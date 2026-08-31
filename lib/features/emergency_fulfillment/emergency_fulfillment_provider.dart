@@ -10,6 +10,7 @@ import '../../core/models/fulfillment_mode.dart';
 import '../../core/services/emergency_web_bridge.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
+import 'kds_realtime_sync.dart';
 
 const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
 const emergencyFloorDirectBeverageAlarmCoalesceDelay = Duration(seconds: 2);
@@ -1105,11 +1106,15 @@ class EmergencyFulfillmentNotifier
   static const _uuid = Uuid();
   static const _handoffRefreshInterval = Duration(seconds: 1);
   RealtimeChannel? _channel;
+  KdsRealtimeSync? _kdsSync;
+  KdsSyncMode _syncMode = KdsSyncMode.legacy;
+  String? _subscriptionKey;
   Timer? _pollTimer;
   bool _refreshing = false;
   bool _refreshRequested = false;
   bool _flushing = false;
   int _realtimeRevision = 0;
+  final Map<String, int> _ticketRevisions = {};
 
   Future<void> load({bool showLoading = true}) async {
     if (_refreshing) {
@@ -1121,7 +1126,23 @@ class EmergencyFulfillmentNotifier
     if (showLoading) state = state.copyWith(isLoading: true, clearError: true);
     try {
       final outboxError = await _flushOutbox();
-      final raw = await supabase.rpc('get_emergency_station_snapshot');
+      var syncConfig = await _loadKdsSyncConfig();
+      KdsBootstrap? bootstrap;
+      dynamic raw;
+      if (syncConfig.mode == KdsSyncMode.active) {
+        try {
+          bootstrap = await SupabaseKdsSyncGateway(supabase).loadBootstrap();
+          syncConfig = bootstrap.config;
+          raw = bootstrap.snapshot;
+        } catch (_) {
+          // A staged or failed v2 rollout must preserve the established KDS
+          // path. The per-store flag can be corrected without blocking work.
+          syncConfig = const KdsSyncConfig.legacy();
+          raw = await supabase.rpc('get_emergency_station_snapshot');
+        }
+      } else {
+        raw = await supabase.rpc('get_emergency_station_snapshot');
+      }
       final json = raw is Map
           ? Map<String, dynamic>.from(raw)
           : <String, dynamic>{};
@@ -1146,23 +1167,31 @@ class EmergencyFulfillmentNotifier
         pendingQueueIds: state.pendingQueueIds,
         clearError: true,
       );
-      await _subscribe(immediate.restaurantId);
+      if (bootstrap == null) {
+        await _subscribe(immediate, syncConfig);
+      }
 
-      final stationData = await Future.wait([
-        _optionalRpc('get_emergency_station_today_completed'),
-        _optionalRpc('get_emergency_station_timings'),
-      ]);
-      final completed = stationData[0];
-      json['completed_orders'] = completed is List ? completed : const [];
-      _mergeStationTimings(json, stationData[1]);
-      if (storeId != null && storeId.isNotEmpty) {
-        try {
-          json['fulfillment_mode'] = await supabase.rpc(
-            'get_store_fulfillment_mode',
-            params: {'p_store_id': storeId},
-          );
-        } catch (_) {
-          // Compatibility with the pre-mode migration during a staged rollout.
+      if (bootstrap != null) {
+        json['completed_orders'] = bootstrap.completedOrders;
+        _mergeStationTimings(json, bootstrap.timings);
+        json['fulfillment_mode'] = bootstrap.fulfillmentMode;
+      } else {
+        final stationData = await Future.wait([
+          _optionalRpc('get_emergency_station_today_completed'),
+          _optionalRpc('get_emergency_station_timings'),
+        ]);
+        final completed = stationData[0];
+        json['completed_orders'] = completed is List ? completed : const [];
+        _mergeStationTimings(json, stationData[1]);
+        if (storeId != null && storeId.isNotEmpty) {
+          try {
+            json['fulfillment_mode'] = await supabase.rpc(
+              'get_store_fulfillment_mode',
+              params: {'p_store_id': storeId},
+            );
+          } catch (_) {
+            // Compatibility with the pre-mode migration during staged rollout.
+          }
         }
       }
       final next = EmergencyFulfillmentState.fromJson(json);
@@ -1178,6 +1207,9 @@ class EmergencyFulfillmentNotifier
         error: outboxError,
         clearError: outboxError == null,
       );
+      if (bootstrap != null) {
+        await _subscribe(state, syncConfig);
+      }
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -1201,11 +1233,74 @@ class EmergencyFulfillmentNotifier
     }
   }
 
-  Future<void> _subscribe(String? storeId) async {
-    if (storeId == null || storeId.isEmpty || _channel != null) {
+  Future<KdsSyncConfig> _loadKdsSyncConfig() async {
+    try {
+      return await SupabaseKdsSyncGateway(supabase).loadConfig();
+    } catch (_) {
+      // The additive migration can be deployed before the Flutter client.
+      return const KdsSyncConfig.legacy();
+    }
+  }
+
+  Future<void> _subscribe(
+    EmergencyFulfillmentState snapshot,
+    KdsSyncConfig syncConfig,
+  ) async {
+    final storeId = snapshot.restaurantId;
+    final subscriptionKey = <String>[
+      syncConfig.mode.name,
+      storeId ?? '',
+      snapshot.sessionId ?? '',
+      snapshot.stationType ?? '',
+      snapshot.floorLabel ?? '',
+    ].join(':');
+    if (_subscriptionKey == subscriptionKey) return;
+    await _disposeSubscriptions();
+    _subscriptionKey = subscriptionKey;
+    _syncMode = syncConfig.mode;
+
+    if (storeId == null || storeId.isEmpty) {
       _startPolling();
       return;
     }
+    if (syncConfig.mode != KdsSyncMode.legacy) {
+      _kdsSync = KdsRealtimeSync(
+        client: supabase,
+        gateway: SupabaseKdsSyncGateway(supabase),
+        config: KdsSyncConfig(
+          mode: syncConfig.mode,
+          revision: syncConfig.revision,
+          assigned: snapshot.assigned,
+          restaurantId: storeId,
+          sessionId: snapshot.sessionId,
+          stationType: snapshot.stationType,
+          floorLabel: snapshot.floorLabel,
+        ),
+        onChange: _applyKdsChange,
+        onBootstrapRequired: _requestKdsBootstrap,
+        onConnected: _onKdsConnected,
+        onError: (error, stack) {
+          if (kDebugMode) debugPrint('KDS realtime degraded: $error');
+        },
+      );
+      try {
+        await _kdsSync!.start();
+      } catch (error) {
+        if (kDebugMode) debugPrint('KDS realtime start fallback: $error');
+        await _kdsSync?.dispose();
+        _kdsSync = null;
+        _syncMode = KdsSyncMode.legacy;
+        _subscriptionKey = 'fallback:$subscriptionKey';
+        _subscribeLegacy(storeId);
+        return;
+      }
+      if (syncConfig.mode == KdsSyncMode.active) return;
+    }
+
+    _subscribeLegacy(storeId);
+  }
+
+  void _subscribeLegacy(String storeId) {
     void refresh(PostgresChangePayload _) => _requestRealtimeRefresh();
     _channel = supabase
         .channel(LiveSyncScope.storeChannel('emergency_fulfillment', storeId))
@@ -1269,6 +1364,18 @@ class EmergencyFulfillmentNotifier
     _startPolling();
   }
 
+  Future<void> _disposeSubscriptions() async {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    final channel = _channel;
+    _channel = null;
+    if (channel != null) await channel.unsubscribe();
+    final kdsSync = _kdsSync;
+    _kdsSync = null;
+    if (kdsSync != null) await kdsSync.dispose();
+    _ticketRevisions.clear();
+  }
+
   void _startPolling() {
     _pollTimer ??= Timer.periodic(_handoffRefreshInterval, (_) {
       if (!_refreshing) unawaited(load(showLoading: false));
@@ -1278,6 +1385,154 @@ class EmergencyFulfillmentNotifier
   void _requestRealtimeRefresh() {
     _realtimeRevision += 1;
     unawaited(load(showLoading: false));
+  }
+
+  Future<void> refreshFromSignal() async {
+    final kdsSync = _kdsSync;
+    if (_syncMode == KdsSyncMode.active && kdsSync != null) {
+      await kdsSync.catchUp();
+      return;
+    }
+    await load(showLoading: false);
+  }
+
+  Future<void> _applyKdsChange(KdsChangeEnvelope change) async {
+    if (!mounted) return;
+    if (change.restaurantId != state.restaurantId) return;
+    if (_syncMode == KdsSyncMode.shadow) {
+      await _observeKdsShadowChange(change);
+      return;
+    }
+    if (_syncMode != KdsSyncMode.active) return;
+    if (change.sessionId != null &&
+        state.sessionId != null &&
+        change.sessionId != state.sessionId) {
+      await _requestKdsBootstrap();
+      return;
+    }
+    switch (change.kind) {
+      case 'bootstrap_required':
+        await _requestKdsBootstrap();
+        return;
+      case 'leftover_changed':
+        _applyKdsLeftoverChange(change.payload);
+        return;
+      default:
+        final queueId =
+            change.queueId ?? change.payload['queue_id']?.toString();
+        if (queueId != null && queueId.isNotEmpty) {
+          await _refreshKdsTicket(queueId);
+        }
+        return;
+    }
+  }
+
+  Future<void> _observeKdsShadowChange(KdsChangeEnvelope change) async {
+    final queueId = change.queueId ?? change.payload['queue_id']?.toString();
+    if (queueId == null || queueId.isEmpty) return;
+    try {
+      final raw = await supabase.rpc(
+        'observe_kds_shadow_v2',
+        params: {'p_queue_id': queueId},
+      );
+      if (raw is Map && raw['matches'] == false && kDebugMode) {
+        debugPrint(
+          'KDS shadow parity mismatch: queue=$queueId '
+          'revision=${raw['revision']}',
+        );
+      }
+    } catch (error) {
+      if (kDebugMode) debugPrint('KDS shadow observation failed: $error');
+    }
+  }
+
+  Future<void> _refreshKdsTicket(String queueId) async {
+    final kdsSync = _kdsSync;
+    if (kdsSync == null || !mounted) return;
+    final result = await kdsSync.loadTicket(queueId);
+    if (!mounted || !identical(kdsSync, _kdsSync)) return;
+    final appliedRevision = _ticketRevisions[queueId] ?? 0;
+    if (result.revision < appliedRevision) return;
+    _ticketRevisions[queueId] = result.revision;
+    final rawTicket = result.ticket;
+    final nextOrders = state.orders
+        .where((order) => order.queueId != queueId)
+        .toList(growable: true);
+    EmergencyFulfillmentOrder? ticket;
+    if (rawTicket != null) {
+      ticket = EmergencyFulfillmentOrder.fromJson(rawTicket);
+      nextOrders.add(ticket);
+      nextOrders.sort((left, right) {
+        final queueOrder = left.queueNo.compareTo(right.queueNo);
+        return queueOrder != 0
+            ? queueOrder
+            : left.createdAt.compareTo(right.createdAt);
+      });
+    }
+    final replacement = ticket;
+    final nextCompleted = state.completedOrders
+        .where((order) => order.queueId != queueId || replacement != null)
+        .map(
+          (order) => order.queueId == queueId && replacement != null
+              ? replacement
+              : order,
+        )
+        .toList(growable: false);
+    _realtimeRevision += 1;
+    state = state.copyWith(
+      orders: nextOrders,
+      completedOrders: nextCompleted,
+      clearError: true,
+    );
+  }
+
+  void _applyKdsLeftoverChange(Map<String, dynamic> payload) {
+    final rawTask = payload['task'];
+    if (rawTask is! Map) return;
+    final task = LeftoverPackagingTask.fromJson(
+      Map<String, dynamic>.from(rawTask),
+    );
+    final station = state.stationType;
+    final actionable = switch (station) {
+      'kitchen' => task.status == 'awaiting_kitchen_packaging',
+      'tray' =>
+        task.status == 'awaiting_tray_to_kitchen' ||
+            task.status == 'awaiting_tray_return',
+      'floor' =>
+        task.floorLabel == state.floorLabel &&
+            (task.status == 'awaiting_floor_pickup' ||
+                task.status == 'awaiting_floor_delivery'),
+      _ => false,
+    };
+    final tasks = state.leftoverPackagingTasks
+        .where((candidate) => candidate.id != task.id)
+        .toList(growable: true);
+    if (actionable) tasks.add(task);
+    tasks.sort((left, right) {
+      final requested = left.requestedAt.compareTo(right.requestedAt);
+      return requested != 0 ? requested : left.id.compareTo(right.id);
+    });
+    _realtimeRevision += 1;
+    state = state.copyWith(leftoverPackagingTasks: tasks, clearError: true);
+  }
+
+  Future<void> _requestKdsBootstrap() async {
+    if (!mounted) return;
+    unawaited(load(showLoading: false));
+  }
+
+  Future<void> _onKdsConnected() async {
+    if (!mounted || _syncMode == KdsSyncMode.legacy) return;
+    final error = await _flushOutbox();
+    final pendingRecords = await EmergencyWebBridge.readOutbox();
+    if (!mounted) return;
+    state = state.copyWith(
+      pendingOutboxCount: pendingRecords.length,
+      pendingQueueIds: _pendingQueueIds(pendingRecords),
+      error: error,
+      clearError: error == null,
+    );
+    await _kdsSync?.catchUp();
   }
 
   void _applyRealtimeItemChange(PostgresChangePayload payload) {
@@ -1361,8 +1616,16 @@ class EmergencyFulfillmentNotifier
     final previous = state;
     _applyOptimistic(itemId: itemId, stage: stage, delta: delta);
     try {
-      await _sendProgress(payload);
-      await load(showLoading: false);
+      final response = await _sendProgress(payload);
+      if (_syncMode == KdsSyncMode.active) {
+        final result = _commandResult(response);
+        if (result.containsKey('floor_served_quantity') ||
+            result.containsKey('kitchen_done_quantity')) {
+          _applyAuthoritativeProgress(itemId, result);
+        }
+      } else {
+        await load(showLoading: false);
+      }
     } catch (error) {
       if (error is PostgrestException) {
         state = previous.copyWith(error: error.message);
@@ -1391,7 +1654,9 @@ class EmergencyFulfillmentNotifier
     _applyOptimisticOrderCompletion(queueId: queueId, actionId: actionId);
     try {
       await _sendOutboxPayload(payload);
-      await load(showLoading: false);
+      if (_syncMode != KdsSyncMode.active) {
+        await load(showLoading: false);
+      }
       return true;
     } catch (error) {
       if (error is PostgrestException) {
@@ -1422,6 +1687,7 @@ class EmergencyFulfillmentNotifier
       'event_id': eventId,
     };
     final previous = state;
+    _realtimeRevision += 1;
     state = state.copyWith(
       leftoverPackagingTasks: state.leftoverPackagingTasks
           .where((candidate) => candidate.id != task.id)
@@ -1430,7 +1696,9 @@ class EmergencyFulfillmentNotifier
     );
     try {
       await _sendOutboxPayload(payload);
-      await load(showLoading: false);
+      if (_syncMode != KdsSyncMode.active) {
+        await load(showLoading: false);
+      }
       return true;
     } catch (error) {
       if (error is PostgrestException) {
@@ -1465,7 +1733,15 @@ class EmergencyFulfillmentNotifier
     };
     try {
       await _sendOutboxPayload(payload);
-      await load(showLoading: false);
+      if (_syncMode == KdsSyncMode.active) {
+        try {
+          await _refreshKdsTicket(queueId);
+        } catch (error) {
+          if (kDebugMode) debugPrint('KDS ticket refresh deferred: $error');
+        }
+      } else {
+        await load(showLoading: false);
+      }
       return true;
     } catch (error) {
       if (error is PostgrestException) {
@@ -1493,6 +1769,7 @@ class EmergencyFulfillmentNotifier
     required int delta,
   }) {
     final actionAt = DateTime.now().toUtc();
+    _realtimeRevision += 1;
     state = state.copyWith(
       orders: state.orders
           .map((order) {
@@ -1520,9 +1797,61 @@ class EmergencyFulfillmentNotifier
     );
   }
 
-  Future<void> _sendProgress(Map<String, dynamic> payload) async {
+  void _applyAuthoritativeProgress(String itemId, Map<String, dynamic> result) {
+    final matchingItem = state.orders
+        .expand((order) => order.items)
+        .where((item) => item.id == itemId)
+        .cast<EmergencyFulfillmentItem?>()
+        .firstWhere((_) => true, orElse: () => null);
+    if (matchingItem == null) return;
+    _applyRealtimeItemRow({
+      'id': itemId,
+      'is_cancelled': false,
+      'kitchen_done_quantity': result.containsKey('kitchen_done_quantity')
+          ? result['kitchen_done_quantity']
+          : matchingItem.kitchenDoneQuantity,
+      'tray_received_quantity': result.containsKey('tray_received_quantity')
+          ? result['tray_received_quantity']
+          : matchingItem.trayReceivedQuantity,
+      'tray_dispatched_quantity': result.containsKey('tray_dispatched_quantity')
+          ? result['tray_dispatched_quantity']
+          : matchingItem.trayDispatchedQuantity,
+      'floor_served_quantity': result.containsKey('floor_served_quantity')
+          ? result['floor_served_quantity']
+          : matchingItem.floorServedQuantity,
+    });
+  }
+
+  Map<String, dynamic> _commandResult(Map<String, dynamic> response) {
+    final result = response['result'];
+    return result is Map
+        ? Map<String, dynamic>.from(result)
+        : Map<String, dynamic>.from(response);
+  }
+
+  Future<Map<String, dynamic>> _sendProgress(
+    Map<String, dynamic> payload,
+  ) async {
+    if (_syncMode == KdsSyncMode.active) {
+      final sourceKind = payload['floor_direct'] == true
+          ? 'floor_direct'
+          : payload['combo_component'] == true
+          ? 'combo_component'
+          : 'base';
+      final raw = await supabase.rpc(
+        'kds_record_progress_v2',
+        params: {
+          'p_item_id': payload['item_id'],
+          'p_stage': payload['stage'],
+          'p_delta': payload['delta'],
+          'p_event_id': payload['event_id'],
+          'p_source_kind': sourceKind,
+        },
+      );
+      return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+    }
     if (payload['floor_direct'] == true) {
-      await supabase.rpc(
+      final raw = await supabase.rpc(
         'emergency_record_floor_direct_progress',
         params: {
           'p_floor_direct_item_id': payload['item_id'],
@@ -1530,10 +1859,10 @@ class EmergencyFulfillmentNotifier
           'p_event_id': payload['event_id'],
         },
       );
-      return;
+      return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
     if (payload['combo_component'] == true) {
-      await supabase.rpc(
+      final raw = await supabase.rpc(
         'emergency_record_combo_component_progress',
         params: {
           'p_component_item_id': payload['item_id'],
@@ -1542,9 +1871,9 @@ class EmergencyFulfillmentNotifier
           'p_event_id': payload['event_id'],
         },
       );
-      return;
+      return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
-    await supabase.rpc(
+    final raw = await supabase.rpc(
       'emergency_record_progress',
       params: {
         'p_fulfillment_item_id': payload['item_id'],
@@ -1553,40 +1882,58 @@ class EmergencyFulfillmentNotifier
         'p_event_id': payload['event_id'],
       },
     );
+    return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
   }
 
-  Future<void> _sendOutboxPayload(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> _sendOutboxPayload(
+    Map<String, dynamic> payload,
+  ) async {
     // The route-aware wrappers delegate food work to the legacy
     // 'emergency_complete_order_stage' / 'emergency_revert_order_action'
     // contracts, then atomically include floor-direct beverage lines.
     switch (payload['kind']) {
       case 'complete_order':
-        await supabase.rpc(
-          'emergency_complete_route_order_stage',
+        final raw = await supabase.rpc(
+          _syncMode == KdsSyncMode.active
+              ? 'kds_complete_order_v2'
+              : 'emergency_complete_route_order_stage',
           params: {
             'p_queue_id': payload['queue_id'],
             'p_action_id': payload['action_id'],
           },
         );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
       case 'revert_order':
-        await supabase.rpc(
-          'emergency_revert_route_order_action',
+        final raw = await supabase.rpc(
+          _syncMode == KdsSyncMode.active
+              ? 'kds_revert_order_v2'
+              : 'emergency_revert_route_order_action',
           params: {
             'p_queue_id': payload['queue_id'],
             'p_action_id': payload['action_id'],
             'p_revert_id': payload['revert_id'],
           },
         );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
       case 'advance_leftover_packaging':
-        await supabase.rpc(
-          'emergency_advance_leftover_packaging',
+        final raw = await supabase.rpc(
+          _syncMode == KdsSyncMode.active
+              ? 'kds_advance_leftover_v2'
+              : 'emergency_advance_leftover_packaging',
           params: {
             'p_request_id': payload['request_id'],
             'p_event_id': payload['event_id'],
           },
         );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
       default:
-        await _sendProgress(payload);
+        return _sendProgress(payload);
     }
   }
 
@@ -1595,6 +1942,7 @@ class EmergencyFulfillmentNotifier
     required String actionId,
   }) {
     final stationType = state.stationType;
+    _realtimeRevision += 1;
     state = state.copyWith(
       orders: state.orders
           .map((order) {
@@ -1675,6 +2023,7 @@ class EmergencyFulfillmentNotifier
   void dispose() {
     _pollTimer?.cancel();
     unawaited(_channel?.unsubscribe());
+    unawaited(_kdsSync?.dispose());
     super.dispose();
   }
 }

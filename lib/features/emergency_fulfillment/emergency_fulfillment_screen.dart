@@ -62,9 +62,7 @@ class _EmergencyFulfillmentScreenState
         .listen((_) {
           if (!mounted) return;
           unawaited(
-            ref
-                .read(emergencyFulfillmentProvider.notifier)
-                .load(showLoading: false),
+            ref.read(emergencyFulfillmentProvider.notifier).refreshFromSignal(),
           );
         });
     Future.microtask(
