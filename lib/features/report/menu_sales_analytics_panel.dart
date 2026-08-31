@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,8 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import 'menu_sales_analytics.dart';
+import 'menu_sales_excel_export.dart';
+import 'report_excel_file.dart';
 
 enum _MenuSalesMetric { quantity, revenue }
 
@@ -16,10 +19,12 @@ class MenuSalesAnalyticsPanel extends ConsumerStatefulWidget {
     super.key,
     required this.params,
     required this.currency,
+    this.saveExcelFile,
   });
 
   final MenuSalesAnalyticsParams params;
   final NumberFormat currency;
+  final ReportExcelFileSaver? saveExcelFile;
 
   @override
   ConsumerState<MenuSalesAnalyticsPanel> createState() =>
@@ -35,6 +40,7 @@ class _MenuSalesAnalyticsPanelState
   String? _selectedMenuKey;
   late DateTime _startDate;
   late DateTime _endDate;
+  bool _isExporting = false;
 
   @override
   void initState() {
@@ -94,6 +100,45 @@ class _MenuSalesAnalyticsPanelState
     });
   }
 
+  Future<void> _downloadExcel(
+    MenuSalesAnalyticsParams params,
+    MenuSalesAnalytics analytics,
+  ) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+    try {
+      final bytes = buildMenuSalesAnalyticsWorkbook(
+        analytics: analytics,
+        params: params,
+      );
+      if (bytes.isEmpty) return;
+      final dateFormat = DateFormat('yyyyMMdd');
+      final fileName =
+          'menu_sales_${dateFormat.format(params.startDate)}_${dateFormat.format(params.endDate)}_${params.scope.rpcValue}';
+      final saver = widget.saveExcelFile ?? saveReportExcelFile;
+      await saver(name: fileName, bytes: Uint8List.fromList(bytes));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.reportsSaved)));
+      }
+    } catch (error) {
+      if (mounted) {
+        final languageCode = Localizations.localeOf(context).languageCode;
+        final message = switch (languageCode) {
+          'vi' => 'Không thể tải Excel doanh số theo món',
+          'en' => 'Menu sales Excel download failed',
+          _ => '메뉴별 판매 Excel 다운로드에 실패했습니다',
+        };
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$message: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final effectiveParams = MenuSalesAnalyticsParams(
@@ -105,6 +150,7 @@ class _MenuSalesAnalyticsPanelState
     final analyticsAsync = ref.watch(
       menuSalesAnalyticsProvider(effectiveParams),
     );
+    final downloadableAnalytics = analyticsAsync.asData?.value;
 
     return PosDataPanel(
       title: context.l10n.menuSalesAnalyticsTitle,
@@ -119,8 +165,15 @@ class _MenuSalesAnalyticsPanelState
                 startDate: _startDate,
                 endDate: _endDate,
                 loading: analyticsAsync.isLoading,
+                exporting: _isExporting,
                 onSelectSingleDate: _selectSingleDate,
                 onSelectDateRange: _selectDateRange,
+                onDownload: downloadableAnalytics == null || _isExporting
+                    ? null
+                    : () => _downloadExcel(
+                        effectiveParams,
+                        downloadableAnalytics,
+                      ),
               ),
               const SizedBox(height: 12),
               _MenuSalesScopeFilter(
@@ -322,15 +375,19 @@ class _MenuSalesPeriodFilter extends StatelessWidget {
     required this.startDate,
     required this.endDate,
     required this.loading,
+    required this.exporting,
     required this.onSelectSingleDate,
     required this.onSelectDateRange,
+    required this.onDownload,
   });
 
   final DateTime startDate;
   final DateTime endDate;
   final bool loading;
+  final bool exporting;
   final VoidCallback onSelectSingleDate;
   final VoidCallback onSelectDateRange;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -382,6 +439,18 @@ class _MenuSalesPeriodFilter extends StatelessWidget {
           onPressed: loading ? null : onSelectDateRange,
           icon: const Icon(Icons.date_range_outlined, size: 18),
           label: Text(copy.dateRange),
+        ),
+        TextButton.icon(
+          key: const Key('menu_sales_excel_download'),
+          onPressed: onDownload,
+          icon: exporting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download_rounded, size: 18),
+          label: Text(context.l10n.reportsDownload),
         ),
       ],
     );

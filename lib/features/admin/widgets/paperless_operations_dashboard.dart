@@ -1,9 +1,14 @@
+import 'dart:typed_data';
+
+import 'package:excel/excel.dart' hide Border;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../main.dart';
 import '../../report/report_provider.dart';
+import '../../report/report_excel_file.dart';
 
 String paperlessOperationsTitle(BuildContext context) =>
     _PaperlessCopy.of(context).title;
@@ -13,6 +18,151 @@ String paperlessOperationsSubtitle(BuildContext context) =>
 
 typedef PaperlessOperationsLoader = Future<Map<String, dynamic>> Function();
 
+List<int> buildPaperlessOperationsWorkbook({
+  required Map<String, dynamic> rawReport,
+  required DateTime startDate,
+  required DateTime endDate,
+  required String languageCode,
+}) {
+  final report = _PaperlessReport.fromJson(rawReport);
+  return _buildPaperlessOperationsWorkbook(
+    report: report,
+    startDate: startDate,
+    endDate: endDate,
+    languageCode: languageCode,
+  );
+}
+
+List<int> _buildPaperlessOperationsWorkbook({
+  required _PaperlessReport report,
+  required DateTime startDate,
+  required DateTime endDate,
+  required String languageCode,
+}) {
+  final copy = _PaperlessCopy(languageCode);
+  final dateFormat = DateFormat('dd/MM/yyyy');
+  final excel = Excel.createExcel();
+  final summary = excel['Summary'];
+  summary.appendRow([TextCellValue('GLOBOS Operations Performance')]);
+  summary.appendRow([
+    TextCellValue('Period'),
+    TextCellValue(
+      '${dateFormat.format(startDate)} ~ ${dateFormat.format(endDate)}',
+    ),
+  ]);
+  summary.appendRow([TextCellValue('Metric'), TextCellValue('Value')]);
+  summary.appendRow([TextCellValue('Orders'), IntCellValue(report.orderCount)]);
+  summary.appendRow([
+    TextCellValue('Completed Orders'),
+    IntCellValue(report.completedOrderCount),
+  ]);
+  summary.appendRow([
+    TextCellValue('Dining Orders'),
+    IntCellValue(report.diningOrderCount),
+  ]);
+  summary.appendRow([
+    TextCellValue('Average Operation Seconds'),
+    IntCellValue(report.averageOperationSeconds),
+  ]);
+  summary.appendRow([
+    TextCellValue('Average Dining Seconds'),
+    IntCellValue(report.averageDiningSeconds),
+  ]);
+  summary.appendRow([
+    TextCellValue('Average Menu Operation Seconds'),
+    report.averageMenuOperationSeconds == null
+        ? TextCellValue('')
+        : IntCellValue(report.averageMenuOperationSeconds!),
+  ]);
+  summary.appendRow([
+    TextCellValue('Completed Menu Samples'),
+    IntCellValue(report.completedMenuSampleCount),
+  ]);
+  summary.appendRow([
+    TextCellValue('Bottleneck Station'),
+    TextCellValue(copy.station(report.bottleneckStation)),
+  ]);
+
+  final stations = excel['Stations'];
+  stations.appendRow([
+    TextCellValue('Station'),
+    TextCellValue('Samples'),
+    TextCellValue('Average Seconds'),
+    TextCellValue('Backlog Quantity'),
+  ]);
+  for (final station in report.stations) {
+    stations.appendRow([
+      TextCellValue(copy.station(station.station)),
+      IntCellValue(station.sampleCount),
+      IntCellValue(station.averageSeconds),
+      IntCellValue(station.backlogQuantity),
+    ]);
+  }
+
+  final categoryRows = report.categoryOperationTimes.toList(growable: false)
+    ..sort(
+      (left, right) =>
+          right.operationAverageSeconds.compareTo(left.operationAverageSeconds),
+    );
+  final categories = excel['Categories'];
+  categories.appendRow([
+    TextCellValue('Rank'),
+    TextCellValue('Category'),
+    TextCellValue('Samples'),
+    TextCellValue('Average Operation Seconds'),
+  ]);
+  for (var index = 0; index < categoryRows.length; index++) {
+    final category = categoryRows[index];
+    categories.appendRow([
+      IntCellValue(index + 1),
+      TextCellValue(category.name(languageCode)),
+      IntCellValue(category.sampleCount),
+      IntCellValue(category.operationAverageSeconds),
+    ]);
+  }
+
+  final menuRows = report.menuOperationTimes.toList(growable: false)
+    ..sort(
+      (left, right) =>
+          right.operationAverageSeconds.compareTo(left.operationAverageSeconds),
+    );
+  final menus = excel['Menu Times'];
+  menus.appendRow([
+    TextCellValue('Rank'),
+    TextCellValue('Menu Key'),
+    TextCellValue('Menu'),
+    TextCellValue('Category'),
+    TextCellValue('Samples'),
+    TextCellValue('Kitchen Seconds'),
+    TextCellValue('Tray Seconds'),
+    TextCellValue('Floor Seconds'),
+    TextCellValue('Operation Seconds'),
+  ]);
+  for (var index = 0; index < menuRows.length; index++) {
+    final menu = menuRows[index];
+    menus.appendRow([
+      IntCellValue(index + 1),
+      TextCellValue(menu.menuKey),
+      TextCellValue(menu.name(languageCode)),
+      TextCellValue(menu.categoryName(languageCode)),
+      IntCellValue(menu.sampleCount),
+      menu.kitchenAverageSeconds == null
+          ? TextCellValue('')
+          : IntCellValue(menu.kitchenAverageSeconds!),
+      menu.trayAverageSeconds == null
+          ? TextCellValue('')
+          : IntCellValue(menu.trayAverageSeconds!),
+      menu.floorAverageSeconds == null
+          ? TextCellValue('')
+          : IntCellValue(menu.floorAverageSeconds!),
+      IntCellValue(menu.operationAverageSeconds),
+    ]);
+  }
+
+  excel.delete('Sheet1');
+  return excel.encode() ?? <int>[];
+}
+
 class PaperlessOperationsDashboard extends StatefulWidget {
   const PaperlessOperationsDashboard({
     super.key,
@@ -20,12 +170,14 @@ class PaperlessOperationsDashboard extends StatefulWidget {
     required this.startDate,
     required this.endDate,
     this.loader,
+    this.saveExcelFile,
   });
 
   final String storeId;
   final DateTime startDate;
   final DateTime endDate;
   final PaperlessOperationsLoader? loader;
+  final ReportExcelFileSaver? saveExcelFile;
 
   @override
   State<PaperlessOperationsDashboard> createState() =>
@@ -37,6 +189,7 @@ class _PaperlessOperationsDashboardState
   _PaperlessReport? _report;
   Object? _error;
   bool _loading = true;
+  bool _isExporting = false;
   late DateTime _startDate;
   late DateTime _endDate;
 
@@ -131,6 +284,46 @@ class _PaperlessOperationsDashboardState
     }
   }
 
+  Future<void> _downloadExcel() async {
+    final report = _report;
+    if (report == null || _isExporting) return;
+    setState(() => _isExporting = true);
+    try {
+      final languageCode = Localizations.localeOf(context).languageCode;
+      final bytes = _buildPaperlessOperationsWorkbook(
+        report: report,
+        startDate: _startDate,
+        endDate: _endDate,
+        languageCode: languageCode,
+      );
+      if (bytes.isEmpty) return;
+      final dateFormat = DateFormat('yyyyMMdd');
+      final fileName =
+          'operations_performance_${dateFormat.format(_startDate)}_${dateFormat.format(_endDate)}';
+      final saver = widget.saveExcelFile ?? saveReportExcelFile;
+      await saver(name: fileName, bytes: Uint8List.fromList(bytes));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.reportsSaved)));
+      }
+    } catch (error) {
+      if (mounted) {
+        final languageCode = Localizations.localeOf(context).languageCode;
+        final message = switch (languageCode) {
+          'vi' => 'Không thể tải Excel hiệu suất vận hành',
+          'en' => 'Operations performance Excel download failed',
+          _ => '운영 성과 Excel 다운로드에 실패했습니다',
+        };
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$message: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final copy = _PaperlessCopy.of(context);
@@ -143,9 +336,13 @@ class _PaperlessOperationsDashboardState
           endDate: _endDate,
           copy: copy,
           loading: _loading,
+          exporting: _isExporting,
           onSelectSingleDate: _selectSingleDate,
           onSelectDateRange: _selectDateRange,
           onRefresh: _load,
+          onDownload: _report == null || _loading || _isExporting
+              ? null
+              : _downloadExcel,
         ),
         const SizedBox(height: 10),
         if (_loading)
@@ -183,18 +380,22 @@ class _PeriodBar extends StatelessWidget {
     required this.endDate,
     required this.copy,
     required this.loading,
+    required this.exporting,
     required this.onSelectSingleDate,
     required this.onSelectDateRange,
     required this.onRefresh,
+    required this.onDownload,
   });
 
   final DateTime startDate;
   final DateTime endDate;
   final _PaperlessCopy copy;
   final bool loading;
+  final bool exporting;
   final VoidCallback onSelectSingleDate;
   final VoidCallback onSelectDateRange;
   final VoidCallback onRefresh;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +447,18 @@ class _PeriodBar extends StatelessWidget {
           onPressed: loading ? null : onSelectDateRange,
           icon: const Icon(Icons.date_range_outlined, size: 18),
           label: Text(copy.dateRange),
+        ),
+        TextButton.icon(
+          key: const Key('paperless_operations_excel_download'),
+          onPressed: onDownload,
+          icon: exporting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download_rounded, size: 18),
+          label: Text(context.l10n.reportsDownload),
         ),
         IconButton(
           tooltip: copy.refresh,
