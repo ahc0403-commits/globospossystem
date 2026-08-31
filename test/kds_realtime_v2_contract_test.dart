@@ -87,6 +87,28 @@ void main() {
       },
     );
 
+    test('acquires source DDL locks in the legacy snapshot order', () {
+      final sessionsLock = migration.indexOf(
+        'LOCK TABLE public.emergency_fulfillment_sessions',
+      );
+      final orderItemsLock = migration.indexOf('LOCK TABLE public.order_items');
+      final eventsLock = migration.indexOf(
+        'LOCK TABLE public.emergency_fulfillment_events',
+      );
+      final modesLock = migration.indexOf(
+        'LOCK TABLE public.fulfillment_mode_changes',
+      );
+      final firstSourceTrigger = migration.indexOf(
+        'DROP TRIGGER IF EXISTS kds_capture_fulfillment_event_trigger',
+      );
+
+      expect(sessionsLock, greaterThan(0));
+      expect(orderItemsLock, greaterThan(sessionsLock));
+      expect(eventsLock, greaterThan(orderItemsLock));
+      expect(modesLock, greaterThan(eventsLock));
+      expect(firstSourceTrigger, greaterThan(modesLock));
+    });
+
     test('v2 commands delegate to the unchanged authoritative RPCs', () {
       for (final legacyRpc in [
         'emergency_record_progress',
