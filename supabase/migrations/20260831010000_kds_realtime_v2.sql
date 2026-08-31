@@ -524,6 +524,16 @@ $$;
 REVOKE ALL ON FUNCTION public.kds_capture_fulfillment_event()
   FROM PUBLIC, anon, authenticated;
 
+-- Legacy KDS clients continuously read sessions before order items/events.
+-- Acquire every source-table DDL lock in that same order before replacing any
+-- trigger. Without this fence, a snapshot can hold sessions while waiting for
+-- events as this migration holds events while waiting for sessions, producing
+-- a deterministic deadlock under the established one-second polling load.
+LOCK TABLE public.emergency_fulfillment_sessions IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.order_items IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.emergency_fulfillment_events IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.fulfillment_mode_changes IN ACCESS EXCLUSIVE MODE;
+
 DROP TRIGGER IF EXISTS kds_capture_fulfillment_event_trigger
   ON public.emergency_fulfillment_events;
 CREATE TRIGGER kds_capture_fulfillment_event_trigger
