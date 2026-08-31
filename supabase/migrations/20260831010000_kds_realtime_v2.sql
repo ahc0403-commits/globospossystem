@@ -524,22 +524,6 @@ $$;
 REVOKE ALL ON FUNCTION public.kds_capture_fulfillment_event()
   FROM PUBLIC, anon, authenticated;
 
--- Legacy KDS clients continuously read sessions before order items/events.
--- Acquire every source-table DDL lock in that same order before replacing any
--- trigger. Without this fence, a snapshot can hold sessions while waiting for
--- events as this migration holds events while waiting for sessions, producing
--- a deterministic deadlock under the established one-second polling load.
-LOCK TABLE public.emergency_fulfillment_sessions IN ACCESS EXCLUSIVE MODE;
-LOCK TABLE public.order_items IN ACCESS EXCLUSIVE MODE;
-LOCK TABLE public.emergency_fulfillment_events IN ACCESS EXCLUSIVE MODE;
-LOCK TABLE public.fulfillment_mode_changes IN ACCESS EXCLUSIVE MODE;
-
-DROP TRIGGER IF EXISTS kds_capture_fulfillment_event_trigger
-  ON public.emergency_fulfillment_events;
-CREATE TRIGGER kds_capture_fulfillment_event_trigger
-AFTER INSERT ON public.emergency_fulfillment_events
-FOR EACH ROW EXECUTE FUNCTION public.kds_capture_fulfillment_event();
-
 CREATE OR REPLACE FUNCTION public.kds_capture_session_change()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -577,12 +561,6 @@ $$;
 
 REVOKE ALL ON FUNCTION public.kds_capture_session_change()
   FROM PUBLIC, anon, authenticated;
-
-DROP TRIGGER IF EXISTS kds_capture_session_change_trigger
-  ON public.emergency_fulfillment_sessions;
-CREATE TRIGGER kds_capture_session_change_trigger
-AFTER INSERT OR UPDATE OF status ON public.emergency_fulfillment_sessions
-FOR EACH ROW EXECUTE FUNCTION public.kds_capture_session_change();
 
 -- Order-item synchronization is the source of truth for base, combo, and
 -- floor-direct membership. This alphabetically-last trigger runs after the
@@ -649,14 +627,6 @@ $$;
 REVOKE ALL ON FUNCTION public.kds_capture_order_item_source_change()
   FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS zzz_kds_capture_order_item_source_change_trigger
-  ON public.order_items;
-CREATE TRIGGER zzz_kds_capture_order_item_source_change_trigger
-AFTER INSERT OR UPDATE OF quantity, status, combo_components,
-  fulfillment_route_snapshot
-ON public.order_items
-FOR EACH ROW EXECUTE FUNCTION public.kds_capture_order_item_source_change();
-
 -- Mode changes are rare control-plane changes. They require a bootstrap so
 -- the established active/draining and print/paperless UI semantics stay exact.
 CREATE OR REPLACE FUNCTION public.kds_capture_fulfillment_mode_change()
@@ -701,12 +671,6 @@ $$;
 
 REVOKE ALL ON FUNCTION public.kds_capture_fulfillment_mode_change()
   FROM PUBLIC, anon, authenticated;
-
-DROP TRIGGER IF EXISTS kds_capture_fulfillment_mode_change_trigger
-  ON public.fulfillment_mode_changes;
-CREATE TRIGGER kds_capture_fulfillment_mode_change_trigger
-AFTER INSERT ON public.fulfillment_mode_changes
-FOR EACH ROW EXECUTE FUNCTION public.kds_capture_fulfillment_mode_change();
 
 CREATE OR REPLACE FUNCTION public.get_kds_sync_config()
 RETURNS jsonb
@@ -1541,6 +1505,30 @@ REVOKE ALL ON FUNCTION public.prune_kds_change_log(timestamptz)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.prune_kds_change_log(timestamptz)
   TO service_role;
+
+-- Install source triggers only after every function exists. CREATE TRIGGER
+-- takes a lock that remains compatible with the legacy snapshot's reads. The
+-- write path starts with order_items and then appends fulfillment events, so
+-- matching that order prevents a writer/DDL lock inversion during rollout.
+-- The production gate requires this migration version to be absent, therefore
+-- these trigger names cannot already exist on a valid first application.
+CREATE TRIGGER zzz_kds_capture_order_item_source_change_trigger
+AFTER INSERT OR UPDATE OF quantity, status, combo_components,
+  fulfillment_route_snapshot
+ON public.order_items
+FOR EACH ROW EXECUTE FUNCTION public.kds_capture_order_item_source_change();
+
+CREATE TRIGGER kds_capture_fulfillment_event_trigger
+AFTER INSERT ON public.emergency_fulfillment_events
+FOR EACH ROW EXECUTE FUNCTION public.kds_capture_fulfillment_event();
+
+CREATE TRIGGER kds_capture_session_change_trigger
+AFTER INSERT OR UPDATE OF status ON public.emergency_fulfillment_sessions
+FOR EACH ROW EXECUTE FUNCTION public.kds_capture_session_change();
+
+CREATE TRIGGER kds_capture_fulfillment_mode_change_trigger
+AFTER INSERT ON public.fulfillment_mode_changes
+FOR EACH ROW EXECUTE FUNCTION public.kds_capture_fulfillment_mode_change();
 
 COMMENT ON TABLE public.kds_change_log IS
   'Durable, store-revisioned KDS transport log. It does not replace the fulfillment audit ledger.';

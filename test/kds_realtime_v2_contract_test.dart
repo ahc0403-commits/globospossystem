@@ -87,27 +87,33 @@ void main() {
       },
     );
 
-    test('acquires source DDL locks in the legacy snapshot order', () {
-      final sessionsLock = migration.indexOf(
-        'LOCK TABLE public.emergency_fulfillment_sessions',
-      );
-      final orderItemsLock = migration.indexOf('LOCK TABLE public.order_items');
-      final eventsLock = migration.indexOf(
-        'LOCK TABLE public.emergency_fulfillment_events',
-      );
-      final modesLock = migration.indexOf(
-        'LOCK TABLE public.fulfillment_mode_changes',
-      );
-      final firstSourceTrigger = migration.indexOf(
-        'DROP TRIGGER IF EXISTS kds_capture_fulfillment_event_trigger',
-      );
+    test(
+      'installs source triggers without exclusive live-table lock fences',
+      () {
+        final orderItemsTrigger = migration.indexOf(
+          'CREATE TRIGGER zzz_kds_capture_order_item_source_change_trigger',
+        );
+        final eventsTrigger = migration.indexOf(
+          'CREATE TRIGGER kds_capture_fulfillment_event_trigger',
+        );
+        final sessionsTrigger = migration.indexOf(
+          'CREATE TRIGGER kds_capture_session_change_trigger',
+        );
+        final modesTrigger = migration.indexOf(
+          'CREATE TRIGGER kds_capture_fulfillment_mode_change_trigger',
+        );
 
-      expect(sessionsLock, greaterThan(0));
-      expect(orderItemsLock, greaterThan(sessionsLock));
-      expect(eventsLock, greaterThan(orderItemsLock));
-      expect(modesLock, greaterThan(eventsLock));
-      expect(firstSourceTrigger, greaterThan(modesLock));
-    });
+        expect(migration, isNot(contains('LOCK TABLE public.')));
+        expect(
+          migration,
+          isNot(contains('DROP TRIGGER IF EXISTS kds_capture_session_change')),
+        );
+        expect(orderItemsTrigger, greaterThan(0));
+        expect(eventsTrigger, greaterThan(orderItemsTrigger));
+        expect(sessionsTrigger, greaterThan(eventsTrigger));
+        expect(modesTrigger, greaterThan(sessionsTrigger));
+      },
+    );
 
     test('v2 commands delegate to the unchanged authoritative RPCs', () {
       for (final legacyRpc in [
