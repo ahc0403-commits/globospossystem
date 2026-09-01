@@ -336,9 +336,9 @@ void main() {
     expect(find.byType(DateRangePickerDialog), findsOne);
     final dialogContext = tester.element(find.byType(DateRangePickerDialog));
     final saveLabel = MaterialLocalizations.of(dialogContext).saveButtonLabel;
-    await tester.tap(find.text('10'));
+    await tester.tap(find.text('10').first);
     await tester.pump();
-    await tester.tap(find.text('12'));
+    await tester.tap(find.text('12').first);
     await tester.pump();
     await tester.tap(find.text(saveLabel));
     await tester.pumpAndSettle();
