@@ -1,3 +1,5 @@
+-- production-gate: self-verifying
+
 BEGIN;
 
 -- Add a separate operational copy type. Customer payment receipts and all
