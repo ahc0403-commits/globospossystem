@@ -344,11 +344,11 @@ void main() {
     final dialogContext = tester.element(rangeDialog);
     final saveLabel = MaterialLocalizations.of(dialogContext).saveButtonLabel;
     await tester.tap(
-      find.descendant(of: rangeDialog, matching: find.text('10')),
+      find.descendant(of: rangeDialog, matching: find.text('10')).first,
     );
     await tester.pump();
     await tester.tap(
-      find.descendant(of: rangeDialog, matching: find.text('11')),
+      find.descendant(of: rangeDialog, matching: find.text('11')).first,
     );
     await tester.pump();
     await tester.tap(find.text(saveLabel));
