@@ -37,6 +37,8 @@ class _DirectOrderCashierScreenState
   Timer? _chatRefreshTimer;
   List<Map<String, dynamic>> _requests = const [];
   Map<String, dynamic>? _detail;
+  DirectOrderDriverReceiptStatus _driverReceiptStatus =
+      const DirectOrderDriverReceiptStatus.empty();
   String? _selectedId;
   String? _error;
   String? _stateFilter;
@@ -95,11 +97,16 @@ class _DirectOrderCashierScreenState
           requestId: selectedId,
         );
       }
+      final driverReceiptStatus =
+          selectedId != null && detail?['financial'] is Map
+          ? await _loadDriverReceiptStatus(storeId, selectedId)
+          : const DirectOrderDriverReceiptStatus.empty();
       if (!mounted || revision != _refreshRevision) return;
       setState(() {
         _requests = rows;
         _selectedId = selectedId;
         _detail = detail;
+        _driverReceiptStatus = driverReceiptStatus;
         _error = null;
         _loading = false;
       });
@@ -119,6 +126,7 @@ class _DirectOrderCashierScreenState
     setState(() {
       _selectedId = id;
       _detail = null;
+      _driverReceiptStatus = const DirectOrderDriverReceiptStatus.empty();
       _loading = true;
     });
     try {
@@ -126,9 +134,13 @@ class _DirectOrderCashierScreenState
         storeId: storeId,
         requestId: id,
       );
+      final driverReceiptStatus = detail['financial'] is Map
+          ? await _loadDriverReceiptStatus(storeId, id)
+          : const DirectOrderDriverReceiptStatus.empty();
       if (!mounted || revision != _refreshRevision) return;
       setState(() {
         _detail = detail;
+        _driverReceiptStatus = driverReceiptStatus;
         _loading = false;
         _error = null;
       });
@@ -178,6 +190,22 @@ class _DirectOrderCashierScreenState
         note: _quoteNoteController.text.trim(),
       );
     }, _copy.quoteSent);
+  }
+
+  Future<DirectOrderDriverReceiptStatus> _loadDriverReceiptStatus(
+    String storeId,
+    String requestId,
+  ) async {
+    try {
+      return await directOrderStaffService.driverReceiptStatus(
+        storeId: storeId,
+        requestId: requestId,
+      );
+    } catch (_) {
+      // Keep the pre-existing direct-order detail usable while the additive
+      // migration is rolling out or the print-status endpoint is unavailable.
+      return const DirectOrderDriverReceiptStatus.empty();
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -412,6 +440,17 @@ class _DirectOrderCashierScreenState
       ),
       _copy.grabLinkSent,
     );
+  }
+
+  Future<void> _printDriverReceipt({required bool reprint}) async {
+    if (_storeId == null || _selectedId == null) return;
+    await _act(() async {
+      await directOrderStaffService.enqueueDriverReceipt(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        reprint: reprint,
+      );
+    }, reprint ? _copy.driverReceiptReprintQueued : _copy.driverReceiptQueued);
   }
 
   Map<String, dynamic>? get _activeQuote {
@@ -767,6 +806,8 @@ class _DirectOrderCashierScreenState
         ],
         if (financial is Map) ...[
           const SizedBox(height: 12),
+          _buildDriverReceiptSection(),
+          const SizedBox(height: 12),
           _Section(
             title: _copy.grabTrackingUrl,
             icon: Icons.delivery_dining,
@@ -887,6 +928,79 @@ class _DirectOrderCashierScreenState
             onPressed: _busy ? null : _showApproval,
             icon: const Icon(Icons.check_circle_outline),
             label: Text(_copy.approveAndSendKitchen),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDriverReceiptSection() {
+    final status = _driverReceiptStatus;
+    final isWaiting = status.status == 'pending' || status.status == 'printing';
+    final isFailed = status.status == 'failed';
+    final isExpired = status.status == 'cancelled';
+    final reprint = status.canReprint;
+    final enabled = !_busy && !isWaiting && !isExpired;
+    final buttonLabel = reprint
+        ? _copy.reprintDriverReceipt
+        : isFailed
+        ? _copy.retryDriverReceipt
+        : _copy.printDriverReceipt;
+
+    return _Section(
+      title: _copy.driverReceipt,
+      icon: Icons.receipt_long_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _copy.driverReceiptHelp,
+            style: const TextStyle(color: PosColors.textSecondary),
+          ),
+          if (status.exists) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  status.status == 'done'
+                      ? Icons.check_circle_outline
+                      : isFailed || isExpired
+                      ? Icons.error_outline
+                      : Icons.schedule_outlined,
+                  size: 18,
+                  color: status.status == 'done'
+                      ? PosColors.success
+                      : isFailed || isExpired
+                      ? PosColors.danger
+                      : PosColors.warning,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    _copy.driverReceiptStatus(
+                      status.status,
+                      batchNo: status.batchNo,
+                      errorCode: status.lastErrorCode,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            key: Key(
+              reprint
+                  ? 'direct_order_driver_receipt_reprint'
+                  : isFailed
+                  ? 'direct_order_driver_receipt_retry'
+                  : 'direct_order_driver_receipt_print',
+            ),
+            onPressed: enabled
+                ? () => _printDriverReceipt(reprint: reprint)
+                : null,
+            icon: Icon(reprint ? Icons.refresh : Icons.print_outlined),
+            label: Text(buttonLabel),
           ),
         ],
       ),

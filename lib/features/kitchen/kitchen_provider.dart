@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/order_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 
 class KitchenComboComponent {
@@ -282,11 +283,14 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   // filtered. Keep a lightweight safety refresh so kitchen never depends on
   // manual reload to see waiter submissions.
   Timer? _pollTimer;
+  Timer? _businessDayTimer;
   String? _pollStoreId;
   bool _realtimeConnected = false;
 
   Future<void> loadOrders(String storeId, {bool showLoading = true}) async {
     _restaurantId = storeId;
+    final businessDay = TimeUtils.currentVietnamBusinessDay();
+    _scheduleBusinessDayRefresh(storeId, businessDay);
     if (showLoading) {
       state = state.copyWith(isLoading: true, clearError: true);
     }
@@ -299,6 +303,8 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
           )
           .eq('restaurant_id', storeId)
           .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])
+          .gte('created_at', businessDay.startIso8601)
+          .lt('created_at', businessDay.endIso8601)
           .order('created_at', ascending: true)
           .order('created_at', referencedTable: 'order_items', ascending: true)
           .order('id', referencedTable: 'order_items', ascending: true);
@@ -501,6 +507,21 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     });
   }
 
+  void _scheduleBusinessDayRefresh(
+    String storeId,
+    VietnamBusinessDayWindow businessDay,
+  ) {
+    _businessDayTimer?.cancel();
+    _businessDayTimer = Timer(
+      businessDay.refreshDelay(DateTime.now().toUtc()),
+      () {
+        if (mounted && _restaurantId == storeId) {
+          unawaited(loadOrders(storeId, showLoading: false));
+        }
+      },
+    );
+  }
+
   Future<void> updateItemStatus(String itemId, String newStatus) async {
     final storeId = _restaurantId;
     if (storeId == null) {
@@ -591,7 +612,9 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _businessDayTimer?.cancel();
     _pollTimer = null;
+    _businessDayTimer = null;
     _pollStoreId = null;
     _ordersChannel?.unsubscribe();
     _ordersChannel = null;

@@ -357,7 +357,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    56,
+    63,
     "registered SQL error count",
   );
   const conflict = normalizeRpcError(
@@ -380,6 +380,15 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
     internal.code,
     "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
     "internal public code",
+  );
+  const driverReceiptInternal = normalizeRpcError(
+    "DIRECT_ORDER_DRIVER_RECEIPT_PAYLOAD_INVALID private payload",
+  );
+  assertEquals(driverReceiptInternal.status, 503, "driver receipt status");
+  assertEquals(
+    driverReceiptInternal.code,
+    "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
+    "driver receipt public code",
   );
   const unknown = normalizeRpcError(
     "DIRECT_ORDER_NEW_INVALID_NOT_FOUND secret address",

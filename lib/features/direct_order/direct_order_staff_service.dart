@@ -29,6 +29,44 @@ String? normalizeGrabTrackingUrl(String input) {
   return validHost ? uri.toString() : null;
 }
 
+class DirectOrderDriverReceiptStatus {
+  const DirectOrderDriverReceiptStatus({
+    required this.exists,
+    required this.status,
+    required this.batchNo,
+    required this.lastErrorCode,
+    required this.canReprint,
+  });
+
+  const DirectOrderDriverReceiptStatus.empty()
+    : exists = false,
+      status = null,
+      batchNo = null,
+      lastErrorCode = null,
+      canReprint = false;
+
+  final bool exists;
+  final String? status;
+  final int? batchNo;
+  final String? lastErrorCode;
+  final bool canReprint;
+
+  factory DirectOrderDriverReceiptStatus.fromJson(Map<String, dynamic> json) {
+    return DirectOrderDriverReceiptStatus(
+      exists: json['exists'] == true,
+      status: json['status']?.toString(),
+      batchNo: switch (json['batch_no']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value),
+        _ => null,
+      },
+      lastErrorCode: json['last_error_code']?.toString(),
+      canReprint: json['can_reprint'] == true,
+    );
+  }
+}
+
 class DirectOrderStaffService {
   const DirectOrderStaffService();
 
@@ -182,6 +220,36 @@ class DirectOrderStaffService {
         'p_grab_tracking_url': grabUrl,
         'p_actual_grab_fee': actualGrabFee,
       },
+    );
+  }
+
+  Future<DirectOrderDriverReceiptStatus> driverReceiptStatus({
+    required String storeId,
+    required String requestId,
+  }) async {
+    final result = _map(
+      await supabase.rpc(
+        'direct_order_driver_receipt_status',
+        params: {'p_store_id': storeId, 'p_request_id': requestId},
+      ),
+    );
+    return DirectOrderDriverReceiptStatus.fromJson(result);
+  }
+
+  Future<Map<String, dynamic>> enqueueDriverReceipt({
+    required String storeId,
+    required String requestId,
+    bool reprint = false,
+  }) async {
+    return _map(
+      await supabase.rpc(
+        'enqueue_direct_delivery_driver_receipt',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_reprint': reprint,
+        },
+      ),
     );
   }
 

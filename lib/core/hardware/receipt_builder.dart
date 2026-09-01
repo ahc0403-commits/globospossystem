@@ -237,6 +237,129 @@ class ReceiptBuilder {
     return bytes;
   }
 
+  static Future<List<int>> buildDeliveryDriverReceipt({
+    required String restaurantName,
+    required String referenceCode,
+    required String customerName,
+    required String customerPhone,
+    required String formattedAddress,
+    required String detailAddress,
+    required List<ReceiptItem> items,
+    required double menuTotal,
+    required double serviceChargeTotal,
+    required double deliveryFeeTotal,
+    required double finalTotal,
+    required DateTime printedAt,
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    final bytes = <int>[];
+
+    bytes.addAll(
+      generator.text(
+        _escText(restaurantName.toUpperCase()),
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
+        'PHIEU GIAO HANG',
+        styles: const PosStyles(
+          bold: true,
+          align: PosAlign.center,
+          height: PosTextSize.size2,
+        ),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
+        'DA THANH TOAN',
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(generator.hr());
+    bytes.addAll(generator.text('Ma don   : ${_escText(referenceCode)}'));
+    bytes.addAll(
+      generator.text(
+        'Ngay/Gio : ${TimeUtils.formatDate(printedAt)} ${TimeUtils.formatTime(printedAt)}',
+      ),
+    );
+    bytes.addAll(generator.hr());
+    bytes.addAll(
+      generator.text(
+        'THONG TIN GIAO HANG',
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(generator.text('Khach: ${_escText(customerName)}'));
+    bytes.addAll(generator.text('SDT  : ${_escText(customerPhone)}'));
+    bytes.addAll(generator.text('Dia chi giao hang:'));
+    bytes.addAll(generator.text(_escText(formattedAddress)));
+    bytes.addAll(generator.text('Chi tiet: ${_escText(detailAddress)}'));
+    bytes.addAll(generator.hr());
+    bytes.addAll(
+      generator.text(
+        'MON GIAO',
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+    );
+    for (final item in items) {
+      bytes.addAll(
+        generator.text(
+          _escText(item.name),
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      bytes.addAll(
+        generator.row([
+          PosColumn(
+            text: '${item.quantity} x ${_formatVnd(item.unitPrice)}',
+            width: 6,
+          ),
+          PosColumn(
+            text: _formatVnd(item.unitPrice * item.quantity),
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right),
+          ),
+        ]),
+      );
+    }
+    bytes.addAll(generator.hr());
+    bytes.addAll(_amountRow(generator, 'Tien mon', menuTotal));
+    bytes.addAll(_amountRow(generator, 'Phi dich vu', serviceChargeTotal));
+    bytes.addAll(_amountRow(generator, 'Phi giao hang Grab', deliveryFeeTotal));
+    bytes.addAll(
+      generator.row([
+        PosColumn(
+          text: 'TONG DA THANH TOAN',
+          width: 7,
+          styles: const PosStyles(bold: true),
+        ),
+        PosColumn(
+          text: _formatVnd(finalTotal),
+          width: 5,
+          styles: const PosStyles(bold: true, align: PosAlign.right),
+        ),
+      ]),
+    );
+    bytes.addAll(generator.hr());
+    bytes.addAll(
+      generator.text(
+        'Khach can tra: ${_formatVnd(0)}',
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
+        'KHONG THU THEM TIEN CUA KHACH',
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(generator.feed(2));
+    bytes.addAll(generator.cut());
+    return bytes;
+  }
+
   static Future<img.Image> _loadBankTransferQr() async {
     final data = await rootBundle.load(bankTransferQrAsset);
     final decoded = img.decodeImage(data.buffer.asUint8List());
@@ -264,6 +387,24 @@ class ReceiptBuilder {
   ]);
 
   static Future<List<int>> buildKitchenTicket(PrintTicket ticket) async {
+    final driverReceipt = ticket.deliveryDriverReceipt;
+    if (ticket.ticket == 'delivery_driver_receipt' && driverReceipt != null) {
+      return buildDeliveryDriverReceipt(
+        restaurantName: driverReceipt.restaurantName,
+        referenceCode: driverReceipt.referenceCode,
+        customerName: driverReceipt.customerName,
+        customerPhone: driverReceipt.customerPhone,
+        formattedAddress: driverReceipt.formattedAddress,
+        detailAddress: driverReceipt.detailAddress,
+        items: driverReceipt.items,
+        menuTotal: driverReceipt.menuTotal,
+        serviceChargeTotal: driverReceipt.serviceChargeTotal,
+        deliveryFeeTotal: driverReceipt.deliveryFeeTotal,
+        finalTotal: driverReceipt.finalTotal,
+        printedAt: driverReceipt.printedAt,
+      );
+    }
+
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
     final bytes = <int>[];
@@ -698,6 +839,7 @@ class PrintTicket {
     required this.printedAt,
     required this.items,
     this.orderNotes,
+    this.deliveryDriverReceipt,
   });
 
   final String ticket;
@@ -709,12 +851,14 @@ class PrintTicket {
   final String printedAt;
   final List<PrintTicketItem> items;
   final String? orderNotes;
+  final QueuedDeliveryDriverReceipt? deliveryDriverReceipt;
 
   factory PrintTicket.fromPayload(Map<String, dynamic> payload) {
     final rawItems = payload['items'];
     final itemRows = rawItems is List ? rawItems : const <Object?>[];
+    final ticket = payload['ticket']?.toString() ?? 'kitchen';
     return PrintTicket(
-      ticket: payload['ticket']?.toString() ?? 'kitchen',
+      ticket: ticket,
       floorLabel: payload['floor_label']?.toString() ?? '-',
       tableNumber: payload['table_number']?.toString() ?? '-',
       ticketCode: payload['ticket_code']?.toString() ?? '-',
@@ -734,6 +878,9 @@ class PrintTicket {
           )
           .toList(),
       orderNotes: payload['order_notes']?.toString(),
+      deliveryDriverReceipt: ticket == 'delivery_driver_receipt'
+          ? QueuedDeliveryDriverReceipt.fromPayload(payload)
+          : null,
     );
   }
 }
@@ -949,6 +1096,82 @@ class QueuedPaymentReceipt {
             receiptValue('change_amount', 'combined_change_amount'),
           ) ??
           0,
+    );
+  }
+
+  static double? _payloadDouble(Object? value) => switch (value) {
+    num number => number.toDouble(),
+    String text => double.tryParse(text),
+    _ => null,
+  };
+}
+
+class QueuedDeliveryDriverReceipt {
+  const QueuedDeliveryDriverReceipt({
+    required this.restaurantName,
+    required this.referenceCode,
+    required this.customerName,
+    required this.customerPhone,
+    required this.formattedAddress,
+    required this.detailAddress,
+    required this.items,
+    required this.menuTotal,
+    required this.serviceChargeTotal,
+    required this.deliveryFeeTotal,
+    required this.finalTotal,
+    required this.printedAt,
+  });
+
+  final String restaurantName;
+  final String referenceCode;
+  final String customerName;
+  final String customerPhone;
+  final String formattedAddress;
+  final String detailAddress;
+  final List<ReceiptItem> items;
+  final double menuTotal;
+  final double serviceChargeTotal;
+  final double deliveryFeeTotal;
+  final double finalTotal;
+  final DateTime printedAt;
+
+  factory QueuedDeliveryDriverReceipt.fromPayload(
+    Map<String, dynamic> payload,
+  ) {
+    final rawItems = payload['items'];
+    final itemRows = rawItems is List ? rawItems : const <Object?>[];
+    return QueuedDeliveryDriverReceipt(
+      restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
+      referenceCode:
+          payload['reference_code']?.toString() ??
+          payload['ticket_code']?.toString() ??
+          '-',
+      customerName: payload['customer_name']?.toString() ?? '-',
+      customerPhone: payload['customer_phone']?.toString() ?? '-',
+      formattedAddress: payload['formatted_address']?.toString() ?? '-',
+      detailAddress: payload['detail_address']?.toString() ?? '-',
+      items: itemRows
+          .whereType<Map>()
+          .map((item) {
+            final row = Map<String, dynamic>.from(item);
+            return ReceiptItem(
+              name: row['label']?.toString() ?? 'Mon',
+              quantity: switch (row['quantity'] ?? row['qty']) {
+                int value => value,
+                num value => value.toInt(),
+                String value => int.tryParse(value) ?? 1,
+                _ => 1,
+              },
+              unitPrice: _payloadDouble(row['unit_price']) ?? 0,
+            );
+          })
+          .toList(growable: false),
+      menuTotal: _payloadDouble(payload['menu_total']) ?? 0,
+      serviceChargeTotal: _payloadDouble(payload['service_charge_total']) ?? 0,
+      deliveryFeeTotal: _payloadDouble(payload['delivery_fee_total']) ?? 0,
+      finalTotal: _payloadDouble(payload['final_total']) ?? 0,
+      printedAt:
+          DateTime.tryParse(payload['at']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 

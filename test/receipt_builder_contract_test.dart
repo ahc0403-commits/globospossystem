@@ -67,6 +67,107 @@ void main() {
     },
   );
 
+  test(
+    'delivery driver receipt includes address and charged Grab total',
+    () async {
+      final bytes = await ReceiptBuilder.buildDeliveryDriverReceipt(
+        restaurantName: 'Bunsik Club',
+        referenceCode: 'D1234ABCD',
+        customerName: 'Nguyễn Văn An',
+        customerPhone: '+84901234567',
+        formattedAddress: '123 Nguyễn Huệ, Quận 1, TP.HCM',
+        detailAddress: 'Tầng 4, phòng 401',
+        items: const [
+          ReceiptItem(name: 'Cơm gà', quantity: 2, unitPrice: 50000),
+        ],
+        menuTotal: 100000,
+        serviceChargeTotal: 10000,
+        deliveryFeeTotal: 25000,
+        finalTotal: 135000,
+        printedAt: DateTime.utc(2026, 9, 1, 10, 30),
+      );
+
+      final text = String.fromCharCodes(bytes);
+      expect(text, contains('PHIEU GIAO HANG'));
+      expect(text, contains('DA THANH TOAN'));
+      expect(text, contains('D1234ABCD'));
+      expect(text, contains('Nguyen Van An'));
+      expect(text, contains('+84901234567'));
+      expect(text, contains('123 Nguyen Hue, Quan 1, TP.HCM'));
+      expect(text, contains('Tang 4, phong 401'));
+      expect(text, contains('Com ga'));
+      expect(text, contains('Phi giao hang Grab'));
+      expect(text, contains('25,000 VND'));
+      expect(text, contains('TONG DA THANH TOAN'));
+      expect(text, contains('135,000 VND'));
+      expect(text, contains('Khach can tra: 0 VND'));
+      expect(text, contains('KHONG THU THEM TIEN CUA KHACH'));
+      expect(text, isNot(contains('WOORI BANK')));
+      expect(text, isNot(contains('PHIEU THANH TOAN')));
+      expect(bytes, contains(0x1d));
+      expect(bytes, contains(0x56));
+    },
+  );
+
+  test('queued delivery driver receipt reads its isolated payload', () {
+    final receipt = QueuedDeliveryDriverReceipt.fromPayload({
+      'restaurant_name': 'GLOBOS POS',
+      'reference_code': 'D9999TEST',
+      'customer_name': 'Customer',
+      'customer_phone': '0901234567',
+      'formatted_address': 'Main address',
+      'detail_address': 'Unit 2',
+      'items': const [
+        {'label': 'Menu', 'quantity': '2', 'unit_price': '50000'},
+      ],
+      'menu_total': '100000',
+      'service_charge_total': 10000,
+      'delivery_fee_total': '25000',
+      'final_total': 135000,
+      'at': '2026-09-01T10:30:00+07:00',
+    });
+
+    expect(receipt.referenceCode, 'D9999TEST');
+    expect(receipt.formattedAddress, 'Main address');
+    expect(receipt.items.single.quantity, 2);
+    expect(receipt.items.single.unitPrice, 50000);
+    expect(receipt.deliveryFeeTotal, 25000);
+    expect(receipt.finalTotal, 135000);
+  });
+
+  test(
+    'frozen print agent fallback renders the dedicated driver slip',
+    () async {
+      final ticket = PrintTicket.fromPayload({
+        'ticket': 'delivery_driver_receipt',
+        'restaurant_name': 'GLOBOS POS',
+        'reference_code': 'D9999TEST',
+        'customer_name': 'Customer',
+        'customer_phone': '0901234567',
+        'formatted_address': 'Main address',
+        'detail_address': 'Unit 2',
+        'items': const [
+          {'label': 'Menu', 'quantity': 2, 'unit_price': 50000},
+        ],
+        'menu_total': 100000,
+        'service_charge_total': 10000,
+        'delivery_fee_total': 25000,
+        'final_total': 135000,
+        'at': '2026-09-01T10:30:00+07:00',
+      });
+
+      final text = String.fromCharCodes(
+        await ReceiptBuilder.buildKitchenTicket(ticket),
+      );
+
+      expect(text, contains('PHIEU GIAO HANG'));
+      expect(text, contains('Main address'));
+      expect(text, contains('Phi giao hang Grab'));
+      expect(text, contains('135,000 VND'));
+      expect(text, isNot(contains('PHIEU BEP')));
+    },
+  );
+
   test('queued payment receipt reads VAT amount from print payload', () {
     final receipt = QueuedPaymentReceipt.fromPayload({
       'restaurant_name': 'GLOBOS POS',
