@@ -13,6 +13,7 @@ void main() {
   test('driver receipt migration is additive and preserves existing cores', () {
     final migration = File(migrationPath).readAsStringSync();
 
+    expect(migration, contains('-- production-gate: self-verifying'));
     expect(migration, contains("'delivery_driver_receipt'"));
     expect(
       migration,
