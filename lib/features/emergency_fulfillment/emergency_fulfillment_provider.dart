@@ -9,12 +9,20 @@ import 'package:uuid/uuid.dart';
 import '../../core/models/fulfillment_mode.dart';
 import '../../core/services/emergency_web_bridge.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 import 'kds_realtime_sync.dart';
 
 const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
 const emergencyFloorDirectBeverageAlarmCoalesceDelay = Duration(seconds: 2);
 const emergencyAdditionalOrderAlarmCoalesceDelay = Duration(seconds: 2);
+
+Duration emergencySnapshotRetryDelay(int consecutiveFailures) =>
+    switch (consecutiveFailures) {
+      <= 1 => const Duration(seconds: 2),
+      2 => const Duration(seconds: 5),
+      _ => const Duration(seconds: 15),
+    };
 
 String formatEmergencyElapsed(Duration elapsed) {
   final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
@@ -805,6 +813,7 @@ class LeftoverPackagingTask {
 class EmergencyFulfillmentState {
   const EmergencyFulfillmentState({
     this.assigned = false,
+    this.assignmentResolved = false,
     this.active = false,
     this.isLoading = false,
     this.restaurantId,
@@ -821,6 +830,7 @@ class EmergencyFulfillmentState {
   });
 
   final bool assigned;
+  final bool assignmentResolved;
   final bool active;
   final bool isLoading;
   final String? restaurantId;
@@ -839,6 +849,7 @@ class EmergencyFulfillmentState {
 
   EmergencyFulfillmentState copyWith({
     bool? assigned,
+    bool? assignmentResolved,
     bool? active,
     bool? isLoading,
     String? restaurantId,
@@ -855,6 +866,7 @@ class EmergencyFulfillmentState {
     bool clearError = false,
   }) => EmergencyFulfillmentState(
     assigned: assigned ?? this.assigned,
+    assignmentResolved: assignmentResolved ?? this.assignmentResolved,
     active: active ?? this.active,
     isLoading: isLoading ?? this.isLoading,
     restaurantId: restaurantId ?? this.restaurantId,
@@ -877,6 +889,7 @@ class EmergencyFulfillmentState {
     final rawLeftoverPackagingTasks = json['leftover_packaging_tasks'];
     return EmergencyFulfillmentState(
       assigned: json['assigned'] == true,
+      assignmentResolved: json.containsKey('assigned'),
       active: json['active'] == true,
       restaurantId: json['restaurant_id']?.toString(),
       sessionId: json['session_id']?.toString(),
@@ -1110,9 +1123,12 @@ class EmergencyFulfillmentNotifier
   KdsSyncMode _syncMode = KdsSyncMode.legacy;
   String? _subscriptionKey;
   Timer? _pollTimer;
+  Timer? _snapshotRetryTimer;
+  Timer? _businessDayTimer;
   bool _refreshing = false;
   bool _refreshRequested = false;
   bool _flushing = false;
+  int _snapshotFailureCount = 0;
   int _realtimeRevision = 0;
   final Map<String, int> _ticketRevisions = {};
 
@@ -1122,6 +1138,7 @@ class EmergencyFulfillmentNotifier
       return;
     }
     _refreshing = true;
+    _scheduleBusinessDayRefresh(TimeUtils.currentVietnamBusinessDay());
     final refreshRevision = _realtimeRevision;
     if (showLoading) state = state.copyWith(isLoading: true, clearError: true);
     try {
@@ -1143,9 +1160,16 @@ class EmergencyFulfillmentNotifier
       } else {
         raw = await supabase.rpc('get_emergency_station_snapshot');
       }
-      final json = raw is Map
-          ? Map<String, dynamic>.from(raw)
-          : <String, dynamic>{};
+      if (raw is! Map) {
+        throw const FormatException('EMERGENCY_SNAPSHOT_RESPONSE_INVALID');
+      }
+      final json = Map<String, dynamic>.from(raw);
+      if (!json.containsKey('assigned')) {
+        throw const FormatException('EMERGENCY_ASSIGNMENT_RESPONSE_INVALID');
+      }
+      _snapshotFailureCount = 0;
+      _snapshotRetryTimer?.cancel();
+      _snapshotRetryTimer = null;
       final storeId = json['restaurant_id']?.toString();
       if (refreshRevision != _realtimeRevision) {
         _refreshRequested = true;
@@ -1211,10 +1235,12 @@ class EmergencyFulfillmentNotifier
         await _subscribe(state, syncConfig);
       }
     } catch (error) {
+      _snapshotFailureCount += 1;
       state = state.copyWith(
         isLoading: false,
         error: 'EMERGENCY_SNAPSHOT_FAILED: $error',
       );
+      _scheduleSnapshotRetry();
     } finally {
       _refreshing = false;
       if (_refreshRequested && mounted) {
@@ -1222,6 +1248,26 @@ class EmergencyFulfillmentNotifier
         unawaited(load(showLoading: false));
       }
     }
+  }
+
+  void _scheduleSnapshotRetry() {
+    _snapshotRetryTimer?.cancel();
+    _snapshotRetryTimer = Timer(
+      emergencySnapshotRetryDelay(_snapshotFailureCount),
+      () {
+        if (mounted) unawaited(load(showLoading: false));
+      },
+    );
+  }
+
+  void _scheduleBusinessDayRefresh(VietnamBusinessDayWindow businessDay) {
+    _businessDayTimer?.cancel();
+    _businessDayTimer = Timer(
+      businessDay.refreshDelay(DateTime.now().toUtc()),
+      () {
+        if (mounted) unawaited(load(showLoading: false));
+      },
+    );
   }
 
   Future<dynamic> _optionalRpc(String functionName) async {
@@ -2022,6 +2068,8 @@ class EmergencyFulfillmentNotifier
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _snapshotRetryTimer?.cancel();
+    _businessDayTimer?.cancel();
     unawaited(_channel?.unsubscribe());
     unawaited(_kdsSync?.dispose());
     super.dispose();

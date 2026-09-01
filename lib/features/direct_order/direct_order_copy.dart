@@ -125,6 +125,22 @@ class DirectOrderCopy {
       'Vui lòng kiểm tra lại link Grab và phí giao hàng thực tế.',
       'Please check the Grab link and actual delivery fee.',
     ),
+    'DIRECT_ORDER_DRIVER_RECEIPT_ADDRESS_UNAVAILABLE' => _pick(
+      '배송지 정보가 없어 기사용 영수증을 출력할 수 없습니다.',
+      'Không thể in phiếu tài xế vì không còn địa chỉ giao hàng.',
+      'The driver receipt cannot be printed because the delivery address is unavailable.',
+    ),
+    'DIRECT_ORDER_DRIVER_RECEIPT_TOTAL_MISMATCH' ||
+    'DIRECT_ORDER_DRIVER_RECEIPT_ITEMS_UNAVAILABLE' => _pick(
+      '주문 금액 또는 메뉴 정보를 확인한 뒤 다시 시도해 주세요.',
+      'Vui lòng kiểm tra lại món và tổng tiền trước khi thử lại.',
+      'Check the order items and total before trying again.',
+    ),
+    'DIRECT_ORDER_DRIVER_RECEIPT_REPRINT_NOT_AVAILABLE' => _pick(
+      '첫 출력이 완료된 뒤 재출력할 수 있습니다.',
+      'Chỉ có thể in lại sau khi bản đầu tiên hoàn tất.',
+      'Reprinting is available after the first copy completes.',
+    ),
     'DIRECT_ORDER_REQUEST_NOT_APPROVABLE' ||
     'DIRECT_ORDER_REQUEST_NOT_REJECTABLE' ||
     'DIRECT_ORDER_NOT_APPROVED' ||
@@ -458,6 +474,60 @@ class DirectOrderCopy {
     'Gửi link Grab cho khách',
     'Send Grab link to customer',
   );
+  String get driverReceipt => _pick(
+    '배달 기사용 영수증',
+    'Phiếu cho tài xế giao hàng',
+    'Delivery driver receipt',
+  );
+  String get driverReceiptHelp => _pick(
+    '배송지와 고객 청구 Grab 배송비가 포함된 결제 완료 전표입니다.',
+    'Phiếu đã thanh toán gồm địa chỉ giao hàng và phí Grab thu của khách.',
+    'A paid handoff slip with the delivery address and customer-charged Grab fee.',
+  );
+  String get printDriverReceipt =>
+      _pick('기사용 영수증 출력', 'In phiếu cho tài xế', 'Print driver receipt');
+  String get reprintDriverReceipt =>
+      _pick('기사용 영수증 재출력', 'In lại phiếu tài xế', 'Reprint driver receipt');
+  String get retryDriverReceipt =>
+      _pick('기사용 영수증 다시 시도', 'Thử in lại phiếu tài xế', 'Retry driver receipt');
+  String get driverReceiptQueued => _pick(
+    '기사용 영수증 출력을 요청했습니다.',
+    'Đã gửi yêu cầu in phiếu tài xế.',
+    'The driver receipt was queued.',
+  );
+  String get driverReceiptReprintQueued => _pick(
+    '기사용 영수증 재출력을 요청했습니다.',
+    'Đã gửi yêu cầu in lại phiếu tài xế.',
+    'The driver receipt reprint was queued.',
+  );
+  String driverReceiptStatus(
+    String? status, {
+    int? batchNo,
+    String? errorCode,
+  }) {
+    final batch = batchNo == null
+        ? ''
+        : _pick(' · $batchNo차', ' · bản $batchNo', ' · batch $batchNo');
+    final label = switch (status) {
+      'pending' => _pick('출력 대기', 'Đang chờ in', 'Queued'),
+      'printing' => _pick('출력 중', 'Đang in', 'Printing'),
+      'done' => _pick('출력 완료', 'Đã in', 'Printed'),
+      'failed' when errorCode == 'NO_DESTINATION' => _pick(
+        '영수증 프린터 미설정',
+        'Chưa cài máy in hóa đơn',
+        'Receipt printer not configured',
+      ),
+      'failed' => _pick('출력 실패', 'In thất bại', 'Print failed'),
+      'cancelled' => _pick(
+        '출력 정보 보존기간 만료',
+        'Thông tin in đã hết hạn',
+        'Print data expired',
+      ),
+      _ => _pick('출력 전', 'Chưa in', 'Not printed'),
+    };
+    return '$label$batch';
+  }
+
   String get kitchenBoard => _pick(
     '직접 배달 주방 보드',
     'Bảng bếp giao hàng',

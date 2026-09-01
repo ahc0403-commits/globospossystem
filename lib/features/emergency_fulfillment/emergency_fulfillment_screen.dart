@@ -347,6 +347,9 @@ class _EmergencyFulfillmentScreenState
     final state = ref.watch(emergencyFulfillmentProvider);
     final copy = _EmergencyCopy.of(context);
     final expected = widget.expectedStationType;
+    final headerStation = state.stationType ?? expected;
+    final assignmentLoadFailed =
+        state.error != null && !state.assignmentResolved;
     final stationMismatch =
         expected != null &&
         state.stationType != null &&
@@ -369,10 +372,9 @@ class _EmergencyFulfillmentScreenState
             children: [
               const OfflineBanner(),
               _EmergencyHeader(
-                title:
-                    state.stationType == null || state.stationType == 'kitchen'
+                title: headerStation == null || headerStation == 'kitchen'
                     ? context.l10n.kitchenTitle
-                    : copy.stationTitle(state.stationType, state.floorLabel),
+                    : copy.stationTitle(headerStation, state.floorLabel),
                 active: state.active,
                 draining: state.isDraining,
                 alarmEnabled: _alarmEnabled,
@@ -391,6 +393,12 @@ class _EmergencyFulfillmentScreenState
                   duration: const Duration(milliseconds: 180),
                   child: state.isLoading
                       ? const Center(child: CircularProgressIndicator())
+                      : assignmentLoadFailed
+                      ? _EmergencyLockedState(
+                          icon: Icons.sync_problem_rounded,
+                          title: copy.orderLoadFailed,
+                          body: copy.orderLoadRetrying,
+                        )
                       : stationMismatch
                       ? _EmergencyLockedState(
                           icon: Icons.lock_outline_rounded,
@@ -2329,6 +2337,13 @@ class _EmergencyCopy {
   );
   String get noAssignment =>
       _pick('스테이션 미배정', 'Chưa phân công trạm', 'Station not assigned');
+  String get orderLoadFailed =>
+      _pick('주문 조회 지연', 'Đang chậm tải đơn hàng', 'Order loading delayed');
+  String get orderLoadRetrying => _pick(
+    '로그인 상태를 유지한 채 자동으로 다시 조회하고 있습니다.',
+    'Hệ thống đang tự tải lại mà không cần đăng nhập lại.',
+    'Retrying automatically without requiring another sign-in.',
+  );
   String get noAssignmentBody => _pick(
     '이 아이디에 주방·트레이·층별 스테이션을 배정해야 합니다.',
     'Tài khoản này cần được phân công bếp, khay hoặc tầng.',

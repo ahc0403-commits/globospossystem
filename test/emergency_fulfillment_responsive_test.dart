@@ -181,6 +181,48 @@ void main() {
     );
   });
 
+  testWidgets(
+    'initial snapshot failure retries without being mislabeled unassigned',
+    (tester) async {
+      final fixture = _FixtureEmergencyNotifier(
+        const EmergencyFulfillmentState(
+          error: 'EMERGENCY_SNAPSHOT_FAILED: timeout',
+        ),
+      );
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(800, 600),
+        locale: const Locale('ko'),
+        expectedStationType: 'tray',
+      );
+
+      expect(find.text('트레이'), findsOne);
+      expect(find.text('주문 조회 지연'), findsOne);
+      expect(find.textContaining('자동으로 다시 조회'), findsOne);
+      expect(find.text('스테이션 미배정'), findsNothing);
+    },
+  );
+
+  testWidgets('resolved missing assignment remains a real locked state', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(
+      const EmergencyFulfillmentState(assignmentResolved: true),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(800, 600),
+      locale: const Locale('ko'),
+      expectedStationType: 'tray',
+    );
+
+    expect(find.text('트레이'), findsOne);
+    expect(find.text('스테이션 미배정'), findsOne);
+    expect(find.text('주문 조회 지연'), findsNothing);
+  });
+
   testWidgets('phone uses four slots and opens the tray order detail', (
     tester,
   ) async {

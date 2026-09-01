@@ -9,6 +9,7 @@ import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/time_utils.dart';
 import '../../l10n/app_localizations.dart';
 import '../../main.dart';
 import '../order/order_model.dart';
@@ -400,11 +401,14 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   // Realtime can be delayed or dropped on mobile web. Keep cashier payment
   // readiness moving so kitchen-ready tables do not wait for a manual refresh.
   Timer? _pollTimer;
+  Timer? _businessDayTimer;
   String? _pollStoreId;
   bool _realtimeConnected = false;
 
   Future<void> loadOrders(String storeId) async {
     _restaurantId = storeId;
+    final businessDay = TimeUtils.currentVietnamBusinessDay();
+    _scheduleBusinessDayRefresh(storeId, businessDay);
 
     try {
       await supabase.rpc(
@@ -422,6 +426,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           // recalc_order_status (ORDER_LIFECYCLE_STATE_CONTRACT_2026_07_03):
           // serving ⇔ every active item is ready|served.
           .eq('status', 'serving')
+          .gte('created_at', businessDay.startIso8601)
+          .lt('created_at', businessDay.endIso8601)
           .order('created_at', ascending: true)
           .order('created_at', referencedTable: 'order_items', ascending: true)
           .order('id', referencedTable: 'order_items', ascending: true);
@@ -524,6 +530,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final completedOrders = await _fetchCompletedOrders(
         storeId,
         storePricing,
+        businessDay,
       );
 
       final selected = state.selectedOrder;
@@ -617,9 +624,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   Future<List<CashierOrder>> _fetchCompletedOrders(
     String storeId,
     _CashierStorePricing storePricing,
+    VietnamBusinessDayWindow businessDay,
   ) async {
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
     final response = await supabase
         .from('orders')
         .select(
@@ -627,7 +633,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
-        .gte('updated_at', todayStart)
+        .gte('created_at', businessDay.startIso8601)
+        .lt('created_at', businessDay.endIso8601)
         .order('updated_at', ascending: false)
         .order('created_at', referencedTable: 'order_items', ascending: true)
         .order('id', referencedTable: 'order_items', ascending: true)
@@ -746,6 +753,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       }
     }
 
+    final businessDay = TimeUtils.currentVietnamBusinessDay();
     final rows = await supabase
         .from('orders')
         .select(
@@ -753,6 +761,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         )
         .eq('restaurant_id', storeId)
         .inFilter('status', ['pending', 'confirmed', 'serving'])
+        .gte('created_at', businessDay.startIso8601)
+        .lt('created_at', businessDay.endIso8601)
         .order('created_at', ascending: false)
         .limit(100);
 
@@ -1525,10 +1535,27 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     });
   }
 
+  void _scheduleBusinessDayRefresh(
+    String storeId,
+    VietnamBusinessDayWindow businessDay,
+  ) {
+    _businessDayTimer?.cancel();
+    _businessDayTimer = Timer(
+      businessDay.refreshDelay(DateTime.now().toUtc()),
+      () {
+        if (mounted && _restaurantId == storeId) {
+          unawaited(loadOrders(storeId));
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _businessDayTimer?.cancel();
     _pollTimer = null;
+    _businessDayTimer = null;
     _pollStoreId = null;
     _ordersChannel?.unsubscribe();
     _paymentsChannel?.unsubscribe();

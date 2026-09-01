@@ -89,7 +89,8 @@ void main() {
       contains('Future<List<CashierOrder>> _fetchCompletedOrders'),
     );
     expect(provider, contains(".eq('status', 'completed')"));
-    expect(provider, contains(".gte('updated_at', todayStart)"));
+    expect(provider, contains(".gte('created_at', businessDay.startIso8601)"));
+    expect(provider, contains(".lt('created_at', businessDay.endIso8601)"));
     expect(screen, contains('class _CashierCompletedOrderHistory'));
     expect(screen, contains("Key('cashier_completed_order_history')"));
     expect(screen, contains("Key('cashier_payment_method_required_hint')"));
