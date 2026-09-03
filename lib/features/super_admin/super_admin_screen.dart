@@ -21,6 +21,7 @@ import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_state.dart';
 import '../emergency_fulfillment/emergency_control_panel.dart';
+import '../photo_sales_import/photo_sales_import_screen.dart';
 import '../qc/qc_provider.dart';
 import '../restaurant_sales_export/restaurant_sales_export_screen.dart';
 import 'super_admin_provider.dart';
@@ -299,6 +300,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       ),
       _AllReportsTab(state: state, notifier: notifier),
       const RestaurantSalesExportScreen(embedded: true),
+      const PhotoSalesImportScreen(),
       const EmergencyControlPanel(),
       const _QcOverviewTab(),
       const _QcGlobalTemplatesTab(),
@@ -332,6 +334,13 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
             urgency: ToastSidebarUrgency.backOffice,
             helperLabel: _superAdminSalesReportHelper(context),
             itemKey: const Key('super_admin_nav_sales_tax_report'),
+          ),
+          ToastSidebarItem(
+            icon: Icons.add_photo_alternate_outlined,
+            label: _superAdminPhotoSalesImportLabel(context),
+            urgency: ToastSidebarUrgency.backOffice,
+            helperLabel: _superAdminPhotoSalesImportHelper(context),
+            itemKey: const Key('super_admin_nav_photo_sales_import'),
           ),
           ToastSidebarItem(
             icon: Icons.crisis_alert_rounded,
@@ -396,6 +405,20 @@ String _superAdminSalesReportHelper(BuildContext context) =>
       'vi' => 'Tải toàn bộ biên lai Restaurant theo mẫu MISA',
       'en' => 'Download all Restaurant receipts in the MISA format',
       _ => 'Restaurant 전체 영수증을 MISA 양식으로 다운로드',
+    };
+
+String _superAdminPhotoSalesImportLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Nhập doanh thu Photo',
+      'en' => 'Import Photo sales',
+      _ => '포토 매출 입력하기',
+    };
+
+String _superAdminPhotoSalesImportHelper(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Chuyển Excel Moers sang định dạng tải lên MISA',
+      'en' => 'Convert Moers Excel to the MISA upload format',
+      _ => 'Moers Excel을 MISA 업로드 양식으로 변환',
     };
 
 String _superAdminEmergencyHelper(BuildContext context) =>
