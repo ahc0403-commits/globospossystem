@@ -1,5 +1,6 @@
 name: Photo Objet Prepared Collector Runner
 
+# Retained as historical rollback reference; execution is disabled.
 on:
   workflow_call:
     inputs:
@@ -24,6 +25,7 @@ permissions:
 
 jobs:
   collect:
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     env:

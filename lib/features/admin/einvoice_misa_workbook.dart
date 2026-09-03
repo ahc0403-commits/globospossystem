@@ -34,11 +34,13 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
       buyer['customer_name'],
       'Bán cho người tiêu dùng',
     ]);
-    final buyerName = _firstText([
-      buyer['buyer_full_name'],
-      legalName,
-      'Bán cho người tiêu dùng',
-    ]);
+    final buyerName = job.containsKey('misa_buyer_person_name')
+        ? _text(job['misa_buyer_person_name'])
+        : _firstText([
+            buyer['buyer_full_name'],
+            legalName,
+            'Bán cho người tiêu dùng',
+          ]);
 
     for (final line in lines) {
       final quantity = _number(line['quantity'], fallback: 1).clamp(1, 999999);
@@ -66,7 +68,9 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
             isPhoto ? 'Dịch vụ chụp ảnh' : 'Món ăn',
           ]),
         ),
-        TextCellValue(isPhoto ? 'Lần' : 'Phần'),
+        TextCellValue(
+          _firstText([line['misa_unit_name'], isPhoto ? 'Lần' : 'Phần']),
+        ),
         DoubleCellValue(quantity.toDouble()),
         DoubleCellValue(amounts.unitPrice),
         DoubleCellValue(amounts.supplyAmount),

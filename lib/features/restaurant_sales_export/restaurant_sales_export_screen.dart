@@ -9,13 +9,23 @@ import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
+import '../photo_sales_import/photo_sales_import_service.dart';
+import '../photo_sales_import/photo_sales_registered_export.dart';
+import 'combined_sales_export.dart';
 import 'restaurant_sales_export.dart';
 import 'restaurant_sales_export_service.dart';
+
+typedef PhotoSalesExportLoader =
+    Future<List<PhotoSalesRegisteredExport>> Function(String businessDate);
+typedef CombinedMisaFileSaver =
+    Future<void> Function(String fileName, Uint8List bytes);
 
 class RestaurantSalesExportScreen extends StatefulWidget {
   const RestaurantSalesExportScreen({
     super.key,
     this.loader,
+    this.photoLoader,
+    this.saveFile,
     this.embedded = false,
     this.todayOverride,
   });
@@ -24,6 +34,8 @@ class RestaurantSalesExportScreen extends StatefulWidget {
   /// Production continues to use [restaurantSalesExportService].
   final Future<List<RestaurantSalesExport>> Function(String businessDate)?
   loader;
+  final PhotoSalesExportLoader? photoLoader;
+  final CombinedMisaFileSaver? saveFile;
   final bool embedded;
   final DateTime? todayOverride;
 
@@ -35,14 +47,14 @@ class RestaurantSalesExportScreen extends StatefulWidget {
 class _RestaurantSalesExportScreenState
     extends State<RestaurantSalesExportScreen> {
   late String _businessDate;
-  List<RestaurantSalesExport> _exports = const [];
+  List<CombinedSalesExport> _exports = const [];
   String? _selectedTaxEntityId;
   bool _isLoading = false;
   bool _isDownloading = false;
   String? _statusMessage;
   bool _statusIsError = false;
 
-  RestaurantSalesExport? get _selectedExport {
+  CombinedSalesExport? get _selectedExport {
     for (final export in _exports) {
       if (export.taxEntityId == _selectedTaxEntityId) return export;
     }
@@ -247,7 +259,7 @@ class _RestaurantSalesExportScreenState
     );
   }
 
-  Widget _metrics(BuildContext context, RestaurantSalesExport export) {
+  Widget _metrics(BuildContext context, CombinedSalesExport export) {
     final currency = NumberFormat('#,##0', 'vi_VN');
     return Wrap(
       key: const Key('restaurant_sales_export_preview'),
@@ -255,6 +267,16 @@ class _RestaurantSalesExportScreenState
       runSpacing: ToastSpacingTokens.sm,
       children: [
         _metric(_receiptLabel(context), '${export.receiptCount}'),
+        _metric(
+          _restaurantSalesLabel(context),
+          '${currency.format(export.restaurantGrossSales)} ₫',
+          key: const Key('restaurant_sales_export_restaurant_total'),
+        ),
+        _metric(
+          _photoSalesLabel(context),
+          '${currency.format(export.photoGrossSales)} ₫',
+          key: const Key('restaurant_sales_export_photo_total'),
+        ),
         _metric(_generalLabel(context), '${export.generalReceiptCount}'),
         _metric(_redLabel(context), '${export.redInvoiceCount}'),
         _metric(
@@ -270,7 +292,7 @@ class _RestaurantSalesExportScreenState
     );
   }
 
-  Widget _entitySelector(BuildContext context, RestaurantSalesExport selected) {
+  Widget _entitySelector(BuildContext context, CombinedSalesExport selected) {
     return KeyedSubtree(
       key: const Key('restaurant_sales_export_tax_entity_selector'),
       child: DropdownButtonFormField<String>(
@@ -307,8 +329,9 @@ class _RestaurantSalesExportScreenState
     );
   }
 
-  Widget _metric(String label, String value) {
+  Widget _metric(String label, String value, {Key? key}) {
     return Container(
+      key: key,
       constraints: const BoxConstraints(minWidth: 150),
       padding: const EdgeInsets.all(ToastSpacingTokens.md),
       decoration: BoxDecoration(
@@ -401,9 +424,24 @@ class _RestaurantSalesExportScreenState
       _statusIsError = false;
     });
     try {
-      final exports =
-          await (widget.loader?.call(_businessDate) ??
-              restaurantSalesExportService.load(_businessDate));
+      final restaurantFuture =
+          widget.loader?.call(_businessDate) ??
+          restaurantSalesExportService.load(_businessDate);
+      final photoFuture =
+          widget.photoLoader?.call(_businessDate) ??
+          (widget.loader != null
+              ? Future<List<PhotoSalesRegisteredExport>>.value(const [])
+              : photoSalesImportService.loadRegistered(_businessDate));
+      // Attach error handlers to both requests at once. In offline mode both
+      // can fail, and awaiting them sequentially would leave the second error
+      // unobserved after the screen has already handled the first one.
+      final loaded = await Future.wait<Object>([restaurantFuture, photoFuture]);
+      final restaurantExports = loaded[0] as List<RestaurantSalesExport>;
+      final photoExports = loaded[1] as List<PhotoSalesRegisteredExport>;
+      final exports = combineSalesExportsByTaxEntity(
+        restaurantExports: restaurantExports,
+        photoExports: photoExports,
+      );
       if (!mounted) return;
       String? preferredEntityId;
       for (final export in exports) {
@@ -442,18 +480,23 @@ class _RestaurantSalesExportScreenState
       _statusIsError = false;
     });
     try {
-      final bytes = buildRestaurantSalesWorkbook(export);
+      final bytes = Uint8List.fromList(buildCombinedSalesWorkbook(export));
       final taxCode = export.sellerTaxCode.replaceAll(
         RegExp(r'[^A-Za-z0-9_-]'),
         '_',
       );
-      await FileSaver.instance.saveFile(
-        name:
-            'MISA_restaurant_sales_${taxCode}_${_businessDate.replaceAll('-', '')}',
-        bytes: Uint8List.fromList(bytes),
-        ext: 'xlsx',
-        mimeType: MimeType.microsoftExcel,
-      );
+      final fileName =
+          'MISA_sales_${taxCode}_${_businessDate.replaceAll('-', '')}';
+      if (widget.saveFile != null) {
+        await widget.saveFile!('$fileName.xlsx', bytes);
+      } else {
+        await FileSaver.instance.saveFile(
+          name: fileName,
+          bytes: bytes,
+          ext: 'xlsx',
+          mimeType: MimeType.microsoftExcel,
+        );
+      }
       if (!mounted) return;
       final amount = NumberFormat('#,##0', 'vi_VN').format(export.grossSales);
       final message = context.l10n.restaurantSalesExportSaved(
@@ -498,17 +541,17 @@ String _subtitle(BuildContext context) => switch (Localizations.localeOf(
   context,
 ).languageCode) {
   'vi' =>
-    'Tạo file MISA riêng theo từng pháp nhân và mã số thuế. Cửa hàng SAMPLE được tách khỏi doanh thu thực.',
+    'Gộp doanh thu Restaurant và Photo cùng pháp nhân vào một file MISA. Các mã số thuế và cửa hàng SAMPLE vẫn được tách riêng.',
   'en' =>
-    'Create a separate MISA file for each legal entity and seller tax code. SAMPLE sales stay isolated from real revenue.',
-  _ => '법인과 판매자 세금코드별로 MISA 엑셀을 따로 생성합니다. 샘플 매장 매출은 실매출과 분리됩니다.',
+    'Combine Restaurant and Photo sales for the same legal entity into one MISA file. Seller tax codes and SAMPLE sales remain separate.',
+  _ => '같은 법인의 Restaurant와 Photo 매출을 하나의 MISA 엑셀로 합칩니다. 다른 세금코드와 샘플 매출은 분리됩니다.',
 };
 
 String _downloadLabel(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Tải file MISA của pháp nhân này',
-      'en' => 'Download this entity’s MISA file',
-      _ => '선택 법인 MISA 엑셀 다운로드',
+      'vi' => 'Tải MISA Restaurant + Photo',
+      'en' => 'Download Restaurant + Photo MISA',
+      _ => 'Restaurant + Photo 통합 MISA 다운로드',
     };
 
 String _entityLabel(BuildContext context) =>
@@ -544,9 +587,9 @@ String _sampleEntityMessage(
 
 String _noSalesMessage(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Không có doanh thu Restaurant đã hoàn tất cho ngày này.',
-      'en' => 'There are no finalized Restaurant sales for this date.',
-      _ => '해당 날짜에 확정된 Restaurant 매출이 없습니다.',
+      'vi' => 'Không có doanh thu Restaurant hoặc Photo cho ngày này.',
+      'en' => 'There are no Restaurant or Photo sales for this date.',
+      _ => '해당 날짜에 Restaurant 또는 Photo 매출이 없습니다.',
     };
 
 String _dateSearchTitle(BuildContext context) =>
@@ -578,6 +621,20 @@ String _receiptLabel(BuildContext context) =>
       'vi' => 'Tổng biên lai',
       'en' => 'All receipts',
       _ => '전체 영수증',
+    };
+
+String _restaurantSalesLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Doanh thu Restaurant',
+      'en' => 'Restaurant sales',
+      _ => 'Restaurant 매출',
+    };
+
+String _photoSalesLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Doanh thu Photo',
+      'en' => 'Photo sales',
+      _ => 'Photo 매출',
     };
 
 String _generalLabel(BuildContext context) =>
@@ -617,7 +674,7 @@ String _grossLabel(BuildContext context) =>
 
 String _blockingMessage(
   BuildContext context,
-  RestaurantSalesExport export,
+  CombinedSalesExport export,
 ) => switch (Localizations.localeOf(context).languageCode) {
   'vi' =>
     '${export.blockingIssueCount} lỗi dữ liệu cần xử lý trước khi tải file.',

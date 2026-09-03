@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -7,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/photo_sales_import/photo_sales_import.dart';
 import 'package:globos_pos_system/features/photo_sales_import/photo_sales_import_screen.dart';
+import 'package:globos_pos_system/features/photo_sales_import/photo_sales_import_service.dart';
 
 void main() {
   test('parses the Korean Moers layout and skips zero-amount rows', () {
@@ -17,8 +19,51 @@ void main() {
     expect(source.storeCount, 2);
     expect(source.totalAmount, 162000);
     expect(source.skippedZeroAmountCount, 1);
+    expect(source.rows.first.branchCode, 'BH');
+    expect(source.rows.last.branchCode, 'DA');
     expect(source.rows.first.deviceName, 'A-01');
     expect(source.rows.last.amount, 54000);
+    expect(
+      source.branchSummaries.map((branch) => branch.branchCode),
+      containsAll(<String>['BH', 'DA']),
+    );
+  });
+
+  test('normalizes Moers Branch names to stable POS store codes', () {
+    expect(normalizePhotoSalesBranchCode('BH'), 'BH');
+    expect(normalizePhotoSalesBranchCode('DI AN'), 'DA');
+    expect(normalizePhotoSalesBranchCode('LONG THANH'), 'LT');
+    expect(normalizePhotoSalesBranchCode('THẢO ĐIỀN'), 'TD');
+    expect(normalizePhotoSalesBranchCode('QUANG TRUNG'), 'QT');
+    expect(normalizePhotoSalesBranchCode('NOWZONE'), 'NZ');
+    expect(normalizePhotoSalesBranchCode('UNKNOWN'), isNull);
+  });
+
+  test('builds stable occurrence numbers for identical source sales', () {
+    final row = PhotoSalesImportRow(
+      sourceRow: 3,
+      branchCode: 'BH',
+      storeName: 'BIEN HOA',
+      deviceName: 'A-01',
+      deviceId: 'device-a',
+      saleTime: '09:30',
+      amount: 108000,
+      type: '현금',
+    );
+    final source = PhotoSalesImportWorkbook(
+      rows: [row, row],
+      sourceSheetName: 'Sales',
+      skippedZeroAmountCount: 0,
+    );
+
+    final rows = buildPhotoSalesRegistrationRows(
+      source: source,
+      saleDate: DateTime(2026, 9, 2),
+    );
+
+    expect(rows.map((value) => value['branch_code']), everyElement('BH'));
+    expect(rows.map((value) => value['sale_time']), everyElement('09:30:00'));
+    expect(rows.map((value) => value['occurrence_no']), [1, 2]);
   });
 
   test('converts every Photo receipt to the 17-column MISA layout', () {
@@ -69,14 +114,15 @@ void main() {
       utf8.encode('''
         <html><body><table>
           <tr><td>Daily sales</td></tr>
-          <tr><th>Store</th><th>Device Name</th><th>Device ID</th><th>Time</th><th>Amount</th><th>Type</th></tr>
-          <tr><td>NOW ZONE</td><td>N-01</td><td>device-n</td><td>11:05:07</td><td>120,000</td><td>PHOTO</td></tr>
+          <tr><th>Branch</th><th>Store</th><th>Device Name</th><th>Device ID</th><th>Time</th><th>Amount</th><th>Type</th></tr>
+          <tr><td>NOWZONE</td><td>NOW ZONE</td><td>N-01</td><td>device-n</td><td>11:05:07</td><td>120,000</td><td>PHOTO</td></tr>
         </table></body></html>
       '''),
     );
 
     final source = parsePhotoSalesImportWorkbook(bytes);
     expect(source.receiptCount, 1);
+    expect(source.rows.single.branchCode, 'NZ');
     expect(source.rows.single.storeName, 'NOW ZONE');
     expect(source.rows.single.amount, 120000);
   });
@@ -85,6 +131,7 @@ void main() {
     final excel = Excel.createExcel();
     excel.rename('Sheet1', 'Sales');
     excel['Sales'].appendRow([
+      TextCellValue('Branch'),
       TextCellValue('Device Name'),
       TextCellValue('Amount'),
     ]);
@@ -108,11 +155,13 @@ void main() {
       excel.rename('Sheet1', 'Sales');
       final sheet = excel['Sales'];
       sheet.appendRow([
+        TextCellValue('Branch'),
         TextCellValue('Device Name'),
         TextCellValue('Time'),
         TextCellValue('Amount'),
       ]);
       sheet.appendRow([
+        TextCellValue('BH'),
         TextCellValue('A-01'),
         TextCellValue('2026-09-01 10:00:00'),
         IntCellValue(108000),
@@ -137,11 +186,13 @@ void main() {
     },
   );
 
-  testWidgets('uploads, previews, and downloads the converted workbook', (
+  testWidgets('uploads, previews, and automatically saves the workbook', (
     tester,
   ) async {
-    String? savedName;
-    Uint8List? savedBytes;
+    String? registeredFileName;
+    DateTime? registeredDate;
+    PhotoSalesImportWorkbook? registeredWorkbook;
+    final registration = Completer<PhotoSalesRegistrationResult>();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -153,10 +204,17 @@ void main() {
               mimeType:
                   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ),
-            saveFile: (fileName, bytes) async {
-              savedName = fileName;
-              savedBytes = bytes;
-            },
+            registerSales:
+                ({
+                  required workbook,
+                  required saleDate,
+                  required sourceFileName,
+                }) async {
+                  registeredWorkbook = workbook;
+                  registeredDate = saleDate;
+                  registeredFileName = sourceFileName;
+                  return registration.future;
+                },
           ),
         ),
       ),
@@ -169,23 +227,51 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byKey(const Key('photo_sales_import_preview')), findsOneWidget);
+    expect(find.byKey(const Key('photo_sales_branch_BH')), findsOneWidget);
+    expect(find.byKey(const Key('photo_sales_branch_DA')), findsOneWidget);
     expect(find.textContaining('162'), findsOneWidget);
-    final download = find.byKey(const Key('photo_sales_misa_download'));
+    expect(find.byKey(const Key('photo_sales_auto_saving')), findsOneWidget);
+    expect(registeredFileName, 'Moers Excel');
+    expect(registeredDate, DateTime(2026, 9, 2));
+    expect(registeredWorkbook?.receiptCount, 2);
+
+    registration.complete(
+      const PhotoSalesRegistrationResult(
+        saleDate: '2026-09-02',
+        sourceRows: 2,
+        insertedRows: 2,
+        duplicateRows: 0,
+        totalAmount: 162000,
+        branches: [
+          PhotoSalesRegistrationBranch(
+            branchCode: 'BH',
+            storeId: 'store-bh',
+            storeName: 'PHOTO OBJET BIEN HOA',
+            receiptCount: 1,
+            totalAmount: 108000,
+          ),
+          PhotoSalesRegistrationBranch(
+            branchCode: 'DA',
+            storeId: 'store-da',
+            storeName: 'PHOTO OBJET DI AN',
+            receiptCount: 1,
+            totalAmount: 54000,
+          ),
+        ],
+      ),
+    );
     await tester.drag(
       find.byKey(const Key('photo_sales_import_screen')),
-      const Offset(0, -500),
+      const Offset(0, -650),
     );
-    await tester.pump();
-    await tester.tap(download);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
 
-    expect(savedName, 'MISA_photo_sales_20260902.xlsx');
-    expect(savedBytes, isNotNull);
     expect(
-      Excel.decodeBytes(savedBytes!).tables.keys,
-      contains('Hóa đơn GTGT'),
+      find.byKey(const Key('photo_sales_registration_result')),
+      findsOneWidget,
     );
+    expect(find.byKey(const Key('photo_sales_auto_saving')), findsNothing);
+    expect(find.byKey(const Key('photo_sales_misa_download')), findsNothing);
   });
 }
 
@@ -195,6 +281,7 @@ Uint8List _sourceWorkbook() {
   final sheet = excel['Sales'];
   sheet.appendRow([TextCellValue('Photo Objet daily sales')]);
   sheet.appendRow([
+    TextCellValue('Branch'),
     TextCellValue('매장'),
     TextCellValue('기기명'),
     TextCellValue('기기ID'),
@@ -203,6 +290,7 @@ Uint8List _sourceWorkbook() {
     TextCellValue('구분'),
   ]);
   sheet.appendRow([
+    TextCellValue('BH'),
     TextCellValue('BIEN HOA'),
     TextCellValue('A-01'),
     TextCellValue('device-a'),
@@ -212,6 +300,7 @@ Uint8List _sourceWorkbook() {
   ]);
   sheet.appendRow([
     TextCellValue('DI AN'),
+    TextCellValue('DI AN'),
     TextCellValue('B-01'),
     TextCellValue('device-b'),
     TextCellValue('10:15'),
@@ -219,6 +308,7 @@ Uint8List _sourceWorkbook() {
     TextCellValue('PHOTO'),
   ]);
   sheet.appendRow([
+    TextCellValue('DI AN'),
     TextCellValue('DI AN'),
     TextCellValue('B-02'),
     TextCellValue('device-c'),

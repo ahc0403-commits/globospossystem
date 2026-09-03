@@ -112,24 +112,26 @@ void main() {
     );
     expect(screenSource, contains('restaurant_sales_export_preview'));
     expect(screenSource, contains('restaurant_sales_export_button'));
-    expect(screenSource, contains('MISA_restaurant_sales_'));
+    expect(screenSource, contains('MISA_sales_'));
+    expect(screenSource, contains('buildCombinedSalesWorkbook'));
+    expect(screenSource, contains('restaurant_sales_export_photo_total'));
     expect(screenSource, contains("ext: 'xlsx'"));
     expect(redScreen, isNot(contains('red_invoice_export_button')));
     expect(queueScreen, isNot(contains('misa_pending_excel_download')));
   });
 
-  test('Super Admin exposes the Photo sales Excel conversion category', () {
+  test('Super Admin exposes the Photo sales reporting category', () {
     final superAdminSource = readRepoFile(superAdmin);
     final photoImportSource = readRepoFile(
       'lib/features/photo_sales_import/photo_sales_import_screen.dart',
     );
 
     expect(superAdminSource, contains('super_admin_nav_photo_sales_import'));
-    expect(superAdminSource, contains('포토 매출 입력하기'));
+    expect(superAdminSource, contains('포토 매출 신고하기'));
     expect(superAdminSource, contains('const PhotoSalesImportScreen()'));
     expect(photoImportSource, contains("extensions: <String>['xlsx', 'xls']"));
-    expect(photoImportSource, contains('photo_sales_misa_download'));
-    expect(photoImportSource, contains('MISA_photo_sales_'));
+    expect(photoImportSource, contains('photo_sales_auto_saving'));
+    expect(photoImportSource, isNot(contains('photo_sales_misa_download')));
   });
 
   test('sales report supports explicit past-date search and download', () {

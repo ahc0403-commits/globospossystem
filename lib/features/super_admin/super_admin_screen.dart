@@ -402,23 +402,23 @@ String _superAdminSalesReportLabel(BuildContext context) =>
 
 String _superAdminSalesReportHelper(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Tải toàn bộ biên lai Restaurant theo mẫu MISA',
-      'en' => 'Download all Restaurant receipts in the MISA format',
-      _ => 'Restaurant 전체 영수증을 MISA 양식으로 다운로드',
+      'vi' => 'Tải chung doanh thu Restaurant và Photo theo mẫu MISA',
+      'en' => 'Download combined Restaurant and Photo sales for MISA',
+      _ => 'Restaurant와 Photo 통합 매출을 MISA 양식으로 다운로드',
     };
 
 String _superAdminPhotoSalesImportLabel(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Nhập doanh thu Photo',
-      'en' => 'Import Photo sales',
-      _ => '포토 매출 입력하기',
+      'vi' => 'Khai báo doanh thu Photo',
+      'en' => 'Report Photo sales',
+      _ => '포토 매출 신고하기',
     };
 
 String _superAdminPhotoSalesImportHelper(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Chuyển Excel Moers sang định dạng tải lên MISA',
-      'en' => 'Convert Moers Excel to the MISA upload format',
-      _ => 'Moers Excel을 MISA 업로드 양식으로 변환',
+      'vi' => 'Tự động lưu doanh thu theo chi nhánh từ Excel',
+      'en' => 'Automatically save branch sales from Excel',
+      _ => 'Excel 업로드 시 지점별 매출 자동 저장',
     };
 
 String _superAdminEmergencyHelper(BuildContext context) =>

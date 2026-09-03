@@ -1,15 +1,15 @@
 name: Photo Objet Sales Collect Backup Prepare
 
+# Retired: Photo sales now enter POS through the Super Admin Excel import.
 on:
-  schedule:
-    # Independent prepared backup. It cannot take the DB lease before 22:01 HCM.
-    - cron: '50 14 * * *'
+  workflow_dispatch:
 permissions:
   contents: read
   issues: write
 
 jobs:
   collect:
+    if: ${{ false }}
     uses: ./.github/workflows/photo_objet_sales_collect_runner.yml
     with:
       executor_role: backup

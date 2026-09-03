@@ -6,9 +6,19 @@ import '../admin/einvoice_misa_workbook.dart';
 
 const photoSalesImportMaxRows = 10000;
 
+const photoSalesBranchLabels = <String, String>{
+  'BH': 'PHOTO OBJET BIEN HOA',
+  'DA': 'PHOTO OBJET DI AN',
+  'LT': 'PHOTO OBJET LONG THANH',
+  'TD': 'PHOTO OBJET THAO DIEN',
+  'QT': 'PHOTO OBJET QUANG TRUNG',
+  'NZ': 'PHOTO OBJET NOW ZONE',
+};
+
 class PhotoSalesImportRow {
   const PhotoSalesImportRow({
     required this.sourceRow,
+    required this.branchCode,
     required this.storeName,
     required this.deviceName,
     required this.deviceId,
@@ -18,6 +28,7 @@ class PhotoSalesImportRow {
   });
 
   final int sourceRow;
+  final String branchCode;
   final String storeName;
   final String deviceName;
   final String deviceId;
@@ -39,11 +50,39 @@ class PhotoSalesImportWorkbook {
 
   int get receiptCount => rows.length;
   int get totalAmount => rows.fold(0, (total, row) => total + row.amount);
-  int get storeCount => rows
-      .map((row) => row.storeName.trim())
-      .where((name) => name.isNotEmpty)
-      .toSet()
-      .length;
+  int get storeCount => branchSummaries.length;
+
+  List<PhotoSalesBranchSummary> get branchSummaries {
+    final grouped = <String, List<PhotoSalesImportRow>>{};
+    for (final row in rows) {
+      grouped.putIfAbsent(row.branchCode, () => []).add(row);
+    }
+    return [
+      for (final entry in grouped.entries)
+        PhotoSalesBranchSummary(
+          branchCode: entry.key,
+          storeName:
+              photoSalesBranchLabels[entry.key] ??
+              entry.value.first.storeName.trim(),
+          receiptCount: entry.value.length,
+          totalAmount: entry.value.fold(0, (total, row) => total + row.amount),
+        ),
+    ]..sort((a, b) => a.storeName.compareTo(b.storeName));
+  }
+}
+
+class PhotoSalesBranchSummary {
+  const PhotoSalesBranchSummary({
+    required this.branchCode,
+    required this.storeName,
+    required this.receiptCount,
+    required this.totalAmount,
+  });
+
+  final String branchCode;
+  final String storeName;
+  final int receiptCount;
+  final int totalAmount;
 }
 
 class PhotoSalesImportValidationException implements Exception {
@@ -119,6 +158,45 @@ List<int> buildPhotoSalesMisaWorkbook({
   return buildMisaPendingInvoiceWorkbook(jobs);
 }
 
+List<Map<String, dynamic>> buildPhotoSalesRegistrationRows({
+  required PhotoSalesImportWorkbook source,
+  required DateTime saleDate,
+}) {
+  if (source.rows.isEmpty) {
+    throw const PhotoSalesImportValidationException(['지점 매출로 등록할 행이 없습니다.']);
+  }
+
+  final date = DateTime(saleDate.year, saleDate.month, saleDate.day);
+  final occurrences = <String, int>{};
+  return source.rows
+      .map((row) {
+        final soldAt = _soldAt(date, row.saleTime, row.sourceRow);
+        final saleTime = _canonicalSaleTime(row.saleTime);
+        final identity = jsonEncode([
+          row.branchCode,
+          row.deviceId,
+          row.deviceName,
+          soldAt.toIso8601String(),
+          row.amount,
+          row.type,
+        ]);
+        final occurrenceNo = (occurrences[identity] ?? 0) + 1;
+        occurrences[identity] = occurrenceNo;
+        return <String, dynamic>{
+          'source_row': row.sourceRow,
+          'branch_code': row.branchCode,
+          'store_name': row.storeName,
+          'device_name': row.deviceName,
+          'device_id': row.deviceId,
+          'sale_time': saleTime,
+          'amount': row.amount,
+          'raw_type': row.type,
+          'occurrence_no': occurrenceNo,
+        };
+      })
+      .toList(growable: false);
+}
+
 class _SourceMatrix {
   const _SourceMatrix({required this.name, required this.rows});
 
@@ -136,7 +214,7 @@ PhotoSalesImportWorkbook _parseMatrices(List<_SourceMatrix> matrices) {
   }
 
   throw const PhotoSalesImportValidationException([
-    '매출 표를 찾을 수 없습니다. 기기명(Device Name), 시간(Time), 금액(Amount) 열이 있는 Moers Excel을 사용하세요.',
+    '매출 표를 찾을 수 없습니다. Branch, 기기명(Device Name), 시간(Time), 금액(Amount) 열이 있는 Moers Excel을 사용하세요.',
   ]);
 }
 
@@ -149,6 +227,7 @@ PhotoSalesImportWorkbook _parseTable(_SourceMatrix matrix, int headerIndex) {
   }
 
   final missing = <String>[
+    if (!indexes.containsKey('branch')) 'Branch(지점)',
     if (!indexes.containsKey('device')) '기기명(Device Name)',
     if (!indexes.containsKey('time')) '시간(Time)',
     if (!indexes.containsKey('amount')) '금액(Amount)',
@@ -178,11 +257,19 @@ PhotoSalesImportWorkbook _parseTable(_SourceMatrix matrix, int headerIndex) {
     final knownValues = indexes.keys.map(value).map(_cellText).toList();
     if (knownValues.every((text) => text.trim().isEmpty)) continue;
 
+    final rawBranch = _cellText(value('branch')).trim();
+    final branchCode = normalizePhotoSalesBranchCode(rawBranch);
     final deviceName = _cellText(value('device')).trim();
     final saleTime = _cellText(value('time')).trim();
     final rawAmount = value('amount');
     final amount = _parseWholeAmount(rawAmount);
 
+    if (branchCode == null) {
+      issues.add(
+        '$sourceRow행: Branch "$rawBranch"를 POS 지점에 연결할 수 없습니다. '
+        '지원값: BH, DI AN, LONG THANH, THẢO ĐIỀN, QUANG TRUNG, NOWZONE',
+      );
+    }
     if (deviceName.isEmpty) {
       issues.add('$sourceRow행: 기기명이 비어 있습니다.');
     }
@@ -192,7 +279,8 @@ PhotoSalesImportWorkbook _parseTable(_SourceMatrix matrix, int headerIndex) {
     if (amount == null || amount < 0) {
       issues.add('$sourceRow행: 금액은 0 이상의 VND 정수여야 합니다.');
     }
-    if (deviceName.isEmpty ||
+    if (branchCode == null ||
+        deviceName.isEmpty ||
         !_isValidSaleTime(saleTime) ||
         amount == null ||
         amount < 0) {
@@ -206,6 +294,7 @@ PhotoSalesImportWorkbook _parseTable(_SourceMatrix matrix, int headerIndex) {
     rows.add(
       PhotoSalesImportRow(
         sourceRow: sourceRow,
+        branchCode: branchCode,
         storeName: _cellText(value('store')).trim(),
         deviceName: deviceName,
         deviceId: _cellText(value('deviceId')).trim(),
@@ -239,12 +328,36 @@ String? _canonicalHeader(String value) {
     '',
   );
   return switch (normalized) {
+    'branch' || 'branchcode' || '지점' || '지점코드' => 'branch',
     '매장' || 'store' => 'store',
     '기기명' || 'devicename' => 'device',
     '기기id' || '기기아이디' || 'deviceid' => 'deviceId',
     '시간' || 'time' => 'time',
     '금액' || 'amount' => 'amount',
     '구분' || 'type' => 'type',
+    _ => null,
+  };
+}
+
+String? normalizePhotoSalesBranchCode(String value) {
+  final normalized = value
+      .trim()
+      .toUpperCase()
+      .replaceAll(RegExp('[ÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬ]'), 'A')
+      .replaceAll(RegExp('[ÈÉẺẼẸÊẾỀỂỄỆ]'), 'E')
+      .replaceAll(RegExp('[ÌÍỈĨỊ]'), 'I')
+      .replaceAll(RegExp('[ÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢ]'), 'O')
+      .replaceAll(RegExp('[ÙÚỦŨỤƯỨỪỬỮỰ]'), 'U')
+      .replaceAll(RegExp('[ỲÝỶỸỴ]'), 'Y')
+      .replaceAll('Đ', 'D')
+      .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  return switch (normalized) {
+    'BH' || 'BIENHOA' => 'BH',
+    'DA' || 'DIAN' => 'DA',
+    'LT' || 'LONGTHANH' => 'LT',
+    'TD' || 'THAODIEN' => 'TD',
+    'QT' || 'QUANGTRUNG' => 'QT',
+    'NZ' || 'NOWZONE' => 'NZ',
     _ => null,
   };
 }
@@ -307,6 +420,14 @@ DateTime _soldAt(DateTime saleDate, String value, int sourceRow) {
     int.parse(match.group(5)!),
     int.parse(match.group(6) ?? '0'),
   ).subtract(const Duration(hours: 7));
+}
+
+String _canonicalSaleTime(String value) {
+  final match = RegExp(
+    r'^(?:\d{4}-\d{2}-\d{2}[ T])?(\d{1,2}):(\d{2})(?::(\d{2}))?$',
+  ).firstMatch(value)!;
+  return '${match.group(1)!.padLeft(2, '0')}:'
+      '${match.group(2)}:${match.group(3) ?? '00'}';
 }
 
 String _dateText(DateTime value) =>

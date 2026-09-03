@@ -1,10 +1,8 @@
 name: Photo Objet Vietnam Day Finalization
 
+# Retired: Photo sales now enter POS through the Super Admin Excel import.
 on:
-  schedule:
-    # At 00:10 HCM, reload the completed prior Vietnam calendar day so sales
-    # after the 22:00 operational snapshot remain on their original sale date.
-    - cron: '10 17 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,6 +10,7 @@ permissions:
 
 jobs:
   finalize:
+    if: ${{ false }}
     uses: ./.github/workflows/photo_objet_sales_collect_runner.yml
     with:
       executor_role: primary
