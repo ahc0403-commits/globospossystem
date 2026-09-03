@@ -23,6 +23,7 @@ import 'package:globos_pos_system/features/payment/payment_detail_screen.dart';
 import 'package:globos_pos_system/features/photo_ops/photo_ops_provider.dart';
 import 'package:globos_pos_system/features/photo_ops/photo_ops_screen.dart';
 import 'package:globos_pos_system/features/photo_ops/photo_ops_service.dart';
+import 'package:globos_pos_system/features/photo_sales_import/photo_sales_registered_export.dart';
 import 'package:globos_pos_system/features/print_station/print_station_screen.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
@@ -725,6 +726,9 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final requestedDates = <String>[];
+    final photoRequestedDates = <String>[];
+    String? savedFileName;
+    var savedByteLength = 0;
     List<RestaurantSalesExport> exportFor(String businessDate) {
       RestaurantSalesExport entityExport({required bool sample}) =>
           RestaurantSalesExport(
@@ -776,6 +780,28 @@ void main() {
       return [entityExport(sample: false), entityExport(sample: true)];
     }
 
+    List<PhotoSalesRegisteredExport> photoFor(String businessDate) => [
+      PhotoSalesRegisteredExport(
+        businessDate: businessDate,
+        taxEntityId: 'production-tax-entity',
+        sellerTaxCode: '0318453298',
+        sellerLegalName: 'CÔNG TY TNHH AKJ INTERNATIONAL',
+        storeCount: 1,
+        receiptCount: 1,
+        grossSales: 54000,
+        receipts: [
+          PhotoSalesRegisteredReceipt(
+            sourceHash: 'photo-$businessDate',
+            storeId: 'photo-store',
+            storeName: 'PHOTO OBJET BIEN HOA',
+            deviceName: 'BH-1',
+            soldAt: DateTime.parse('${businessDate}T11:00:00+07:00'),
+            amount: 54000,
+          ),
+        ],
+      ),
+    ];
+
     await _pump(
       tester,
       child: RestaurantSalesExportScreen(
@@ -784,10 +810,23 @@ void main() {
           requestedDates.add(businessDate);
           return exportFor(businessDate);
         },
+        photoLoader: (businessDate) async {
+          photoRequestedDates.add(businessDate);
+          return photoFor(businessDate);
+        },
+        saveFile: (fileName, bytes) async {
+          savedFileName = fileName;
+          savedByteLength = bytes.length;
+        },
       ),
     );
     await tester.pumpAndSettle();
     expect(requestedDates, ['2026-08-16']);
+    expect(photoRequestedDates, ['2026-08-16']);
+    expect(
+      find.byKey(const Key('restaurant_sales_export_photo_total')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const Key('restaurant_sales_export_date_search')),
       findsOneWidget,
@@ -827,6 +866,7 @@ void main() {
     await tester.tap(find.byKey(const Key('restaurant_sales_export_search')));
     await tester.pumpAndSettle();
     expect(requestedDates, ['2026-08-16', '2026-08-15']);
+    expect(photoRequestedDates, ['2026-08-16', '2026-08-15']);
     expect(
       tester
           .widget<ButtonStyleButton>(
@@ -835,6 +875,10 @@ void main() {
           .onPressed,
       isNotNull,
     );
+    await tester.tap(find.byKey(const Key('restaurant_sales_export_button')));
+    await tester.pumpAndSettle();
+    expect(savedFileName, 'MISA_sales_0318453298_20260815.xlsx');
+    expect(savedByteLength, greaterThan(0));
     expect(tester.takeException(), isNull);
   });
 

@@ -1,9 +1,7 @@
 name: Photo Objet Sales Health
 
+# Retired with the automatic collector. Manual imports are validated in POS.
 on:
-  schedule:
-    # Verify the 22:25 REPORT_READY deadline at 22:30 HCM.
-    - cron: '30 15 * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,6 +14,7 @@ concurrency:
 
 jobs:
   health:
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:

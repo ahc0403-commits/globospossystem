@@ -270,11 +270,10 @@ void main() {
       '.github/workflows/photo_objet_release_proof.yml',
     );
 
-    final collectionCrons = RegExp(
-      r"cron: '([^']+)'",
-    ).allMatches(collect).map((match) => match.group(1)).toList();
-    expect(collectionCrons, ['40 14 * * *']);
-    expect(collectBackup, contains("cron: '50 14 * * *'"));
+    expect(collect, isNot(contains('schedule:')));
+    expect(collectBackup, isNot(contains('schedule:')));
+    expect(collect, contains(r'if: ${{ false }}'));
+    expect(collectBackup, contains(r'if: ${{ false }}'));
     expect(collect, contains('executor_role: primary'));
     expect(collectBackup, contains('executor_role: backup'));
     expect(collectRunner, contains("node-version: '22'"));
@@ -282,7 +281,8 @@ void main() {
     expect(collectRunner, contains('npx puppeteer browsers install'));
     expect(collectRunner, isNot(contains('--install-deps')));
     expect(collectRunner, isNot(contains('audit-missing-runs')));
-    expect(collectRecovery, contains("cron: '30 17 * * *'"));
+    expect(collectRecovery, isNot(contains('schedule:')));
+    expect(collectRecovery, contains(r'if: ${{ false }}'));
     expect(collectRecovery, contains('workflow_dispatch:'));
     expect(collectRecovery, contains('slot_date_hcm:'));
     expect(collectRecovery, contains('executor_role: backup'));
@@ -290,7 +290,8 @@ void main() {
       collectRecovery,
       contains("test \"\${SOURCE_REF}\" = 'refs/heads/main'"),
     );
-    expect(collectFinalize, contains("cron: '10 17 * * *'"));
+    expect(collectFinalize, isNot(contains('schedule:')));
+    expect(collectFinalize, contains(r'if: ${{ false }}'));
     expect(collectFinalize, contains('full_day_finalize: true'));
     expect(collectRunner, contains('full_day_finalize:'));
     expect(collectRunner, contains('PHOTO_OBJET_BUSINESS_DATE_HCM='));
@@ -303,8 +304,8 @@ void main() {
       contains('--backfill-to "\${PHOTO_OBJET_BUSINESS_DATE_HCM}" --execute'),
     );
 
-    expect(slotHealth, contains("cron: '30 15 * * *'"));
-    expect(RegExp(r"cron: '[^']+'\n").allMatches(slotHealth), hasLength(1));
+    expect(slotHealth, isNot(contains('schedule:')));
+    expect(slotHealth, contains(r'if: ${{ false }}'));
     expect(slotHealth, contains('--refresh --output health-evidence.json'));
     expect(slotHealth, contains('--ack-file health-evidence.json'));
     expect(slotHealth, contains('--assert-file health-evidence.json'));
@@ -314,6 +315,7 @@ void main() {
     expect(backfill, contains('workflow_dispatch:'));
     expect(backfill, contains('default: false'));
     expect(backfill, contains('EXECUTE_IMMUTABLE_BACKFILL'));
+    expect(backfill, contains(r'if: ${{ false }}'));
     expect(backfill, isNot(contains('schedule:')));
     expect(contract, contains('pull_request:'));
     expect(contract, isNot(contains('secrets.')));

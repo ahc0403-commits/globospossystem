@@ -1,6 +1,3 @@
-import 'dart:typed_data';
-
-import 'package:file_saver/file_saver.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -9,21 +6,26 @@ import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import 'photo_sales_import.dart';
+import 'photo_sales_import_service.dart';
 
 typedef PhotoSalesImportFilePicker = Future<XFile?> Function();
-typedef PhotoSalesMisaFileSaver =
-    Future<void> Function(String fileName, Uint8List bytes);
+typedef PhotoSalesRegistrar =
+    Future<PhotoSalesRegistrationResult> Function({
+      required PhotoSalesImportWorkbook workbook,
+      required DateTime saleDate,
+      required String sourceFileName,
+    });
 
 class PhotoSalesImportScreen extends StatefulWidget {
   const PhotoSalesImportScreen({
     super.key,
     this.pickFile,
-    this.saveFile,
+    this.registerSales,
     this.todayOverride,
   });
 
   final PhotoSalesImportFilePicker? pickFile;
-  final PhotoSalesMisaFileSaver? saveFile;
+  final PhotoSalesRegistrar? registerSales;
   final DateTime? todayOverride;
 
   @override
@@ -37,7 +39,10 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
   String? _statusMessage;
   bool _statusIsError = false;
   bool _isReading = false;
-  bool _isDownloading = false;
+  bool _isRegistering = false;
+  PhotoSalesRegistrationResult? _registrationResult;
+
+  bool get _isBusy => _isReading || _isRegistering;
 
   @override
   void initState() {
@@ -63,9 +68,9 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
                 child: Text(
                   _text(
                     context,
-                    ko: '포토 매출 입력하기',
-                    en: 'Import Photo sales',
-                    vi: 'Nhập doanh thu Photo',
+                    ko: '포토 매출 신고하기',
+                    en: 'Report Photo sales',
+                    vi: 'Khai báo doanh thu Photo',
                   ),
                   style: AppFonts.system(
                     color: ToastColorTokens.textPrimary,
@@ -79,9 +84,9 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
               Text(
                 _text(
                   context,
-                  ko: 'Moers 매출 Excel을 확인한 뒤 MISA 업로드용 Excel로 변환합니다. 파일 내용은 서버에 저장되지 않습니다.',
-                  en: 'Review a Moers sales workbook and convert it to the MISA upload format. The file is not stored on the server.',
-                  vi: 'Kiểm tra Excel doanh thu Moers rồi chuyển sang định dạng tải lên MISA. Tệp không được lưu trên máy chủ.',
+                  ko: 'Moers 매출 Excel을 선택하면 검증 후 지점별 POS 매출로 자동 저장합니다. 원본 파일은 저장하지 않고 검증된 매출 행만 저장합니다.',
+                  en: 'Choosing a Moers workbook validates and automatically saves its rows as branch-level POS sales. The source file is not stored.',
+                  vi: 'Khi chọn Excel Moers, hệ thống xác thực và tự động lưu doanh thu POS theo chi nhánh. Tệp gốc không được lưu.',
                 ),
                 style: AppFonts.system(
                   color: ToastColorTokens.textSecondary,
@@ -101,7 +106,7 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
                 ),
                 child: OutlinedButton.icon(
                   key: const Key('photo_sales_import_date_picker'),
-                  onPressed: _isReading || _isDownloading ? null : _chooseDate,
+                  onPressed: _isBusy ? null : _chooseDate,
                   icon: const Icon(Icons.calendar_month_outlined),
                   label: Text(
                     DateFormat('yyyy-MM-dd').format(_saleDate),
@@ -130,9 +135,9 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
                     Text(
                       _text(
                         context,
-                        ko: '필수 열: 기기명, 시간, 금액 · 지원 파일: .xlsx, Moers .xls',
-                        en: 'Required columns: Device Name, Time, Amount · Files: .xlsx, Moers .xls',
-                        vi: 'Cột bắt buộc: Device Name, Time, Amount · Tệp: .xlsx, .xls từ Moers',
+                        ko: '필수 열: Branch, 기기명, 시간, 금액 · 지원 파일: .xlsx, Moers .xls',
+                        en: 'Required columns: Branch, Device Name, Time, Amount · Files: .xlsx, Moers .xls',
+                        vi: 'Cột bắt buộc: Branch, Device Name, Time, Amount · Tệp: .xlsx, .xls từ Moers',
                       ),
                       style: AppFonts.system(
                         color: ToastColorTokens.textSecondary,
@@ -142,9 +147,7 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
                     const SizedBox(height: ToastSpacingTokens.sm),
                     OutlinedButton.icon(
                       key: const Key('photo_sales_import_file_picker'),
-                      onPressed: _isReading || _isDownloading
-                          ? null
-                          : _pickWorkbook,
+                      onPressed: _isBusy ? null : _pickWorkbook,
                       icon: _isReading
                           ? const SizedBox.square(
                               dimension: 18,
@@ -198,32 +201,13 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
               if (workbook != null) ...[
                 const SizedBox(height: ToastSpacingTokens.lg),
                 _preview(context, workbook),
+                const SizedBox(height: ToastSpacingTokens.lg),
+                _registrationPanel(context),
               ],
               if (_statusMessage != null) ...[
                 const SizedBox(height: ToastSpacingTokens.lg),
                 _messagePanel(_statusMessage!, isError: _statusIsError),
               ],
-              const SizedBox(height: ToastSpacingTokens.lg),
-              FilledButton.icon(
-                key: const Key('photo_sales_misa_download'),
-                onPressed: workbook == null || _isReading || _isDownloading
-                    ? null
-                    : _downloadMisaWorkbook,
-                icon: _isDownloading
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.download_outlined),
-                label: Text(
-                  _text(
-                    context,
-                    ko: 'MISA Excel 다운로드',
-                    en: 'Download MISA Excel',
-                    vi: 'Tải Excel MISA',
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -341,12 +325,69 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
             ],
           ),
           const SizedBox(height: ToastSpacingTokens.sm),
+          const Divider(color: ToastColorTokens.border),
+          const SizedBox(height: ToastSpacingTokens.sm),
           Text(
             _text(
               context,
-              ko: '각 매출 행은 현금 결제 1건으로 변환되며, VAT 포함 금액에서 공급가액과 8% VAT를 계산합니다.',
-              en: 'Each sales row becomes one cash receipt. Supply amount and 8% VAT are derived from the VAT-inclusive amount.',
-              vi: 'Mỗi dòng doanh thu trở thành một biên lai tiền mặt. Tiền trước thuế và VAT 8% được tính từ tổng đã gồm VAT.',
+              ko: '지점별 적용 내역',
+              en: 'Branch allocation',
+              vi: 'Phân bổ theo chi nhánh',
+            ),
+            style: AppFonts.system(
+              color: ToastColorTokens.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: ToastSpacingTokens.xs),
+          for (final branch in workbook.branchSummaries)
+            Padding(
+              padding: const EdgeInsets.only(top: ToastSpacingTokens.xs),
+              child: Row(
+                key: Key('photo_sales_branch_${branch.branchCode}'),
+                children: [
+                  SizedBox(
+                    width: 36,
+                    child: Text(
+                      branch.branchCode,
+                      style: AppFonts.system(
+                        color: ToastColorTokens.info,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      branch.storeName,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppFonts.system(
+                        color: ToastColorTokens.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${branch.receiptCount}건 · ${currency.format(branch.totalAmount)} ₫',
+                    style: AppFonts.system(
+                      color: ToastColorTokens.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: ToastSpacingTokens.sm),
+          Text(
+            _text(
+              context,
+              ko: 'Branch를 POS 지점 코드로 확인한 뒤 등록합니다. 같은 원천 거래를 다시 등록해도 중복 합산되지 않습니다.',
+              en: 'Branch is matched to the POS store code before registration. Re-registering the same source transaction does not double-count sales.',
+              vi: 'Branch được đối chiếu với mã cửa hàng POS trước khi ghi nhận. Ghi nhận lại cùng giao dịch nguồn sẽ không cộng trùng doanh thu.',
             ),
             style: AppFonts.system(
               color: ToastColorTokens.textSecondary,
@@ -354,6 +395,100 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
               height: 1.4,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _registrationPanel(BuildContext context) {
+    final result = _registrationResult;
+    return Container(
+      padding: const EdgeInsets.all(ToastSpacingTokens.md),
+      decoration: BoxDecoration(
+        color: ToastColorTokens.infoMuted,
+        borderRadius: ToastRadiusTokens.sm,
+        border: Border.all(color: ToastColorTokens.info),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _text(
+              context,
+              ko: '지점 매출 자동 저장',
+              en: 'Automatic branch sales save',
+              vi: 'Tự động lưu doanh thu chi nhánh',
+            ),
+            style: AppFonts.system(
+              color: ToastColorTokens.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: ToastSpacingTokens.xs),
+          Text(
+            _text(
+              context,
+              ko: '파일 검증이 끝나면 별도 버튼 없이 자동 저장되어 각 지점의 포토 매출에 반영됩니다. 같은 파일은 다시 선택해도 중복 합산되지 않습니다.',
+              en: 'After validation, rows are saved automatically and update each branch’s Photo sales. Selecting the same file again does not double-count it.',
+              vi: 'Sau khi xác thực, dữ liệu được tự động lưu vào doanh thu Photo của từng chi nhánh. Chọn lại cùng tệp sẽ không cộng trùng.',
+            ),
+            style: AppFonts.system(
+              color: ToastColorTokens.textSecondary,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: ToastSpacingTokens.md),
+          if (_isRegistering)
+            Row(
+              key: const Key('photo_sales_auto_saving'),
+              children: [
+                const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: ToastSpacingTokens.sm),
+                Text(
+                  _text(
+                    context,
+                    ko: '지점별 매출을 자동 저장하는 중...',
+                    en: 'Automatically saving branch sales...',
+                    vi: 'Đang tự động lưu doanh thu chi nhánh...',
+                  ),
+                ),
+              ],
+            ),
+          if (result != null) ...[
+            Text(
+              _text(
+                context,
+                ko: '${result.branches.length}개 지점 · 신규 ${result.insertedRows}건 · 중복 ${result.duplicateRows}건',
+                en: '${result.branches.length} branches · ${result.insertedRows} new · ${result.duplicateRows} duplicates',
+                vi: '${result.branches.length} chi nhánh · ${result.insertedRows} mới · ${result.duplicateRows} trùng',
+              ),
+              key: const Key('photo_sales_registration_result'),
+              style: AppFonts.system(
+                color: ToastColorTokens.success,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+          if (!_isRegistering && result == null)
+            Text(
+              _text(
+                context,
+                ko: '자동 저장이 완료되지 않았습니다. 오류를 확인한 뒤 파일을 다시 선택하세요.',
+                en: 'Automatic save is incomplete. Check the error and choose the file again.',
+                vi: 'Tự động lưu chưa hoàn tất. Hãy kiểm tra lỗi và chọn lại tệp.',
+              ),
+              style: AppFonts.system(
+                color: ToastColorTokens.danger,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
         ],
       ),
     );
@@ -433,6 +568,9 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
     if (selected == null) return;
     setState(() {
       _saleDate = DateTime(selected.year, selected.month, selected.day);
+      _workbook = null;
+      _sourceFileName = null;
+      _registrationResult = null;
       _statusMessage = null;
     });
   }
@@ -456,6 +594,7 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
         !lowerName.endsWith('.xls')) {
       setState(() {
         _workbook = null;
+        _registrationResult = null;
         _sourceFileName = sourceName;
         _statusMessage = _text(
           context,
@@ -476,15 +615,30 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
     try {
       final workbook = parsePhotoSalesImportWorkbook(await file.readAsBytes());
       if (!mounted) return;
+      final fileDate = _saleDateFromFileName(sourceName);
+      final today = widget.todayOverride ?? DateTime.now();
+      if (fileDate != null &&
+          fileDate.isAfter(DateTime(today.year, today.month, today.day))) {
+        throw const PhotoSalesImportValidationException([
+          '파일명의 매출일이 오늘보다 미래입니다.',
+        ]);
+      }
       setState(() {
+        if (fileDate != null) _saleDate = fileDate;
         _workbook = workbook;
+        _registrationResult = null;
         _sourceFileName = sourceName.isEmpty ? 'Moers Excel' : sourceName;
         _statusMessage = null;
       });
+      await _registerWorkbook(
+        workbook,
+        sourceName.isEmpty ? 'Moers Excel' : sourceName,
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _workbook = null;
+        _registrationResult = null;
         _sourceFileName = sourceName.isEmpty ? 'Moers Excel' : sourceName;
         _statusMessage = error.toString();
         _statusIsError = true;
@@ -494,56 +648,66 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
     }
   }
 
-  Future<void> _downloadMisaWorkbook() async {
-    final workbook = _workbook;
-    if (workbook == null) return;
+  Future<void> _registerWorkbook(
+    PhotoSalesImportWorkbook workbook,
+    String sourceFileName,
+  ) async {
     setState(() {
-      _isDownloading = true;
+      _isRegistering = true;
       _statusMessage = null;
       _statusIsError = false;
     });
-
     try {
-      final bytes = Uint8List.fromList(
-        buildPhotoSalesMisaWorkbook(source: workbook, saleDate: _saleDate),
-      );
-      final stamp = DateFormat('yyyyMMdd').format(_saleDate);
-      final name = 'MISA_photo_sales_$stamp';
-      if (widget.saveFile != null) {
-        await widget.saveFile!('$name.xlsx', bytes);
-      } else {
-        await FileSaver.instance.saveFile(
-          name: name,
-          bytes: bytes,
-          ext: 'xlsx',
-          mimeType: MimeType.microsoftExcel,
-        );
-      }
+      final result = widget.registerSales != null
+          ? await widget.registerSales!(
+              workbook: workbook,
+              saleDate: _saleDate,
+              sourceFileName: sourceFileName,
+            )
+          : await photoSalesImportService.register(
+              workbook: workbook,
+              saleDate: _saleDate,
+              sourceFileName: sourceFileName,
+            );
       if (!mounted) return;
-      final amount = NumberFormat(
-        '#,##0',
-        'vi_VN',
-      ).format(workbook.totalAmount);
       final message = _text(
         context,
-        ko: 'MISA Excel 저장 완료: 영수증 ${workbook.receiptCount}건, $amount VND',
-        en: 'MISA Excel saved: ${workbook.receiptCount} receipts, $amount VND',
-        vi: 'Đã lưu Excel MISA: ${workbook.receiptCount} biên lai, $amount VND',
+        ko: '지점 매출 등록 완료: 신규 ${result.insertedRows}건, 중복 ${result.duplicateRows}건',
+        en: 'Branch sales registered: ${result.insertedRows} new, ${result.duplicateRows} duplicates',
+        vi: 'Đã ghi nhận doanh thu: ${result.insertedRows} mới, ${result.duplicateRows} trùng',
       );
-      setState(() => _statusMessage = message);
+      setState(() {
+        _registrationResult = result;
+        _statusMessage = message;
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _statusMessage = error.toString();
+        _statusMessage = _registrationError(context, error);
         _statusIsError = true;
       });
     } finally {
-      if (mounted) setState(() => _isDownloading = false);
+      if (mounted) setState(() => _isRegistering = false);
     }
   }
+}
+
+DateTime? _saleDateFromFileName(String fileName) {
+  final match = RegExp(r'(20\d{2})[-_](\d{2})[-_](\d{2})').firstMatch(fileName);
+  if (match == null) return null;
+  final year = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final day = int.parse(match.group(3)!);
+  final parsed = DateTime(year, month, day);
+  if (parsed.year != year || parsed.month != month || parsed.day != day) {
+    throw const PhotoSalesImportValidationException([
+      '파일명의 매출일 형식이 올바르지 않습니다.',
+    ]);
+  }
+  return parsed;
 }
 
 String _text(
@@ -556,3 +720,37 @@ String _text(
   'vi' => vi,
   _ => ko,
 };
+
+String _registrationError(BuildContext context, Object error) {
+  final message = error.toString();
+  if (message.contains('PHOTO_SALES_IMPORT_FORBIDDEN')) {
+    return _text(
+      context,
+      ko: '시스템 관리자만 포토 매출을 등록할 수 있습니다.',
+      en: 'Only a system administrator can register Photo sales.',
+      vi: 'Chỉ quản trị viên hệ thống mới có thể ghi nhận doanh thu Photo.',
+    );
+  }
+  if (message.contains('PHOTO_SALES_IMPORT_BRANCH_STORE_NOT_FOUND')) {
+    return _text(
+      context,
+      ko: 'Branch와 연결된 활성 POS 지점을 찾을 수 없습니다. 지점 코드를 확인하세요.',
+      en: 'No active POS store matches a Branch value. Check the branch codes.',
+      vi: 'Không tìm thấy cửa hàng POS đang hoạt động cho Branch. Hãy kiểm tra mã chi nhánh.',
+    );
+  }
+  if (message.contains('PHOTO_SALES_IMPORT_')) {
+    return _text(
+      context,
+      ko: '매출 등록 검증에 실패했습니다. 날짜와 Excel 내용을 다시 확인하세요.',
+      en: 'Sales registration validation failed. Check the date and workbook.',
+      vi: 'Xác thực ghi nhận doanh thu thất bại. Hãy kiểm tra ngày và tệp Excel.',
+    );
+  }
+  return _text(
+    context,
+    ko: '지점 매출을 등록하지 못했습니다: $message',
+    en: 'Could not register branch sales: $message',
+    vi: 'Không thể ghi nhận doanh thu chi nhánh: $message',
+  );
+}

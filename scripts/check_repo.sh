@@ -50,6 +50,8 @@ printf 'CHECK_REPO_STEP=production_sql_wrapper_contract\n'
 bash test/pos_production_sql_wrapper_test.sh
 printf 'CHECK_REPO_STEP=photo_expected_slot_contract\n'
 bash test/photo_objet_expected_slot_ledger_test.sh
+printf 'CHECK_REPO_STEP=photo_manual_import_contract\n'
+bash test/photo_sales_manual_import_sql_test.sh
 
 printf 'CHECK_REPO_STEP=flutter_web_release_build\n'
 flutter build web --release

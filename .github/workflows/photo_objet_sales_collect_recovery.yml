@@ -1,9 +1,7 @@
 name: Photo Objet Sales Recover Missing Slot
 
+# Retired: Photo sales now enter POS through the Super Admin Excel import.
 on:
-  schedule:
-    # Recover the preceding 22:00 HCM slot after scheduler or runner outages.
-    - cron: '30 17 * * *'
   workflow_dispatch:
     inputs:
       slot_date_hcm:
@@ -16,6 +14,7 @@ permissions:
 
 jobs:
   validate:
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     steps:
       - name: Restrict manual recovery to main
@@ -27,6 +26,7 @@ jobs:
             test "${SOURCE_REF}" = 'refs/heads/main'
           fi
   collect:
+    if: ${{ false }}
     needs: validate
     uses: ./.github/workflows/photo_objet_sales_collect_runner.yml
     with:

@@ -1,5 +1,6 @@
 name: Photo Objet Sales Backfill
 
+# Retired: Photo sales now enter POS through the Super Admin Excel import.
 on:
   workflow_dispatch:
     inputs:
@@ -26,6 +27,7 @@ concurrency:
 
 jobs:
   backfill:
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     environment: production-backfill

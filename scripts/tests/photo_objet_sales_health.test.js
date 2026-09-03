@@ -621,7 +621,7 @@ test('automatic recovery targets only enabled mapped stores and excludes current
   );
 });
 
-test('collector has independently prepared primary and backup workflows', () => {
+test('automatic collector workflows are retired while rollback code remains', () => {
   const primary = fs.readFileSync(
     path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect.yml'),
     'utf8',
@@ -642,16 +642,20 @@ test('collector has independently prepared primary and backup workflows', () => 
     path.join(__dirname, '../../.github/workflows/photo_objet_sales_finalize.yml'),
     'utf8',
   );
-  assert.match(primary, /cron: '40 14 \* \* \*'/);
+  assert.doesNotMatch(primary, /schedule:/);
+  assert.match(primary, /if: \$\{\{ false \}\}/);
   assert.match(primary, /executor_role: primary/);
-  assert.match(backup, /cron: '50 14 \* \* \*'/);
+  assert.doesNotMatch(backup, /schedule:/);
+  assert.match(backup, /if: \$\{\{ false \}\}/);
   assert.match(backup, /executor_role: backup/);
-  assert.match(recovery, /cron: '30 17 \* \* \*'/);
+  assert.doesNotMatch(recovery, /schedule:/);
+  assert.match(recovery, /if: \$\{\{ false \}\}/);
   assert.match(recovery, /workflow_dispatch:/);
   assert.match(recovery, /slot_date_hcm:/);
   assert.match(recovery, /executor_role: backup/);
   assert.match(recovery, /test "\$\{SOURCE_REF\}" = 'refs\/heads\/main'/);
-  assert.match(finalize, /cron: '10 17 \* \* \*'/);
+  assert.doesNotMatch(finalize, /schedule:/);
+  assert.match(finalize, /if: \$\{\{ false \}\}/);
   assert.match(finalize, /full_day_finalize: true/);
   assert.match(runner, /full_day_finalize:/);
   assert.match(runner, /PHOTO_OBJET_BUSINESS_DATE_HCM=/);
@@ -661,6 +665,7 @@ test('collector has independently prepared primary and backup workflows', () => 
   assert.match(runner, /timeout-minutes: 50/);
   assert.match(runner, /PHOTO_OBJET_PARALLELISM: '3'/);
   assert.match(runner, /PHOTO_OBJET_SLOT_DATE_HCM:/);
+  assert.match(runner, /if: \$\{\{ false \}\}/);
   assert.doesNotMatch(primary + backup, /concurrency:/);
 });
 
@@ -856,17 +861,16 @@ test('partial aggregate snapshots never overwrite fuller totals', () => {
   assert.doesNotThrow(() => assertAggregateComplete([], []));
 });
 
-test('collection workflow stays green independently from slot health', () => {
+test('retired collector caller cannot execute the retained implementation', () => {
   const caller = fs.readFileSync(
     path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect.yml'), 'utf8',
   );
   const workflow = fs.readFileSync(
     path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect_runner.yml'), 'utf8',
   );
-  assert.match(caller, /on:\n  schedule:/);
-  assert.deepEqual([...caller.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
-    '40 14 * * *',
-  ]);
+  assert.doesNotMatch(caller, /schedule:/);
+  assert.match(caller, /workflow_dispatch:/);
+  assert.match(caller, /if: \$\{\{ false \}\}/);
   assert.match(workflow, /node-version: '22'/);
   assert.match(workflow, /npm ci/);
   assert.match(
@@ -905,9 +909,8 @@ test('health, backfill, contract, and release proof are independent workflows', 
     path.join(__dirname, '../check_repo.sh'), 'utf8',
   );
 
-  assert.deepEqual([...health.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
-    '30 15 * * *',
-  ]);
+  assert.deepEqual([...health.matchAll(/cron: '([^']+)'/g)], []);
+  assert.match(health, /if: \$\{\{ false \}\}/);
   assert.match(health, /photo_objet_slot_health\.js --refresh/);
   assert.match(health, /--ack-file health-evidence\.json/);
   assert.match(health, /--assert-file health-evidence\.json/);
@@ -917,6 +920,7 @@ test('health, backfill, contract, and release proof are independent workflows', 
   assert.match(backfill, /workflow_dispatch:/);
   assert.match(backfill, /execute_backfill:[\s\S]*default: false/);
   assert.match(backfill, /EXECUTE_IMMUTABLE_BACKFILL/);
+  assert.match(backfill, /if: \$\{\{ false \}\}/);
   assert.doesNotMatch(backfill, /schedule:/);
   assert.match(contract, /pull_request:/);
   assert.match(contract, /push:[\s\S]*branches: \[main\]/);

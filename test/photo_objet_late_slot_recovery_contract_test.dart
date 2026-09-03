@@ -43,7 +43,8 @@ void main() {
         '.github/workflows/photo_objet_sales_collect_runner.yml',
       ).readAsStringSync();
 
-      expect(workflow, contains("cron: '30 17 * * *'"));
+      expect(workflow, isNot(contains('schedule:')));
+      expect(workflow, contains(r'if: ${{ false }}'));
       expect(workflow, contains('workflow_dispatch:'));
       expect(workflow, contains('slot_date_hcm:'));
       expect(workflow, contains('executor_role: backup'));
