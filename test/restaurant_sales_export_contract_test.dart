@@ -118,6 +118,20 @@ void main() {
     expect(queueScreen, isNot(contains('misa_pending_excel_download')));
   });
 
+  test('Super Admin exposes the Photo sales Excel conversion category', () {
+    final superAdminSource = readRepoFile(superAdmin);
+    final photoImportSource = readRepoFile(
+      'lib/features/photo_sales_import/photo_sales_import_screen.dart',
+    );
+
+    expect(superAdminSource, contains('super_admin_nav_photo_sales_import'));
+    expect(superAdminSource, contains('포토 매출 입력하기'));
+    expect(superAdminSource, contains('const PhotoSalesImportScreen()'));
+    expect(photoImportSource, contains("extensions: <String>['xlsx', 'xls']"));
+    expect(photoImportSource, contains('photo_sales_misa_download'));
+    expect(photoImportSource, contains('MISA_photo_sales_'));
+  });
+
   test('sales report supports explicit past-date search and download', () {
     final screenSource = readRepoFile(screen);
 
