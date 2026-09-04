@@ -3192,7 +3192,7 @@
   "staffHourlyRuleConfigured": "{rate} VND/h · Night {night}x · Holiday {holiday}x",
   "@staffHourlyRuleConfigured": {"placeholders":{"rate":{"type":"String"},"night":{"type":"num"},"holiday":{"type":"num"}}},
   "staffHourlyRulesTitle": "Part-timer hourly rules",
-  "staffHourlyRulesHint": "Confirmed statutory holidays apply automatically with the statutory minimum 3x. Sundays are excluded, and night and holiday multipliers stack.",
+  "staffHourlyRulesHint": "Confirmed statutory holidays apply automatically with the statutory minimum 3x. Sundays are excluded; when night hours overlap a holiday, only the holiday multiplier applies.",
   "staffHourlyRate": "Base hourly rate",
   "staffScheduledStart": "Scheduled start",
   "staffNightStart": "Night starts",

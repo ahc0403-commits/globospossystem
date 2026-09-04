@@ -3191,7 +3191,7 @@
   "staffHourlyRuleConfigured": "{rate} VND/h · 야간 {night}배 · 공휴일 {holiday}배",
   "@staffHourlyRuleConfigured": {"placeholders":{"rate":{"type":"String"},"night":{"type":"num"},"holiday":{"type":"num"}}},
   "staffHourlyRulesTitle": "파트타이머 시급 규칙",
-  "staffHourlyRulesHint": "법정 공휴일은 공식 달력에서 자동 적용되며 법정 최소 3배를 보장합니다. 일요일은 제외되고 야간과 공휴일이 겹치면 두 배수를 함께 적용합니다.",
+  "staffHourlyRulesHint": "법정 공휴일은 공식 달력에서 자동 적용되며 법정 최소 3배를 보장합니다. 일요일은 제외되며 야간과 공휴일이 겹치면 공휴일 배수만 적용합니다.",
   "staffHourlyRate": "기본 시급",
   "staffScheduledStart": "기본 출근시각",
   "staffNightStart": "야간 시작시각",

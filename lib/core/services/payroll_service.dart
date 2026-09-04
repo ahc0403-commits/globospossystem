@@ -373,12 +373,16 @@ class PayrollService {
           !(excludeSunday && minute.weekday == DateTime.sunday);
       var multiplier = 1.0;
       if (isNight) {
-        multiplier *= nightMultiplier;
         nightMinutes++;
       }
       if (isHoliday) {
-        multiplier *= holidayMultiplier;
+        // Holiday pay replaces the night premium for the same minute. Stacking
+        // both multipliers would turn a 3x holiday rate and 1.5x night rate
+        // into an unintended 4.5x rate.
+        multiplier = holidayMultiplier;
         holidayMinutes++;
+      } else if (isNight) {
+        multiplier = nightMultiplier;
       }
       amount += hourlyRate / 60 * multiplier;
     }

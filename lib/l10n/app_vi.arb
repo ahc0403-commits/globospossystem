@@ -3191,7 +3191,7 @@
   "staffHourlyRuleConfigured": "{rate} VND/giờ · Ban đêm {night}x · Ngày lễ {holiday}x",
   "@staffHourlyRuleConfigured": {"placeholders":{"rate":{"type":"String"},"night":{"type":"num"},"holiday":{"type":"num"}}},
   "staffHourlyRulesTitle": "Quy tắc lương theo giờ cho nhân viên bán thời gian",
-  "staffHourlyRulesHint": "Ngày lễ chính thức được áp dụng tự động với mức tối thiểu theo luật là 3x. Chủ nhật được loại trừ; hệ số ban đêm và ngày lễ được nhân cùng nhau.",
+  "staffHourlyRulesHint": "Ngày lễ chính thức được áp dụng tự động với mức tối thiểu theo luật là 3x. Chủ nhật được loại trừ; khi giờ ban đêm trùng ngày lễ, chỉ áp dụng hệ số ngày lễ.",
   "staffHourlyRate": "Lương cơ bản theo giờ",
   "staffScheduledStart": "Giờ bắt đầu dự kiến",
   "staffNightStart": "Bắt đầu ca đêm",
