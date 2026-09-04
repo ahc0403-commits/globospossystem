@@ -53,7 +53,7 @@ void main() {
     },
   );
 
-  test('hourly rules stack night and holiday premiums and exclude Sunday', () {
+  test('holiday premium replaces night premium and excludes Sunday', () {
     final service = PayrollService();
     final holiday = DateTime(2026, 9, 2);
     final holidayNight = service.calcRuleBasedHourlyAmount(
@@ -66,7 +66,7 @@ void main() {
       excludeSunday: true,
       holidays: {holiday},
     );
-    expect(holidayNight.amount, 390);
+    expect(holidayNight.amount, 300);
     expect(holidayNight.nightHours, 1);
     expect(holidayNight.holidayHours, 1);
 

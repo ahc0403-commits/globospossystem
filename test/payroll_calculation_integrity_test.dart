@@ -3,9 +3,15 @@ import 'package:globos_pos_system/core/services/attendance_service.dart';
 import 'package:globos_pos_system/core/services/payroll_service.dart';
 
 class _AttendanceServiceFake extends AttendanceService {
-  _AttendanceServiceFake(this.logs);
+  _AttendanceServiceFake(
+    this.logs, {
+    this.hourlyPayRule,
+    this.holidays = const {},
+  });
 
   final List<Map<String, dynamic>> logs;
+  final Map<String, dynamic>? hourlyPayRule;
+  final Set<DateTime> holidays;
   DateTime? requestedFrom;
   DateTime? requestedTo;
   final List<String> requestedRuleEmployeeIds = [];
@@ -45,23 +51,24 @@ class _AttendanceServiceFake extends AttendanceService {
     required String employeeId,
   }) async {
     requestedRuleEmployeeIds.add(employeeId);
-    return {
-      'hourly_rate': 30000,
-      'scheduled_start': '09:00',
-      'night_start': '22:00',
-      'night_multiplier': 1.3,
-      'holiday_multiplier': 3,
-      'exclude_sunday': true,
-      'late_threshold_minutes': 60,
-      'late_review_hourly_multiplier': 2,
-    };
+    return hourlyPayRule ??
+        {
+          'hourly_rate': 30000,
+          'scheduled_start': '09:00',
+          'night_start': '22:00',
+          'night_multiplier': 1.3,
+          'holiday_multiplier': 3,
+          'exclude_sunday': true,
+          'late_threshold_minutes': 60,
+          'late_review_hourly_multiplier': 2,
+        };
   }
 
   @override
   Future<Set<DateTime>> fetchVietnamPublicHolidays({
     required DateTime from,
     required DateTime to,
-  }) async => {};
+  }) async => holidays;
 
   @override
   Future<List<Map<String, dynamic>>> fetchDailyAllowances({
@@ -203,6 +210,64 @@ void main() {
       expect(payroll.totalMealAllowance, 25000);
       expect(payroll.totalParkingAllowance, 5000);
       expect(payroll.totalAmount, 120000);
+    },
+  );
+
+  test(
+    'holiday shift ignores early arrival and does not stack the night rate',
+    () async {
+      final attendance =
+          _AttendanceServiceFake(
+              [
+                _log(
+                  employeeId: 'part-timer',
+                  name: 'Le Thi Nhu Y',
+                  role: 'part_timer',
+                  type: 'clock_in',
+                  loggedAt: '2026-09-01T10:51:00Z',
+                ),
+                _log(
+                  employeeId: 'part-timer',
+                  name: 'Le Thi Nhu Y',
+                  role: 'part_timer',
+                  type: 'clock_out',
+                  loggedAt: '2026-09-01T15:00:00Z',
+                ),
+              ],
+              hourlyPayRule: {
+                'hourly_rate': 25000,
+                'scheduled_start': '18:00',
+                'night_start': '18:00',
+                'night_multiplier': 1.5,
+                'holiday_multiplier': 3,
+                'exclude_sunday': true,
+                'late_threshold_minutes': 60,
+                'late_review_hourly_multiplier': 2,
+              },
+              holidays: {DateTime(2026, 9, 1)},
+            )
+            ..allowances = [
+              {
+                'employee_id': 'part-timer',
+                'work_date': '2026-09-01',
+                'meal_allowance_amount': 0,
+                'parking_allowance_amount': 3000,
+              },
+            ];
+
+      final payroll =
+          (await PayrollService(attendanceSource: attendance).calculatePayroll(
+            storeId: 'store',
+            periodStart: DateTime(2026, 9, 1),
+            periodEnd: DateTime(2026, 9, 1),
+          )).single;
+
+      expect(payroll.dailyRecords.single.clockIn, DateTime(2026, 9, 1, 17, 51));
+      expect(payroll.totalHours, 4);
+      expect(payroll.dailyRecords.single.holidayHours, 4);
+      expect(payroll.grossAmount, 300000);
+      expect(payroll.totalParkingAllowance, 3000);
+      expect(payroll.totalAmount, 303000);
     },
   );
 
