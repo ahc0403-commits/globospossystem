@@ -37,7 +37,12 @@ for sql_file in \
   scripts/verify_payroll_complete_attendance.sql \
   scripts/preflight_complete_financial_inputs.sql \
   supabase/migrations/20260905020000_complete_financial_inputs.sql \
-  scripts/verify_complete_financial_inputs.sql; do
+  scripts/verify_complete_financial_inputs.sql \
+  scripts/preflight_store_revenue_summary.sql \
+  supabase/migrations/20260905040000_store_revenue_summary.sql \
+  scripts/verify_store_revenue_summary.sql \
+  supabase/migrations/20260905040000_store_revenue_summary.sql \
+  scripts/verify_store_revenue_summary.sql; do
   printf 'FINANCIAL_API_TEST_SQL=%s\n' "$sql_file"
   docker exec -i "$db_name" psql -X -v ON_ERROR_STOP=1 -U postgres -d payroll_test < "$sql_file" >/dev/null
 done

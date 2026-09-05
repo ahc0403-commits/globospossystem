@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/attendance_service.dart';
 import 'package:globos_pos_system/core/services/financial_input_service.dart';
 import 'package:globos_pos_system/core/services/payroll_service.dart';
+import 'package:globos_pos_system/core/services/store_revenue_summary_service.dart';
 import 'package:globos_pos_system/features/report/report_provider.dart';
 import 'package:globos_pos_system/features/super_admin/super_admin_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -66,7 +67,9 @@ void main() {
       late SupabaseClient client;
       late FinancialInputService service;
       var actor = _admin;
+      var rejectSummary = false;
       final requests = <String, int>{};
+      final returnedRows = <String, int>{};
       Future<void> Function(String source, int page)? beforePage;
       Map<String, dynamic> Function(
         String source,
@@ -159,13 +162,30 @@ void main() {
             final isPage = request.uri.path.endsWith(
               '/get_financial_input_page',
             );
-            final source = isPage
+            final isSummary = request.uri.path.endsWith(
+              '/get_store_revenue_summary',
+            );
+            final source = isSummary
+                ? 'storeRevenueSummary'
+                : isPage
                 ? (jsonDecode(body) as Map)['p_source'] as String
                 : '';
-            final page = isPage ? (requests[source] ?? 0) + 1 : 0;
-            if (isPage) {
+            final page = isPage || isSummary ? (requests[source] ?? 0) + 1 : 0;
+            if (isPage || isSummary) {
               requests[source] = page;
               await beforePage?.call(source, page);
+            }
+            if (isSummary && rejectSummary) {
+              request.response.statusCode = 404;
+              request.response.headers.contentType = ContentType.json;
+              request.response.write(
+                jsonEncode({
+                  'code': 'PGRST202',
+                  'message': 'Summary RPC is not deployed',
+                }),
+              );
+              await request.response.close();
+              return;
             }
             final upstream = await transport.openUrl(
               request.method,
@@ -182,8 +202,18 @@ void main() {
             request.response.statusCode = response.statusCode;
             request.response.headers.contentType = ContentType.json;
             final data = await utf8.decoder.bind(response).join();
+            if ((isPage || isSummary) && response.statusCode == 200) {
+              final rows = (jsonDecode(data) as Map)['rows'] as List;
+              returnedRows.update(
+                source,
+                (n) => n + rows.length,
+                ifAbsent: () => rows.length,
+              );
+            }
             request.response.write(
-              isPage && response.statusCode == 200 && overridePage != null
+              (isPage || isSummary) &&
+                      response.statusCode == 200 &&
+                      overridePage != null
                   ? jsonEncode(
                       overridePage!(
                         source,
@@ -213,7 +243,9 @@ void main() {
       });
       setUp(() async {
         actor = _admin;
+        rejectSummary = false;
         requests.clear();
+        returnedRows.clear();
         beforePage = null;
         overridePage = null;
         await sql(
@@ -383,6 +415,455 @@ void main() {
           // Revenue follows the sales allocation; received cash is a separate metric.
           expect(report.state.reportSummary!.totalRevenue, 501 * 158 + 65);
           expect(report.state.reportSummary!.rows, hasLength(2));
+        },
+      );
+
+      test('global report uses one aggregate request for 100 stores', () async {
+        await seed(501);
+        actor = _superAdmin;
+        final stores = [
+          for (var i = 1; i <= 100; i++)
+            '10000000-0000-0000-0000-${i.toString().padLeft(12, '0')}',
+        ];
+        final report = _AdminReports(client)..setStores(stores);
+        addTearDown(report.dispose);
+        await report.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
+        expect(report.state.error, isNull);
+        expect(report.state.reportSummary!.rows, hasLength(100));
+        expect(report.state.reportSummary!.totalRevenue, 501 * 158);
+        expect(requests.values.fold<int>(0, (a, b) => a + b), 1);
+        expect(requests['storeRevenueSummary'], 1);
+        expect(returnedRows, {'storeRevenueSummary': 100});
+      });
+
+      Future<Map<String, StoreRevenueTotals>> aggregate({
+        List<String> stores = const [_store],
+      }) => StoreRevenueSummaryService(client).fetch(
+        storeIds: stores,
+        fromDate: DateTime(2024),
+        toDate: DateTime(2029, 12, 31),
+      );
+
+      for (final count in [1, 10, 50, 500]) {
+        test(
+          'aggregate returns all $count zero-activity stores despite the API row cap',
+          () async {
+            actor = _superAdmin;
+            final stores = [
+              for (var i = 1; i <= count; i++)
+                '10000000-0000-0000-0000-${i.toString().padLeft(12, '0')}',
+            ];
+            final totals = await aggregate(stores: stores);
+            expect(totals.keys.toSet(), stores.toSet());
+            expect(
+              totals.values.every((v) => v.dineIn == 0 && v.delivery == 0),
+              isTrue,
+            );
+            expect(requests, {'storeRevenueSummary': 1});
+            expect(returnedRows, {'storeRevenueSummary': count});
+          },
+        );
+      }
+
+      test(
+        'aggregate matches complete legacy arithmetic across 1500 rows and mixed stores',
+        () async {
+          await seed(1500);
+          await sql("""
+          UPDATE payments SET amount=123.45, amount_portion=CASE
+            WHEN right(id::text,12)::bigint % 6 = 0 THEN NULL
+            WHEN right(id::text,12)::bigint % 6 = 1 THEN 0
+            WHEN right(id::text,12)::bigint % 6 = 2 THEN -5.25 ELSE 100.37 END;
+          UPDATE payments SET is_revenue=false WHERE right(id::text,12)::bigint % 7 = 0;
+          UPDATE payments SET is_revenue=NULL WHERE right(id::text,12)::bigint % 11 = 0;
+          UPDATE payments SET order_id=NULL WHERE right(id::text,12)::bigint % 13 = 0;
+          UPDATE orders SET sales_channel=CASE right(id::text,12)::bigint % 5
+            WHEN 0 THEN 'DELIVERY' WHEN 1 THEN ' delivery ' WHEN 2 THEN NULL
+            WHEN 3 THEN 'takeaway' ELSE 'dine_in' END;
+          UPDATE external_sales SET net_amount=CASE right(id::text,12)::bigint % 3
+            WHEN 0 THEN NULL WHEN 1 THEN -2.15 ELSE 8.27 END;
+          UPDATE external_sales SET order_status='cancelled' WHERE right(id::text,12)::bigint % 7 = 0;
+          UPDATE external_sales SET is_revenue=false WHERE right(id::text,12)::bigint % 11 = 0;
+          INSERT INTO photo_objet_sales VALUES
+            ('a1000000-0000-0000-0000-000000000001','$_store','2024-01-01',5,300,1),
+            ('a1000000-0000-0000-0000-000000000002','$_store','2024-01-02',500,5,1),
+            ('a1000000-0000-0000-0000-000000000003','$_otherStore','2024-01-01',70,5,1);
+          INSERT INTO payments(id,restaurant_id,amount,amount_portion,created_at,is_revenue)
+            VALUES ('62000000-0000-0000-0000-000000000001','$_otherStore',19.9,NULL,'2026-07-27',true);
+          INSERT INTO external_sales VALUES
+            ('71000000-0000-0000-0000-000000000001','$_otherStore',13.2,'2026-07-27',true,'completed');
+        """);
+          actor = _superAdmin;
+          const stores = [_store, _otherStore];
+          final expected = <String, StoreRevenueTotals>{
+            for (final id in stores) id: (dineIn: 0, delivery: 0),
+          };
+          for (final row in await load(
+            FinancialInputSource.revenuePayments,
+            stores: stores,
+          )) {
+            final id = row['restaurant_id'] as String;
+            final prior = expected[id]!;
+            final amount = revenuePaymentSalesAmount(row);
+            final delivery =
+                ((row['orders'] as Map?)?['sales_channel']?.toString() ?? '')
+                    .toLowerCase() ==
+                'delivery';
+            expected[id] = (
+              dineIn: prior.dineIn + (delivery ? 0 : amount),
+              delivery: prior.delivery + (delivery ? amount : 0),
+            );
+          }
+          for (final row in await load(
+            FinancialInputSource.externalSales,
+            stores: stores,
+          )) {
+            final id = row['restaurant_id'] as String;
+            final prior = expected[id]!;
+            expected[id] = (
+              dineIn: prior.dineIn,
+              delivery:
+                  prior.delivery +
+                  ((row['net_amount'] as num?)?.toDouble() ?? 0),
+            );
+          }
+          final photo = aggregateSuperAdminPhotoObjetSalesByStore(
+            await load(FinancialInputSource.photoSales, stores: stores),
+          );
+          for (final id in stores) {
+            final prior = expected[id]!;
+            expected[id] = (
+              dineIn: prior.dineIn + (photo[id] ?? 0),
+              delivery: prior.delivery,
+            );
+          }
+          requests.clear();
+          returnedRows.clear();
+          final actual = await aggregate(stores: stores);
+          for (final id in stores) {
+            expect(actual[id]!.dineIn, closeTo(expected[id]!.dineIn, 0.000001));
+            expect(
+              actual[id]!.delivery,
+              closeTo(expected[id]!.delivery, 0.000001),
+            );
+          }
+          expect(requests, {'storeRevenueSummary': 1});
+          expect(returnedRows, {'storeRevenueSummary': 2});
+        },
+      );
+
+      test(
+        'selected store loads only its aggregate and empty selection avoids RPC',
+        () async {
+          await seed(1);
+          actor = _superAdmin;
+          final report = _AdminReports(client)
+            ..setStores([_store, _otherStore]);
+          addTearDown(report.dispose);
+          await report.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
+          requests.clear();
+          await report.loadAllReports(selectedRestaurantId: _otherStore);
+          expect(report.state.reportSummary!.rows.single.storeId, _otherStore);
+          expect(report.state.reportSummary!.totalRevenue, 0);
+          expect(requests, {'storeRevenueSummary': 1});
+          report.setStores([]);
+          requests.clear();
+          await report.loadAllReports();
+          expect(report.state.reportSummary!.rows, isEmpty);
+          expect(requests, isEmpty);
+        },
+      );
+
+      test(
+        'aggregate rejects unauthorized and mixed store scopes atomically',
+        () async {
+          await seed(1);
+          for (final stores in [
+            [_otherStore],
+            [_store, _otherStore],
+          ]) {
+            await expectLater(
+              aggregate(stores: stores),
+              throwsA(isA<PostgrestException>()),
+            );
+          }
+          actor = '';
+          await expectLater(aggregate(), throwsA(isA<PostgrestException>()));
+          actor = _superAdmin;
+          expect(
+            (await aggregate(stores: [_store, _otherStore])).keys,
+            hasLength(2),
+          );
+        },
+      );
+
+      test('aggregate retains underlying table RLS and SELECT grants', () async {
+        await seed(1);
+        await sql('ALTER POLICY payments_read ON payments USING (false);');
+        try {
+          final actual = (await aggregate())[_store]!;
+          expect(actual.dineIn, 48);
+          expect(actual.delivery, 10);
+        } finally {
+          await sql(
+            'ALTER POLICY payments_read ON payments USING (public.fixture_can_read(restaurant_id));',
+          );
+        }
+        await sql('REVOKE SELECT ON payments FROM authenticated;');
+        try {
+          await expectLater(aggregate(), throwsA(isA<PostgrestException>()));
+        } finally {
+          await sql('GRANT SELECT ON payments TO authenticated;');
+        }
+      });
+
+      test(
+        'aggregate rejects invalid dates, duplicate/null stores and oversized scopes',
+        () async {
+          actor = _superAdmin;
+          final params = <String, dynamic>{
+            'p_store_ids': [_store],
+            'p_from_date': '2024-01-01',
+            'p_to_date': '2029-12-31',
+          };
+          for (final invalid in [
+            {'p_store_ids': null},
+            {'p_store_ids': []},
+            {
+              'p_store_ids': [_store, _store],
+            },
+            {
+              'p_store_ids': [_store, null],
+            },
+            {'p_from_date': null},
+            {'p_to_date': 'infinity'},
+            {'p_to_date': '2023-12-31'},
+            {
+              'p_store_ids': [
+                for (var i = 1; i <= 501; i++)
+                  '10000000-0000-0000-0000-${i.toString().padLeft(12, '0')}',
+              ],
+            },
+          ]) {
+            await expectLater(
+              client.rpc(
+                'get_store_revenue_summary',
+                params: {...params, ...invalid},
+              ),
+              throwsA(isA<PostgrestException>()),
+            );
+          }
+        },
+      );
+
+      for (final corruption in [
+        'truncate',
+        'duplicate',
+        'wrongStore',
+        'fromDate',
+        'toDate',
+        'missingCount',
+        'version',
+        'nullAmount',
+        'nanAmount',
+        'infiniteAmount',
+      ]) {
+        test(
+          'aggregate fails closed and clears old report for $corruption',
+          () async {
+            await seed(1);
+            actor = _superAdmin;
+            final report = _AdminReports(client)
+              ..setStores([_store, _otherStore]);
+            addTearDown(report.dispose);
+            await report.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
+            expect(report.state.reportSummary, isNotNull);
+            overridePage = (source, page, payload) {
+              if (source != 'storeRevenueSummary') return payload;
+              final rows = payload['rows'] as List;
+              switch (corruption) {
+                case 'truncate':
+                  rows.removeLast();
+                case 'duplicate':
+                  rows[1] = rows.first;
+                case 'wrongStore':
+                  (rows.first as Map)['store_id'] = 'foreign';
+                case 'fromDate':
+                  payload['from_date'] = '2030-01-01';
+                case 'toDate':
+                  payload['to_date'] = '2030-01-01';
+                case 'missingCount':
+                  payload.remove('store_count');
+                case 'version':
+                  payload['version'] = 999;
+                case 'nullAmount':
+                  (rows.first as Map)['dine_in'] = null;
+                case 'nanAmount':
+                  (rows.first as Map)['dine_in'] = 'NaN';
+                case 'infiniteAmount':
+                  (rows.first as Map)['delivery'] = 'Infinity';
+              }
+              return payload;
+            };
+            requests.clear();
+            await report.loadAllReports();
+            expect(report.state.reportSummary, isNull);
+            expect(report.state.error, isNotNull);
+            expect(requests, {'storeRevenueSummary': 1});
+          },
+        );
+      }
+
+      for (final failOld in [false, true]) {
+        test(
+          'late aggregate ${failOld ? 'failure' : 'success'} cannot replace a new period',
+          () async {
+            await seed(1);
+            final report = _AdminReports(client)..setStores([_store]);
+            addTearDown(report.dispose);
+            final blocked = Completer<void>();
+            final release = Completer<void>();
+            beforePage = (source, page) async {
+              if (source == 'storeRevenueSummary' && page == 1) {
+                blocked.complete();
+                await release.future;
+              }
+            };
+            if (failOld) {
+              overridePage = (source, page, payload) {
+                if (source == 'storeRevenueSummary' && page == 1) {
+                  payload['rows'] = [];
+                }
+                return payload;
+              };
+            }
+            final old = report.setReportRange(
+              DateTime(2024),
+              DateTime(2029, 12, 31),
+            );
+            await blocked.future;
+            await report.setReportRange(DateTime(2030), DateTime(2030, 12, 31));
+            release.complete();
+            await old;
+            expect(report.state.reportSummary!.totalRevenue, 0);
+            expect(report.state.error, isNull);
+            expect(report.state.reportStart, DateTime(2030));
+          },
+        );
+      }
+
+      test(
+        'missing aggregate RPC clears old totals without a raw-data fallback',
+        () async {
+          await seed(1);
+          final report = _AdminReports(client)..setStores([_store]);
+          addTearDown(report.dispose);
+          await report.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
+          expect(report.state.reportSummary, isNotNull);
+          rejectSummary = true;
+          requests.clear();
+          await report.loadAllReports();
+          expect(report.state.reportSummary, isNull);
+          expect(report.state.error, contains('PGRST202'));
+          expect(requests, {'storeRevenueSummary': 1});
+        },
+      );
+
+      test(
+        'disposing during an aggregate prevents late report publication',
+        () async {
+          final report = _AdminReports(client)..setStores([_store]);
+          final blocked = Completer<void>();
+          final release = Completer<void>();
+          beforePage = (source, page) async {
+            if (source == 'storeRevenueSummary') {
+              blocked.complete();
+              await release.future;
+            }
+          };
+          final loading = report.setReportRange(
+            DateTime(2024),
+            DateTime(2029, 12, 31),
+          );
+          await blocked.future;
+          report.dispose();
+          release.complete();
+          await loading;
+          expect(requests, {'storeRevenueSummary': 1});
+        },
+      );
+
+      test(
+        'aggregate keeps one statement snapshot during concurrent source updates',
+        () async {
+          await seed(1);
+          // Pause the Photo Objet branch after the request's statement snapshot
+          // exists, commit changes to all three sources, then let it finish.
+          await sql(r"""
+          ALTER VIEW public.v_photo_objet_daily_summary RENAME TO fixture_photo_original;
+          CREATE FUNCTION public.fixture_report_pause() RETURNS boolean LANGUAGE plpgsql VOLATILE AS $$
+          BEGIN PERFORM pg_advisory_xact_lock(825910); RETURN true; END $$;
+          CREATE VIEW public.v_photo_objet_daily_summary WITH (security_invoker=true) AS
+            SELECT * FROM public.fixture_photo_original WHERE public.fixture_report_pause();
+          GRANT SELECT ON public.v_photo_objet_daily_summary TO authenticated;
+        """);
+          final holder = await Process.start('docker', [
+            'exec',
+            '-i',
+            dbContainer!,
+            'psql',
+            '-X',
+            '-q',
+            '-v',
+            'ON_ERROR_STOP=1',
+            '-U',
+            'postgres',
+            '-d',
+            'payroll_test',
+          ]);
+          final stdoutDone = holder.stdout.drain<void>();
+          final stderrDone = holder.stderr.drain<void>();
+          holder.stdin.writeln('BEGIN; SELECT pg_advisory_xact_lock(825910);');
+          await holder.stdin.flush();
+          Future<void> waitForLock(bool granted) => sql('''
+          DO \$\$ BEGIN
+            FOR attempt IN 1..250 LOOP
+              IF EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=825910 AND granted=$granted) THEN RETURN; END IF;
+              PERFORM pg_sleep(0.02);
+            END LOOP;
+            RAISE EXCEPTION 'REPORT_FIXTURE_LOCK_TIMEOUT';
+          END \$\$;
+        ''');
+          var released = false;
+          try {
+            await waitForLock(true);
+            final reading = aggregate();
+            await waitForLock(false);
+            await sql(
+              'UPDATE payments SET amount_portion=900 WHERE is_revenue=true; '
+              'UPDATE external_sales SET net_amount=90; UPDATE photo_objet_sales SET gross_sales=500;',
+            );
+            holder.stdin.writeln('COMMIT;');
+            await holder.stdin.close();
+            await holder.exitCode;
+            released = true;
+            final before = (await reading)[_store]!;
+            expect(before, (dineIn: 148.0, delivery: 10.0));
+            final after = (await aggregate())[_store]!;
+            expect(after, (dineIn: 1398.0, delivery: 90.0));
+          } finally {
+            if (!released) {
+              // Closing psql releases/rolls back the fixture transaction on failure.
+              await holder.stdin.close();
+              await holder.exitCode;
+            }
+            await Future.wait([stdoutDone, stderrDone]);
+            await sql(
+              'DROP VIEW public.v_photo_objet_daily_summary; '
+              'ALTER VIEW public.fixture_photo_original RENAME TO v_photo_objet_daily_summary; '
+              'DROP FUNCTION public.fixture_report_pause();',
+            );
+          }
         },
       );
 
@@ -746,7 +1227,7 @@ void main() {
           final blocked = Completer<void>();
           final release = Completer<void>();
           beforePage = (source, page) async {
-            if (source == 'photoSales') {
+            if (source == 'storeRevenueSummary') {
               blocked.complete();
               await release.future;
             }

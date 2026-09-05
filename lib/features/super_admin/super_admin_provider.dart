@@ -1,8 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/services/financial_input_service.dart';
+import '../../core/services/store_revenue_summary_service.dart';
 import '../../core/services/store_service.dart';
 import '../../main.dart';
 import '../report/report_provider.dart';
@@ -692,17 +691,9 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     );
     try {
       final restaurants = state.restaurants;
-      final Map<String, _Accumulator> accumulators = {};
       final sourceRestaurants = selectedRestaurantId == null
           ? restaurants
           : restaurants.where((r) => r.id == selectedRestaurantId).toList();
-
-      for (final restaurant in sourceRestaurants) {
-        accumulators[restaurant.id] = _Accumulator(
-          storeId: restaurant.id,
-          restaurantName: restaurant.name,
-        );
-      }
 
       if (sourceRestaurants.isEmpty) {
         state = state.copyWith(
@@ -718,73 +709,25 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         return;
       }
 
-      final inputs = FinancialInputService(_reportClient ?? supabase);
-      final range = reportUtcRange(requestedStart, requestedEnd);
-      final photoObjetSales = await inputs.fetch(
-        source: FinancialInputSource.photoSales,
-        storeIds: sourceRestaurants.map((restaurant) => restaurant.id).toList(),
-        fromDate: DateFormat('yyyy-MM-dd').format(requestedStart),
-        toDate: DateFormat('yyyy-MM-dd').format(requestedEnd),
-      );
-
-      for (final restaurant in sourceRestaurants) {
-        if (!mounted || requestId != _reportRequestId) return;
-        final payments = await inputs.fetch(
-          source: FinancialInputSource.revenuePayments,
-          storeIds: [restaurant.id],
-          from: range.startUtc,
-          toExclusive: range.endExclusiveUtc,
+      final totals = await StoreRevenueSummaryService(_reportClient ?? supabase)
+          .fetch(
+            storeIds: sourceRestaurants
+                .map((restaurant) => restaurant.id)
+                .toList(),
+            fromDate: requestedStart,
+            toDate: requestedEnd,
+          );
+      if (!mounted || requestId != _reportRequestId) return;
+      final reportRows = sourceRestaurants.map((restaurant) {
+        final value = totals[restaurant.id]!;
+        return SuperAdminRestaurantReport(
+          storeId: restaurant.id,
+          restaurantName: restaurant.name,
+          dineIn: value.dineIn,
+          delivery: value.delivery,
+          total: value.dineIn + value.delivery,
         );
-        final externalSales = await inputs.fetch(
-          source: FinancialInputSource.externalSales,
-          storeIds: [restaurant.id],
-          from: range.startUtc,
-          toExclusive: range.endExclusiveUtc,
-        );
-
-        final accumulator = accumulators[restaurant.id]!;
-
-        for (final row in payments) {
-          final payment = Map<String, dynamic>.from(row);
-          final amount = revenuePaymentSalesAmount(payment);
-          String channel = '';
-          final orderRaw = payment['orders'];
-          if (orderRaw is Map<String, dynamic>) {
-            channel = orderRaw['sales_channel']?.toString() ?? '';
-          }
-          if (channel.toLowerCase() == 'delivery') {
-            accumulator.delivery += amount;
-          } else {
-            accumulator.dineIn += amount;
-          }
-        }
-
-        for (final row in externalSales) {
-          final sale = Map<String, dynamic>.from(row);
-          accumulator.delivery += _toDouble(sale['net_amount']);
-        }
-      }
-
-      final photoObjetSalesByStore = aggregateSuperAdminPhotoObjetSalesByStore(
-        List<Map<String, dynamic>>.from(photoObjetSales),
-      );
-      for (final entry in photoObjetSalesByStore.entries) {
-        accumulators[entry.key]?.dineIn += entry.value;
-      }
-
-      final reportRows =
-          accumulators.values
-              .map(
-                (value) => SuperAdminRestaurantReport(
-                  storeId: value.storeId,
-                  restaurantName: value.restaurantName,
-                  dineIn: value.dineIn,
-                  delivery: value.delivery,
-                  total: value.dineIn + value.delivery,
-                ),
-              )
-              .toList()
-            ..sort((a, b) => b.total.compareTo(a.total));
+      }).toList()..sort((a, b) => b.total.compareTo(a.total));
 
       final dineInTotal = reportRows.fold<double>(
         0,
@@ -815,22 +758,6 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       );
     }
   }
-}
-
-double _toDouble(dynamic value) {
-  return switch (value) {
-    num v => v.toDouble(),
-    String v => double.tryParse(v) ?? 0,
-    _ => 0,
-  };
-}
-
-class _Accumulator {
-  _Accumulator({required this.storeId, required this.restaurantName});
-  final String storeId;
-  final String restaurantName;
-  double dineIn = 0;
-  double delivery = 0;
 }
 
 final superAdminProvider =

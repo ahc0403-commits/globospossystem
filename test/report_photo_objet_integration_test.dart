@@ -88,14 +88,21 @@ void main() {
     expect(totals, {'thao-dien': 8190000, 'bien-hoa': 1950000});
   });
 
-  test('Super Admin report loads the Photo Objet daily summary', () {
-    final provider = readRepoFile(
-      'lib/features/super_admin/super_admin_provider.dart',
-    );
+  test(
+    'Super Admin report uses the scoped server aggregate including Photo Objet',
+    () {
+      final provider = readRepoFile(
+        'lib/features/super_admin/super_admin_provider.dart',
+      );
 
-    expect(provider, contains("FinancialInputSource.photoSales"));
-    expect(provider, contains('aggregateSuperAdminPhotoObjetSalesByStore'));
-  });
+      expect(provider, contains('StoreRevenueSummaryService'));
+      final sql = readRepoFile(
+        'supabase/migrations/20260905040000_store_revenue_summary.sql',
+      );
+      expect(sql, contains('public.v_photo_objet_daily_summary'));
+      expect(provider, contains('aggregateSuperAdminPhotoObjetSalesByStore'));
+    },
+  );
 
   test('report export keeps sales and service revenue separate', () {
     final provider = readRepoFile('lib/features/report/report_provider.dart');
