@@ -15,8 +15,9 @@ void main() {
     final english = File('lib/l10n/app_en.arb').readAsStringSync();
 
     expect(cashier, contains('const _wetTissueUnitPrice = 2000;'));
-    expect(cashier, contains('quantity * _wetTissueUnitPrice'));
-    expect(cashier, contains('wetTissueDifference * _wetTissueUnitPrice'));
+    expect(cashier, contains('wetTissueAmounts('));
+    expect(cashier, contains('order.fixedChargeTotal'));
+    expect(cashier, contains('vatPricingMode: order.vatPricingMode'));
     expect(vietnamese, contains('2.000 VND / khăn'));
     expect(korean, contains('1개당 2,000동'));
     expect(english, contains('2,000 VND each'));

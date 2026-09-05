@@ -1,6 +1,21 @@
 const String vatPricingModeExclusive = 'exclusive';
 const String vatPricingModeInclusive = 'inclusive';
 
+({double supply, double vat, double total}) wetTissueAmounts({
+  required double unitPrice,
+  required int quantity,
+  required String vatPricingMode,
+}) {
+  final price = _roundMoney(unitPrice * quantity);
+  final supply = vatPricingMode == vatPricingModeInclusive
+      ? _roundMoney(price / 1.08)
+      : price;
+  final vat = vatPricingMode == vatPricingModeInclusive
+      ? _roundMoney(price - supply)
+      : _roundMoney(supply * .08);
+  return (supply: supply, vat: vat, total: _roundMoney(supply + vat));
+}
+
 class PaymentQuoteLine {
   const PaymentQuoteLine({
     this.id = '',
@@ -61,6 +76,7 @@ PaymentQuoteResult calculatePaymentQuote({
   var existingServiceChargeVatTotal = 0.0;
   var serviceItemTotal = 0.0;
   var fixedChargeTotal = 0.0;
+  var fixedChargeVatTotal = 0.0;
   var hasExistingServiceCharge = false;
   var explicitDiscountCents = 0;
   final menuVatLines = <_PaymentVatLine>[];
@@ -91,11 +107,16 @@ PaymentQuoteResult calculatePaymentQuote({
               _roundMoney(serviceChargeIncTax / (1 + (vatRate / 100)));
         }
       } else if (itemType == 'wet_tissue_charge') {
-        fixedChargeTotal += _roundMoney(
-          line.payingAmountIncTax != null && line.payingAmountIncTax! > 0
-              ? line.payingAmountIncTax!
-              : line.unitPrice * line.quantity,
+        final amounts = wetTissueAmounts(
+          unitPrice: line.unitPrice,
+          quantity: line.quantity,
+          vatPricingMode: vatPricingMode,
         );
+        // A persisted payment snapshot remains authoritative for history.
+        final gross = line.payingAmountIncTax ?? amounts.total;
+        final rate = line.vatRate ?? 8;
+        fixedChargeTotal += gross;
+        fixedChargeVatTotal += gross - _roundMoney(gross / (1 + rate / 100));
       }
       continue;
     }
@@ -162,7 +183,9 @@ PaymentQuoteResult calculatePaymentQuote({
     serviceItemTotal: _roundMoney(serviceItemTotal),
     fixedChargeTotal: _roundMoney(fixedChargeTotal),
     discountTotal: resolvedDiscount,
-    vatTotal: _roundMoney(menuVatTotal + serviceChargeVatTotal),
+    vatTotal: _roundMoney(
+      menuVatTotal + serviceChargeVatTotal + fixedChargeVatTotal,
+    ),
     payableTotal: _roundMoney(
       menuSubtotal + serviceChargeTotal + fixedChargeTotal - resolvedDiscount,
     ),

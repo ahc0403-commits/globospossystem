@@ -1,5 +1,16 @@
 import 'package:excel/excel.dart';
 
+// VND exports allow at most one dong of rounding, never a missing tax line.
+bool isMisaVatConsistent(double supply, double rate, double vat) =>
+    supply.isFinite &&
+    rate.isFinite &&
+    vat.isFinite &&
+    supply >= 0 &&
+    rate >= 0 &&
+    rate <= 100 &&
+    vat >= 0 &&
+    (supply * rate / 100 - vat).abs() <= 1;
+
 /// Builds the one-sheet MISA desktop import workbook used by POS operations.
 ///
 /// Photo sales are VAT-inclusive, so their 8% VAT is derived from the gross
@@ -47,6 +58,16 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
       final amounts = isPhoto
           ? _photoAmounts(line, quantity.toDouble())
           : _restaurantAmounts(line, quantity.toDouble());
+      if (!isMisaVatConsistent(
+            amounts.supplyAmount,
+            amounts.vatRate,
+            amounts.vatAmount,
+          ) ||
+          (!isPhoto &&
+              line['item_type'] == 'wet_tissue_charge' &&
+              amounts.vatRate != 8)) {
+        throw const FormatException('MISA_EXPORT_VAT_MISMATCH');
+      }
       sheet.appendRow([
         IntCellValue(invoiceIndex + 1),
         TextCellValue(_invoiceDate(_saleDate(job))),
@@ -154,6 +175,7 @@ _restaurantAmounts(Map<String, dynamic> line, double quantity) {
 
 String _paymentCode(Object? value) {
   final normalized = _text(value).toLowerCase();
+  if (normalized == 'tm' || normalized == 'ck') return normalized.toUpperCase();
   if (normalized.contains('cash') ||
       normalized.contains('tiền mặt') ||
       normalized.contains('tien mat')) {

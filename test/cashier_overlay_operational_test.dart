@@ -875,7 +875,7 @@ void main() {
       await tester.tap(increment);
       await tester.pump();
       expect(find.text('2'), findsOneWidget);
-      expect(find.text('₫4.000'), findsOneWidget);
+      expect(find.text('₫4.320'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('cashier_wet_tissue_confirm')));
       await tester.pumpAndSettle();

@@ -19,6 +19,7 @@ import '../../core/services/bank_transfer_alert_coordinator.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/digital_receipt_service.dart';
 import '../../core/services/discount_service.dart';
+import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/services/menu_service.dart';
 import '../../core/layout/platform_info.dart';
@@ -4266,6 +4267,7 @@ class _CashierPaymentRail extends StatelessWidget {
           if (!order.isStaffMeal) ...[
             _WetTissueQuantityControl(
               dense: dense,
+              vatPricingMode: order.vatPricingMode,
               quantity: wetTissueQuantity,
               confirmed: wetTissueConfirmed,
               isProcessing: isProcessing,
@@ -4439,6 +4441,7 @@ class _CashierPaymentRail extends StatelessWidget {
 class _WetTissueQuantityControl extends StatelessWidget {
   const _WetTissueQuantityControl({
     this.dense = false,
+    required this.vatPricingMode,
     required this.quantity,
     required this.confirmed,
     required this.isProcessing,
@@ -4448,6 +4451,7 @@ class _WetTissueQuantityControl extends StatelessWidget {
   });
 
   final int quantity;
+  final String vatPricingMode;
   final bool dense;
   final bool confirmed;
   final bool isProcessing;
@@ -4460,7 +4464,11 @@ class _WetTissueQuantityControl extends StatelessWidget {
     final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
     final enabled = !isProcessing && isOnline;
-    final total = quantity * _wetTissueUnitPrice;
+    final total = wetTissueAmounts(
+      unitPrice: _wetTissueUnitPrice.toDouble(),
+      quantity: quantity,
+      vatPricingMode: vatPricingMode,
+    ).total;
 
     return Container(
       key: const Key('cashier_wet_tissue_control'),
@@ -4510,7 +4518,9 @@ class _WetTissueQuantityControl extends StatelessWidget {
                       ),
                       Text(
                         confirmed
-                            ? l10n.cashierWetTissueUnitPrice
+                            ? (vatPricingMode == vatPricingModeExclusive
+                                  ? '${l10n.cashierWetTissueUnitPrice} + VAT 8%'
+                                  : l10n.cashierWetTissueUnitPrice)
                             : l10n.cashierWetTissueRequired,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -4611,7 +4621,9 @@ class _WetTissueQuantityControl extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            l10n.cashierWetTissueUnitPrice,
+                            (vatPricingMode == vatPricingModeExclusive
+                                ? '${l10n.cashierWetTissueUnitPrice} + VAT 8%'
+                                : l10n.cashierWetTissueUnitPrice),
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: PosColors.textSecondary,
@@ -5849,10 +5861,14 @@ class _CombinedTablePaymentDialogState
 
   double get _adjustedTotal => widget.orders.fold<double>(0, (sum, order) {
     final quantity = _wetTissueQuantities[order.orderId] ?? 0;
-    final wetTissueDifference = quantity - order.wetTissueQuantity;
     return sum +
         order.remainingDue +
-        (wetTissueDifference * _wetTissueUnitPrice);
+        wetTissueAmounts(
+          unitPrice: _wetTissueUnitPrice.toDouble(),
+          quantity: quantity,
+          vatPricingMode: order.vatPricingMode,
+        ).total -
+        order.fixedChargeTotal;
   });
 
   @override
