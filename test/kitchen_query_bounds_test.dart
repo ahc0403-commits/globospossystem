@@ -21,6 +21,8 @@ void main() {
   var failPage = false;
   var repeatPage = false;
   var activeRequests = 0;
+  var apiCap = 50;
+  final removedIds = <String>{};
   final createdAt = DateTime.now().toUtc().toIso8601String();
   Map<String, dynamic> row(int i, String status) => {
     'id': '00000000-0000-0000-0000-${i.toString().padLeft(12, '0')}',
@@ -53,6 +55,8 @@ void main() {
     failPage = false;
     repeatPage = false;
     activeRequests = 0;
+    apiCap = 50;
+    removedIds.clear();
     requests.clear();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
@@ -74,18 +78,38 @@ void main() {
         final cursorMatch = RegExp(
           r'id.gt.([\w-]+)',
         ).firstMatch(params['or'] ?? '');
-        final cursor = repeatPage ? null : cursorMatch?.group(1);
+        final idFilters = request.uri.queryParametersAll['id'] ?? [];
+        final includedIds = idFilters
+            .where((filter) => filter.startsWith('in.('))
+            .expand((filter) => RegExp(r'[\w-]{36}').allMatches(filter))
+            .map((match) => match.group(0))
+            .toSet();
+        final idCursor = idFilters.where((filter) => filter.startsWith('gt.'));
+        final cursor = repeatPage
+            ? null
+            : cursorMatch?.group(1) ??
+                  (idCursor.isEmpty ? null : idCursor.first.substring(3));
+        final ascending = (params['order'] ?? '').contains('id.asc.');
+        all.sort(
+          (a, b) => ascending
+              ? (a['id'] as String).compareTo(b['id'] as String)
+              : (b['id'] as String).compareTo(a['id'] as String),
+        );
         final rows = all.where(
           (r) =>
-              completed ||
-              cursor == null ||
-              (r['id'] as String).compareTo(cursor) > 0,
+              !removedIds.contains(r['id']) &&
+              (includedIds.isEmpty || includedIds.contains(r['id'])) &&
+              (completed ||
+                  cursor == null ||
+                  (r['id'] as String).compareTo(cursor) > 0),
         );
         // Deliberately lower than the client's 100-row limit.
         final requestedLimit = int.parse(params['limit'] ?? '999999');
         request.response.write(
           jsonEncode(
-            rows.take(requestedLimit < 50 ? requestedLimit : 50).toList(),
+            rows
+                .take(requestedLimit < apiCap ? requestedLimit : apiCap)
+                .toList(),
           ),
         );
       }
@@ -152,4 +176,32 @@ void main() {
     expect(kitchen.state.error, contains('KITCHEN_ORDER_PAGE_INVALID'));
     expect(activeRequests, 2);
   });
+
+  test('changed orders page completely below the API cap', () async {
+    activeCount = 5;
+    apiCap = 2;
+    await kitchen.loadOrders('store-a');
+    final ids = kitchen.state.orders.map((order) => order.orderId).toList();
+    await kitchen.refreshOrdersById('store-a', ids);
+    expect(kitchen.state.error, isNull);
+    expect(kitchen.state.orders.map((order) => order.orderId), ids);
+  });
+
+  test(
+    'changed orders remove missing IDs without losing unaffected orders',
+    () async {
+      activeCount = 5;
+      await kitchen.loadOrders('store-a');
+      final ids = kitchen.state.orders.map((order) => order.orderId).toList();
+      removedIds.add(ids[2]);
+      await kitchen.refreshOrdersById('store-a', [ids[0], ids[2], ids[4]]);
+      expect(kitchen.state.error, isNull);
+      expect(kitchen.state.orders.map((order) => order.orderId), [
+        ids[0],
+        ids[1],
+        ids[3],
+        ids[4],
+      ]);
+    },
+  );
 }
