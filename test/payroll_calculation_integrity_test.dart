@@ -26,6 +26,19 @@ class _AttendanceServiceFake extends AttendanceService {
   }) async {
     requestedFrom = from;
     requestedTo = to;
+    final rows = List<Map<String, dynamic>>.of(logs)
+      ..sort((a, b) => '${b['logged_at']}'.compareTo('${a['logged_at']}'));
+    return rows.take(limit).toList();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchPayrollLogs({
+    required String storeId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    requestedFrom = from;
+    requestedTo = to;
     return logs;
   }
 
@@ -46,22 +59,26 @@ class _AttendanceServiceFake extends AttendanceService {
   }
 
   @override
-  Future<Map<String, dynamic>?> fetchHourlyPayRule({
+  Future<Map<String, Map<String, dynamic>?>> fetchHourlyPayRules({
     required String storeId,
-    required String employeeId,
+    required Iterable<String> employeeIds,
   }) async {
-    requestedRuleEmployeeIds.add(employeeId);
-    return hourlyPayRule ??
-        {
-          'hourly_rate': 30000,
-          'scheduled_start': '09:00',
-          'night_start': '22:00',
-          'night_multiplier': 1.3,
-          'holiday_multiplier': 3,
-          'exclude_sunday': true,
-          'late_threshold_minutes': 60,
-          'late_review_hourly_multiplier': 2,
-        };
+    requestedRuleEmployeeIds.addAll(employeeIds);
+    return {
+      for (final id in employeeIds)
+        id:
+            hourlyPayRule ??
+            {
+              'hourly_rate': 30000,
+              'scheduled_start': '09:00',
+              'night_start': '22:00',
+              'night_multiplier': 1.3,
+              'holiday_multiplier': 3,
+              'exclude_sunday': true,
+              'late_threshold_minutes': 60,
+              'late_review_hourly_multiplier': 2,
+            },
+    };
   }
 
   @override
@@ -104,6 +121,52 @@ Map<String, dynamic> _log({
 }
 
 void main() {
+  test(
+    'payroll includes attendance beyond the 500-row display limit',
+    () async {
+      final start = DateTime.utc(2026, 1, 1);
+      final logs = <Map<String, dynamic>>[
+        for (var day = 0; day < 251; day++) ...[
+          _log(
+            employeeId: 'part-timer',
+            name: 'Mai',
+            role: 'part_timer',
+            type: 'clock_in',
+            loggedAt: start
+                .add(Duration(days: day, hours: 2))
+                .toIso8601String(),
+          ),
+          _log(
+            employeeId: 'part-timer',
+            name: 'Mai',
+            role: 'part_timer',
+            type: 'clock_out',
+            loggedAt: start
+                .add(Duration(days: day, hours: 10))
+                .toIso8601String(),
+          ),
+        ],
+      ];
+      final attendance = _AttendanceServiceFake(
+        logs,
+        hourlyPayRule: {
+          'hourly_rate': 30000,
+          'scheduled_start': '09:00',
+          'exclude_sunday': false,
+        },
+      );
+      final payroll = await PayrollService(attendanceSource: attendance)
+          .calculatePayroll(
+            storeId: 'store',
+            periodStart: DateTime(2026, 1, 1),
+            periodEnd: DateTime(2026, 1, 1).add(const Duration(days: 250)),
+          );
+      expect(payroll.single.dailyRecords, hasLength(251));
+      expect(payroll.single.totalHours, 251 * 8);
+      expect(payroll.single.totalAmount, 251 * 8 * 30000);
+    },
+  );
+
   test(
     'payroll includes the full selected end date and only part-timers',
     () async {

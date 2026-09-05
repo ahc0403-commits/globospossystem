@@ -6,12 +6,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
+import 'financial_input_service.dart';
 import 'rpc_compat.dart';
 
 const attendanceScreenRecordLimit = 10;
 const attendanceManagementRecordLimit = 500;
 
 class AttendanceService {
+  AttendanceService({SupabaseClient? client}) : _client = client;
+
+  final SupabaseClient? _client;
+
   Future<Map<String, dynamic>> recordEmployeeAttendance({
     required String storeId,
     required String employeeNumber,
@@ -142,7 +147,7 @@ class AttendanceService {
     if (limit < 1) {
       throw ArgumentError.value(limit, 'limit', 'must be at least 1');
     }
-    final result = await supabase.rpc(
+    final result = await (_client ?? supabase).rpc(
       'get_attendance_logs_with_names',
       params: {
         'p_store_id': storeId,
@@ -157,13 +162,99 @@ class AttendanceService {
     ).map(normalizeAttendanceLogRow).toList(growable: false);
   }
 
+  /// Payroll needs the complete period, independently of display/API row caps.
+  /// The final page verifies the first page's revision before any result is used.
+  Future<List<Map<String, dynamic>>> fetchPayrollLogs({
+    required String storeId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final rows = <Map<String, dynamic>>[];
+    final seenIds = <String>{};
+    String? revision;
+    String? cursorAt;
+    String? cursorId;
+    int? totalCount;
+    while (true) {
+      final result = await (_client ?? supabase).rpc(
+        'get_payroll_attendance_page',
+        params: {
+          'p_store_id': storeId,
+          'p_from': from.toUtc().toIso8601String(),
+          'p_to': to.toUtc().toIso8601String(),
+          'p_page_size': 500,
+          'p_after_logged_at': cursorAt,
+          'p_after_id': cursorId,
+          'p_expected_revision': revision,
+        },
+      );
+      if (result is! Map ||
+          result['rows'] is! List ||
+          result['has_more'] is! bool ||
+          result['revision'] is! String ||
+          (result['revision'] as String).isEmpty) {
+        throw const FormatException('PAYROLL_ATTENDANCE_RESPONSE_INVALID');
+      }
+      final pageRevision = result['revision'] as String;
+      if (revision != null && revision != pageRevision) {
+        throw StateError('PAYROLL_ATTENDANCE_CHANGED');
+      }
+      final pageCount = result['total_count'];
+      if (totalCount == null) {
+        if (pageCount is! int || pageCount < 0) {
+          throw const FormatException('PAYROLL_ATTENDANCE_COUNT_INVALID');
+        }
+        totalCount = pageCount;
+      } else if (pageCount != null && pageCount != totalCount) {
+        throw StateError('PAYROLL_ATTENDANCE_CHANGED');
+      }
+      revision = pageRevision;
+      final page = List<Map<String, dynamic>>.from(result['rows'] as List);
+      for (final row in page) {
+        final id = row['id']?.toString();
+        final at = DateTime.tryParse(row['logged_at']?.toString() ?? '');
+        final previousAt = cursorAt == null ? null : DateTime.parse(cursorAt);
+        if (id == null ||
+            id.isEmpty ||
+            at == null ||
+            row['restaurant_id']?.toString() != storeId ||
+            at.isBefore(from.toUtc()) ||
+            !at.isBefore(to.toUtc()) ||
+            !seenIds.add(id) ||
+            (previousAt != null &&
+                (at.isBefore(previousAt) ||
+                    (at.isAtSameMomentAs(previousAt) &&
+                        id.compareTo(cursorId!) <= 0)))) {
+          throw const FormatException('PAYROLL_ATTENDANCE_PAGE_INVALID');
+        }
+        cursorAt = row['logged_at'].toString();
+        cursorId = id;
+        rows.add(normalizeAttendanceLogRow(row));
+      }
+      if (rows.length > totalCount) {
+        throw StateError('PAYROLL_ATTENDANCE_CHANGED');
+      }
+      if (result['has_more'] == false) {
+        if (pageCount == null || rows.length != totalCount) {
+          throw const FormatException('PAYROLL_ATTENDANCE_INCOMPLETE');
+        }
+        return rows;
+      }
+      if (page.isEmpty) {
+        throw const FormatException('PAYROLL_ATTENDANCE_CURSOR_STALLED');
+      }
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
-    final result = await supabase
-        .from('store_employees')
-        .select('id, employee_number, full_name, employment_role')
-        .eq('store_id', storeId)
-        .eq('is_active', true)
-        .order('employee_number');
+    final result = await FinancialInputService(
+      _client ?? supabase,
+    ).fetch(source: FinancialInputSource.staff, storeIds: [storeId]);
+    result.sort(
+      (a, b) => (a['employee_number'] as String).compareTo(
+        b['employee_number'] as String,
+      ),
+    );
     return List<Map<String, dynamic>>.from(result)
         .map(
           (row) => {
@@ -257,16 +348,55 @@ class AttendanceService {
     return result == null ? null : Map<String, dynamic>.from(result);
   }
 
+  /// Bounded batches with explicit coverage, including employees without a rule.
+  /// A failed batch never returns partial payroll inputs.
+  Future<Map<String, Map<String, dynamic>?>> fetchHourlyPayRules({
+    required String storeId,
+    required Iterable<String> employeeIds,
+  }) async {
+    final ids = employeeIds.toSet().toList()..sort();
+    final rules = <String, Map<String, dynamic>?>{};
+    for (var start = 0; start < ids.length; start += 500) {
+      final end = start + 500 < ids.length ? start + 500 : ids.length;
+      final batch = ids.sublist(start, end);
+      final response = await (_client ?? supabase).rpc(
+        'get_payroll_hourly_rules',
+        params: {'p_store_id': storeId, 'p_employee_ids': batch},
+      );
+      if (response is! Map ||
+          response['version'] != 1 ||
+          response['store_id'] != storeId ||
+          response['rows'] is! List) {
+        throw const FormatException('PAYROLL_RULES_RESPONSE_INVALID');
+      }
+      final pending = batch.toSet();
+      for (final row in response['rows'] as List) {
+        if (row is! Map ||
+            !pending.remove(row['employee_id']) ||
+            !row.containsKey('rule') ||
+            (row['rule'] != null && row['rule'] is! Map)) {
+          throw const FormatException('PAYROLL_RULES_RESPONSE_INVALID');
+        }
+        rules[row['employee_id'] as String] = row['rule'] == null
+            ? null
+            : Map<String, dynamic>.from(row['rule'] as Map);
+      }
+      if (pending.isNotEmpty) {
+        throw const FormatException('PAYROLL_RULES_INCOMPLETE');
+      }
+    }
+    return rules;
+  }
+
   Future<Set<DateTime>> fetchVietnamPublicHolidays({
     required DateTime from,
     required DateTime to,
   }) async {
-    final result = await supabase
-        .from('vietnam_public_holidays')
-        .select('holiday_date')
-        .eq('is_active', true)
-        .gte('holiday_date', from.toIso8601String().substring(0, 10))
-        .lte('holiday_date', to.toIso8601String().substring(0, 10));
+    final result = await FinancialInputService(_client ?? supabase).fetch(
+      source: FinancialInputSource.holidays,
+      fromDate: _dateOnly(from),
+      toDate: _dateOnly(to),
+    );
     return List<Map<String, dynamic>>.from(result)
         .map((row) => DateTime.tryParse(row['holiday_date']?.toString() ?? ''))
         .whereType<DateTime>()
@@ -279,13 +409,12 @@ class AttendanceService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final result = await supabase
-        .from('employee_daily_allowances')
-        .select()
-        .eq('store_id', storeId)
-        .gte('work_date', _dateOnly(from))
-        .lte('work_date', _dateOnly(to))
-        .order('work_date');
+    final result = await FinancialInputService(_client ?? supabase).fetch(
+      source: FinancialInputSource.allowances,
+      storeIds: [storeId],
+      fromDate: _dateOnly(from),
+      toDate: _dateOnly(to),
+    );
     return List<Map<String, dynamic>>.from(result);
   }
 

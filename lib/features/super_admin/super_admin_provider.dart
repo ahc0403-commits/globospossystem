@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/services/store_revenue_summary_service.dart';
 import '../../core/services/store_service.dart';
+import '../../core/services/catalog_query_service.dart';
 import '../../main.dart';
+import '../../core/utils/coalesced_refresh.dart';
 import '../report/report_provider.dart';
 
 const kUnclassifiedBrandFilter = '__unclassified__';
@@ -326,93 +329,135 @@ class StoreCloseResult {
 }
 
 class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
-  SuperAdminNotifier()
-    : super(
+  SuperAdminNotifier({SupabaseClient? client})
+    : _reportClient = client,
+      super(
         SuperAdminState(
           reportStart: DateTime(DateTime.now().year, DateTime.now().month, 1),
           reportEnd: DateTime.now(),
         ),
       );
 
+  final SupabaseClient? _reportClient;
+  int _reportRequestId = 0;
+
   String? get lastError => state.error;
 
-  Future<void> loadAllRestaurants() async {
+  final _catalogLoads = <String, Future<void>>{};
+
+  Future<void> _catalogLoad(
+    String key,
+    Future<void> Function() read, {
+    bool force = false,
+  }) async {
+    final existing = _catalogLoads[key];
+    if (existing != null) {
+      if (!force) return existing;
+      await existing;
+    }
+    if (!mounted) return;
+    final future = read();
+    _catalogLoads[key] = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_catalogLoads[key], future)) _catalogLoads.remove(key);
+    }
+  }
+
+  Future<void> loadAllRestaurants({
+    bool force = false,
+  }) => _catalogLoad('restaurants', () async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final response = await supabase
-          .from('restaurants')
-          .select(
-            '*, brands(name, code), tax_entity(name, tax_code, owner_type)',
-          )
-          .order('created_at', ascending: false);
-      final restaurants = response
-          .map<SuperRestaurant>(
-            (row) => SuperRestaurant.fromJson(Map<String, dynamic>.from(row)),
-          )
-          .toList();
+      final response = await fetchCompleteCatalog(
+        () => (_reportClient ?? supabase)
+            .from('restaurants')
+            .select(
+              'id, name, slug, address, operation_mode, per_person_charge, is_active, created_at, '
+              'store_type, brand_id, tax_entity_id, brands(name, code), tax_entity(name, tax_code, owner_type)',
+            ),
+      );
+      if (!mounted) return;
+      final restaurants = response.map(SuperRestaurant.fromJson).toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       state = state.copyWith(
         restaurants: restaurants,
         isLoading: false,
         clearError: true,
       );
     } catch (error) {
+      if (!mounted) return;
+      _reportRequestId++;
       state = state.copyWith(
+        restaurants: [],
+        clearReportSummary: true,
         isLoading: false,
         error: 'Failed to load restaurants: $error',
       );
     }
-  }
+  }, force: force);
 
-  Future<void> loadBrands() async {
-    try {
-      final response = await supabase
-          .from('brands')
-          .select('id, code, name')
-          .order('name', ascending: true);
-      state = state.copyWith(brands: List<Map<String, dynamic>>.from(response));
-    } catch (_) {
-      // brands 로드 실패는 치명적이지 않음 — 필터 없이 계속
-    }
-  }
+  Future<void> loadBrands({bool force = false}) =>
+      _catalogLoad('brands', () async {
+        try {
+          final response = await fetchCompleteCatalog(
+            () => (_reportClient ?? supabase)
+                .from('brands')
+                .select('id, code, name'),
+          );
+          response.sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
+          if (mounted) state = state.copyWith(brands: response);
+        } catch (_) {
+          // Filters are optional; never retain a partially loaded list.
+          if (mounted) state = state.copyWith(brands: []);
+        }
+      }, force: force);
 
-  Future<void> loadLegalEntityStructure() async {
+  Future<void> loadLegalEntityStructure({
+    bool force = false,
+  }) => _catalogLoad('legal', () async {
     try {
+      final client = _reportClient ?? supabase;
       final responses = await Future.wait([
-        supabase
-            .from('tax_entity')
-            .select('id, name, tax_code, owner_type')
-            .order('name', ascending: true),
-        supabase.from('tax_entity_brands').select('tax_entity_id, brand_id'),
-        supabase
-            .from('legal_entity_fixed_account_requirements')
-            .select(
-              'id, tax_entity_id, account_code, display_name, scope, '
-              'provisioned_user_id, is_active',
-            )
-            .eq('is_active', true),
-      ]);
-      state = state.copyWith(
-        taxEntities: responses[0]
-            .map<SuperTaxEntity>(
-              (row) => SuperTaxEntity.fromJson(Map<String, dynamic>.from(row)),
-            )
-            .toList(growable: false),
-        taxEntityBrands: responses[1]
-            .map<SuperTaxEntityBrand>(
-              (row) =>
-                  SuperTaxEntityBrand.fromJson(Map<String, dynamic>.from(row)),
-            )
-            .toList(growable: false),
-        legalEntityAccountingRequirements: List<Map<String, dynamic>>.from(
-          responses[2],
+        fetchCompleteCatalog(
+          () => client
+              .from('tax_entity')
+              .select('id, name, tax_code, owner_type'),
         ),
+        fetchCompleteCatalog(
+          () => client
+              .from('tax_entity_brands')
+              .select('tax_entity_id, brand_id'),
+          keys: const ['tax_entity_id', 'brand_id'],
+        ),
+        fetchCompleteCatalog(
+          () => client
+              .from('legal_entity_fixed_account_requirements')
+              .select(
+                'id, tax_entity_id, account_code, display_name, scope, provisioned_user_id, is_active',
+              )
+              .eq('is_active', true),
+        ),
+      ]);
+      if (!mounted) return;
+      final entities = responses[0].map(SuperTaxEntity.fromJson).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+      state = state.copyWith(
+        taxEntities: entities,
+        taxEntityBrands: responses[1]
+            .map(SuperTaxEntityBrand.fromJson)
+            .toList(),
+        legalEntityAccountingRequirements: responses[2],
       );
     } catch (error) {
-      state = state.copyWith(
-        error: 'Failed to load legal entity structure: $error',
-      );
+      if (mounted) {
+        state = state.copyWith(
+          error: 'Failed to load legal entity structure: $error',
+        );
+      }
     }
-  }
+  }, force: force);
 
   Future<String?> configureLegalEntityAccounting({
     required String taxEntityId,
@@ -429,7 +474,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         },
       );
       final row = Map<String, dynamic>.from(result as Map);
-      await loadLegalEntityStructure();
+      await loadLegalEntityStructure(force: true);
       return row['id']?.toString();
     } catch (error) {
       state = state.copyWith(
@@ -454,7 +499,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       if (response.status < 200 || response.status >= 300) {
         throw StateError('ACCOUNT_PROVISION_FAILED_${response.status}');
       }
-      await loadLegalEntityStructure();
+      await loadLegalEntityStructure(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -543,7 +588,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         brandId: brandId,
         taxEntityId: taxEntityId,
       );
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -595,7 +640,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         brandId: brandId,
         taxEntityId: taxEntityId,
       );
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -610,7 +655,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await restaurantService.deactivateRestaurant(id);
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -631,7 +676,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         id: id,
         confirmationSlug: confirmationSlug,
       );
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -646,7 +691,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final summary = await restaurantService.closeStore(id, reason);
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return StoreCloseResult(summary: summary);
     } catch (error) {
       state = state.copyWith(isLoading: false, clearError: true);
@@ -655,8 +700,11 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   }
 
   void selectRestaurant(SuperRestaurant? restaurant) {
+    _reportRequestId++;
     state = state.copyWith(
       selectedRestaurant: restaurant,
+      clearReportSummary: true,
+      isLoading: false,
       clearSelectedRestaurant: restaurant == null,
       clearError: true,
     );
@@ -666,26 +714,108 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     state = state.copyWith(
       reportStart: DateTime(start.year, start.month, start.day),
       reportEnd: DateTime(end.year, end.month, end.day, 23, 59, 59, 999),
+      clearReportSummary: true,
       clearError: true,
     );
     await loadAllReports(selectedRestaurantId: state.selectedRestaurant?.id);
   }
 
+  final _liveReportQueue = CoalescedRefresh();
+  final _pendingReportStores = <String>{};
+  bool _fullReportRefresh = false;
+
+  Future<void> refreshReportsForStore(String? storeId) {
+    if (!mounted) return Future.value();
+    if (storeId == null) {
+      _fullReportRefresh = true;
+    } else {
+      _pendingReportStores.add(storeId);
+    }
+    return _liveReportQueue.run(() async {
+      if (!mounted) return;
+      final full = _fullReportRefresh;
+      _fullReportRefresh = false;
+      final changed = _pendingReportStores.toSet();
+      _pendingReportStores.clear();
+      final prior = state.reportSummary;
+      if (full || prior == null) {
+        await loadAllReports(
+          selectedRestaurantId: state.selectedRestaurant?.id,
+        );
+        return;
+      }
+      final ids = prior.rows
+          .map((row) => row.storeId)
+          .where(changed.contains)
+          .toList();
+      if (ids.isEmpty) return;
+      final generation = _reportRequestId;
+      try {
+        final totals =
+            await StoreRevenueSummaryService(_reportClient ?? supabase).fetch(
+              storeIds: ids,
+              fromDate: state.reportStart,
+              toDate: state.reportEnd,
+            );
+        if (!mounted ||
+            generation != _reportRequestId ||
+            !identical(prior, state.reportSummary)) {
+          return;
+        }
+        final rows = prior.rows.map((row) {
+          final value = totals[row.storeId];
+          return value == null
+              ? row
+              : SuperAdminRestaurantReport(
+                  storeId: row.storeId,
+                  restaurantName: row.restaurantName,
+                  dineIn: value.dineIn,
+                  delivery: value.delivery,
+                  total: value.dineIn + value.delivery,
+                );
+        }).toList()..sort((a, b) => b.total.compareTo(a.total));
+        final dineIn = rows.fold<double>(0, (sum, row) => sum + row.dineIn);
+        final delivery = rows.fold<double>(0, (sum, row) => sum + row.delivery);
+        state = state.copyWith(
+          reportSummary: SuperAdminReportSummary(
+            totalRevenue: dineIn + delivery,
+            dineInRevenue: dineIn,
+            deliveryRevenue: delivery,
+            rows: rows,
+          ),
+          clearError: true,
+        );
+      } catch (error) {
+        if (!mounted || generation != _reportRequestId) return;
+        state = state.copyWith(
+          error: 'Failed to refresh reports: $error',
+          clearReportSummary: true,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _reportRequestId++;
+    _liveReportQueue.dispose();
+    super.dispose();
+  }
+
   Future<void> loadAllReports({String? selectedRestaurantId}) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    final requestId = ++_reportRequestId;
+    final requestedStart = state.reportStart;
+    final requestedEnd = state.reportEnd;
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      clearReportSummary: true,
+    );
     try {
       final restaurants = state.restaurants;
-      final Map<String, _Accumulator> accumulators = {};
       final sourceRestaurants = selectedRestaurantId == null
           ? restaurants
           : restaurants.where((r) => r.id == selectedRestaurantId).toList();
-
-      for (final restaurant in sourceRestaurants) {
-        accumulators[restaurant.id] = _Accumulator(
-          storeId: restaurant.id,
-          restaurantName: restaurant.name,
-        );
-      }
 
       if (sourceRestaurants.isEmpty) {
         state = state.copyWith(
@@ -701,83 +831,25 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         return;
       }
 
-      final startIso = state.reportStart.toIso8601String();
-      final endIso = state.reportEnd.toIso8601String();
-      final startSaleDate = DateFormat('yyyy-MM-dd').format(state.reportStart);
-      final endSaleDate = DateFormat('yyyy-MM-dd').format(state.reportEnd);
-      final photoObjetSales = await supabase
-          .from('v_photo_objet_daily_summary')
-          .select(
-            'store_id, sale_date, total_gross_sales, total_transactions, total_service_amount',
-          )
-          .inFilter(
-            'store_id',
-            sourceRestaurants.map((restaurant) => restaurant.id).toList(),
-          )
-          .gte('sale_date', startSaleDate)
-          .lte('sale_date', endSaleDate);
-
-      for (final restaurant in sourceRestaurants) {
-        final payments = await supabase
-            .from('payments')
-            .select('amount, orders(sales_channel)')
-            .eq('restaurant_id', restaurant.id)
-            .eq('is_revenue', true)
-            .gte('created_at', startIso)
-            .lte('created_at', endIso);
-
-        final externalSales = await supabase
-            .from('external_sales')
-            .select('net_amount')
-            .eq('restaurant_id', restaurant.id)
-            .eq('is_revenue', true)
-            .eq('order_status', 'completed')
-            .gte('completed_at', startIso)
-            .lte('completed_at', endIso);
-
-        final accumulator = accumulators[restaurant.id]!;
-
-        for (final row in payments) {
-          final payment = Map<String, dynamic>.from(row);
-          final amount = _toDouble(payment['amount']);
-          String channel = '';
-          final orderRaw = payment['orders'];
-          if (orderRaw is Map<String, dynamic>) {
-            channel = orderRaw['sales_channel']?.toString() ?? '';
-          }
-          if (channel.toLowerCase() == 'delivery') {
-            accumulator.delivery += amount;
-          } else {
-            accumulator.dineIn += amount;
-          }
-        }
-
-        for (final row in externalSales) {
-          final sale = Map<String, dynamic>.from(row);
-          accumulator.delivery += _toDouble(sale['net_amount']);
-        }
-      }
-
-      final photoObjetSalesByStore = aggregateSuperAdminPhotoObjetSalesByStore(
-        List<Map<String, dynamic>>.from(photoObjetSales),
-      );
-      for (final entry in photoObjetSalesByStore.entries) {
-        accumulators[entry.key]?.dineIn += entry.value;
-      }
-
-      final reportRows =
-          accumulators.values
-              .map(
-                (value) => SuperAdminRestaurantReport(
-                  storeId: value.storeId,
-                  restaurantName: value.restaurantName,
-                  dineIn: value.dineIn,
-                  delivery: value.delivery,
-                  total: value.dineIn + value.delivery,
-                ),
-              )
-              .toList()
-            ..sort((a, b) => b.total.compareTo(a.total));
+      final totals = await StoreRevenueSummaryService(_reportClient ?? supabase)
+          .fetch(
+            storeIds: sourceRestaurants
+                .map((restaurant) => restaurant.id)
+                .toList(),
+            fromDate: requestedStart,
+            toDate: requestedEnd,
+          );
+      if (!mounted || requestId != _reportRequestId) return;
+      final reportRows = sourceRestaurants.map((restaurant) {
+        final value = totals[restaurant.id]!;
+        return SuperAdminRestaurantReport(
+          storeId: restaurant.id,
+          restaurantName: restaurant.name,
+          dineIn: value.dineIn,
+          delivery: value.delivery,
+          total: value.dineIn + value.delivery,
+        );
+      }).toList()..sort((a, b) => b.total.compareTo(a.total));
 
       final dineInTotal = reportRows.fold<double>(
         0,
@@ -788,6 +860,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         (sum, row) => sum + row.delivery,
       );
 
+      if (!mounted || requestId != _reportRequestId) return;
       state = state.copyWith(
         reportSummary: SuperAdminReportSummary(
           totalRevenue: dineInTotal + deliveryTotal,
@@ -799,28 +872,14 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         clearError: true,
       );
     } catch (error) {
+      if (!mounted || requestId != _reportRequestId) return;
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load reports: $error',
+        clearReportSummary: true,
       );
     }
   }
-}
-
-double _toDouble(dynamic value) {
-  return switch (value) {
-    num v => v.toDouble(),
-    String v => double.tryParse(v) ?? 0,
-    _ => 0,
-  };
-}
-
-class _Accumulator {
-  _Accumulator({required this.storeId, required this.restaurantName});
-  final String storeId;
-  final String restaurantName;
-  double dineIn = 0;
-  double delivery = 0;
 }
 
 final superAdminProvider =

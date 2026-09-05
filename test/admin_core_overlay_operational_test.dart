@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
@@ -11,6 +12,7 @@ import 'package:globos_pos_system/core/services/menu_service.dart';
 import 'package:globos_pos_system/core/services/pin_service.dart';
 import 'package:globos_pos_system/core/services/printer_destination_service.dart';
 import 'package:globos_pos_system/core/services/attendance_service.dart';
+import 'package:globos_pos_system/core/services/payroll_service.dart';
 import 'package:globos_pos_system/core/services/tables_service.dart';
 import 'package:globos_pos_system/core/utils/time_utils.dart';
 import 'package:globos_pos_system/features/admin/providers/admin_audit_provider.dart';
@@ -535,6 +537,47 @@ class _PinService extends PinService {
   @override
   Future<void> clearPin(String storeId) async {
     clearCalls += 1;
+  }
+}
+
+class _UnlockedPayrollPinService extends _PinService {
+  @override
+  Future<bool> hasPayrollPin(String storeId) async => false;
+}
+
+class _ChangingPayrollService extends PayrollService {
+  int calculations = 0;
+  int exports = 0;
+  Completer<void>? pendingRead;
+
+  @override
+  Future<List<StaffPayroll>> calculatePayroll({
+    required String storeId,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+  }) async {
+    calculations++;
+    await pendingRead?.future;
+    if (calculations > 1) {
+      throw const PostgrestException(message: 'PAYROLL_ATTENDANCE_CHANGED');
+    }
+    return const [
+      StaffPayroll(
+        userId: 'attendance-staff-1',
+        userName: 'Nguyễn Minh Anh',
+        dailyRecords: [],
+      ),
+    ];
+  }
+
+  @override
+  Future<List<int>> exportToExcel({
+    required List<StaffPayroll> payrolls,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+  }) async {
+    exports++;
+    return const [];
   }
 }
 
@@ -1484,6 +1527,90 @@ void main() {
     expect(destinationsNotifier.deleteCalls, 1);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Failed payroll refresh clears cached export and allows retry', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final payroll = _ChangingPayrollService();
+    await _pump(
+      tester,
+      child: AttendanceTab(
+        attendanceServiceOverride: _AttendanceService(role: 'part_timer'),
+        payrollServiceOverride: payroll,
+        pinServiceOverride: _UnlockedPayrollPinService(),
+      ),
+      overrides: const [],
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nguyễn Minh Anh').first);
+    await tester.pumpAndSettle();
+    final download = find.byKey(const Key('attendance_export_all_payroll'));
+    await tester.ensureVisible(download);
+    await tester.tap(download);
+    await tester.pumpAndSettle();
+    expect(payroll.calculations, 1);
+    expect(payroll.exports, 1);
+    await tester.tap(download);
+    await tester.pumpAndSettle();
+    expect(payroll.calculations, 2);
+    expect(payroll.exports, 1);
+    final summary = find.byKey(
+      const Key('attendance_payroll_secondary_detail'),
+    );
+    await tester.ensureVisible(summary);
+    await tester.tap(summary);
+    await tester.pumpAndSettle();
+    final primary = find.byKey(const Key('attendance_payroll_primary_action'));
+    final l10n = AppLocalizations.of(tester.element(primary))!;
+    expect(
+      find.descendant(
+        of: primary,
+        matching: find.text(l10n.attendanceRunPayrollPreview),
+      ),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(primary);
+    await tester.tap(primary);
+    await tester.pumpAndSettle();
+    expect(payroll.calculations, 3);
+    expect(payroll.exports, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Invalidated payroll read cannot restore or export stale results',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final pending = Completer<void>();
+      final payroll = _ChangingPayrollService()..pendingRead = pending;
+      await _pump(
+        tester,
+        child: AttendanceTab(
+          attendanceServiceOverride: _AttendanceService(role: 'part_timer'),
+          payrollServiceOverride: payroll,
+          pinServiceOverride: _UnlockedPayrollPinService(),
+        ),
+        overrides: const [],
+      );
+      await tester.pumpAndSettle();
+      final download = find.byKey(const Key('attendance_export_all_payroll'));
+      final l10n = AppLocalizations.of(tester.element(download))!;
+      await tester.ensureVisible(download);
+      await tester.tap(download);
+      await tester.pump();
+      expect(payroll.calculations, 1);
+      // A new attendance search invalidates any payroll for the previous input.
+      await tester.tap(find.text(l10n.search).first);
+      await tester.pumpAndSettle();
+      pending.complete();
+      await tester.pumpAndSettle();
+      expect(payroll.exports, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('Attendance payroll unlock dialog executes with store logs', (
     tester,

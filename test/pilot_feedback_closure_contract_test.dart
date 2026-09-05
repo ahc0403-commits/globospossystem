@@ -64,9 +64,7 @@ void main() {
     expect(provider, contains('completedOrders'));
     expect(
       provider,
-      contains(
-        ".inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])",
-      ),
+      contains(".inFilter('status', ['pending', 'confirmed', 'serving'])"),
     );
     expect(provider, contains("item.status == 'served'"));
     expect(provider, contains("item.status != 'served'"));

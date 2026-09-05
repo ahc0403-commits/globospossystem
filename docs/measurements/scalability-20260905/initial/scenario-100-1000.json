@@ -1,0 +1,381 @@
+{
+  "measuredAt": "2026-09-05T10:02:10.340Z",
+  "stores": 100,
+  "virtualUsers": 1000,
+  "durationMs": 20000,
+  "elapsedMs": 24970.550792000002,
+  "maxInFlight": 830,
+  "requests": 2647,
+  "requestsPerSecond": 106.00487037907224,
+  "errors": 61,
+  "grouped": {
+    "queue_items": {
+      "requests": 1858,
+      "errors": 46,
+      "responseBytes": 1447347,
+      "p50Ms": 3812.38,
+      "p95Ms": 10694.02,
+      "p99Ms": 13308.37
+    },
+    "store_report": {
+      "requests": 534,
+      "errors": 8,
+      "responseBytes": 416954,
+      "p50Ms": 3883.98,
+      "p95Ms": 10303.15,
+      "p99Ms": 13553.93
+    },
+    "all_store_report": {
+      "requests": 255,
+      "errors": 7,
+      "responseBytes": 2330985,
+      "p50Ms": 4031.62,
+      "p95Ms": 11174.3,
+      "p99Ms": 13872.12
+    }
+  },
+  "cpuSamples": [
+    {
+      "elapsedMs": 7440,
+      "stats": [
+        {
+          "BlockIO": "4.85MB / 799MB",
+          "CPUPerc": "135.14%",
+          "Container": "pos-scale-test-35052-db",
+          "ID": "d75e834e4012",
+          "MemPerc": "10.12%",
+          "MemUsage": "207.3MiB / 2GiB",
+          "Name": "pos-scale-test-35052-db",
+          "NetIO": "2.98MB / 6.01MB",
+          "PIDs": "19"
+        },
+        {
+          "BlockIO": "512kB / 0B",
+          "CPUPerc": "102.55%",
+          "Container": "pos-scale-test-35052-rest",
+          "ID": "87d2282c9d37",
+          "MemPerc": "20.87%",
+          "MemUsage": "106.8MiB / 512MiB",
+          "Name": "pos-scale-test-35052-rest",
+          "NetIO": "7.76MB / 6.4MB",
+          "PIDs": "63"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 12076,
+      "stats": [
+        {
+          "BlockIO": "4.85MB / 799MB",
+          "CPUPerc": "82.58%",
+          "Container": "pos-scale-test-35052-db",
+          "ID": "d75e834e4012",
+          "MemPerc": "10.02%",
+          "MemUsage": "205.1MiB / 2GiB",
+          "Name": "pos-scale-test-35052-db",
+          "NetIO": "3.38MB / 6.84MB",
+          "PIDs": "17"
+        },
+        {
+          "BlockIO": "643kB / 0B",
+          "CPUPerc": "98.13%",
+          "Container": "pos-scale-test-35052-rest",
+          "ID": "87d2282c9d37",
+          "MemPerc": "23.86%",
+          "MemUsage": "122.2MiB / 512MiB",
+          "Name": "pos-scale-test-35052-rest",
+          "NetIO": "9.89MB / 8.17MB",
+          "PIDs": "65"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 17336,
+      "stats": [
+        {
+          "BlockIO": "4.85MB / 799MB",
+          "CPUPerc": "125.92%",
+          "Container": "pos-scale-test-35052-db",
+          "ID": "d75e834e4012",
+          "MemPerc": "10.05%",
+          "MemUsage": "205.8MiB / 2GiB",
+          "Name": "pos-scale-test-35052-db",
+          "NetIO": "4.3MB / 8.71MB",
+          "PIDs": "17"
+        },
+        {
+          "BlockIO": "643kB / 0B",
+          "CPUPerc": "104.98%",
+          "Container": "pos-scale-test-35052-rest",
+          "ID": "87d2282c9d37",
+          "MemPerc": "24.59%",
+          "MemUsage": "125.9MiB / 512MiB",
+          "Name": "pos-scale-test-35052-rest",
+          "NetIO": "11.4MB / 9.58MB",
+          "PIDs": "66"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 21072,
+      "stats": [
+        {
+          "BlockIO": "4.85MB / 800MB",
+          "CPUPerc": "111.38%",
+          "Container": "pos-scale-test-35052-db",
+          "ID": "d75e834e4012",
+          "MemPerc": "10.07%",
+          "MemUsage": "206.3MiB / 2GiB",
+          "Name": "pos-scale-test-35052-db",
+          "NetIO": "4.81MB / 9.75MB",
+          "PIDs": "17"
+        },
+        {
+          "BlockIO": "643kB / 0B",
+          "CPUPerc": "99.16%",
+          "Container": "pos-scale-test-35052-rest",
+          "ID": "87d2282c9d37",
+          "MemPerc": "25.74%",
+          "MemUsage": "131.8MiB / 512MiB",
+          "Name": "pos-scale-test-35052-rest",
+          "NetIO": "13.2MB / 11.2MB",
+          "PIDs": "68"
+        }
+      ]
+    }
+  ],
+  "metricsBefore": {
+    "time": "2026-09-05T10:01:43.969711+00:00",
+    "wal_bytes": 376449001,
+    "db": {
+      "xact_commit": 1653,
+      "xact_rollback": 0,
+      "blks_read": 672,
+      "blks_hit": 9636716,
+      "temp_bytes": 10436608
+    },
+    "statements": [
+      {
+        "queryid": -3456927769090902500,
+        "calls": 1,
+        "total_exec_time": 0.176375,
+        "rows": 1,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      }
+    ]
+  },
+  "metricsAfter": {
+    "time": "2026-09-05T10:02:10.292997+00:00",
+    "wal_bytes": 376787899,
+    "db": {
+      "xact_commit": 4195,
+      "xact_rollback": 0,
+      "blks_read": 672,
+      "blks_hit": 13994160,
+      "temp_bytes": 10436608
+    },
+    "statements": [
+      {
+        "queryid": -766866523165864100,
+        "calls": 248,
+        "total_exec_time": 35681.443905,
+        "rows": 248,
+        "shared_blks_hit": 4200216,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 5241315933029202000,
+        "calls": 248,
+        "total_exec_time": 35313.883026,
+        "rows": 248,
+        "shared_blks_hit": 4199880,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3972417005336333300,
+        "calls": 1807536,
+        "total_exec_time": 9673.5614249889,
+        "rows": 1807536,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 2638390711206801000,
+        "calls": 526,
+        "total_exec_time": 4415.30625400001,
+        "rows": 526,
+        "shared_blks_hit": 224183,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -2741077285684281300,
+        "calls": 526,
+        "total_exec_time": 3201.061049,
+        "rows": 526,
+        "shared_blks_hit": 220139,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 1793891315187677200,
+        "calls": 1812,
+        "total_exec_time": 1264.673309,
+        "rows": 1812,
+        "shared_blks_hit": 13451,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3952111448014359600,
+        "calls": 1812,
+        "total_exec_time": 297.952007,
+        "rows": 1812,
+        "shared_blks_hit": 12684,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 5360251647081716000,
+        "calls": 2586,
+        "total_exec_time": 110.13087,
+        "rows": 2586,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -7437125274491522000,
+        "calls": 248,
+        "total_exec_time": 15.374326,
+        "rows": 248,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 4219092154925455000,
+        "calls": 526,
+        "total_exec_time": 8.854035,
+        "rows": 526,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -1704849344782797300,
+        "calls": 248,
+        "total_exec_time": 1.737702,
+        "rows": 248,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 1533978796192699100,
+        "calls": 1,
+        "total_exec_time": 0.322084,
+        "rows": 1,
+        "shared_blks_hit": 23,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3456927769090902500,
+        "calls": 1,
+        "total_exec_time": 0.176375,
+        "rows": 1,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      }
+    ]
+  },
+  "errorSamples": [
+    {
+      "kind": "queue_items",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10229.343208000006
+    },
+    {
+      "kind": "queue_items",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10243.591832999999
+    },
+    {
+      "kind": "queue_items",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10829.635750000001
+    },
+    {
+      "kind": "queue_items",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10835.788042000007
+    },
+    {
+      "kind": "all_store_report",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10786.446667000004
+    },
+    {
+      "kind": "queue_items",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10829.046958000006
+    },
+    {
+      "kind": "store_report",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10880.099875000007
+    },
+    {
+      "kind": "queue_items",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 11030.156709000003
+    },
+    {
+      "kind": "queue_items",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10921.712166000005
+    },
+    {
+      "kind": "queue_items",
+      "status": 504,
+      "bytes": 111,
+      "valid": false,
+      "error": null,
+      "ms": 10960.557333000004
+    }
+  ]
+}

@@ -77,13 +77,13 @@ class _NoopBankTransferAlertService extends BankTransferAlertService {
 
 class _FixtureSuperAdminNotifier extends SuperAdminNotifier {
   @override
-  Future<void> loadAllRestaurants() async {}
+  Future<void> loadAllRestaurants({bool force = false}) async {}
 
   @override
-  Future<void> loadBrands() async {}
+  Future<void> loadBrands({bool force = false}) async {}
 
   @override
-  Future<void> loadLegalEntityStructure() async {}
+  Future<void> loadLegalEntityStructure({bool force = false}) async {}
 
   @override
   Future<void> loadAllReports({String? selectedRestaurantId}) async {}

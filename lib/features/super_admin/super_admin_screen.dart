@@ -100,14 +100,15 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
           return;
         }
         Future.microtask(() async {
-          await notifier.loadBrands();
-          await notifier.loadLegalEntityStructure();
-          await notifier.loadAllRestaurants();
-          await notifier.loadAllReports(
-            selectedRestaurantId: ref
-                .read(superAdminProvider)
-                .selectedRestaurant
-                ?.id,
+          if (event.affects({'settings', 'staff'})) {
+            await Future.wait([
+              notifier.loadBrands(force: true),
+              notifier.loadLegalEntityStructure(force: true),
+              notifier.loadAllRestaurants(force: true),
+            ]);
+          }
+          await notifier.refreshReportsForStore(
+            event.affects({'settings', 'staff'}) ? null : event.restaurantId,
           );
         });
       });
@@ -116,9 +117,11 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
     if (!_initialized) {
       _initialized = true;
       Future.microtask(() async {
-        await notifier.loadBrands();
-        await notifier.loadLegalEntityStructure();
-        await notifier.loadAllRestaurants();
+        await Future.wait([
+          notifier.loadBrands(),
+          notifier.loadLegalEntityStructure(),
+          notifier.loadAllRestaurants(),
+        ]);
         await notifier.loadAllReports();
       });
     }

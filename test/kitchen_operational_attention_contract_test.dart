@@ -28,9 +28,7 @@ void main() {
 
     expect(
       provider,
-      contains(
-        ".inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])",
-      ),
+      contains(".inFilter('status', ['pending', 'confirmed', 'serving'])"),
     );
     expect(
       provider,
@@ -42,11 +40,16 @@ void main() {
     expect(provider, contains('PostgresChangeEvent.insert'));
     expect(provider, contains('PostgresChangeEvent.update'));
     expect(provider, contains('PostgresChangeEvent.delete'));
-    expect(provider, contains('_refreshKitchenOrdersFromRealtime(storeId)'));
+    expect(
+      provider,
+      contains('_refreshKitchenOrdersFromRealtime(storeId, payload)'),
+    );
     expect(provider, contains('Duration(seconds: 2)'));
     expect(provider, contains('_ensureAutoRefresh(storeId)'));
     expect(provider, contains('showLoading: false'));
     expect(provider, contains('completedOrders'));
+    expect(provider, contains(".eq('status', 'completed')"));
+    expect(provider, contains('.limit(12)'));
     expect(screen, contains("Key('kitchen_completed_history_panel')"));
 
     expect(screen, isNot(contains("path: '/kitchen/attention'")));

@@ -46,7 +46,7 @@ const _frozenAlertFiles = <String, String>{
   'test/sepay_bank_transfer_contract_test.dart':
       '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
   'test/kitchen_operational_attention_contract_test.dart':
-      '4b6ecfc6d031b749c9195a0788c279bf61e63f617feadaf590cb91c7da296411',
+        'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
   'lib/l10n/app_localizations.dart':
       '31f2a9f6dd634f1a21dd1f57c5aebae4dcf098ca06d1779d1b27a9c6a3a3f5fb',
   'lib/l10n/app_localizations_ko.dart':

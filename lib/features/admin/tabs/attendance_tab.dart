@@ -72,6 +72,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   bool _isDailyLogsLoading = false;
   bool _isEmployeeMonthLoading = false;
   bool _isPayrollLoading = false;
+  int _payrollRequestId = 0;
   bool _isManualAttendanceSaving = false;
   bool _payrollUnlocked = false;
   String? _logsError;
@@ -108,6 +109,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       first.day == second.day;
 
   void _clearPayrollPreview() {
+    _payrollRequestId++;
     _payrolls = const [];
     _payrollError = null;
     _isPayrollLoading = false;
@@ -279,10 +281,13 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   }
 
   Future<void> _loadPayrollPreview(String storeId) async {
+    if (_isPayrollLoading) return;
+    final requestId = ++_payrollRequestId;
     final periodStart = _logFrom;
     final periodEnd = _logTo;
 
     setState(() {
+      _payrolls = const [];
       _isPayrollLoading = true;
       _payrollError = null;
     });
@@ -293,14 +298,14 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         periodStart: periodStart,
         periodEnd: periodEnd,
       );
-      if (!mounted) return;
+      if (!mounted || requestId != _payrollRequestId) return;
       if (periodStart != _logFrom || periodEnd != _logTo) return;
       setState(() {
         _payrolls = payrolls;
         _isPayrollLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || requestId != _payrollRequestId) return;
       if (periodStart != _logFrom || periodEnd != _logTo) return;
       setState(() {
         _isPayrollLoading = false;
@@ -314,15 +319,17 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   }
 
   Future<void> _exportPayrollPreview(List<StaffPayroll> payrolls) async {
+    final periodStart = _logFrom;
+    final periodEnd = _logTo;
     final bytes = await _payrollService.exportToExcel(
       payrolls: payrolls,
-      periodStart: _logFrom,
-      periodEnd: _logTo,
+      periodStart: periodStart,
+      periodEnd: periodEnd,
     );
     if (bytes.isEmpty) return;
 
     final fileName =
-        'payroll_${DateFormat('yyyyMMdd').format(_logFrom)}_${DateFormat('yyyyMMdd').format(_logTo)}';
+        'payroll_${DateFormat('yyyyMMdd').format(periodStart)}_${DateFormat('yyyyMMdd').format(periodEnd)}';
     await FileSaver.instance.saveFile(
       name: fileName,
       bytes: Uint8List.fromList(bytes),
@@ -338,7 +345,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
 
   Future<void> _downloadAllPayroll(String storeId) async {
     if (_isPayrollLoading || !_payrollUnlocked) return;
+    final requestId = ++_payrollRequestId;
     setState(() {
+      _payrolls = const [];
       _isPayrollLoading = true;
       _payrollError = null;
     });
@@ -348,14 +357,14 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         periodStart: _logFrom,
         periodEnd: _logTo,
       );
-      if (!mounted) return;
+      if (!mounted || requestId != _payrollRequestId) return;
       setState(() {
         _payrolls = payrolls;
         _isPayrollLoading = false;
       });
       await _exportPayrollPreview(payrolls);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestId != _payrollRequestId) return;
       setState(() {
         _isPayrollLoading = false;
         _payrollError = _mapPayrollError(

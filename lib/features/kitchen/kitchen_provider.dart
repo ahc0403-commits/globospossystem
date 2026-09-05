@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/order_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/coalesced_refresh.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 
@@ -272,42 +273,95 @@ class FailedPrintJob {
 }
 
 class KitchenNotifier extends StateNotifier<KitchenState> {
-  KitchenNotifier() : super(const KitchenState());
+  KitchenNotifier({SupabaseClient? client})
+    : _client = client,
+      super(const KitchenState());
+
+  final SupabaseClient? _client;
+  SupabaseClient get _db => _client ?? supabase;
 
   static const _autoRefreshInterval = Duration(seconds: 2);
   static const _fallbackPollInterval = Duration(seconds: 15);
 
+  final _refreshQueue = CoalescedRefresh();
+  final _dirtyOrderIds = <String>{};
+  final _orderRows = <String, Map<String, dynamic>>{};
+  bool _fullRefreshRequested = false;
+  int _scopeGeneration = 0;
+  String? _channelStoreId;
+  int? _channelGeneration;
+  Timer? _eventRefreshTimer;
+
   RealtimeChannel? _ordersChannel;
   String? _restaurantId;
-  // Realtime can report subscribed while table events are still delayed or
-  // filtered. Keep a lightweight safety refresh so kitchen never depends on
-  // manual reload to see waiter submissions.
+  // Disconnected channels poll; successful joins perform one catch-up read.
   Timer? _pollTimer;
   Timer? _businessDayTimer;
   String? _pollStoreId;
   bool _realtimeConnected = false;
 
-  Future<void> loadOrders(String storeId, {bool showLoading = true}) async {
-    _restaurantId = storeId;
+  Future<void> loadOrders(String storeId, {bool showLoading = true}) {
+    if (!mounted) return Future.value();
+    if (_restaurantId != storeId) {
+      _restaurantId = storeId;
+      _scopeGeneration++;
+      _eventRefreshTimer?.cancel();
+      _eventRefreshTimer = null;
+      _dirtyOrderIds.clear();
+      _orderRows.clear();
+      state = const KitchenState();
+    }
+    _fullRefreshRequested = true;
+    if (showLoading) state = state.copyWith(isLoading: true, clearError: true);
+    return _refreshQueue.run(_refreshOrders);
+  }
+
+  Future<void> refreshOrdersById(String storeId, Iterable<String> orderIds) {
+    if (!mounted || _restaurantId != storeId) return Future.value();
+    _dirtyOrderIds.addAll(orderIds);
+    return _refreshQueue.run(_refreshOrders);
+  }
+
+  Future<void> _refreshOrders() async {
+    if (!mounted) return;
+    final storeId = _restaurantId!;
+    final generation = _scopeGeneration;
+    final full = _fullRefreshRequested;
+    _fullRefreshRequested = false;
+    final ids = _dirtyOrderIds.toList();
+    _dirtyOrderIds.clear();
     final businessDay = TimeUtils.currentVietnamBusinessDay();
     _scheduleBusinessDayRefresh(storeId, businessDay);
-    if (showLoading) {
-      state = state.copyWith(isLoading: true, clearError: true);
-    }
-
     try {
-      final response = await supabase
-          .from('orders')
-          .select(
-            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_vi, name_en))',
-          )
-          .eq('restaurant_id', storeId)
-          .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])
-          .gte('created_at', businessDay.startIso8601)
-          .lt('created_at', businessDay.endIso8601)
-          .order('created_at', ascending: true)
-          .order('created_at', referencedTable: 'order_items', ascending: true)
-          .order('id', referencedTable: 'order_items', ascending: true);
+      final results = await Future.wait([
+        full
+            ? _fetchActiveOrders(storeId, businessDay)
+            : _fetchChangedOrders(storeId, businessDay, ids),
+        _orderQuery(storeId, businessDay)
+            .eq('status', 'completed')
+            .order('created_at', ascending: false)
+            .order('id', ascending: false)
+            .limit(12),
+      ]);
+      if (!mounted || generation != _scopeGeneration) return;
+      if (full) _orderRows.clear();
+      for (final id in ids) {
+        _orderRows.remove(id);
+      }
+      _orderRows.removeWhere((_, row) => row['status'] == 'completed');
+      for (final row in results[0]) {
+        if (['pending', 'confirmed', 'serving'].contains(row['status'])) {
+          _orderRows[row['id'].toString()] = row;
+        }
+      }
+      for (final row in results[1]) {
+        _orderRows[row['id'].toString()] = row;
+      }
+      final response = _orderRows.values.toList()
+        ..sort((a, b) {
+          final time = '${a['created_at']}'.compareTo('${b['created_at']}');
+          return time != 0 ? time : '${a['id']}'.compareTo('${b['id']}');
+        });
 
       // Lane eligibility is an ORDER-status fact
       // (ORDER_LIFECYCLE_STATE_CONTRACT: kitchen never shows completed).
@@ -401,6 +455,9 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       );
       await subscribeRealtime(storeId);
     } catch (error) {
+      if (!mounted || generation != _scopeGeneration) return;
+      // A failed delta must not silently discard the IDs consumed above.
+      _fullRefreshRequested = true;
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load kitchen orders: $error',
@@ -408,8 +465,97 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     }
   }
 
+  PostgrestFilterBuilder<List<Map<String, dynamic>>> _orderQuery(
+    String storeId,
+    VietnamBusinessDayWindow businessDay,
+  ) => _db
+      .from('orders')
+      .select(
+        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_vi, name_en))',
+      )
+      .eq('restaurant_id', storeId)
+      .gte('created_at', businessDay.startIso8601)
+      .lt('created_at', businessDay.endIso8601);
+
+  Future<List<Map<String, dynamic>>> _fetchActiveOrders(
+    String storeId,
+    VietnamBusinessDayWindow businessDay,
+  ) async {
+    final rows = <Map<String, dynamic>>[];
+    final seen = <String>{};
+    Map<String, dynamic>? cursor;
+    while (true) {
+      var query = _orderQuery(
+        storeId,
+        businessDay,
+      ).inFilter('status', ['pending', 'confirmed', 'serving']);
+      if (cursor != null) {
+        query = query.or(
+          'created_at.gt.${cursor['created_at']},and(created_at.eq.${cursor['created_at']},id.gt.${cursor['id']})',
+        );
+      }
+      final page = await query
+          .order('created_at', ascending: true)
+          .order('id', ascending: true)
+          .order('created_at', referencedTable: 'order_items', ascending: true)
+          .order('id', referencedTable: 'order_items', ascending: true)
+          .limit(100);
+      // An empty terminal page also works when the API has a smaller row cap.
+      if (page.isEmpty) return rows;
+      for (final row in page) {
+        if (row['id'] is! String ||
+            row['created_at'] is! String ||
+            !seen.add(row['id'] as String)) {
+          throw const FormatException('KITCHEN_ORDER_PAGE_INVALID');
+        }
+        rows.add(row);
+      }
+      cursor = page.last;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchChangedOrders(
+    String storeId,
+    VietnamBusinessDayWindow businessDay,
+    List<String> ids,
+  ) async {
+    final rows = <Map<String, dynamic>>[];
+    // Tiny ID batches remain complete even on conservatively capped APIs.
+    for (var i = 0; i < ids.length; i += 50) {
+      final end = i + 50 < ids.length ? i + 50 : ids.length;
+      final batch = ids.sublist(i, end).toSet();
+      final found = <String>{};
+      String? cursor;
+      while (true) {
+        var query = _orderQuery(
+          storeId,
+          businessDay,
+        ).inFilter('id', batch.toList());
+        if (cursor != null) query = query.gt('id', cursor);
+        final page = await query.order('id').limit(50);
+        if (page.isEmpty) break;
+        for (final row in page) {
+          final id = row['id']?.toString();
+          if (id == null || !batch.contains(id) || !found.add(id)) {
+            throw const FormatException('KITCHEN_ORDER_PAGE_INVALID');
+          }
+          rows.add(row);
+          cursor = id;
+        }
+        if (found.length == batch.length) break;
+      }
+    }
+    return rows;
+  }
+
   Future<void> subscribeRealtime(String storeId) async {
-    if (_ordersChannel != null && _restaurantId == storeId) {
+    final generation = _scopeGeneration;
+    bool current() =>
+        mounted && generation == _scopeGeneration && _restaurantId == storeId;
+    if (!current()) return;
+    if (_ordersChannel != null &&
+        _channelStoreId == storeId &&
+        _channelGeneration == generation) {
       _ensureAutoRefresh(storeId);
       return;
     }
@@ -417,58 +563,81 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     if (_ordersChannel != null) {
       await _ordersChannel!.unsubscribe();
     }
+    if (!current()) return;
     _pollTimer?.cancel();
     _pollTimer = null;
     _pollStoreId = null;
     _realtimeConnected = false;
 
-    _restaurantId = storeId;
-    _ordersChannel = supabase
+    _channelStoreId = storeId;
+    _channelGeneration = generation;
+    _ordersChannel = _db
         .channel(LiveSyncScope.storeChannel('kitchen_orders', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'orders',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+          callback: (payload) {
+            if (current()) _refreshKitchenOrdersFromRealtime(storeId, payload);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'orders',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+          callback: (payload) {
+            if (current()) _refreshKitchenOrdersFromRealtime(storeId, payload);
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'orders',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (payload) {
+            if (current()) _refreshKitchenOrdersFromRealtime(storeId, payload);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'order_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+          callback: (payload) {
+            if (current()) _refreshKitchenOrdersFromRealtime(storeId, payload);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'order_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+          callback: (payload) {
+            if (current()) _refreshKitchenOrdersFromRealtime(storeId, payload);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.delete,
           schema: 'public',
           table: 'order_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+          callback: (payload) {
+            if (current()) _refreshKitchenOrdersFromRealtime(storeId, payload);
+          },
         )
         .subscribe((status, [error]) {
-          // Realtime 연결 상태 추적
+          if (!current()) return;
           final connected = status == RealtimeSubscribeStatus.subscribed;
           if (connected != _realtimeConnected) {
             _realtimeConnected = connected;
+            _ensureAutoRefresh(storeId);
             if (connected) {
-              _ensureAutoRefresh(storeId);
-            } else {
-              _ensureAutoRefresh(storeId);
+              // Reconcile writes between the initial read and join, including
+              // a reconnect. Reused subscriptions do not repeat this read.
+              _fullRefreshRequested = true;
+              _scheduleEventRefresh();
             }
           }
         });
@@ -480,11 +649,32 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     });
   }
 
-  void _refreshKitchenOrdersFromRealtime(String storeId) {
-    if (!mounted) {
-      return;
+  void _refreshKitchenOrdersFromRealtime(
+    String storeId,
+    PostgresChangePayload payload,
+  ) {
+    if (!mounted || _restaurantId != storeId) return;
+    final record = payload.newRecord.isNotEmpty
+        ? payload.newRecord
+        : payload.oldRecord;
+    final id = record[payload.table == 'orders' ? 'id' : 'order_id']
+        ?.toString();
+    if (id == null || id.isEmpty) {
+      _fullRefreshRequested = true;
+    } else {
+      _dirtyOrderIds.add(id);
     }
-    unawaited(loadOrders(storeId, showLoading: false));
+    _scheduleEventRefresh();
+  }
+
+  void _scheduleEventRefresh() {
+    final generation = _scopeGeneration;
+    _eventRefreshTimer ??= Timer(const Duration(milliseconds: 100), () {
+      _eventRefreshTimer = null;
+      if (mounted && generation == _scopeGeneration) {
+        unawaited(_refreshQueue.run(_refreshOrders));
+      }
+    });
   }
 
   void _ensureAutoRefresh(String storeId) {
@@ -606,11 +796,14 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   }
 
   Future<void> reprintPrintJob(String jobId) async {
-    await supabase.rpc('reprint_print_job', params: {'p_job_id': jobId});
+    await _db.rpc('reprint_print_job', params: {'p_job_id': jobId});
   }
 
   @override
   void dispose() {
+    _scopeGeneration++;
+    _refreshQueue.dispose();
+    _eventRefreshTimer?.cancel();
     _pollTimer?.cancel();
     _businessDayTimer?.cancel();
     _pollTimer = null;

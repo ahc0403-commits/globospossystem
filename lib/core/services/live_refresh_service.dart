@@ -12,6 +12,7 @@ class PosLiveEvent {
     required this.eventType,
     this.restaurantId,
     this.isFallback = false,
+    this.affectedDomains,
   });
 
   const PosLiveEvent.fallback()
@@ -19,16 +20,35 @@ class PosLiveEvent {
       sourceTable = '',
       eventType = 'POLL',
       restaurantId = null,
-      isFallback = true;
+      isFallback = true,
+      affectedDomains = null;
 
   final String domain;
   final String sourceTable;
   final String eventType;
   final String? restaurantId;
   final bool isFallback;
+  final Set<String>? affectedDomains;
 
   bool affects(Set<String> domains) =>
-      isFallback || domain == '*' || domains.contains(domain);
+      isFallback ||
+      (affectedDomains ?? {domain}).any(
+        (value) => value == '*' || domains.contains(value),
+      );
+
+  PosLiveEvent merge(PosLiveEvent other) => PosLiveEvent(
+    domain: domain == other.domain ? domain : '*',
+    sourceTable: sourceTable == other.sourceTable ? sourceTable : '*',
+    eventType: eventType == other.eventType ? eventType : 'UPDATE',
+    restaurantId: restaurantId == other.restaurantId ? restaurantId : null,
+    isFallback: isFallback || other.isFallback,
+    affectedDomains: Set.unmodifiable({
+      ...?affectedDomains,
+      if (affectedDomains == null) domain,
+      ...?other.affectedDomains,
+      if (other.affectedDomains == null) other.domain,
+    }),
+  );
 
   factory PosLiveEvent.fromRecord(Map<String, dynamic> record) {
     return PosLiveEvent(
@@ -58,20 +78,10 @@ final posLiveEventsProvider = StreamProvider.autoDispose
       var realtimeConnected = false;
 
       void emitDebounced(PosLiveEvent event) {
-        final pending = pendingEvent;
-        pendingEvent =
-            pending != null &&
-                (pending.domain != event.domain ||
-                    pending.restaurantId != event.restaurantId)
-            ? PosLiveEvent(
-                domain: '*',
-                sourceTable: '*',
-                eventType: 'UPDATE',
-                restaurantId: event.restaurantId,
-              )
-            : event;
-        debounceTimer?.cancel();
-        debounceTimer = Timer(const Duration(milliseconds: 350), () {
+        pendingEvent = pendingEvent?.merge(event) ?? event;
+        // Fixed window: continuous traffic must not postpone refresh forever.
+        debounceTimer ??= Timer(const Duration(milliseconds: 350), () {
+          debounceTimer = null;
           final next = pendingEvent;
           pendingEvent = null;
           if (next != null && !controller.isClosed) {
@@ -98,7 +108,12 @@ final posLiveEventsProvider = StreamProvider.autoDispose
             },
           );
       channel = channel.subscribe((status, [error]) {
-        realtimeConnected = status == RealtimeSubscribeStatus.subscribed;
+        final connected = status == RealtimeSubscribeStatus.subscribed;
+        if (connected && !realtimeConnected) {
+          // Reconcile changes missed before the first join or during reconnect.
+          emitDebounced(const PosLiveEvent.fallback());
+        }
+        realtimeConnected = connected;
       });
 
       // Realtime reconnects automatically. The low-frequency safety tick

@@ -18,11 +18,10 @@ class _PayrollAttendanceFixture extends AttendanceService {
   ];
 
   @override
-  Future<List<Map<String, dynamic>>> fetchLogs({
+  Future<List<Map<String, dynamic>>> fetchPayrollLogs({
     required String storeId,
     required DateTime from,
     required DateTime to,
-    int limit = 500,
   }) async => const [];
 
   @override
@@ -39,10 +38,12 @@ class _PayrollAttendanceFixture extends AttendanceService {
   }) async => const {};
 
   @override
-  Future<Map<String, dynamic>?> fetchHourlyPayRule({
+  Future<Map<String, Map<String, dynamic>?>> fetchHourlyPayRules({
     required String storeId,
-    required String employeeId,
-  }) async => {'hourly_rate': 30000};
+    required Iterable<String> employeeIds,
+  }) async => {
+    for (final id in employeeIds) id: {'hourly_rate': 30000},
+  };
 }
 
 void main() {

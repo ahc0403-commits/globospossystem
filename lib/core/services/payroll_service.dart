@@ -83,7 +83,7 @@ class PayrollService {
       periodEnd.month,
       periodEnd.day + 1,
     );
-    final logs = await _attendanceService.fetchLogs(
+    final logs = await _attendanceService.fetchPayrollLogs(
       storeId: storeId,
       from: normalizedPeriodStart,
       to: normalizedPeriodEndExclusive,
@@ -132,18 +132,20 @@ class PayrollService {
       userRoles[userId] = role;
     }
 
+    final hourlyRules = await _attendanceService.fetchHourlyPayRules(
+      storeId: storeId,
+      employeeIds: groupedByUser.keys.where(
+        (id) => userRoles[id] == 'part_timer',
+      ),
+    );
+
     final result = <StaffPayroll>[];
 
     for (final entry in groupedByUser.entries) {
       final userId = entry.key;
       final userLogs = entry.value;
       final role = userRoles[userId] ?? '';
-      final hourlyRule = role == 'part_timer'
-          ? await _attendanceService.fetchHourlyPayRule(
-              storeId: storeId,
-              employeeId: userId,
-            )
-          : null;
+      final hourlyRule = hourlyRules[userId];
       final hourlyRate =
           double.tryParse('${hourlyRule?['hourly_rate'] ?? 0}') ?? 0;
 

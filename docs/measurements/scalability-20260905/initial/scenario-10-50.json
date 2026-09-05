@@ -1,0 +1,336 @@
+{
+  "measuredAt": "2026-09-05T10:01:12.450Z",
+  "stores": 10,
+  "virtualUsers": 50,
+  "durationMs": 20000,
+  "elapsedMs": 20009.919917,
+  "maxInFlight": 6,
+  "requests": 201,
+  "requestsPerSecond": 10.045017712901226,
+  "errors": 0,
+  "grouped": {
+    "queue_items": {
+      "requests": 141,
+      "errors": 0,
+      "responseBytes": 112236,
+      "p50Ms": 3.99,
+      "p95Ms": 19.29,
+      "p99Ms": 44.95
+    },
+    "store_report": {
+      "requests": 40,
+      "errors": 0,
+      "responseBytes": 31640,
+      "p50Ms": 7.53,
+      "p95Ms": 24,
+      "p99Ms": 26.34
+    },
+    "all_store_report": {
+      "requests": 20,
+      "errors": 0,
+      "responseBytes": 20500,
+      "p50Ms": 13.77,
+      "p95Ms": 26.34,
+      "p99Ms": 49.21
+    }
+  },
+  "cpuSamples": [
+    {
+      "elapsedMs": 7050,
+      "stats": [
+        {
+          "BlockIO": "1.62MB / 364MB",
+          "CPUPerc": "22.80%",
+          "Container": "pos-scale-test-35052-db",
+          "ID": "d75e834e4012",
+          "MemPerc": "6.40%",
+          "MemUsage": "131MiB / 2GiB",
+          "Name": "pos-scale-test-35052-db",
+          "NetIO": "151kB / 276kB",
+          "PIDs": "11"
+        },
+        {
+          "BlockIO": "0B / 0B",
+          "CPUPerc": "0.15%",
+          "Container": "pos-scale-test-35052-rest",
+          "ID": "87d2282c9d37",
+          "MemPerc": "7.52%",
+          "MemUsage": "38.48MiB / 512MiB",
+          "Name": "pos-scale-test-35052-rest",
+          "NetIO": "329kB / 317kB",
+          "PIDs": "37"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 12229,
+      "stats": [
+        {
+          "BlockIO": "1.62MB / 364MB",
+          "CPUPerc": "19.38%",
+          "Container": "pos-scale-test-35052-db",
+          "ID": "d75e834e4012",
+          "MemPerc": "6.74%",
+          "MemUsage": "138MiB / 2GiB",
+          "Name": "pos-scale-test-35052-db",
+          "NetIO": "208kB / 381kB",
+          "PIDs": "12"
+        },
+        {
+          "BlockIO": "0B / 0B",
+          "CPUPerc": "0.20%",
+          "Container": "pos-scale-test-35052-rest",
+          "ID": "87d2282c9d37",
+          "MemPerc": "9.11%",
+          "MemUsage": "46.62MiB / 512MiB",
+          "Name": "pos-scale-test-35052-rest",
+          "NetIO": "460kB / 429kB",
+          "PIDs": "41"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 17062,
+      "stats": [
+        {
+          "BlockIO": "1.68MB / 365MB",
+          "CPUPerc": "0.04%",
+          "Container": "pos-scale-test-35052-db",
+          "ID": "d75e834e4012",
+          "MemPerc": "6.85%",
+          "MemUsage": "140.4MiB / 2GiB",
+          "Name": "pos-scale-test-35052-db",
+          "NetIO": "261kB / 485kB",
+          "PIDs": "12"
+        },
+        {
+          "BlockIO": "0B / 0B",
+          "CPUPerc": "8.11%",
+          "Container": "pos-scale-test-35052-rest",
+          "ID": "87d2282c9d37",
+          "MemPerc": "10.54%",
+          "MemUsage": "53.96MiB / 512MiB",
+          "Name": "pos-scale-test-35052-rest",
+          "NetIO": "589kB / 535kB",
+          "PIDs": "42"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 22215,
+      "stats": [
+        {
+          "BlockIO": "1.68MB / 365MB",
+          "CPUPerc": "0.05%",
+          "Container": "pos-scale-test-35052-db",
+          "ID": "d75e834e4012",
+          "MemPerc": "6.85%",
+          "MemUsage": "140.4MiB / 2GiB",
+          "Name": "pos-scale-test-35052-db",
+          "NetIO": "262kB / 487kB",
+          "PIDs": "12"
+        },
+        {
+          "BlockIO": "0B / 0B",
+          "CPUPerc": "0.17%",
+          "Container": "pos-scale-test-35052-rest",
+          "ID": "87d2282c9d37",
+          "MemPerc": "10.54%",
+          "MemUsage": "53.95MiB / 512MiB",
+          "Name": "pos-scale-test-35052-rest",
+          "NetIO": "592kB / 537kB",
+          "PIDs": "42"
+        }
+      ]
+    }
+  ],
+  "metricsBefore": {
+    "time": "2026-09-05T10:00:48.910596+00:00",
+    "wal_bytes": 163775780,
+    "db": {
+      "xact_commit": 152,
+      "xact_rollback": 0,
+      "blks_read": 636,
+      "blks_hit": 3566138,
+      "temp_bytes": 10436608
+    },
+    "statements": [
+      {
+        "queryid": -3456927769090902500,
+        "calls": 1,
+        "total_exec_time": 0.144166,
+        "rows": 1,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      }
+    ]
+  },
+  "metricsAfter": {
+    "time": "2026-09-05T10:01:12.426955+00:00",
+    "wal_bytes": 164022130,
+    "db": {
+      "xact_commit": 369,
+      "xact_rollback": 0,
+      "blks_read": 640,
+      "blks_hit": 3617254,
+      "temp_bytes": 10436608
+    },
+    "statements": [
+      {
+        "queryid": 2638390711206801000,
+        "calls": 40,
+        "total_exec_time": 225.019749,
+        "rows": 40,
+        "shared_blks_hit": 19919,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -766866523165864100,
+        "calls": 20,
+        "total_exec_time": 211.76925,
+        "rows": 20,
+        "shared_blks_hit": 26485,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 5241315933029202000,
+        "calls": 20,
+        "total_exec_time": 185.278,
+        "rows": 20,
+        "shared_blks_hit": 25099,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -2741077285684281300,
+        "calls": 40,
+        "total_exec_time": 113.357915,
+        "rows": 40,
+        "shared_blks_hit": 14023,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 1793891315187677200,
+        "calls": 141,
+        "total_exec_time": 73.263035,
+        "rows": 141,
+        "shared_blks_hit": 1569,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3972417005336333300,
+        "calls": 19440,
+        "total_exec_time": 61.1783030000009,
+        "rows": 19440,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3952111448014359600,
+        "calls": 141,
+        "total_exec_time": 16.087576,
+        "rows": 141,
+        "shared_blks_hit": 512,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 5360251647081716000,
+        "calls": 201,
+        "total_exec_time": 7.754422,
+        "rows": 201,
+        "shared_blks_hit": 88,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 4219092154925455000,
+        "calls": 40,
+        "total_exec_time": 0.776704,
+        "rows": 40,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -7437125274491522000,
+        "calls": 20,
+        "total_exec_time": 0.509458,
+        "rows": 20,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 1533978796192699100,
+        "calls": 1,
+        "total_exec_time": 0.348209,
+        "rows": 1,
+        "shared_blks_hit": 23,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -1704849344782797300,
+        "calls": 20,
+        "total_exec_time": 0.162167,
+        "rows": 20,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3456927769090902500,
+        "calls": 1,
+        "total_exec_time": 0.144166,
+        "rows": 1,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 5947864457175217000,
+        "calls": 4,
+        "total_exec_time": 0.085582,
+        "rows": 0,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -7025816098001848000,
+        "calls": 4,
+        "total_exec_time": 0.070666,
+        "rows": 0,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -8390746607827765000,
+        "calls": 4,
+        "total_exec_time": 0.051083,
+        "rows": 0,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -2835399305386019000,
+        "calls": 4,
+        "total_exec_time": 0.004543,
+        "rows": 0,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      }
+    ]
+  },
+  "errorSamples": []
+}
