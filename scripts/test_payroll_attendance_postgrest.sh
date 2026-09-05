@@ -40,7 +40,8 @@ done
 printf 'PAYROLL_API_TEST_STEP=postgrest_start\n'
 docker run --detach --rm --name "$rest_name" --network "$run_name" \
   --publish 127.0.0.1::3000 \
-  --env "PGRST_DB_URI=postgres://postgres:payroll-fixture@${db_name}:5432/payroll_test" \
+  --env "PGRST_DB_URI=postgres://postgres@${db_name}:5432/payroll_test" \
+  --env PGPASSWORD=payroll-fixture \
   --env PGRST_DB_ANON_ROLE=authenticated --env PGRST_DB_SCHEMAS=public \
   --env PGRST_DB_MAX_ROWS=100 \
   public.ecr.aws/supabase/postgrest:v14.5 >/dev/null
