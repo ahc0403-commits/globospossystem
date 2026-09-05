@@ -211,7 +211,7 @@ void main() {
     ]);
   });
 
-  test('keeps one row when a receipt has taxable and zero-VAT items', () {
+  test('keeps separate tax rows under one receipt number', () {
     final payload = _validPayload();
     final receipts = payload['receipts']! as List<Map<String, Object?>>;
     final lines = receipts.first['line_items']! as List<Map<String, Object?>>;
@@ -225,11 +225,16 @@ void main() {
 
     final workbook = Excel.decodeBytes(buildRestaurantSalesWorkbook(export));
     final rows = workbook.tables['Hóa đơn GTGT']!.rows;
-    expect(rows, hasLength(10));
+    expect(rows, hasLength(11));
     expect(rows[8][10]!.value.toString(), 'Dịch vụ ăn uống');
-    expect(rows[8][14]!.value.toString(), '100000');
+    expect(rows[8][14]!.value.toString(), '60000');
     expect(rows[8][15]!.value.toString(), '8');
     expect(rows[8][16]!.value.toString(), '4800');
+    expect(rows[9][0]!.value.toString(), '1');
+    expect(rows[9][14]!.value.toString(), '40000');
+    expect(rows[9][15]!.value.toString(), '0');
+    expect(rows[9][16]!.value.toString(), '0');
+    expect(rows[10][0]!.value.toString(), '2');
   });
 
   test('keeps different seller tax codes in separate export groups', () {

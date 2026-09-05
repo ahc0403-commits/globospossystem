@@ -37,6 +37,7 @@ class CashierOrder {
     required this.createdAt,
     this.completedAt,
     this.activeDiscount,
+    this.vatPricingMode = vatPricingModeExclusive,
     this.fulfillmentMode = FulfillmentMode.posPrint,
     this.emergencyModeActive = false,
     this.unservedQuantity = 0,
@@ -64,6 +65,7 @@ class CashierOrder {
   final DateTime createdAt;
   final DateTime? completedAt;
   final ActiveOrderDiscount? activeDiscount;
+  final String vatPricingMode;
   final FulfillmentMode fulfillmentMode;
   final bool emergencyModeActive;
   final int unservedQuantity;
@@ -529,6 +531,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
                   ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
                   : DateTime.now(),
               activeDiscount: activeDiscount,
+              vatPricingMode: storePricing.vatPricingMode,
               fulfillmentMode: FulfillmentMode.fromValue(
                 data['fulfillment_mode_snapshot'],
               ),
@@ -735,6 +738,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
             ? DateTime.tryParse(updatedAtRaw)
             : null,
         activeDiscount: consumedDiscount,
+        vatPricingMode: storePricing.vatPricingMode,
         fulfillmentMode: FulfillmentMode.fromValue(
           data['fulfillment_mode_snapshot'],
         ),

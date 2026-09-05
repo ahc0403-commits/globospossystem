@@ -11,7 +11,7 @@ const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
       '3be65edc63f943e3fddd1f4e4b25fca8b842d430e5fc803d54c76c9d75e7f49b',
   'lib/features/cashier/cashier_screen.dart':
-      '60f007189e40d111d1e302d7719a9156b0cb9aaee8b12f3879b95f17ce5bee3e',
+      'fd982fa6ba0af10be226ba9b8e23e38bbe8efebad8bc369f0e5e48626126ff55',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
@@ -22,7 +22,7 @@ const _frozenFiles = <String, String>{
   'lib/core/services/payment_service.dart':
       'ceb62497c8f43ed6cd0cd100ad3ac1c2f7ae5a9131184a4a48a7b002236ee28e',
   'lib/core/payments/payment_total_calculator.dart':
-      '52cc2f364ce9f199e8727abf1eec5b43a4f0e2ba1c6821fd712df8122d69f0b8',
+      'a6fe830f387dac0775a794f466fb5fb33103a64f4e0f6d8c0863ea3e87b47076',
   // Phase 4D moves the reconciled sales report to a server aggregate.
   // Real SQL/API and Excel coverage lives in financial_inputs_postgrest_test.dart.
   'lib/features/report/report_provider.dart':

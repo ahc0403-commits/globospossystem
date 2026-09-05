@@ -68,6 +68,9 @@ bash test/photo_objet_expected_slot_ledger_test.sh
 printf 'CHECK_REPO_STEP=photo_manual_import_contract\n'
 bash test/photo_sales_manual_import_sql_test.sh
 
+printf 'CHECK_REPO_STEP=restaurant_vat_integrity\n'
+bash test/restaurant_vat_integrity_sql_test.sh
+
 printf 'CHECK_REPO_STEP=flutter_web_release_build\n'
 flutter build web --release
 printf 'CHECK_REPO_STEP=git_whitespace_contract\n'

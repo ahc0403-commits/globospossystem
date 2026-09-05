@@ -24,7 +24,7 @@ const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '9db6f26a839d5e2744e9430b7589e8dcb838df67844a413c8fb4a0858a74707c',
   'lib/features/cashier/cashier_screen.dart':
-      '60f007189e40d111d1e302d7719a9156b0cb9aaee8b12f3879b95f17ce5bee3e',
+      'fd982fa6ba0af10be226ba9b8e23e38bbe8efebad8bc369f0e5e48626126ff55',
   'lib/features/kitchen/kitchen_screen.dart':
       'e3cdc57c2a55ab67d948f7445fe18cac7305957153ef63ffff38b139bc5b5fa6',
   // Intentional event-merge fix; behavioral regressions live in

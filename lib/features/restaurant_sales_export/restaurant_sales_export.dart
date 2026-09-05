@@ -1,4 +1,4 @@
-import 'package:excel/excel.dart';
+import '../admin/einvoice_misa_workbook.dart';
 
 class RestaurantSalesLineItem {
   const RestaurantSalesLineItem({
@@ -8,6 +8,7 @@ class RestaurantSalesLineItem {
     required this.supplyAmount,
     required this.vatRate,
     required this.vatAmount,
+    this.itemType = '',
   });
 
   final String name;
@@ -16,6 +17,7 @@ class RestaurantSalesLineItem {
   final double supplyAmount;
   final double vatRate;
   final double vatAmount;
+  final String itemType;
 
   double get grossAmount => supplyAmount + vatAmount;
   double get misaUnitPrice => supplyAmount / quantity;
@@ -241,6 +243,7 @@ RestaurantSalesExport createRestaurantSalesExport(
                   .map((rawLine) {
                     final line = Map<String, dynamic>.from(rawLine);
                     return RestaurantSalesLineItem(
+                      itemType: line['item_type']?.toString() ?? '',
                       name: _requiredText(
                         line['display_name'] ?? line['name'],
                         'RESTAURANT_EXPORT_INVALID_LINE_NAME:$receiptId',
@@ -276,6 +279,18 @@ RestaurantSalesExport createRestaurantSalesExport(
         );
         final issues = <String>[
           if (lines.isEmpty) 'MISSING_LINE_ITEMS',
+          if (lines.any(
+            (line) => !isMisaVatConsistent(
+              line.supplyAmount,
+              line.vatRate,
+              line.vatAmount,
+            ),
+          ))
+            'VAT_AMOUNT_MISMATCH',
+          if (lines.any(
+            (line) => line.itemType == 'wet_tissue_charge' && line.vatRate != 8,
+          ))
+            'WET_TISSUE_VAT_MISMATCH',
           if (isRedInvoice && buyerTaxCode.isEmpty) 'MISSING_BUYER_TAX_CODE',
           if (isRedInvoice && buyerLegalName.isEmpty)
             'MISSING_BUYER_LEGAL_NAME',
@@ -439,116 +454,80 @@ List<int> buildRestaurantSalesWorkbook(RestaurantSalesExport export) {
     throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
   }
 
-  final workbook = Excel.createExcel();
-  workbook.rename('Sheet1', 'Hóa đơn GTGT');
-  workbook.setDefaultSheet('Hóa đơn GTGT');
-  final sheet = workbook['Hóa đơn GTGT'];
-
-  for (final instruction in _misaInstructions) {
-    sheet.appendRow([TextCellValue(instruction)]);
-  }
-  sheet.appendRow([TextCellValue('')]);
-  sheet.appendRow(_misaHeaders.map(TextCellValue.new).toList());
-
-  for (
-    var receiptIndex = 0;
-    receiptIndex < export.receipts.length;
-    receiptIndex += 1
-  ) {
-    final receipt = export.receipts[receiptIndex];
-    final buyerName = receipt.isRedInvoice
-        ? receipt.buyerLegalName
-        : 'Bán cho người tiêu dùng';
-    sheet.appendRow([
-      IntCellValue(receiptIndex + 1),
-      TextCellValue(_misaDate(receipt.soldAtHcm)),
-      TextCellValue(buyerName),
-      TextCellValue(receipt.isRedInvoice ? receipt.buyerTaxCode : ''),
-      TextCellValue(receipt.isRedInvoice ? receipt.buyerAddress : ''),
-      TextCellValue(receipt.isRedInvoice ? '' : 'Bán cho người tiêu dùng'),
-      TextCellValue(receipt.isRedInvoice ? receipt.buyerEmail : ''),
-      TextCellValue(receipt.isRedInvoice ? receipt.buyerPhone : ''),
-      TextCellValue(''),
-      TextCellValue(_misaPaymentCode(receipt.paymentMethod)),
-      TextCellValue('Dịch vụ ăn uống'),
-      TextCellValue('Lần'),
-      DoubleCellValue(1.0),
-      DoubleCellValue(receipt.supplyAmount),
-      DoubleCellValue(receipt.supplyAmount),
-      DoubleCellValue(_misaReceiptVatRate(receipt)),
-      DoubleCellValue(receipt.vatAmount),
-    ]);
-  }
-
-  for (var index = 0; index < _misaHeaders.length; index += 1) {
-    sheet.setColumnWidth(index, switch (index) {
-      2 || 4 || 5 || 10 => 28,
-      _ => 18,
-    });
-  }
-  return workbook.encode() ?? <int>[];
+  return buildMisaPendingInvoiceWorkbook(
+    export.receipts.map(buildRestaurantMisaJob).toList(),
+  );
 }
 
-const _misaInstructions = <String>[
-  'File mẫu danh sách hóa đơn để nhập vào phần mềm ',
-  'Hướng dẫn:',
-  '- Điền dữ liệu hóa đơn cần lập trên phần mềm vào các cột tương ứng trên file này',
-  '- Các cột có dấu (*) là những cột bắt buộc',
-  '- Nếu muốn nhập thêm thông tin khác, người dùng có thể tự thêm cột trên file này (VD: Mã khách hàng, Mã hàng, Tỷ lệ chiết khấu,...)',
-  '- Các dòng dữ liệu phía dưới chỉ là ví dụ minh họa',
-];
-
-const _misaHeaders = <String>[
-  'Số thứ tự hóa đơn (*)',
-  'Ngày hóa đơn',
-  'Tên đơn vị mua hàng',
-  'Mã số thuế',
-  'Địa chỉ',
-  'Người mua hàng',
-  'Email',
-  'Số điện thoại',
-  'Căn cước công dân',
-  'Hình thức thanh toán (*)',
-  'Tên hàng hóa/dịch vụ (*)',
-  'ĐVT',
-  'Số lượng',
-  'Đơn giá',
-  'Thành tiền',
-  'Thuế suất GTGT (%)',
-  'Tiền thuế GTGT',
-];
-
-String _misaDate(DateTime value) =>
-    '${value.day.toString().padLeft(2, '0')}/'
-    '${value.month.toString().padLeft(2, '0')}/'
-    '${value.year.toString().padLeft(4, '0')}';
-
-String _misaPaymentCode(String value) {
-  final normalized = value.trim().toLowerCase();
-  if (normalized == 'tm' ||
-      normalized.contains('cash') ||
-      normalized.contains('tiền mặt') ||
-      normalized.contains('tien mat')) {
-    return 'TM';
+/// Keep one invoice number per receipt, and one summary per actual tax rate.
+/// Use the settled net amounts, including any allocated discounts.
+Map<String, dynamic> buildRestaurantMisaJob(RestaurantSalesReceipt receipt) {
+  if (receipt.lineItems.isEmpty ||
+      receipt.issues.isNotEmpty ||
+      (receipt.supplyAmount + receipt.vatAmount - receipt.grossSales).abs() >
+          1) {
+    throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
   }
-  if (normalized == 'ck' ||
-      normalized.contains('card') ||
-      normalized.contains('transfer') ||
-      normalized.contains('thẻ') ||
-      normalized.contains('chuyển khoản')) {
-    return 'CK';
+  final groups = <double, List<RestaurantSalesLineItem>>{};
+  for (final line in receipt.lineItems) {
+    if (!isMisaVatConsistent(line.supplyAmount, line.vatRate, line.vatAmount) ||
+        (line.itemType == 'wet_tissue_charge' && line.vatRate != 8)) {
+      throw const FormatException('MISA_EXPORT_VAT_MISMATCH');
+    }
+    groups.putIfAbsent(line.vatRate, () => []).add(line);
   }
-  return value.trim();
-}
-
-double _misaReceiptVatRate(RestaurantSalesReceipt receipt) {
-  final taxableRates = receipt.lineItems
-      .map((line) => line.vatRate)
-      .where((rate) => rate > 0)
-      .toSet();
-  if (taxableRates.length == 1) return taxableRates.single;
-  if (taxableRates.isEmpty || receipt.supplyAmount == 0) return 0;
-  return receipt.vatAmount / receipt.supplyAmount * 100;
+  final lines = <Map<String, dynamic>>[];
+  for (final entry in groups.entries) {
+    final supply = entry.value.fold<double>(
+      0,
+      (sum, line) => sum + line.supplyAmount,
+    );
+    final vat = entry.value.fold<double>(
+      0,
+      (sum, line) => sum + line.vatAmount,
+    );
+    if (isMisaVatConsistent(supply, entry.key, vat)) {
+      lines.add({
+        'display_name': 'Dịch vụ ăn uống',
+        'misa_unit_name': 'Lần',
+        'quantity': 1,
+        'total_amount_ex_tax': supply,
+        'vat_rate': entry.key,
+        'vat_amount': vat,
+      });
+    } else {
+      // Preserve independently rounded source lines if grouping would exceed
+      // the one-dong arithmetic tolerance. Never change tax to force a total.
+      for (final line in entry.value) {
+        lines.add({
+          'display_name': line.name,
+          'misa_unit_name': 'Lần',
+          'quantity': 1,
+          'total_amount_ex_tax': line.supplyAmount,
+          'vat_rate': line.vatRate,
+          'vat_amount': line.vatAmount,
+        });
+      }
+    }
+  }
+  final buyerName = receipt.isRedInvoice ? receipt.buyerLegalName : '';
+  return {
+    'source_system': 'restaurant_pos',
+    'created_at': receipt.soldAt.toIso8601String(),
+    'payment_method_snapshot': receipt.paymentMethod,
+    'misa_buyer_person_name': receipt.isRedInvoice
+        ? ''
+        : 'Bán cho người tiêu dùng',
+    'buyer_snapshot': {
+      'unit_name': buyerName,
+      'customer_name': buyerName,
+      'tax_code': receipt.isRedInvoice ? receipt.buyerTaxCode : '',
+      'address': receipt.isRedInvoice ? receipt.buyerAddress : '',
+      'email': receipt.isRedInvoice ? receipt.buyerEmail : '',
+      'phone': receipt.isRedInvoice ? receipt.buyerPhone : '',
+    },
+    'line_items_snapshot': lines,
+  };
 }
 
 String _requiredText(dynamic value, String error) {

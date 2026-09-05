@@ -88,49 +88,9 @@ List<int> buildCombinedSalesWorkbook(CombinedSalesExport export) {
   }
   final jobs = <Map<String, dynamic>>[
     if (export.restaurant case final restaurant?)
-      ...restaurant.receipts.map(_restaurantMisaJob),
+      ...restaurant.receipts.map(buildRestaurantMisaJob),
     if (export.photo case final photo?)
       ...buildPhotoSalesRegisteredMisaJobs(photo),
   ];
   return buildMisaPendingInvoiceWorkbook(jobs);
-}
-
-Map<String, dynamic> _restaurantMisaJob(RestaurantSalesReceipt receipt) {
-  final buyerName = receipt.isRedInvoice ? receipt.buyerLegalName : '';
-  return <String, dynamic>{
-    'source_system': 'restaurant_pos',
-    'created_at': receipt.soldAt.toIso8601String(),
-    'payment_method_snapshot': receipt.paymentMethod,
-    'misa_buyer_person_name': receipt.isRedInvoice
-        ? ''
-        : 'Bán cho người tiêu dùng',
-    'buyer_snapshot': {
-      'unit_name': buyerName,
-      'customer_name': buyerName,
-      'tax_code': receipt.isRedInvoice ? receipt.buyerTaxCode : '',
-      'address': receipt.isRedInvoice ? receipt.buyerAddress : '',
-      'email': receipt.isRedInvoice ? receipt.buyerEmail : '',
-      'phone': receipt.isRedInvoice ? receipt.buyerPhone : '',
-    },
-    'line_items_snapshot': [
-      {
-        'display_name': 'Dịch vụ ăn uống',
-        'misa_unit_name': 'Lần',
-        'quantity': 1,
-        'total_amount_ex_tax': receipt.supplyAmount,
-        'vat_rate': _restaurantReceiptVatRate(receipt),
-        'vat_amount': receipt.vatAmount,
-      },
-    ],
-  };
-}
-
-double _restaurantReceiptVatRate(RestaurantSalesReceipt receipt) {
-  final taxableRates = receipt.lineItems
-      .map((line) => line.vatRate)
-      .where((rate) => rate > 0)
-      .toSet();
-  if (taxableRates.length == 1) return taxableRates.single;
-  if (taxableRates.isEmpty || receipt.supplyAmount == 0) return 0;
-  return receipt.vatAmount / receipt.supplyAmount * 100;
 }
