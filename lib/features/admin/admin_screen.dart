@@ -106,9 +106,13 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           ref.invalidate(adminAuditTraceProvider(liveStoreId));
           setState(() {
             _allLiveRevision++;
-            final domain = event.isFallback ? '*' : event.domain;
-            _domainLiveRevisions[domain] =
-                (_domainLiveRevisions[domain] ?? 0) + 1;
+            final domains = event.isFallback
+                ? const {'*'}
+                : event.affectedDomains ?? {event.domain};
+            for (final domain in domains) {
+              _domainLiveRevisions[domain] =
+                  (_domainLiveRevisions[domain] ?? 0) + 1;
+            }
           });
         }),
       );

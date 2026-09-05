@@ -175,10 +175,11 @@ class _BankTransferAlertCoordinatorState
         next,
       ) {
         next.whenData((event) {
-          if (!event.isFallback &&
-              event.domain == 'bank_transfer' &&
-              event.sourceTable == 'sepay_transactions' &&
-              event.eventType == 'INSERT') {
+          if (event.includesChange(
+            domain: 'bank_transfer',
+            sourceTable: 'sepay_transactions',
+            eventType: 'INSERT',
+          )) {
             unawaited(_drain(storeId));
           }
         });

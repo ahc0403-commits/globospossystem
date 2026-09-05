@@ -27,8 +27,10 @@ const _frozenAlertFiles = <String, String>{
       '60f007189e40d111d1e302d7719a9156b0cb9aaee8b12f3879b95f17ce5bee3e',
   'lib/features/kitchen/kitchen_screen.dart':
       'e3cdc57c2a55ab67d948f7445fe18cac7305957153ef63ffff38b139bc5b5fa6',
+  // Intentional event-merge fix; behavioral regressions live in
+  // scalability_live_consumer_regression_test.dart.
   'lib/core/services/bank_transfer_alert_coordinator.dart':
-      'c2be5ad39d75cd26df46682bed90423d39fc147b0841fe140d0beacc9a628d71',
+      'ecd5271073ee71e84590341c081c492599eee3bc9b283671fe30d5e1305eee25',
   'lib/core/services/bank_transfer_alert_service.dart':
       '05a1dbf45971c9c28437f52e970ce1ab6dfbec29f291188648cf50e708028dff',
   'lib/core/services/bank_transfer_alert_sound.dart':
@@ -46,7 +48,7 @@ const _frozenAlertFiles = <String, String>{
   'test/sepay_bank_transfer_contract_test.dart':
       '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
   'test/kitchen_operational_attention_contract_test.dart':
-        'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
+      'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
   'lib/l10n/app_localizations.dart':
       '31f2a9f6dd634f1a21dd1f57c5aebae4dcf098ca06d1779d1b27a9c6a3a3f5fb',
   'lib/l10n/app_localizations_ko.dart':
@@ -289,6 +291,98 @@ void main() {
     expect(find.text('A new delivery order has arrived.'), findsOneWidget);
     expect(presented, [1]);
     expect(sound.plays, 1);
+    await events.close();
+  });
+
+  for (final withFallback in [false, true]) {
+    testWidgets(
+      'merged insert during baseline alerts once (fallback=$withFallback)',
+      (tester) async {
+        final baselineGate = Completer<void>();
+        final service = _MemoryArrivalService()..baselineGate = baselineGate;
+        final sound = _RecordingArrivalSound();
+        final events = StreamController<PosLiveEvent>.broadcast();
+        final presented = <int>[];
+        await _pumpHost(
+          tester,
+          service: service,
+          sound: sound,
+          events: events.stream,
+          presented: presented,
+        );
+        service.add(1);
+        events.add(
+          (withFallback
+                  ? const PosLiveEvent.fallback()
+                  : const PosLiveEvent(
+                      domain: 'orders',
+                      sourceTable: 'orders',
+                      eventType: 'UPDATE',
+                      restaurantId: _storeId,
+                    ))
+              .merge(_event('direct_orders')),
+        );
+        await tester.pump();
+        baselineGate.complete();
+        await tester.pump(const Duration(milliseconds: 5));
+        await tester.pump();
+        final observed = List<int>.of(presented);
+        final spoken = sound.plays;
+        // A later poll cannot recover an alert already included in the baseline.
+        await tester.pump(const Duration(seconds: 11));
+        expect(presented, observed);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await events.close();
+        expect(
+          observed,
+          [1],
+          reason: 'a new insert during initial baseline must still alert',
+        );
+        expect(spoken, 1);
+      },
+    );
+  }
+
+  testWidgets('merged update during baseline does not announce old orders', (
+    tester,
+  ) async {
+    final baselineGate = Completer<void>();
+    final service = _MemoryArrivalService()
+      ..baselineGate = baselineGate
+      ..add(1);
+    final sound = _RecordingArrivalSound();
+    final events = StreamController<PosLiveEvent>.broadcast();
+    final presented = <int>[];
+    await _pumpHost(
+      tester,
+      service: service,
+      sound: sound,
+      events: events.stream,
+      presented: presented,
+    );
+    events.add(
+      const PosLiveEvent(
+        domain: 'direct_orders',
+        sourceTable: 'direct_order_requests',
+        eventType: 'UPDATE',
+        restaurantId: _storeId,
+      ).merge(
+        const PosLiveEvent(
+          domain: 'orders',
+          sourceTable: 'orders',
+          eventType: 'INSERT',
+          restaurantId: _storeId,
+        ),
+      ),
+    );
+    events.add(const PosLiveEvent.fallback());
+    await tester.pump();
+    baselineGate.complete();
+    await tester.pump(const Duration(milliseconds: 5));
+    await tester.pump();
+    expect(presented, isEmpty);
+    expect(sound.plays, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
     await events.close();
   });
 
