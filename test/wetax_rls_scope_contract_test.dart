@@ -48,7 +48,12 @@ void main() {
     expect(einvoiceTab, contains(".from('meinvoice_jobs')"));
     expect(paymentService, contains(".from('meinvoice_jobs')"));
     expect(statusProvider, contains(".from('meinvoice_jobs')"));
-    expect(reportProvider, contains(".from('meinvoice_jobs')"));
+    expect(reportProvider, contains('FinancialInputSource.einvoiceJobs'));
+    final financialInputSql = readRepoFile(
+      'supabase/migrations/20260905020000_complete_financial_inputs.sql',
+    );
+    expect(financialInputSql, contains('FROM public.meinvoice_jobs'));
+    expect(financialInputSql, isNot(contains('FROM public.einvoice_jobs')));
     expect(reportProvider, isNot(contains(".from('einvoice_jobs')")));
   });
 

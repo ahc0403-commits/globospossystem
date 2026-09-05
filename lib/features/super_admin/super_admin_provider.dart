@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/services/financial_input_service.dart';
 import '../../core/services/store_service.dart';
 import '../../main.dart';
 import '../report/report_provider.dart';
@@ -326,13 +328,17 @@ class StoreCloseResult {
 }
 
 class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
-  SuperAdminNotifier()
-    : super(
+  SuperAdminNotifier({SupabaseClient? client})
+    : _reportClient = client,
+      super(
         SuperAdminState(
           reportStart: DateTime(DateTime.now().year, DateTime.now().month, 1),
           reportEnd: DateTime.now(),
         ),
       );
+
+  final SupabaseClient? _reportClient;
+  int _reportRequestId = 0;
 
   String? get lastError => state.error;
 
@@ -655,8 +661,11 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   }
 
   void selectRestaurant(SuperRestaurant? restaurant) {
+    _reportRequestId++;
     state = state.copyWith(
       selectedRestaurant: restaurant,
+      clearReportSummary: true,
+      isLoading: false,
       clearSelectedRestaurant: restaurant == null,
       clearError: true,
     );
@@ -666,13 +675,21 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     state = state.copyWith(
       reportStart: DateTime(start.year, start.month, start.day),
       reportEnd: DateTime(end.year, end.month, end.day, 23, 59, 59, 999),
+      clearReportSummary: true,
       clearError: true,
     );
     await loadAllReports(selectedRestaurantId: state.selectedRestaurant?.id);
   }
 
   Future<void> loadAllReports({String? selectedRestaurantId}) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    final requestId = ++_reportRequestId;
+    final requestedStart = state.reportStart;
+    final requestedEnd = state.reportEnd;
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      clearReportSummary: true,
+    );
     try {
       final restaurants = state.restaurants;
       final Map<String, _Accumulator> accumulators = {};
@@ -701,39 +718,29 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         return;
       }
 
-      final startIso = state.reportStart.toIso8601String();
-      final endIso = state.reportEnd.toIso8601String();
-      final startSaleDate = DateFormat('yyyy-MM-dd').format(state.reportStart);
-      final endSaleDate = DateFormat('yyyy-MM-dd').format(state.reportEnd);
-      final photoObjetSales = await supabase
-          .from('v_photo_objet_daily_summary')
-          .select(
-            'store_id, sale_date, total_gross_sales, total_transactions, total_service_amount',
-          )
-          .inFilter(
-            'store_id',
-            sourceRestaurants.map((restaurant) => restaurant.id).toList(),
-          )
-          .gte('sale_date', startSaleDate)
-          .lte('sale_date', endSaleDate);
+      final inputs = FinancialInputService(_reportClient ?? supabase);
+      final range = reportUtcRange(requestedStart, requestedEnd);
+      final photoObjetSales = await inputs.fetch(
+        source: FinancialInputSource.photoSales,
+        storeIds: sourceRestaurants.map((restaurant) => restaurant.id).toList(),
+        fromDate: DateFormat('yyyy-MM-dd').format(requestedStart),
+        toDate: DateFormat('yyyy-MM-dd').format(requestedEnd),
+      );
 
       for (final restaurant in sourceRestaurants) {
-        final payments = await supabase
-            .from('payments')
-            .select('amount, orders(sales_channel)')
-            .eq('restaurant_id', restaurant.id)
-            .eq('is_revenue', true)
-            .gte('created_at', startIso)
-            .lte('created_at', endIso);
-
-        final externalSales = await supabase
-            .from('external_sales')
-            .select('net_amount')
-            .eq('restaurant_id', restaurant.id)
-            .eq('is_revenue', true)
-            .eq('order_status', 'completed')
-            .gte('completed_at', startIso)
-            .lte('completed_at', endIso);
+        if (!mounted || requestId != _reportRequestId) return;
+        final payments = await inputs.fetch(
+          source: FinancialInputSource.revenuePayments,
+          storeIds: [restaurant.id],
+          from: range.startUtc,
+          toExclusive: range.endExclusiveUtc,
+        );
+        final externalSales = await inputs.fetch(
+          source: FinancialInputSource.externalSales,
+          storeIds: [restaurant.id],
+          from: range.startUtc,
+          toExclusive: range.endExclusiveUtc,
+        );
 
         final accumulator = accumulators[restaurant.id]!;
 
@@ -788,6 +795,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         (sum, row) => sum + row.delivery,
       );
 
+      if (!mounted || requestId != _reportRequestId) return;
       state = state.copyWith(
         reportSummary: SuperAdminReportSummary(
           totalRevenue: dineInTotal + deliveryTotal,
@@ -799,9 +807,11 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         clearError: true,
       );
     } catch (error) {
+      if (!mounted || requestId != _reportRequestId) return;
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load reports: $error',
+        clearReportSummary: true,
       );
     }
   }

@@ -93,7 +93,7 @@ void main() {
       'lib/features/super_admin/super_admin_provider.dart',
     );
 
-    expect(provider, contains(".from('v_photo_objet_daily_summary')"));
+    expect(provider, contains("FinancialInputSource.photoSales"));
     expect(provider, contains('aggregateSuperAdminPhotoObjetSalesByStore'));
   });
 

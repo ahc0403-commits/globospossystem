@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
+import 'financial_input_service.dart';
 import 'rpc_compat.dart';
 
 const attendanceScreenRecordLimit = 10;
@@ -246,12 +247,14 @@ class AttendanceService {
   }
 
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
-    final result = await supabase
-        .from('store_employees')
-        .select('id, employee_number, full_name, employment_role')
-        .eq('store_id', storeId)
-        .eq('is_active', true)
-        .order('employee_number');
+    final result = await FinancialInputService(
+      _client ?? supabase,
+    ).fetch(source: FinancialInputSource.staff, storeIds: [storeId]);
+    result.sort(
+      (a, b) => (a['employee_number'] as String).compareTo(
+        b['employee_number'] as String,
+      ),
+    );
     return List<Map<String, dynamic>>.from(result)
         .map(
           (row) => {
@@ -349,12 +352,11 @@ class AttendanceService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final result = await supabase
-        .from('vietnam_public_holidays')
-        .select('holiday_date')
-        .eq('is_active', true)
-        .gte('holiday_date', from.toIso8601String().substring(0, 10))
-        .lte('holiday_date', to.toIso8601String().substring(0, 10));
+    final result = await FinancialInputService(_client ?? supabase).fetch(
+      source: FinancialInputSource.holidays,
+      fromDate: _dateOnly(from),
+      toDate: _dateOnly(to),
+    );
     return List<Map<String, dynamic>>.from(result)
         .map((row) => DateTime.tryParse(row['holiday_date']?.toString() ?? ''))
         .whereType<DateTime>()
@@ -367,13 +369,12 @@ class AttendanceService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final result = await supabase
-        .from('employee_daily_allowances')
-        .select()
-        .eq('store_id', storeId)
-        .gte('work_date', _dateOnly(from))
-        .lte('work_date', _dateOnly(to))
-        .order('work_date');
+    final result = await FinancialInputService(_client ?? supabase).fetch(
+      source: FinancialInputSource.allowances,
+      storeIds: [storeId],
+      fromDate: _dateOnly(from),
+      toDate: _dateOnly(to),
+    );
     return List<Map<String, dynamic>>.from(result);
   }
 

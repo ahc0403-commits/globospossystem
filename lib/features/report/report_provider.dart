@@ -1,8 +1,10 @@
 import 'package:excel/excel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/payments/payment_method_contract.dart';
+import '../../core/services/financial_input_service.dart';
 import '../../main.dart';
 import 'menu_sales_analytics.dart';
 
@@ -380,8 +382,9 @@ class ReportState {
 }
 
 class ReportNotifier extends StateNotifier<ReportState> {
-  ReportNotifier()
-    : super(
+  ReportNotifier({SupabaseClient? client})
+    : _client = client,
+      super(
         ReportState(
           startDate: DateTime(
             DateTime.now().year,
@@ -391,6 +394,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
           endDate: DateTime.now(),
         ),
       );
+
+  final SupabaseClient? _client;
+  int _requestId = 0;
 
   Future<void> setDateRange(
     DateTime start,
@@ -410,68 +416,56 @@ class ReportNotifier extends StateNotifier<ReportState> {
     state = state.copyWith(
       startDate: normalizedStart,
       endDate: normalizedEnd,
+      clearSummary: true,
       clearError: true,
     );
     await loadReport(storeId);
   }
 
   Future<void> loadReport(String storeId) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    final requestId = ++_requestId;
+    final requestedStart = state.startDate;
+    final requestedEnd = state.endDate;
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      clearSummary: true,
+    );
 
     try {
-      final reportRange = reportUtcRange(state.startDate, state.endDate);
+      final client = _client ?? supabase;
+      final inputs = FinancialInputService(client);
+      final reportRange = reportUtcRange(requestedStart, requestedEnd);
       final startIso = reportRange.startUtc.toIso8601String();
-      final endExclusiveIso = reportRange.endExclusiveUtc.toIso8601String();
       final endInclusiveIso = reportRange.endExclusiveUtc
           .subtract(const Duration(microseconds: 1))
           .toIso8601String();
-      final startSaleDate = DateFormat('yyyy-MM-dd').format(state.startDate);
-      final endSaleDate = DateFormat('yyyy-MM-dd').format(state.endDate);
+      final startSaleDate = DateFormat('yyyy-MM-dd').format(requestedStart);
+      final endSaleDate = DateFormat('yyyy-MM-dd').format(requestedEnd);
+      Future<List<Map<String, dynamic>>> read(FinancialInputSource source) =>
+          inputs.fetch(
+            source: source,
+            storeIds: [storeId],
+            from: reportRange.startUtc,
+            toExclusive: reportRange.endExclusiveUtc,
+            fromDate: startSaleDate,
+            toDate: endSaleDate,
+          );
 
-      final paymentsRevenueResponse = await supabase
-          .from('payments')
-          .select(
-            'id, order_id, amount, amount_portion, method, created_at, proof_required, proof_photo_url, orders(sales_channel)',
-          )
-          .eq('restaurant_id', storeId)
-          .eq('is_revenue', true)
-          .gte('created_at', startIso)
-          .lt('created_at', endExclusiveIso);
-
-      final externalSalesResponse = await supabase
-          .from('external_sales')
-          .select('net_amount, completed_at')
-          .eq('restaurant_id', storeId)
-          .eq('is_revenue', true)
-          .eq('order_status', 'completed')
-          .gte('completed_at', startIso)
-          .lt('completed_at', endExclusiveIso);
-
-      final photoObjetSalesResponse = await supabase
-          .from('v_photo_objet_daily_summary')
-          .select(
-            'sale_date, total_gross_sales, total_transactions, total_service_amount',
-          )
-          .eq('store_id', storeId)
-          .gte('sale_date', startSaleDate)
-          .lte('sale_date', endSaleDate);
-
-      final servicePaymentsResponse = await supabase
-          .from('payments')
-          .select('amount')
-          .eq('restaurant_id', storeId)
-          .eq('is_revenue', false)
-          .gte('created_at', startIso)
-          .lt('created_at', endExclusiveIso);
-
-      final ordersResponse = await supabase
-          .from('orders')
-          .select('id, status, created_at')
-          .eq('restaurant_id', storeId)
-          .gte('created_at', startIso)
-          .lt('created_at', endExclusiveIso);
-
-      final cancelledAmountResponse = await supabase.rpc(
+      final paymentsRevenueResponse = await read(
+        FinancialInputSource.revenuePayments,
+      );
+      final externalSalesResponse = await read(
+        FinancialInputSource.externalSales,
+      );
+      final photoObjetSalesResponse = await read(
+        FinancialInputSource.photoSales,
+      );
+      final servicePaymentsResponse = await read(
+        FinancialInputSource.servicePayments,
+      );
+      final ordersResponse = await read(FinancialInputSource.orders);
+      final cancelledAmountResponse = await client.rpc(
         'get_store_sales_cancellation_total',
         params: {
           'p_store_id': storeId,
@@ -479,24 +473,13 @@ class ReportNotifier extends StateNotifier<ReportState> {
           'p_end_at': endInclusiveIso,
         },
       );
-
-      // Cancelled items count
-      final cancelledItemsResponse = await supabase
-          .from('order_items')
-          .select('id, order_id, orders!inner(restaurant_id, created_at)')
-          .eq('status', 'cancelled')
-          .eq('orders.restaurant_id', storeId)
-          .gte('orders.created_at', startIso)
-          .lt('orders.created_at', endExclusiveIso);
-
-      final einvoiceJobsResponse = await supabase
-          .from('meinvoice_jobs')
-          .select(
-            'id, order_id, status, error_message, manual_action_type, created_at',
-          )
-          .eq('store_id', storeId)
-          .gte('created_at', startIso)
-          .lt('created_at', endExclusiveIso);
+      final cancelledItemsResponse = await read(
+        FinancialInputSource.cancelledItems,
+      );
+      final einvoiceJobsResponse = await read(
+        FinancialInputSource.einvoiceJobs,
+      );
+      if (!mounted || requestId != _requestId) return;
 
       double dineInRevenue = 0;
       final revenuePayments = List<Map<String, dynamic>>.from(
@@ -520,7 +503,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         final method = normalizedMethod.isEmpty ? 'UNKNOWN' : normalizedMethod;
         final parsedCreatedAt = _parseDateTime(payment['created_at']);
         final createdAt = parsedCreatedAt == null
-            ? state.startDate
+            ? requestedStart
             : toHoChiMinhBusinessTime(parsedCreatedAt);
         final dateKey = DateFormat('yyyy-MM-dd').format(createdAt);
         final accumulator = dailyMap.putIfAbsent(
@@ -597,7 +580,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         final amount = _toDouble(external['net_amount']);
         final parsedCompletedAt = _parseDateTime(external['completed_at']);
         final completedAt = parsedCompletedAt == null
-            ? state.startDate
+            ? requestedStart
             : toHoChiMinhBusinessTime(parsedCompletedAt);
         final dateKey = DateFormat('yyyy-MM-dd').format(completedAt);
         final accumulator = dailyMap.putIfAbsent(
@@ -745,9 +728,11 @@ class ReportNotifier extends StateNotifier<ReportState> {
         clearError: true,
       );
     } catch (error) {
+      if (!mounted || requestId != _requestId) return;
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load report: $error',
+        clearSummary: true,
       );
     }
   }

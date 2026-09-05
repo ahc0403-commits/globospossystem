@@ -28,7 +28,12 @@ void main() {
     expect(reportProvider, contains('missingProofPhotosCount'));
     expect(reportProvider, contains('failedEinvoiceJobsCount'));
     expect(reportProvider, contains('proofCompletePercent'));
-    expect(reportProvider, contains(".from('meinvoice_jobs')"));
+    expect(reportProvider, contains('FinancialInputSource.einvoiceJobs'));
+    final financialInputSql = readRepoFile(
+      'supabase/migrations/20260905020000_complete_financial_inputs.sql',
+    );
+    expect(financialInputSql, contains('FROM public.meinvoice_jobs'));
+    expect(financialInputSql, isNot(contains('FROM public.einvoice_jobs')));
     expect(reportProvider, contains('collectMissingProofIssues'));
     expect(reportProvider, contains('collectEinvoiceReviewIssues'));
 
