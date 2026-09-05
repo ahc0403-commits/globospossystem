@@ -18,11 +18,10 @@ class _PayrollAttendanceFixture extends AttendanceService {
   ];
 
   @override
-  Future<List<Map<String, dynamic>>> fetchLogs({
+  Future<List<Map<String, dynamic>>> fetchPayrollLogs({
     required String storeId,
     required DateTime from,
     required DateTime to,
-    int limit = 500,
   }) async => const [];
 
   @override

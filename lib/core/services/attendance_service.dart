@@ -12,6 +12,10 @@ const attendanceScreenRecordLimit = 10;
 const attendanceManagementRecordLimit = 500;
 
 class AttendanceService {
+  AttendanceService({SupabaseClient? client}) : _client = client;
+
+  final SupabaseClient? _client;
+
   Future<Map<String, dynamic>> recordEmployeeAttendance({
     required String storeId,
     required String employeeNumber,
@@ -142,7 +146,7 @@ class AttendanceService {
     if (limit < 1) {
       throw ArgumentError.value(limit, 'limit', 'must be at least 1');
     }
-    final result = await supabase.rpc(
+    final result = await (_client ?? supabase).rpc(
       'get_attendance_logs_with_names',
       params: {
         'p_store_id': storeId,
@@ -155,6 +159,90 @@ class AttendanceService {
     return List<Map<String, dynamic>>.from(
       result,
     ).map(normalizeAttendanceLogRow).toList(growable: false);
+  }
+
+  /// Payroll needs the complete period, independently of display/API row caps.
+  /// The final page verifies the first page's revision before any result is used.
+  Future<List<Map<String, dynamic>>> fetchPayrollLogs({
+    required String storeId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final rows = <Map<String, dynamic>>[];
+    final seenIds = <String>{};
+    String? revision;
+    String? cursorAt;
+    String? cursorId;
+    int? totalCount;
+    while (true) {
+      final result = await (_client ?? supabase).rpc(
+        'get_payroll_attendance_page',
+        params: {
+          'p_store_id': storeId,
+          'p_from': from.toUtc().toIso8601String(),
+          'p_to': to.toUtc().toIso8601String(),
+          'p_page_size': 500,
+          'p_after_logged_at': cursorAt,
+          'p_after_id': cursorId,
+          'p_expected_revision': revision,
+        },
+      );
+      if (result is! Map ||
+          result['rows'] is! List ||
+          result['has_more'] is! bool ||
+          result['revision'] is! String ||
+          (result['revision'] as String).isEmpty) {
+        throw const FormatException('PAYROLL_ATTENDANCE_RESPONSE_INVALID');
+      }
+      final pageRevision = result['revision'] as String;
+      if (revision != null && revision != pageRevision) {
+        throw StateError('PAYROLL_ATTENDANCE_CHANGED');
+      }
+      final pageCount = result['total_count'];
+      if (totalCount == null) {
+        if (pageCount is! int || pageCount < 0) {
+          throw const FormatException('PAYROLL_ATTENDANCE_COUNT_INVALID');
+        }
+        totalCount = pageCount;
+      } else if (pageCount != null && pageCount != totalCount) {
+        throw StateError('PAYROLL_ATTENDANCE_CHANGED');
+      }
+      revision = pageRevision;
+      final page = List<Map<String, dynamic>>.from(result['rows'] as List);
+      for (final row in page) {
+        final id = row['id']?.toString();
+        final at = DateTime.tryParse(row['logged_at']?.toString() ?? '');
+        final previousAt = cursorAt == null ? null : DateTime.parse(cursorAt);
+        if (id == null ||
+            id.isEmpty ||
+            at == null ||
+            row['restaurant_id']?.toString() != storeId ||
+            at.isBefore(from.toUtc()) ||
+            !at.isBefore(to.toUtc()) ||
+            !seenIds.add(id) ||
+            (previousAt != null &&
+                (at.isBefore(previousAt) ||
+                    (at.isAtSameMomentAs(previousAt) &&
+                        id.compareTo(cursorId!) <= 0)))) {
+          throw const FormatException('PAYROLL_ATTENDANCE_PAGE_INVALID');
+        }
+        cursorAt = row['logged_at'].toString();
+        cursorId = id;
+        rows.add(normalizeAttendanceLogRow(row));
+      }
+      if (rows.length > totalCount) {
+        throw StateError('PAYROLL_ATTENDANCE_CHANGED');
+      }
+      if (result['has_more'] == false) {
+        if (pageCount == null || rows.length != totalCount) {
+          throw const FormatException('PAYROLL_ATTENDANCE_INCOMPLETE');
+        }
+        return rows;
+      }
+      if (page.isEmpty) {
+        throw const FormatException('PAYROLL_ATTENDANCE_CURSOR_STALLED');
+      }
+    }
   }
 
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {

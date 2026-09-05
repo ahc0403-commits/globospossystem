@@ -13,6 +13,9 @@ dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
 flutter test
 
+printf 'CHECK_REPO_STEP=payroll_attendance_sql_api\n'
+bash scripts/test_payroll_attendance_postgrest.sh
+
 printf 'CHECK_REPO_STEP=direct_order_edge_contracts\n'
 deno fmt --check \
   supabase/functions/direct-order-public/index.ts \

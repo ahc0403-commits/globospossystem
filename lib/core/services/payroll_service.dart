@@ -83,7 +83,7 @@ class PayrollService {
       periodEnd.month,
       periodEnd.day + 1,
     );
-    final logs = await _attendanceService.fetchLogs(
+    final logs = await _attendanceService.fetchPayrollLogs(
       storeId: storeId,
       from: normalizedPeriodStart,
       to: normalizedPeriodEndExclusive,
