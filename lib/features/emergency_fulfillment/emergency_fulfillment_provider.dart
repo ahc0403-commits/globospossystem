@@ -1114,15 +1114,26 @@ List<EmergencyHandoffNotice> emergencyHandoffNotices(
 
 class EmergencyFulfillmentNotifier
     extends StateNotifier<EmergencyFulfillmentState> {
-  EmergencyFulfillmentNotifier() : super(const EmergencyFulfillmentState());
+  EmergencyFulfillmentNotifier({SupabaseClient? client})
+    : _providedClient = client,
+      super(const EmergencyFulfillmentState());
+
+  final SupabaseClient? _providedClient;
+  SupabaseClient get _client => _providedClient ?? supabase;
 
   static const _uuid = Uuid();
   static const _handoffRefreshInterval = Duration(seconds: 1);
+  static const _connectedHealthRefreshInterval = Duration(seconds: 5);
+  static const _realtimeRefreshDelay = Duration(milliseconds: 100);
   RealtimeChannel? _channel;
   KdsRealtimeSync? _kdsSync;
   KdsSyncMode _syncMode = KdsSyncMode.legacy;
   String? _subscriptionKey;
   Timer? _pollTimer;
+  Duration? _pollInterval;
+  bool _legacyRealtimeConnected = false;
+  int _subscriptionGeneration = 0;
+  Timer? _realtimeRefreshTimer;
   Timer? _snapshotRetryTimer;
   Timer? _businessDayTimer;
   bool _refreshing = false;
@@ -1133,33 +1144,40 @@ class EmergencyFulfillmentNotifier
   final Map<String, int> _ticketRevisions = {};
 
   Future<void> load({bool showLoading = true}) async {
+    if (!mounted) return;
     if (_refreshing) {
       _refreshRequested = true;
       return;
     }
+    _snapshotRetryTimer?.cancel();
+    _snapshotRetryTimer = null;
     _refreshing = true;
     _scheduleBusinessDayRefresh(TimeUtils.currentVietnamBusinessDay());
     final refreshRevision = _realtimeRevision;
     if (showLoading) state = state.copyWith(isLoading: true, clearError: true);
     try {
       final outboxError = await _flushOutbox();
+      if (!mounted) return;
       var syncConfig = await _loadKdsSyncConfig();
+      if (!mounted) return;
       KdsBootstrap? bootstrap;
       dynamic raw;
       if (syncConfig.mode == KdsSyncMode.active) {
         try {
-          bootstrap = await SupabaseKdsSyncGateway(supabase).loadBootstrap();
+          bootstrap = await SupabaseKdsSyncGateway(_client).loadBootstrap();
           syncConfig = bootstrap.config;
           raw = bootstrap.snapshot;
         } catch (_) {
+          if (!mounted) return;
           // A staged or failed v2 rollout must preserve the established KDS
           // path. The per-store flag can be corrected without blocking work.
           syncConfig = const KdsSyncConfig.legacy();
-          raw = await supabase.rpc('get_emergency_station_snapshot');
+          raw = await _client.rpc('get_emergency_station_snapshot');
         }
       } else {
-        raw = await supabase.rpc('get_emergency_station_snapshot');
+        raw = await _client.rpc('get_emergency_station_snapshot');
       }
+      if (!mounted) return;
       if (raw is! Map) {
         throw const FormatException('EMERGENCY_SNAPSHOT_RESPONSE_INVALID');
       }
@@ -1194,6 +1212,7 @@ class EmergencyFulfillmentNotifier
       if (bootstrap == null) {
         await _subscribe(immediate, syncConfig);
       }
+      if (!mounted) return;
 
       if (bootstrap != null) {
         json['completed_orders'] = bootstrap.completedOrders;
@@ -1204,12 +1223,13 @@ class EmergencyFulfillmentNotifier
           _optionalRpc('get_emergency_station_today_completed'),
           _optionalRpc('get_emergency_station_timings'),
         ]);
+        if (!mounted) return;
         final completed = stationData[0];
         json['completed_orders'] = completed is List ? completed : const [];
         _mergeStationTimings(json, stationData[1]);
         if (storeId != null && storeId.isNotEmpty) {
           try {
-            json['fulfillment_mode'] = await supabase.rpc(
+            json['fulfillment_mode'] = await _client.rpc(
               'get_store_fulfillment_mode',
               params: {'p_store_id': storeId},
             );
@@ -1218,8 +1238,10 @@ class EmergencyFulfillmentNotifier
           }
         }
       }
+      if (!mounted) return;
       final next = EmergencyFulfillmentState.fromJson(json);
       final pendingRecords = await EmergencyWebBridge.readOutbox();
+      if (!mounted) return;
       if (refreshRevision != _realtimeRevision) {
         _refreshRequested = true;
         return;
@@ -1235,6 +1257,8 @@ class EmergencyFulfillmentNotifier
         await _subscribe(state, syncConfig);
       }
     } catch (error) {
+      if (!mounted) return;
+      _refreshRequested = false;
       _snapshotFailureCount += 1;
       state = state.copyWith(
         isLoading: false,
@@ -1243,7 +1267,7 @@ class EmergencyFulfillmentNotifier
       _scheduleSnapshotRetry();
     } finally {
       _refreshing = false;
-      if (_refreshRequested && mounted) {
+      if (_refreshRequested && mounted && _snapshotRetryTimer == null) {
         _refreshRequested = false;
         unawaited(load(showLoading: false));
       }
@@ -1255,6 +1279,7 @@ class EmergencyFulfillmentNotifier
     _snapshotRetryTimer = Timer(
       emergencySnapshotRetryDelay(_snapshotFailureCount),
       () {
+        _snapshotRetryTimer = null;
         if (mounted) unawaited(load(showLoading: false));
       },
     );
@@ -1272,7 +1297,7 @@ class EmergencyFulfillmentNotifier
 
   Future<dynamic> _optionalRpc(String functionName) async {
     try {
-      return await supabase.rpc(functionName);
+      return await _client.rpc(functionName);
     } catch (_) {
       // Compatibility while additive station RPCs roll out.
       return null;
@@ -1281,7 +1306,7 @@ class EmergencyFulfillmentNotifier
 
   Future<KdsSyncConfig> _loadKdsSyncConfig() async {
     try {
-      return await SupabaseKdsSyncGateway(supabase).loadConfig();
+      return await SupabaseKdsSyncGateway(_client).loadConfig();
     } catch (_) {
       // The additive migration can be deployed before the Flutter client.
       return const KdsSyncConfig.legacy();
@@ -1302,6 +1327,7 @@ class EmergencyFulfillmentNotifier
     ].join(':');
     if (_subscriptionKey == subscriptionKey) return;
     await _disposeSubscriptions();
+    if (!mounted) return;
     _subscriptionKey = subscriptionKey;
     _syncMode = syncConfig.mode;
 
@@ -1311,8 +1337,8 @@ class EmergencyFulfillmentNotifier
     }
     if (syncConfig.mode != KdsSyncMode.legacy) {
       _kdsSync = KdsRealtimeSync(
-        client: supabase,
-        gateway: SupabaseKdsSyncGateway(supabase),
+        client: _client,
+        gateway: SupabaseKdsSyncGateway(_client),
         config: KdsSyncConfig(
           mode: syncConfig.mode,
           revision: syncConfig.revision,
@@ -1331,9 +1357,12 @@ class EmergencyFulfillmentNotifier
       );
       try {
         await _kdsSync!.start();
+        if (!mounted) return;
       } catch (error) {
+        if (!mounted) return;
         if (kDebugMode) debugPrint('KDS realtime start fallback: $error');
         await _kdsSync?.dispose();
+        if (!mounted) return;
         _kdsSync = null;
         _syncMode = KdsSyncMode.legacy;
         _subscriptionKey = 'fallback:$subscriptionKey';
@@ -1347,8 +1376,13 @@ class EmergencyFulfillmentNotifier
   }
 
   void _subscribeLegacy(String storeId) {
-    void refresh(PostgresChangePayload _) => _requestRealtimeRefresh();
-    _channel = supabase
+    final generation = _subscriptionGeneration;
+    bool current() => mounted && generation == _subscriptionGeneration;
+    void refresh(PostgresChangePayload _) {
+      if (current()) _requestRealtimeRefresh();
+    }
+
+    _channel = _client
         .channel(LiveSyncScope.storeChannel('emergency_fulfillment', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -1369,14 +1403,18 @@ class EmergencyFulfillmentNotifier
           schema: 'public',
           table: 'emergency_fulfillment_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: _applyRealtimeItemChange,
+          callback: (payload) {
+            if (current()) _applyRealtimeItemChange(payload);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'emergency_combo_component_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: _applyRealtimeItemChange,
+          callback: (payload) {
+            if (current()) _applyRealtimeItemChange(payload);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -1406,13 +1444,31 @@ class EmergencyFulfillmentNotifier
           filter: LiveSyncScope.storeFilter(storeId),
           callback: refresh,
         )
-        .subscribe();
+        .subscribe((status, [error]) {
+          if (!current()) return;
+          final connected = status == RealtimeSubscribeStatus.subscribed;
+          if (_legacyRealtimeConnected == connected) return;
+          _legacyRealtimeConnected = connected;
+          _startPolling();
+          if (connected) {
+            // Close the initial snapshot/subscription gap and recover promptly
+            // after reconnection, even if the normal retry is backing off.
+            _snapshotRetryTimer?.cancel();
+            _snapshotRetryTimer = null;
+            _requestRealtimeRefresh();
+          }
+        });
     _startPolling();
   }
 
   Future<void> _disposeSubscriptions() async {
+    _subscriptionGeneration += 1;
+    _legacyRealtimeConnected = false;
     _pollTimer?.cancel();
     _pollTimer = null;
+    _pollInterval = null;
+    _realtimeRefreshTimer?.cancel();
+    _realtimeRefreshTimer = null;
     final channel = _channel;
     _channel = null;
     if (channel != null) await channel.unsubscribe();
@@ -1423,14 +1479,31 @@ class EmergencyFulfillmentNotifier
   }
 
   void _startPolling() {
-    _pollTimer ??= Timer.periodic(_handoffRefreshInterval, (_) {
-      if (!_refreshing) unawaited(load(showLoading: false));
+    final interval = _legacyRealtimeConnected
+        ? _connectedHealthRefreshInterval
+        : _handoffRefreshInterval;
+    if (_pollTimer != null && _pollInterval == interval) return;
+    _pollTimer?.cancel();
+    _pollInterval = interval;
+    _pollTimer = Timer.periodic(interval, (_) {
+      // The retry timer owns recovery after failure; polling must not bypass it.
+      if (mounted && !_refreshing && _snapshotRetryTimer == null) {
+        unawaited(load(showLoading: false));
+      }
     });
   }
 
   void _requestRealtimeRefresh() {
+    if (!mounted) return;
     _realtimeRevision += 1;
-    unawaited(load(showLoading: false));
+    // Keep a bounded window from the first event, not a debounce that can be
+    // postponed indefinitely by a busy station. Known item rows still apply now.
+    _realtimeRefreshTimer ??= Timer(_realtimeRefreshDelay, () {
+      _realtimeRefreshTimer = null;
+      if (mounted && _snapshotRetryTimer == null) {
+        unawaited(load(showLoading: false));
+      }
+    });
   }
 
   Future<void> refreshFromSignal() async {
@@ -1477,7 +1550,7 @@ class EmergencyFulfillmentNotifier
     final queueId = change.queueId ?? change.payload['queue_id']?.toString();
     if (queueId == null || queueId.isEmpty) return;
     try {
-      final raw = await supabase.rpc(
+      final raw = await _client.rpc(
         'observe_kds_shadow_v2',
         params: {'p_queue_id': queueId},
       );
@@ -1884,7 +1957,7 @@ class EmergencyFulfillmentNotifier
           : payload['combo_component'] == true
           ? 'combo_component'
           : 'base';
-      final raw = await supabase.rpc(
+      final raw = await _client.rpc(
         'kds_record_progress_v2',
         params: {
           'p_item_id': payload['item_id'],
@@ -1897,7 +1970,7 @@ class EmergencyFulfillmentNotifier
       return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
     if (payload['floor_direct'] == true) {
-      final raw = await supabase.rpc(
+      final raw = await _client.rpc(
         'emergency_record_floor_direct_progress',
         params: {
           'p_floor_direct_item_id': payload['item_id'],
@@ -1908,7 +1981,7 @@ class EmergencyFulfillmentNotifier
       return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
     if (payload['combo_component'] == true) {
-      final raw = await supabase.rpc(
+      final raw = await _client.rpc(
         'emergency_record_combo_component_progress',
         params: {
           'p_component_item_id': payload['item_id'],
@@ -1919,7 +1992,7 @@ class EmergencyFulfillmentNotifier
       );
       return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
-    final raw = await supabase.rpc(
+    final raw = await _client.rpc(
       'emergency_record_progress',
       params: {
         'p_fulfillment_item_id': payload['item_id'],
@@ -1939,7 +2012,7 @@ class EmergencyFulfillmentNotifier
     // contracts, then atomically include floor-direct beverage lines.
     switch (payload['kind']) {
       case 'complete_order':
-        final raw = await supabase.rpc(
+        final raw = await _client.rpc(
           _syncMode == KdsSyncMode.active
               ? 'kds_complete_order_v2'
               : 'emergency_complete_route_order_stage',
@@ -1952,7 +2025,7 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       case 'revert_order':
-        final raw = await supabase.rpc(
+        final raw = await _client.rpc(
           _syncMode == KdsSyncMode.active
               ? 'kds_revert_order_v2'
               : 'emergency_revert_route_order_action',
@@ -1966,7 +2039,7 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       case 'advance_leftover_packaging':
-        final raw = await supabase.rpc(
+        final raw = await _client.rpc(
           _syncMode == KdsSyncMode.active
               ? 'kds_advance_leftover_v2'
               : 'emergency_advance_leftover_packaging',
@@ -2067,6 +2140,8 @@ class EmergencyFulfillmentNotifier
 
   @override
   void dispose() {
+    _subscriptionGeneration += 1;
+    _realtimeRefreshTimer?.cancel();
     _pollTimer?.cancel();
     _snapshotRetryTimer?.cancel();
     _businessDayTimer?.cancel();

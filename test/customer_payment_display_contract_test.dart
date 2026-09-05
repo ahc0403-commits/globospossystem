@@ -78,7 +78,7 @@ void main() {
   });
 
   test(
-    'customer display polls within one second regardless of socket state',
+    'customer display keeps fast disconnected and slower healthy recovery',
     () {
       expect(
         CustomerDisplayNotifier.fallbackIntervalForConnection(connected: false),
@@ -86,7 +86,7 @@ void main() {
       );
       expect(
         CustomerDisplayNotifier.fallbackIntervalForConnection(connected: true),
-        const Duration(seconds: 1),
+        const Duration(seconds: 5),
       );
     },
   );

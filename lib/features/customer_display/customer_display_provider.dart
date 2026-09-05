@@ -123,17 +123,22 @@ class CustomerDisplayState {
 }
 
 class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
-  CustomerDisplayNotifier({Duration receiptDuration = receiptDisplayDuration})
-    : _receiptDuration = receiptDuration,
-      super(const CustomerDisplayState());
+  CustomerDisplayNotifier({
+    Duration receiptDuration = receiptDisplayDuration,
+    SupabaseClient? client,
+  }) : _providedClient = client,
+       _receiptDuration = receiptDuration,
+       super(const CustomerDisplayState());
 
   // A subscribed socket does not guarantee that Postgres change events are
-  // actually reaching this device. Keep the indexed single-row fallback fast
-  // even while Realtime reports a healthy connection.
-  static const _connectedHealthRefreshInterval = Duration(seconds: 1);
+  // actually reaching this device. Reconcile every five seconds when connected,
+  // and every second when disconnected. Failed reads back off independently.
+  static const _connectedHealthRefreshInterval = Duration(seconds: 5);
   static const _disconnectedRefreshInterval = Duration(seconds: 1);
   static const receiptDisplayDuration = Duration(seconds: 10);
 
+  final SupabaseClient? _providedClient;
+  SupabaseClient get _client => _providedClient ?? supabase;
   final Duration _receiptDuration;
 
   RealtimeChannel? _channel;
@@ -143,6 +148,10 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
   Duration? _pollInterval;
   bool _realtimeConnected = false;
   int _realtimeRevision = 0;
+  int _generation = 0;
+  int _loadFailureCount = 0;
+  Future<void>? _pendingLoad;
+  bool _reloadRequested = false;
   String? _resolvedReceiptId;
   String? _resolvedReceiptUrl;
   String? _failedReceiptId;
@@ -153,10 +162,15 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
 
   Future<void> start(String storeId) async {
     if (_storeId == storeId && _channel != null) return;
+    if (!mounted) return;
+    final generation = ++_generation;
     _storeId = storeId;
-    state = const CustomerDisplayState(isLoading: true);
-    await _channel?.unsubscribe();
+    final previousChannel = _channel;
     _channel = null;
+    _pendingLoad = null;
+    _reloadRequested = false;
+    _loadFailureCount = 0;
+    state = const CustomerDisplayState(isLoading: true);
     _pollTimer?.cancel();
     _receiptTimer?.cancel();
     _pollTimer = null;
@@ -170,22 +184,29 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
     _resolvingReceiptId = null;
     _visibleReceiptRevision = null;
     _hiddenReceiptRevision = null;
+    await previousChannel?.unsubscribe();
+    if (!_isCurrent(storeId, generation)) return;
 
-    _channel = supabase
+    _channel = _client
         .channel(LiveSyncScope.storeChannel('customer_display', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'customer_payment_displays',
           filter: LiveSyncScope.storeFilter(storeId, column: 'store_id'),
-          callback: (payload) => _applyRealtimeChange(storeId, payload),
+          callback: (payload) {
+            if (_isCurrent(storeId, generation)) {
+              _applyRealtimeChange(storeId, payload);
+            }
+          },
         )
         .subscribe((status, [error]) {
-          if (!mounted || _storeId != storeId) return;
+          if (!_isCurrent(storeId, generation)) return;
           final connected = status == RealtimeSubscribeStatus.subscribed;
           if (connected == _realtimeConnected) return;
           _realtimeConnected = connected;
           _ensurePolling(storeId);
+          if (connected) unawaited(_load(storeId));
         });
 
     _ensurePolling(storeId);
@@ -194,37 +215,74 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
 
   Future<void> retry() async {
     final storeId = _storeId;
-    if (storeId == null) return;
+    if (!mounted || storeId == null) return;
     state = CustomerDisplayState(isLoading: true, snapshot: state.snapshot);
     await _load(storeId);
   }
 
-  Future<void> _load(String storeId) async {
+  bool _isCurrent(String storeId, int generation) =>
+      mounted && _storeId == storeId && _generation == generation;
+
+  Future<void> _load(String storeId, {bool queueIfBusy = true}) {
+    if (!mounted || _storeId != storeId) return Future.value();
+    final pending = _pendingLoad;
+    if (pending != null) {
+      if (queueIfBusy) _reloadRequested = true;
+      return pending;
+    }
+    return _pendingLoad = _drainLoads(storeId, _generation);
+  }
+
+  Future<void> _drainLoads(String storeId, int generation) async {
+    try {
+      do {
+        _reloadRequested = false;
+        final succeeded = await _loadOnce(storeId, generation);
+        if (!succeeded) break;
+      } while (_isCurrent(storeId, generation) && _reloadRequested);
+    } finally {
+      if (_isCurrent(storeId, generation)) {
+        _pendingLoad = null;
+        _reloadRequested = false;
+      }
+    }
+  }
+
+  Future<bool> _loadOnce(String storeId, int generation) async {
     final revision = _realtimeRevision;
     try {
-      final row = await supabase
+      final row = await _client
           .from('customer_payment_displays')
           .select('store_id, status, payload')
           .eq('store_id', storeId)
           .maybeSingle();
-      if (!mounted || _storeId != storeId || revision != _realtimeRevision) {
-        return;
-      }
-
+      if (!_isCurrent(storeId, generation)) return false;
+      if (revision != _realtimeRevision) return true;
+      _loadFailureCount = 0;
+      _ensurePolling(storeId);
       _applyRow(storeId, row);
+      return true;
     } catch (error) {
-      if (!mounted || _storeId != storeId) return;
+      if (!_isCurrent(storeId, generation)) return false;
+      if (revision != _realtimeRevision) return true;
+      _loadFailureCount += 1;
+      _ensurePolling(storeId);
       state = CustomerDisplayState(
         snapshot: state.snapshot,
         error: error.toString(),
       );
+      return false;
     }
   }
 
   void _applyRealtimeChange(String storeId, PostgresChangePayload payload) {
     if (!mounted || _storeId != storeId) return;
-    _realtimeRevision += 1;
     final row = payload.newRecord;
+    final rowStore = row['store_id']?.toString();
+    if (rowStore != null && rowStore != storeId) return;
+    _realtimeRevision += 1;
+    _loadFailureCount = 0;
+    _ensurePolling(storeId);
     if (row.isEmpty) {
       unawaited(_load(storeId));
       return;
@@ -263,8 +321,9 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
       if (revision != null && revision != _visibleReceiptRevision) {
         _visibleReceiptRevision = revision;
         _receiptTimer?.cancel();
+        final generation = _generation;
         _receiptTimer = Timer(_receiptDuration, () {
-          if (!mounted || _storeId != storeId) return;
+          if (!_isCurrent(storeId, generation)) return;
           _hiddenReceiptRevision = revision;
           state = const CustomerDisplayState();
         });
@@ -287,12 +346,13 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
     String storeId,
     CustomerDisplaySnapshot snapshot,
   ) async {
+    final generation = _generation;
     final receiptId = snapshot.receiptId;
     if (receiptId == null || receiptId.isEmpty) return;
     _resolvingReceiptId = receiptId;
     try {
       final access = await digitalReceiptService.issueLink(receiptId);
-      if (!mounted || _storeId != storeId) return;
+      if (!_isCurrent(storeId, generation)) return;
       final current = state.snapshot;
       if (current?.receiptId != receiptId || current?.isReceipt != true) return;
       _resolvedReceiptId = receiptId;
@@ -303,7 +363,7 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
         snapshot: current!.copyWith(receiptUrl: access.publicUrl),
       );
     } catch (error) {
-      if (!mounted || _storeId != storeId) return;
+      if (!_isCurrent(storeId, generation)) return;
       _failedReceiptId = receiptId;
       _receiptRetryAfter = DateTime.now().add(const Duration(seconds: 15));
       state = CustomerDisplayState(
@@ -311,21 +371,33 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
         error: error.toString(),
       );
     } finally {
-      if (_resolvingReceiptId == receiptId) _resolvingReceiptId = null;
+      if (_isCurrent(storeId, generation) && _resolvingReceiptId == receiptId) {
+        _resolvingReceiptId = null;
+      }
     }
   }
 
   void _ensurePolling(String storeId) {
-    final interval = _realtimeConnected
-        ? _connectedHealthRefreshInterval
-        : _disconnectedRefreshInterval;
+    final baseInterval = fallbackIntervalForConnection(
+      connected: _realtimeConnected,
+    );
+    final retryInterval = switch (_loadFailureCount) {
+      0 => Duration.zero,
+      1 => const Duration(seconds: 2),
+      2 => const Duration(seconds: 5),
+      _ => const Duration(seconds: 15),
+    };
+    final interval = retryInterval > baseInterval
+        ? retryInterval
+        : baseInterval;
     if (_pollTimer != null && _pollInterval == interval) return;
 
     _pollTimer?.cancel();
     _pollInterval = interval;
+    final generation = _generation;
     _pollTimer = Timer.periodic(interval, (_) {
-      if (mounted && _storeId == storeId) {
-        unawaited(_load(storeId));
+      if (_isCurrent(storeId, generation)) {
+        unawaited(_load(storeId, queueIfBusy: false));
       }
     });
   }
@@ -339,6 +411,7 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
 
   @override
   void dispose() {
+    _generation += 1;
     _pollTimer?.cancel();
     _receiptTimer?.cancel();
     _channel?.unsubscribe();

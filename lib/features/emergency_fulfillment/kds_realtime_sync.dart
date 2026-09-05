@@ -350,12 +350,14 @@ class KdsRealtimeSync {
   Future<void> start() async {
     if (_disposed || config.mode == KdsSyncMode.legacy) return;
     final stored = await revisionStore.read(_cursorKey);
+    if (_disposed) return;
     // The bootstrap already represents every change through config.revision.
     // Never replay older events into alarm-producing state on app restart.
     _cursor = config.revision > (stored ?? 0)
         ? config.revision
         : (stored ?? config.revision);
     await revisionStore.write(_cursorKey, _cursor);
+    if (_disposed) return;
 
     final storeId = config.restaurantId;
     final station = config.stationType;

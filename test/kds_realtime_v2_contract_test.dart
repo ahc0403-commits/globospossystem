@@ -145,7 +145,7 @@ void main() {
         );
         expect(provider, contains('_subscribeLegacy(storeId);'));
         expect(provider, contains("'observe_kds_shadow_v2'"));
-        expect(provider, contains('Timer.periodic(_handoffRefreshInterval'));
+        expect(provider, contains('Timer.periodic(interval'));
         expect(provider, contains('const KdsSyncConfig.legacy()'));
       },
     );
