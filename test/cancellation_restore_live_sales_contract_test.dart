@@ -46,7 +46,15 @@ void main() {
       provider,
       contains('grossOrderAmount => totalRevenue + cancelledAmount'),
     );
-    expect(provider, contains("'get_store_sales_cancellation_total'"));
+    expect(provider, contains("'get_store_report_summary'"));
+    expect(
+      File(
+        'supabase/migrations/20260905060000_store_report_summary.sql',
+      ).readAsStringSync(),
+      contains(
+        'public.get_store_sales_cancellation_total(p_store_id,v_from,v_to',
+      ),
+    );
     expect(reports, contains('reportsGrossOrderAmount'));
     expect(reports, contains('reportsCanceledAmount'));
     expect(reports, contains('reportsNetSales'));

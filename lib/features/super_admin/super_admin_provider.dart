@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/store_revenue_summary_service.dart';
 import '../../core/services/store_service.dart';
+import '../../core/services/catalog_query_service.dart';
 import '../../main.dart';
 import '../report/report_provider.dart';
 
@@ -341,83 +342,121 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
 
   String? get lastError => state.error;
 
-  Future<void> loadAllRestaurants() async {
+  final _catalogLoads = <String, Future<void>>{};
+
+  Future<void> _catalogLoad(
+    String key,
+    Future<void> Function() read, {
+    bool force = false,
+  }) async {
+    final existing = _catalogLoads[key];
+    if (existing != null) {
+      if (!force) return existing;
+      await existing;
+    }
+    if (!mounted) return;
+    final future = read();
+    _catalogLoads[key] = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_catalogLoads[key], future)) _catalogLoads.remove(key);
+    }
+  }
+
+  Future<void> loadAllRestaurants({
+    bool force = false,
+  }) => _catalogLoad('restaurants', () async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final response = await supabase
-          .from('restaurants')
-          .select(
-            '*, brands(name, code), tax_entity(name, tax_code, owner_type)',
-          )
-          .order('created_at', ascending: false);
-      final restaurants = response
-          .map<SuperRestaurant>(
-            (row) => SuperRestaurant.fromJson(Map<String, dynamic>.from(row)),
-          )
-          .toList();
+      final response = await fetchCompleteCatalog(
+        () => (_reportClient ?? supabase)
+            .from('restaurants')
+            .select(
+              'id, name, slug, address, operation_mode, per_person_charge, is_active, created_at, '
+              'store_type, brand_id, tax_entity_id, brands(name, code), tax_entity(name, tax_code, owner_type)',
+            ),
+      );
+      if (!mounted) return;
+      final restaurants = response.map(SuperRestaurant.fromJson).toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       state = state.copyWith(
         restaurants: restaurants,
         isLoading: false,
         clearError: true,
       );
     } catch (error) {
+      if (!mounted) return;
+      _reportRequestId++;
       state = state.copyWith(
+        restaurants: [],
+        clearReportSummary: true,
         isLoading: false,
         error: 'Failed to load restaurants: $error',
       );
     }
-  }
+  }, force: force);
 
-  Future<void> loadBrands() async {
-    try {
-      final response = await supabase
-          .from('brands')
-          .select('id, code, name')
-          .order('name', ascending: true);
-      state = state.copyWith(brands: List<Map<String, dynamic>>.from(response));
-    } catch (_) {
-      // brands 로드 실패는 치명적이지 않음 — 필터 없이 계속
-    }
-  }
+  Future<void> loadBrands({bool force = false}) =>
+      _catalogLoad('brands', () async {
+        try {
+          final response = await fetchCompleteCatalog(
+            () => (_reportClient ?? supabase)
+                .from('brands')
+                .select('id, code, name'),
+          );
+          response.sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
+          if (mounted) state = state.copyWith(brands: response);
+        } catch (_) {
+          // Filters are optional; never retain a partially loaded list.
+          if (mounted) state = state.copyWith(brands: []);
+        }
+      }, force: force);
 
-  Future<void> loadLegalEntityStructure() async {
+  Future<void> loadLegalEntityStructure({
+    bool force = false,
+  }) => _catalogLoad('legal', () async {
     try {
+      final client = _reportClient ?? supabase;
       final responses = await Future.wait([
-        supabase
-            .from('tax_entity')
-            .select('id, name, tax_code, owner_type')
-            .order('name', ascending: true),
-        supabase.from('tax_entity_brands').select('tax_entity_id, brand_id'),
-        supabase
-            .from('legal_entity_fixed_account_requirements')
-            .select(
-              'id, tax_entity_id, account_code, display_name, scope, '
-              'provisioned_user_id, is_active',
-            )
-            .eq('is_active', true),
-      ]);
-      state = state.copyWith(
-        taxEntities: responses[0]
-            .map<SuperTaxEntity>(
-              (row) => SuperTaxEntity.fromJson(Map<String, dynamic>.from(row)),
-            )
-            .toList(growable: false),
-        taxEntityBrands: responses[1]
-            .map<SuperTaxEntityBrand>(
-              (row) =>
-                  SuperTaxEntityBrand.fromJson(Map<String, dynamic>.from(row)),
-            )
-            .toList(growable: false),
-        legalEntityAccountingRequirements: List<Map<String, dynamic>>.from(
-          responses[2],
+        fetchCompleteCatalog(
+          () => client
+              .from('tax_entity')
+              .select('id, name, tax_code, owner_type'),
         ),
+        fetchCompleteCatalog(
+          () => client
+              .from('tax_entity_brands')
+              .select('tax_entity_id, brand_id'),
+          keys: const ['tax_entity_id', 'brand_id'],
+        ),
+        fetchCompleteCatalog(
+          () => client
+              .from('legal_entity_fixed_account_requirements')
+              .select(
+                'id, tax_entity_id, account_code, display_name, scope, provisioned_user_id, is_active',
+              )
+              .eq('is_active', true),
+        ),
+      ]);
+      if (!mounted) return;
+      final entities = responses[0].map(SuperTaxEntity.fromJson).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+      state = state.copyWith(
+        taxEntities: entities,
+        taxEntityBrands: responses[1]
+            .map(SuperTaxEntityBrand.fromJson)
+            .toList(),
+        legalEntityAccountingRequirements: responses[2],
       );
     } catch (error) {
-      state = state.copyWith(
-        error: 'Failed to load legal entity structure: $error',
-      );
+      if (mounted) {
+        state = state.copyWith(
+          error: 'Failed to load legal entity structure: $error',
+        );
+      }
     }
-  }
+  }, force: force);
 
   Future<String?> configureLegalEntityAccounting({
     required String taxEntityId,
@@ -434,7 +473,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         },
       );
       final row = Map<String, dynamic>.from(result as Map);
-      await loadLegalEntityStructure();
+      await loadLegalEntityStructure(force: true);
       return row['id']?.toString();
     } catch (error) {
       state = state.copyWith(
@@ -459,7 +498,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       if (response.status < 200 || response.status >= 300) {
         throw StateError('ACCOUNT_PROVISION_FAILED_${response.status}');
       }
-      await loadLegalEntityStructure();
+      await loadLegalEntityStructure(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -548,7 +587,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         brandId: brandId,
         taxEntityId: taxEntityId,
       );
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -600,7 +639,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         brandId: brandId,
         taxEntityId: taxEntityId,
       );
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -615,7 +654,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await restaurantService.deactivateRestaurant(id);
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -636,7 +675,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         id: id,
         confirmationSlug: confirmationSlug,
       );
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -651,7 +690,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final summary = await restaurantService.closeStore(id, reason);
-      await loadAllRestaurants();
+      await loadAllRestaurants(force: true);
       return StoreCloseResult(summary: summary);
     } catch (error) {
       state = state.copyWith(isLoading: false, clearError: true);

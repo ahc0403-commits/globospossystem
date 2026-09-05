@@ -348,6 +348,46 @@ class AttendanceService {
     return result == null ? null : Map<String, dynamic>.from(result);
   }
 
+  /// Bounded batches with explicit coverage, including employees without a rule.
+  /// A failed batch never returns partial payroll inputs.
+  Future<Map<String, Map<String, dynamic>?>> fetchHourlyPayRules({
+    required String storeId,
+    required Iterable<String> employeeIds,
+  }) async {
+    final ids = employeeIds.toSet().toList()..sort();
+    final rules = <String, Map<String, dynamic>?>{};
+    for (var start = 0; start < ids.length; start += 500) {
+      final end = start + 500 < ids.length ? start + 500 : ids.length;
+      final batch = ids.sublist(start, end);
+      final response = await (_client ?? supabase).rpc(
+        'get_payroll_hourly_rules',
+        params: {'p_store_id': storeId, 'p_employee_ids': batch},
+      );
+      if (response is! Map ||
+          response['version'] != 1 ||
+          response['store_id'] != storeId ||
+          response['rows'] is! List) {
+        throw const FormatException('PAYROLL_RULES_RESPONSE_INVALID');
+      }
+      final pending = batch.toSet();
+      for (final row in response['rows'] as List) {
+        if (row is! Map ||
+            !pending.remove(row['employee_id']) ||
+            !row.containsKey('rule') ||
+            (row['rule'] != null && row['rule'] is! Map)) {
+          throw const FormatException('PAYROLL_RULES_RESPONSE_INVALID');
+        }
+        rules[row['employee_id'] as String] = row['rule'] == null
+            ? null
+            : Map<String, dynamic>.from(row['rule'] as Map);
+      }
+      if (pending.isNotEmpty) {
+        throw const FormatException('PAYROLL_RULES_INCOMPLETE');
+      }
+    }
+    return rules;
+  }
+
   Future<Set<DateTime>> fetchVietnamPublicHolidays({
     required DateTime from,
     required DateTime to,

@@ -92,3 +92,19 @@ GRANT SELECT ON public.store_employees, public.employee_daily_allowances,
   public.vietnam_public_holidays, public.orders, public.payments, public.external_sales,
   public.order_items, public.meinvoice_jobs, public.photo_objet_sales,
   public.v_photo_objet_daily_summary TO authenticated;
+
+CREATE FUNCTION public.workforce_can_manage_store(store_id uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$ SELECT public.fixture_can_manage(store_id) $$;
+CREATE TABLE public.employee_hourly_pay_rules (
+  employee_id uuid PRIMARY KEY REFERENCES public.store_employees(id), store_id uuid NOT NULL,
+  hourly_rate numeric NOT NULL, scheduled_start time NOT NULL DEFAULT '00:00',
+  night_start time NOT NULL DEFAULT '22:00', night_multiplier numeric NOT NULL DEFAULT 1.3,
+  holiday_multiplier numeric NOT NULL DEFAULT 3, exclude_sunday boolean NOT NULL DEFAULT false,
+  late_threshold_minutes integer NOT NULL DEFAULT 60,
+  late_review_hourly_multiplier numeric NOT NULL DEFAULT 2
+);
+CREATE INDEX ON public.employee_hourly_pay_rules(store_id, employee_id);
+ALTER TABLE public.employee_hourly_pay_rules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY hourly_rules_read ON public.employee_hourly_pay_rules FOR SELECT TO authenticated
+  USING (public.workforce_can_manage_store(store_id));
+GRANT SELECT ON public.employee_hourly_pay_rules TO authenticated;

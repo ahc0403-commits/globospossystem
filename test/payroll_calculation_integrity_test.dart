@@ -59,22 +59,26 @@ class _AttendanceServiceFake extends AttendanceService {
   }
 
   @override
-  Future<Map<String, dynamic>?> fetchHourlyPayRule({
+  Future<Map<String, Map<String, dynamic>?>> fetchHourlyPayRules({
     required String storeId,
-    required String employeeId,
+    required Iterable<String> employeeIds,
   }) async {
-    requestedRuleEmployeeIds.add(employeeId);
-    return hourlyPayRule ??
-        {
-          'hourly_rate': 30000,
-          'scheduled_start': '09:00',
-          'night_start': '22:00',
-          'night_multiplier': 1.3,
-          'holiday_multiplier': 3,
-          'exclude_sunday': true,
-          'late_threshold_minutes': 60,
-          'late_review_hourly_multiplier': 2,
-        };
+    requestedRuleEmployeeIds.addAll(employeeIds);
+    return {
+      for (final id in employeeIds)
+        id:
+            hourlyPayRule ??
+            {
+              'hourly_rate': 30000,
+              'scheduled_start': '09:00',
+              'night_start': '22:00',
+              'night_multiplier': 1.3,
+              'holiday_multiplier': 3,
+              'exclude_sunday': true,
+              'late_threshold_minutes': 60,
+              'late_review_hourly_multiplier': 2,
+            },
+    };
   }
 
   @override

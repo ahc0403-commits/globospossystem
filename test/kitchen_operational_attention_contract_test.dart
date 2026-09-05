@@ -28,9 +28,7 @@ void main() {
 
     expect(
       provider,
-      contains(
-        ".inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])",
-      ),
+      contains(".inFilter('status', ['pending', 'confirmed', 'serving'])"),
     );
     expect(
       provider,
@@ -47,6 +45,8 @@ void main() {
     expect(provider, contains('_ensureAutoRefresh(storeId)'));
     expect(provider, contains('showLoading: false'));
     expect(provider, contains('completedOrders'));
+    expect(provider, contains(".eq('status', 'completed')"));
+    expect(provider, contains('.limit(12)'));
     expect(screen, contains("Key('kitchen_completed_history_panel')"));
 
     expect(screen, isNot(contains("path: '/kitchen/attention'")));

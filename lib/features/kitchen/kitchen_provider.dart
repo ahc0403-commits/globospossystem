@@ -272,7 +272,12 @@ class FailedPrintJob {
 }
 
 class KitchenNotifier extends StateNotifier<KitchenState> {
-  KitchenNotifier() : super(const KitchenState());
+  KitchenNotifier({SupabaseClient? client})
+    : _client = client,
+      super(const KitchenState());
+
+  final SupabaseClient? _client;
+  SupabaseClient get _db => _client ?? supabase;
 
   static const _autoRefreshInterval = Duration(seconds: 2);
   static const _fallbackPollInterval = Duration(seconds: 15);
@@ -296,18 +301,15 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     }
 
     try {
-      final response = await supabase
-          .from('orders')
-          .select(
-            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_vi, name_en))',
-          )
-          .eq('restaurant_id', storeId)
-          .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])
-          .gte('created_at', businessDay.startIso8601)
-          .lt('created_at', businessDay.endIso8601)
-          .order('created_at', ascending: true)
-          .order('created_at', referencedTable: 'order_items', ascending: true)
-          .order('id', referencedTable: 'order_items', ascending: true);
+      final results = await Future.wait([
+        _fetchActiveOrders(storeId, businessDay),
+        _orderQuery(storeId, businessDay)
+            .eq('status', 'completed')
+            .order('created_at', ascending: false)
+            .order('id', ascending: false)
+            .limit(12),
+      ]);
+      final response = [...results[0], ...results[1].reversed];
 
       // Lane eligibility is an ORDER-status fact
       // (ORDER_LIFECYCLE_STATE_CONTRACT: kitchen never shows completed).
@@ -408,6 +410,55 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     }
   }
 
+  PostgrestFilterBuilder<List<Map<String, dynamic>>> _orderQuery(
+    String storeId,
+    VietnamBusinessDayWindow businessDay,
+  ) => _db
+      .from('orders')
+      .select(
+        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_vi, name_en))',
+      )
+      .eq('restaurant_id', storeId)
+      .gte('created_at', businessDay.startIso8601)
+      .lt('created_at', businessDay.endIso8601);
+
+  Future<List<Map<String, dynamic>>> _fetchActiveOrders(
+    String storeId,
+    VietnamBusinessDayWindow businessDay,
+  ) async {
+    final rows = <Map<String, dynamic>>[];
+    final seen = <String>{};
+    Map<String, dynamic>? cursor;
+    while (true) {
+      var query = _orderQuery(
+        storeId,
+        businessDay,
+      ).inFilter('status', ['pending', 'confirmed', 'serving']);
+      if (cursor != null) {
+        query = query.or(
+          'created_at.gt.${cursor['created_at']},and(created_at.eq.${cursor['created_at']},id.gt.${cursor['id']})',
+        );
+      }
+      final page = await query
+          .order('created_at', ascending: true)
+          .order('id', ascending: true)
+          .order('created_at', referencedTable: 'order_items', ascending: true)
+          .order('id', referencedTable: 'order_items', ascending: true)
+          .limit(100);
+      // An empty terminal page also works when the API has a smaller row cap.
+      if (page.isEmpty) return rows;
+      for (final row in page) {
+        if (row['id'] is! String ||
+            row['created_at'] is! String ||
+            !seen.add(row['id'] as String)) {
+          throw const FormatException('KITCHEN_ORDER_PAGE_INVALID');
+        }
+        rows.add(row);
+      }
+      cursor = page.last;
+    }
+  }
+
   Future<void> subscribeRealtime(String storeId) async {
     if (_ordersChannel != null && _restaurantId == storeId) {
       _ensureAutoRefresh(storeId);
@@ -423,7 +474,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     _realtimeConnected = false;
 
     _restaurantId = storeId;
-    _ordersChannel = supabase
+    _ordersChannel = _db
         .channel(LiveSyncScope.storeChannel('kitchen_orders', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
@@ -606,7 +657,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   }
 
   Future<void> reprintPrintJob(String jobId) async {
-    await supabase.rpc('reprint_print_job', params: {'p_job_id': jobId});
+    await _db.rpc('reprint_print_job', params: {'p_job_id': jobId});
   }
 
   @override

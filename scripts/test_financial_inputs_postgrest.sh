@@ -42,7 +42,17 @@ for sql_file in \
   supabase/migrations/20260905040000_store_revenue_summary.sql \
   scripts/verify_store_revenue_summary.sql \
   supabase/migrations/20260905040000_store_revenue_summary.sql \
-  scripts/verify_store_revenue_summary.sql; do
+  scripts/verify_store_revenue_summary.sql \
+  scripts/preflight_payroll_hourly_rules_batch.sql \
+  supabase/migrations/20260905050000_payroll_hourly_rules_batch.sql \
+  scripts/verify_payroll_hourly_rules_batch.sql \
+  supabase/migrations/20260905050000_payroll_hourly_rules_batch.sql \
+  scripts/verify_payroll_hourly_rules_batch.sql \
+  scripts/preflight_store_report_summary.sql \
+  supabase/migrations/20260905060000_store_report_summary.sql \
+  scripts/verify_store_report_summary.sql \
+  supabase/migrations/20260905060000_store_report_summary.sql \
+  scripts/verify_store_report_summary.sql; do
   printf 'FINANCIAL_API_TEST_SQL=%s\n' "$sql_file"
   docker exec -i "$db_name" psql -X -v ON_ERROR_STOP=1 -U postgres -d payroll_test < "$sql_file" >/dev/null
 done

@@ -12,18 +12,20 @@ const _frozenFiles = <String, String>{
       '3be65edc63f943e3fddd1f4e4b25fca8b842d430e5fc803d54c76c9d75e7f49b',
   'lib/features/cashier/cashier_screen.dart':
       '60f007189e40d111d1e302d7719a9156b0cb9aaee8b12f3879b95f17ce5bee3e',
+  // Phase 4C bounds history and pages active orders; kitchen_query_bounds_test
+  // exercises the real Supabase SDK with a lower API cap and failed pages.
   'lib/features/kitchen/kitchen_provider.dart':
-      '8902b57cd80d7277dbcb268505a808d99d5fce6a740cebda79c34bbe73af4e90',
+      '56819d664d4714232a0b3ae9f9c6e7effda68fd0143a195b39ce062fc0a0e28f',
   'lib/features/kitchen/kitchen_screen.dart':
       'e3cdc57c2a55ab67d948f7445fe18cac7305957153ef63ffff38b139bc5b5fa6',
   'lib/core/services/payment_service.dart':
       'ceb62497c8f43ed6cd0cd100ad3ac1c2f7ae5a9131184a4a48a7b002236ee28e',
   'lib/core/payments/payment_total_calculator.dart':
       '52cc2f364ce9f199e8727abf1eec5b43a4f0e2ba1c6821fd712df8122d69f0b8',
-  // Phase 1C reconciles POS delivery and allocated sales in report totals.
+  // Phase 4D moves the reconciled sales report to a server aggregate.
   // Real SQL/API and Excel coverage lives in financial_inputs_postgrest_test.dart.
   'lib/features/report/report_provider.dart':
-      '6f78e328c5e9b9ff519d2b22102f9cea43795308f348f799b16ce51c24854789',
+      'dd2d2e3ac50b1961c5fe3d99e17de6f585e84bf48aab137d79bef6f28f9a757a',
   'lib/core/hardware/print_job_agent_service.dart':
       '5c976d66666e47e3a9a2de7cf7cda39a6c6827792015cb414b118925409b03db',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':

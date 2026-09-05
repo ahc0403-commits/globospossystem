@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'helpers/legacy_report_aggregation.dart' show legacyReportSummary;
 
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,22 +18,6 @@ const _otherStore = '10000000-0000-0000-0000-000000000002';
 const _admin = '20000000-0000-0000-0000-000000000001';
 const _superAdmin = '20000000-0000-0000-0000-000000000003';
 const _employee = '30000000-0000-0000-0000-000000000001';
-
-// Only wage policy is fixed here; attendance and all supplemental inputs use
-// the real SQL/API. Wage policy batching is a separate performance phase.
-class _PayrollInputs extends AttendanceService {
-  _PayrollInputs(SupabaseClient client) : super(client: client);
-
-  @override
-  Future<Map<String, dynamic>?> fetchHourlyPayRule({
-    required String storeId,
-    required String employeeId,
-  }) async => {
-    'hourly_rate': 100,
-    'scheduled_start': '00:00',
-    'exclude_sunday': false,
-  };
-}
 
 class _AdminReports extends SuperAdminNotifier {
   _AdminReports(SupabaseClient client) : super(client: client);
@@ -103,6 +88,8 @@ void main() {
       SELECT ('30000000-0000-0000-0000-' || lpad(i::text,12,'0'))::uuid,
         '$_store', lpad(i::text,12,'0'), 'Employee ' || i, 'part_timer'
       FROM generate_series(1,$count) i;
+      INSERT INTO employee_hourly_pay_rules(employee_id,store_id,hourly_rate,night_multiplier)
+      SELECT id,store_id,100,1 FROM store_employees WHERE store_id = '$_store';
       INSERT INTO employee_daily_allowances
       SELECT ('41000000-0000-0000-0000-' || lpad(i::text,12,'0'))::uuid,
         '$_store', ('30000000-0000-0000-0000-' || lpad(i::text,12,'0'))::uuid,
@@ -162,16 +149,28 @@ void main() {
             final isPage = request.uri.path.endsWith(
               '/get_financial_input_page',
             );
+            final isRules = request.uri.path.endsWith(
+              '/get_payroll_hourly_rules',
+            );
             final isSummary = request.uri.path.endsWith(
               '/get_store_revenue_summary',
             );
-            final source = isSummary
+            final isReport = request.uri.path.endsWith(
+              '/get_store_report_summary',
+            );
+            final source = isReport
+                ? 'storeReport'
+                : isRules
+                ? 'hourlyRules'
+                : isSummary
                 ? 'storeRevenueSummary'
                 : isPage
                 ? (jsonDecode(body) as Map)['p_source'] as String
                 : '';
-            final page = isPage || isSummary ? (requests[source] ?? 0) + 1 : 0;
-            if (isPage || isSummary) {
+            final page = isPage || isSummary || isRules || isReport
+                ? (requests[source] ?? 0) + 1
+                : 0;
+            if (isPage || isSummary || isRules || isReport) {
               requests[source] = page;
               await beforePage?.call(source, page);
             }
@@ -202,8 +201,10 @@ void main() {
             request.response.statusCode = response.statusCode;
             request.response.headers.contentType = ContentType.json;
             final data = await utf8.decoder.bind(response).join();
-            if ((isPage || isSummary) && response.statusCode == 200) {
-              final rows = (jsonDecode(data) as Map)['rows'] as List;
+            if ((isPage || isSummary || isRules || isReport) &&
+                response.statusCode == 200) {
+              final payload = jsonDecode(data) as Map;
+              final rows = (payload[isReport ? 'daily' : 'rows']) as List;
               returnedRows.update(
                 source,
                 (n) => n + rows.length,
@@ -211,7 +212,7 @@ void main() {
               );
             }
             request.response.write(
-              (isPage || isSummary) &&
+              (isPage || isSummary || isRules || isReport) &&
                       response.statusCode == 200 &&
                       overridePage != null
                   ? jsonEncode(
@@ -249,11 +250,134 @@ void main() {
         beforePage = null;
         overridePage = null;
         await sql(
-          'TRUNCATE attendance_logs, store_employees, employee_daily_allowances, '
+          'TRUNCATE attendance_logs, employee_hourly_pay_rules, store_employees, employee_daily_allowances, '
           'vietnam_public_holidays, payments, orders, order_items, external_sales, '
           'meinvoice_jobs, photo_objet_sales;',
         );
       });
+
+      for (final count in [0, 1, 500, 501, 1500]) {
+        test('hourly rules batch covers $count employees', () async {
+          await seed(count);
+          final ids = List.generate(
+            count,
+            (i) =>
+                '30000000-0000-0000-0000-${(i + 1).toString().padLeft(12, '0')}',
+          );
+          final rules = await AttendanceService(
+            client: client,
+          ).fetchHourlyPayRules(storeId: _store, employeeIds: [...ids, ...ids]);
+          expect(rules.length, count);
+          expect(rules.values.every((r) => r?['hourly_rate'] == 100), isTrue);
+          expect(requests['hourlyRules'] ?? 0, (count / 500).ceil());
+        });
+      }
+      test('missing rule is explicit; other-store rule cannot leak', () async {
+        await seed(1);
+        await sql(
+          "UPDATE employee_hourly_pay_rules SET store_id = '$_otherStore'",
+        );
+        final result = await AttendanceService(
+          client: client,
+        ).fetchHourlyPayRules(storeId: _store, employeeIds: [_employee]);
+        expect(result, {_employee: null});
+      });
+      for (final identity in ['', '20000000-0000-0000-0000-000000000002']) {
+        test(
+          'hourly rules reject unauthenticated or non-manager $identity',
+          () async {
+            actor = identity;
+            await expectLater(
+              AttendanceService(
+                client: client,
+              ).fetchHourlyPayRules(storeId: _store, employeeIds: [_employee]),
+              throwsA(isA<PostgrestException>()),
+            );
+          },
+        );
+      }
+      test('hourly rules reject unauthorized store', () async {
+        await expectLater(
+          AttendanceService(
+            client: client,
+          ).fetchHourlyPayRules(storeId: _otherStore, employeeIds: [_employee]),
+          throwsA(isA<PostgrestException>()),
+        );
+      });
+      test('hourly rules respect underlying SELECT grant', () async {
+        await sql(
+          'REVOKE SELECT ON employee_hourly_pay_rules FROM authenticated',
+        );
+        try {
+          await expectLater(
+            AttendanceService(
+              client: client,
+            ).fetchHourlyPayRules(storeId: _store, employeeIds: [_employee]),
+            throwsA(isA<PostgrestException>()),
+          );
+        } finally {
+          await sql(
+            'GRANT SELECT ON employee_hourly_pay_rules TO authenticated',
+          );
+        }
+      });
+      test(
+        'hourly rules do not return partial results after batch failure',
+        () async {
+          await seed(501);
+          beforePage = (source, page) async {
+            if (source == 'hourlyRules' && page == 2) actor = '';
+          };
+          final ids = List.generate(
+            501,
+            (i) =>
+                '30000000-0000-0000-0000-${(i + 1).toString().padLeft(12, '0')}',
+          );
+          await expectLater(
+            AttendanceService(
+              client: client,
+            ).fetchHourlyPayRules(storeId: _store, employeeIds: ids),
+            throwsA(isA<PostgrestException>()),
+          );
+        },
+      );
+      for (final invalid in [
+        'missing',
+        'duplicate',
+        'scope',
+        'rule',
+        'version',
+      ]) {
+        test('hourly rules reject malformed $invalid response', () async {
+          overridePage = (source, page, payload) {
+            if (source != 'hourlyRules') return payload;
+            switch (invalid) {
+              case 'missing':
+                payload['rows'] = [];
+                break;
+              case 'duplicate':
+                (payload['rows'] as List).add((payload['rows'] as List).first);
+                break;
+              case 'scope':
+                payload['store_id'] = _otherStore;
+                break;
+              case 'rule':
+                ((payload['rows'] as List).first as Map)['rule'] = false;
+                break;
+              case 'version':
+                payload['version'] = 2;
+                break;
+            }
+            return payload;
+          };
+          await expectLater(
+            AttendanceService(
+              client: client,
+            ).fetchHourlyPayRules(storeId: _store, employeeIds: [_employee]),
+            throwsA(isA<FormatException>()),
+          );
+        });
+      }
 
       test(
         'reproduces silent row caps on the former direct table and view reads',
@@ -317,7 +441,7 @@ void main() {
         INSERT INTO store_employees VALUES
           ('30000000-0000-0000-0000-000000009999','No attendance','part_timer','999999999999','$_store',true);
       ''');
-          final source = _PayrollInputs(client);
+          final source = AttendanceService(client: client);
           final payroll = await PayrollService(attendanceSource: source)
               .calculatePayroll(
                 storeId: _store,
@@ -325,6 +449,8 @@ void main() {
                 periodEnd: DateTime(2026, 7, 27),
               );
           expect(payroll, hasLength(502));
+          expect(requests['hourlyRules'], 2);
+          expect(returnedRows['hourlyRules'], 502);
           expect(
             payroll.fold<double>(0, (sum, row) => sum + row.totalHours),
             501,
@@ -396,6 +522,128 @@ void main() {
             summary.totalRevenue,
           );
           expect(report.exportToExcel(), isNotEmpty);
+        },
+      );
+
+      test(
+        'detailed report matches frozen legacy calculation over mixed inputs',
+        () async {
+          await seed(1500);
+          await sql("""
+          UPDATE payments SET amount_portion = CASE WHEN id::text LIKE '600%' THEN
+            CASE (right(id::text,4)::int % 4) WHEN 0 THEN NULL WHEN 1 THEN 0 WHEN 2 THEN -3.25 ELSE 41.33 END
+            ELSE amount_portion END,
+            method = (ARRAY['cash','card','credit_card','ATM','BANKTRANSFER','pay','MOMO','service','',' custom '])[1+right(id::text,4)::int%10],
+            proof_photo_url = CASE WHEN right(id::text,4)::int%2=0 THEN 'proof' ELSE '   ' END;
+          UPDATE orders SET sales_channel = CASE WHEN right(id::text,4)::int%3=0 THEN 'DeLiVeRy' ELSE NULL END,
+            status = (ARRAY['completed','cancelled','confirmed'])[1+right(id::text,4)::int%3];
+          UPDATE photo_objet_sales SET service_amount = CASE WHEN right(id::text,4)::int%3=0 THEN 70 ELSE 2 END;
+          UPDATE meinvoice_jobs SET status = CASE WHEN right(id::text,4)::int%2=0 THEN 'issued' ELSE 'manual_action_required' END,
+            error_message = ' ', manual_action_type = ' buyer_review ';
+        """);
+          final legacy = legacyReportSummary(
+            requestedStart: DateTime(2024),
+            paymentsRevenueResponse: await load(
+              FinancialInputSource.revenuePayments,
+            ),
+            externalSalesResponse: await load(
+              FinancialInputSource.externalSales,
+            ),
+            photoObjetSalesResponse: await load(
+              FinancialInputSource.photoSales,
+            ),
+            servicePaymentsResponse: await load(
+              FinancialInputSource.servicePayments,
+            ),
+            ordersResponse: await load(FinancialInputSource.orders),
+            cancelledAmountResponse: 7,
+            cancelledItemsResponse: await load(
+              FinancialInputSource.cancelledItems,
+            ),
+            einvoiceJobsResponse: await load(FinancialInputSource.einvoiceJobs),
+          );
+          requests.clear();
+          final report = ReportNotifier(client: client);
+          addTearDown(report.dispose);
+          await report.setDateRange(
+            DateTime(2024),
+            DateTime(2029, 12, 31),
+            _store,
+          );
+          expect(report.state.error, isNull);
+          expect(requests, {'storeReport': 1});
+          final actual = report.state.summary!;
+          List<num> totals(ReportSummary s) => [
+            s.dineInRevenue,
+            s.deliveryRevenue,
+            s.serviceTotal,
+            s.cancelledAmount,
+            s.totalOrders,
+            s.completedOrders,
+            s.paidOrders,
+            s.openOrders,
+            s.cancelledOrders,
+            s.cancelledItems,
+            s.cashTotal,
+            s.cardTotal,
+            s.bankTransferTotal,
+            s.payTotal,
+            s.paymentVariance,
+            s.proofCompletePercent,
+            s.missingProofPhotosCount,
+            s.failedEinvoiceJobsCount,
+          ];
+          final expected = totals(legacy);
+          final received = totals(actual);
+          for (var i = 0; i < expected.length; i++) {
+            expect(
+              received[i],
+              closeTo(expected[i], 0.00001),
+              reason: 'field $i',
+            );
+          }
+          expect(actual.dailyBreakdown.length, legacy.dailyBreakdown.length);
+          for (var i = 0; i < legacy.dailyBreakdown.length; i++) {
+            final a = actual.dailyBreakdown[i], b = legacy.dailyBreakdown[i];
+            expect(a.date, b.date);
+            expect(a.total, closeTo(b.total, 0.00001));
+            expect(a.teamCount, b.teamCount);
+            expect(a.paymentVariance, closeTo(b.paymentVariance, 0.00001));
+          }
+          for (var i = 0; i < legacy.hourlyBreakdown.length; i++) {
+            expect(
+              actual.hourlyBreakdown[i].hour,
+              legacy.hourlyBreakdown[i].hour,
+            );
+            expect(
+              actual.hourlyBreakdown[i].amount,
+              closeTo(legacy.hourlyBreakdown[i].amount, 0.00001),
+            );
+          }
+          expect(
+            actual.paymentMethodBreakdown.length,
+            legacy.paymentMethodBreakdown.length,
+          );
+          for (var i = 0; i < legacy.paymentMethodBreakdown.length; i++) {
+            final a = actual.paymentMethodBreakdown[i],
+                b = legacy.paymentMethodBreakdown[i];
+            expect(a.method, b.method);
+            expect(a.count, b.count);
+            expect(a.totalAmount, closeTo(b.totalAmount, 0.00001));
+            expect(a.proofCompletePct, closeTo(b.proofCompletePct, 0.00001));
+          }
+          expect(
+            actual.missingProofIssues.map((r) => r.paymentId),
+            legacy.missingProofIssues.map((r) => r.paymentId),
+          );
+          expect(
+            actual.einvoiceReviewIssues.map((r) => r.paymentId),
+            legacy.einvoiceReviewIssues.map((r) => r.paymentId),
+          );
+          expect(
+            actual.einvoiceReviewIssues.map((r) => r.detail),
+            legacy.einvoiceReviewIssues.map((r) => r.detail),
+          );
         },
       );
 
@@ -1252,7 +1500,7 @@ void main() {
         final blocked = Completer<void>();
         final release = Completer<void>();
         beforePage = (source, page) async {
-          if (source == 'revenuePayments' && page == 1) {
+          if (source == 'storeReport' && page == 1) {
             blocked.complete();
             await release.future;
           }
