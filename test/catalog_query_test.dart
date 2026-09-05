@@ -35,6 +35,16 @@ void main() {
           'tax_entity': null,
         },
       );
+      // Model the actual PostgREST sort direction, including the Dart SDK's
+      // descending default. Ignoring this parameter hid the cursor regression.
+      final ascending = (request.uri.queryParameters['order'] ?? '').contains(
+        '.asc.',
+      );
+      rows.sort(
+        (a, b) => ascending
+            ? a['id']!.compareTo(b['id']!)
+            : b['id']!.compareTo(a['id']!),
+      );
       request.response.headers.contentType = ContentType.json;
       if (fail && cursor != null) {
         request.response.statusCode = 503;
@@ -62,6 +72,7 @@ void main() {
       () => client.from('brands').select('id,name'),
     );
     expect(rows, hasLength(7));
+    expect(rows.map((row) => row['id']), List.generate(7, (i) => id(i + 1)));
     expect(requests, 5);
   });
   test(
