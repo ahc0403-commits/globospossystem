@@ -26,7 +26,7 @@ Future<List<Map<String, dynamic>>> fetchCompleteCatalog(
     }
     PostgrestTransformBuilder<List<Map<String, dynamic>>> ordered = pageQuery;
     for (final key in keys) {
-      ordered = ordered.order(key);
+      ordered = ordered.order(key, ascending: true);
     }
     final page = await ordered.limit(100);
     if (page.isEmpty) return rows;

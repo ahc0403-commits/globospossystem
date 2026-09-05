@@ -532,7 +532,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
           businessDay,
         ).inFilter('id', batch.toList());
         if (cursor != null) query = query.gt('id', cursor);
-        final page = await query.order('id').limit(50);
+        final page = await query.order('id', ascending: true).limit(50);
         if (page.isEmpty) break;
         for (final row in page) {
           final id = row['id']?.toString();
