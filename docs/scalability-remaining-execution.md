@@ -147,6 +147,9 @@ rule and Photo indexes are retained. The migration has a 3-second lock timeout a
 a separately reviewed concurrent-build procedure. Replay, verification, rollback,
 and reapplication are exercised in the disposable harness.
 
+`scripts/check_repo.sh` runs the index-only mode in CI as well; the longer read-load
+scenarios are recorded experiments and are not a flaky throughput gate.
+
 ## Item 7 methodology and limits
 
 Run `bash scripts/test_scalability_isolated.sh /tmp/pos-scalability-measurements`.

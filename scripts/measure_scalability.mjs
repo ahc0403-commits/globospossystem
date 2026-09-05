@@ -57,6 +57,7 @@ if (sql("SELECT count(*) FROM pg_indexes WHERE indexname IN ('emergency_items_qu
 apply('supabase/migrations/20260905080000_measured_operational_indexes.sql');
 apply('scripts/verify_measured_operational_indexes.sql');
 console.log('SCALE_INDEX_COMPARISON=PASS');
+if (process.env.SCALE_INDEX_ONLY === '1') process.exit(0);
 
 function snapshot() {
   return JSON.parse(sql(`SELECT json_build_object('time',clock_timestamp(),'wal_bytes',(SELECT wal_bytes FROM pg_stat_wal),
