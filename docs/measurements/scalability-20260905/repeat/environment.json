@@ -1,0 +1,20 @@
+{
+  "node": "v24.12.0",
+  "measuredAt": "2026-09-05T10:04:25.008Z",
+  "databaseImage": "supabase/postgres:17.6.1.104",
+  "postgrestImage": "supabase/postgrest:v14.5",
+  "dbCpuLimit": 2,
+  "dbMemoryGiB": 2,
+  "restCpuLimit": 1,
+  "restMemoryMiB": 512,
+  "dbPool": 10,
+  "dataPerStore": {
+    "payments": 1000,
+    "orders": 1000,
+    "externalSales": 100,
+    "photoDays": 30,
+    "queues": 100,
+    "queueItems": 400
+  },
+  "caveat": "Synthetic minimal schema and fixture RLS helpers; actual report SQL, extracted queue item SQL. No browser, full KDS RPC, write workload, Realtime server, Vercel, network egress billing or production capacity certification."
+}

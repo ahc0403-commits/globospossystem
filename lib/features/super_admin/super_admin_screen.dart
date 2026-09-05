@@ -107,11 +107,8 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
               notifier.loadAllRestaurants(force: true),
             ]);
           }
-          await notifier.loadAllReports(
-            selectedRestaurantId: ref
-                .read(superAdminProvider)
-                .selectedRestaurant
-                ?.id,
+          await notifier.refreshReportsForStore(
+            event.affects({'settings', 'staff'}) ? null : event.restaurantId,
           );
         });
       });

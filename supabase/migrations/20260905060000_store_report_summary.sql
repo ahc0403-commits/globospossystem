@@ -27,7 +27,7 @@ BEGIN
       CASE lower(btrim(coalesce(p.method::text,'')))
         WHEN 'card' THEN 'CREDITCARD' WHEN 'credit_card' THEN 'CREDITCARD'
         WHEN 'pay' THEN 'OTHER' WHEN 'epay' THEN 'OTHER' WHEN 'e_pay' THEN 'OTHER'
-        ELSE coalesce(nullif(upper(btrim(p.method::text)),''),'UNKNOWN') END AS method,
+        ELSE upper(btrim(coalesce(p.method::text,''))) END AS method,
       coalesce(p.proof_required,false) AS proof_required,
       btrim(coalesce(p.proof_photo_url,'')) <> '' AS proof_present
     FROM public.payments p LEFT JOIN public.orders o ON o.id = p.order_id
@@ -65,11 +65,12 @@ BEGIN
       SELECT hour,sales FROM p UNION ALL SELECT hour,sales FROM e
     ) h GROUP BY hour
   ), methods AS (
-    SELECT method,count(DISTINCT tx) AS count,sum(received) AS amount,
+    SELECT coalesce(nullif(method,''),'UNKNOWN') AS method,
+      count(DISTINCT tx) AS count,sum(received) AS amount,
       CASE WHEN count(*) FILTER (WHERE proof_required)=0 THEN 100::numeric ELSE
         100.0 * count(*) FILTER (WHERE proof_required AND proof_present)
           / count(*) FILTER (WHERE proof_required) END AS proof_pct
-    FROM p GROUP BY method
+    FROM p GROUP BY coalesce(nullif(method,''),'UNKNOWN')
   ), order_counts AS (
     SELECT count(*) AS total,
       count(*) FILTER (WHERE lower(status::text)='completed') AS completed,

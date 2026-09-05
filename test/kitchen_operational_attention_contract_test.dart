@@ -40,7 +40,10 @@ void main() {
     expect(provider, contains('PostgresChangeEvent.insert'));
     expect(provider, contains('PostgresChangeEvent.update'));
     expect(provider, contains('PostgresChangeEvent.delete'));
-    expect(provider, contains('_refreshKitchenOrdersFromRealtime(storeId)'));
+    expect(
+      provider,
+      contains('_refreshKitchenOrdersFromRealtime(storeId, payload)'),
+    );
     expect(provider, contains('Duration(seconds: 2)'));
     expect(provider, contains('_ensureAutoRefresh(storeId)'));
     expect(provider, contains('showLoading: false'));

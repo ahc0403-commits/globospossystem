@@ -54,6 +54,7 @@ void main() {
       var actor = _admin;
       var rejectSummary = false;
       final requests = <String, int>{};
+      final requestedScopes = <String, List<List<dynamic>>>{};
       final returnedRows = <String, int>{};
       Future<void> Function(String source, int page)? beforePage;
       Map<String, dynamic> Function(
@@ -172,6 +173,10 @@ void main() {
                 : 0;
             if (isPage || isSummary || isRules || isReport) {
               requests[source] = page;
+              final scope = (jsonDecode(body) as Map)['p_store_ids'];
+              if (scope is List) {
+                requestedScopes.putIfAbsent(source, () => []).add(scope);
+              }
               await beforePage?.call(source, page);
             }
             if (isSummary && rejectSummary) {
@@ -246,6 +251,7 @@ void main() {
         actor = _admin;
         rejectSummary = false;
         requests.clear();
+        requestedScopes.clear();
         returnedRows.clear();
         beforePage = null;
         overridePage = null;
@@ -534,7 +540,7 @@ void main() {
             CASE (right(id::text,4)::int % 4) WHEN 0 THEN NULL WHEN 1 THEN 0 WHEN 2 THEN -3.25 ELSE 41.33 END
             ELSE amount_portion END,
             method = (ARRAY['cash','card','credit_card','ATM','BANKTRANSFER','pay','MOMO','service','',' custom '])[1+right(id::text,4)::int%10],
-            proof_photo_url = CASE WHEN right(id::text,4)::int%2=0 THEN 'proof' ELSE '   ' END;
+            proof_photo_url = CASE WHEN right(id::text,4)::int%2=0 AND right(id::text,4)::int%10<>8 THEN 'proof' ELSE '   ' END;
           UPDATE orders SET sales_channel = CASE WHEN right(id::text,4)::int%3=0 THEN 'DeLiVeRy' ELSE NULL END,
             status = (ARRAY['completed','cancelled','confirmed'])[1+right(id::text,4)::int%3];
           UPDATE photo_objet_sales SET service_amount = CASE WHEN right(id::text,4)::int%3=0 THEN 70 ELSE 2 END;
@@ -637,6 +643,14 @@ void main() {
             legacy.missingProofIssues.map((r) => r.paymentId),
           );
           expect(
+            actual.missingProofIssues.map(
+              (r) => [r.method, r.amount, r.createdAt],
+            ),
+            legacy.missingProofIssues.map(
+              (r) => [r.method, r.amount, r.createdAt],
+            ),
+          );
+          expect(
             actual.einvoiceReviewIssues.map((r) => r.paymentId),
             legacy.einvoiceReviewIssues.map((r) => r.paymentId),
           );
@@ -665,6 +679,55 @@ void main() {
           expect(report.state.reportSummary!.rows, hasLength(2));
         },
       );
+
+      test('live dashboard update aggregates only its changed store', () async {
+        await seed(1);
+        actor = _superAdmin;
+        await sql(
+          "INSERT INTO payments VALUES ('60000000-0000-0000-0000-000000009999','$_otherStore',NULL,700,700,'CASH','2026-07-27',false,NULL,true)",
+        );
+        final admin = _AdminReports(client)..setStores([_store, _otherStore]);
+        addTearDown(admin.dispose);
+        await admin.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
+        expect(admin.state.reportSummary!.totalRevenue, 858);
+        requests.clear();
+        requestedScopes.clear();
+        await sql(
+          "UPDATE payments SET amount_portion=250 WHERE restaurant_id='$_store' AND is_revenue=true",
+        );
+        await admin.refreshReportsForStore(_store);
+        expect(requests, {'storeRevenueSummary': 1});
+        expect(requestedScopes['storeRevenueSummary'], [
+          [_store],
+        ]);
+        expect(admin.state.reportSummary!.totalRevenue, 1008);
+        expect(
+          admin.state.reportSummary!.rows
+              .singleWhere((r) => r.storeId == _otherStore)
+              .total,
+          700,
+        );
+      });
+      test('live dashboard update cannot overwrite a new date scope', () async {
+        await seed(1);
+        final admin = _AdminReports(client)..setStores([_store]);
+        addTearDown(admin.dispose);
+        await admin.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
+        requests.clear();
+        final started = Completer<void>(), release = Completer<void>();
+        beforePage = (source, page) async {
+          if (source == 'storeRevenueSummary' && page == 1) {
+            started.complete();
+            await release.future;
+          }
+        };
+        final old = admin.refreshReportsForStore(_store);
+        await started.future;
+        await admin.setReportRange(DateTime(2030), DateTime(2030, 12, 31));
+        release.complete();
+        await old;
+        expect(admin.state.reportSummary!.totalRevenue, 0);
+      });
 
       test('global report uses one aggregate request for 100 stores', () async {
         await seed(501);

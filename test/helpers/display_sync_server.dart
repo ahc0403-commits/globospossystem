@@ -13,6 +13,7 @@ class DisplaySyncServer {
   final peers = <WebSocket>[];
   final subscriptions = <String, (WebSocket, List<Map<String, dynamic>>)>{};
   Future<void> Function(String path)? beforeReply;
+  Object? Function(HttpRequest request)? responseForRequest;
   bool acknowledgeJoins = true;
   bool _closing = false;
   bool snapshotFailure = false;
@@ -120,29 +121,31 @@ class DisplaySyncServer {
     final store =
         request.uri.queryParameters['store_id']?.replaceFirst('eq.', '') ??
         'store-1';
-    final data = switch (path) {
-      'customer_payment_displays' => displayRows[store],
-      'get_kds_sync_config' => config,
-      'get_kds_bootstrap_v2' => {
-        'sync': config,
-        'snapshot': snapshot,
-        'completed_orders': [],
-        'timings': [],
-        'fulfillment_mode': 'paperless',
-      },
-      'get_kds_changes_v2' => {
-        'bootstrap_required': false,
-        'scanned_through_revision': revision,
-        'current_revision': revision,
-        'has_more': false,
-        'changes': [],
-      },
-      'get_emergency_station_snapshot' => snapshot,
-      'get_emergency_station_today_completed' ||
-      'get_emergency_station_timings' => [],
-      'get_store_fulfillment_mode' => 'paperless',
-      _ => null,
-    };
+    final data = responseForRequest != null
+        ? responseForRequest!(request)
+        : switch (path) {
+            'customer_payment_displays' => displayRows[store],
+            'get_kds_sync_config' => config,
+            'get_kds_bootstrap_v2' => {
+              'sync': config,
+              'snapshot': snapshot,
+              'completed_orders': [],
+              'timings': [],
+              'fulfillment_mode': 'paperless',
+            },
+            'get_kds_changes_v2' => {
+              'bootstrap_required': false,
+              'scanned_through_revision': revision,
+              'current_revision': revision,
+              'has_more': false,
+              'changes': [],
+            },
+            'get_emergency_station_snapshot' => snapshot,
+            'get_emergency_station_today_completed' ||
+            'get_emergency_station_timings' => [],
+            'get_store_fulfillment_mode' => 'paperless',
+            _ => null,
+          };
     final encoded = jsonEncode(data);
     final fail =
         (path == 'get_emergency_station_snapshot' && snapshotFailure) ||

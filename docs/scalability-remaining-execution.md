@@ -10,10 +10,10 @@ checkout and its untracked migration are preserved.
 | 1. Payroll wage-rule batching | Implemented | 19 payroll/unit contract tests; financial SQL/API suite 70 tests passed; not deployed |
 | 2. Kitchen history bounds | Implemented | Bounded-history/active-page SDK fixture added; full release checks pending |
 | 3. Detailed report aggregation, catalogs/cache | Implemented | 71 financial SQL/API tests; 18 catalog/report overlay tests; analyze passed; release checks pending |
-| 4. Promotion reads without synchronization writes | Pending | Preserve time boundaries and payment semantics |
-| 5. Realtime event-scoped refresh | Pending | Preserve reconnect, stale-response, lifecycle safety |
-| 6. Measured indexes | Pending | Inspect production plans read-only; no speculative indexes |
-| 7. Measurement / isolated scale scenarios | Pending | Never infer production capacity from synthetic throughput |
+| 4. Promotion reads without synchronization writes | Implemented | 110 SQL assertions, 10 payment/recovery tests passed; final gate pending |
+| 5. Realtime event-scoped refresh | Implemented | 73 financial API tests, 12 coalescer/realtime/payment tests, 29 display/kitchen contracts passed; final gate pending |
+| 6. Measured indexes | Implemented | Production EXPLAIN captured read-only; isolated before/after and replay/rollback passed |
+| 7. Measurement / isolated scale scenarios | Executed twice | A/B zero errors; initial C 61 failures, repeat C zero errors but p95 4.6–4.8 s; production capacity unverified |
 | 8. Production application | Pending | Exact-main GitHub checks and production wrapper required |
 
 ## Item 1
@@ -70,3 +70,130 @@ all catalogs; settings/staff events still do. No persistent cross-user cache was
 First full preflight stopped at four stale source-shape/hash contract expectations
 (1,302 Flutter tests passed); these contracts were updated to track the new query
 locations and bounded kitchen reads. Final full preflight is still required.
+
+## Item 4
+
+Cashier reads no longer call `refresh_store_order_promotions`. Explicit promotion
+edits/order mutations retain their synchronization. A private `promotion-boundaries`
+cron runs once per minute, catches crossed start/end boundaries since its persisted
+cursor, and synchronizes unfinished customer orders for affected stores in the current
+Vietnam business day. A transaction advisory lock prevents overlapping ticks. Cursor
+and discount updates commit together; a failed tick does not advance the cursor.
+Unchanged synchronization emits no discount DML/live events. The private cursor write
+is one small update per tick, independent of screen count.
+
+The previously documented claim that no feedback loop was proven was incorrect:
+`order_discounts.pos_live_event_trigger` emits `pos_live_events` in the `orders` domain,
+and the cashier listener reloads orders. This trigger was confirmed in production.
+The new read path breaks that loop rather than relying solely on idempotent writes.
+
+The payment wrapper checks current promotion state inside the existing atomic payment
+transaction. A boundary change rejects the attempt with `PROMOTION_PRICE_CHANGED`
+before delegation. The client performs one explicit preparation RPC, rereads, and
+leaves the attempt failed for cashier review. It never automatically resubmits a
+charge. Existing scoped/VAT/payment implementation and partial-payment semantics
+remain in the preserved delegate; MISA remains asynchronous.
+
+Limits: displayed boundary changes can lag one cron interval plus execution/delivery
+time. This is not a new versioned client quote protocol: it detects a boundary the
+database has not synchronized yet, and preserves the pre-existing handling of a
+client quote stale relative to an already updated database. The SQL harness tests
+the real promotion SQL and scoped wrapper with a settlement spy, not a complete
+production payment database. Existing financial engine regression tests remain required.
+
+## Item 5
+
+Kitchen raw events collect affected order IDs for 100 ms. They fetch only those IDs
+in batches of at most 50 plus the 12-row completed history. Unknown-ID events trigger
+a complete reconciliation. Failed delta reads force the next reconciliation to be
+complete. Deletes remove missing cached rows. The real SDK wire fixture proves 30
+events for one ticket result in two reads and preserve 250 unrelated tickets.
+
+Kitchen/cashier refreshes serialize, retaining at most one pending follow-up. Scope
+generations prevent old reads/callbacks from publishing after A→B→A store switches
+or disposal. A successful channel join/reconnect performs one catch-up read to close
+the query/subscription gap. Cashier fallback polling stops only when all three
+channels are healthy. Cashier still refetches its scoped list per coalesced event;
+it has not been converted to a complete ID-delta protocol.
+
+The shared live signal uses a fixed 350 ms window, so continuous traffic cannot
+postpone refresh indefinitely. Merging different domains retains the actual domain
+set; merging different stores retains an unknown/full scope, not only the last store.
+Global report events request aggregate rows only for affected stores; settings or
+unknown/mixed-store events reconcile the complete scope. A date change invalidates
+pending patches. Existing catalogs are not reloaded on ordinary financial events.
+Connection count is not reduced by request coalescing. Emergency KDS v2 is not enabled
+by these changes; existing legacy/shadow mode keeps its five-second safety polling.
+
+## Item 6
+
+Production read-only EXPLAIN artifacts: `measurements/20260905-production-index-before.json`.
+The queue read scans all fulfillment items to return one queue, matching the lateral
+lookup in `20260901130000_operational_order_business_day_scope.sql`. The new partial
+`(queue_id,created_at,order_item_id) WHERE is_cancelled=false` index restricts that
+lookup. Cancelled rows do not burden this index. Existing session/order indexes
+serve different predicates and are retained.
+
+`payments_store_created_id(restaurant_id,created_at,id)` supports the actual store,
+half-open date, and keyset-order predicates in financial inputs and reports. It
+includes both revenue and service payments. Production currently scans the store's
+older payments and filters them by date. The local optimizer still preferred the
+old store-only index for a densely clustered 30-day history; a selective day over
+180 retained days used the new index. No planner settings were forced.
+
+Only these two measured indexes are added. Existing orders, external sales, hourly
+rule and Photo indexes are retained. The migration has a 3-second lock timeout and
+30-second statement timeout; preflight refuses relations above 64 MiB, which require
+a separately reviewed concurrent-build procedure. Replay, verification, rollback,
+and reapplication are exercised in the disposable harness.
+
+## Item 7 methodology and limits
+
+Run `bash scripts/test_scalability_isolated.sh /tmp/pos-scalability-measurements`.
+The script creates and removes its own Docker network/Postgres/PostgREST containers;
+it refuses non-loopback HTTP targets and unrelated container names. PostgreSQL is
+limited to 2 CPUs/2 GiB, PostgREST to 1 CPU/512 MiB with a ten-connection pool.
+Each scenario seeds its own store count, 1,000 payments/orders per store over 30 days,
+100 delivery rows, 30 Photo days and 400 fulfillment items. Reports request one day.
+
+For 20 seconds, 50/300/1,000 virtual users each keep at most one request in flight,
+with five seconds of think time and initial arrivals spread over one second. The
+mix is 70% extracted queue-item reads, 20% actual detailed report RPC, 10% actual
+all-store aggregate RPC. This is a closed-loop read test, not simultaneous open
+connections for every virtual user or a sustained maximum-throughputput benchmark.
+Every successful response is checked against exact seeded rows/financial totals.
+
+Artifacts contain request counts, response bytes, p50/p95/p99, errors, maximum
+in-flight requests, container CPU/memory samples, and interval DB/statements/WAL
+snapshots. Docker CPU 100% represents one core; the DB limit is 200%. Monitor/control
+queries are included in DB snapshots, and nested pg_stat_statements calls must not
+be summed as independent HTTP requests. The host also runs other local containers;
+these measurements do not represent a dedicated Supabase compute instance.
+
+Not measured by this harness: full emergency KDS RPC chains, real production RLS
+cost, Realtime connection/message fan-out, order/payment writes and lock contention,
+mobile network latency, Vercel requests, or billable egress. These remain explicit
+production/staging acceptance metrics before declaring 50/100-store capacity or
+choosing a compute upgrade. No VPS migration or Supabase replacement is required
+by the evidence gathered so far.
+
+## Release gate
+
+All staged source must pass `scripts/check_repo.sh`, then exact pushed-head GitHub
+checks. Merge the complete reviewed stack through PR #456 retargeted to `main`,
+wait for the exact fresh-main Photo Objet check,
+and apply each unapplied migration through `scripts/deploy_pos_production.sh` with
+its preflight/verify artifacts. Web release also requires the existing fixed-account
+login smoke and Auth hygiene checks. Source, DB, web, and operational verification
+are reported separately. As of this checkpoint no production changes from this task
+have been applied; fixed-account smoke credentials were requested securely.
+
+The live Vercel project was linked to production branch `main` with no ignored
+build command or automatic-deployment override. Merging intermediate stack branches
+would publish clients requiring unapplied RPCs. `vercel.json` therefore disables
+automatic Git deployments for `main` only, preserving feature-branch previews.
+The final merged tree contains this guard before any new production client can be
+published. CLI deployment remains through the required production wrapper after DB
+verification. See [Vercel Git configuration](https://vercel.com/docs/project-configuration/git-configuration#git.deploymentenabled).
+
+Measured results and raw artifacts: [scenario comparison](measurements/scalability-20260905/README.md).

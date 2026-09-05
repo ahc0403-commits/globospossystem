@@ -5,6 +5,7 @@ import '../../core/services/store_revenue_summary_service.dart';
 import '../../core/services/store_service.dart';
 import '../../core/services/catalog_query_service.dart';
 import '../../main.dart';
+import '../../core/utils/coalesced_refresh.dart';
 import '../report/report_provider.dart';
 
 const kUnclassifiedBrandFilter = '__unclassified__';
@@ -717,6 +718,88 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       clearError: true,
     );
     await loadAllReports(selectedRestaurantId: state.selectedRestaurant?.id);
+  }
+
+  final _liveReportQueue = CoalescedRefresh();
+  final _pendingReportStores = <String>{};
+  bool _fullReportRefresh = false;
+
+  Future<void> refreshReportsForStore(String? storeId) {
+    if (!mounted) return Future.value();
+    if (storeId == null) {
+      _fullReportRefresh = true;
+    } else {
+      _pendingReportStores.add(storeId);
+    }
+    return _liveReportQueue.run(() async {
+      if (!mounted) return;
+      final full = _fullReportRefresh;
+      _fullReportRefresh = false;
+      final changed = _pendingReportStores.toSet();
+      _pendingReportStores.clear();
+      final prior = state.reportSummary;
+      if (full || prior == null) {
+        await loadAllReports(
+          selectedRestaurantId: state.selectedRestaurant?.id,
+        );
+        return;
+      }
+      final ids = prior.rows
+          .map((row) => row.storeId)
+          .where(changed.contains)
+          .toList();
+      if (ids.isEmpty) return;
+      final generation = _reportRequestId;
+      try {
+        final totals =
+            await StoreRevenueSummaryService(_reportClient ?? supabase).fetch(
+              storeIds: ids,
+              fromDate: state.reportStart,
+              toDate: state.reportEnd,
+            );
+        if (!mounted ||
+            generation != _reportRequestId ||
+            !identical(prior, state.reportSummary)) {
+          return;
+        }
+        final rows = prior.rows.map((row) {
+          final value = totals[row.storeId];
+          return value == null
+              ? row
+              : SuperAdminRestaurantReport(
+                  storeId: row.storeId,
+                  restaurantName: row.restaurantName,
+                  dineIn: value.dineIn,
+                  delivery: value.delivery,
+                  total: value.dineIn + value.delivery,
+                );
+        }).toList()..sort((a, b) => b.total.compareTo(a.total));
+        final dineIn = rows.fold<double>(0, (sum, row) => sum + row.dineIn);
+        final delivery = rows.fold<double>(0, (sum, row) => sum + row.delivery);
+        state = state.copyWith(
+          reportSummary: SuperAdminReportSummary(
+            totalRevenue: dineIn + delivery,
+            dineInRevenue: dineIn,
+            deliveryRevenue: delivery,
+            rows: rows,
+          ),
+          clearError: true,
+        );
+      } catch (error) {
+        if (!mounted || generation != _reportRequestId) return;
+        state = state.copyWith(
+          error: 'Failed to refresh reports: $error',
+          clearReportSummary: true,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _reportRequestId++;
+    _liveReportQueue.dispose();
+    super.dispose();
   }
 
   Future<void> loadAllReports({String? selectedRestaurantId}) async {

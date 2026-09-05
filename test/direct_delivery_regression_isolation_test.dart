@@ -12,10 +12,10 @@ const _frozenFiles = <String, String>{
       '3be65edc63f943e3fddd1f4e4b25fca8b842d430e5fc803d54c76c9d75e7f49b',
   'lib/features/cashier/cashier_screen.dart':
       '60f007189e40d111d1e302d7719a9156b0cb9aaee8b12f3879b95f17ce5bee3e',
-  // Phase 4C bounds history and pages active orders; kitchen_query_bounds_test
-  // exercises the real Supabase SDK with a lower API cap and failed pages.
+  // Bounded history and event-scoped reads are exercised with the real SDK
+  // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   'lib/features/kitchen/kitchen_provider.dart':
-      '56819d664d4714232a0b3ae9f9c6e7effda68fd0143a195b39ce062fc0a0e28f',
+      '28a45e233ac1c9ded58f30c0cddf24e39a084d93e35656201af61fbdff3df4ce',
   'lib/features/kitchen/kitchen_screen.dart':
       'e3cdc57c2a55ab67d948f7445fe18cac7305957153ef63ffff38b139bc5b5fa6',
   'lib/core/services/payment_service.dart':

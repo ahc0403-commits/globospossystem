@@ -9,6 +9,7 @@ import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/coalesced_refresh.dart';
 import '../../core/utils/time_utils.dart';
 import '../../l10n/app_localizations.dart';
 import '../../main.dart';
@@ -389,10 +390,23 @@ class PaymentState {
 }
 
 class PaymentNotifier extends StateNotifier<PaymentState> {
-  PaymentNotifier() : super(const PaymentState());
+  PaymentNotifier({SupabaseClient? client, PaymentService? payments})
+    : _client = client,
+      _paymentSource = payments,
+      super(const PaymentState());
+  final SupabaseClient? _client;
+  final PaymentService? _paymentSource;
+  SupabaseClient get _db => _client ?? supabase;
+  PaymentService get _payments => _paymentSource ?? paymentService;
 
   static const _autoRefreshInterval = Duration(seconds: 2);
   static const _fallbackPollInterval = Duration(seconds: 15);
+
+  final _refreshQueue = CoalescedRefresh();
+  int _scopeGeneration = 0;
+  String? _channelStoreId;
+  int? _channelGeneration;
+  Timer? _eventRefreshTimer;
 
   RealtimeChannel? _ordersChannel;
   RealtimeChannel? _paymentsChannel;
@@ -404,19 +418,29 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   Timer? _businessDayTimer;
   String? _pollStoreId;
   bool _realtimeConnected = false;
+  final _connectedChannels = <String>{};
 
-  Future<void> loadOrders(String storeId) async {
-    _restaurantId = storeId;
+  Future<void> loadOrders(String storeId) {
+    if (!mounted) return Future.value();
+    if (_restaurantId != storeId) {
+      _restaurantId = storeId;
+      _scopeGeneration++;
+      _eventRefreshTimer?.cancel();
+      _eventRefreshTimer = null;
+      state = const PaymentState();
+    }
+    final generation = _scopeGeneration;
+    return _refreshQueue.run(() => _loadOrders(storeId, generation));
+  }
+
+  Future<void> _loadOrders(String storeId, int generation) async {
+    if (!mounted || generation != _scopeGeneration) return;
     final businessDay = TimeUtils.currentVietnamBusinessDay();
     _scheduleBusinessDayRefresh(storeId, businessDay);
 
     try {
-      await supabase.rpc(
-        'refresh_store_order_promotions',
-        params: {'p_store_id': storeId},
-      );
       final storePricing = await _loadStorePricing(storeId);
-      final response = await supabase
+      final response = await _db
           .from('orders')
           .select(
             'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
@@ -533,6 +557,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         businessDay,
       );
 
+      if (!mounted || generation != _scopeGeneration) return;
       final selected = state.selectedOrder;
       CashierOrder? updatedSelected;
       if (selected != null) {
@@ -554,6 +579,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
       await subscribeRealtime(storeId);
     } catch (error) {
+      if (!mounted || generation != _scopeGeneration) return;
       state = state.copyWith(error: 'Failed to load payable orders: $error');
     }
   }
@@ -563,7 +589,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   ) async {
     if (orderIds.isEmpty) return const {};
     try {
-      final raw = await supabase.rpc(
+      final raw = await _db.rpc(
         'get_emergency_order_summaries',
         params: {'p_order_ids': orderIds},
       );
@@ -592,7 +618,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       // The RPC applies the same active-session scope previously expressed as
       // emergency_fulfillment_sessions!inner(status), and also unions direct
       // beverage component lines without exposing either ledger for writes.
-      final raw = await supabase.rpc(
+      final raw = await _db.rpc(
         'get_emergency_order_item_progress',
         params: {'p_order_ids': orderIds},
       );
@@ -626,7 +652,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     _CashierStorePricing storePricing,
     VietnamBusinessDayWindow businessDay,
   ) async {
-    final response = await supabase
+    final response = await _db
         .from('orders')
         .select(
           'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
@@ -742,7 +768,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
 
     try {
-      final rpcResult = await supabase.rpc(
+      final rpcResult = await _db.rpc(
         'search_active_order_for_cashier',
         params: {'p_store_id': storeId, 'p_query': query},
       );
@@ -754,7 +780,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
 
     final businessDay = TimeUtils.currentVietnamBusinessDay();
-    final rows = await supabase
+    final rows = await _db
         .from('orders')
         .select(
           'id, table_id, status, order_purpose, order_source, created_at, tables(table_number)',
@@ -793,7 +819,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   Future<List<QrOrderLedgerBatch>> fetchQrOrderLedger(String orderId) async {
-    final response = await supabase
+    final response = await _db
         .from('qr_order_batches')
         .select('batch_no, items_snapshot, created_at')
         .eq('order_id', orderId)
@@ -812,7 +838,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         .toList(growable: false);
     if (menuItemIds.isEmpty) return batches;
 
-    final menuRows = await supabase
+    final menuRows = await _db
         .from('menu_items')
         .select('id, name, name_vi, name_en')
         .inFilter('id', menuItemIds);
@@ -864,7 +890,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         .toList(growable: false);
 
     try {
-      await supabase.rpc(
+      await _db.rpc(
         'show_customer_payment_display',
         params: {
           'p_store_id': storeId,
@@ -918,7 +944,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     ];
 
     try {
-      await supabase.rpc(
+      await _db.rpc(
         'show_customer_payment_display',
         params: {
           'p_store_id': storeId,
@@ -967,7 +993,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     required String receiptId,
   }) async {
     try {
-      await supabase.rpc(
+      await _db.rpc(
         'show_customer_receipt_display',
         params: {
           'p_store_id': storeId,
@@ -989,7 +1015,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     required String receiptId,
   }) async {
     try {
-      await supabase.rpc(
+      await _db.rpc(
         'show_combined_customer_receipt_display',
         params: {
           'p_store_id': storeId,
@@ -1033,7 +1059,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   Future<_CashierStorePricing> _loadStorePricing(String storeId) async {
-    final response = await supabase
+    final response = await _db
         .from('restaurants')
         .select(
           'vat_pricing_mode, brands(service_charge_enabled, service_charge_rate)',
@@ -1041,6 +1067,27 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         .eq('id', storeId)
         .maybeSingle();
     return _CashierStorePricing.fromJson(response);
+  }
+
+  Future<void> _recoverPromotionBoundary(
+    Object error,
+    String storeId,
+    List<String> orderIds,
+  ) async {
+    if (error is! PostgrestException ||
+        error.details != 'PROMOTION_PRICE_CHANGED') {
+      return;
+    }
+    try {
+      await _db.rpc(
+        'prepare_order_payment_promotions',
+        params: {'p_store_id': storeId, 'p_order_ids': orderIds},
+      );
+      await loadOrders(storeId);
+    } catch (_) {
+      // Preserve the failed payment result. The cashier must retry explicitly;
+      // recovery failure must never be mistaken for a successful charge.
+    }
   }
 
   Future<Map<String, dynamic>?> processPayment(
@@ -1056,7 +1103,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
-      final payment = await paymentService.processPayment(
+      final payment = await _payments.processPayment(
         orderId: orderId,
         storeId: storeId,
         amount: amount,
@@ -1072,6 +1119,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       );
       return payment;
     } catch (error) {
+      await _recoverPromotionBoundary(error, storeId, [orderId]);
       state = state.copyWith(
         isProcessing: false,
         error: _mapPaymentError(error, 'Failed to process payment'),
@@ -1092,7 +1140,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
-      final result = await paymentService.processCombinedTablePayment(
+      final result = await _payments.processCombinedTablePayment(
         storeId: storeId,
         orders: orders
             .map(
@@ -1113,6 +1161,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       );
       return result;
     } catch (error) {
+      await _recoverPromotionBoundary(
+        error,
+        storeId,
+        orders.map((order) => order.orderId).toList(),
+      );
       state = state.copyWith(
         isProcessing: false,
         error: _mapPaymentError(
@@ -1131,7 +1184,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
       for (final entry in wetTissueQuantities.entries) {
-        await paymentService.setOrderWetTissueQuantity(
+        await _payments.setOrderWetTissueQuantity(
           orderId: entry.key,
           storeId: storeId,
           quantity: entry.value,
@@ -1159,7 +1212,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }) async {
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
-      await paymentService.setOrderWetTissueQuantity(
+      await _payments.setOrderWetTissueQuantity(
         orderId: orderId,
         storeId: storeId,
         quantity: quantity,
@@ -1192,7 +1245,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
-      final payment = await paymentService.processNonRevenuePayment(
+      final payment = await _payments.processNonRevenuePayment(
         orderId: orderId,
         storeId: storeId,
         amount: amount,
@@ -1230,7 +1283,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
-      final payments = await paymentService.processPaymentSplits(
+      final payments = await _payments.processPaymentSplits(
         orderId: orderId,
         storeId: storeId,
         orderTotal: orderTotal,
@@ -1246,6 +1299,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       );
       return payments;
     } catch (error) {
+      await _recoverPromotionBoundary(error, storeId, [orderId]);
       state = state.copyWith(
         isProcessing: false,
         error: _mapPaymentError(error, 'Failed to process split payment'),
@@ -1262,7 +1316,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }) async {
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
-      await paymentService.markOrderItemService(
+      await _payments.markOrderItemService(
         itemId: itemId,
         storeId: storeId,
         reason: reason,
@@ -1288,7 +1342,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }) async {
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
-      await paymentService.unmarkOrderItemService(
+      await _payments.unmarkOrderItemService(
         itemId: itemId,
         storeId: storeId,
         reason: reason,
@@ -1397,7 +1451,12 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   Future<void> subscribeRealtime(String storeId) async {
-    if (_restaurantId == storeId &&
+    final generation = _scopeGeneration;
+    bool current() =>
+        mounted && generation == _scopeGeneration && _restaurantId == storeId;
+    if (!current()) return;
+    if (_channelStoreId == storeId &&
+        _channelGeneration == generation &&
         _ordersChannel != null &&
         _paymentsChannel != null &&
         _emergencyChannel != null) {
@@ -1414,92 +1473,119 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     if (_emergencyChannel != null) {
       await _emergencyChannel!.unsubscribe();
     }
+    if (!current()) return;
     _pollTimer?.cancel();
     _pollTimer = null;
     _pollStoreId = null;
     _realtimeConnected = false;
+    _connectedChannels.clear();
 
-    _restaurantId = storeId;
+    _channelStoreId = storeId;
+    _channelGeneration = generation;
+    void trackChannel(String channel, RealtimeSubscribeStatus status) {
+      if (!current()) return;
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        _connectedChannels.add(channel);
+      } else {
+        _connectedChannels.remove(channel);
+      }
+      final connected = _connectedChannels.length == 3;
+      if (connected != _realtimeConnected) {
+        _realtimeConnected = connected;
+        _ensureAutoRefresh(storeId);
+        if (connected) _refreshPaymentOrdersFromRealtime(storeId);
+      }
+    }
 
-    _ordersChannel = supabase
+    _ordersChannel = _db
         .channel(LiveSyncScope.storeChannel('cashier_orders', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'orders',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+          callback: (_) {
+            if (current()) _refreshPaymentOrdersFromRealtime(storeId);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'orders',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+          callback: (_) {
+            if (current()) _refreshPaymentOrdersFromRealtime(storeId);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'order_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+          callback: (_) {
+            if (current()) _refreshPaymentOrdersFromRealtime(storeId);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'order_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+          callback: (_) {
+            if (current()) _refreshPaymentOrdersFromRealtime(storeId);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.delete,
           schema: 'public',
           table: 'order_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+          callback: (_) {
+            if (current()) _refreshPaymentOrdersFromRealtime(storeId);
+          },
         )
         .subscribe((status, [error]) {
-          final connected = status == RealtimeSubscribeStatus.subscribed;
-          if (connected != _realtimeConnected) {
-            _realtimeConnected = connected;
-            _ensureAutoRefresh(storeId);
-          }
+          trackChannel('orders', status);
         });
 
-    _paymentsChannel = supabase
+    _paymentsChannel = _db
         .channel(LiveSyncScope.storeChannel('cashier_payments', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'payments',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+          callback: (_) {
+            if (current()) _refreshPaymentOrdersFromRealtime(storeId);
+          },
         )
         .subscribe((status, [error]) {
-          final connected = status == RealtimeSubscribeStatus.subscribed;
-          if (connected != _realtimeConnected) {
-            _realtimeConnected = connected;
-            _ensureAutoRefresh(storeId);
-          }
+          trackChannel('payments', status);
         });
 
-    _emergencyChannel = supabase
+    _emergencyChannel = _db
         .channel(LiveSyncScope.storeChannel('cashier_emergency', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'emergency_fulfillment_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+          callback: (_) {
+            if (current()) _refreshPaymentOrdersFromRealtime(storeId);
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'emergency_floor_direct_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+          callback: (_) {
+            if (current()) _refreshPaymentOrdersFromRealtime(storeId);
+          },
         )
-        .subscribe();
+        .subscribe((status, [error]) {
+          trackChannel('emergency', status);
+        });
     _ensureAutoRefresh(storeId);
     Future.delayed(_autoRefreshInterval, () {
       if (mounted && !_realtimeConnected && _restaurantId == storeId) {
@@ -1509,10 +1595,14 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   void _refreshPaymentOrdersFromRealtime(String storeId) {
-    if (!mounted) {
-      return;
-    }
-    unawaited(loadOrders(storeId));
+    if (!mounted || _restaurantId != storeId) return;
+    final generation = _scopeGeneration;
+    _eventRefreshTimer ??= Timer(const Duration(milliseconds: 100), () {
+      _eventRefreshTimer = null;
+      if (mounted && generation == _scopeGeneration) {
+        unawaited(loadOrders(storeId));
+      }
+    });
   }
 
   void _ensureAutoRefresh(String storeId) {
@@ -1552,6 +1642,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
   @override
   void dispose() {
+    _scopeGeneration++;
+    _refreshQueue.dispose();
+    _eventRefreshTimer?.cancel();
     _pollTimer?.cancel();
     _businessDayTimer?.cancel();
     _pollTimer = null;

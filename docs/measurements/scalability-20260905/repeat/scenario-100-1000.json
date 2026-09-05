@@ -1,0 +1,337 @@
+{
+  "measuredAt": "2026-09-05T10:05:38.406Z",
+  "stores": 100,
+  "virtualUsers": 1000,
+  "durationMs": 20000,
+  "elapsedMs": 20026.396375000004,
+  "maxInFlight": 825,
+  "requests": 3523,
+  "requestsPerSecond": 175.91782036222676,
+  "errors": 0,
+  "errorCounts": {},
+  "grouped": {
+    "queue_items": {
+      "requests": 2476,
+      "errors": 0,
+      "responseBytes": 1970896,
+      "p50Ms": 712.05,
+      "p95Ms": 4626.26,
+      "p99Ms": 7450.74
+    },
+    "store_report": {
+      "requests": 703,
+      "errors": 0,
+      "responseBytes": 556073,
+      "p50Ms": 757.66,
+      "p95Ms": 4812.18,
+      "p99Ms": 7109.64
+    },
+    "all_store_report": {
+      "requests": 344,
+      "errors": 0,
+      "responseBytes": 3232224,
+      "p50Ms": 882.52,
+      "p95Ms": 4582.26,
+      "p99Ms": 6793.74
+    }
+  },
+  "cpuSamples": [
+    {
+      "elapsedMs": 6203,
+      "stats": [
+        {
+          "BlockIO": "11MB / 844MB",
+          "CPUPerc": "56.21%",
+          "Container": "pos-scale-test-36963-db",
+          "ID": "6492c6a39748",
+          "MemPerc": "10.63%",
+          "MemUsage": "217.7MiB / 2GiB",
+          "Name": "pos-scale-test-36963-db",
+          "NetIO": "2.97MB / 6.16MB",
+          "PIDs": "17"
+        },
+        {
+          "BlockIO": "2.86MB / 0B",
+          "CPUPerc": "104.27%",
+          "Container": "pos-scale-test-36963-rest",
+          "ID": "ef4dba221771",
+          "MemPerc": "22.23%",
+          "MemUsage": "113.8MiB / 512MiB",
+          "Name": "pos-scale-test-36963-rest",
+          "NetIO": "8.24MB / 6.89MB",
+          "PIDs": "61"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 12035,
+      "stats": [
+        {
+          "BlockIO": "11MB / 844MB",
+          "CPUPerc": "87.03%",
+          "Container": "pos-scale-test-36963-db",
+          "ID": "6492c6a39748",
+          "MemPerc": "10.61%",
+          "MemUsage": "217.3MiB / 2GiB",
+          "Name": "pos-scale-test-36963-db",
+          "NetIO": "4.32MB / 8.97MB",
+          "PIDs": "17"
+        },
+        {
+          "BlockIO": "2.86MB / 0B",
+          "CPUPerc": "100.30%",
+          "Container": "pos-scale-test-36963-rest",
+          "ID": "ef4dba221771",
+          "MemPerc": "23.74%",
+          "MemUsage": "121.6MiB / 512MiB",
+          "Name": "pos-scale-test-36963-rest",
+          "NetIO": "11.3MB / 9.65MB",
+          "PIDs": "65"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 16157,
+      "stats": [
+        {
+          "BlockIO": "11MB / 844MB",
+          "CPUPerc": "144.31%",
+          "Container": "pos-scale-test-36963-db",
+          "ID": "6492c6a39748",
+          "MemPerc": "10.62%",
+          "MemUsage": "217.5MiB / 2GiB",
+          "Name": "pos-scale-test-36963-db",
+          "NetIO": "5.49MB / 11.4MB",
+          "PIDs": "17"
+        },
+        {
+          "BlockIO": "2.88MB / 0B",
+          "CPUPerc": "97.51%",
+          "Container": "pos-scale-test-36963-rest",
+          "ID": "ef4dba221771",
+          "MemPerc": "24.26%",
+          "MemUsage": "124.2MiB / 512MiB",
+          "Name": "pos-scale-test-36963-rest",
+          "NetIO": "15MB / 13MB",
+          "PIDs": "66"
+        }
+      ]
+    },
+    {
+      "elapsedMs": 22034,
+      "stats": [
+        {
+          "BlockIO": "11MB / 844MB",
+          "CPUPerc": "2.63%",
+          "Container": "pos-scale-test-36963-db",
+          "ID": "6492c6a39748",
+          "MemPerc": "10.65%",
+          "MemUsage": "218.1MiB / 2GiB",
+          "Name": "pos-scale-test-36963-db",
+          "NetIO": "6.56MB / 13.7MB",
+          "PIDs": "17"
+        },
+        {
+          "BlockIO": "2.88MB / 0B",
+          "CPUPerc": "0.53%",
+          "Container": "pos-scale-test-36963-rest",
+          "ID": "ef4dba221771",
+          "MemPerc": "23.87%",
+          "MemUsage": "122.2MiB / 512MiB",
+          "Name": "pos-scale-test-36963-rest",
+          "NetIO": "17.9MB / 15.5MB",
+          "PIDs": "66"
+        }
+      ]
+    }
+  ],
+  "metricsBefore": {
+    "time": "2026-09-05T10:05:15.089115+00:00",
+    "wal_bytes": 376448899,
+    "db": {
+      "xact_commit": 1600,
+      "xact_rollback": 0,
+      "blks_read": 672,
+      "blks_hit": 9583458,
+      "temp_bytes": 10436608
+    },
+    "statements": [
+      {
+        "queryid": -3456927769090902500,
+        "calls": 1,
+        "total_exec_time": 0.116291,
+        "rows": 1,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      }
+    ]
+  },
+  "metricsAfter": {
+    "time": "2026-09-05T10:05:38.395887+00:00",
+    "wal_bytes": 376800018,
+    "db": {
+      "xact_commit": 5131,
+      "xact_rollback": 0,
+      "blks_read": 672,
+      "blks_hit": 15659306,
+      "temp_bytes": 10436608
+    },
+    "statements": [
+      {
+        "queryid": -766866523165864100,
+        "calls": 344,
+        "total_exec_time": 24380.30092,
+        "rows": 344,
+        "shared_blks_hit": 5802330,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 5241315933029202000,
+        "calls": 344,
+        "total_exec_time": 24075.153161,
+        "rows": 344,
+        "shared_blks_hit": 5801924,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3972417005336333300,
+        "calls": 2503608,
+        "total_exec_time": 7729.36277101812,
+        "rows": 2503608,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 2638390711206801000,
+        "calls": 703,
+        "total_exec_time": 2939.245036,
+        "rows": 703,
+        "shared_blks_hit": 311533,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -2741077285684281300,
+        "calls": 703,
+        "total_exec_time": 2436.27815,
+        "rows": 703,
+        "shared_blks_hit": 306222,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 1793891315187677200,
+        "calls": 2476,
+        "total_exec_time": 629.959531000001,
+        "rows": 2476,
+        "shared_blks_hit": 18088,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3952111448014359600,
+        "calls": 2476,
+        "total_exec_time": 150.545211,
+        "rows": 2476,
+        "shared_blks_hit": 17344,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 5360251647081716000,
+        "calls": 3523,
+        "total_exec_time": 65.9894910000001,
+        "rows": 3523,
+        "shared_blks_hit": 44,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -7437125274491522000,
+        "calls": 344,
+        "total_exec_time": 13.485542,
+        "rows": 344,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 4219092154925455000,
+        "calls": 703,
+        "total_exec_time": 9.224277,
+        "rows": 703,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -1704849344782797300,
+        "calls": 344,
+        "total_exec_time": 1.813428,
+        "rows": 344,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -3456927769090902500,
+        "calls": 1,
+        "total_exec_time": 0.116291,
+        "rows": 1,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 1533978796192699100,
+        "calls": 1,
+        "total_exec_time": 0.099042,
+        "rows": 1,
+        "shared_blks_hit": 23,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -7025816098001848000,
+        "calls": 2,
+        "total_exec_time": 0.0105,
+        "rows": 0,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -8390746607827765000,
+        "calls": 2,
+        "total_exec_time": 0.009167,
+        "rows": 0,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": 5947864457175217000,
+        "calls": 2,
+        "total_exec_time": 0.004709,
+        "rows": 0,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      },
+      {
+        "queryid": -2835399305386019000,
+        "calls": 2,
+        "total_exec_time": 0.000791,
+        "rows": 0,
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      }
+    ]
+  },
+  "errorSamples": []
+}

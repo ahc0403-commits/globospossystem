@@ -9,7 +9,9 @@ cleanup() { docker rm -f "$db_name" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker run --detach --rm --name "$db_name" \
   --env POSTGRES_PASSWORD=promotion-fixture --env POSTGRES_DB=promotion_test \
-  public.ecr.aws/supabase/postgres:17.6.1.104 >/dev/null
+  public.ecr.aws/supabase/postgres:17.6.1.104 \
+  postgres -D /etc/postgresql -c shared_preload_libraries=pg_cron \
+  -c cron.database_name=promotion_test -c cron.launch_active_jobs=off >/dev/null
 for attempt in $(seq 1 60); do
   if docker exec "$db_name" pg_isready -h 127.0.0.1 -U postgres -d promotion_test >/dev/null 2>&1; then break; fi
   if [[ "$attempt" == 60 ]]; then docker logs --tail 60 "$db_name"; exit 1; fi
@@ -74,5 +76,21 @@ if [[ "${PROMOTION_TEST_BASELINE:-0}" != 1 ]]; then
   run_sql < supabase/migrations/20260905030000_idempotent_promotion_sync.sql >/dev/null
   run_sql < scripts/verify_idempotent_promotion_sync.sql >/dev/null
   run_sql -c "SELECT fixture_assert((SELECT count(*) = 0 FROM fixture_writes), 'migration reapplication does not modify business rows')" >/dev/null
+fi
+if [[ "${PROMOTION_TEST_BASELINE:-0}" != 1 ]]; then
+  docker exec --env PGPASSWORD=promotion-fixture "$db_name" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d promotion_test \
+    -c 'CREATE EXTENSION pg_cron; GRANT USAGE ON SCHEMA cron TO postgres;' >/dev/null
+  run_sql -c "ALTER TABLE orders ADD COLUMN created_at timestamptz NOT NULL DEFAULT now(); CREATE TABLE pos_live_events(id bigserial,restaurant_id uuid,domain text,source_table text,event_type text);" >/dev/null
+  sed -n '/^CREATE OR REPLACE FUNCTION public.emit_pos_live_event()/,/^\$\$;/p' \
+    supabase/migrations/20260805090000_pos_live_events_all_domains.sql | run_sql >/dev/null
+  run_sql -c "CREATE TRIGGER pos_live_event_trigger AFTER INSERT OR UPDATE OR DELETE ON order_discounts FOR EACH ROW EXECUTE FUNCTION emit_pos_live_event('orders');" >/dev/null
+  for sql_file in scripts/preflight_promotion_read_write_separation.sql \
+    supabase/migrations/20260905070000_promotion_read_write_separation.sql \
+    scripts/verify_promotion_read_write_separation.sql \
+    test/sql/promotion_read_write_separation_test.sql \
+    supabase/migrations/20260905070000_promotion_read_write_separation.sql \
+    scripts/verify_promotion_read_write_separation.sql; do
+    run_sql < "$sql_file" >/dev/null
+  done
 fi
 printf 'PROMOTION_SQL_TEST=PASS\n'

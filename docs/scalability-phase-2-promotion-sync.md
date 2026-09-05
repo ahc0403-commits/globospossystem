@@ -15,13 +15,16 @@ the store, including older orders. The effective sync implementation in
 scheduled discount and deleted/reinserted all its allocation lines. This also
 occurred on eligible order-item status changes and repeated campaign saves.
 
-The current cashier subscriptions watch orders, order items, payments, and
-emergency fulfillment tables. No checked-in subscription directly watches
-`order_discounts` or `order_discount_lines`, and no checked-in discount trigger
-was found that forwards these updates to those subscriptions. Therefore a
-closed `read → discount write → realtime → read` loop is **not established by
-source**. The repeated DML itself is established; runtime realtime publication,
-external consumers, and message amplification require measurement.
+**Correction from the 2026-09-05 follow-up:** the earlier inspection missed the
+indirect feed. `20260805090000_pos_live_events_all_domains.sql` installs
+`pos_live_event_trigger` on `order_discounts`, invoking
+`emit_pos_live_event('orders')`. The production trigger was confirmed read-only
+on 2026-09-05. `CashierScreen._refreshFromLiveEvent` listens to that feed and calls
+`PaymentNotifier.loadOrders` again. A closed read → discount write → live event →
+read path is therefore established in both source and deployed trigger metadata.
+Phase 2's unchanged-DML suppression breaks repeated unchanged writes, but removing
+the mutation from the read path remains necessary. Measured amplification magnitude
+is still not inferred from the existence of this path.
 
 Deleting the refresh RPC from reads would change behavior: there is no separate
 promotion start/end scheduler in the implementation. This phase retains that
