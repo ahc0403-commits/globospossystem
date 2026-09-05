@@ -14,8 +14,9 @@ const _frozenFiles = <String, String>{
       '60f007189e40d111d1e302d7719a9156b0cb9aaee8b12f3879b95f17ce5bee3e',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
+  // Forward cursor ordering also covers capped pages and missing changed IDs.
   'lib/features/kitchen/kitchen_provider.dart':
-      '28a45e233ac1c9ded58f30c0cddf24e39a084d93e35656201af61fbdff3df4ce',
+      '202e0233d184734301e089d9a7141dd7a3abee38054f9c1997fc70411ecb52c0',
   'lib/features/kitchen/kitchen_screen.dart':
       'e3cdc57c2a55ab67d948f7445fe18cac7305957153ef63ffff38b139bc5b5fa6',
   'lib/core/services/payment_service.dart':
