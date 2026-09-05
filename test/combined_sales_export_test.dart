@@ -82,6 +82,19 @@ void main() {
     expect(combined.every((export) => export.receiptCount == 1), isTrue);
   });
 
+  test('keeps Photo sales downloadable when Restaurant has no rows', () {
+    final combined = combineSalesExportsByTaxEntity(
+      restaurantExports: const [],
+      photoExports: [_photoExport()],
+    );
+
+    expect(combined, hasLength(1));
+    expect(combined.single.restaurantReceiptCount, 0);
+    expect(combined.single.photoReceiptCount, 1);
+    expect(combined.single.isReadyForDownload, isTrue);
+    expect(buildCombinedSalesWorkbook(combined.single), isNotEmpty);
+  });
+
   test('validates the registered Photo export response before MISA use', () {
     final exports = createPhotoSalesRegisteredExports({
       'business_date': '2026-09-02',

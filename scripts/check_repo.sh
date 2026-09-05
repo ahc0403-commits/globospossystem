@@ -19,6 +19,9 @@ bash scripts/test_payroll_attendance_postgrest.sh
 printf 'CHECK_REPO_STEP=financial_inputs_sql_api\n'
 bash scripts/test_financial_inputs_postgrest.sh
 
+printf 'CHECK_REPO_STEP=restaurant_report_ready_sql\n'
+bash test/restaurant_sales_report_ready_sql_test.sh
+
 printf 'CHECK_REPO_STEP=promotion_sync_sql\n'
 bash scripts/test_promotion_sync_sql.sh
 

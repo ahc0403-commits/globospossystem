@@ -50,13 +50,13 @@ const _frozenAlertFiles = <String, String>{
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
   'lib/l10n/app_localizations.dart':
-      '31f2a9f6dd634f1a21dd1f57c5aebae4dcf098ca06d1779d1b27a9c6a3a3f5fb',
+      '644120e466290375cc892961c4e772273474e32e5e1c5d8493ee26ea8f2e10c7',
   'lib/l10n/app_localizations_ko.dart':
-      '65e98584e779b4e5e9352348308c21a29c45326a868e9f955d852463bcf954a6',
+      'bb0d7b6469629d466903344128ff1b690e63d5e8d5a1d32818dcf245840476d3',
   'lib/l10n/app_localizations_vi.dart':
-      'f7bfc3ca19261062d54a8de183bfbeead77601f946145838b678b5304c88a681',
+      '09f08ee8a5498d11a92f786a15387f92c492109a3ddaf494e0f7be56db417536',
   'lib/l10n/app_localizations_en.dart':
-      'fab8e559f8b04fc3f8c87dcaa63913ce192c28c3b932d844aadb2693133cd95f',
+      '65f8ace338a8c9d0337355053bd68de2e5cea1709e19d8397ef98597f60d1482',
 };
 
 void main() {
