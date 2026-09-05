@@ -51,6 +51,36 @@ if [[ "${PROMOTION_TEST_BASELINE:-0}" != 1 ]]; then
 fi
 run_sql < test/sql/promotion_sync_test.sql >/dev/null
 
+if [[ "${PROMOTION_TEST_BASELINE:-0}" != 1 ]]; then
+  run_sql < supabase/migrations/20260905030000_idempotent_promotion_sync.sql >/dev/null
+  run_sql < scripts/verify_idempotent_promotion_sync.sql >/dev/null
+  run_sql -c "SELECT fixture_assert((SELECT count(*) = 0 FROM fixture_writes), 'migration reapplication does not modify business rows')" >/dev/null
+fi
+if [[ "${PROMOTION_TEST_BASELINE:-0}" != 1 ]]; then
+  docker exec --env PGPASSWORD=promotion-fixture "$db_name" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d promotion_test \
+    -c 'CREATE EXTENSION pg_cron; GRANT USAGE ON SCHEMA cron TO postgres;' >/dev/null
+  run_sql -c "ALTER TABLE orders ADD COLUMN created_at timestamptz NOT NULL DEFAULT now(); CREATE TABLE pos_live_events(id bigserial,restaurant_id uuid,domain text,source_table text,event_type text);" >/dev/null
+  sed -n '/^CREATE OR REPLACE FUNCTION public.emit_pos_live_event()/,/^\$\$;/p' \
+    supabase/migrations/20260805090000_pos_live_events_all_domains.sql | run_sql >/dev/null
+  run_sql -c "CREATE TRIGGER pos_live_event_trigger AFTER INSERT OR UPDATE OR DELETE ON order_discounts FOR EACH ROW EXECUTE FUNCTION emit_pos_live_event('orders');" >/dev/null
+  for sql_file in scripts/preflight_promotion_read_write_separation.sql \
+    supabase/migrations/20260905070000_promotion_read_write_separation.sql \
+    scripts/verify_promotion_read_write_separation.sql \
+    scripts/preflight_promotion_allocation_live_refresh.sql \
+    supabase/migrations/20260905090000_promotion_allocation_live_refresh.sql \
+    scripts/verify_promotion_allocation_live_refresh.sql \
+    test/sql/promotion_read_write_separation_test.sql \
+    supabase/migrations/20260905070000_promotion_read_write_separation.sql \
+    scripts/verify_promotion_read_write_separation.sql; do
+    run_sql < "$sql_file" >/dev/null
+  done
+  run_sql < test/sql/promotion_line_event_regression_test.sql >/dev/null
+  run_sql < supabase/migrations/20260905090000_promotion_allocation_live_refresh.sql >/dev/null
+  run_sql < scripts/preflight_promotion_allocation_live_refresh.sql >/dev/null
+  run_sql < scripts/verify_promotion_allocation_live_refresh.sql >/dev/null
+  run_sql -c "SELECT fixture_assert((SELECT count(*)=0 FROM fixture_writes) AND (SELECT count(*)=0 FROM pos_live_events), 'allocation migration replay does not modify business rows or emit events')" >/dev/null
+  run_sql < test/sql/promotion_line_event_regression_test.sql >/dev/null
+fi
 # Hold a real active-discount lock so a second refresh must wait, then check
 # that neither transaction rewrites the unchanged discount after acquiring it.
 run_sql -c "TRUNCATE fixture_writes" >/dev/null
@@ -72,25 +102,4 @@ wait_for_activity "application_name = 'promotion-waiter' AND wait_event_type = '
 wait "$first_pid"
 wait "$second_pid"
 run_sql -c "SELECT fixture_assert((SELECT count(*) = 0 FROM fixture_writes), 'concurrent unchanged syncs perform zero writes')" >/dev/null
-if [[ "${PROMOTION_TEST_BASELINE:-0}" != 1 ]]; then
-  run_sql < supabase/migrations/20260905030000_idempotent_promotion_sync.sql >/dev/null
-  run_sql < scripts/verify_idempotent_promotion_sync.sql >/dev/null
-  run_sql -c "SELECT fixture_assert((SELECT count(*) = 0 FROM fixture_writes), 'migration reapplication does not modify business rows')" >/dev/null
-fi
-if [[ "${PROMOTION_TEST_BASELINE:-0}" != 1 ]]; then
-  docker exec --env PGPASSWORD=promotion-fixture "$db_name" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d promotion_test \
-    -c 'CREATE EXTENSION pg_cron; GRANT USAGE ON SCHEMA cron TO postgres;' >/dev/null
-  run_sql -c "ALTER TABLE orders ADD COLUMN created_at timestamptz NOT NULL DEFAULT now(); CREATE TABLE pos_live_events(id bigserial,restaurant_id uuid,domain text,source_table text,event_type text);" >/dev/null
-  sed -n '/^CREATE OR REPLACE FUNCTION public.emit_pos_live_event()/,/^\$\$;/p' \
-    supabase/migrations/20260805090000_pos_live_events_all_domains.sql | run_sql >/dev/null
-  run_sql -c "CREATE TRIGGER pos_live_event_trigger AFTER INSERT OR UPDATE OR DELETE ON order_discounts FOR EACH ROW EXECUTE FUNCTION emit_pos_live_event('orders');" >/dev/null
-  for sql_file in scripts/preflight_promotion_read_write_separation.sql \
-    supabase/migrations/20260905070000_promotion_read_write_separation.sql \
-    scripts/verify_promotion_read_write_separation.sql \
-    test/sql/promotion_read_write_separation_test.sql \
-    supabase/migrations/20260905070000_promotion_read_write_separation.sql \
-    scripts/verify_promotion_read_write_separation.sql; do
-    run_sql < "$sql_file" >/dev/null
-  done
-fi
 printf 'PROMOTION_SQL_TEST=PASS\n'

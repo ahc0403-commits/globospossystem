@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+typedef _LiveChange = ({String domain, String sourceTable, String eventType});
+
 /// A payload-free signal telling a screen to refetch data through its normal,
 /// RLS-protected query path.
 class PosLiveEvent {
@@ -13,7 +15,17 @@ class PosLiveEvent {
     this.restaurantId,
     this.isFallback = false,
     this.affectedDomains,
-  });
+  }) : _changes = null;
+
+  const PosLiveEvent._merged({
+    required this.domain,
+    required this.sourceTable,
+    required this.eventType,
+    required this.restaurantId,
+    required this.isFallback,
+    required this.affectedDomains,
+    required Set<_LiveChange> changes,
+  }) : _changes = changes;
 
   const PosLiveEvent.fallback()
     : domain = '*',
@@ -21,7 +33,8 @@ class PosLiveEvent {
       eventType = 'POLL',
       restaurantId = null,
       isFallback = true,
-      affectedDomains = null;
+      affectedDomains = null,
+      _changes = null;
 
   final String domain;
   final String sourceTable;
@@ -29,6 +42,23 @@ class PosLiveEvent {
   final String? restaurantId;
   final bool isFallback;
   final Set<String>? affectedDomains;
+  final Set<_LiveChange>? _changes;
+
+  Set<_LiveChange> get _changeKinds =>
+      _changes ??
+      {(domain: domain, sourceTable: sourceTable, eventType: eventType)};
+
+  /// Match an original change, not a combination synthesized from different
+  /// records. Deduplicated kinds contain no row payloads or identifiers.
+  bool includesChange({
+    required String domain,
+    required String sourceTable,
+    required String eventType,
+  }) => _changeKinds.contains((
+    domain: domain,
+    sourceTable: sourceTable,
+    eventType: eventType,
+  ));
 
   bool affects(Set<String> domains) =>
       isFallback ||
@@ -36,7 +66,7 @@ class PosLiveEvent {
         (value) => value == '*' || domains.contains(value),
       );
 
-  PosLiveEvent merge(PosLiveEvent other) => PosLiveEvent(
+  PosLiveEvent merge(PosLiveEvent other) => PosLiveEvent._merged(
     domain: domain == other.domain ? domain : '*',
     sourceTable: sourceTable == other.sourceTable ? sourceTable : '*',
     eventType: eventType == other.eventType ? eventType : 'UPDATE',
@@ -48,6 +78,7 @@ class PosLiveEvent {
       ...?other.affectedDomains,
       if (other.affectedDomains == null) other.domain,
     }),
+    changes: Set.unmodifiable({..._changeKinds, ...other._changeKinds}),
   );
 
   factory PosLiveEvent.fromRecord(Map<String, dynamic> record) {

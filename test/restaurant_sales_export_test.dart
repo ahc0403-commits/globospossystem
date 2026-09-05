@@ -1,6 +1,7 @@
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export.dart';
+import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
 
 void main() {
   test('builds exactly one MISA row per general or Red receipt', () {
@@ -91,6 +92,51 @@ void main() {
           'RESTAURANT_EXPORT_DATA_INTEGRITY_FAILED',
         ),
       ),
+    );
+  });
+
+  test('accepts a 22:00-ready report without a finalization marker', () {
+    final payload = _validPayload()
+      ..['status'] = 'ready'
+      ..['report_ready_at'] = '2026-08-16T22:00:00+07:00'
+      ..remove('finalized_at');
+
+    final export = createRestaurantSalesExport(payload);
+    final grouped = createRestaurantSalesExportsByTaxEntity({
+      'business_date': '2026-08-16',
+      'status': 'ready',
+      'report_ready_at': '2026-08-16T22:00:00+07:00',
+      'entity_count': 1,
+      'entities': [payload],
+    });
+    final restaurantEmpty = createRestaurantSalesExportsByTaxEntity({
+      'business_date': '2026-08-16',
+      'status': 'ready',
+      'report_ready_at': '2026-08-16T22:00:00+07:00',
+      'entity_count': 0,
+      'entities': const [],
+    });
+
+    expect(export.finalizedAt, isNull);
+    expect(export.isReadyForDownload, isTrue);
+    expect(grouped, hasLength(1));
+    expect(grouped.single.finalizedAt, isNull);
+    expect(grouped.single.isReadyForDownload, isTrue);
+    expect(restaurantEmpty, isEmpty);
+  });
+
+  test('calculates the automatic refresh boundary in HCM time', () {
+    expect(
+      restaurantSalesReportAutoRefreshDelay(
+        DateTime.parse('2026-09-04T21:59:30+07:00'),
+      ),
+      const Duration(seconds: 30),
+    );
+    expect(
+      restaurantSalesReportAutoRefreshDelay(
+        DateTime.parse('2026-09-04T22:00:00+07:00'),
+      ),
+      isNull,
     );
   });
 

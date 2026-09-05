@@ -22,6 +22,8 @@ any store that overlaps an active Photo monitoring policy.
 - From 21:45: payment completion and all other sale-producing mutations fail
   with `RESTAURANT_DAILY_SALES_CLOSED`. Cancellation, quantity reduction, and
   kitchen status cleanup remain available.
+- At 22:00: the current-date MISA sales report becomes available. This report
+  readiness is independent of the later audit finalization.
 - At 22:20: `restaurant-daily-sales-finalize-2220-hcm` executes once. There is
   no later fallback execution.
 
@@ -59,10 +61,11 @@ restaurant_sales_YYYYMMDD.xlsx
 
 The workbook contains `Sales` receipt rows ordered by the original sale time,
 `Hourly Summary`, and `Summary`. It is not split into store files. The RPC and
-page expose no customer data and do not write or recalculate sales. A download
-is allowed only when the immutable 22:20 result is `finalized`; `pending` and
-`data_integrity_failed` results fail closed. Photo remains available separately
-at `/photo-ops` with `photo_sales_YYYYMMDD.xlsx`.
+page expose no customer data and do not write sales. The current HCM business
+date is reportable from 22:00, even when the independent 22:20 audit
+finalization has not run yet. Past dates remain reportable. A confirmed
+`data_integrity_failed` result still fails closed. Photo remains available
+separately at `/photo-ops` with `photo_sales_YYYYMMDD.xlsx`.
 
 ## Verification and rollback
 

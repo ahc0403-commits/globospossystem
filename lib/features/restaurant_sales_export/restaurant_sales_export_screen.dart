@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
@@ -51,6 +52,7 @@ class _RestaurantSalesExportScreenState
   String? _selectedTaxEntityId;
   bool _isLoading = false;
   bool _isDownloading = false;
+  Timer? _availabilityRefreshTimer;
   String? _statusMessage;
   bool _statusIsError = false;
 
@@ -68,6 +70,13 @@ class _RestaurantSalesExportScreenState
       widget.todayOverride ?? DateTime.now(),
     );
     Future.microtask(_load);
+    _scheduleAvailabilityRefresh();
+  }
+
+  @override
+  void dispose() {
+    _availabilityRefreshTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -415,6 +424,26 @@ class _RestaurantSalesExportScreenState
       _selectedTaxEntityId = null;
       _statusMessage = null;
     });
+    _scheduleAvailabilityRefresh();
+  }
+
+  void _scheduleAvailabilityRefresh() {
+    _availabilityRefreshTimer?.cancel();
+    _availabilityRefreshTimer = null;
+    if (widget.todayOverride != null) return;
+
+    final now = DateTime.now();
+    if (_businessDate != restaurantHcmBusinessDate(now)) return;
+    final delay = restaurantSalesReportAutoRefreshDelay(now);
+    if (delay == null) return;
+
+    _availabilityRefreshTimer = Timer(delay + const Duration(seconds: 1), () {
+      if (!mounted) return;
+      _availabilityRefreshTimer = null;
+      if (_businessDate == restaurantHcmBusinessDate(DateTime.now())) {
+        _load();
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -528,6 +557,12 @@ class _RestaurantSalesExportScreenState
       _ => context.l10n.restaurantSalesExportFailed('$error'),
     };
   }
+}
+
+Duration? restaurantSalesReportAutoRefreshDelay(DateTime now) {
+  final hcmNow = now.toUtc().add(const Duration(hours: 7));
+  final opensAt = DateTime.utc(hcmNow.year, hcmNow.month, hcmNow.day, 22);
+  return hcmNow.isBefore(opensAt) ? opensAt.difference(hcmNow) : null;
 }
 
 String _title(BuildContext context) =>

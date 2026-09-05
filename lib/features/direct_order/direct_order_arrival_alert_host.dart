@@ -243,9 +243,11 @@ class _DirectOrderArrivalAlertHostState
     if (!event.affects({'direct_orders'})) return;
     if (_cursor == null &&
         _initializing &&
-        event.domain == 'direct_orders' &&
-        event.sourceTable == 'direct_order_requests' &&
-        event.eventType == 'INSERT') {
+        event.includesChange(
+          domain: 'direct_orders',
+          sourceTable: 'direct_order_requests',
+          eventType: 'INSERT',
+        )) {
       _insertSignalDuringInitialization = true;
     }
     _requestDrain();

@@ -85,4 +85,56 @@ void main() {
     expect(a.merge(a).restaurantId, 'a');
     expect(a.merge(const PosLiveEvent.fallback()).isFallback, isTrue);
   });
+
+  test('nested merges retain original change tuples in either order', () {
+    const insert = PosLiveEvent(
+      domain: 'direct_orders',
+      sourceTable: 'direct_order_requests',
+      eventType: 'INSERT',
+    );
+    const update = PosLiveEvent(
+      domain: 'orders',
+      sourceTable: 'orders',
+      eventType: 'UPDATE',
+    );
+    for (final merged in [
+      insert.merge(update).merge(insert),
+      update.merge(insert.merge(update)),
+      const PosLiveEvent.fallback().merge(insert).merge(update),
+    ]) {
+      expect(
+        merged.includesChange(
+          domain: 'direct_orders',
+          sourceTable: 'direct_order_requests',
+          eventType: 'INSERT',
+        ),
+        isTrue,
+      );
+      expect(
+        merged.includesChange(
+          domain: 'orders',
+          sourceTable: 'orders',
+          eventType: 'UPDATE',
+        ),
+        isTrue,
+      );
+      expect(
+        merged.includesChange(
+          domain: 'orders',
+          sourceTable: 'orders',
+          eventType: 'INSERT',
+        ),
+        isFalse,
+        reason: 'an INSERT on another table must not invent one here',
+      );
+    }
+    expect(
+      const PosLiveEvent.fallback().includesChange(
+        domain: 'direct_orders',
+        sourceTable: 'direct_order_requests',
+        eventType: 'INSERT',
+      ),
+      isFalse,
+    );
+  });
 }

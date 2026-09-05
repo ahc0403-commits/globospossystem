@@ -87,7 +87,7 @@ class RestaurantSalesExport {
   final int storeCount;
   final int receiptCount;
   final double grossSales;
-  final DateTime finalizedAt;
+  final DateTime? finalizedAt;
   final List<RestaurantSalesReceipt> receipts;
 
   int get redInvoiceCount =>
@@ -132,7 +132,7 @@ RestaurantSalesExport createRestaurantSalesExport(
   if (status == 'data_integrity_failed') {
     throw const FormatException('RESTAURANT_EXPORT_DATA_INTEGRITY_FAILED');
   }
-  if (status != 'finalized') {
+  if (status != 'ready' && status != 'finalized') {
     throw const FormatException('RESTAURANT_EXPORT_INVALID_STATUS');
   }
 
@@ -165,8 +165,12 @@ RestaurantSalesExport createRestaurantSalesExport(
   final finalizedAt = DateTime.tryParse(
     payload['finalized_at']?.toString() ?? '',
   );
-  if (finalizedAt == null) {
+  if (status == 'finalized' && finalizedAt == null) {
     throw const FormatException('RESTAURANT_EXPORT_INVALID_FINALIZED_AT');
+  }
+  if (status == 'ready' &&
+      DateTime.tryParse(payload['report_ready_at']?.toString() ?? '') == null) {
+    throw const FormatException('RESTAURANT_EXPORT_INVALID_REPORT_READY_AT');
   }
 
   final rawReceipts = payload['receipts'];
@@ -376,7 +380,7 @@ List<RestaurantSalesExport> createRestaurantSalesExportsByTaxEntity(
   if (status == 'data_integrity_failed') {
     throw const FormatException('RESTAURANT_EXPORT_DATA_INTEGRITY_FAILED');
   }
-  if (status != 'finalized') {
+  if (status != 'ready' && status != 'finalized') {
     throw const FormatException('RESTAURANT_EXPORT_INVALID_STATUS');
   }
 
@@ -384,10 +388,14 @@ List<RestaurantSalesExport> createRestaurantSalesExportsByTaxEntity(
   if (rawEntities is! List) {
     throw const FormatException('RESTAURANT_EXPORT_INVALID_ENTITIES');
   }
-  final finalizedAt = _requiredText(
-    payload['finalized_at'],
-    'RESTAURANT_EXPORT_INVALID_FINALIZED_AT',
-  );
+  final finalizedAt = payload['finalized_at']?.toString();
+  final reportReadyAt = payload['report_ready_at']?.toString();
+  if (status == 'finalized' && DateTime.tryParse(finalizedAt ?? '') == null) {
+    throw const FormatException('RESTAURANT_EXPORT_INVALID_FINALIZED_AT');
+  }
+  if (status == 'ready' && DateTime.tryParse(reportReadyAt ?? '') == null) {
+    throw const FormatException('RESTAURANT_EXPORT_INVALID_REPORT_READY_AT');
+  }
   final exports = rawEntities
       .map((raw) {
         if (raw is! Map) {
@@ -397,6 +405,7 @@ List<RestaurantSalesExport> createRestaurantSalesExportsByTaxEntity(
         entity['business_date'] = businessDate;
         entity['status'] = status;
         entity['finalized_at'] = finalizedAt;
+        entity['report_ready_at'] = reportReadyAt;
         return createRestaurantSalesExport(entity);
       })
       .toList(growable: false);

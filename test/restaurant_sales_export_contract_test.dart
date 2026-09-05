@@ -17,6 +17,8 @@ void main() {
       'supabase/migrations/20260816180000_red_invoice_contact_fields.sql';
   const taxEntityMigration =
       'supabase/migrations/20260825110000_restaurant_sales_tax_entity_aggregation.sql';
+  const reportReadyMigration =
+      'supabase/migrations/20260904120000_restaurant_sales_report_ready_at_2200.sql';
   const pilotPreflight = 'scripts/preflight_sample_misa_sales_pilot.sql';
   const screen =
       'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
@@ -149,6 +151,21 @@ void main() {
     expect(screenSource, contains("_businessDate.replaceAll('-', '')"));
   });
 
+  test('current-day report opens at 22:00 without the 22:20 marker', () {
+    final sql = readRepoFile(reportReadyMigration);
+    final screenSource = readRepoFile(screen);
+
+    expect(sql, contains("TIME '22:00:00'"));
+    expect(sql, contains("ELSE 'ready'"));
+    expect(sql, contains("'report_ready_at'"));
+    expect(sql, contains("v_finalization.status <> 'finalized'"));
+    expect(sql, isNot(contains("TIME '22:20:00'")));
+    expect(sql, contains('get_restaurant_daily_sales_exports_by_tax_entity'));
+    expect(sql, contains("NOT IN ('ready', 'finalized')"));
+    expect(screenSource, contains('restaurantSalesReportAutoRefreshDelay'));
+    expect(screenSource, contains('Timer('));
+  });
+
   test('seller tax codes are isolated and SAMPLE is a separate entity', () {
     final sql = readRepoFile(taxEntityMigration);
     final service = readRepoFile(
@@ -213,5 +230,9 @@ void main() {
       contains('-- production-gate: self-verifying'),
     );
     expect(deployment, contains('production-gate: self-verifying'));
+    expect(
+      readRepoFile(reportReadyMigration),
+      contains('-- production-gate: self-verifying'),
+    );
   });
 }
