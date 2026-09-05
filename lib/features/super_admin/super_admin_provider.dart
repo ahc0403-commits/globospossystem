@@ -746,7 +746,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
 
         for (final row in payments) {
           final payment = Map<String, dynamic>.from(row);
-          final amount = _toDouble(payment['amount']);
+          final amount = revenuePaymentSalesAmount(payment);
           String channel = '';
           final orderRaw = payment['orders'];
           if (orderRaw is Map<String, dynamic>) {

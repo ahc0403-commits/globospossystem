@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/attendance_service.dart';
 import 'package:globos_pos_system/core/services/financial_input_service.dart';
@@ -379,9 +380,130 @@ void main() {
           addTearDown(report.dispose);
           await report.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
           expect(report.state.error, isNull);
-          // Preserve this screen's existing received-amount basis (110 vs 100 sales).
-          expect(report.state.reportSummary!.totalRevenue, 501 * 168 + 65);
+          // Revenue follows the sales allocation; received cash is a separate metric.
+          expect(report.state.reportSummary!.totalRevenue, 501 * 158 + 65);
           expect(report.state.reportSummary!.rows, hasLength(2));
+        },
+      );
+
+      test('POS delivery appears in headline totals beyond one page', () async {
+        await seed(501);
+        await sql('''UPDATE orders SET sales_channel='delivery';
+          TRUNCATE external_sales, photo_objet_sales;''');
+        final report = ReportNotifier(client: client);
+        addTearDown(report.dispose);
+        await report.setDateRange(
+          DateTime(2026, 7, 27),
+          DateTime(2026, 7, 27),
+          _store,
+        );
+        expect(report.state.error, isNull);
+        final summary = report.state.summary!;
+        expect(summary.dineInRevenue, 0);
+        expect(summary.deliveryRevenue, 50100);
+        expect(summary.totalRevenue, 50100);
+        expect(summary.dailyBreakdown.single.delivery, 50100);
+        expect(summary.hourlyBreakdown.single.amount, 50100);
+        expect(summary.paymentReceivedTotal, 55110);
+        expect(summary.paymentVariance, 5010);
+        expect(summary.serviceTotal, 2505);
+        expect(summary.paidOrders, 501);
+      });
+
+      test(
+        'store, global and Excel sales reconcile across channels and payment splits',
+        () async {
+          await sql('''
+          INSERT INTO orders VALUES
+            ('50000000-0000-0000-0000-000000000001','$_store','completed','dine_in','2026-07-27 02:00:00+00'),
+            ('50000000-0000-0000-0000-000000000002','$_store','completed','delivery','2026-07-28 02:00:00+00'),
+            ('50000000-0000-0000-0000-000000000003','$_store','completed','takeaway','2026-07-27 02:00:00+00');
+          INSERT INTO payments(id,restaurant_id,order_id,amount,amount_portion,method,created_at,is_revenue)
+          VALUES
+            ('60000000-0000-0000-0000-000000000001','$_store','50000000-0000-0000-0000-000000000001',110,100,'CASH','2026-07-27 02:00:00+00',true),
+            ('60000000-0000-0000-0000-000000000002','$_store','50000000-0000-0000-0000-000000000001',45,50,'BANKTRANSFER','2026-07-27 02:00:00+00',true),
+            ('60000000-0000-0000-0000-000000000003','$_store','50000000-0000-0000-0000-000000000002',220,200,'CASH','2026-07-28 02:00:00+00',true),
+            ('60000000-0000-0000-0000-000000000004','$_store','50000000-0000-0000-0000-000000000002',75,NULL,'BANKTRANSFER','2026-07-28 02:00:00+00',true),
+            ('60000000-0000-0000-0000-000000000005','$_store','50000000-0000-0000-0000-000000000003',15,0,'CASH','2026-07-27 02:00:00+00',true),
+            ('60000000-0000-0000-0000-000000000006','$_store','50000000-0000-0000-0000-000000000003',12,NULL,'CARD','2026-07-27 02:00:00+00',true),
+            ('60000000-0000-0000-0000-000000000007','$_store',NULL,8,NULL,'OTHER','2026-07-27 02:00:00+00',true),
+            ('61000000-0000-0000-0000-000000000001','$_store',NULL,9,NULL,'CASH','2026-07-27 02:00:00+00',false);
+          INSERT INTO external_sales VALUES
+            ('70000000-0000-0000-0000-000000000001','$_store',30,'2026-07-27 02:00:00+00',true,'completed'),
+            ('70000000-0000-0000-0000-000000000002','$_store',999,'2026-07-27 02:00:00+00',true,'pending'),
+            ('70000000-0000-0000-0000-000000000003','$_store',999,'2026-07-27 02:00:00+00',false,'completed');
+          INSERT INTO photo_objet_sales VALUES
+            ('a0000000-0000-0000-0000-000000000001','$_store','2026-07-27',50,2,2);
+        ''');
+          final report = ReportNotifier(client: client);
+          final global = _AdminReports(client)..setStores([_store]);
+          addTearDown(report.dispose);
+          addTearDown(global.dispose);
+          await report.setDateRange(
+            DateTime(2026, 7, 27),
+            DateTime(2026, 7, 28),
+            _store,
+          );
+          await global.setReportRange(
+            DateTime(2026, 7, 27),
+            DateTime(2026, 7, 28),
+          );
+          expect(report.state.error, isNull);
+          expect(global.state.error, isNull);
+          final summary = report.state.summary!;
+          expect(summary.dineInRevenue, 218);
+          expect(summary.deliveryRevenue, 305);
+          expect(summary.totalRevenue, 523);
+          expect(summary.paymentReceivedTotal, 485);
+          expect(summary.paymentVariance, 40);
+          expect(summary.cashTotal, 345);
+          expect(summary.bankTransferTotal, 120);
+          expect(summary.cardTotal, 12);
+          expect(summary.payTotal, 8);
+          expect(summary.serviceTotal, 11);
+          expect(summary.totalOrders, 6);
+          expect(summary.paidOrders, 7);
+          expect(summary.dailyBreakdown.map((day) => day.total), [248, 275]);
+          expect(
+            summary.dailyBreakdown.fold<double>(
+              0,
+              (sum, day) => sum + day.total,
+            ),
+            summary.totalRevenue,
+          );
+          // The hourly chart intentionally excludes Photo Objet daily-only input.
+          expect(
+            summary.hourlyBreakdown.fold<double>(
+              0,
+              (sum, hour) => sum + hour.amount,
+            ),
+            475,
+          );
+          final globalSummary = global.state.reportSummary!;
+          expect(globalSummary.totalRevenue, summary.totalRevenue);
+          expect(globalSummary.dineInRevenue, summary.dineInRevenue);
+          expect(globalSummary.deliveryRevenue, summary.deliveryRevenue);
+          expect(globalSummary.rows.single.total, 523);
+
+          final sheet = Excel.decodeBytes(
+            report.exportToExcel(),
+          ).tables['Sales Report']!;
+          double valueFor(String label) => double.parse(
+            sheet.rows
+                .singleWhere((row) => row.first?.value.toString() == label)[1]!
+                .value
+                .toString(),
+          );
+          expect(valueFor('Store Sales Revenue'), 218);
+          expect(valueFor('Delivery Sales Revenue'), 305);
+          expect(valueFor('Net Sales Revenue'), 523);
+          expect(valueFor('Payment Received Total'), 485);
+          expect(valueFor('Payment Variance'), 40);
+          final totalRow = sheet.rows.singleWhere(
+            (row) => row.first?.value.toString() == 'Total',
+          );
+          expect(double.parse(totalRow[2]!.value.toString()), 305);
+          expect(double.parse(totalRow[3]!.value.toString()), 523);
         },
       );
 

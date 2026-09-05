@@ -220,7 +220,7 @@ int countPaidRevenueOrders(Iterable<Map<String, dynamic>> payments) {
 double aggregateRevenueSalesTotal(Iterable<Map<String, dynamic>> payments) {
   return payments.fold<double>(
     0,
-    (sum, payment) => sum + _paymentSalesAmount(payment),
+    (sum, payment) => sum + revenuePaymentSalesAmount(payment),
   );
 }
 
@@ -482,6 +482,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
       if (!mounted || requestId != _requestId) return;
 
       double dineInRevenue = 0;
+      double deliveryRevenue = 0;
       final revenuePayments = List<Map<String, dynamic>>.from(
         paymentsRevenueResponse,
       );
@@ -496,7 +497,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
 
       for (final payment in revenuePayments) {
         final receivedAmount = _toDouble(payment['amount']);
-        final salesAmount = _paymentSalesAmount(payment);
+        final salesAmount = revenuePaymentSalesAmount(payment);
         final normalizedMethod = normalizePaymentMethodInput(
           payment['method']?.toString() ?? '',
         );
@@ -567,6 +568,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         final normalized = channel.toLowerCase();
         if (normalized == 'delivery') {
           accumulator.delivery += salesAmount;
+          deliveryRevenue += salesAmount;
         } else {
           accumulator.teamKeys.add(transactionKey);
           accumulator.dineIn += salesAmount;
@@ -574,7 +576,6 @@ class ReportNotifier extends StateNotifier<ReportState> {
         }
       }
 
-      double deliveryRevenue = 0;
       for (final row in externalSalesResponse) {
         final external = Map<String, dynamic>.from(row);
         final amount = _toDouble(external['net_amount']);
@@ -1003,7 +1004,9 @@ double _toDouble(dynamic value) {
   };
 }
 
-double _paymentSalesAmount(Map<String, dynamic> payment) {
+/// Sales allocation is independent of received cash. Only legacy null values
+/// fall back to amount; a zero allocation remains zero.
+double revenuePaymentSalesAmount(Map<String, dynamic> payment) {
   final amountPortion = payment['amount_portion'];
   return amountPortion == null
       ? _toDouble(payment['amount'])

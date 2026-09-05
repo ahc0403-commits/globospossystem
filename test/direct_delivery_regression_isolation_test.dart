@@ -20,10 +20,10 @@ const _frozenFiles = <String, String>{
       'ceb62497c8f43ed6cd0cd100ad3ac1c2f7ae5a9131184a4a48a7b002236ee28e',
   'lib/core/payments/payment_total_calculator.dart':
       '52cc2f364ce9f199e8727abf1eec5b43a4f0e2ba1c6821fd712df8122d69f0b8',
-  // Phase 1B changes only input completeness/time capture and stale-load state.
-  // Financial arithmetic is covered by financial_inputs_postgrest_test.dart.
+  // Phase 1C reconciles POS delivery and allocated sales in report totals.
+  // Real SQL/API and Excel coverage lives in financial_inputs_postgrest_test.dart.
   'lib/features/report/report_provider.dart':
-      '088a422c6e41d82d461ae3bfbbcfe4c5ccf7ce7f5dfdd5f805da7277342562cb',
+      '6f78e328c5e9b9ff519d2b22102f9cea43795308f348f799b16ce51c24854789',
   'lib/core/hardware/print_job_agent_service.dart':
       '5c976d66666e47e3a9a2de7cf7cda39a6c6827792015cb414b118925409b03db',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
