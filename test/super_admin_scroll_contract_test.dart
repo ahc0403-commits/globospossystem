@@ -75,9 +75,9 @@ void main() {
     expect(source, contains('constraints.maxWidth < 520'));
     expect(source, contains('constraints.maxWidth < 560'));
     expect(source, contains('Wrap('));
-    expect(source, contains('alignment: WrapAlignment.end'));
+    expect(source, contains('alignment: WrapAlignment.start'));
     expect(source, contains('SingleChildScrollView('));
-    expect(source, contains('scrollDirection: Axis.horizontal'));
+    expect(source, contains("Key('super_admin_stores_scroll')"));
     expect(source, contains('overflow: TextOverflow.ellipsis'));
   });
 }

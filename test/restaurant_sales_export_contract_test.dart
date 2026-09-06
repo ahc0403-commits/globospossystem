@@ -153,8 +153,6 @@ void main() {
 
   test('current-day report opens at 22:00 without the 22:20 marker', () {
     final sql = readRepoFile(reportReadyMigration);
-    final screenSource = readRepoFile(screen);
-
     expect(sql, contains("TIME '22:00:00'"));
     expect(sql, contains("ELSE 'ready'"));
     expect(sql, contains("'report_ready_at'"));
@@ -162,8 +160,6 @@ void main() {
     expect(sql, isNot(contains("TIME '22:20:00'")));
     expect(sql, contains('get_restaurant_daily_sales_exports_by_tax_entity'));
     expect(sql, contains("NOT IN ('ready', 'finalized')"));
-    expect(screenSource, contains('restaurantSalesReportAutoRefreshDelay'));
-    expect(screenSource, contains('Timer('));
   });
 
   test('seller tax codes are isolated and SAMPLE is a separate entity', () {

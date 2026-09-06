@@ -1027,348 +1027,390 @@ class _RestaurantsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final hierarchyCopy = _SuperAdminHierarchyCopy(context);
-    return Column(
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final title = Text(
-              l10n.superAdminStores,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppFonts.system(
-                color: AppColors.amber500,
-                fontSize: 28,
-                letterSpacing: 1.0,
-              ),
-            );
-            final actions = [
-              OutlinedButton.icon(
-                key: const Key('super_admin_legal_entity_accounting_action'),
-                onPressed: state.taxEntities.isEmpty
-                    ? null
-                    : () => showDialog<void>(
-                        context: context,
-                        builder: (_) => _LegalEntityAccountingDialog(
-                          state: state,
-                          notifier: notifier,
+    return CustomScrollView(
+      key: const Key('super_admin_stores_scroll'),
+      primary: false,
+      physics: _superAdminScrollPhysics,
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final title = Text(
+                    l10n.superAdminStores,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.system(
+                      color: AppColors.amber500,
+                      fontSize: 28,
+                      letterSpacing: 1.0,
+                    ),
+                  );
+                  final actions = [
+                    OutlinedButton.icon(
+                      key: const Key(
+                        'super_admin_legal_entity_accounting_action',
+                      ),
+                      onPressed: state.taxEntities.isEmpty
+                          ? null
+                          : () => showDialog<void>(
+                              context: context,
+                              builder: (_) => _LegalEntityAccountingDialog(
+                                state: state,
+                                notifier: notifier,
+                              ),
+                            ),
+                      icon: const Icon(Icons.account_balance_outlined),
+                      label: Text(
+                        _legalAccountingText(
+                          context,
+                          ko: '법인 회계 계정',
+                          en: 'Legal entity accounting',
+                          vi: 'Kế toán pháp nhân',
                         ),
                       ),
-                icon: const Icon(Icons.account_balance_outlined),
-                label: Text(
-                  _legalAccountingText(
-                    context,
-                    ko: '법인 회계 계정',
-                    en: 'Legal entity accounting',
-                    vi: 'Kế toán pháp nhân',
-                  ),
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: _openOfficeSystem,
-                icon: const Icon(Icons.business),
-                label: Text(l10n.superAdminGoToOfficeSystem),
-              ),
-              FilledButton.icon(
-                key: const Key('super_admin_add_store_action'),
-                onPressed: () =>
-                    _showRestaurantSheet(context, notifier: notifier),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
-                ),
-                icon: const Icon(Icons.add_business),
-                label: Text(l10n.superAdminAddStore),
-              ),
-            ];
-
-            if (constraints.maxWidth < 560 ||
-                MediaQuery.textScalerOf(context).scale(1) > 1.5) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  title,
-                  const SizedBox(height: 8),
-                  Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: actions,
-                  ),
-                ],
-              );
-            }
-
-            return Row(
-              children: [
-                Expanded(child: title),
-                const SizedBox(width: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  children: actions,
-                ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              Text(
-                l10n.superAdminStatusLabel,
-                style: AppFonts.system(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _activityChip(
-                'active',
-                l10n.superAdminStatusActive,
-                state.selectedActivity,
-              ),
-              const SizedBox(width: 6),
-              _activityChip(
-                'inactive',
-                l10n.superAdminStatusInactive,
-                state.selectedActivity,
-              ),
-              const SizedBox(width: 6),
-              _activityChip(
-                'all',
-                l10n.superAdminStatusAll,
-                state.selectedActivity,
-              ),
-              const SizedBox(width: 16),
-              _ownerTypeChip(
-                null,
-                l10n.superAdminFilterAll,
-                state.selectedOwnerType,
-              ),
-              const SizedBox(width: 6),
-              _ownerTypeChip(
-                'internal',
-                hierarchyCopy.filterInternal,
-                state.selectedOwnerType,
-              ),
-              const SizedBox(width: 6),
-              _ownerTypeChip(
-                'external',
-                hierarchyCopy.filterExternal,
-                state.selectedOwnerType,
-              ),
-              const SizedBox(width: 16),
-              Text(
-                hierarchyCopy.legalEntity,
-                style: AppFonts.system(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<String?>(
-                value: state.selectedTaxEntityId,
-                dropdownColor: AppColors.surface1,
-                hint: Text(
-                  l10n.superAdminSelectLegalEntity,
-                  style: AppFonts.system(color: AppColors.textPrimary),
-                ),
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(l10n.superAdminFilterAll),
-                  ),
-                  ...state.filteredTaxEntities.map(
-                    (entity) => DropdownMenuItem<String?>(
-                      value: entity.id,
-                      child: Text(entity.name),
                     ),
-                  ),
-                ],
-                onChanged: notifier.setTaxEntityFilter,
-              ),
-              const SizedBox(width: 16),
-              Text(
-                l10n.superAdminBrand,
-                style: AppFonts.system(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<String?>(
-                value: state.selectedBrandId,
-                dropdownColor: AppColors.surface1,
-                hint: Text(
-                  l10n.superAdminFilterAll,
-                  style: AppFonts.system(color: AppColors.textPrimary),
-                ),
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(
-                      l10n.superAdminFilterAll,
-                      style: AppFonts.system(color: AppColors.textPrimary),
+                    OutlinedButton.icon(
+                      onPressed: _openOfficeSystem,
+                      icon: const Icon(Icons.business),
+                      label: Text(l10n.superAdminGoToOfficeSystem),
                     ),
-                  ),
-                  DropdownMenuItem<String?>(
-                    value: kUnclassifiedBrandFilter,
-                    child: Text(
-                      l10n.superAdminUncategorized,
-                      style: AppFonts.system(color: AppColors.textPrimary),
-                    ),
-                  ),
-                  ...state.filteredBrands.map((brand) {
-                    final id = brand['id']?.toString();
-                    final code = brand['code']?.toString() ?? '-';
-                    final name = brand['name']?.toString() ?? '-';
-                    return DropdownMenuItem<String?>(
-                      value: id,
-                      child: Text(
-                        '$name ($code)',
-                        style: AppFonts.system(color: AppColors.textPrimary),
+                    FilledButton.icon(
+                      key: const Key('super_admin_add_store_action'),
+                      onPressed: () =>
+                          _showRestaurantSheet(context, notifier: notifier),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.amber500,
+                        foregroundColor: AppColors.surface0,
                       ),
+                      icon: const Icon(Icons.add_business),
+                      label: Text(l10n.superAdminAddStore),
+                    ),
+                  ];
+
+                  if (constraints.maxWidth < 900 ||
+                      MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        title,
+                        const SizedBox(height: 8),
+                        Wrap(
+                          alignment: WrapAlignment.start,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: actions,
+                        ),
+                      ],
                     );
-                  }),
-                ],
-                onChanged: notifier.setBrandFilter,
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: title),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.start,
+                          children: actions,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(l10n.superAdminStatusLabel),
+                  _activityChip(
+                    'active',
+                    l10n.superAdminStatusActive,
+                    state.selectedActivity,
+                  ),
+                  _activityChip(
+                    'inactive',
+                    l10n.superAdminStatusInactive,
+                    state.selectedActivity,
+                  ),
+                  _activityChip(
+                    'all',
+                    l10n.superAdminStatusAll,
+                    state.selectedActivity,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(l10n.superAdminStoreType),
+                  _ownerTypeChip(
+                    null,
+                    l10n.superAdminFilterAll,
+                    state.selectedOwnerType,
+                  ),
+                  _ownerTypeChip(
+                    'internal',
+                    hierarchyCopy.filterInternal,
+                    state.selectedOwnerType,
+                  ),
+                  _ownerTypeChip(
+                    'external',
+                    hierarchyCopy.filterExternal,
+                    state.selectedOwnerType,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth < 600
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth - 12) / 2;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: width,
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'store_entity_${state.selectedTaxEntityId}',
+                          ),
+                          initialValue: state.selectedTaxEntityId,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: hierarchyCopy.legalEntity,
+                            border: const OutlineInputBorder(),
+                          ),
+                          hint: Text(l10n.superAdminFilterAll),
+                          items: [
+                            DropdownMenuItem(
+                              value: null,
+                              child: Text(l10n.superAdminFilterAll),
+                            ),
+                            ...state.filteredTaxEntities.map(
+                              (entity) => DropdownMenuItem(
+                                value: entity.id,
+                                child: Text(
+                                  entity.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: notifier.setTaxEntityFilter,
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey('store_brand_${state.selectedBrandId}'),
+                          initialValue: state.selectedBrandId,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: l10n.superAdminBrand,
+                            border: const OutlineInputBorder(),
+                          ),
+                          hint: Text(l10n.superAdminFilterAll),
+                          items: [
+                            DropdownMenuItem(
+                              value: null,
+                              child: Text(l10n.superAdminFilterAll),
+                            ),
+                            DropdownMenuItem(
+                              value: kUnclassifiedBrandFilter,
+                              child: Text(l10n.superAdminUncategorized),
+                            ),
+                            ...state.filteredBrands.map(
+                              (brand) => DropdownMenuItem(
+                                value: brand['id']?.toString(),
+                                child: Text(
+                                  '${brand['name']} (${brand['code']})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: notifier.setBrandFilter,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
-        const SizedBox(height: 10),
-        Expanded(
-          child: state.isLoading && state.restaurants.isEmpty
-              ? const Center(
-                  child: CircularProgressIndicator(color: AppColors.amber500),
-                )
-              : ListView.separated(
-                  primary: false,
-                  physics: _superAdminScrollPhysics,
-                  padding: _superAdminScrollPadding,
-                  itemCount: state.filteredRestaurants.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final restaurant = state.filteredRestaurants[index];
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.surface1,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              color: restaurant.isActive
-                                  ? AppColors.statusAvailable
-                                  : AppColors.textSecondary,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  restaurant.name,
-                                  style: AppFonts.system(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 24,
-                                  ),
-                                ),
-                                Text(
-                                  '${restaurant.slug} • ${restaurant.address}',
-                                  style: AppFonts.system(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  l10n.superAdminLegalEntityPrefix(
-                                    restaurant.taxEntityName ??
-                                        l10n.superAdminUncategorized,
-                                  ),
-                                  style: AppFonts.system(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  l10n.superAdminBrandPrefix(
-                                    restaurant.brandName ??
-                                        l10n.superAdminUncategorized,
-                                  ),
-                                  style: AppFonts.system(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          _ownerTypeBadge(context, restaurant.ownerType),
-                          const SizedBox(width: 6),
-                          _officeIntegrationBadge(
-                            context,
-                            restaurant.isOfficeLinked,
-                          ),
-                          const SizedBox(width: 6),
-                          _modeBadge(context, restaurant.operationMode),
-                          const SizedBox(width: 10),
-                          OutlinedButton(
-                            key: Key(
-                              'super_admin_manage_store_${restaurant.id}',
-                            ),
-                            onPressed: () => _showRestaurantSheet(
-                              context,
-                              notifier: notifier,
-                              initial: restaurant,
-                            ),
-                            child: Text(l10n.superAdminManageStore),
-                          ),
-                          const SizedBox(width: 8),
-                          OutlinedButton.icon(
-                            key: Key(
-                              'super_admin_store_setup_${restaurant.id}',
-                            ),
-                            onPressed: restaurant.isActive
-                                ? () => context.go(
-                                    '/store-setup/${restaurant.id}',
-                                  )
-                                : null,
-                            icon: const Icon(Icons.rocket_launch_outlined),
-                            label: Text(l10n.storeSetupEntry),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: restaurant.isActive
-                                ? () {
-                                    notifier.selectRestaurant(restaurant);
-                                    onGoToAdmin(restaurant.id);
-                                  }
-                                : null,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.amber500,
-                              foregroundColor: AppColors.surface0,
-                            ),
-                            child: Text(l10n.superAdminGoToAdmin),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-        ),
+        if (state.isLoading && state.restaurants.isEmpty)
+          const SliverToBoxAdapter(
+            child: Center(
+              child: CircularProgressIndicator(color: AppColors.amber500),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: _superAdminScrollPadding,
+            sliver: SliverList.separated(
+              itemCount: state.filteredRestaurants.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, index) =>
+                  _storeCard(context, state.filteredRestaurants[index]),
+            ),
+          ),
       ],
+    );
+  }
+
+  Widget _storeCard(BuildContext context, SuperRestaurant restaurant) {
+    final l10n = context.l10n;
+    return Container(
+      key: Key('super_admin_store_card_${restaurant.id}'),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 7),
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: restaurant.isActive
+                        ? AppColors.statusAvailable
+                        : AppColors.textSecondary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  restaurant.name,
+                  style: AppFonts.system(
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${restaurant.slug} • ${restaurant.address}',
+            style: AppFonts.system(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.superAdminLegalEntityPrefix(
+              restaurant.taxEntityName ?? l10n.superAdminUncategorized,
+            ),
+            style: AppFonts.system(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          Text(
+            l10n.superAdminBrandPrefix(
+              restaurant.brandName ?? l10n.superAdminUncategorized,
+            ),
+            style: AppFonts.system(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _ownerTypeBadge(context, restaurant.ownerType),
+              _officeIntegrationBadge(context, restaurant.isOfficeLinked),
+              _modeBadge(context, restaurant.operationMode),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final actions = [
+                OutlinedButton(
+                  key: Key('super_admin_manage_store_${restaurant.id}'),
+                  onPressed: () => _showRestaurantSheet(
+                    context,
+                    notifier: notifier,
+                    initial: restaurant,
+                  ),
+                  child: Text(l10n.superAdminManageStore),
+                ),
+                OutlinedButton.icon(
+                  key: Key('super_admin_store_setup_${restaurant.id}'),
+                  onPressed: restaurant.isActive
+                      ? () => context.go('/store-setup/${restaurant.id}')
+                      : null,
+                  icon: const Icon(Icons.rocket_launch_outlined),
+                  label: Text(
+                    l10n.storeSetupEntry,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                FilledButton(
+                  key: Key('super_admin_enter_store_${restaurant.id}'),
+                  onPressed: restaurant.isActive
+                      ? () {
+                          notifier.selectRestaurant(restaurant);
+                          onGoToAdmin(restaurant.id);
+                        }
+                      : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: Text(
+                    l10n.superAdminGoToAdmin,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ];
+              if (constraints.maxWidth < 560 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final action in actions)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: action,
+                      ),
+                  ],
+                );
+              }
+              return Wrap(spacing: 8, runSpacing: 8, children: actions);
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -1631,11 +1673,12 @@ class _RestaurantsTab extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppColors.surface1,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
+            return SingleChildScrollView(
               key: const Key('super_admin_store_sheet'),
               padding: EdgeInsets.only(
                 left: 16,
@@ -1686,6 +1729,7 @@ class _RestaurantsTab extends StatelessWidget {
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: operationMode,
+                    isExpanded: true,
                     dropdownColor: AppColors.surface1,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
@@ -1715,6 +1759,7 @@ class _RestaurantsTab extends StatelessWidget {
                   DropdownButtonFormField<String?>(
                     key: ValueKey(selectedTaxEntityId),
                     initialValue: selectedTaxEntityId,
+                    isExpanded: true,
                     dropdownColor: AppColors.surface1,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
@@ -1725,7 +1770,10 @@ class _RestaurantsTab extends StatelessWidget {
                         .map(
                           (entity) => DropdownMenuItem<String?>(
                             value: entity.id,
-                            child: Text(entity.name),
+                            child: Text(
+                              entity.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         )
                         .toList(),
@@ -1747,6 +1795,7 @@ class _RestaurantsTab extends StatelessWidget {
                       '${selectedTaxEntityId ?? 'none'}-${selectedBrandId ?? 'none'}',
                     ),
                     initialValue: selectedBrandId,
+                    isExpanded: true,
                     dropdownColor: AppColors.surface1,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
@@ -1761,7 +1810,10 @@ class _RestaurantsTab extends StatelessWidget {
                         final code = brand['code']?.toString() ?? '-';
                         return DropdownMenuItem<String?>(
                           value: id,
-                          child: Text('$name ($code)'),
+                          child: Text(
+                            '$name ($code)',
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }),
                     ],

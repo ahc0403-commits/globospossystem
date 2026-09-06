@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
@@ -52,7 +51,6 @@ class _RestaurantSalesExportScreenState
   String? _selectedTaxEntityId;
   bool _isLoading = false;
   bool _isDownloading = false;
-  Timer? _availabilityRefreshTimer;
   String? _statusMessage;
   bool _statusIsError = false;
 
@@ -70,13 +68,6 @@ class _RestaurantSalesExportScreenState
       widget.todayOverride ?? DateTime.now(),
     );
     Future.microtask(_load);
-    _scheduleAvailabilityRefresh();
-  }
-
-  @override
-  void dispose() {
-    _availabilityRefreshTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -424,26 +415,6 @@ class _RestaurantSalesExportScreenState
       _selectedTaxEntityId = null;
       _statusMessage = null;
     });
-    _scheduleAvailabilityRefresh();
-  }
-
-  void _scheduleAvailabilityRefresh() {
-    _availabilityRefreshTimer?.cancel();
-    _availabilityRefreshTimer = null;
-    if (widget.todayOverride != null) return;
-
-    final now = DateTime.now();
-    if (_businessDate != restaurantHcmBusinessDate(now)) return;
-    final delay = restaurantSalesReportAutoRefreshDelay(now);
-    if (delay == null) return;
-
-    _availabilityRefreshTimer = Timer(delay + const Duration(seconds: 1), () {
-      if (!mounted) return;
-      _availabilityRefreshTimer = null;
-      if (_businessDate == restaurantHcmBusinessDate(DateTime.now())) {
-        _load();
-      }
-    });
   }
 
   Future<void> _load() async {
@@ -559,12 +530,6 @@ class _RestaurantSalesExportScreenState
   }
 }
 
-Duration? restaurantSalesReportAutoRefreshDelay(DateTime now) {
-  final hcmNow = now.toUtc().add(const Duration(hours: 7));
-  final opensAt = DateTime.utc(hcmNow.year, hcmNow.month, hcmNow.day, 22);
-  return hcmNow.isBefore(opensAt) ? opensAt.difference(hcmNow) : null;
-}
-
 String _title(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
       'vi' => 'Khai báo doanh thu',
@@ -645,10 +610,11 @@ String _dateSearchGuidance(
   BuildContext context,
 ) => switch (Localizations.localeOf(context).languageCode) {
   'vi' =>
-    'Nguyên tắc là khai báo trong ngày. Có thể tra cứu và tải lại file Excel của ngày trước khi cần kiểm tra bổ sung.',
+    'Có thể tra cứu và tải bất cứ lúc nào. Tra cứu lại để cập nhật doanh thu phát sinh thêm. Có thể chọn ngày trước.',
   'en' =>
-    'Reports should be filed the same day. Past dates remain searchable and downloadable for later checks.',
-  _ => '당일 신고가 원칙입니다. 추가 확인이 필요하면 지난 날짜를 조회해 엑셀을 다시 다운로드할 수 있습니다.',
+    'View and download at any time. Search again to include later sales. Past dates are also available.',
+  _ =>
+    '시간 제한 없이 조회·다운로드할 수 있습니다. 추가 매출이 발생하면 다시 조회한 뒤 다운로드하세요. 지난 날짜도 조회할 수 있습니다.',
 };
 
 String _receiptLabel(BuildContext context) =>

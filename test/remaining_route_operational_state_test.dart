@@ -720,9 +720,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Sales report searches and enables download for a past date', (
-    tester,
-  ) async {
+  testWidgets('Sales report downloads today and past dates', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final requestedDates = <String>[];
@@ -744,7 +742,7 @@ void main() {
             storeCount: 1,
             receiptCount: 1,
             grossSales: 108000,
-            finalizedAt: DateTime.parse('${businessDate}T16:00:00+07:00'),
+            finalizedAt: null,
             receipts: [
               RestaurantSalesReceipt(
                 storeId: _storeId,
@@ -805,7 +803,7 @@ void main() {
     await _pump(
       tester,
       child: RestaurantSalesExportScreen(
-        todayOverride: DateTime.utc(2026, 8, 15, 17),
+        todayOverride: DateTime.parse('2026-08-16T20:28:00+07:00'),
         loader: (businessDate) async {
           requestedDates.add(businessDate);
           return exportFor(businessDate);
@@ -844,6 +842,16 @@ void main() {
       findsNothing,
     );
 
+    await tester.ensureVisible(
+      find.byKey(const Key('restaurant_sales_export_button')),
+    );
+    await tester.tap(find.byKey(const Key('restaurant_sales_export_button')));
+    await tester.pumpAndSettle();
+    expect(savedFileName, 'MISA_sales_0318453298_20260816.xlsx');
+    expect(savedByteLength, greaterThan(0));
+    await tester.ensureVisible(
+      find.byKey(const Key('restaurant_sales_export_date_picker')),
+    );
     await tester.tap(
       find.byKey(const Key('restaurant_sales_export_date_picker')),
     );
