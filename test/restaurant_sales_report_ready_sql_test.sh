@@ -22,4 +22,16 @@ for attempt in 1 2; do
   run_sql < supabase/migrations/20260904120000_restaurant_sales_report_ready_at_2200.sql >/dev/null
   run_sql < test/sql/restaurant_sales_report_ready_test.sql >/dev/null
 done
+# Preserve the current VAT export fields before applying the clock-only fix.
+run_sql <<'SQL' >/dev/null
+ALTER TABLE order_items ADD COLUMN item_type text DEFAULT 'menu_item';
+DO $$
+DECLARE definition text;
+BEGIN
+  SELECT pg_get_functiondef('get_restaurant_daily_sales_exports_by_tax_entity(date)'::regprocedure) INTO definition;
+  EXECUTE replace(definition, '''quantity'', item.quantity,', '''item_type'', item.item_type, ''quantity'', item.quantity,');
+END $$;
+SQL
+run_sql < supabase/migrations/20260906140000_restaurant_sales_report_anytime.sql >/dev/null
+run_sql < test/sql/restaurant_sales_report_anytime_test.sql >/dev/null
 printf 'RESTAURANT_REPORT_READY_SQL_TEST=PASS\n'

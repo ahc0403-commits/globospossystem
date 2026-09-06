@@ -162,6 +162,132 @@ void main() {
     );
   });
 
+  for (final size in [
+    const Size(390, 844),
+    const Size(320, 568),
+    const Size(768, 1024),
+    const Size(414, 896),
+  ]) {
+    testWidgets('store controls remain usable at ${size.width} pixels', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final notifier = _SuperAdminNotifier();
+      final router = GoRouter(
+        initialLocation: '/super-admin',
+        routes: [
+          GoRoute(
+            path: '/super-admin',
+            builder: (_, __) => const SuperAdminScreen(),
+          ),
+          GoRoute(
+            path: '/store-setup/:storeId',
+            builder: (_, __) => const Scaffold(body: Text('Setup opened')),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => _AuthNotifier()),
+            superAdminProvider.overrideWith((ref) => notifier),
+            qcTemplateProvider.overrideWith((ref) => _TemplateNotifier()),
+            globalQcTemplatesProvider.overrideWith((ref) async => const []),
+          ],
+          child: MaterialApp.router(
+            theme: AppTheme.build(),
+            locale: Locale(size.width == 414 ? 'vi' : 'ko'),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(size.width == 414 ? 1.5 : 1),
+              ),
+              child: child!,
+            ),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final inactive = find.byKey(const Key('super_admin_activity_inactive'));
+      await tester.ensureVisible(inactive);
+      await tester.tap(inactive);
+      await tester.pumpAndSettle();
+      expect(notifier.state.selectedActivity, 'inactive');
+      final active = find.byKey(const Key('super_admin_activity_active'));
+      await tester.ensureVisible(active);
+      await tester.tap(active);
+      await tester.pumpAndSettle();
+      if (size.width == 390) {
+        final entity = find.byKey(const ValueKey('store_entity_null'));
+        await tester.ensureVisible(entity);
+        await tester.tap(entity);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('GLOBOS Vietnam').last);
+        await tester.pumpAndSettle();
+        expect(notifier.state.selectedTaxEntityId, _taxEntityId);
+        final brand = find.byKey(const ValueKey('store_brand_null'));
+        await tester.ensureVisible(brand);
+        await tester.tap(brand);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('GLOBOS (GLOBOS)').last);
+        await tester.pumpAndSettle();
+        expect(notifier.state.selectedBrandId, _brandId);
+        await tester.tap(find.byKey(const ValueKey('store_brand_$_brandId')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('전체').last);
+        await tester.pumpAndSettle();
+        expect(notifier.state.selectedBrandId, isNull);
+      }
+      final manage = find.byKey(
+        const Key('super_admin_manage_store_$_storeId'),
+      );
+      await tester.scrollUntilVisible(
+        manage,
+        180,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.ensureVisible(manage);
+      await tester.pumpAndSettle();
+      expect(manage.hitTestable(), findsOneWidget);
+      final rect = tester.getRect(manage);
+      expect(rect.left, greaterThanOrEqualTo(0));
+      expect(rect.right, lessThanOrEqualTo(size.width));
+      expect(tester.getSize(find.text(_store.name)).width, greaterThan(180));
+      await tester.tap(manage);
+      await tester.pumpAndSettle();
+      final sheet = find.byKey(const Key('super_admin_store_sheet'));
+      expect(sheet, findsOneWidget);
+      final closeStore = find.byKey(
+        const Key('super_admin_close_store_button'),
+      );
+      await tester.ensureVisible(closeStore);
+      await tester.pumpAndSettle();
+      expect(closeStore.hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      Navigator.of(tester.element(sheet)).pop();
+      await tester.pumpAndSettle();
+      final setup = find.byKey(const Key('super_admin_store_setup_$_storeId'));
+      await tester.ensureVisible(setup);
+      await tester.pumpAndSettle();
+      await tester.tap(setup);
+      await tester.pumpAndSettle();
+      expect(find.text('Setup opened'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('all Super Admin overlay entrypoints execute', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1440, 1800);
