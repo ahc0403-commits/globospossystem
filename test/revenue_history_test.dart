@@ -57,7 +57,15 @@ SupabaseClient _client(Future<http.Response> Function(http.Request) handle) {
   final client = SupabaseClient(
     'http://localhost:54321',
     'test-anon',
-    httpClient: MockClient(handle),
+    httpClient: MockClient((request) async {
+      final response = await handle(request);
+      return http.Response.bytes(
+        response.bodyBytes,
+        response.statusCode,
+        headers: response.headers,
+        request: request,
+      );
+    }),
   );
   addTearDown(client.dispose);
   return client;
