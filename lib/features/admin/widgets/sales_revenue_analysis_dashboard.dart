@@ -22,6 +22,12 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
     required this.onEndDatePressed,
     required this.onApplyCustomRange,
     required this.onRetry,
+    this.appliedStartDate,
+    this.appliedEndDate,
+    this.priorDailyRevenue,
+    this.isTrendLoading = false,
+    this.trendLoadFailed = false,
+    this.onRetryTrend,
   });
 
   final ReportSummary? summary;
@@ -34,18 +40,28 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
   final VoidCallback onEndDatePressed;
   final VoidCallback onApplyCustomRange;
   final VoidCallback onRetry;
+  final DateTime? appliedStartDate;
+  final DateTime? appliedEndDate;
+  final List<DailyRevenue>? priorDailyRevenue;
+  final bool isTrendLoading;
+  final bool trendLoadFailed;
+  final VoidCallback? onRetryTrend;
 
   @override
   Widget build(BuildContext context) {
     final copy = _SalesAnalysisCopy.of(context);
     final currency = NumberFormat('#,###', 'vi_VN');
     final dateFormat = DateFormat('dd/MM/yyyy');
-    final normalizedStart = DateTime(
+    final normalizedStart = DateTime.utc(
       startDate.year,
       startDate.month,
       startDate.day,
     );
-    final normalizedEnd = DateTime(endDate.year, endDate.month, endDate.day);
+    final normalizedEnd = DateTime.utc(
+      endDate.year,
+      endDate.month,
+      endDate.day,
+    );
     final selectedDays = normalizedEnd.difference(normalizedStart).inDays + 1;
 
     return Column(
@@ -65,6 +81,24 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
           onApplyCustomRange: onApplyCustomRange,
         ),
         const SizedBox(height: 12),
+        if (isTrendLoading || trendLoadFailed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                Text(
+                  isTrendLoading
+                      ? copy.averageLoading
+                      : copy.averageUnavailable,
+                  key: const Key('sales_average_status'),
+                ),
+                if (trendLoadFailed)
+                  TextButton(onPressed: onRetryTrend, child: Text(copy.retry)),
+              ],
+            ),
+          ),
         _buildContent(context, copy, currency),
       ],
     );
@@ -107,8 +141,7 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
     }
 
     final data = summary;
-    if (data == null ||
-        (data.dailyBreakdown.isEmpty && data.hourlyBreakdown.isEmpty)) {
+    if (data == null) {
       return ToastWorkSurface(
         child: PosEmptyState(
           title: copy.noDataTitle,
@@ -118,7 +151,25 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
       );
     }
 
-    final daily = _fillDailyRange(data.dailyBreakdown, startDate, endDate);
+    final appliedStart = appliedStartDate ?? startDate;
+    final appliedEnd = appliedEndDate ?? endDate;
+    final daily = _fillDailyRange(
+      data.dailyBreakdown,
+      appliedStart,
+      appliedEnd,
+    );
+    final firstDay = DateTime.utc(
+      appliedStart.year,
+      appliedStart.month,
+      appliedStart.day,
+    );
+    final prior = priorDailyRevenue == null || daily.length <= 1
+        ? const <DailyRevenue>[]
+        : _fillDailyRange(
+            priorDailyRevenue!,
+            firstDay.subtract(Duration(days: daily.length - 1)),
+            firstDay.subtract(const Duration(days: 1)),
+          );
     final hourly = _fillHourlyRange(data.hourlyBreakdown);
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -127,7 +178,11 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
           title: copy.dailyTitle,
           subtitle: copy.dailySubtitle,
           trailing: _RevenueTrendBadge(rows: daily, currency: currency),
-          child: _DailyRevenuePanelContent(rows: daily, currency: currency),
+          child: _DailyRevenuePanelContent(
+            rows: daily,
+            priorRows: prior,
+            currency: currency,
+          ),
         );
         final hourlyPanel = PosDataPanel(
           key: const Key('sales_hourly_bar_panel'),
@@ -315,8 +370,8 @@ List<DailyRevenue> _fillDailyRange(
   DateTime start,
   DateTime end,
 ) {
-  final first = DateTime(start.year, start.month, start.day);
-  final last = DateTime(end.year, end.month, end.day);
+  final first = DateTime.utc(start.year, start.month, start.day);
+  final last = DateTime.utc(end.year, end.month, end.day);
   final byDate = <String, DailyRevenue>{
     for (final row in rows) DateFormat('yyyy-MM-dd').format(row.date): row,
   };
@@ -346,6 +401,7 @@ List<FlSpot> _revenueMovingAverageSpots(
   List<DailyRevenue> rows, {
   required int window,
   required DateTime today,
+  int visibleOffset = 0,
 }) {
   if (window <= 0 || rows.length < window) return const [];
 
@@ -356,16 +412,16 @@ List<FlSpot> _revenueMovingAverageSpots(
   }
   if (effectiveLength < window) return const [];
 
-  return [
-    for (var end = window - 1; end < effectiveLength; end++)
-      FlSpot(
-        end.toDouble(),
-        rows
-                .sublist(end - window + 1, end + 1)
-                .fold<double>(0, (sum, row) => sum + row.total) /
-            window,
-      ),
-  ];
+  var sum = 0.0;
+  final spots = <FlSpot>[];
+  for (var end = 0; end < effectiveLength; end++) {
+    sum += rows[end].total;
+    if (end >= window) sum -= rows[end - window].total;
+    if (end >= window - 1 && end >= visibleOffset) {
+      spots.add(FlSpot((end - visibleOffset).toDouble(), sum / window));
+    }
+  }
+  return spots;
 }
 
 class _RevenueTrendBadge extends StatelessWidget {
@@ -444,9 +500,9 @@ class _DailyRevenueLineChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final copy = _SalesAnalysisCopy.of(context);
-    final maxAmount = rows.fold<double>(
-      0,
-      (max, row) => math.max(max, row.total),
+    final maxAmount = trendSpots.fold<double>(
+      rows.fold<double>(0, (max, row) => math.max(max, row.total)),
+      (max, spot) => math.max(max, spot.y),
     );
     final maxY = maxAmount <= 0 ? 1.0 : maxAmount * 1.2;
     final interval = maxY / 4;
@@ -593,7 +649,7 @@ class _DailyRevenueLineChart extends StatelessWidget {
                         barWidth: 2.5,
                         dashArray: const [8, 5],
                         isStrokeCapRound: true,
-                        dotData: const FlDotData(show: false),
+                        dotData: FlDotData(show: trendSpots.length == 1),
                         belowBarData: BarAreaData(show: false),
                       ),
                   ],
@@ -608,20 +664,27 @@ class _DailyRevenueLineChart extends StatelessWidget {
 }
 
 class _DailyRevenuePanelContent extends StatelessWidget {
-  const _DailyRevenuePanelContent({required this.rows, required this.currency});
+  const _DailyRevenuePanelContent({
+    required this.rows,
+    required this.priorRows,
+    required this.currency,
+  });
 
   final List<DailyRevenue> rows;
+  final List<DailyRevenue> priorRows;
   final NumberFormat currency;
 
   @override
   Widget build(BuildContext context) {
     final copy = _SalesAnalysisCopy.of(context);
     final latest = rows.last;
-    final trendWindow = rows.length <= 7 ? 3 : 7;
+    final today = toHoChiMinhBusinessTime(DateTime.now());
+    final trendWindow = rows.length;
     final trendSpots = _revenueMovingAverageSpots(
-      rows,
+      [...priorRows, ...rows],
       window: trendWindow,
-      today: DateTime.now(),
+      today: today,
+      visibleOffset: priorRows.length,
     );
     final trendLabel = copy.movingAverage(trendWindow);
     final teamChart = _DailyMetricSurface(
@@ -658,7 +721,11 @@ class _DailyRevenuePanelContent extends StatelessWidget {
           title: copy.revenueLabel,
           value: '${_compactCurrency(latest.total)} VND',
           color: PosColors.accent,
-          comparisonLabel: trendSpots.isEmpty ? null : trendLabel,
+          comparisonLabel: trendSpots.isEmpty
+              ? null
+              : DateUtils.isSameDay(latest.date, today)
+              ? '$trendLabel · ${latest.total == 0 ? copy.todayExcluded : copy.todayPartial}'
+              : trendLabel,
           comparisonColor: PosColors.warning,
           child: _DailyRevenueLineChart(
             rows: rows,
@@ -1135,6 +1202,20 @@ class _SalesAnalysisCopy {
   String get revenueLabel => pick('매출', 'Doanh thu', 'Revenue');
   String movingAverage(int days) =>
       pick('$days일 이동평균', 'TB động $days ngày', '$days-day moving average');
+  String get averageLoading =>
+      pick('이동평균 계산 중', 'Đang tính trung bình động', 'Loading moving average');
+  String get todayExcluded => pick(
+    '오늘 0원 제외',
+    'Bỏ qua hôm nay chưa có doanh thu',
+    'Today with zero revenue excluded',
+  );
+  String get todayPartial =>
+      pick('오늘은 현재까지 집계', 'Hôm nay tính đến hiện tại', 'Today is partial');
+  String get averageUnavailable => pick(
+    '이동평균의 이전 기간을 불러오지 못했습니다',
+    'Không tải được kỳ trước cho trung bình động',
+    'Could not load the preceding period for the moving average',
+  );
   String get teamLabel => pick('매출 팀수', 'Số nhóm', 'Sales teams');
   String get averageTableLabel =>
       pick('테이블 평균 단가', 'Giá trị TB mỗi bàn', 'Average table value');

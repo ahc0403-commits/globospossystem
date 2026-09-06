@@ -68,6 +68,7 @@ dependencies:
     path: packages/sepay_android_audio
 
 dev_dependencies:
+  http: ^1.6.0
   flutter_test:
     sdk: flutter
   integration_test:

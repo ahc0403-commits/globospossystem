@@ -72,6 +72,8 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   int _currentIndex = 0;
   int _allLiveRevision = 0;
   final Map<String, int> _domainLiveRevisions = <String, int>{};
+  final Set<Type> _visitedTabs = <Type>{};
+  String? _tabScope;
 
   @override
   void initState() {
@@ -125,6 +127,12 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       role: role,
       brandId: overrideStoreContext?.brandId,
     );
+    final tabScope = '${auth.user?.id}:$liveStoreId:$role:$isPhotoObjetContext';
+    if (_tabScope != tabScope) {
+      _tabScope = tabScope;
+      _visitedTabs.clear();
+      _domainLiveRevisions.clear();
+    }
     final viewport = MediaQuery.sizeOf(context);
     final useDesktopShell =
         PlatformInfo.isWebOrDesktop &&
@@ -159,34 +167,38 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }
 
   List<Widget> _liveKeyedTabs(List<Widget> tabs) {
+    _visitedTabs.add(tabs[_currentIndex.clamp(0, tabs.length - 1)].runtimeType);
     return [
       for (final tab in tabs)
-        KeyedSubtree(
-          key: ValueKey(
-            '${tab.runtimeType}:${switch (tab) {
-              // Reports are a user-selected period snapshot. Live POS events
-              // must not remount the tab and restart its report query.
-              ReportsTab() => 0,
-              TablesTab() => _revisionForDomains({'tables', 'orders', 'payments'}),
-              MenuTab() => _revisionForDomains({'menu', 'inventory'}),
-              StaffTab() => _revisionForDomains({'staff', 'attendance'}),
-              AttendanceTab() => _revisionForDomains({'attendance', 'staff'}),
-              // Inventory Purchase refreshes its providers in place so live
-              // reconnect ticks cannot reset the operator to its dashboard.
-              InventoryPurchaseScreen() => 0,
-              PhotoInventoryScreen() => _revisionForDomains({'inventory', 'menu', 'photo_ops'}),
-              QcTab() => _revisionForDomains({'qc'}),
-              // Settings contains editable dialogs. Keep its element stable
-              // across live events so an update cannot dismiss the dialog or
-              // reset the selected settings category.
-              SettingsTab() => 0,
-              DeliverySettlementTab() => _revisionForDomains({'delivery'}),
-              EinvoiceTab() => _revisionForDomains({'einvoice', 'settings'}),
-              _ => _allLiveRevision,
-            }}',
+        if (!_visitedTabs.contains(tab.runtimeType))
+          const SizedBox.shrink()
+        else
+          KeyedSubtree(
+            key: ValueKey(
+              '$_tabScope:${tab.runtimeType}:${switch (tab) {
+                // Reports are a user-selected period snapshot. Live POS events
+                // must not remount the tab and restart its report query.
+                ReportsTab() => 0,
+                TablesTab() => _revisionForDomains({'tables', 'orders', 'payments'}),
+                MenuTab() => _revisionForDomains({'menu', 'inventory'}),
+                StaffTab() => _revisionForDomains({'staff', 'attendance'}),
+                AttendanceTab() => _revisionForDomains({'attendance', 'staff'}),
+                // Inventory Purchase refreshes its providers in place so live
+                // reconnect ticks cannot reset the operator to its dashboard.
+                InventoryPurchaseScreen() => 0,
+                PhotoInventoryScreen() => _revisionForDomains({'inventory', 'menu', 'photo_ops'}),
+                QcTab() => _revisionForDomains({'qc'}),
+                // Settings contains editable dialogs. Keep its element stable
+                // across live events so an update cannot dismiss the dialog or
+                // reset the selected settings category.
+                SettingsTab() => 0,
+                DeliverySettlementTab() => _revisionForDomains({'delivery'}),
+                EinvoiceTab() => _revisionForDomains({'einvoice', 'settings'}),
+                _ => _allLiveRevision,
+              }}',
+            ),
+            child: tab,
           ),
-          child: tab,
-        ),
     ];
   }
 

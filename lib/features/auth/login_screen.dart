@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
-import '../../core/utils/role_routes.dart';
 import '../../main.dart';
 import '../../widgets/language_switcher.dart';
 import 'auth_provider.dart';
@@ -34,17 +32,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-
-    // 로그인 성공 시 router redirect가 처리
-    ref.listen(authProvider, (prev, next) {
-      final role = next.role;
-      if (next.user != null &&
-          role != null &&
-          !next.passwordChangeRequired &&
-          !next.privacyConsentRequired) {
-        context.go(homeRouteForRole(role));
-      }
-    });
 
     return Scaffold(
       backgroundColor: PosColors.canvas,
@@ -370,12 +357,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   onPressed: authState.isLoading
                       ? null
-                      : () => ref
-                            .read(authProvider.notifier)
-                            .login(
-                              _emailController.text,
-                              _passwordController.text,
-                            ),
+                      : () {
+                          // Dismiss the keyboard before the router replaces
+                          // this screen, so the next shell gets a full viewport.
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          ref
+                              .read(authProvider.notifier)
+                              .login(
+                                _emailController.text,
+                                _passwordController.text,
+                              );
+                        },
                   child: authState.isLoading
                       ? const CircularProgressIndicator(
                           color: Colors.white,

@@ -62,7 +62,12 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     }
     _initializedRestaurantId = storeId;
     Future.microtask(() {
-      ref.read(tablesProvider(storeId).notifier).fetchTables();
+      if (!mounted) return;
+      // The provider starts its first fetch in its constructor. Reuse that
+      // request when this tab mounts while it is still loading.
+      if (!ref.read(tablesProvider(storeId)).isLoading) {
+        ref.read(tablesProvider(storeId).notifier).fetchTables();
+      }
       ref.read(orderProvider.notifier).clearSession();
     });
   }

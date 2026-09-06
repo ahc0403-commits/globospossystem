@@ -9,6 +9,7 @@ import 'package:globos_pos_system/features/admin/widgets/paperless_operations_da
 import 'package:globos_pos_system/features/report/menu_sales_analytics.dart';
 import 'package:globos_pos_system/features/report/menu_sales_analytics_panel.dart';
 import 'package:globos_pos_system/features/report/report_provider.dart';
+import 'package:globos_pos_system/features/report/revenue_history_provider.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
@@ -249,6 +250,7 @@ void main() {
       ProviderScope(
         overrides: [
           reportProvider.overrideWith((ref) => _LoadedReportNotifier()),
+          revenueHistoryProvider.overrideWith((ref, range) async => []),
         ],
         child: _materialApp(
           SalesRevenueAnalyticsScreen(
