@@ -3,7 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
-    show AuthChangeEvent, AuthException, PostgrestException, User;
+    show
+        AuthChangeEvent,
+        AuthException,
+        PostgrestException,
+        SupabaseClient,
+        User;
 import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/role_routes.dart';
 import '../../main.dart';
@@ -40,28 +45,46 @@ const authErrorPasswordChangeFailedPrefix = 'auth/password-change-failed:';
 const privacyConsentDocumentVersion = 'vn-pdpl-2026-01';
 
 class AuthNotifier extends StateNotifier<PosAuthState> {
-  AuthNotifier({this.onLogout}) : super(const PosAuthState()) {
+  AuthNotifier({this.onLogout, SupabaseClient? client})
+    : _client = client ?? supabase,
+      super(const PosAuthState()) {
     _init();
   }
 
   final void Function()? onLogout;
+  final SupabaseClient _client;
+  Future<void>? _profileLoad;
+  String? _profileUserId;
+  int _sessionGeneration = 0;
+
+  void _invalidateProfileLoad() {
+    _sessionGeneration++;
+    _profileLoad = null;
+    _profileUserId = null;
+  }
 
   static const _activeStorePrefsPrefix = 'active_store_';
   StreamSubscription<dynamic>? _authSub;
   String? _pendingSignedOutErrorMessage;
 
   void _init() {
-    final session = supabase.auth.currentSession;
+    final session = _client.auth.currentSession;
     if (session != null) {
+      state = state.copyWith(isLoading: true);
       _fetchUserProfile(session.user);
     }
 
-    _authSub = supabase.auth.onAuthStateChange.listen((data) async {
+    _authSub = _client.auth.onAuthStateChange.listen((data) async {
+      if (!mounted) return;
       final event = data.event;
       final session = data.session;
       if (event == AuthChangeEvent.signedIn && session != null) {
-        await _fetchUserProfile(session.user);
+        if (_client.auth.currentUser?.id == session.user.id &&
+            state.user?.id != session.user.id) {
+          await _fetchUserProfile(session.user);
+        }
       } else if (event == AuthChangeEvent.signedOut) {
+        _invalidateProfileLoad();
         NavigationHistoryService.instance.clear();
         state = PosAuthState(errorMessage: _pendingSignedOutErrorMessage);
         _pendingSignedOutErrorMessage = null;
@@ -69,9 +92,28 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     });
   }
 
-  Future<void> _fetchUserProfile(User user) async {
+  Future<void> _fetchUserProfile(User user) {
+    if (_profileUserId == user.id && _profileLoad != null) {
+      return _profileLoad!;
+    }
+    final generation = ++_sessionGeneration;
+    _profileUserId = user.id;
+    final load = _loadUserProfile(user, generation);
+    _profileLoad = load;
+    return load.whenComplete(() {
+      if (generation == _sessionGeneration) {
+        _profileLoad = null;
+        _profileUserId = null;
+      }
+    });
+  }
+
+  bool _isCurrentProfile(int generation) =>
+      mounted && generation == _sessionGeneration;
+
+  Future<void> _loadUserProfile(User user, int generation) async {
     try {
-      final data = await supabase
+      final data = await _client
           .from('users')
           .select(
             'role, restaurant_id, is_active, extra_permissions, '
@@ -79,6 +121,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
           )
           .eq('auth_id', user.id)
           .single();
+      if (!_isCurrentProfile(generation)) return;
 
       final isActive = data['is_active'] as bool? ?? true;
       if (!isActive) {
@@ -96,10 +139,12 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       final extraPermissions = extraRaw is List
           ? extraRaw.map((e) => e.toString()).toList()
           : const <String>[];
+      final consent = _hasAcceptedCurrentPrivacyConsent();
       final stores = await _resolveAccessibleStores(
         user: user,
         fallbackStoreId: data['restaurant_id'] as String?,
       );
+      if (!_isCurrentProfile(generation)) return;
       if (stores.isEmpty && !kStoreScopeExemptRoles.contains(role)) {
         // A store-scoped role with no accessible store cannot operate any
         // POS surface — refuse the session instead of landing with
@@ -117,7 +162,8 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         primaryStoreId: primaryStoreId,
         stores: stores,
       );
-      final hasPrivacyConsent = await _hasAcceptedCurrentPrivacyConsent();
+      final hasPrivacyConsent = await consent;
+      if (!_isCurrentProfile(generation)) return;
 
       state = state.copyWith(
         isLoading: false,
@@ -136,8 +182,10 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       final homeRoute = homeRouteForRole(role);
       NavigationHistoryService.instance.push(homeRoute);
     } on PostgrestException catch (error) {
+      if (!_isCurrentProfile(generation)) return;
       await _handleProfileLoadError(error);
     } catch (_) {
+      if (!_isCurrentProfile(generation)) return;
       state = state.copyWith(
         isLoading: false,
         clearUser: true,
@@ -147,18 +195,23 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   }
 
   Future<void> login(String email, String password) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    _invalidateProfileLoad();
+    state = state.copyWith(isLoading: true, clearUser: true, clearError: true);
     try {
-      final response = await supabase.auth.signInWithPassword(
+      final response = await _client.auth.signInWithPassword(
         email: email.trim(),
         password: password,
       );
-      if (response.user != null) {
+      if (mounted &&
+          response.user != null &&
+          state.user?.id != response.user!.id) {
         await _fetchUserProfile(response.user!);
       }
     } on AuthException catch (e) {
+      if (!mounted) return;
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: authErrorGenericLogin,
@@ -195,12 +248,15 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
   Future<void> _signOutWithError(String message) async {
     _pendingSignedOutErrorMessage = message;
-    await supabase.auth.signOut();
+    await _client.auth.signOut();
+    if (!mounted) return;
     state = PosAuthState(errorMessage: message);
   }
 
   Future<void> logout() async {
-    await supabase.auth.signOut();
+    _invalidateProfileLoad();
+    await _client.auth.signOut();
+    if (!mounted) return;
     NavigationHistoryService.instance.clear();
     state = const PosAuthState();
     onLogout?.call();
@@ -225,7 +281,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     state = state.copyWith(isPasswordChangeSubmitting: true, clearError: true);
 
     try {
-      final response = await supabase.functions.invoke(
+      final response = await _client.functions.invoke(
         'complete-initial-password-change',
         body: {
           'new_password': newPassword,
@@ -239,7 +295,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       if (!selfService || state.passwordChangeRequired) {
         // A forced reset is cleared only for the generation that this request
         // started. Re-read the server-owned gate before POS navigation.
-        final profile = await supabase
+        final profile = await _client
             .from('users')
             .select('must_change_password, password_change_generation')
             .eq('auth_id', state.user!.id)
@@ -280,7 +336,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     state = state.copyWith(isPrivacyConsentSubmitting: true, clearError: true);
 
     try {
-      await supabase.rpc(
+      await _client.rpc(
         'accept_my_privacy_consent',
         params: {'p_consent_locale': localeName},
       );
@@ -311,13 +367,14 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     );
     if (!isAccessible) return;
 
+    _invalidateProfileLoad();
     state = state.copyWith(storeId: storeId);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('$_activeStorePrefsPrefix${user.id}', storeId);
   }
 
   Future<void> refreshProfile() async {
-    final user = supabase.auth.currentUser;
+    final user = _client.auth.currentUser;
     if (user == null) {
       state = const PosAuthState();
       return;
@@ -327,6 +384,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
   @override
   void dispose() {
+    _invalidateProfileLoad();
     _authSub?.cancel();
     super.dispose();
   }
@@ -360,7 +418,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     if (storeIds.isEmpty) return const [];
 
     try {
-      final rows = await supabase
+      final rows = await _client
           .from('restaurants')
           .select('id, name, brand_id, brands(name)')
           .inFilter('id', storeIds)
@@ -451,7 +509,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
   Future<bool> _hasAcceptedCurrentPrivacyConsent() async {
     try {
-      final accepted = await supabase.rpc(
+      final accepted = await _client.rpc(
         'has_accepted_current_privacy_consent',
       );
       return accepted == true;

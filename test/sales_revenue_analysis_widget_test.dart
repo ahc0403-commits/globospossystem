@@ -43,6 +43,10 @@ Widget _app({
   ReportSummary? summary,
   DateTime? startDate,
   DateTime? endDate,
+  List<DailyRevenue>? priorDailyRevenue = const [],
+  DateTime? appliedStartDate,
+  DateTime? appliedEndDate,
+  bool trendLoadFailed = false,
 }) {
   return MaterialApp(
     locale: const Locale('ko'),
@@ -59,6 +63,10 @@ Widget _app({
         padding: const EdgeInsets.all(12),
         child: SalesRevenueAnalysisDashboard(
           summary: summary ?? _summary(),
+          priorDailyRevenue: priorDailyRevenue,
+          appliedStartDate: appliedStartDate,
+          appliedEndDate: appliedEndDate,
+          trendLoadFailed: trendLoadFailed,
           startDate: startDate ?? DateTime(2026, 8, 8),
           endDate: endDate ?? DateTime(2026, 8, 14),
           isLoading: false,
@@ -109,7 +117,7 @@ void main() {
         find.byKey(const Key('sales_revenue_trend_legend')),
         findsOneWidget,
       );
-      expect(find.text('3일 이동평균'), findsOneWidget);
+      expect(find.text('7일 이동평균'), findsOneWidget);
       final revenueChart = tester.widget<LineChart>(
         find.descendant(
           of: find.byKey(const Key('sales_daily_line_chart')),
@@ -118,7 +126,7 @@ void main() {
       );
       expect(revenueChart.data.lineBarsData, hasLength(2));
       expect(revenueChart.data.lineBarsData.last.dashArray, [8, 5]);
-      expect(revenueChart.data.lineBarsData.last.spots, hasLength(5));
+      expect(revenueChart.data.lineBarsData.last.spots, hasLength(7));
       expect(
         find.byKey(const Key('sales_revenue_analysis_filters')),
         findsOneWidget,
@@ -185,7 +193,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('two-week range uses seven-day moving average', (tester) async {
+  testWidgets('two-week range uses fourteen-day moving average', (
+    tester,
+  ) async {
     final yesterday = DateUtils.dateOnly(
       DateTime.now().subtract(const Duration(days: 1)),
     );
@@ -218,15 +228,15 @@ void main() {
         matching: find.byType(LineChart),
       ),
     );
-    expect(find.text('7일 이동평균'), findsOneWidget);
-    expect(chart.data.lineBarsData.last.spots, hasLength(8));
+    expect(find.text('14일 이동평균'), findsOneWidget);
+    expect(chart.data.lineBarsData.last.spots, hasLength(14));
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('zero revenue for today is excluded from moving average', (
     tester,
   ) async {
-    final today = DateUtils.dateOnly(DateTime.now());
+    final today = DateUtils.dateOnly(toHoChiMinhBusinessTime(DateTime.now()));
     final first = today.subtract(const Duration(days: 6));
     final rows = [
       for (var index = 0; index < 7; index++)
@@ -257,9 +267,9 @@ void main() {
       ),
     );
     final trend = chart.data.lineBarsData.last;
-    expect(trend.spots, hasLength(4));
+    expect(trend.spots, hasLength(6));
     expect(trend.spots.last.x, 5);
-    expect(trend.spots.last.y, closeTo(500000, 0.001));
+    expect(trend.spots.last.y, closeTo(300000, 0.001));
     expect(tester.takeException(), isNull);
   });
 
@@ -270,6 +280,105 @@ void main() {
     expect(firstDay.averageTableAmount, closeTo(800000 / 7, 0.001));
   });
 
+  for (final days in [1, 7, 10, 14, 30, 45]) {
+    testWidgets(
+      '$days-day selection calculates the matching average from the first visible day',
+      (tester) async {
+        final first = DateTime(2025, 12, 1);
+        final all = [
+          for (var i = 0; i < days * 2 - 1; i++)
+            DailyRevenue(
+              date: first.add(Duration(days: i)),
+              dineIn: (i + 1) * 100000,
+              delivery: 0,
+              total: (i + 1) * 100000,
+            ),
+        ];
+        final visible = all.sublist(days - 1);
+        await tester.binding.setSurfaceSize(const Size(1200, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          _app(
+            onQuickRangeSelected: (_) {},
+            summary: _summary(dailyBreakdown: visible),
+            startDate: visible.first.date,
+            endDate: visible.last.date,
+            priorDailyRevenue: all.take(days - 1).toList(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final chart = tester.widget<LineChart>(
+          find.descendant(
+            of: find.byKey(const Key('sales_daily_line_chart')),
+            matching: find.byType(LineChart),
+          ),
+        );
+        final trend = chart.data.lineBarsData.last;
+        expect(find.text('$days일 이동평균'), findsOneWidget);
+        expect(trend.spots, hasLength(days));
+        expect(trend.spots.first.x, 0);
+        expect(trend.spots.first.y, closeTo((days + 1) / 2 * 100000, 0.001));
+        expect(trend.spots.last.x, days - 1);
+        expect(trend.spots.last.y, closeTo((3 * days - 1) / 2 * 100000, 0.001));
+        expect(chart.data.lineBarsData.first.spots, hasLength(days));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'draft dates do not relabel or expand the applied revenue series',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _app(
+          onQuickRangeSelected: (_) {},
+          startDate: DateTime(2026, 7, 16),
+          endDate: DateTime(2026, 8, 14),
+          appliedStartDate: DateTime(2026, 8, 8),
+          appliedEndDate: DateTime(2026, 8, 14),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('7일 이동평균'), findsOneWidget);
+      expect(find.text('30일 이동평균'), findsNothing);
+      final chart = tester.widget<LineChart>(
+        find.descendant(
+          of: find.byKey(const Key('sales_daily_line_chart')),
+          matching: find.byType(LineChart),
+        ),
+      );
+      expect(chart.data.lineBarsData.first.spots, hasLength(7));
+    },
+  );
+
+  testWidgets(
+    'failed history keeps revenue and never invents preceding zeroes',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _app(
+          onQuickRangeSelected: (_) {},
+          priorDailyRevenue: null,
+          trendLoadFailed: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('sales_average_status')), findsOneWidget);
+      final chart = tester.widget<LineChart>(
+        find.descendant(
+          of: find.byKey(const Key('sales_daily_line_chart')),
+          matching: find.byType(LineChart),
+        ),
+      );
+      expect(chart.data.lineBarsData.first.spots, hasLength(7));
+      expect(chart.data.lineBarsData.last.spots, hasLength(1));
+      expect(chart.data.lineBarsData.last.spots.single.x, 6);
+    },
+  );
+
   test('daily metrics use independent truthful units', () {
     final rows = _summary().dailyBreakdown;
 
@@ -279,4 +388,51 @@ void main() {
     );
     expect(rows.first.averageTableAmount, isNot(rows.first.total));
   });
+
+  testWidgets(
+    'a high preceding average stays inside the chart after sales fall',
+    (tester) async {
+      final start = DateTime(2026, 1, 1);
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _app(
+          onQuickRangeSelected: (_) {},
+          startDate: start,
+          endDate: start.add(const Duration(days: 29)),
+          summary: _summary(
+            dailyBreakdown: [
+              for (var i = 0; i < 30; i++)
+                DailyRevenue(
+                  date: start.add(Duration(days: i)),
+                  dineIn: 10000,
+                  delivery: 0,
+                  total: 10000,
+                ),
+            ],
+          ),
+          priorDailyRevenue: [
+            for (var i = 1; i < 30; i++)
+              DailyRevenue(
+                date: start.subtract(Duration(days: i)),
+                dineIn: 1000000,
+                delivery: 0,
+                total: 1000000,
+              ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      final chart = tester.widget<LineChart>(
+        find.descendant(
+          of: find.byKey(const Key('sales_daily_line_chart')),
+          matching: find.byType(LineChart),
+        ),
+      );
+      final firstAverage = chart.data.lineBarsData.last.spots.first.y;
+      expect(firstAverage, closeTo(29010000 / 30, 0.001));
+      expect(chart.data.maxY, greaterThan(firstAverage));
+      expect(chart.data.lineBarsData.first.spots.first.y, 10000);
+    },
+  );
 }

@@ -11,6 +11,7 @@ import '../report/menu_sales_analytics.dart';
 import '../report/menu_sales_analytics_panel.dart';
 import '../report/report_excel_file.dart';
 import '../report/report_provider.dart';
+import '../report/revenue_history_provider.dart';
 import 'widgets/paperless_operations_dashboard.dart';
 import 'widgets/sales_revenue_analysis_dashboard.dart';
 
@@ -126,7 +127,7 @@ class _SalesRevenueAnalyticsScreenState
       context: context,
       initialDate: _pendingStart,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: toHoChiMinhBusinessTime(DateTime.now()),
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -140,15 +141,15 @@ class _SalesRevenueAnalyticsScreenState
       context: context,
       initialDate: _pendingEnd,
       firstDate: _pendingStart,
-      lastDate: DateTime.now(),
+      lastDate: toHoChiMinhBusinessTime(DateTime.now()),
     );
     if (picked == null || !mounted) return;
     setState(() => _pendingEnd = picked);
   }
 
   void _applyQuickRange(int days) {
-    final now = DateTime.now();
-    final end = DateTime(now.year, now.month, now.day);
+    final now = toHoChiMinhBusinessTime(DateTime.now());
+    final end = DateTime.utc(now.year, now.month, now.day);
     final start = end.subtract(Duration(days: days - 1));
     setState(() {
       _pendingStart = start;
@@ -201,6 +202,25 @@ class _SalesRevenueAnalyticsScreenState
   @override
   Widget build(BuildContext context) {
     final reportState = ref.watch(reportProvider);
+    final start = DateTime.utc(
+      reportState.startDate.year,
+      reportState.startDate.month,
+      reportState.startDate.day,
+    );
+    final end = DateTime.utc(
+      reportState.endDate.year,
+      reportState.endDate.month,
+      reportState.endDate.day,
+    );
+    final days = end.difference(start).inDays + 1;
+    final historyRange = (
+      storeId: widget.storeId,
+      start: start.subtract(Duration(days: days - 1)),
+      end: start.subtract(const Duration(days: 1)),
+    );
+    final history = days <= 1
+        ? const AsyncData<List<DailyRevenue>>([])
+        : ref.watch(revenueHistoryProvider(historyRange));
     return Scaffold(
       key: const Key('sales_revenue_analytics_screen'),
       backgroundColor: AppColors.surface0,
@@ -238,6 +258,13 @@ class _SalesRevenueAnalyticsScreenState
               summary: reportState.summary,
               startDate: _pendingStart,
               endDate: _pendingEnd,
+              appliedStartDate: reportState.startDate,
+              appliedEndDate: reportState.endDate,
+              priorDailyRevenue: history.asData?.value,
+              isTrendLoading: history.isLoading,
+              trendLoadFailed: history.hasError,
+              onRetryTrend: () =>
+                  ref.invalidate(revenueHistoryProvider(historyRange)),
               isLoading: reportState.isLoading,
               error: reportState.error,
               onQuickRangeSelected: _applyQuickRange,

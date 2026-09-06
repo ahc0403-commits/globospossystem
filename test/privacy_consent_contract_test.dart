@@ -83,7 +83,10 @@ void main() {
       expect(router, contains('PrivacyConsentScreen'));
       expect(router, contains('auth.privacyConsentRequired'));
       expect(router, contains("'/privacy-consent'"));
-      expect(login, contains('!next.privacyConsentRequired'));
+      // Central routing owns both consent gating and return-to restoration.
+      // The login screen must not introduce a second redirect around it.
+      expect(login, isNot(contains('context.go(')));
+      expect(login, isNot(contains('ref.listen(authProvider')));
       expect(provider, contains('has_accepted_current_privacy_consent'));
       expect(provider, contains('accept_my_privacy_consent'));
       expect(provider, contains('authErrorPrivacyConsentFailed'));
