@@ -79,6 +79,7 @@ class _DirectOrderStorefrontScreenState
   bool _submitting = false;
   bool _searching = false;
   bool _mapsReady = false;
+  bool _mapsLoading = false;
   bool _mapLoadAttempted = false;
   bool _locationConfirmed = false;
   bool _usingSavedAddress = false;
@@ -175,12 +176,16 @@ class _DirectOrderStorefrontScreenState
   Future<void> _ensureMapLoaded() async {
     if (_mapLoadAttempted) return;
     _mapLoadAttempted = true;
+    setState(() => _mapsLoading = true);
     final key = _storefront?.googleMapsBrowserKey ?? '';
     final loader = widget.mapLoader ?? loadDirectOrderGoogleMaps;
     final canAttemptLoad = kIsWeb || widget.mapLoader != null;
     final loaded = canAttemptLoad && key.isNotEmpty ? await loader(key) : false;
     if (!mounted) return;
-    setState(() => _mapsReady = loaded);
+    setState(() {
+      _mapsReady = loaded;
+      _mapsLoading = false;
+    });
     if (loaded) _monitorMapHealth();
   }
 
@@ -1157,10 +1162,12 @@ class _DirectOrderStorefrontScreenState
                 child: Center(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Text(
-                      _copy.mapUnavailable,
-                      textAlign: TextAlign.center,
-                    ),
+                    child: _mapsLoading
+                        ? const CircularProgressIndicator()
+                        : Text(
+                            _copy.mapUnavailable,
+                            textAlign: TextAlign.center,
+                          ),
                   ),
                 ),
               ),
