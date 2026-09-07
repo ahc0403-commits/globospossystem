@@ -30,6 +30,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
     this.service = directOrderService,
     this.locationAdapter,
     this.mapLoader,
+    this.mapHealthCheck,
     this.mapBuilder,
   });
 
@@ -37,6 +38,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
   final DirectOrderService service;
   final DirectOrderBrowserLocationAdapter? locationAdapter;
   final Future<bool> Function(String apiKey)? mapLoader;
+  final bool Function()? mapHealthCheck;
   final DirectOrderMapBuilder? mapBuilder;
 
   @override
@@ -69,6 +71,7 @@ class _DirectOrderStorefrontScreenState
   _CustomerView _view = _CustomerView.menu;
   Timer? _searchTimer;
   Timer? _statusTimer;
+  Timer? _mapHealthTimer;
   DirectOrderMapCamera? _mapCamera;
   DirectOrderLocationFailure? _locationFailure;
   String? _placesSessionToken;
@@ -108,6 +111,7 @@ class _DirectOrderStorefrontScreenState
   void dispose() {
     _searchTimer?.cancel();
     _statusTimer?.cancel();
+    _mapHealthTimer?.cancel();
     _mapCamera?.dispose();
     _nameController.dispose();
     _phoneController.dispose();
@@ -175,7 +179,38 @@ class _DirectOrderStorefrontScreenState
     final loader = widget.mapLoader ?? loadDirectOrderGoogleMaps;
     final canAttemptLoad = kIsWeb || widget.mapLoader != null;
     final loaded = canAttemptLoad && key.isNotEmpty ? await loader(key) : false;
-    if (mounted) setState(() => _mapsReady = loaded);
+    if (!mounted) return;
+    setState(() => _mapsReady = loaded);
+    if (loaded) _monitorMapHealth();
+  }
+
+  void _monitorMapHealth() {
+    _mapHealthTimer?.cancel();
+    final canMonitor = kIsWeb || widget.mapHealthCheck != null;
+    if (!canMonitor) return;
+    final check =
+        widget.mapHealthCheck ?? didDirectOrderGoogleMapsAuthenticationFail;
+    _mapHealthTimer = Timer.periodic(const Duration(milliseconds: 250), (
+      timer,
+    ) {
+      if (!mounted || !_mapsReady) {
+        timer.cancel();
+        if (identical(_mapHealthTimer, timer)) _mapHealthTimer = null;
+        return;
+      }
+      var failed = false;
+      try {
+        failed = check();
+      } catch (_) {
+        // A missing browser bridge is not itself a Maps authentication failure.
+      }
+      if (!failed) return;
+      timer.cancel();
+      if (identical(_mapHealthTimer, timer)) _mapHealthTimer = null;
+      _mapCamera?.dispose();
+      _mapCamera = null;
+      setState(() => _mapsReady = false);
+    });
   }
 
   void _populateAddress(DirectOrderAddress address) {
@@ -1098,6 +1133,10 @@ class _DirectOrderStorefrontScreenState
                     semanticLabel: _copy.deliveryMapLabel,
                     onTap: _selectMapPoint,
                     onCameraReady: (camera) {
+                      if (!mounted || !_mapsReady) {
+                        camera.dispose();
+                        return;
+                      }
                       _mapCamera?.dispose();
                       _mapCamera = camera;
                     },

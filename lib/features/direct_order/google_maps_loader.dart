@@ -4,3 +4,6 @@ import 'google_maps_loader_stub.dart'
 
 Future<bool> loadDirectOrderGoogleMaps(String apiKey) =>
     platform.loadDirectOrderGoogleMaps(apiKey);
+
+bool didDirectOrderGoogleMapsAuthenticationFail() =>
+    platform.didDirectOrderGoogleMapsAuthenticationFail();

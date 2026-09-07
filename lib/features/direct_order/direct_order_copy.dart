@@ -266,9 +266,9 @@ class DirectOrderCopy {
     'Delivery location map',
   );
   String get mapUnavailable => _pick(
-    '지도를 불러오지 못했습니다. 주소 검색을 이용해 주세요.',
-    'Không tải được bản đồ. Vui lòng dùng tìm kiếm địa chỉ.',
-    'The map could not load. Please use address search.',
+    '지도를 불러오지 못해 배송 위치를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+    'Không tải được bản đồ để xác nhận vị trí giao hàng. Vui lòng thử lại sau.',
+    'The map could not load to confirm your delivery location. Please try again later.',
   );
   String get selectedLocation =>
       _pick('선택한 위치', 'Vị trí đã chọn', 'Selected location');

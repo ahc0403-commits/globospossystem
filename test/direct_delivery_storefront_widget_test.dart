@@ -236,6 +236,7 @@ Widget _fixtureApp({
   _StorefrontFixtureService? service,
   DirectOrderBrowserLocationAdapter? locationAdapter,
   Future<bool> Function(String)? mapLoader,
+  bool Function()? mapHealthCheck,
   DirectOrderMapBuilder? mapBuilder,
   Locale locale = const Locale('vi'),
 }) => ProviderScope(
@@ -254,6 +255,7 @@ Widget _fixtureApp({
       service: service ?? _StorefrontFixtureService(),
       locationAdapter: locationAdapter,
       mapLoader: mapLoader,
+      mapHealthCheck: mapHealthCheck,
       mapBuilder: mapBuilder,
     ),
   ),
@@ -591,7 +593,9 @@ void main() {
     await tester.pumpAndSettle();
     await _openAddress(tester);
     expect(
-      find.text('Không tải được bản đồ. Vui lòng dùng tìm kiếm địa chỉ.'),
+      find.text(
+        'Không tải được bản đồ để xác nhận vị trí giao hàng. Vui lòng thử lại sau.',
+      ),
       findsOneWidget,
     );
     await tester.tap(find.text('Chọn trực tiếp trên bản đồ'));
@@ -602,6 +606,67 @@ void main() {
     expect(button.onPressed, isNull);
     expect(find.byKey(const Key('direct_address_search')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('map authentication failure replaces the broken map safely', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    await tester.pumpWidget(
+      _fixtureApp(
+        service: _StorefrontFixtureService(browserKey: 'browser-key'),
+        mapLoader: (_) async => true,
+        mapHealthCheck: () => true,
+        mapBuilder: (_, _) => const ColoredBox(
+          key: Key('direct_fake_map'),
+          color: Colors.blueGrey,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _openAddress(tester);
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.byKey(const Key('direct_fake_map')), findsNothing);
+    expect(
+      find.text(
+        'Không tải được bản đồ để xác nhận vị trí giao hàng. Vui lòng thử lại sau.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('direct_address_search')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('late authentication failure after camera ready hides the map', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    var authenticationFailed = false;
+    await tester.pumpWidget(
+      _fixtureApp(
+        service: _StorefrontFixtureService(browserKey: 'browser-key'),
+        mapLoader: (_) async => true,
+        mapHealthCheck: () => authenticationFailed,
+        mapBuilder: _fakeMapBuilder(_FakeMapCamera()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _openAddress(tester);
+    await tester.pump(const Duration(seconds: 12));
+    expect(find.byKey(const Key('direct_fake_map')), findsOneWidget);
+
+    authenticationFailed = true;
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const Key('direct_fake_map')), findsNothing);
+    expect(
+      find.text(
+        'Không tải được bản đồ để xác nhận vị trí giao hàng. Vui lòng thử lại sau.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('sent chat message renders without a second status round trip', (

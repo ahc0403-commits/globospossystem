@@ -70,6 +70,12 @@ void main() {
     expect(webIndex, contains('&auth_referrer_policy=origin'));
     expect(webIndex, contains("script.referrerPolicy = 'origin';"));
     expect(webIndex, isNot(contains("script.referrerPolicy = 'no-referrer';")));
+    expect(webIndex, contains('googleMapsApiIsReady'));
+    expect(webIndex, contains("typeof window.google.maps.Map === 'function'"));
+    expect(webIndex, contains('window.google.maps.MapTypeId'));
+    expect(webIndex, contains('GOOGLE_MAPS_READY_TIMEOUT'));
+    expect(webIndex, contains('window.gm_authFailure'));
+    expect(webIndex, contains('globosDidGoogleMapsAuthenticationFail'));
     expect(webIndex, contains(r"/^\/order\/[a-z0-9][a-z0-9-]{2,62}$/"));
     expect(webIndex, contains("'/#' + path + window.location.search"));
 
