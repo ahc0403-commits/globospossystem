@@ -5,18 +5,10 @@ import {
   type DirectOrderDependencies,
   directOrderLocale,
   directOrderSecretKeyName,
-  googleAutocompletePayload,
-  googleAutocompleteSuggestions,
-  googleJson,
-  googlePlaceDetailsResult,
-  googlePlaceDetailsUrl,
-  googleReverseGeocodeResult,
   normalizeRpcError,
-  requireGoogleServerKey,
   resolveProjectSecretKey,
   sqlDomainErrorRegistry,
   validateProofImage,
-  validPlacesSessionToken,
   validProofObjectPath,
   validProofPath,
 } from "./index.ts";
@@ -116,6 +108,23 @@ Deno.test("returns no-store data only to an allowed storefront origin", async ()
   );
 });
 
+Deno.test("retired map actions are rejected without calling a provider", async () => {
+  let executions = 0;
+  const handler = createDirectOrderHandler(dependencies({
+    execute: () => {
+      executions++;
+      return Promise.resolve({});
+    },
+  }));
+  for (
+    const action of ["places_autocomplete", "place_details", "reverse_geocode"]
+  ) {
+    const response = await handler(request({ action }));
+    assertEquals(response.status, 400, "retired action rejected");
+  }
+  assertEquals(executions, 0, "no provider or database execution");
+});
+
 Deno.test("caches the exact-origin CORS preflight for chat polling", async () => {
   const response = await createDirectOrderHandler(dependencies())(
     request(undefined, { method: "OPTIONS" }),
@@ -205,15 +214,12 @@ Deno.test("requires JSON and enforces the 64 KiB limit in UTF-8 bytes", async ()
   assertEquals(utf8Oversized.status, 413, "UTF-8 byte limit status");
 });
 
-Deno.test("action registry is exact and dispatches all 13 boundaries", async () => {
+Deno.test("action registry is exact and dispatches all 10 boundaries", async () => {
   assertEquals(
     Object.keys(directOrderActionRegistry),
     [
       "storefront",
       "create_session",
-      "places_autocomplete",
-      "place_details",
-      "reverse_geocode",
       "submit",
       "status",
       "message",
@@ -224,11 +230,6 @@ Deno.test("action registry is exact and dispatches all 13 boundaries", async () 
       "cleanup_expired_pii",
     ],
     "action names",
-  );
-  assertEquals(
-    directOrderActionRegistry.places_autocomplete.rateLimit,
-    30,
-    "Places rate class",
   );
   assertEquals(
     directOrderActionRegistry.proof_upload_url.rateLimit,
@@ -357,7 +358,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    63,
+    64,
     "registered SQL error count",
   );
   const conflict = normalizeRpcError(
@@ -472,69 +473,6 @@ Deno.test("proof path is bound to the request and a supported image name", () =>
   );
 });
 
-Deno.test("Google 400, 429, 5xx, timeout and malformed JSON use one safe map error", async () => {
-  const failures: Array<typeof fetch> = [
-    () => Promise.reject(new Error("timeout private response")),
-    () => Promise.resolve(new Response("{}", { status: 400 })),
-    () => Promise.resolve(new Response("{}", { status: 429 })),
-    () => Promise.resolve(new Response("{}", { status: 503 })),
-    () => Promise.resolve(new Response("not-json", { status: 200 })),
-  ];
-  for (const fetcher of failures) {
-    let caught: unknown;
-    try {
-      await googleJson("https://maps.test", {}, fetcher);
-    } catch (error) {
-      caught = error;
-    }
-    assertEquals(
-      caught instanceof Error ? caught.message : null,
-      "MAP_TEMPORARILY_UNAVAILABLE",
-      "safe Google error",
-    );
-  }
-});
-
-Deno.test("Places New uses one UUIDv4 token for autocomplete and details", () => {
-  const token = "123e4567-e89b-42d3-a456-426614174000";
-  assertEquals(validPlacesSessionToken(token), true, "UUIDv4 token");
-  assertEquals(
-    validPlacesSessionToken("123e4567-e89b-12d3-a456-426614174000"),
-    false,
-    "non-v4 token",
-  );
-  const payload = googleAutocompletePayload(
-    "Landmark 81",
-    "en",
-    token,
-    10.795,
-    106.722,
-  );
-  assertEquals(payload.sessionToken, token, "autocomplete token");
-  assertEquals(payload.languageCode, "en", "autocomplete language");
-  assertEquals(
-    googlePlaceDetailsUrl("ChIJfixture", "en", token).searchParams.get(
-      "sessionToken",
-    ),
-    token,
-    "details token",
-  );
-});
-
-Deno.test("missing Google server key fails before provider traffic", () => {
-  let caught: unknown;
-  try {
-    requireGoogleServerKey("");
-  } catch (error) {
-    caught = error;
-  }
-  assertEquals(
-    caught instanceof Error ? caught.message : null,
-    "MAP_TEMPORARILY_UNAVAILABLE",
-    "missing server key",
-  );
-});
-
 Deno.test("direct order locale accepts only ko vi en", () => {
   for (const locale of ["ko", "vi", "en"] as const) {
     assertEquals(directOrderLocale(locale), locale, `accepted ${locale}`);
@@ -551,54 +489,6 @@ Deno.test("direct order locale accepts only ko vi en", () => {
       caught instanceof Error ? caught.message : null,
       "INVALID_REQUEST",
       `rejected ${String(invalid)}`,
-    );
-  }
-});
-
-Deno.test("empty and malformed autocomplete suggestions are safely filtered", () => {
-  assertEquals(googleAutocompleteSuggestions({}), [], "missing suggestions");
-  assertEquals(
-    googleAutocompleteSuggestions({
-      suggestions: [
-        null,
-        {},
-        { placePrediction: { placeId: "bad", text: { text: "Bad" } } },
-        {
-          placePrediction: {
-            placeId: "ChIJfixture",
-            text: { text: "  Landmark 81  " },
-          },
-        },
-      ],
-    }),
-    [{ place_id: "ChIJfixture", text: "Landmark 81" }],
-    "only valid suggestion",
-  );
-});
-
-Deno.test("invalid place details and empty reverse geocode fail closed", () => {
-  for (
-    const operation of [
-      () => googlePlaceDetailsResult({ id: "ChIJfixture", location: {} }),
-      () =>
-        googlePlaceDetailsResult({
-          id: "ChIJfixture",
-          formattedAddress: "Address",
-          location: { latitude: 999, longitude: 106.7 },
-        }),
-      () => googleReverseGeocodeResult({ results: [] }, 10.8, 106.7),
-    ]
-  ) {
-    let caught: unknown;
-    try {
-      operation();
-    } catch (error) {
-      caught = error;
-    }
-    assertEquals(
-      caught instanceof Error ? caught.message : null,
-      "MAP_LOCATION_NOT_FOUND",
-      "invalid Google result",
     );
   }
 });

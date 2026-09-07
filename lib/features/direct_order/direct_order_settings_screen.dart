@@ -329,39 +329,6 @@ class _DirectOrderSettingsScreenState
                                   keyboard: TextInputType.number,
                                   suffix: 'VND',
                                 ),
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final fields = [
-                                      _field(
-                                        _latitude,
-                                        _copy.latitude,
-                                        keyboard:
-                                            const TextInputType.numberWithOptions(
-                                              decimal: true,
-                                              signed: true,
-                                            ),
-                                      ),
-                                      _field(
-                                        _longitude,
-                                        _copy.longitude,
-                                        keyboard:
-                                            const TextInputType.numberWithOptions(
-                                              decimal: true,
-                                              signed: true,
-                                            ),
-                                      ),
-                                    ];
-                                    return constraints.maxWidth >= 620
-                                        ? Row(
-                                            children: [
-                                              Expanded(child: fields[0]),
-                                              const SizedBox(width: 12),
-                                              Expanded(child: fields[1]),
-                                            ],
-                                          )
-                                        : Column(children: fields);
-                                  },
-                                ),
                               ],
                             ),
                           ),

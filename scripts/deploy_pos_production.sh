@@ -585,10 +585,7 @@ verify_direct_order_secrets() {
     fail "Missing direct-order or public-receipt Supabase secret-key selector."
   fi
 
-  if ! grep -Fxq GOOGLE_MAPS_SERVER_API_KEY <<<"$secret_names" ||
-     ! grep -Fxq GOOGLE_MAPS_BROWSER_KEY <<<"$secret_names"; then
-    warn "Google Maps keys are not configured; direct storefronts must remain disabled."
-  fi
+  # Delivery addresses are entered manually; no map-provider secret is needed.
   printf 'Direct order Edge secret names: ready.\n'
 }
 

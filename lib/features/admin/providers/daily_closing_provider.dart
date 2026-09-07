@@ -18,6 +18,7 @@ class DailyClosingRecord {
     required this.paymentsCard,
     required this.paymentsPay,
     required this.paymentsBankTransfer,
+    required this.deliveryCashPayout,
     required this.openingCashAmount,
     required this.expectedCashAmount,
     required this.countedCashAmount,
@@ -43,6 +44,7 @@ class DailyClosingRecord {
   final double paymentsCard;
   final double paymentsPay;
   final double paymentsBankTransfer;
+  final double deliveryCashPayout;
   final double openingCashAmount;
   final double expectedCashAmount;
   final double countedCashAmount;
@@ -69,6 +71,7 @@ class DailyClosingRecord {
       paymentsCard: _toDouble(json['payments_card']),
       paymentsPay: _toDouble(json['payments_pay']),
       paymentsBankTransfer: _toDouble(json['payments_bank_transfer']),
+      deliveryCashPayout: _toDouble(json['delivery_cash_payout']),
       openingCashAmount: _toDouble(json['opening_cash_amount']),
       expectedCashAmount: _toDouble(json['expected_cash_amount']),
       countedCashAmount: _toDouble(json['counted_cash_amount']),

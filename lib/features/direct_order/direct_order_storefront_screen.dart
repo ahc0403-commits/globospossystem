@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -14,12 +12,9 @@ import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/language_switcher.dart';
 import 'direct_order_copy.dart';
 import 'direct_order_localization.dart';
-import 'direct_order_browser_location.dart';
 import 'direct_order_dialog.dart';
-import 'direct_order_map_view.dart';
 import 'direct_order_models.dart';
 import 'direct_order_service.dart';
-import 'google_maps_loader.dart';
 
 enum _CustomerView { menu, address, status }
 
@@ -28,16 +23,10 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
     super.key,
     required this.slug,
     this.service = directOrderService,
-    this.locationAdapter,
-    this.mapLoader,
-    this.mapBuilder,
   });
 
   final String slug;
   final DirectOrderService service;
-  final DirectOrderBrowserLocationAdapter? locationAdapter;
-  final Future<bool> Function(String apiKey)? mapLoader;
-  final DirectOrderMapBuilder? mapBuilder;
 
   @override
   State<DirectOrderStorefrontScreen> createState() =>
@@ -63,35 +52,17 @@ class _DirectOrderStorefrontScreenState
   DirectOrderStorefront? _storefront;
   DirectOrderSession? _session;
   DirectOrderAddress? _savedAddress;
-  DirectOrderPlace? _selectedPlace;
   DirectOrderStatus? _status;
-  List<DirectOrderPlaceSuggestion> _suggestions = const [];
   _CustomerView _view = _CustomerView.menu;
-  Timer? _searchTimer;
   Timer? _statusTimer;
-  DirectOrderMapCamera? _mapCamera;
-  DirectOrderLocationFailure? _locationFailure;
-  String? _placesSessionToken;
   bool _loading = true;
   bool _submitting = false;
-  bool _searching = false;
-  bool _mapsReady = false;
-  bool _mapLoadAttempted = false;
-  bool _locationConfirmed = false;
-  bool _usingSavedAddress = false;
   bool _rememberAddress = false;
   bool _proofUploading = false;
   bool _sendingMessage = false;
   bool _refreshingStatus = false;
-  bool _locating = false;
-  bool _resolvingMap = false;
   String? _errorCode;
-  String _addressMode = 'search';
   int _loadGeneration = 0;
-  int _searchGeneration = 0;
-  int _placeDetailsGeneration = 0;
-  int _mapResolveGeneration = 0;
-  int _locationGeneration = 0;
   int _statusMutationRevision = 0;
 
   String get _languageCode =>
@@ -106,9 +77,7 @@ class _DirectOrderStorefrontScreenState
 
   @override
   void dispose() {
-    _searchTimer?.cancel();
     _statusTimer?.cancel();
-    _mapCamera?.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -168,62 +137,15 @@ class _DirectOrderStorefrontScreenState
     }
   }
 
-  Future<void> _ensureMapLoaded() async {
-    if (_mapLoadAttempted) return;
-    _mapLoadAttempted = true;
-    final key = _storefront?.googleMapsBrowserKey ?? '';
-    final loader = widget.mapLoader ?? loadDirectOrderGoogleMaps;
-    final canAttemptLoad = kIsWeb || widget.mapLoader != null;
-    final loaded = canAttemptLoad && key.isNotEmpty ? await loader(key) : false;
-    if (mounted) setState(() => _mapsReady = loaded);
-  }
-
   void _populateAddress(DirectOrderAddress address) {
     _nameController.text = address.customerName;
     _phoneController.text = address.customerPhone;
     _addressController.text = address.formattedAddress;
     _detailController.text = address.detailAddress;
-    _selectedPlace = DirectOrderPlace(
-      formattedAddress: address.formattedAddress,
-      latitude: address.latitude,
-      longitude: address.longitude,
-      placeId: address.googlePlaceId,
-      district: address.district,
-      ward: address.ward,
-    );
-    _addressMode = address.addressSource;
-    _locationConfirmed = address.locationVerified;
-    _usingSavedAddress = address.locationVerified;
     _rememberAddress = true;
   }
 
-  void _selectView(_CustomerView view) {
-    setState(() => _view = view);
-    if (view == _CustomerView.address && !_usingSavedAddress) {
-      unawaited(_ensureMapLoaded());
-    }
-  }
-
-  Future<void> _beginAddressChange() async {
-    _searchTimer?.cancel();
-    ++_searchGeneration;
-    ++_placeDetailsGeneration;
-    ++_mapResolveGeneration;
-    ++_locationGeneration;
-    _placesSessionToken = null;
-    setState(() {
-      _usingSavedAddress = false;
-      _selectedPlace = null;
-      _locationConfirmed = false;
-      _addressMode = 'search';
-      _suggestions = const [];
-      _searching = false;
-      _locationFailure = null;
-      _addressController.clear();
-      _detailController.clear();
-    });
-    await _ensureMapLoaded();
-  }
+  void _selectView(_CustomerView view) => setState(() => _view = view);
 
   void _changeQuantity(String itemId, int delta) {
     setState(() {
@@ -249,197 +171,18 @@ class _DirectOrderStorefrontScreenState
 
   int get _cartCount => _cart.values.fold(0, (sum, value) => sum + value);
 
-  void _onAddressSearchChanged(String value) {
-    _searchTimer?.cancel();
-    final generation = ++_searchGeneration;
-    final query = value.trim();
-    if (query.length < 2) {
-      _placesSessionToken = null;
-      setState(() {
-        _suggestions = const [];
-        _searching = false;
-      });
-      return;
-    }
-    final sessionToken = _placesSessionToken ??= widget.service
-        .createPlacesSessionToken();
-    _searchTimer = Timer(const Duration(milliseconds: 350), () async {
-      if (!mounted || generation != _searchGeneration) return;
-      setState(() => _searching = true);
-      try {
-        final suggestions = await widget.service.autocomplete(
-          slug: widget.slug,
-          query: query,
-          locale: _languageCode,
-          sessionToken: sessionToken,
-        );
-        if (mounted &&
-            generation == _searchGeneration &&
-            _addressController.text.trim() == query &&
-            _placesSessionToken == sessionToken) {
-          setState(() => _suggestions = suggestions);
-        }
-      } catch (_) {
-        if (mounted && generation == _searchGeneration) {
-          setState(() => _suggestions = const []);
-        }
-      } finally {
-        if (mounted && generation == _searchGeneration) {
-          setState(() => _searching = false);
-        }
-      }
-    });
-  }
-
-  Future<void> _selectSuggestion(DirectOrderPlaceSuggestion suggestion) async {
-    _searchTimer?.cancel();
-    ++_searchGeneration;
-    ++_locationGeneration;
-    ++_mapResolveGeneration;
-    final generation = ++_placeDetailsGeneration;
-    final sessionToken =
-        _placesSessionToken ?? widget.service.createPlacesSessionToken();
-    _placesSessionToken = null;
-    setState(() {
-      _searching = true;
-      _suggestions = const [];
-      _locationFailure = null;
-    });
-    try {
-      final place = await widget.service.placeDetails(
-        placeId: suggestion.placeId,
-        locale: _languageCode,
-        sessionToken: sessionToken,
-      );
-      if (!mounted || generation != _placeDetailsGeneration) return;
-      setState(() {
-        _selectedPlace = place;
-        _addressController.text = place.formattedAddress;
-        _addressMode = 'search';
-        _locationConfirmed = false;
-        _usingSavedAddress = false;
-      });
-      await _moveMap(LatLng(place.latitude, place.longitude));
-    } catch (error) {
-      if (generation == _placeDetailsGeneration) _showError(error);
-    } finally {
-      if (mounted && generation == _placeDetailsGeneration) {
-        setState(() => _searching = false);
-      }
-    }
-  }
-
-  Future<void> _selectMapPoint(LatLng point) async {
-    ++_locationGeneration;
-    await _resolveMapPoint(point, moveCamera: false);
-  }
-
-  Future<void> _resolveMapPoint(
-    LatLng point, {
-    required bool moveCamera,
-  }) async {
-    final generation = ++_mapResolveGeneration;
-    setState(() {
-      _resolvingMap = true;
-      _locationFailure = null;
-    });
-    try {
-      if (moveCamera) await _moveMap(point);
-      final place = await widget.service.reverseGeocode(
-        latitude: point.latitude,
-        longitude: point.longitude,
-        locale: _languageCode,
-      );
-      if (!mounted || generation != _mapResolveGeneration) return;
-      setState(() {
-        _selectedPlace = place;
-        _addressController.text = place.formattedAddress;
-        _addressMode = 'map_pin';
-        _locationConfirmed = true;
-        _usingSavedAddress = false;
-      });
-    } catch (error) {
-      if (generation == _mapResolveGeneration) _showError(error);
-    } finally {
-      if (mounted && generation == _mapResolveGeneration) {
-        setState(() => _resolvingMap = false);
-      }
-    }
-  }
-
-  Future<void> _moveMap(LatLng target) async {
-    try {
-      await _mapCamera?.moveTo(target);
-    } catch (_) {
-      // A detached browser map must not turn a valid address into an order.
-    }
-  }
-
-  Future<void> _useCurrentLocation() async {
-    if (!_mapsReady || _locating) return;
-    _searchTimer?.cancel();
-    ++_searchGeneration;
-    ++_placeDetailsGeneration;
-    _placesSessionToken = null;
-    final generation = ++_locationGeneration;
-    setState(() {
-      _locating = true;
-      _locationFailure = null;
-      _suggestions = const [];
-    });
-    final result =
-        await (widget.locationAdapter ?? directOrderBrowserLocationAdapter)
-            .currentPosition();
-    if (!mounted || generation != _locationGeneration) return;
-    if (!result.isSuccess) {
-      final fallback = LatLng(
-        _storefront?.defaultLatitude ?? 10.776,
-        _storefront?.defaultLongitude ?? 106.701,
-      );
-      setState(() {
-        _locationFailure =
-            result.failure ?? DirectOrderLocationFailure.unavailable;
-        _locating = false;
-      });
-      if (_selectedPlace == null) await _moveMap(fallback);
-      return;
-    }
-    setState(() => _locating = false);
-    await _resolveMapPoint(
-      LatLng(result.latitude!, result.longitude!),
-      moveCamera: true,
-    );
-  }
-
-  String _locationFailureMessage(DirectOrderLocationFailure failure) =>
-      switch (failure) {
-        DirectOrderLocationFailure.permissionDenied =>
-          _copy.locationPermissionDenied,
-        DirectOrderLocationFailure.timeout => _copy.locationTimedOut,
-        DirectOrderLocationFailure.unsupported => _copy.locationUnsupported,
-        DirectOrderLocationFailure.unavailable => _copy.locationUnavailable,
-      };
-
   DirectOrderAddress? _composeAddress() {
-    final place = _selectedPlace;
-    if (place == null || place.formattedAddress.trim().isEmpty) return null;
     if (_nameController.text.trim().isEmpty ||
         _phoneController.text.trim().isEmpty ||
+        _addressController.text.trim().length < 3 ||
         _detailController.text.trim().isEmpty) {
       return null;
     }
     return DirectOrderAddress(
       customerName: _nameController.text.trim(),
       customerPhone: _phoneController.text.trim(),
-      formattedAddress: place.formattedAddress.trim(),
+      formattedAddress: _addressController.text.trim(),
       detailAddress: _detailController.text.trim(),
-      latitude: place.latitude,
-      longitude: place.longitude,
-      googlePlaceId: place.placeId,
-      district: place.district,
-      ward: place.ward,
-      addressSource: _addressMode,
-      locationVerified: true,
     );
   }
 
@@ -450,14 +193,12 @@ class _DirectOrderStorefrontScreenState
       return;
     }
     final address = _composeAddress();
-    if (_selectedPlace == null ||
-        !_locationConfirmed ||
-        (!_usingSavedAddress && !_mapsReady)) {
-      _snack(_copy.addressRequired);
-      return;
-    }
     if (address == null) {
       _snack(_copy.requiredFields);
+      return;
+    }
+    if (!RegExp(r'^[+]?[0-9][0-9 -]{7,19}$').hasMatch(address.customerPhone)) {
+      _snack(_copy.invalidPhone);
       return;
     }
     final session = _session;
@@ -481,7 +222,6 @@ class _DirectOrderStorefrontScreenState
       if (!mounted) return;
       setState(() {
         _savedAddress = _rememberAddress ? address : null;
-        _usingSavedAddress = _rememberAddress;
         _status = status;
         _view = _CustomerView.status;
       });
@@ -654,16 +394,12 @@ class _DirectOrderStorefrontScreenState
     if (!mounted) return;
     setState(() {
       _savedAddress = null;
-      _selectedPlace = null;
-      _locationConfirmed = false;
-      _usingSavedAddress = false;
       _rememberAddress = false;
       _nameController.clear();
       _phoneController.clear();
       _addressController.clear();
       _detailController.clear();
     });
-    await _ensureMapLoaded();
   }
 
   void _showError(Object error) {
@@ -673,9 +409,9 @@ class _DirectOrderStorefrontScreenState
   }
 
   void _snack(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -887,14 +623,10 @@ class _DirectOrderStorefrontScreenState
   );
 
   Widget _buildAddressView() {
-    final initial = LatLng(
-      _selectedPlace?.latitude ?? _storefront?.defaultLatitude ?? 10.776,
-      _selectedPlace?.longitude ?? _storefront?.defaultLongitude ?? 106.701,
-    );
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
-        if (_savedAddress != null)
+        if (_savedAddress != null) ...[
           Card(
             color: PosColors.infoMuted,
             child: Padding(
@@ -902,57 +634,19 @@ class _DirectOrderStorefrontScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _copy.useSavedAddress,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 6),
                   Text(_savedAddress!.formattedAddress),
-                  Text(
-                    _savedAddress!.detailAddress,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _copy.savedOnlyOnDevice,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  if (_usingSavedAddress) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.check_circle_rounded,
-                          size: 18,
-                          color: PosColors.success,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _copy.locationConfirmed,
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(color: PosColors.success),
-                        ),
-                      ],
-                    ),
-                  ],
+                  Text(_savedAddress!.detailAddress),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
-                    runSpacing: 8,
                     children: [
-                      if (_usingSavedAddress)
-                        FilledButton.tonalIcon(
-                          key: const Key('direct_change_saved_address'),
-                          onPressed: _beginAddressChange,
-                          icon: const Icon(Icons.edit_location_alt_outlined),
-                          label: Text(_copy.changeSavedAddress),
-                        )
-                      else
-                        FilledButton.tonal(
-                          onPressed: () =>
-                              setState(() => _populateAddress(_savedAddress!)),
-                          child: Text(_copy.useSavedAddress),
-                        ),
+                      FilledButton.tonalIcon(
+                        key: const Key('direct_use_saved_address'),
+                        onPressed: () =>
+                            setState(() => _populateAddress(_savedAddress!)),
+                        icon: const Icon(Icons.home_outlined),
+                        label: Text(_copy.useSavedAddress),
+                      ),
                       TextButton(
                         onPressed: _clearSavedAddress,
                         child: Text(_copy.deleteSavedAddress),
@@ -963,244 +657,29 @@ class _DirectOrderStorefrontScreenState
               ),
             ),
           ),
-        const SizedBox(height: 12),
-        if (!_usingSavedAddress) ...[
-          SegmentedButton<String>(
-            segments: [
-              ButtonSegment(
-                value: 'search',
-                icon: const Icon(Icons.search_rounded),
-                label: Text(_copy.searchAddress),
-              ),
-              ButtonSegment(
-                value: 'map_pin',
-                icon: const Icon(Icons.location_on_outlined),
-                label: Text(_copy.pickOnMap),
-              ),
-            ],
-            selected: {_addressMode},
-            onSelectionChanged: (selected) {
-              _searchTimer?.cancel();
-              ++_searchGeneration;
-              ++_placeDetailsGeneration;
-              _placesSessionToken = null;
-              setState(() {
-                _addressMode = selected.first;
-                _suggestions = const [];
-                _searching = false;
-                _locationFailure = null;
-              });
-            },
-          ),
-          const SizedBox(height: 14),
-          if (_addressMode == 'search') ...[
-            TextField(
-              key: const Key('direct_address_search'),
-              controller: _addressController,
-              onChanged: _onAddressSearchChanged,
-              decoration: InputDecoration(
-                labelText: _copy.searchAddress,
-                hintText: _copy.addressSearchHint,
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searching
-                    ? Semantics(
-                        liveRegion: true,
-                        label: _copy.resolvingMapLocation,
-                        child: const Padding(
-                          padding: EdgeInsets.all(14),
-                          child: SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
-                      )
-                    : null,
-              ),
-            ),
-            if (_suggestions.isNotEmpty)
-              Card(
-                margin: const EdgeInsets.only(top: 6),
-                child: Column(
-                  children: [
-                    for (final suggestion in _suggestions)
-                      ListTile(
-                        leading: const Icon(Icons.place_outlined),
-                        title: Text(suggestion.text),
-                        onTap: () => _selectSuggestion(suggestion),
-                      ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 12),
-            Text(
-              _copy.confirmOnMap,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ] else
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    _copy.tapMapHint,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 10),
-                  Semantics(
-                    button: true,
-                    label: _copy.useCurrentLocation,
-                    child: FilledButton.tonalIcon(
-                      key: const Key('direct_use_current_location'),
-                      onPressed: _mapsReady && !_locating
-                          ? _useCurrentLocation
-                          : null,
-                      icon: _locating
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.my_location_rounded),
-                      label: Text(
-                        _locating
-                            ? _copy.locatingCurrentLocation
-                            : _copy.useCurrentLocation,
-                      ),
-                    ),
-                  ),
-                  if (_locationFailure != null) ...[
-                    const SizedBox(height: 8),
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        '${_locationFailureMessage(_locationFailure!)} '
-                        '${_copy.manualPinFallback}',
-                        key: const Key('direct_location_fallback'),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.warning,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          if (_mapsReady)
-            ClipRRect(
-              borderRadius: AppRadius.lg,
-              child: SizedBox(
-                height: 300,
-                child: (widget.mapBuilder ?? buildDirectOrderGoogleMap)(
-                  context,
-                  DirectOrderMapConfiguration(
-                    initialPosition: initial,
-                    markerPosition: _selectedPlace == null ? null : initial,
-                    semanticLabel: _copy.deliveryMapLabel,
-                    onTap: _selectMapPoint,
-                    onCameraReady: (camera) {
-                      _mapCamera?.dispose();
-                      _mapCamera = camera;
-                    },
-                  ),
-                ),
-              ),
-            )
-          else
-            Semantics(
-              liveRegion: true,
-              child: Container(
-                height: 180,
-                decoration: BoxDecoration(
-                  color: PosColors.panelMuted,
-                  border: Border.all(color: PosColors.border),
-                  borderRadius: AppRadius.lg,
-                ),
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Text(
-                      _copy.mapUnavailable,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          if (_resolvingMap) ...[
-            const SizedBox(height: 8),
-            Semantics(
-              liveRegion: true,
-              child: Row(
-                children: [
-                  const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(_copy.resolvingMapLocation)),
-                ],
-              ),
-            ),
-          ],
-          if (_selectedPlace != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _locationConfirmed
-                    ? PosColors.successMuted
-                    : PosColors.warningMuted,
-                borderRadius: AppRadius.md,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    _locationConfirmed
-                        ? Icons.check_circle_rounded
-                        : Icons.location_searching_rounded,
-                    color: _locationConfirmed
-                        ? PosColors.success
-                        : PosColors.warning,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _locationConfirmed
-                              ? _copy.locationConfirmed
-                              : _copy.selectedLocation,
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                        Text(_selectedPlace!.formattedAddress),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (!_locationConfirmed) ...[
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonalIcon(
-                  key: const Key('direct_confirm_map_location'),
-                  onPressed: _mapsReady
-                      ? () => setState(() => _locationConfirmed = true)
-                      : null,
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: Text(_copy.confirmOnMap),
-                ),
-              ),
-            ],
-          ],
+          const SizedBox(height: 12),
         ],
+        TextField(
+          key: const Key('direct_address_input'),
+          controller: _addressController,
+          maxLength: 500,
+          minLines: 1,
+          maxLines: 3,
+          keyboardType: TextInputType.streetAddress,
+          decoration: InputDecoration(
+            labelText: _copy.deliveryAddress,
+            hintText: _copy.addressInputHint,
+            counterText: '',
+            prefixIcon: const Icon(Icons.home_outlined),
+          ),
+        ),
         const SizedBox(height: 16),
         TextField(
+          key: const Key('direct_address_detail'),
           controller: _detailController,
+          maxLength: 300,
           decoration: InputDecoration(
+            counterText: '',
             labelText: _copy.detailAddress,
             hintText: _copy.detailAddressHint,
             prefixIcon: const Icon(Icons.apartment_rounded),
@@ -1211,8 +690,11 @@ class _DirectOrderStorefrontScreenState
           children: [
             Expanded(
               child: TextField(
+                key: const Key('direct_recipient_name'),
                 controller: _nameController,
+                maxLength: 100,
                 decoration: InputDecoration(
+                  counterText: '',
                   labelText: _copy.customerName,
                   prefixIcon: const Icon(Icons.person_outline_rounded),
                 ),
@@ -1221,9 +703,12 @@ class _DirectOrderStorefrontScreenState
             const SizedBox(width: 10),
             Expanded(
               child: TextField(
+                key: const Key('direct_recipient_phone'),
                 controller: _phoneController,
+                maxLength: 21,
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
+                  counterText: '',
                   labelText: _copy.phone,
                   prefixIcon: const Icon(Icons.phone_outlined),
                 ),

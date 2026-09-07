@@ -312,10 +312,10 @@ class DirectOrderAddress {
     required this.customerPhone,
     required this.formattedAddress,
     required this.detailAddress,
-    required this.latitude,
-    required this.longitude,
-    required this.addressSource,
-    required this.locationVerified,
+    this.latitude,
+    this.longitude,
+    this.addressSource = 'manual',
+    this.locationVerified = false,
     this.googlePlaceId,
     this.district,
     this.ward,
@@ -325,8 +325,8 @@ class DirectOrderAddress {
   final String customerPhone;
   final String formattedAddress;
   final String detailAddress;
-  final double latitude;
-  final double longitude;
+  final double? latitude;
+  final double? longitude;
   final String? googlePlaceId;
   final String? district;
   final String? ward;
@@ -368,8 +368,8 @@ class DirectOrderAddress {
       customerPhone: _requiredString(json, 'customer_phone'),
       formattedAddress: _requiredString(json, 'formatted_address'),
       detailAddress: _requiredString(json, 'detail_address'),
-      latitude: _requiredNumber(json, 'latitude').toDouble(),
-      longitude: _requiredNumber(json, 'longitude').toDouble(),
+      latitude: _optionalDouble(json, 'latitude'),
+      longitude: _optionalDouble(json, 'longitude'),
       googlePlaceId: _optionalString(json, 'google_place_id'),
       district: _optionalString(json, 'district'),
       ward: _optionalString(json, 'ward'),
@@ -381,61 +381,6 @@ class DirectOrderAddress {
   factory DirectOrderAddress.decode(String raw) {
     return DirectOrderAddress.fromJson(
       Map<String, dynamic>.from(jsonDecode(raw) as Map),
-    );
-  }
-}
-
-class DirectOrderPlaceSuggestion {
-  const DirectOrderPlaceSuggestion({required this.placeId, required this.text});
-  final String placeId;
-  final String text;
-
-  factory DirectOrderPlaceSuggestion.fromJson(Map<String, dynamic> json) {
-    _expectKeys(json, const {'place_id', 'text'});
-    return DirectOrderPlaceSuggestion(
-      placeId: _requiredString(json, 'place_id'),
-      text: _requiredString(json, 'text'),
-    );
-  }
-}
-
-class DirectOrderPlace {
-  const DirectOrderPlace({
-    required this.formattedAddress,
-    required this.latitude,
-    required this.longitude,
-    this.placeId,
-    this.district,
-    this.ward,
-  });
-
-  final String formattedAddress;
-  final double latitude;
-  final double longitude;
-  final String? placeId;
-  final String? district;
-  final String? ward;
-
-  factory DirectOrderPlace.fromJson(Map<String, dynamic> json) {
-    _expectKeys(json, const {
-      'place_id',
-      'formatted_address',
-      'latitude',
-      'longitude',
-      'district',
-      'ward',
-    });
-    final latitude = _requiredNumber(json, 'latitude').toDouble();
-    final longitude = _requiredNumber(json, 'longitude').toDouble();
-    if (latitude < -90 || latitude > 90) _invalidModel('latitude');
-    if (longitude < -180 || longitude > 180) _invalidModel('longitude');
-    return DirectOrderPlace(
-      formattedAddress: _requiredString(json, 'formatted_address'),
-      latitude: latitude,
-      longitude: longitude,
-      placeId: _optionalString(json, 'place_id'),
-      district: _optionalString(json, 'district'),
-      ward: _optionalString(json, 'ward'),
     );
   }
 }

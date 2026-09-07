@@ -67,9 +67,8 @@ void main() {
       webIndex,
       isNot(contains('<meta name="referrer" content="no-referrer">')),
     );
-    expect(webIndex, contains('&auth_referrer_policy=origin'));
-    expect(webIndex, contains("script.referrerPolicy = 'origin';"));
-    expect(webIndex, isNot(contains("script.referrerPolicy = 'no-referrer';")));
+    expect(webIndex, isNot(contains('maps.googleapis.com')));
+    expect(webIndex, isNot(contains('globosLoadGoogleMaps')));
     expect(webIndex, contains(r"/^\/order\/[a-z0-9][a-z0-9-]{2,62}$/"));
     expect(webIndex, contains("'/#' + path + window.location.search"));
 

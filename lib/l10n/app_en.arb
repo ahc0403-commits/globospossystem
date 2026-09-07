@@ -435,6 +435,7 @@
   "reportsCashClosingTitle": "Cash drawer closing",
   "reportsOpeningCash": "Default opening float",
   "reportsCashSales": "Today's cash sales",
+  "reportsDeliveryCashPayout": "Delivery cash payout",
   "reportsExpectedCash": "Expected drawer cash",
   "reportsCountBanknotes": "Enter the count for each banknote.",
   "reportsBanknoteUnit": "notes",

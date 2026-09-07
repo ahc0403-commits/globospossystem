@@ -123,65 +123,6 @@ class DirectOrderService {
     return session;
   }
 
-  Future<List<DirectOrderPlaceSuggestion>> autocomplete({
-    required String slug,
-    required String query,
-    required String locale,
-    required String sessionToken,
-  }) async {
-    final data = await _invoke({
-      'action': 'places_autocomplete',
-      'slug': slug,
-      'query': query,
-      'locale': locale,
-      'session_token': sessionToken,
-    });
-    final rows = data['suggestions'];
-    if (data.length != 1 || rows is! List) {
-      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
-    }
-    return rows
-        .map((row) {
-          if (row is! Map) {
-            throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
-          }
-          return DirectOrderPlaceSuggestion.fromJson(
-            Map<String, dynamic>.from(row),
-          );
-        })
-        .toList(growable: false);
-  }
-
-  Future<DirectOrderPlace> placeDetails({
-    required String placeId,
-    required String locale,
-    required String sessionToken,
-  }) async {
-    final data = await _invoke({
-      'action': 'place_details',
-      'place_id': placeId,
-      'locale': locale,
-      'session_token': sessionToken,
-    });
-    return DirectOrderPlace.fromJson(data);
-  }
-
-  String createPlacesSessionToken() => const Uuid().v4();
-
-  Future<DirectOrderPlace> reverseGeocode({
-    required double latitude,
-    required double longitude,
-    required String locale,
-  }) async {
-    final data = await _invoke({
-      'action': 'reverse_geocode',
-      'latitude': latitude,
-      'longitude': longitude,
-      'locale': locale,
-    });
-    return DirectOrderPlace.fromJson(data);
-  }
-
   Future<DirectOrderSubmission> submit({
     required String slug,
     required DirectOrderSession session,

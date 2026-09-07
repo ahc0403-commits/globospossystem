@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_theme.dart';
@@ -102,6 +101,9 @@ class _DirectOrderCashierScreenState
           ? await _loadDriverReceiptStatus(storeId, selectedId)
           : const DirectOrderDriverReceiptStatus.empty();
       if (!mounted || revision != _refreshRevision) return;
+      if (selectedId != requestedSelection && detail != null) {
+        _seedDispatchInputs(detail);
+      }
       setState(() {
         _requests = rows;
         _selectedId = selectedId;
@@ -138,6 +140,7 @@ class _DirectOrderCashierScreenState
           ? await _loadDriverReceiptStatus(storeId, id)
           : const DirectOrderDriverReceiptStatus.empty();
       if (!mounted || revision != _refreshRevision) return;
+      _seedDispatchInputs(detail);
       setState(() {
         _detail = detail;
         _driverReceiptStatus = driverReceiptStatus;
@@ -416,13 +419,13 @@ class _DirectOrderCashierScreenState
 
   Future<void> _sendGrab() async {
     final url = normalizeGrabTrackingUrl(_grabUrlController.text);
-    final actual = _actualGrabFeeController.text.trim().isEmpty
-        ? null
-        : double.tryParse(_actualGrabFeeController.text.replaceAll(',', ''));
-    if (url == null) {
+    final actual = double.tryParse(
+      _actualGrabFeeController.text.replaceAll(',', ''),
+    );
+    if (url == null || actual == null || !actual.isFinite || actual < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_copy.invalidGrabLink),
+          content: Text(_copy.deliveryCashPayoutRequired),
           backgroundColor: PosColors.danger,
         ),
       );
@@ -440,6 +443,17 @@ class _DirectOrderCashierScreenState
       ),
       _copy.grabLinkSent,
     );
+  }
+
+  void _seedDispatchInputs(Map<String, dynamic> detail) {
+    _grabUrlController.clear();
+    _actualGrabFeeController.clear();
+    final dispatch = detail['dispatch'];
+    if (dispatch is! Map) return;
+    final url = dispatch['grab_tracking_url']?.toString();
+    final fee = dispatch['actual_grab_fee'];
+    if (url != null && url.isNotEmpty) _grabUrlController.text = url;
+    if (fee is num) _actualGrabFeeController.text = fee.toString();
   }
 
   Future<void> _printDriverReceipt({required bool reprint}) async {
@@ -683,21 +697,6 @@ class _DirectOrderCashierScreenState
                 address['detail_address']?.toString() ?? '',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              if (address['latitude'] != null &&
-                  address['longitude'] != null) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => launchUrl(
-                    Uri.https('www.google.com', '/maps/search/', {
-                      'api': '1',
-                      'query': '${address['latitude']},${address['longitude']}',
-                    }),
-                    mode: LaunchMode.externalApplication,
-                  ),
-                  icon: const Icon(Icons.map_outlined),
-                  label: Text(_copy.openMap),
-                ),
-              ],
             ],
           ),
         ),
@@ -825,7 +824,7 @@ class _DirectOrderCashierScreenState
                   controller: _actualGrabFeeController,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: _copy.actualGrabFee,
+                    labelText: _copy.actualGrabFeeCashPayout,
                     suffixText: 'VND',
                   ),
                 ),

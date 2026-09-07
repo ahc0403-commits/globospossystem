@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/utils/role_routes.dart';
-import 'package:globos_pos_system/features/direct_order/direct_order_browser_location.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_localization.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
@@ -10,6 +9,26 @@ import 'package:globos_pos_system/features/direct_order/direct_order_staff_servi
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
+  test(
+    'manual cached address keeps text without manufacturing coordinates',
+    () {
+      const address = DirectOrderAddress(
+        customerName: 'Nguyen An',
+        customerPhone: '+84901234567',
+        formattedAddress: '123 Nguyen Hue, District 1',
+        detailAddress: 'Floor 4, room 401',
+      );
+      final restored = DirectOrderAddress.decode(address.encode());
+      expect(restored.formattedAddress, address.formattedAddress);
+      expect(restored.detailAddress, address.detailAddress);
+      expect(restored.addressSource, 'manual');
+      expect(restored.latitude, isNull);
+      expect(restored.longitude, isNull);
+      expect(restored.googlePlaceId, isNull);
+      expect(restored.locationVerified, isFalse);
+    },
+  );
+
   test('direct delivery routes preserve least-privilege role separation', () {
     expect(canAccessRouteForRole('cashier', '/cashier/direct-orders'), isTrue);
     expect(canAccessRouteForRole('cashier', '/kitchen/direct-orders'), isFalse);
@@ -69,37 +88,6 @@ void main() {
     expect(restored.latitude, address.latitude);
     expect(restored.longitude, address.longitude);
     expect(restored.locationVerified, isTrue);
-  });
-
-  test(
-    'non-web location adapter fails safely without requesting permission',
-    () async {
-      final result = await directOrderBrowserLocationAdapter.currentPosition(
-        timeout: const Duration(milliseconds: 1),
-      );
-      expect(result.isSuccess, isFalse);
-      expect(result.failure, DirectOrderLocationFailure.unsupported);
-    },
-  );
-
-  test('provider place coordinates are finite and in range', () {
-    final valid = <String, dynamic>{
-      'place_id': 'ChIJfixture',
-      'formatted_address': 'Landmark 81, Ho Chi Minh City',
-      'latitude': 10.795,
-      'longitude': 106.722,
-      'district': 'Binh Thanh',
-      'ward': null,
-    };
-    expect(DirectOrderPlace.fromJson(valid).latitude, 10.795);
-    expect(
-      () => DirectOrderPlace.fromJson({...valid, 'latitude': 91}),
-      throwsFormatException,
-    );
-    expect(
-      () => DirectOrderPlace.fromJson({...valid, 'longitude': -181}),
-      throwsFormatException,
-    );
   });
 
   test(
