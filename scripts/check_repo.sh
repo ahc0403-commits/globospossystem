@@ -29,6 +29,7 @@ printf 'CHECK_REPO_STEP=measured_index_sql\n'
 SCALE_INDEX_ONLY=1 bash scripts/test_scalability_isolated.sh
 
 printf 'CHECK_REPO_STEP=direct_order_edge_contracts\n'
+bash test/direct_delivery_manual_addresses_sql_test.sh
 deno fmt --check \
   supabase/functions/direct-order-public/index.ts \
   supabase/functions/direct-order-public/index_test.ts \

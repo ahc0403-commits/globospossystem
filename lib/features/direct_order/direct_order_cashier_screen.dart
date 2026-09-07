@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_theme.dart';
@@ -683,21 +682,6 @@ class _DirectOrderCashierScreenState
                 address['detail_address']?.toString() ?? '',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              if (address['latitude'] != null &&
-                  address['longitude'] != null) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => launchUrl(
-                    Uri.https('www.google.com', '/maps/search/', {
-                      'api': '1',
-                      'query': '${address['latitude']},${address['longitude']}',
-                    }),
-                    mode: LaunchMode.externalApplication,
-                  ),
-                  icon: const Icon(Icons.map_outlined),
-                  label: Text(_copy.openMap),
-                ),
-              ],
             ],
           ),
         ),

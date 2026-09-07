@@ -150,12 +150,6 @@ class DirectOrderCopy {
     'DIRECT_DELIVERY_TICKET_TRANSITION_INVALID' ||
     'DIRECT_ORDER_CLEANUP_NOT_ELIGIBLE' ||
     'DIRECT_ORDER_CLEANUP_TOO_EARLY' => actionFailed,
-    'MAP_TEMPORARILY_UNAVAILABLE' => mapUnavailable,
-    'MAP_LOCATION_NOT_FOUND' => _pick(
-      '선택한 위치의 주소를 찾지 못했습니다.',
-      'Không tìm thấy địa chỉ cho vị trí đã chọn.',
-      'No address was found for the selected location.',
-    ),
     'TOO_MANY_REQUESTS' => _pick(
       '요청이 많습니다. 잠시 후 다시 시도해 주세요.',
       'Có quá nhiều yêu cầu. Vui lòng thử lại sau.',
@@ -204,76 +198,18 @@ class DirectOrderCopy {
     'Lưu địa chỉ trên thiết bị này',
     'Save this address on this device',
   );
-  String get searchAddress =>
-      _pick('주소 붙여넣기·검색', 'Dán hoặc tìm địa chỉ', 'Paste or search address');
-  String get pickOnMap =>
-      _pick('지도에서 직접 선택', 'Chọn trực tiếp trên bản đồ', 'Pick directly on map');
-  String get addressSearchHint => _pick(
-    '건물명이나 전체 주소를 입력하세요',
-    'Nhập tên tòa nhà hoặc địa chỉ đầy đủ',
-    'Enter a building or full address',
+  String get deliveryAddress =>
+      _pick('배송 주소', 'Địa chỉ giao hàng', 'Delivery address');
+  String get addressInputHint => _pick(
+    '도로명·건물명·동네를 포함한 전체 주소를 입력하세요',
+    'Nhập địa chỉ đầy đủ: đường, tòa nhà, phường/xã',
+    'Enter the full street, building and neighborhood address',
   );
-  String get confirmOnMap => _pick(
-    '지도에서 위치 확인',
-    'Xác nhận vị trí trên bản đồ',
-    'Confirm location on map',
+  String get invalidPhone => _pick(
+    '전화번호 형식을 확인해 주세요.',
+    'Vui lòng kiểm tra định dạng số điện thoại.',
+    'Please check the phone number format.',
   );
-  String get tapMapHint => _pick(
-    '지도를 눌러 정확한 위치를 선택하세요.',
-    'Chạm bản đồ để chọn đúng vị trí.',
-    'Tap the map to select the exact location.',
-  );
-  String get useCurrentLocation =>
-      _pick('현재 위치 사용', 'Dùng vị trí hiện tại', 'Use current location');
-  String get locatingCurrentLocation => _pick(
-    '현재 위치를 확인하고 있습니다…',
-    'Đang xác định vị trí hiện tại…',
-    'Finding your current location…',
-  );
-  String get locationPermissionDenied => _pick(
-    '위치 권한이 거부되었습니다.',
-    'Quyền vị trí đã bị từ chối.',
-    'Location permission was denied.',
-  );
-  String get locationTimedOut => _pick(
-    '현재 위치 확인 시간이 초과되었습니다.',
-    'Hết thời gian xác định vị trí.',
-    'Current location timed out.',
-  );
-  String get locationUnavailable => _pick(
-    '현재 위치를 확인할 수 없습니다.',
-    'Không thể xác định vị trí hiện tại.',
-    'Current location is unavailable.',
-  );
-  String get locationUnsupported => _pick(
-    '이 브라우저는 현재 위치를 지원하지 않습니다.',
-    'Trình duyệt này không hỗ trợ vị trí hiện tại.',
-    'This browser does not support current location.',
-  );
-  String get manualPinFallback => _pick(
-    '지도에서 직접 위치를 선택해 주세요.',
-    'Vui lòng chọn vị trí trực tiếp trên bản đồ.',
-    'Please pick the location directly on the map.',
-  );
-  String get resolvingMapLocation => _pick(
-    '선택한 위치의 주소를 확인하고 있습니다…',
-    'Đang xác nhận địa chỉ tại vị trí đã chọn…',
-    'Confirming the address at the selected location…',
-  );
-  String get deliveryMapLabel => _pick(
-    '배송 위치 선택 지도',
-    'Bản đồ chọn vị trí giao hàng',
-    'Delivery location map',
-  );
-  String get mapUnavailable => _pick(
-    '지도를 불러오지 못했습니다. 주소 검색을 이용해 주세요.',
-    'Không tải được bản đồ. Vui lòng dùng tìm kiếm địa chỉ.',
-    'The map could not load. Please use address search.',
-  );
-  String get selectedLocation =>
-      _pick('선택한 위치', 'Vị trí đã chọn', 'Selected location');
-  String get locationConfirmed =>
-      _pick('위치 확인 완료', 'Đã xác nhận vị trí', 'Location confirmed');
   String get customerName => _pick('받는 분', 'Tên người nhận', 'Recipient name');
   String get phone => _pick('전화번호', 'Số điện thoại', 'Phone number');
   String get detailAddress =>
@@ -286,15 +222,10 @@ class DirectOrderCopy {
   String get deliveryNote => _pick('요청사항', 'Ghi chú', 'Note');
   String get submitForQuote =>
       _pick('배송비 견적 요청', 'Yêu cầu báo phí giao hàng', 'Request delivery quote');
-  String get addressRequired => _pick(
-    '지도에서 배송 위치를 확인해 주세요.',
-    'Vui lòng xác nhận vị trí giao hàng trên bản đồ.',
-    'Please confirm the delivery location on the map.',
-  );
   String get requiredFields => _pick(
-    '받는 분, 전화번호, 상세주소를 모두 입력해 주세요.',
-    'Vui lòng nhập tên, số điện thoại và địa chỉ chi tiết.',
-    'Enter the recipient, phone number, and address details.',
+    '배송 주소(3자 이상), 상세주소, 받는 분, 전화번호를 모두 입력해 주세요.',
+    'Vui lòng nhập địa chỉ giao hàng (ít nhất 3 ký tự), địa chỉ chi tiết, tên và số điện thoại.',
+    'Enter a delivery address (at least 3 characters), address details, recipient and phone number.',
   );
   String get awaitingQuote => _pick(
     '캐셔가 Grab 배송비를 확인하고 있습니다.',
@@ -423,7 +354,6 @@ class DirectOrderCopy {
       _pick('입금 확인 필요', 'Cần xác nhận tiền', 'Payment review');
   String get addressAndContact =>
       _pick('배송지·연락처', 'Địa chỉ & liên hệ', 'Address & contact');
-  String get openMap => _pick('지도에서 열기', 'Mở trên bản đồ', 'Open in map');
   String get orderItems => _pick('주문 메뉴', 'Món đã đặt', 'Order items');
   String get enterGrabFee => _pick(
     '고객에게 안내할 Grab 배송비',
@@ -695,9 +625,6 @@ class DirectOrderCopy {
   String get dailySales => _pick('일별 매출', 'Doanh thu theo ngày', 'Daily sales');
   String get bankLabel =>
       _pick('은행 표시명', 'Tên hiển thị ngân hàng', 'Bank display name');
-  String get latitude => _pick('기본 위도', 'Vĩ độ mặc định', 'Default latitude');
-  String get longitude =>
-      _pick('기본 경도', 'Kinh độ mặc định', 'Default longitude');
   String get saved => _pick('저장했습니다.', 'Đã lưu.', 'Saved.');
   String get enableBlocked => _pick(
     '회계 승인 전에는 외부 주문을 활성화할 수 없습니다.',

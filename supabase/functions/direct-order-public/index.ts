@@ -31,9 +31,6 @@ export const directOrderActionRegistry = Object.freeze(
   {
     storefront: { actor: "public", rateLimit: 60 },
     create_session: { actor: "public", rateLimit: 60 },
-    places_autocomplete: { actor: "public", rateLimit: 30 },
-    place_details: { actor: "public", rateLimit: 30 },
-    reverse_geocode: { actor: "public", rateLimit: 30 },
     submit: { actor: "public", rateLimit: 60 },
     status: { actor: "public", rateLimit: 60 },
     message: { actor: "public", rateLimit: 60 },
@@ -61,9 +58,6 @@ const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const slugPattern = /^[a-z0-9][a-z0-9-]{2,62}$/;
 const secretPattern = /^[A-Za-z0-9_-]{40,128}$/;
-const placeIdPattern = /^[A-Za-z0-9_-]{5,255}$/;
-const placeSessionTokenPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedProofTypes = new Map([
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
@@ -588,188 +582,6 @@ function asObject(value: unknown): JsonObject {
   return value as JsonObject;
 }
 
-function addressParts(
-  components: unknown,
-): { district?: string; ward?: string } {
-  if (!Array.isArray(components)) return {};
-  let district: string | undefined;
-  let ward: string | undefined;
-  for (const raw of components) {
-    if (!raw || typeof raw !== "object") continue;
-    const component = raw as JsonObject;
-    const types = Array.isArray(component.types) ? component.types : [];
-    const name = typeof component.longText === "string"
-      ? component.longText
-      : typeof component.long_name === "string"
-      ? component.long_name
-      : undefined;
-    if (!name) continue;
-    if (
-      !district &&
-      (types.includes("administrative_area_level_2") ||
-        types.includes("sublocality_level_1"))
-    ) district = name;
-    if (
-      !ward &&
-      (types.includes("administrative_area_level_3") ||
-        types.includes("sublocality_level_2"))
-    ) ward = name;
-  }
-  return { district, ward };
-}
-
-export function validPlacesSessionToken(value: unknown): value is string {
-  return typeof value === "string" && placeSessionTokenPattern.test(value);
-}
-
-export function requireGoogleServerKey(value: string): string {
-  if (!value) {
-    throw new SafeHttpError(503, "MAP_TEMPORARILY_UNAVAILABLE");
-  }
-  return value;
-}
-
-export function googleAutocompletePayload(
-  query: string,
-  locale: string,
-  sessionToken: string,
-  latitude?: number,
-  longitude?: number,
-): JsonObject {
-  const payload: JsonObject = {
-    input: query,
-    includedRegionCodes: ["vn"],
-    languageCode: locale,
-    regionCode: "VN",
-    sessionToken,
-  };
-  if (
-    typeof latitude === "number" && Number.isFinite(latitude) &&
-    typeof longitude === "number" && Number.isFinite(longitude)
-  ) {
-    payload.locationBias = {
-      circle: {
-        center: { latitude, longitude },
-        radius: 50000,
-      },
-    };
-  }
-  return payload;
-}
-
-export function googlePlaceDetailsUrl(
-  placeId: string,
-  locale: string,
-  sessionToken: string,
-): URL {
-  const url = new URL(`https://places.googleapis.com/v1/places/${placeId}`);
-  url.searchParams.set("languageCode", locale);
-  url.searchParams.set("regionCode", "VN");
-  url.searchParams.set("sessionToken", sessionToken);
-  return url;
-}
-
-export function googleAutocompleteSuggestions(data: JsonObject): JsonObject[] {
-  return Array.isArray(data.suggestions)
-    ? data.suggestions.slice(0, 8).flatMap((raw) => {
-      if (!raw || typeof raw !== "object") return [];
-      const prediction = (raw as JsonObject).placePrediction;
-      if (!prediction || typeof prediction !== "object") return [];
-      const row = prediction as JsonObject;
-      const text = row.text && typeof row.text === "object"
-        ? (row.text as JsonObject).text
-        : null;
-      return typeof row.placeId === "string" &&
-          placeIdPattern.test(row.placeId) &&
-          typeof text === "string" && text.trim().length > 0
-        ? [{ place_id: row.placeId, text: text.trim() }]
-        : [];
-    })
-    : [];
-}
-
-function providerPlace(
-  placeId: unknown,
-  formattedAddress: unknown,
-  latitude: unknown,
-  longitude: unknown,
-  components: unknown,
-): JsonObject {
-  if (
-    typeof formattedAddress !== "string" ||
-    formattedAddress.trim().length === 0 ||
-    typeof latitude !== "number" || !Number.isFinite(latitude) ||
-    latitude < -90 || latitude > 90 ||
-    typeof longitude !== "number" || !Number.isFinite(longitude) ||
-    longitude < -180 || longitude > 180 ||
-    (placeId != null &&
-      (typeof placeId !== "string" || !placeIdPattern.test(placeId)))
-  ) {
-    throw new SafeHttpError(404, "MAP_LOCATION_NOT_FOUND");
-  }
-  const parts = addressParts(components);
-  return {
-    place_id: placeId ?? null,
-    formatted_address: formattedAddress.trim(),
-    latitude,
-    longitude,
-    district: parts.district ?? null,
-    ward: parts.ward ?? null,
-  };
-}
-
-export function googlePlaceDetailsResult(data: JsonObject): JsonObject {
-  const location = data.location;
-  if (!location || typeof location !== "object" || Array.isArray(location)) {
-    throw new SafeHttpError(404, "MAP_LOCATION_NOT_FOUND");
-  }
-  const coordinates = location as JsonObject;
-  return providerPlace(
-    data.id,
-    data.formattedAddress,
-    coordinates.latitude,
-    coordinates.longitude,
-    data.addressComponents,
-  );
-}
-
-export function googleReverseGeocodeResult(
-  data: JsonObject,
-  latitude: number,
-  longitude: number,
-): JsonObject {
-  const results = Array.isArray(data.results) ? data.results : [];
-  const first = results[0];
-  if (!first || typeof first !== "object" || Array.isArray(first)) {
-    throw new SafeHttpError(404, "MAP_LOCATION_NOT_FOUND");
-  }
-  const result = first as JsonObject;
-  return providerPlace(
-    result.place_id,
-    result.formatted_address,
-    latitude,
-    longitude,
-    result.address_components,
-  );
-}
-
-export async function googleJson(
-  url: string | URL,
-  init: RequestInit,
-  fetcher: typeof fetch = fetch,
-): Promise<JsonObject> {
-  try {
-    const response = await fetcher(url, init);
-    if (!response.ok) {
-      throw new SafeHttpError(503, "MAP_TEMPORARILY_UNAVAILABLE");
-    }
-    return asObject(await response.json());
-  } catch (error) {
-    if (error instanceof SafeHttpError) throw error;
-    throw new SafeHttpError(503, "MAP_TEMPORARILY_UNAVAILABLE");
-  }
-}
-
 export function validProofObjectPath(path: string): boolean {
   const segments = path.split("/");
   if (segments.length !== 3) return false;
@@ -802,8 +614,6 @@ function productionDependencies(): DirectOrderDependencies {
   );
   const rateLimitSecret = Deno.env.get("DIRECT_ORDER_RATE_LIMIT_SECRET") ?? "";
   const cleanupSecret = Deno.env.get("DIRECT_ORDER_CLEANUP_SECRET") ?? "";
-  const googleServerKey = Deno.env.get("GOOGLE_MAPS_SERVER_API_KEY") ?? "";
-  const googleBrowserKey = Deno.env.get("GOOGLE_MAPS_BROWSER_KEY") ?? "";
   const allowedOrigins = configuredOrigins();
   if (
     !supabaseUrl || allowedOrigins.length === 0 ||
@@ -855,7 +665,8 @@ function productionDependencies(): DirectOrderDependencies {
         if (!value) throw new SafeHttpError(404, "DIRECT_ORDER_UNAVAILABLE");
         return {
           ...asObject(value),
-          google_maps_browser_key: googleBrowserKey || null,
+          // Legacy response compatibility only; no map credential is used.
+          google_maps_browser_key: null,
         };
       }
       case "create_session": {
@@ -874,86 +685,6 @@ function productionDependencies(): DirectOrderDependencies {
           ),
         );
         return { ...value, secret };
-      }
-      case "places_autocomplete": {
-        const apiKey = requireGoogleServerKey(googleServerKey);
-        const query = requiredString(body, "query", 200);
-        if (query.length < 2) throw new SafeHttpError(400, "INVALID_REQUEST");
-        const slug = requiredString(body, "slug", 63, slugPattern);
-        const storefront = asObject(
-          await rpc(
-            service,
-            "direct_order_public_storefront",
-            { p_slug: slug },
-          ),
-        );
-        const latitude = Number(storefront.default_latitude);
-        const longitude = Number(storefront.default_longitude);
-        const locale = directOrderLocale(body.locale, "vi");
-        if (!validPlacesSessionToken(body.session_token)) {
-          throw new SafeHttpError(400, "INVALID_REQUEST");
-        }
-        const payload = googleAutocompletePayload(
-          query,
-          locale,
-          body.session_token,
-          latitude,
-          longitude,
-        );
-        const data = await googleJson(
-          "https://places.googleapis.com/v1/places:autocomplete",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Goog-Api-Key": apiKey,
-              "X-Goog-FieldMask":
-                "suggestions.placePrediction.placeId,suggestions.placePrediction.text",
-            },
-            body: JSON.stringify(payload),
-          },
-        );
-        return { suggestions: googleAutocompleteSuggestions(data) };
-      }
-      case "place_details": {
-        const apiKey = requireGoogleServerKey(googleServerKey);
-        const placeId = requiredString(body, "place_id", 255, placeIdPattern);
-        const locale = directOrderLocale(body.locale, "vi");
-        if (!validPlacesSessionToken(body.session_token)) {
-          throw new SafeHttpError(400, "INVALID_REQUEST");
-        }
-        const url = googlePlaceDetailsUrl(
-          placeId,
-          locale,
-          body.session_token,
-        );
-        const data = await googleJson(url, {
-          headers: {
-            "X-Goog-Api-Key": apiKey,
-            "X-Goog-FieldMask":
-              "id,formattedAddress,location,addressComponents",
-          },
-        });
-        return googlePlaceDetailsResult(data);
-      }
-      case "reverse_geocode": {
-        const apiKey = requireGoogleServerKey(googleServerKey);
-        const latitude = Number(body.latitude);
-        const longitude = Number(body.longitude);
-        if (
-          !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
-          !Number.isFinite(longitude) || longitude < -180 || longitude > 180
-        ) throw new SafeHttpError(400, "INVALID_REQUEST");
-        const locale = directOrderLocale(body.locale, "vi");
-        const url = new URL(
-          "https://maps.googleapis.com/maps/api/geocode/json",
-        );
-        url.searchParams.set("latlng", `${latitude},${longitude}`);
-        url.searchParams.set("key", apiKey);
-        url.searchParams.set("region", "vn");
-        url.searchParams.set("language", locale);
-        const data = await googleJson(url, {});
-        return googleReverseGeocodeResult(data, latitude, longitude);
       }
       case "submit": {
         const sessionId = requiredUuid(body, "session_id");
