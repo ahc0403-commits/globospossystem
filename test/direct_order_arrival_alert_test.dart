@@ -49,14 +49,16 @@ const _frozenAlertFiles = <String, String>{
       '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
+  // Only the daily-closing cash-payout label was added in KO/VI/EN.
+  // Arrival copy behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      'a72981c6bc4082baa5e7d6d4c04b80bbfab1aaa58b3d7d7efc8ed6c2f5020d08',
+      'c0fe5b696b33d7d1a20bc495037d6c4b994d1735028c704d74ef691cf22a77fa',
   'lib/l10n/app_localizations_ko.dart':
-      '0a0fea421ac70b5440aaa6ba59ad97565509c6f59158866a03b83f2a2c2e83dd',
+      '5f28f367cfa5a7b6a23e644ddf89126126be01d2fd07308b6a0145ed0dfe0814',
   'lib/l10n/app_localizations_vi.dart':
-      'c3679738f96284e4250258d77a63ea4704467260310c3caa0bebbc48b681d04f',
+      'ef790a71c8f44ab47a962176d835bb556af704d8355106c6e740fb7a47c4c342',
   'lib/l10n/app_localizations_en.dart':
-      'a033296fbcb13dca13c99bea2dcc6b56eb23827494f03335913eeea942182543',
+      '6b91899dcdcd98985b44ddc25b98adb776f1ee0f7e9ac72d1ecdfaadc85c08d8',
 };
 
 void main() {
