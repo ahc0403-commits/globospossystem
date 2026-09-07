@@ -21,7 +21,7 @@ BEGIN
     RAISE EXCEPTION 'DISPOSABLE_DATABASE_REQUIRED';
   END IF;
   INSERT INTO restaurants VALUES (v_store);
-  INSERT INTO direct_order_storefronts VALUES (v_store, true, false, '00:00', '23:59:59.999999');
+  INSERT INTO direct_order_storefronts VALUES (v_store, true, false, '00:00', '23:59:59.999999', true);
   INSERT INTO menu_items(id,restaurant_id,name,name_ko,name_vi,name_en,vat_category,price,is_available,is_visible_public)
     VALUES (v_menu,v_store,'Fixture','Fixture','Fixture','Fixture','food',100000,true,true);
   v_payload := jsonb_build_object('locale','vi','items',jsonb_build_array(
@@ -80,6 +80,16 @@ BEGIN
     IF SQLERRM <> 'DIRECT_ORDER_STOREFRONT_PAUSED' THEN RAISE; END IF;
   END;
   UPDATE direct_order_storefronts SET is_paused=false WHERE restaurant_id=v_store;
+  UPDATE direct_order_storefronts SET ordering_starts_at='00:00', ordering_cutoff_at='00:00'
+    WHERE restaurant_id=v_store;
+  BEGIN
+    PERFORM direct_order_public_submit(v_session,repeat('b',64),gen_random_uuid(),v_payload);
+    RAISE EXCEPTION 'ENFORCED_ORDERING_HOURS_IGNORED';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'DIRECT_ORDER_OUTSIDE_HOURS' THEN RAISE; END IF;
+  END;
+  -- The existing per-store pilot switch must remain effective after migration.
+  UPDATE direct_order_storefronts SET ordering_hours_enforced=false WHERE restaurant_id=v_store;
   -- Cached old clients retain their original coordinate contract.
   v_result := direct_order_public_submit(v_session,repeat('b',64),gen_random_uuid(),
     v_payload || jsonb_build_object('address',v_address ||

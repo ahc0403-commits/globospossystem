@@ -125,6 +125,11 @@ class DirectOrderCopy {
       'Vui lòng kiểm tra lại link Grab và phí giao hàng thực tế.',
       'Please check the Grab link and actual delivery fee.',
     ),
+    'DIRECT_ORDER_CASH_PAYOUT_LOCKED' => _pick(
+      '이미 금고에서 지급한 배달비는 변경할 수 없습니다.',
+      'Không thể thay đổi phí giao hàng đã chi tiền mặt từ két.',
+      'A delivery fee already paid from the safe cannot be changed.',
+    ),
     'DIRECT_ORDER_DRIVER_RECEIPT_ADDRESS_UNAVAILABLE' => _pick(
       '배송지 정보가 없어 기사용 영수증을 출력할 수 없습니다.',
       'Không thể in phiếu tài xế vì không còn địa chỉ giao hàng.',
@@ -399,6 +404,16 @@ class DirectOrderCopy {
       _pick('Grab 공유 링크', 'Link theo dõi Grab', 'Grab tracking link');
   String get actualGrabFee =>
       _pick('실제 Grab 비용', 'Phí Grab thực tế', 'Actual Grab cost');
+  String get actualGrabFeeCashPayout => _pick(
+    '실제 Grab 비용 (금고 현금 지출)',
+    'Phí Grab thực tế (chi tiền mặt từ két)',
+    'Actual Grab cost (cash paid from safe)',
+  );
+  String get deliveryCashPayoutRequired => _pick(
+    'Grab 링크와 금고에서 지급한 실제 배달비를 입력해 주세요.',
+    'Nhập link Grab và phí giao hàng thực tế đã chi tiền mặt từ két.',
+    'Enter the Grab link and the actual delivery fee paid in cash from the safe.',
+  );
   String get sendGrabLink => _pick(
     '고객에게 Grab 링크 전송',
     'Gửi link Grab cho khách',

@@ -434,6 +434,7 @@
   "reportsCashClosingTitle": "현금 시재 마감",
   "reportsOpeningCash": "기본 시제금",
   "reportsCashSales": "오늘 현금 매출",
+  "reportsDeliveryCashPayout": "배달비 금고 현금 지출",
   "reportsExpectedCash": "예상 보유 현금",
   "reportsCountBanknotes": "지폐별 수량을 입력하세요.",
   "reportsBanknoteUnit": "장",

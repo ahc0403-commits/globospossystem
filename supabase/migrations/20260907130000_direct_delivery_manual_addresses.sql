@@ -80,8 +80,9 @@ BEGIN
   END IF;
 
   v_local_time := (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::time;
-  IF v_local_time < v_storefront.ordering_starts_at
-     OR v_local_time >= v_storefront.ordering_cutoff_at THEN
+  IF v_storefront.ordering_hours_enforced
+     AND (v_local_time < v_storefront.ordering_starts_at
+          OR v_local_time >= v_storefront.ordering_cutoff_at) THEN
     RAISE EXCEPTION 'DIRECT_ORDER_OUTSIDE_HOURS';
   END IF;
 

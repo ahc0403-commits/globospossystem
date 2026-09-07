@@ -3027,6 +3027,7 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
       barrierDismissible: false,
       builder: (_) => _DailyClosingCashDialog(
         cashSales: _reportDouble(preview['payments_cash']),
+        deliveryCashPayout: _reportDouble(preview['delivery_cash_payout']),
       ),
     );
 
@@ -3350,6 +3351,13 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
                           value: _formatVnd(currency, record.countedCashAmount),
                         ),
                         _DailyClosingMetric(
+                          label: context.l10n.reportsDeliveryCashPayout,
+                          value: _formatVnd(
+                            currency,
+                            -record.deliveryCashPayout,
+                          ),
+                        ),
+                        _DailyClosingMetric(
                           label: context.l10n.reportsCashVariance,
                           value: _formatVnd(currency, record.cashVariance),
                           valueColor: record.cashVariance == 0
@@ -3606,9 +3614,13 @@ class _DailyClosingCashInput {
 }
 
 class _DailyClosingCashDialog extends StatefulWidget {
-  const _DailyClosingCashDialog({required this.cashSales});
+  const _DailyClosingCashDialog({
+    required this.cashSales,
+    required this.deliveryCashPayout,
+  });
 
   final double cashSales;
+  final double deliveryCashPayout;
 
   @override
   State<_DailyClosingCashDialog> createState() =>
@@ -3655,7 +3667,8 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
     (sum, denomination) => sum + (denomination * _countFor(denomination)),
   );
 
-  double get _expectedCash => _defaultOpeningCash + widget.cashSales;
+  double get _expectedCash =>
+      _defaultOpeningCash + widget.cashSales - widget.deliveryCashPayout;
 
   @override
   void dispose() {
@@ -3693,6 +3706,11 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
                   _ClosingCashSummary(
                     label: l10n.reportsCashSales,
                     value: widget.cashSales,
+                    currency: _currency,
+                  ),
+                  _ClosingCashSummary(
+                    label: l10n.reportsDeliveryCashPayout,
+                    value: -widget.deliveryCashPayout,
                     currency: _currency,
                   ),
                   _ClosingCashSummary(

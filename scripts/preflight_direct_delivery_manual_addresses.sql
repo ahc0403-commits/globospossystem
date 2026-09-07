@@ -4,10 +4,10 @@ DO $preflight$
 DECLARE v_definition text;
 BEGIN
   -- Reject a drifted live RPC rather than overwriting unrelated hotfixes.
-  -- Digest of the predecessor prosrc from 20260821130000.
+  -- Digest includes the 20260824013000 per-store ordering-hours switch.
   IF (SELECT md5(prosrc) FROM pg_proc
       WHERE oid = 'public.direct_order_public_submit(uuid,text,uuid,jsonb)'::regprocedure)
-      <> '157e15556523d34c81bde72213a88b71' THEN
+      <> 'd828a4dd65b18e5676f9ac04231a3a14' THEN
     RAISE EXCEPTION 'DIRECT_ORDER_SUBMIT_SOURCE_DRIFT';
   END IF;
   SELECT pg_get_functiondef('public.direct_order_public_submit(uuid,text,uuid,jsonb)'::regprocedure)

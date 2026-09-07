@@ -18,6 +18,7 @@ BEGIN
   IF position('address_source'' = ''manual''' IN v_definition) = 0
      OR position('direct_order_validate_session' IN v_definition) = 0
      OR position('DIRECT_ORDER_OUTSIDE_HOURS' IN v_definition) = 0
+     OR position('v_storefront.ordering_hours_enforced' IN v_definition) = 0
      OR position('idempotent' IN v_definition) = 0
      OR has_function_privilege('anon', 'public.direct_order_public_submit(uuid,text,uuid,jsonb)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.direct_order_public_submit(uuid,text,uuid,jsonb)', 'EXECUTE')

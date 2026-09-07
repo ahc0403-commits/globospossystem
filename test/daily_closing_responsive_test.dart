@@ -22,6 +22,7 @@ DailyClosingRecord _record({bool closed = false}) {
     paymentsCard: 50000000,
     paymentsPay: 30000000,
     paymentsBankTransfer: 20000000,
+    deliveryCashPayout: 25000,
     openingCashAmount: 5000000,
     expectedCashAmount: 28456789,
     countedCashAmount: 28456789,
