@@ -61,6 +61,7 @@ class _DirectOrderStorefrontScreenState
   bool _proofUploading = false;
   bool _sendingMessage = false;
   bool _refreshingStatus = false;
+  bool _pausedByServer = false;
   String? _errorCode;
   int _loadGeneration = 0;
   int _statusMutationRevision = 0;
@@ -92,17 +93,29 @@ class _DirectOrderStorefrontScreenState
     setState(() {
       _loading = true;
       _errorCode = null;
+      _pausedByServer = false;
     });
     try {
       final storefront = await widget.service.fetchStorefront(widget.slug);
+      final activeRequest = await widget.service.loadActiveRequestId(
+        widget.slug,
+      );
+      if (storefront.paused && activeRequest == null) {
+        if (!mounted || generation != _loadGeneration) return;
+        _statusTimer?.cancel();
+        setState(() {
+          _storefront = storefront;
+          _status = null;
+          _view = _CustomerView.menu;
+          _loading = false;
+        });
+        return;
+      }
       final session = await widget.service.ensureSession(
         slug: widget.slug,
         locale: _languageCode,
       );
       final saved = await widget.service.loadAddress(widget.slug);
-      final activeRequest = await widget.service.loadActiveRequestId(
-        widget.slug,
-      );
       DirectOrderStatus? status;
       if (activeRequest != null) {
         try {
@@ -227,7 +240,12 @@ class _DirectOrderStorefrontScreenState
       });
       _startStatusPolling();
     } catch (error) {
-      _showError(error);
+      if (error is DirectOrderException &&
+          error.code == 'DIRECT_ORDER_STOREFRONT_PAUSED') {
+        if (mounted) setState(() => _pausedByServer = true);
+      } else {
+        _showError(error);
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -456,13 +474,8 @@ class _DirectOrderStorefrontScreenState
         onAction: _load,
       );
     }
-    if (_storefront!.paused) {
-      return _CenteredMessage(
-        icon: Icons.pause_circle_outline_rounded,
-        title: _copy.paused,
-        actionLabel: _copy.retry,
-        onAction: _load,
-      );
+    if ((_storefront!.paused || _pausedByServer) && _status == null) {
+      return _DeliveryClosedMessage(copy: _copy, onCheckAgain: _load);
     }
     final content = switch (_view) {
       _CustomerView.menu => _buildMenu(),
@@ -1373,6 +1386,87 @@ class _BottomActionCard extends StatelessWidget {
               const SizedBox(width: 6),
               const Icon(Icons.arrow_forward_rounded, color: Colors.white),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DeliveryClosedMessage extends StatelessWidget {
+  const _DeliveryClosedMessage({
+    required this.copy,
+    required this.onCheckAgain,
+  });
+
+  final DirectOrderCopy copy;
+  final VoidCallback onCheckAgain;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Container(
+              key: const Key('direct_order_closed_state'),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+              decoration: BoxDecoration(
+                color: PosColors.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: PosColors.border),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0F0F172A),
+                    blurRadius: 24,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Semantics(
+                    label: copy.apologyEmojiLabel,
+                    excludeSemantics: true,
+                    child: const Text(
+                      '🙏',
+                      key: Key('direct_order_closed_emoji'),
+                      style: TextStyle(fontSize: 72, height: 1),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    copy.pausedTitle,
+                    key: const Key('direct_order_closed_title'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: PosColors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    copy.pausedMessage,
+                    key: const Key('direct_order_closed_message'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: PosColors.textSecondary,
+                      height: 1.55,
+                    ),
+                  ),
+                  const SizedBox(height: 26),
+                  FilledButton.icon(
+                    key: const Key('direct_order_closed_retry'),
+                    onPressed: onCheckAgain,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: Text(copy.checkAgain),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

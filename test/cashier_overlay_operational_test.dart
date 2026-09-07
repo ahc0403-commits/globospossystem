@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1413,18 +1415,226 @@ void main() {
     expect(find.text('#D12345678'), findsOneWidget);
     expect(find.text('Đang chuẩn bị'), findsOneWidget);
   });
+
+  testWidgets('cashier closes and reopens new delivery intake from the header', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(tester);
+
+    expect(find.text('Giao hàng OPEN'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Chỉ ngưng nhận đơn giao hàng mới. Các đơn đã nhận vẫn có thể tiếp tục xử lý.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Giao hàng CLOSED'), findsOneWidget);
+    expect(harness.directOrderStaffService.setPausedValues, [true]);
+
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Vui lòng xác nhận bếp đã sẵn sàng nhận đơn giao hàng mới.'),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Giao hàng OPEN'), findsOneWidget);
+    expect(harness.directOrderStaffService.setPausedValues, [true, false]);
+  });
+
+  testWidgets('compact cashier exposes the same delivery availability action', (
+    tester,
+  ) async {
+    await _pumpCashier(tester, physicalSize: const Size(700, 900));
+
+    expect(find.byTooltip('Giao hàng OPEN'), findsOneWidget);
+    expect(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('cashier cancel keeps the last server availability', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(tester);
+
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_cancel')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Giao hàng OPEN'), findsOneWidget);
+    expect(harness.directOrderStaffService.setPausedValues, isEmpty);
+  });
+
+  testWidgets('failed availability update does not show a false CLOSED state', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(
+      tester,
+      deliveryAvailabilitySetFails: true,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Giao hàng OPEN'), findsOneWidget);
+    expect(harness.directOrderStaffService.setPausedValues, [true]);
+  });
+
+  testWidgets('saving availability disables duplicate cashier taps', (
+    tester,
+  ) async {
+    final completer = Completer<DirectOrderAvailability>();
+    final harness = await _pumpCashier(
+      tester,
+      deliveryAvailabilitySetCompleter: completer,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('cashier_delivery_availability_confirm')),
+    );
+    await tester.pump();
+
+    final savingButton = tester.widget<FilledButton>(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    expect(savingButton.onPressed, isNull);
+    expect(harness.directOrderStaffService.setPausedValues, [true]);
+
+    completer.complete(
+      DirectOrderAvailability(
+        configured: true,
+        enabled: true,
+        paused: true,
+        updatedAt: DateTime.utc(2026, 9, 7),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Giao hàng CLOSED'), findsOneWidget);
+  });
+
+  testWidgets('offline and failed reads disable availability changes', (
+    tester,
+  ) async {
+    await _pumpCashier(tester, isOnline: false);
+    var button = tester.widget<FilledButton>(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    expect(button.onPressed, isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpCashier(tester, deliveryAvailabilityReadFails: true);
+    expect(find.text('Không thể kiểm tra giao hàng'), findsOneWidget);
+    button = tester.widget<FilledButton>(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    expect(button.onPressed, isNull);
+  });
+
+  testWidgets('disabled storefront cannot be opened by cashier', (
+    tester,
+  ) async {
+    await _pumpCashier(
+      tester,
+      deliveryAvailability: const DirectOrderAvailability(
+        configured: true,
+        enabled: false,
+        paused: false,
+        updatedAt: null,
+      ),
+    );
+
+    expect(find.text('Chưa bật giao hàng'), findsOneWidget);
+    final button = tester.widget<FilledButton>(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    expect(button.onPressed, isNull);
+  });
 }
 
 class _DirectOrderStaffService extends DirectOrderStaffService {
-  const _DirectOrderStaffService(this.tickets);
+  _DirectOrderStaffService(
+    this.tickets, {
+    required this.availability,
+    this.availabilityReadFails = false,
+    this.availabilitySetFails = false,
+    this.availabilitySetCompleter,
+  });
 
   final List<Map<String, dynamic>> tickets;
+  DirectOrderAvailability availability;
+  final bool availabilityReadFails;
+  final bool availabilitySetFails;
+  final Completer<DirectOrderAvailability>? availabilitySetCompleter;
+  final List<bool> setPausedValues = [];
 
   @override
   Future<List<Map<String, dynamic>>> listTickets({
     required String storeId,
     List<String>? statuses,
   }) async => tickets;
+
+  @override
+  Future<DirectOrderAvailability> getAvailability({
+    required String storeId,
+  }) async {
+    if (availabilityReadFails) {
+      throw Exception('availability read failed');
+    }
+    return availability;
+  }
+
+  @override
+  Future<DirectOrderAvailability> setPaused({
+    required String storeId,
+    required bool paused,
+  }) async {
+    setPausedValues.add(paused);
+    if (availabilitySetFails) {
+      throw Exception('availability update failed');
+    }
+    if (availabilitySetCompleter != null) {
+      return availabilitySetCompleter!.future;
+    }
+    availability = DirectOrderAvailability(
+      configured: availability.configured,
+      enabled: availability.enabled,
+      paused: paused,
+      updatedAt: DateTime.utc(2026, 9, 7),
+    );
+    return availability;
+  }
 }
 
 class _CashierHarness {
@@ -1434,6 +1644,7 @@ class _CashierHarness {
     required this.paymentService,
     required this.menuService,
     required this.digitalReceiptService,
+    required this.directOrderStaffService,
   });
 
   final _PaymentNotifier notifier;
@@ -1441,6 +1652,7 @@ class _CashierHarness {
   final _PaymentService paymentService;
   final _MenuService menuService;
   final _DigitalReceiptService digitalReceiptService;
+  final _DirectOrderStaffService directOrderStaffService;
 }
 
 Future<_CashierHarness> _pumpCashier(
@@ -1455,6 +1667,16 @@ Future<_CashierHarness> _pumpCashier(
   BankTransferAlertSoundService? bankTransferAlertSoundService,
   Duration bankTransferAlertPollInterval = const Duration(seconds: 2),
   List<Map<String, dynamic>> deliveryTickets = const [],
+  DirectOrderAvailability deliveryAvailability = const DirectOrderAvailability(
+    configured: true,
+    enabled: true,
+    paused: false,
+    updatedAt: null,
+  ),
+  bool deliveryAvailabilityReadFails = false,
+  bool deliveryAvailabilitySetFails = false,
+  Completer<DirectOrderAvailability>? deliveryAvailabilitySetCompleter,
+  bool isOnline = true,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = physicalSize;
@@ -1470,7 +1692,13 @@ Future<_CashierHarness> _pumpCashier(
   final paymentService = _PaymentService();
   final menuService = _MenuService();
   final digitalReceiptService = _DigitalReceiptService();
-  final directOrderStaffService = _DirectOrderStaffService(deliveryTickets);
+  final directOrderStaffService = _DirectOrderStaffService(
+    deliveryTickets,
+    availability: deliveryAvailability,
+    availabilityReadFails: deliveryAvailabilityReadFails,
+    availabilitySetFails: deliveryAvailabilitySetFails,
+    availabilitySetCompleter: deliveryAvailabilitySetCompleter,
+  );
   final router = GoRouter(
     initialLocation: '/cashier',
     routes: [
@@ -1512,7 +1740,7 @@ Future<_CashierHarness> _pumpCashier(
     ProviderScope(
       overrides: [
         authProvider.overrideWith((ref) => _AuthNotifier(authState)),
-        connectivityProvider.overrideWith((ref) => Stream.value(true)),
+        connectivityProvider.overrideWith((ref) => Stream.value(isOnline)),
         paymentProvider.overrideWith((ref) => notifier),
         waiterTableProvider.overrideWith(
           (ref) => _TableNotifier(
@@ -1553,6 +1781,7 @@ Future<_CashierHarness> _pumpCashier(
     paymentService: paymentService,
     menuService: menuService,
     digitalReceiptService: digitalReceiptService,
+    directOrderStaffService: directOrderStaffService,
   );
 }
 

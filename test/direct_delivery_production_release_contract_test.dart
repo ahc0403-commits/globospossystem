@@ -56,6 +56,16 @@ void main() {
       isTrue,
     );
 
+    final availabilityMigration = File(
+      'supabase/migrations/'
+      '20260907150000_cashier_direct_delivery_availability.sql',
+    );
+    expect(availabilityMigration.existsSync(), isTrue);
+    expect(
+      availabilityMigration.readAsStringSync(),
+      contains('-- production-gate: self-verifying'),
+    );
+
     final webIndex = File('web/index.html').readAsStringSync();
     expect(
       webIndex,

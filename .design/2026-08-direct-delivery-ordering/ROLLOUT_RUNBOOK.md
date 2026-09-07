@@ -5,10 +5,14 @@ Scope: source-complete feature; production remains disabled
 
 ## Release invariants
 
-- Do not mutate the frozen QR, cashier, legacy KDS, payment, print, report, or effective `process_payment` implementation.
+- Do not mutate the frozen QR, legacy KDS, payment, print, report, or effective
+  `process_payment` implementation. The cashier main header is intentionally
+  extended only with the direct-delivery availability control.
 - Apply `20260821130000_direct_delivery_ordering.sql` and then
-  `20260821140000_direct_delivery_arrival_alerts.sql` only through the normal
-  guarded deployment workflow.
+  `20260821140000_direct_delivery_arrival_alerts.sql`, followed by the effective
+  later direct-delivery migrations including
+  `20260907150000_cashier_direct_delivery_availability.sql`, only through the
+  normal guarded deployment workflow.
 - Do not enable a storefront until accounting approval, a real Google Maps check, and a controlled store pilot are recorded.
 - Rollback is link removal plus `is_enabled=false`. Do not roll back the additive migration after orders exist.
 
@@ -45,6 +49,10 @@ Google Cloud Translation or require a translation credential.
    catch-up, reconnect/app-restart dedupe, storefront OFF silence, and unchanged
    simultaneous bank-transfer alert behavior.
 9. Only after the exact pushed SHA passes required GitHub Actions, enable one storefront. Add its `/order/:slug?source=google_maps` URL to Google Business Profile last.
+10. On two cashier terminals, confirm `OPEN -> CLOSED -> OPEN` convergence.
+    While CLOSED, verify that a new customer sees the localized `🙏` apology,
+    a stale menu submit creates no request, and an already submitted request can
+    still be quoted, approved, prepared, and dispatched.
 
 ### Arrival-alert telemetry
 
@@ -60,6 +68,20 @@ cursor rules, frozen hashes, and stop conditions are in
 - Kitchen/admin: `/kitchen/direct-orders`
 - Admin analytics: `/direct-delivery/analytics`
 - Admin configuration: `/direct-delivery/settings`
+
+## Cashier intake switch
+
+The cashier main screen button is a manual store-level intake control:
+
+- Green `Delivery OPEN` accepts new direct-delivery submits.
+- Red `Delivery CLOSED` rejects only new submits and remains closed until a
+  cashier or admin explicitly reopens it.
+- Disabled/unconfigured or unavailable state cannot be changed from cashier.
+- Both close and reopen require confirmation; the UI changes only after the
+  server returns the persisted state.
+
+Do not use CLOSED to cancel existing requests. Use the individual rejection or
+fulfillment workflows when an existing order needs an explicit action.
 
 No new employee identity is created. Initial pilot discovery is by direct URL/bookmark, preserving the frozen cashier and KDS screens.
 

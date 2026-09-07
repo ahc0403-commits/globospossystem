@@ -17,10 +17,65 @@ class DirectOrderCopy {
   String get cart => _pick('장바구니', 'Giỏ hàng', 'Cart');
   String get cartEmpty =>
       _pick('메뉴를 선택해 주세요.', 'Vui lòng chọn món.', 'Please choose an item.');
-  String get paused => _pick(
-    '현재 배달 주문을 잠시 쉬고 있습니다.',
-    'Cửa hàng đang tạm ngưng nhận đơn giao hàng.',
-    'Delivery ordering is temporarily paused.',
+  String get pausedTitle => _pick(
+    '현재 배달 주문을 잠시 쉬고 있습니다',
+    'Cửa hàng đang tạm ngưng nhận đơn giao hàng',
+    'Delivery ordering is temporarily paused',
+  );
+  String get pausedMessage => _pick(
+    '현재 주문량이 많아 새 배달 주문을 받기 어렵습니다. 불편을 드려 정말 죄송합니다. 잠시 후 다시 주문해 주세요.',
+    'Hiện tại cửa hàng có nhiều đơn nên tạm thời chưa thể nhận thêm đơn giao hàng. Chúng tôi thành thật xin lỗi vì sự bất tiện này. Vui lòng quay lại đặt hàng sau ít phút.',
+    'We are handling a high volume of orders and cannot accept new delivery orders right now. We are very sorry for the inconvenience. Please try again a little later.',
+  );
+  String get paused => pausedTitle;
+  String get apologyEmojiLabel =>
+      _pick('죄송한 마음', 'Lời xin lỗi chân thành', 'A sincere apology');
+  String get checkAgain => _pick('다시 확인', 'Kiểm tra lại', 'Check again');
+  String get deliveryOpen =>
+      _pick('배달 OPEN', 'Giao hàng OPEN', 'Delivery OPEN');
+  String get deliveryClosed =>
+      _pick('배달 CLOSED', 'Giao hàng CLOSED', 'Delivery CLOSED');
+  String get deliveryNotConfigured =>
+      _pick('배달 미설정', 'Chưa bật giao hàng', 'Delivery not configured');
+  String get deliveryStateUnavailable => _pick(
+    '배달 상태 확인 실패',
+    'Không thể kiểm tra giao hàng',
+    'Delivery state unavailable',
+  );
+  String get pauseConfirmTitle => _pick(
+    '배달 주문을 닫을까요?',
+    'Tạm ngưng nhận đơn giao hàng?',
+    'Close delivery ordering?',
+  );
+  String get pauseConfirmMessage => _pick(
+    '새 배달 주문 접수만 중지됩니다. 이미 접수된 주문은 계속 처리할 수 있습니다.',
+    'Chỉ ngưng nhận đơn giao hàng mới. Các đơn đã nhận vẫn có thể tiếp tục xử lý.',
+    'Only new delivery orders will stop. Orders already received can still be processed.',
+  );
+  String get pauseAction =>
+      _pick('배달 주문 닫기', 'Tạm ngưng giao hàng', 'Close delivery');
+  String get resumeConfirmTitle => _pick(
+    '배달 주문을 다시 열까요?',
+    'Nhận lại đơn giao hàng?',
+    'Reopen delivery ordering?',
+  );
+  String get resumeConfirmMessage => _pick(
+    '주방에서 새 배달 주문을 받을 준비가 되었는지 확인해 주세요.',
+    'Vui lòng xác nhận bếp đã sẵn sàng nhận đơn giao hàng mới.',
+    'Please confirm that the kitchen is ready for new delivery orders.',
+  );
+  String get resumeAction =>
+      _pick('배달 주문 열기', 'Mở lại giao hàng', 'Reopen delivery');
+  String get keepCurrentState => _pick('취소', 'Hủy', 'Cancel');
+  String get deliveryPausedSuccess => _pick(
+    '새 배달 주문 접수를 닫았습니다.',
+    'Đã tạm ngưng nhận đơn giao hàng mới.',
+    'New delivery ordering is closed.',
+  );
+  String get deliveryResumedSuccess => _pick(
+    '새 배달 주문 접수를 열었습니다.',
+    'Đã mở lại nhận đơn giao hàng.',
+    'New delivery ordering is open.',
   );
   String get unavailable => _pick(
     '배달 주문 페이지를 불러올 수 없습니다.',

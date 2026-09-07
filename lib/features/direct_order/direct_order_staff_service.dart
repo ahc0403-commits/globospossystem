@@ -29,6 +29,49 @@ String? normalizeGrabTrackingUrl(String input) {
   return validHost ? uri.toString() : null;
 }
 
+class DirectOrderAvailability {
+  const DirectOrderAvailability({
+    required this.configured,
+    required this.enabled,
+    required this.paused,
+    required this.updatedAt,
+  });
+
+  final bool configured;
+  final bool enabled;
+  final bool paused;
+  final DateTime? updatedAt;
+
+  bool get acceptingOrders => configured && enabled && !paused;
+  bool get canChange => configured && enabled;
+
+  factory DirectOrderAvailability.fromJson(Map<String, dynamic> json) {
+    const expected = {'configured', 'enabled', 'paused', 'updated_at'};
+    if (json.keys.toSet().difference(expected).isNotEmpty ||
+        expected.difference(json.keys.toSet()).isNotEmpty ||
+        json['configured'] is! bool ||
+        json['enabled'] is! bool ||
+        json['paused'] is! bool) {
+      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+    }
+    final rawUpdatedAt = json['updated_at'];
+    final updatedAt = rawUpdatedAt == null
+        ? null
+        : rawUpdatedAt is String
+        ? DateTime.tryParse(rawUpdatedAt)
+        : null;
+    if (rawUpdatedAt != null && updatedAt == null) {
+      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+    }
+    return DirectOrderAvailability(
+      configured: json['configured'] as bool,
+      enabled: json['enabled'] as bool,
+      paused: json['paused'] as bool,
+      updatedAt: updatedAt,
+    );
+  }
+}
+
 class DirectOrderDriverReceiptStatus {
   const DirectOrderDriverReceiptStatus({
     required this.exists,
@@ -294,6 +337,31 @@ class DirectOrderStaffService {
         params: {'p_store_id': storeId, 'p_statuses': statuses, 'p_limit': 200},
       ),
     );
+  }
+
+  Future<DirectOrderAvailability> getAvailability({
+    required String storeId,
+  }) async {
+    final result = _map(
+      await supabase.rpc(
+        'direct_order_staff_get_availability',
+        params: {'p_store_id': storeId},
+      ),
+    );
+    return DirectOrderAvailability.fromJson(result);
+  }
+
+  Future<DirectOrderAvailability> setPaused({
+    required String storeId,
+    required bool paused,
+  }) async {
+    final result = _map(
+      await supabase.rpc(
+        'direct_order_staff_set_paused',
+        params: {'p_store_id': storeId, 'p_is_paused': paused},
+      ),
+    );
+    return DirectOrderAvailability.fromJson(result);
   }
 
   Future<Map<String, dynamic>> transitionTicket({

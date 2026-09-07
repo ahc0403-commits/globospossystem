@@ -58,9 +58,10 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/cashier/cashier_screen.dart',
-    directCalls: 22,
+    directCalls: 23,
     test: 'test/cashier_overlay_operational_test.dart',
     markers: [
+      'cashier_delivery_availability_confirm',
       'cashier_cancel_order_dialog',
       'cashier_service_item_dialog',
       'cashier_non_revenue_dialog',
@@ -318,7 +319,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 114 dialog and sheet entrypoints map to operational tests', () {
+  test('all 115 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -330,10 +331,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 113);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 114);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      114,
+      115,
     );
 
     final settings = File(

@@ -54,7 +54,7 @@ BEGIN
       procedure_row.proname LIKE 'direct_order_%'
       OR procedure_row.proname LIKE 'direct_delivery_%'
     );
-  IF v_function_count <> 28 THEN
+  IF v_function_count <> 31 THEN
     RAISE EXCEPTION 'DIRECT_ORDER_FUNCTION_COUNT_DRIFT:%', v_function_count;
   END IF;
 
@@ -62,6 +62,10 @@ BEGIN
     'public.direct_order_approve_payment(uuid,uuid,numeric,text)'
   ) IS NULL OR to_regprocedure(
     'public.direct_order_public_submit(uuid,text,uuid,jsonb)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_staff_get_availability(uuid)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_staff_set_paused(uuid,boolean)'
   ) IS NULL OR to_regprocedure(
     'public.direct_order_analytics(uuid,date,date)'
   ) IS NULL THEN

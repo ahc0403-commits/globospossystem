@@ -11,7 +11,7 @@ const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
       '3be65edc63f943e3fddd1f4e4b25fca8b842d430e5fc803d54c76c9d75e7f49b',
   'lib/features/cashier/cashier_screen.dart':
-      'fd982fa6ba0af10be226ba9b8e23e38bbe8efebad8bc369f0e5e48626126ff55',
+      '1c3c2c096eae8c5f4a0327fe5c8f68dd55bdeea49bc527a6aaa5103d25b8bfc7',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.

@@ -241,15 +241,17 @@ BEGIN
   BEGIN
     UPDATE public.direct_order_storefronts
     SET is_paused = true WHERE restaurant_id = v_store;
-    v_ok := direct_delivery_test.expect_approval_error(
-      v_request, v_total, 'DIRECT_ORDER_STOREFRONT_DISABLED'
-    );
+    v_result := direct_delivery_test.approve(v_request, v_total);
+    PERFORM direct_delivery_test.assert_single_graph(v_request);
+    v_ok := COALESCE((v_result->>'idempotent')::boolean, true) = false;
     RAISE EXCEPTION 'DIRECT_TEST_ROLLBACK';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'DIRECT_TEST_ROLLBACK' THEN RAISE; END IF;
   END;
   INSERT INTO _direct_precondition_results VALUES (
-    'paused storefront is rejected', v_ok, 'pause blocks manual approval'
+    'paused storefront keeps existing approval operational',
+    v_ok,
+    'pause blocks new intake only'
   );
 
   v_ok := false;
