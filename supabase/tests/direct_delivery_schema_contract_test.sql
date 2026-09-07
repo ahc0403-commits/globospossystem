@@ -184,6 +184,7 @@ INSERT INTO _expected_direct_columns VALUES
 ('direct_order_dispatches','customer_delivery_fee','numeric(15,2)',true,false),
 ('direct_order_dispatches','actual_grab_fee','numeric(15,2)',false,false),
 ('direct_order_dispatches','fee_variance','numeric(15,2)',false,false),
+('direct_order_dispatches','cash_paid_at','timestamp with time zone',false,false),
 ('direct_order_dispatches','sent_by','uuid',true,false),
 ('direct_order_dispatches','sent_at','timestamp with time zone',true,true),
 ('direct_order_dispatches','updated_at','timestamp with time zone',true,true);
@@ -321,6 +322,8 @@ INSERT INTO _expected_direct_function_access VALUES
 ('public.direct_order_admin_get_storefront(uuid)',true,true),
 ('public.direct_order_staff_list(uuid,text[],timestamp with time zone,uuid,integer)',true,true),
 ('public.direct_order_staff_detail(uuid,uuid)',true,true),
+('public.direct_order_staff_get_availability(uuid)',true,true),
+('public.direct_order_staff_set_paused(uuid,boolean)',true,true),
 ('public.direct_order_staff_quote(uuid,uuid,numeric,text)',true,true),
 ('public.direct_order_staff_message(uuid,uuid,text)',true,true),
 ('public.direct_order_staff_reject(uuid,uuid,text)',true,true),
@@ -335,7 +338,8 @@ INSERT INTO _expected_direct_function_access VALUES
 ('public.direct_order_cleanup_candidates(integer)',false,true),
 ('public.direct_order_orphan_proof_candidates(integer)',false,true);
 INSERT INTO _expected_direct_function_access VALUES
-('public.direct_order_arrival_alerts_after(uuid,timestamp with time zone,uuid,integer)',true,true);
+('public.direct_order_arrival_alerts_after(uuid,timestamp with time zone,uuid,integer)',true,true),
+('public.direct_order_driver_receipt_status(uuid,uuid)',true,true);
 
 INSERT INTO _direct_schema_failures
 SELECT 'missing direct function ' || signature
@@ -519,7 +523,8 @@ INSERT INTO _expected_direct_indexes VALUES
 ('direct_delivery_tickets_store_status_created','restaurant_id,status,created_at,id',false,false),
 ('direct_delivery_ticket_items_ticket','ticket_id,sort_order,id',false,false),
 ('direct_delivery_ticket_items_store','restaurant_id,ticket_id',false,false),
-('direct_order_dispatches_store_sent','restaurant_id,sent_at',false,false);
+('direct_order_dispatches_store_sent','restaurant_id,sent_at',false,false),
+('direct_order_dispatches_store_cash_paid','restaurant_id,cash_paid_at',false,true);
 
 WITH actual AS (
  SELECT index_class.relname index_name, index_row.indisunique is_unique,

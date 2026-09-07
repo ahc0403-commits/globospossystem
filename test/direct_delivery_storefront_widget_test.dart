@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_storefront_screen.dart';
@@ -10,16 +11,24 @@ import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _StorefrontFixtureService extends DirectOrderService {
-  _StorefrontFixtureService({this.savedAddress, this.activeStatus});
+  _StorefrontFixtureService({
+    this.savedAddress,
+    this.activeStatus,
+    this.paused = false,
+    this.pauseOnSubmit = false,
+  });
 
   final DirectOrderAddress? savedAddress;
   final DirectOrderStatus? activeStatus;
+  final bool paused;
+  final bool pauseOnSubmit;
   DirectOrderAddress? submittedAddress;
   bool? submittedRememberAddress;
   int submitCalls = 0;
   int clearAddressCalls = 0;
   var fetchStatusCalls = 0;
   var sendMessageCalls = 0;
+  var ensureSessionCalls = 0;
 
   @override
   Future<DirectOrderStorefront> fetchStorefront(String slug) async =>
@@ -27,7 +36,7 @@ class _StorefrontFixtureService extends DirectOrderService {
         storeId: 'fixture-store',
         storeName: 'GLOBOS BUNSIK',
         slug: 'fixture-store',
-        paused: false,
+        paused: paused,
         minimumOrderAmount: 100000,
         defaultLatitude: 10.8,
         defaultLongitude: 106.7,
@@ -67,11 +76,14 @@ class _StorefrontFixtureService extends DirectOrderService {
   Future<DirectOrderSession> ensureSession({
     required String slug,
     required String locale,
-  }) async => DirectOrderSession(
-    id: 'fixture-session',
-    secret: 'fixture-secret',
-    expiresAt: DateTime.now().add(const Duration(hours: 1)),
-  );
+  }) async {
+    ensureSessionCalls += 1;
+    return DirectOrderSession(
+      id: 'fixture-session',
+      secret: 'fixture-secret',
+      expiresAt: DateTime.now().add(const Duration(hours: 1)),
+    );
+  }
 
   @override
   Future<DirectOrderAddress?> loadAddress(String slug) async => savedAddress;
@@ -131,6 +143,9 @@ class _StorefrontFixtureService extends DirectOrderService {
     submitCalls++;
     submittedAddress = address;
     submittedRememberAddress = rememberAddress;
+    if (pauseOnSubmit) {
+      throw const DirectOrderException('DIRECT_ORDER_STOREFRONT_PAUSED');
+    }
     return const DirectOrderSubmission(
       requestId: 'fixture-request',
       referenceCode: 'D12345678',
@@ -167,6 +182,139 @@ Future<void> _openAddress(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('paused storefront shows a localized apology without a session', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    final service = _StorefrontFixtureService(paused: true);
+
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('ko')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('direct_order_closed_state')), findsOneWidget);
+    expect(find.text('🙏'), findsOneWidget);
+    expect(find.text('현재 배달 주문을 잠시 쉬고 있습니다'), findsOneWidget);
+    expect(
+      find.text(
+        '현재 주문량이 많아 새 배달 주문을 받기 어렵습니다. 불편을 드려 정말 죄송합니다. 잠시 후 다시 주문해 주세요.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('즉석 떡볶이'), findsNothing);
+    expect(service.ensureSessionCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('paused storefront keeps an active order status visible', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    const status = DirectOrderStatus(
+      requestId: 'fixture-request',
+      referenceCode: 'D12345678',
+      state: 'approved',
+      fulfillmentStatus: 'preparing',
+      messages: [],
+    );
+    final service = _StorefrontFixtureService(
+      paused: true,
+      activeStatus: status,
+    );
+
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('ko')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('direct_order_closed_state')), findsNothing);
+    expect(find.byKey(const Key('direct_order_status_title')), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('direct_order_status_title')))
+          .data,
+      '조리 중',
+    );
+    expect(service.ensureSessionCalls, 1);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('closed apology is responsive in every supported locale', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    for (final locale in const [Locale('ko'), Locale('vi'), Locale('en')]) {
+      final copy = DirectOrderCopy(locale.languageCode);
+      for (final size in const [
+        Size(390, 844),
+        Size(768, 1024),
+        Size(1024, 768),
+        Size(1440, 900),
+      ]) {
+        tester.view.physicalSize = size;
+        final service = _StorefrontFixtureService(paused: true);
+        await tester.pumpWidget(_fixtureApp(service: service, locale: locale));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('direct_order_closed_state')),
+          findsOneWidget,
+          reason: '${locale.languageCode}:$size',
+        );
+        expect(find.text(copy.pausedTitle), findsOneWidget);
+        expect(find.text(copy.pausedMessage), findsOneWidget);
+        expect(find.text(copy.checkAgain), findsOneWidget);
+        expect(find.text('🙏'), findsOneWidget);
+        expect(service.ensureSessionCalls, 0);
+        expect(tester.takeException(), isNull, reason: '$locale:$size');
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    }
+  });
+
+  testWidgets('submit race transitions to the closed apology state', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    const saved = DirectOrderAddress(
+      customerName: 'Nguyen Van A',
+      customerPhone: '+84901234567',
+      formattedAddress: 'Landmark 81, Bình Thạnh, Hồ Chí Minh',
+      detailAddress: 'Tầng 12, căn 1201',
+      latitude: 10.795,
+      longitude: 106.722,
+      addressSource: 'search',
+      locationVerified: true,
+    );
+    final service = _StorefrontFixtureService(
+      savedAddress: saved,
+      pauseOnSubmit: true,
+    );
+
+    await tester.pumpWidget(_fixtureApp(service: service));
+    await tester.pumpAndSettle();
+    await _openAddress(tester);
+    final submit = find.byKey(const Key('direct_submit_quote_request'));
+    await tester.scrollUntilVisible(
+      submit,
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(service.submitCalls, 1);
+    expect(find.byKey(const Key('direct_order_closed_state')), findsOneWidget);
+    expect(find.text('🙏'), findsOneWidget);
+    expect(find.text('Tokbokki cay'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('storefront stays usable at all required responsive widths', (
     tester,
   ) async {

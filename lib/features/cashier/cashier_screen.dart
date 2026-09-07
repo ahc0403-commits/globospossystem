@@ -31,6 +31,7 @@ import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import '../digital_receipt/digital_receipt_model.dart';
+import '../direct_order/direct_order_copy.dart';
 import '../direct_order/direct_order_staff_service.dart';
 import '../order/order_model.dart';
 import '../payment/payment_provider.dart';
@@ -153,6 +154,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   List<Map<String, dynamic>> _deliveryTickets = const [];
   bool _deliveryTicketsLoading = false;
   bool _deliveryTicketsFailed = false;
+  DirectOrderAvailability? _deliveryAvailability;
+  bool _deliveryAvailabilityLoading = true;
+  bool _deliveryAvailabilityFailed = false;
+  bool _deliveryAvailabilitySaving = false;
+  int _deliveryAvailabilityGeneration = 0;
   late final ProviderSubscription<PaymentState> _paymentSub;
   late final PrintJobAgentService _printJobAgent;
 
@@ -190,7 +196,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       _,
     ) {
       final storeId = _initializedRestaurantId;
-      if (storeId != null) unawaited(_loadDeliveryTickets(storeId));
+      if (storeId != null) {
+        unawaited(_loadDeliveryTickets(storeId));
+        unawaited(_loadDeliveryAvailability(storeId));
+      }
     });
     _orderSearchController.addListener(() {
       if (!mounted) {
@@ -248,10 +257,16 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
     _initializedRestaurantId = storeId;
+    _deliveryAvailabilityGeneration += 1;
+    _deliveryAvailability = null;
+    _deliveryAvailabilityLoading = true;
+    _deliveryAvailabilityFailed = false;
+    _deliveryAvailabilitySaving = false;
     Future.microtask(() {
       ref.read(paymentProvider.notifier).loadOrders(storeId);
       ref.read(waiterTableProvider.notifier).loadTables(storeId);
       _loadDeliveryTickets(storeId, showLoading: true);
+      _loadDeliveryAvailability(storeId, showLoading: true);
     });
     if (PlatformInfo.isWindows && _printAgentStoreId != storeId) {
       _printJobAgent.stop();
@@ -307,6 +322,118 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         _deliveryTicketsLoading = false;
         _deliveryTicketsFailed = true;
       });
+    }
+  }
+
+  Future<void> _loadDeliveryAvailability(
+    String storeId, {
+    bool showLoading = false,
+  }) async {
+    if (_deliveryAvailabilitySaving || storeId != _initializedRestaurantId) {
+      return;
+    }
+    final generation = ++_deliveryAvailabilityGeneration;
+    if (showLoading && mounted) {
+      setState(() => _deliveryAvailabilityLoading = true);
+    }
+    try {
+      final availability = await _directOrderStaffService.getAvailability(
+        storeId: storeId,
+      );
+      if (!mounted ||
+          storeId != _initializedRestaurantId ||
+          generation != _deliveryAvailabilityGeneration) {
+        return;
+      }
+      setState(() {
+        _deliveryAvailability = availability;
+        _deliveryAvailabilityLoading = false;
+        _deliveryAvailabilityFailed = false;
+      });
+    } catch (_) {
+      if (!mounted ||
+          storeId != _initializedRestaurantId ||
+          generation != _deliveryAvailabilityGeneration) {
+        return;
+      }
+      setState(() {
+        _deliveryAvailabilityLoading = false;
+        _deliveryAvailabilityFailed = true;
+      });
+    }
+  }
+
+  Future<void> _toggleDeliveryAvailability(
+    String storeId,
+    DirectOrderAvailability current,
+  ) async {
+    if (_deliveryAvailabilitySaving || !current.canChange) return;
+    final copy = DirectOrderCopy(Localizations.localeOf(context).languageCode);
+    final shouldPause = !current.paused;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('cashier_delivery_availability_dialog'),
+        title: Text(
+          shouldPause ? copy.pauseConfirmTitle : copy.resumeConfirmTitle,
+        ),
+        content: Text(
+          shouldPause ? copy.pauseConfirmMessage : copy.resumeConfirmMessage,
+        ),
+        actions: [
+          TextButton(
+            key: const Key('cashier_delivery_availability_cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(copy.keepCurrentState),
+          ),
+          FilledButton(
+            key: const Key('cashier_delivery_availability_confirm'),
+            style: FilledButton.styleFrom(
+              backgroundColor: shouldPause
+                  ? PosColors.danger
+                  : PosColors.success,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(shouldPause ? copy.pauseAction : copy.resumeAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || storeId != _initializedRestaurantId) {
+      return;
+    }
+
+    final generation = ++_deliveryAvailabilityGeneration;
+    setState(() => _deliveryAvailabilitySaving = true);
+    try {
+      final availability = await _directOrderStaffService.setPaused(
+        storeId: storeId,
+        paused: shouldPause,
+      );
+      if (!mounted ||
+          storeId != _initializedRestaurantId ||
+          generation != _deliveryAvailabilityGeneration) {
+        return;
+      }
+      setState(() {
+        _deliveryAvailability = availability;
+        _deliveryAvailabilityFailed = false;
+      });
+      showSuccessToast(
+        context,
+        shouldPause ? copy.deliveryPausedSuccess : copy.deliveryResumedSuccess,
+      );
+    } catch (error) {
+      if (mounted && generation == _deliveryAvailabilityGeneration) {
+        showErrorToast(
+          context,
+          copy.errorMessage(directOrderStaffErrorCode(error)),
+        );
+      }
+    } finally {
+      if (mounted && generation == _deliveryAvailabilityGeneration) {
+        setState(() => _deliveryAvailabilitySaving = false);
+      }
     }
   }
 
@@ -2162,7 +2289,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       MediaQuery.textScalerOf(context).scale(1) <= 1.3;
                   final useCompactChrome = !useWideLayout;
                   final useDenseWideLayout =
-                      useWideLayout && viewport.height < 900;
+                      useWideLayout && viewport.height <= 900;
                   final showCompactQueue =
                       selectedOrder == null || _showPaymentQueueOnCompact;
 
@@ -2175,6 +2302,23 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         selectedOrder: selectedOrder,
                         currency: currency,
                         isOnline: isOnline,
+                        deliveryAvailability: _deliveryAvailability,
+                        deliveryAvailabilityLoading:
+                            _deliveryAvailabilityLoading,
+                        deliveryAvailabilityFailed: _deliveryAvailabilityFailed,
+                        deliveryAvailabilitySaving: _deliveryAvailabilitySaving,
+                        onToggleDelivery:
+                            storeId == null ||
+                                !isOnline ||
+                                _deliveryAvailabilityFailed ||
+                                _deliveryAvailabilityLoading ||
+                                _deliveryAvailabilitySaving ||
+                                _deliveryAvailability?.canChange != true
+                            ? null
+                            : () => _toggleDeliveryAvailability(
+                                storeId,
+                                _deliveryAvailability!,
+                              ),
                         compact: useCompactChrome,
                         dense: useDenseWideLayout,
                         onManageSoldOut: storeId == null || !isOnline
@@ -2265,6 +2409,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     required CashierOrder? selectedOrder,
     required NumberFormat currency,
     required bool isOnline,
+    required DirectOrderAvailability? deliveryAvailability,
+    required bool deliveryAvailabilityLoading,
+    required bool deliveryAvailabilityFailed,
+    required bool deliveryAvailabilitySaving,
+    required VoidCallback? onToggleDelivery,
     required bool compact,
     required bool dense,
     required VoidCallback? onManageSoldOut,
@@ -2274,6 +2423,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return _CashierCompactCommandBar(
         isOnline: isOnline,
         onManageSoldOut: onManageSoldOut,
+        deliveryAvailability: deliveryAvailability,
+        deliveryAvailabilityLoading: deliveryAvailabilityLoading,
+        deliveryAvailabilityFailed: deliveryAvailabilityFailed,
+        deliveryAvailabilitySaving: deliveryAvailabilitySaving,
+        onToggleDelivery: onToggleDelivery,
       );
     }
 
@@ -2305,6 +2459,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
     final actions = <Widget>[
       const AppNavBar(showLogout: false),
+      _CashierDeliveryAvailabilityButton(
+        availability: deliveryAvailability,
+        loading: deliveryAvailabilityLoading,
+        failed: deliveryAvailabilityFailed,
+        saving: deliveryAvailabilitySaving,
+        onPressed: onToggleDelivery,
+      ),
       OutlinedButton.icon(
         key: const Key('cashier_sold_out_menu_action'),
         onPressed: onManageSoldOut,
@@ -2357,6 +2518,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     ];
 
     return ToastWorkSurface(
+      key: const Key('cashier_command_header'),
       padding: EdgeInsets.fromLTRB(14, dense ? 6 : 10, 14, dense ? 6 : 10),
       backgroundColor: PosColors.surface,
       child: LayoutBuilder(
@@ -2379,12 +2541,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   children: [
                     Expanded(child: titleBlock),
                     const SizedBox(width: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      alignment: WrapAlignment.end,
-                      children: actions,
+                    Flexible(
+                      flex: 3,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        alignment: WrapAlignment.end,
+                        children: actions,
+                      ),
                     ),
                   ],
                 ),
@@ -2416,14 +2581,106 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   }
 }
 
+class _CashierDeliveryAvailabilityButton extends StatelessWidget {
+  const _CashierDeliveryAvailabilityButton({
+    required this.availability,
+    required this.loading,
+    required this.failed,
+    required this.saving,
+    required this.onPressed,
+    this.compact = false,
+  });
+
+  final DirectOrderAvailability? availability;
+  final bool loading;
+  final bool failed;
+  final bool saving;
+  final VoidCallback? onPressed;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = DirectOrderCopy(Localizations.localeOf(context).languageCode);
+    final isWaiting = loading || saving;
+    final isConfigured = availability?.canChange == true;
+    final isPaused = availability?.paused == true;
+    final label = isWaiting && availability == null
+        ? copy.loading
+        : failed
+        ? copy.deliveryStateUnavailable
+        : !isConfigured
+        ? copy.deliveryNotConfigured
+        : isPaused
+        ? copy.deliveryClosed
+        : copy.deliveryOpen;
+    final color = failed || !isConfigured
+        ? PosColors.textMuted
+        : isPaused
+        ? PosColors.danger
+        : PosColors.success;
+    final icon = isWaiting
+        ? const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Icon(
+            failed
+                ? Icons.cloud_off_outlined
+                : !isConfigured
+                ? Icons.settings_outlined
+                : isPaused
+                ? Icons.do_not_disturb_alt_rounded
+                : Icons.delivery_dining_rounded,
+          );
+
+    if (compact) {
+      return IconButton.filled(
+        key: const Key('cashier_delivery_availability_toggle'),
+        tooltip: label,
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: PosColors.disabledSurface,
+          disabledForegroundColor: PosColors.textMuted,
+        ),
+        icon: icon,
+      );
+    }
+
+    return FilledButton.icon(
+      key: const Key('cashier_delivery_availability_toggle'),
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: PosColors.disabledSurface,
+        disabledForegroundColor: PosColors.textMuted,
+      ),
+      icon: icon,
+      label: Text(label),
+    );
+  }
+}
+
 class _CashierCompactCommandBar extends ConsumerWidget {
   const _CashierCompactCommandBar({
     required this.isOnline,
     required this.onManageSoldOut,
+    required this.deliveryAvailability,
+    required this.deliveryAvailabilityLoading,
+    required this.deliveryAvailabilityFailed,
+    required this.deliveryAvailabilitySaving,
+    required this.onToggleDelivery,
   });
 
   final bool isOnline;
   final VoidCallback? onManageSoldOut;
+  final DirectOrderAvailability? deliveryAvailability;
+  final bool deliveryAvailabilityLoading;
+  final bool deliveryAvailabilityFailed;
+  final bool deliveryAvailabilitySaving;
+  final VoidCallback? onToggleDelivery;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2491,6 +2748,14 @@ class _CashierCompactCommandBar extends ConsumerWidget {
               ),
             ),
           ],
+          _CashierDeliveryAvailabilityButton(
+            availability: deliveryAvailability,
+            loading: deliveryAvailabilityLoading,
+            failed: deliveryAvailabilityFailed,
+            saving: deliveryAvailabilitySaving,
+            onPressed: onToggleDelivery,
+            compact: true,
+          ),
           IconButton(
             key: const Key('cashier_sold_out_menu_action'),
             onPressed: onManageSoldOut,

@@ -3,6 +3,20 @@
 Authority: current direct migration and its RPCs. Conceptual UI labels do not
 create additional database states.
 
+## Intake availability (not a request state)
+
+`direct_order_storefronts.is_paused` is the manual new-intake switch shown as
+`OPEN`/`CLOSED` on the cashier main screen. `CLOSED` blocks only a new public
+submit. Requests that already exist remain visible and can continue through
+quote, proof review, manual approval, chat, fulfillment, dispatch, and status
+polling. It never rewrites a request state, cancels an order, or reopens
+automatically.
+
+Cashier and admin roles may read the four-field availability projection and set
+the pause value only for an accessible store. Kitchen, waiter, anonymous, and
+cross-store actors cannot read or change it. The setter row-locks the storefront;
+actual changes write one old/new audit, while a same-value replay is idempotent.
+
 ## Request states
 
 | Stored state | Entered by | Allowed next operation/state | Forbidden or important rule |
@@ -68,9 +82,10 @@ Approval is the only direct-to-legacy write path:
 
 1. Validate actor/input, acquire request-specific transaction advisory lock.
 2. Return existing financial identity immediately on replay.
-3. Row-lock request and locked quote; validate state, cutoff, storefront,
+3. Row-lock request and locked quote; validate state, cutoff, enabled storefront,
    fulfillment mode, emergency/promotion, exact amount, proof, quote expiry,
-   and unchanged menu.
+   and unchanged menu. The new-intake pause value is not an existing-request
+   approval precondition.
 4. Insert one delivery order, menu lines, attributable delivery-fee line, one
    direct ticket and its item snapshots.
 5. Call the unchanged `process_payment` exactly once.
@@ -91,6 +106,8 @@ bridge, request/message/audit changes together.
 | approve vs cancel | no state is eligible for both operations: approval requires payment-review while cancel allows only awaiting_quote/quoted. From payment-review, approval may win and cancel must return not-cancellable; no mixed graph |
 | two ticket updates at same version | first increments version; second returns version conflict |
 | dispatch vs explicit ready->dispatched | ticket row lock/version contract permits one state change; replay observes dispatched and must not regress |
+| OPEN vs CLOSED from two cashier terminals | storefront row lock serializes both set-to-value calls; each caller uses the returned server state and the last committed call becomes the persisted state |
+| public submit vs cashier CLOSED | storefront share/update locks serialize the boundary; a submit that observes CLOSED creates no request, while a request committed first is an existing request and remains processable |
 
 ## Failure-injection boundary
 

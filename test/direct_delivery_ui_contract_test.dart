@@ -5,6 +5,7 @@ import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_localization.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_staff_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -63,6 +64,66 @@ void main() {
       ),
       'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE',
     );
+  });
+
+  test(
+    'delivery availability response is strict and state is derived safely',
+    () {
+      final open = DirectOrderAvailability.fromJson(const {
+        'configured': true,
+        'enabled': true,
+        'paused': false,
+        'updated_at': '2026-09-07T08:30:00Z',
+      });
+      expect(open.acceptingOrders, isTrue);
+      expect(open.canChange, isTrue);
+      expect(open.updatedAt, DateTime.utc(2026, 9, 7, 8, 30));
+
+      final disabled = DirectOrderAvailability.fromJson(const {
+        'configured': true,
+        'enabled': false,
+        'paused': false,
+        'updated_at': null,
+      });
+      expect(disabled.acceptingOrders, isFalse);
+      expect(disabled.canChange, isFalse);
+
+      for (final invalid in [
+        const {'configured': true, 'enabled': true, 'paused': false},
+        const {
+          'configured': true,
+          'enabled': true,
+          'paused': false,
+          'updated_at': null,
+          'private_field': 'must not be accepted',
+        },
+        const {
+          'configured': true,
+          'enabled': true,
+          'paused': 'false',
+          'updated_at': null,
+        },
+      ]) {
+        expect(
+          () => DirectOrderAvailability.fromJson(invalid),
+          throwsA(isA<DirectOrderException>()),
+        );
+      }
+    },
+  );
+
+  test('closed storefront apology and cashier labels exist in KO VI EN', () {
+    for (final language in const ['ko', 'vi', 'en']) {
+      final copy = DirectOrderCopy(language);
+      expect(copy.pausedTitle, isNotEmpty, reason: language);
+      expect(copy.pausedMessage, isNotEmpty, reason: language);
+      expect(copy.apologyEmojiLabel, isNotEmpty, reason: language);
+      expect(copy.checkAgain, isNotEmpty, reason: language);
+      expect(copy.deliveryOpen, contains('OPEN'), reason: language);
+      expect(copy.deliveryClosed, contains('CLOSED'), reason: language);
+      expect(copy.pauseConfirmMessage, isNotEmpty, reason: language);
+      expect(copy.resumeConfirmMessage, isNotEmpty, reason: language);
+    }
   });
 
   test('cached address round-trips all user-entered and verified fields', () {
