@@ -395,8 +395,17 @@ class _MenuSalesPeriodFilter extends StatelessWidget {
     final formatter = DateFormat('yyyy.MM.dd');
     final start = formatter.format(startDate);
     final end = formatter.format(endDate);
-    final period = start == end ? start : '$start – $end';
-    final dateDetails = Row(
+    final fullPeriod = start == end ? start : '$start – $end';
+    final sameYear = startDate.year == endDate.year;
+    final sameMonth = sameYear && startDate.month == endDate.month;
+    final compactPeriod = start == end
+        ? start
+        : sameMonth
+        ? '$start – ${DateFormat('dd').format(endDate)}'
+        : sameYear
+        ? '$start – ${DateFormat('MM.dd').format(endDate)}'
+        : fullPeriod;
+    Widget dateDetails(String period) => Row(
       children: [
         const Icon(
           Icons.calendar_today_outlined,
@@ -414,6 +423,7 @@ class _MenuSalesPeriodFilter extends StatelessWidget {
               ),
               Text(
                 period,
+                semanticsLabel: period == fullPeriod ? null : fullPeriod,
                 style: Theme.of(
                   context,
                 ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -466,21 +476,21 @@ class _MenuSalesPeriodFilter extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final stacked =
-              constraints.maxWidth < 330 ||
+              constraints.maxWidth < 600 ||
               MediaQuery.textScalerOf(context).scale(1) > 1.5;
           if (stacked) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                dateDetails,
-                const SizedBox(height: 4),
+                dateDetails(compactPeriod),
+                const SizedBox(height: 8),
                 Align(alignment: Alignment.centerRight, child: actions),
               ],
             );
           }
           return Row(
             children: [
-              Expanded(child: dateDetails),
+              Expanded(child: dateDetails(fullPeriod)),
               const SizedBox(width: 12),
               actions,
             ],

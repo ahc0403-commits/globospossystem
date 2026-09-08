@@ -77,11 +77,12 @@ MenuSalesAnalytics _analytics() {
 Widget _app({
   Future<MenuSalesAnalytics> Function()? loader,
   Future<MenuSalesAnalytics> Function(MenuSalesAnalyticsParams)? paramsLoader,
+  MenuSalesAnalyticsParams? params,
   TextScaler? textScaler,
   bool boundedDesktopPanel = false,
 }) {
   final panel = MenuSalesAnalyticsPanel(
-    params: _params,
+    params: params ?? _params,
     currency: NumberFormat('#,###', 'vi_VN'),
   );
   return ProviderScope(
@@ -200,6 +201,35 @@ void main() {
     await tester.pump();
 
     expect(find.text('메뉴 12'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('phone period filter keeps the date readable above actions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _app(
+        params: MenuSalesAnalyticsParams(
+          storeId: _params.storeId,
+          startDate: DateTime(2026, 9),
+          endDate: DateTime(2026, 9, 7),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final periodLabel = tester.getRect(find.text('선택 기간'));
+    final periodValue = tester.getRect(find.text('2026.09.01 – 07'));
+    final firstAction = tester.getRect(
+      find.byKey(const Key('menu_sales_select_single_date')),
+    );
+    expect(periodLabel.width, greaterThan(40));
+    expect(periodLabel.height, lessThan(24));
+    expect(periodValue.width, greaterThan(140));
+    expect(periodValue.height, lessThan(30));
+    expect(firstAction.top, greaterThanOrEqualTo(periodValue.bottom));
     expect(tester.takeException(), isNull);
   });
 
