@@ -11,8 +11,9 @@ Scope: source-complete feature; production remains disabled
 - Apply `20260821130000_direct_delivery_ordering.sql` and then
   `20260821140000_direct_delivery_arrival_alerts.sql`, followed by the effective
   later direct-delivery migrations including
-  `20260907150000_cashier_direct_delivery_availability.sql`, only through the
-  normal guarded deployment workflow.
+  `20260907150000_cashier_direct_delivery_availability.sql` and
+  `20260908120000_direct_order_pilot_safety.sql`, only through the normal
+  guarded deployment workflow.
 - Do not enable a storefront until accounting approval, a real Google Maps check, and a controlled store pilot are recorded.
 - Rollback is link removal plus `is_enabled=false`. Do not roll back the additive migration after orders exist.
 
@@ -53,6 +54,12 @@ Google Cloud Translation or require a translation credential.
     While CLOSED, verify that a new customer sees the localized `🙏` apology,
     a stale menu submit creates no request, and an already submitted request can
     still be quoted, approved, prepared, and dispatched.
+11. Confirm the pilot bank account is producing matched SePay transactions for
+    the correct store. Verify that an uploaded image without a linked transaction
+    cannot approve, and that one transaction cannot be linked to two requests.
+12. Print the first customer Bill on the configured receipt destination, break
+    the printer connection, recover the same failed batch, and then perform one
+    explicit reprint. Confirm payment and inventory remain single throughout.
 
 ### Arrival-alert telemetry
 
@@ -102,3 +109,8 @@ address/chat/session PII. Coarse location facts and financial audit remain.
 4. Reconcile outstanding requests before any further change.
 
 Never compensate by editing an approved customer's quote or payment. A higher Grab cost is the store's cost; a lower cost remains the already accepted customer charge under the approved policy.
+
+For new quotes, `customer_direct` is the default delivery policy: the customer
+pays the driver and the POS collects no delivery fee or cash-payout amount.
+Use `store_prepaid` only when the cashier has the actual fee and the store will
+collect and pay it; existing historical quotes retain their stored policy.

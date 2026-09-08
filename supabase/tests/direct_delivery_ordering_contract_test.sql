@@ -43,6 +43,7 @@ DECLARE
   v_request uuid;
   v_reference text;
   v_final_total numeric;
+  v_sepay_transaction uuid;
   v_orders_before integer;
   v_orders_after integer;
   v_blocked boolean;
@@ -345,7 +346,19 @@ BEGIN
     PERFORM set_config('request.jwt.claim.sub', v_auth::text, true);
     PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
     PERFORM set_config('direct_order.test_local_time', '23:45', true);
+    INSERT INTO public.sepay_transactions(
+      sepay_transaction_id, restaurant_id, gateway, account_number,
+      transfer_type, transfer_amount, payment_code, reference_code,
+      transaction_at, resolution_status, raw_payload
+    ) VALUES (
+      88000001, v_store, 'MB', '123456789', 'in', v_final_total,
+      'DIRECTCONTRACT', 'contract-bank-reference', now(), 'matched',
+      jsonb_build_object('source', 'direct_delivery_ordering_contract')
+    ) RETURNING id INTO v_sepay_transaction;
     EXECUTE 'SET LOCAL ROLE authenticated';
+    PERFORM public.direct_order_staff_link_sepay(
+      v_store, v_request, v_sepay_transaction
+    );
     v_approval := public.direct_order_approve_payment(
       v_store, v_request, v_final_total, 'contract-bank-reference'
     );

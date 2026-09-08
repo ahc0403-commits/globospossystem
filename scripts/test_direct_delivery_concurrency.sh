@@ -66,7 +66,7 @@ LANGUAGE plpgsql
 AS $function$
 BEGIN
   IF current_setting('application_name') LIKE 'direct_approval_a_%' THEN
-    PERFORM pg_sleep(0.15);
+    PERFORM pg_sleep(0.5);
   END IF;
   RETURN NEW;
 END;
@@ -84,7 +84,7 @@ AS $function$
 BEGIN
   IF current_setting('application_name') = 'direct_reject_a' AND
      OLD.state = 'awaiting_payment_review' AND NEW.state = 'rejected' THEN
-    PERFORM pg_sleep(0.15);
+    PERFORM pg_sleep(0.5);
   END IF;
   RETURN NEW;
 END;
@@ -164,9 +164,15 @@ $function$;
 SQL
 
 create_request() {
-  psql -X -qAt -v ON_ERROR_STOP=1 "$db_url" -c \
+  local fixture request_id total
+  fixture="$(psql -X -qAt -v ON_ERROR_STOP=1 "$db_url" -c \
     "select (result->>'request_id') || '|' || (result->>'final_total')
-       from (select direct_delivery_test.create_request('payment_review') result) fixture"
+       from (select direct_delivery_test.create_request('payment_review') result) fixture")"
+  IFS='|' read -r request_id total <<<"$fixture"
+  psql -X -qAt -v ON_ERROR_STOP=1 "$db_url" -c \
+    "select direct_delivery_test.link_verified_payment('$request_id', $total)" \
+    >/dev/null
+  printf '%s\n' "$fixture"
 }
 
 approval_query() {
