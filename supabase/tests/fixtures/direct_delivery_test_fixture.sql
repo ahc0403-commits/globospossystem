@@ -12,6 +12,17 @@ $guard$;
 
 DROP SCHEMA IF EXISTS direct_delivery_test CASCADE;
 CREATE SCHEMA direct_delivery_test;
+CREATE SEQUENCE direct_delivery_test.sepay_provider_transaction_id
+  START WITH 900000;
+SELECT setval(
+  'direct_delivery_test.sepay_provider_transaction_id',
+  GREATEST(
+    900000,
+    COALESCE((SELECT max(sepay_transaction_id) + 1
+              FROM public.sepay_transactions), 900000)
+  ),
+  false
+);
 
 -- Approval has a binding 21:30 HCM cutoff. State/concurrency/rollback tests
 -- must be deterministic at any wall-clock time, so only a guarded disposable
@@ -197,19 +208,68 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION direct_delivery_test.link_verified_payment(
+  p_request_id uuid,
+  p_amount numeric
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, direct_delivery_test, auth, pg_catalog
+AS $function$
+DECLARE
+  v_store uuid;
+  v_transaction uuid;
+BEGIN
+  SELECT store_id INTO v_store FROM direct_delivery_test.constants LIMIT 1;
+  PERFORM direct_delivery_test.set_actor();
+  IF NOT EXISTS (
+    SELECT 1 FROM public.direct_order_sepay_candidates
+    WHERE request_id = p_request_id AND restaurant_id = v_store
+  ) THEN
+    INSERT INTO public.sepay_transactions(
+      sepay_transaction_id, restaurant_id, gateway, account_number,
+      transfer_type, transfer_amount, payment_code, reference_code,
+      transaction_at, resolution_status, raw_payload
+    ) VALUES (
+      nextval('direct_delivery_test.sepay_provider_transaction_id'),
+      v_store, 'MB', '123456789', 'in', p_amount,
+      'DIRECTTEST', 'test-bank-reference', now(), 'matched',
+      jsonb_build_object('source', 'direct_delivery_test')
+    ) RETURNING id INTO v_transaction;
+
+    PERFORM public.direct_order_staff_link_sepay(
+      v_store, p_request_id, v_transaction
+    );
+  END IF;
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION direct_delivery_test.approve(
   p_request_id uuid,
   p_amount numeric
 ) RETURNS jsonb
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, direct_delivery_test, auth, pg_catalog
 AS $function$
-DECLARE v_store uuid;
+DECLARE
+  v_store uuid;
 BEGIN
   SELECT store_id INTO v_store FROM direct_delivery_test.constants LIMIT 1;
   PERFORM direct_delivery_test.set_actor();
-  RETURN public.direct_order_approve_payment(
-    v_store, p_request_id, p_amount, 'test-bank-reference'
-  );
+  IF EXISTS (
+    SELECT 1 FROM public.direct_order_requests request_row
+    WHERE request_row.id = p_request_id
+      AND request_row.restaurant_id = v_store
+      AND request_row.state = 'awaiting_payment_review'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM public.direct_order_financials financial
+    WHERE financial.request_id = p_request_id
+      AND financial.restaurant_id = v_store
+  ) THEN
+    PERFORM direct_delivery_test.link_verified_payment(p_request_id, p_amount);
+  END IF;
+  RETURN public.direct_order_approve_verified_payment(v_store, p_request_id);
 END;
 $function$;
 

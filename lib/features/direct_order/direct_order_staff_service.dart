@@ -110,6 +110,18 @@ class DirectOrderDriverReceiptStatus {
   }
 }
 
+enum DirectOrderDeliveryPaymentMode {
+  customerDirect('customer_direct'),
+  storePrepaid('store_prepaid');
+
+  const DirectOrderDeliveryPaymentMode(this.value);
+
+  final String value;
+
+  static DirectOrderDeliveryPaymentMode fromValue(Object? value) =>
+      value == storePrepaid.value ? storePrepaid : customerDirect;
+}
+
 class DirectOrderStaffService {
   const DirectOrderStaffService();
 
@@ -156,16 +168,18 @@ class DirectOrderStaffService {
     required String storeId,
     required String requestId,
     required double deliveryFee,
+    required DirectOrderDeliveryPaymentMode deliveryPaymentMode,
     String? note,
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_quote',
+        'direct_order_staff_quote_with_payment_mode',
         params: {
           'p_store_id': storeId,
           'p_request_id': requestId,
           'p_delivery_fee_total': deliveryFee,
           'p_cashier_note': note,
+          'p_delivery_payment_mode': deliveryPaymentMode.value,
         },
       ),
     );
@@ -209,7 +223,7 @@ class DirectOrderStaffService {
   }) async {
     return _list(
       await supabase.rpc(
-        'direct_order_staff_sepay_candidates',
+        'direct_order_staff_sepay_candidates_v2',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
@@ -230,21 +244,26 @@ class DirectOrderStaffService {
     );
   }
 
+  Future<Map<String, dynamic>?> verifiedPaymentEvidence({
+    required String storeId,
+    required String requestId,
+  }) async {
+    final result = await supabase.rpc(
+      'direct_order_staff_verified_payment_evidence',
+      params: {'p_store_id': storeId, 'p_request_id': requestId},
+    );
+    if (result == null) return null;
+    return _map(result);
+  }
+
   Future<Map<String, dynamic>> approve({
     required String storeId,
     required String requestId,
-    required double confirmedAmount,
-    String? bankReference,
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_approve_payment',
-        params: {
-          'p_store_id': storeId,
-          'p_request_id': requestId,
-          'p_confirmed_amount': confirmedAmount,
-          'p_confirmed_bank_reference': bankReference,
-        },
+        'direct_order_approve_verified_payment',
+        params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
   }
@@ -256,7 +275,7 @@ class DirectOrderStaffService {
     double? actualGrabFee,
   }) async {
     await supabase.rpc(
-      'direct_order_set_dispatch',
+      'direct_order_set_dispatch_with_payment_mode',
       params: {
         'p_store_id': storeId,
         'p_request_id': requestId,
@@ -287,6 +306,36 @@ class DirectOrderStaffService {
     return _map(
       await supabase.rpc(
         'enqueue_direct_delivery_driver_receipt',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_reprint': reprint,
+        },
+      ),
+    );
+  }
+
+  Future<DirectOrderDriverReceiptStatus> customerReceiptStatus({
+    required String storeId,
+    required String requestId,
+  }) async {
+    final result = _map(
+      await supabase.rpc(
+        'direct_order_customer_receipt_status',
+        params: {'p_store_id': storeId, 'p_request_id': requestId},
+      ),
+    );
+    return DirectOrderDriverReceiptStatus.fromJson(result);
+  }
+
+  Future<Map<String, dynamic>> enqueueCustomerReceipt({
+    required String storeId,
+    required String requestId,
+    bool reprint = false,
+  }) async {
+    return _map(
+      await supabase.rpc(
+        'enqueue_direct_order_customer_receipt',
         params: {
           'p_store_id': storeId,
           'p_request_id': requestId,

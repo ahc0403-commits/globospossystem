@@ -23,7 +23,7 @@ actual changes write one old/new audit, while a same-value replay is idempotent.
 |---|---|---|---|
 | `awaiting_quote` | successful public submit | cashier quote -> `quoted`; cashier reject -> `rejected`; customer cancel -> `cancelled`; chat | no legacy order/payment/ticket exists |
 | `quoted` | first or replacement cashier quote | re-quote stays `quoted` with next version; proof commit -> `awaiting_payment_review`; reject/cancel; chat | only one active quote; old active quote becomes superseded |
-| `awaiting_payment_review` | structurally validated proof commit | manual cashier approve -> `approved`; cashier reject -> `rejected`; chat | customer cancel and re-quote forbidden; proof/SePay never auto-approves |
+| `awaiting_payment_review` | structurally validated proof commit or verified SePay link | verified cashier approve -> `approved`; cashier reject -> `rejected`; chat | customer cancel and re-quote forbidden; an image alone cannot authorize approval and SePay never auto-approves |
 | `approved` | successful atomic manual approval | chat; Grab dispatch and direct kitchen lifecycle | request remains approved while ticket progresses; approve replay returns same financial IDs |
 | `rejected` | cashier rejection from any pre-approval state | no state transition | chat/cancel/quote/approve forbidden |
 | `cancelled` | customer cancel from awaiting_quote/quoted | no state transition | chat/quote/approve/reject forbidden |
@@ -50,7 +50,7 @@ The full rule is `DIRECT_ORDER_LOCALE_CONTRACT.md`.
 |---|---|
 | `active` | new quote; at most one active/locked quote per request |
 | `superseded` | re-quote replaces an active quote and increments version |
-| `locked` | proof commit locks the selected unexpired quote |
+| `locked` | proof commit or verified SePay link locks the selected unexpired quote |
 | `expired` | cancel/reject expires active or locked quote |
 
 `expires_at <= now()` makes an active/locked quote unusable even before its
@@ -83,15 +83,18 @@ Approval is the only direct-to-legacy write path:
 1. Validate actor/input, acquire request-specific transaction advisory lock.
 2. Return existing financial identity immediately on replay.
 3. Row-lock request and locked quote; validate state, cutoff, enabled storefront,
-   fulfillment mode, emergency/promotion, exact amount, proof, quote expiry,
-   and unchanged menu. The new-intake pause value is not an existing-request
-   approval precondition.
+   fulfillment mode, emergency/promotion, quote expiry, unchanged menu, and a
+   linked incoming SePay transaction with the exact store and final amount. An
+   uploaded image is supporting evidence only. The new-intake pause value is
+   not an existing-request approval precondition.
 4. Insert one delivery order, menu lines, attributable delivery-fee line, one
    direct ticket and its item snapshots.
 5. Call the unchanged `process_payment` exactly once.
 6. Reconcile final order/payment totals.
 7. Insert the unique direct financial bridge, set request approved, and write
    one fixed system message and audit record.
+8. Enqueue the first customer Bill once. Missing destinations or print failures
+   remain visible and retryable without rolling back the completed payment.
 
 Every step is one PostgreSQL transaction. An exception at any step rolls back
 orders, items, payment, inventory, meInvoice enqueue, ticket/items, financial
@@ -102,6 +105,7 @@ bridge, request/message/audit changes together.
 | Race | Required outcome |
 |---|---|
 | approve vs identical approve | advisory lock serializes; first creates graph, second returns the same request/order/payment/ticket identity and final amount with `idempotent=true`; exactly one graph |
+| same SePay transaction vs two requests | transaction advisory lock plus the unique transaction index allows one request link; the loser receives `DIRECT_ORDER_SEPAY_TRANSACTION_ALREADY_USED` and cannot approve |
 | approve vs reject | request row lock serializes; whichever legal terminal operation commits first wins; loser receives its documented state conflict; no mixed graph |
 | approve vs cancel | no state is eligible for both operations: approval requires payment-review while cancel allows only awaiting_quote/quoted. From payment-review, approval may win and cancel must return not-cancellable; no mixed graph |
 | two ticket updates at same version | first increments version; second returns version conflict |

@@ -165,6 +165,12 @@ class DirectOrderCopy {
       'Vui lòng kiểm tra ảnh chuyển khoản trước.',
       'Please review the transfer proof first.',
     ),
+    'DIRECT_ORDER_VERIFIED_PAYMENT_REQUIRED' => verifiedPaymentRequired,
+    'DIRECT_ORDER_SEPAY_TRANSACTION_ALREADY_USED' => _pick(
+      '이 입금은 이미 다른 주문에 연결되었습니다.',
+      'Giao dịch này đã được liên kết với đơn khác.',
+      'This transfer is already linked to another order.',
+    ),
     'DIRECT_ORDER_REJECTION_REASON_INVALID' => _pick(
       '거절 사유는 3자 이상 입력해 주세요.',
       'Vui lòng nhập lý do từ 3 ký tự trở lên.',
@@ -196,7 +202,8 @@ class DirectOrderCopy {
       'Vui lòng kiểm tra lại món và tổng tiền trước khi thử lại.',
       'Check the order items and total before trying again.',
     ),
-    'DIRECT_ORDER_DRIVER_RECEIPT_REPRINT_NOT_AVAILABLE' => _pick(
+    'DIRECT_ORDER_DRIVER_RECEIPT_REPRINT_NOT_AVAILABLE' ||
+    'DIRECT_ORDER_CUSTOMER_RECEIPT_REPRINT_NOT_AVAILABLE' => _pick(
       '첫 출력이 완료된 뒤 재출력할 수 있습니다.',
       'Chỉ có thể in lại sau khi bản đầu tiên hoàn tất.',
       'Reprinting is available after the first copy completes.',
@@ -206,6 +213,8 @@ class DirectOrderCopy {
     'DIRECT_ORDER_NOT_APPROVED' ||
     'DIRECT_ORDER_FINANCIAL_RECONCILIATION_FAILED' ||
     'DIRECT_ORDER_SEPAY_CANDIDATE_INVALID' ||
+    'DIRECT_ORDER_CUSTOMER_DIRECT_FEE_MUST_BE_EMPTY' ||
+    'DIRECT_ORDER_DELIVERY_PAYMENT_MODE_CONFLICT' ||
     'DIRECT_DELIVERY_TICKET_VERSION_CONFLICT' ||
     'DIRECT_DELIVERY_TICKET_TRANSITION_INVALID' ||
     'DIRECT_ORDER_CLEANUP_NOT_ELIGIBLE' ||
@@ -353,6 +362,11 @@ class DirectOrderCopy {
   String get cancelOrder => _pick('주문 취소', 'Hủy đơn', 'Cancel order');
   String get startNewOrder =>
       _pick('새 주문 시작', 'Bắt đầu đơn mới', 'Start a new order');
+  String get completedOrderReady => _pick(
+    '이전 주문이 완료되었습니다. 바로 새 주문을 시작할 수 있습니다.',
+    'Đơn trước đã hoàn tất. Bạn có thể đặt đơn mới ngay.',
+    'Your previous order is complete. You can start a new order now.',
+  );
   String get cancelConfirm => _pick(
     '입금 전 주문만 취소할 수 있습니다. 취소할까요?',
     'Chỉ có thể hủy trước khi gửi ảnh chuyển khoản. Tiếp tục?',
@@ -420,6 +434,41 @@ class DirectOrderCopy {
     'Phí Grab báo khách',
     'Grab fee quoted to customer',
   );
+  String get deliveryPaymentMethod => _pick(
+    '배송비 결제 방식',
+    'Cách thanh toán phí giao hàng',
+    'Delivery fee payment',
+  );
+  String get customerPaysDriver => _pick(
+    '고객이 기사에게 직접 결제',
+    'Khách trả trực tiếp cho tài xế',
+    'Customer pays the driver',
+  );
+  String get customerPaysDriverHelp => _pick(
+    '배송비는 매장 결제 금액과 Bill에 포함되지 않습니다.',
+    'Phí giao hàng không nằm trong số tiền trả cho cửa hàng hoặc hóa đơn.',
+    'The delivery fee is excluded from the store payment and bill.',
+  );
+  String get storePrepaysDriver => _pick(
+    '매장이 기사비 대납',
+    'Cửa hàng trả trước phí tài xế',
+    'Store prepays the driver',
+  );
+  String get storePrepaysDriverHelp => _pick(
+    '기사를 호출해 실제 금액을 확인하고 고객 동의를 받은 뒤 입력해 주세요.',
+    'Hãy gọi tài xế, xác nhận phí thực tế và được khách đồng ý trước khi nhập.',
+    'Call the driver, confirm the actual fee, and obtain customer agreement before entering it.',
+  );
+  String get storeCollectedDeliveryFee => _pick(
+    '매장이 고객에게 받을 실제 배송비',
+    'Phí giao hàng thực tế cửa hàng thu của khách',
+    'Actual delivery fee collected by store',
+  );
+  String get noStoreCashPayout => _pick(
+    '고객이 기사에게 직접 지급하므로 매장 현금 지출로 기록하지 않습니다.',
+    'Khách trả trực tiếp cho tài xế nên không ghi nhận chi tiền mặt của cửa hàng.',
+    'The customer pays the driver, so no store cash payout is recorded.',
+  );
   String get quoteNote => _pick('견적 메모', 'Ghi chú báo giá', 'Quote note');
   String get sendQuote =>
       _pick('최종 금액 보내기', 'Gửi báo giá cuối', 'Send final quote');
@@ -433,14 +482,31 @@ class DirectOrderCopy {
     'Không có giao dịch phù hợp',
     'No matching transaction',
   );
+  String paymentConfirmed(String amount) => _pick(
+    '입금 확인: $amount',
+    'Đã nhận tiền: $amount',
+    'Payment received: $amount',
+  );
+  String verifiedPaymentSummary(String amount, String? reference) {
+    final suffix = reference == null || reference.trim().isEmpty
+        ? ''
+        : ' · $reference';
+    return '${paymentConfirmed(amount)}$suffix';
+  }
+
+  String get verifiedPaymentRequired => _pick(
+    '실제 입금 거래를 이 주문에 연결한 후 승인할 수 있습니다.',
+    'Chỉ có thể duyệt sau khi liên kết giao dịch thực tế với đơn này.',
+    'Link a verified bank transfer to this order before approval.',
+  );
   String get confirmedAmount =>
       _pick('확인한 입금액', 'Số tiền đã xác nhận', 'Confirmed transfer amount');
   String get bankReference =>
       _pick('은행 거래번호·메모', 'Mã giao dịch ngân hàng', 'Bank reference');
   String get manualApprovalCheck => _pick(
-    '입금액과 증빙을 직접 확인했습니다. 승인 시에만 주문이 주방으로 전달됩니다.',
-    'Tôi đã kiểm tra số tiền và ảnh. Chỉ sau khi duyệt đơn mới vào bếp.',
-    'I manually verified the amount and proof. Only approval sends the order to the kitchen.',
+    '시스템이 확인한 실제 입금과 주문 금액이 일치합니다. 승인 시 주문이 주방으로 전달됩니다.',
+    'Giao dịch thực tế do hệ thống xác nhận khớp với đơn. Khi duyệt, đơn sẽ được gửi vào bếp.',
+    'The verified bank transfer matches this order. Approval sends the order to the kitchen.',
   );
   String get approveAndSendKitchen => _pick(
     '입금 승인·주방 전달',
@@ -479,6 +545,41 @@ class DirectOrderCopy {
     'Phiếu cho tài xế giao hàng',
     'Delivery driver receipt',
   );
+  String get customerBill =>
+      _pick('고객 Bill', 'Hóa đơn khách hàng', 'Customer bill');
+  String get customerBillHelp => _pick(
+    '결제 완료 금액의 최초 Bill은 자동 요청됩니다. 실패 시 같은 요청을 다시 시도할 수 있습니다.',
+    'Hóa đơn đầu tiên được tự động yêu cầu sau khi thanh toán. Có thể thử lại cùng yêu cầu nếu lỗi.',
+    'The first paid bill is queued automatically. A failed request can be retried safely.',
+  );
+  String get printCustomerBill => _pick('Bill 출력', 'In hóa đơn', 'Print bill');
+  String get reprintCustomerBill =>
+      _pick('Bill 재출력', 'In lại hóa đơn', 'Reprint bill');
+  String get retryCustomerBill =>
+      _pick('Bill 출력 다시 시도', 'Thử in lại hóa đơn', 'Retry bill printing');
+  String get customerBillQueued => _pick(
+    '고객 Bill 출력을 요청했습니다.',
+    'Đã gửi yêu cầu in hóa đơn khách hàng.',
+    'The customer bill was queued.',
+  );
+  String get customerBillReprintQueued => _pick(
+    '고객 Bill 재출력을 요청했습니다.',
+    'Đã gửi yêu cầu in lại hóa đơn khách hàng.',
+    'The customer bill reprint was queued.',
+  );
+  String customerBillStatus(String? status, String? errorCode) =>
+      switch (status) {
+        'pending' => _pick('출력 대기', 'Đang chờ in', 'Queued'),
+        'printing' => _pick('출력 중', 'Đang in', 'Printing'),
+        'done' => _pick('출력 완료', 'Đã in', 'Printed'),
+        'failed' when errorCode == 'NO_DESTINATION' => _pick(
+          '영수증 프린터가 설정되지 않았습니다.',
+          'Chưa cài đặt máy in hóa đơn.',
+          'The receipt printer is not configured.',
+        ),
+        'failed' => _pick('출력 실패', 'In thất bại', 'Print failed'),
+        _ => _pick('출력 요청 없음', 'Chưa yêu cầu in', 'Not queued'),
+      };
   String get driverReceiptHelp => _pick(
     '배송지와 고객 청구 Grab 배송비가 포함된 결제 완료 전표입니다.',
     'Phiếu đã thanh toán gồm địa chỉ giao hàng và phí Grab thu của khách.',
@@ -626,9 +727,9 @@ class DirectOrderCopy {
   String get quoteBreakdown =>
       _pick('최종 견적', 'Chi tiết báo giá', 'Final quote');
   String get supportingEvidence => _pick(
-    'SePay는 보조 증거일 뿐이며 자동 승인하지 않습니다.',
-    'SePay chỉ là bằng chứng hỗ trợ và không tự duyệt.',
-    'SePay is supporting evidence only and never approves an order.',
+    '입금 이미지는 참고 자료입니다. 실제 SePay 입금 거래를 연결해야 승인할 수 있습니다.',
+    'Ảnh chuyển khoản chỉ để tham khảo. Phải liên kết giao dịch SePay thực tế mới có thể duyệt.',
+    'The image is supporting evidence. A verified SePay transfer must be linked before approval.',
   );
   String get linked => _pick('연결됨', 'Đã liên kết', 'Linked');
   String get link => _pick('연결', 'Liên kết', 'Link');

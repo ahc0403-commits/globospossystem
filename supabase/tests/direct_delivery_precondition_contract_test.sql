@@ -67,6 +67,7 @@ DECLARE
   v_ok boolean;
   v_error text;
   v_result jsonb;
+  v_transaction uuid;
   v_kitchen_auth uuid := 'de200000-0000-4000-8000-000000000001';
   v_kitchen_user uuid := 'de200000-0000-4000-8000-000000000002';
 BEGIN
@@ -104,9 +105,30 @@ BEGIN
   v_request := (v_fixture->>'request_id')::uuid;
   v_total := (v_fixture->>'final_total')::numeric;
   BEGIN
-    v_ok := direct_delivery_test.expect_approval_error(
-      v_request, v_total + 1, 'DIRECT_ORDER_PAYMENT_AMOUNT_MISMATCH'
+    INSERT INTO public.sepay_transactions(
+      sepay_transaction_id, restaurant_id, gateway, account_number,
+      transfer_type, transfer_amount, payment_code, reference_code,
+      transaction_at, resolution_status, raw_payload
+    ) VALUES (
+      nextval('direct_delivery_test.sepay_provider_transaction_id'),
+      v_store, 'MB', '123456789', 'in', v_total,
+      'DIRECTTEST', 'amount-mismatch-test', now(), 'matched',
+      jsonb_build_object('source', 'direct_delivery_precondition_test')
+    ) RETURNING id INTO v_transaction;
+    PERFORM direct_delivery_test.set_actor();
+    PERFORM public.direct_order_staff_link_sepay(
+      v_store, v_request, v_transaction
     );
+    v_error := NULL;
+    BEGIN
+      PERFORM public.direct_order_approve_payment(
+        v_store, v_request, v_total + 1, 'amount-mismatch-test'
+      );
+    EXCEPTION WHEN OTHERS THEN
+      v_error := SQLERRM;
+    END;
+    v_ok := v_error = 'DIRECT_ORDER_PAYMENT_AMOUNT_MISMATCH'
+      AND direct_delivery_test.graph_is_empty(v_request);
     RAISE EXCEPTION 'DIRECT_TEST_ROLLBACK';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'DIRECT_TEST_ROLLBACK' THEN RAISE; END IF;
@@ -142,15 +164,17 @@ BEGIN
   BEGIN
     DELETE FROM public.direct_order_messages
     WHERE request_id = v_request AND message_type = 'payment_proof';
-    v_ok := direct_delivery_test.expect_approval_error(
-      v_request, v_total, 'DIRECT_ORDER_PAYMENT_PROOF_REQUIRED'
-    );
+    v_result := direct_delivery_test.approve(v_request, v_total);
+    PERFORM direct_delivery_test.assert_single_graph(v_request);
+    v_ok := COALESCE((v_result->>'idempotent')::boolean, true) = false;
     RAISE EXCEPTION 'DIRECT_TEST_ROLLBACK';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'DIRECT_TEST_ROLLBACK' THEN RAISE; END IF;
   END;
   INSERT INTO _direct_precondition_results VALUES (
-    'missing proof is rejected', v_ok, 'manual evidence remains mandatory'
+    'verified payment does not require an image',
+    v_ok,
+    'bank evidence is authoritative and the uploaded image is optional support'
   );
 
   v_fixture := direct_delivery_test.create_request('quoted');

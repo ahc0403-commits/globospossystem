@@ -5,11 +5,28 @@ import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_localization.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_money.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_staff_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
+  test('VND input displays thousands separators and parses exact integers', () {
+    expect(parseDirectOrderVnd('30.000'), 30000);
+    expect(parseDirectOrderVnd('150,000 VND'), 150000);
+    expect(parseDirectOrderVnd(''), isNull);
+    expect(parseDirectOrderVnd('${maxDirectOrderVndAmount}0'), isNull);
+    expect(formatDirectOrderVnd(30000), '30.000');
+
+    const formatter = DirectOrderVndInputFormatter();
+    final formatted = formatter.formatEditUpdate(
+      TextEditingValue.empty,
+      const TextEditingValue(text: '30000'),
+    );
+    expect(formatted.text, '30.000');
+    expect(formatted.selection.baseOffset, formatted.text.length);
+  });
+
   test(
     'manual cached address keeps text without manufacturing coordinates',
     () {

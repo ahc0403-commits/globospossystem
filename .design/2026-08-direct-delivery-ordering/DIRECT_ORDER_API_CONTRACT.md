@@ -5,7 +5,7 @@ Authorities:
 - Edge: `supabase/functions/direct-order-public/index.ts`
 - SQL: `supabase/migrations/20260821130000_direct_delivery_ordering.sql`
   through
-  `supabase/migrations/20260907150000_cashier_direct_delivery_availability.sql`
+  `supabase/migrations/20260908120000_direct_order_pilot_safety.sql`
 - Flutter customer decode: `lib/features/direct_order/direct_order_models.dart`
 - Catalog enforcement: `supabase/tests/direct_delivery_schema_contract_test.sql`
 
@@ -228,14 +228,22 @@ for super_admin, staff functions require the requested store in
 | `direct_order_staff_get_availability(uuid) -> jsonb` | C/A store | Returns exactly `configured`, `enabled`, `paused`, `updated_at`; no bank/accounting/map configuration is exposed; retry-safe | forbidden |
 | `direct_order_staff_set_paused(uuid,bool) -> jsonb` | C/A store | Storefront `FOR UPDATE`; changes only pause/operator timestamp fields; actual changes write one old/new audit; same-value replay returns the current state without audit churn | forbidden, invalid input, storefront disabled/unconfigured |
 | `direct_order_staff_quote(uuid,uuid,numeric,text) -> jsonb` | C/A store | Request `FOR UPDATE`; price/menu revalidation; supersedes quote, updates request/message; versioned; an existing request remains quotable while new intake is paused | quote input/state, store enabled/accounting/menu/minimum |
+| `direct_order_staff_quote_with_payment_mode(uuid,uuid,numeric,text,text) -> jsonb` | C/A store | Delegates quote calculation to the existing quote RPC, then snapshots `customer_direct` or `store_prepaid`; customer-direct always stores zero delivery fee | quote/payment-mode input plus quote errors |
 | `direct_order_staff_message(uuid,uuid,text) -> jsonb` | C/A store | Reads state; inserts one cashier message; non-idempotent | forbidden, invalid/not chatable |
 | `direct_order_staff_reject(uuid,uuid,text) -> jsonb` | C/A store | Request `FOR UPDATE`; rejects, expires live quote, writes message/audit | reason, not found/not rejectable |
 | `direct_order_staff_sepay_candidates(uuid,uuid) -> jsonb` | C/A store | Read-only time/amount candidate list; evidence only | forbidden, quote not found |
-| `direct_order_staff_link_sepay(uuid,uuid,uuid) -> jsonb` | C/A store | Validates candidate then request+transaction upsert; pair-idempotent; never approves | quote/candidate invalid |
-| `direct_order_approve_payment(uuid,uuid,numeric,text) -> jsonb` | C/A store | Advisory transaction lock + request/quote row locks; validates proof/amount/menu/operations; creates one legacy graph, calls unchanged `process_payment` once, writes financial/ticket/message/audit atomically; same-store replay returns the same `request_id`, `order_id`, `payment_id`, `ticket_id`, and `final_total` with `idempotent=true`; cross-store replay returns nothing; an existing payment-review request remains approvable while new intake is paused | all approval preconditions; reconciliation is sanitized 503 |
+| `direct_order_staff_sepay_candidates_v2(uuid,uuid) -> jsonb` | C/A store | Lists recent exact-store/exact-amount matched incoming transactions, excluding a transaction consumed by another request | forbidden, quote not found |
+| `direct_order_staff_link_sepay(uuid,uuid,uuid) -> jsonb` | C/A store | Locks the provider transaction, validates exact store/direction/status/amount/age, enforces one request per transaction, locks the quote and enters payment review; pair replay is idempotent and never approves | quote/candidate invalid, transaction already used |
+| `direct_order_staff_verified_payment_evidence(uuid,uuid) -> jsonb` | C/A store | Returns only the linked transaction that still matches the locked quote; read-only and retry-safe | forbidden |
+| `direct_order_approve_payment(uuid,uuid,numeric,text) -> jsonb` | C/A store | Compatibility approval anchor; now requires a linked verified transaction matching the locked quote before creating the legacy graph and calling unchanged `process_payment` once | all approval preconditions; reconciliation is sanitized 503 |
+| `direct_order_approve_verified_payment(uuid,uuid) -> jsonb` | C/A store | Derives amount/reference from verified evidence, invokes the atomic approval anchor, snapshots delivery mode, and attempts the first customer Bill job without making payment depend on printing | verified payment required plus approval errors |
+| `direct_order_customer_receipt_status(uuid,uuid) -> jsonb` | C/A store | Reads the latest customer receipt job and whether a completed first copy permits reprint | forbidden, request not approved |
+| `enqueue_direct_order_customer_receipt(uuid,uuid,bool) -> jsonb` | C/A store | First-copy retries reuse batch 1; reprint requires a completed copy and creates explicit history | request not approved, reprint unavailable |
+| `enqueue_direct_order_customer_receipt_after_payment() -> trigger` | S/trigger | Best-effort first customer Bill enqueue after the financial bridge insert; print failures are isolated from payment | none propagated to approval |
 | `direct_delivery_ticket_list(uuid,text[],timestamptz,uuid,int) -> jsonb` | K/C/A store | Direct-only ticket/item cursor read <=200; retry-safe | forbidden, limit |
 | `direct_delivery_ticket_transition(uuid,uuid,int,text) -> jsonb` | K/C/A store | Ticket `FOR UPDATE`; expected-version and allowed edge; increments once | ticket not found/version/transition |
 | `direct_order_set_dispatch(uuid,uuid,text,numeric) -> jsonb` | C/A store | Requires approved financial; dispatch upsert, ticket state update, fixed Grab-link message/audit; same URL/cost converges | invalid URL/cost, not approved |
+| `direct_order_set_dispatch_with_payment_mode(uuid,uuid,text,numeric) -> jsonb` | C/A store | Store-prepaid delegates to the existing cash payout path; customer-direct stores no fee, variance, or cash-paid timestamp | mode conflict, invalid URL/cost, not approved |
 | `direct_order_analytics(uuid,date,date) -> jsonb` | A/store | Read financial/dispatch/coarse facts <=366 days; privacy-suppressed regions | forbidden, range invalid |
 | `direct_order_cleanup_expired_pii(uuid[]) -> jsonb` | S | Validates every ID terminal/old, deletes exact messages/address/note and old session/rate rows; transaction atomic | input/not eligible/too early |
 | `direct_order_cleanup_candidates(int) -> jsonb` | S | Read-only eligible IDs/proof paths <=500 | limit invalid |
@@ -246,8 +254,9 @@ for super_admin, staff functions require the requested store in
 Function signatures and grants are executable catalog contracts. Adding an
 overload, changing argument identity, exposing an uncontracted execute grant, or
 adding a direct function makes `direct_delivery_schema_contract_test.sql` fail.
-The current exact catalog contains 31 direct functions, including the isolated
-cashier arrival cursor, driver-receipt status, and cashier availability RPCs.
+The current exact catalog contains 37 `direct_order_*`/`direct_delivery_*`
+functions, including the isolated cashier arrival cursor, verified-payment,
+customer Bill, delivery-mode, driver-receipt, and cashier availability RPCs.
 None of these staff RPCs is an Edge public action.
 
 ## Explicit SQL error registry

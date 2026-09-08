@@ -63,6 +63,7 @@ class _DirectOrderStorefrontScreenState
   bool _refreshingStatus = false;
   bool _pausedByServer = false;
   String? _errorCode;
+  String? _lastCompletedReferenceCode;
   int _loadGeneration = 0;
   int _statusMutationRevision = 0;
 
@@ -123,8 +124,17 @@ class _DirectOrderStorefrontScreenState
             session: session,
             requestId: activeRequest,
           );
-        } catch (_) {
-          await widget.service.clearActiveRequest(widget.slug);
+          if (status.fulfillmentStatus == 'completed') {
+            _lastCompletedReferenceCode = status.referenceCode;
+            await widget.service.clearActiveRequest(widget.slug);
+            status = null;
+          }
+        } catch (error) {
+          if (_activeRequestIsGone(error)) {
+            await widget.service.clearActiveRequest(widget.slug);
+          } else {
+            rethrow;
+          }
         }
       }
       if (!mounted || generation != _loadGeneration) return;
@@ -274,11 +284,14 @@ class _DirectOrderStorefrontScreenState
         session: session,
         requestId: requestId,
       );
-      if (mounted && revision == _statusMutationRevision) {
-        setState(() => _status = status);
+      if (!mounted || revision != _statusMutationRevision) return;
+      if (status.fulfillmentStatus == 'completed') {
+        _statusTimer?.cancel();
+        await _finishCompletedOrder(status);
+        return;
       }
-      if (const {'rejected', 'cancelled', 'expired'}.contains(status.state) ||
-          status.fulfillmentStatus == 'completed') {
+      setState(() => _status = status);
+      if (const {'rejected', 'cancelled', 'expired'}.contains(status.state)) {
         _statusTimer?.cancel();
       }
     } catch (error) {
@@ -286,6 +299,31 @@ class _DirectOrderStorefrontScreenState
     } finally {
       _refreshingStatus = false;
     }
+  }
+
+  bool _activeRequestIsGone(Object error) {
+    if (error is! DirectOrderException) return false;
+    return const {
+      'DIRECT_ORDER_REQUEST_NOT_FOUND',
+      'DIRECT_ORDER_SESSION_INVALID',
+      'DIRECT_ORDER_SESSION_EXPIRED',
+    }.contains(error.code);
+  }
+
+  Future<void> _finishCompletedOrder(DirectOrderStatus status) async {
+    await widget.service.clearActiveRequest(widget.slug);
+    if (!mounted || _status?.requestId != status.requestId) return;
+    _statusMutationRevision += 1;
+    setState(() {
+      _lastCompletedReferenceCode = status.referenceCode;
+      _status = null;
+      _cart.clear();
+      _itemNotes.clear();
+      _noteController.clear();
+      _messageController.clear();
+      _view = _CustomerView.menu;
+    });
+    await _load();
   }
 
   Future<void> _uploadProof() async {
@@ -398,13 +436,17 @@ class _DirectOrderStorefrontScreenState
     _statusTimer?.cancel();
     await widget.service.clearActiveRequest(widget.slug);
     if (!mounted) return;
+    _statusMutationRevision += 1;
     setState(() {
       _status = null;
       _cart.clear();
       _itemNotes.clear();
+      _noteController.clear();
+      _messageController.clear();
       _view = _CustomerView.menu;
       if (_savedAddress != null) _populateAddress(_savedAddress!);
     });
+    await _load();
   }
 
   Future<void> _clearSavedAddress() async {
@@ -511,6 +553,25 @@ class _DirectOrderStorefrontScreenState
         ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 132),
           children: [
+            if (_lastCompletedReferenceCode != null)
+              Card(
+                key: const Key('direct_order_completed_auto_reset'),
+                color: PosColors.successMuted,
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.check_circle_rounded,
+                    color: PosColors.success,
+                  ),
+                  title: Text(_copy.completedOrderReady),
+                  subtitle: Text(_lastCompletedReferenceCode!),
+                  trailing: IconButton(
+                    tooltip: _copy.close,
+                    onPressed: () =>
+                        setState(() => _lastCompletedReferenceCode = null),
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+              ),
             for (final category in storefront.categories) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),

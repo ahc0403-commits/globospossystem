@@ -42,6 +42,7 @@ DECLARE
   v_order uuid;
   v_payment uuid;
   v_ticket uuid;
+  v_transaction uuid;
   v_transition jsonb;
   v_status jsonb;
   v_analytics jsonb;
@@ -161,8 +162,12 @@ BEGIN
     v_store, v_request, 'Địa chỉ đã được xác nhận.'
   );
 
-  v_quote := public.direct_order_staff_quote(
-    v_store, v_request, 25000, 'rollback-only delivery quote'
+  v_quote := public.direct_order_staff_quote_with_payment_mode(
+    v_store,
+    v_request,
+    25000,
+    'rollback-only delivery quote',
+    'store_prepaid'
   );
   PERFORM public.direct_order_public_commit_proof(
     v_session,
@@ -171,11 +176,22 @@ BEGIN
     v_store::text || '/' || v_request::text || '/' ||
       gen_random_uuid()::text || '.jpg'
   );
-  v_approval := public.direct_order_approve_payment(
-    v_store,
-    v_request,
+  INSERT INTO public.sepay_transactions(
+    sepay_transaction_id, restaurant_id, gateway, account_number,
+    transfer_type, transfer_amount, payment_code, reference_code,
+    transaction_at, resolution_status, raw_payload
+  ) VALUES (
+    9000000000000000 + floor(random() * 999999999)::bigint,
+    v_store, 'ROLLBACK_E2E', 'rollback-only', 'in',
     (v_quote->>'final_total')::numeric,
-    'rollback-only-bank-reference'
+    'ROLLBACKE2E', 'rollback-only-bank-reference', now(), 'matched',
+    jsonb_build_object('source', 'direct_delivery_production_rollback_e2e')
+  ) RETURNING id INTO v_transaction;
+  PERFORM public.direct_order_staff_link_sepay(
+    v_store, v_request, v_transaction
+  );
+  v_approval := public.direct_order_approve_verified_payment(
+    v_store, v_request
   );
   v_order := (v_approval->>'order_id')::uuid;
   v_payment := (v_approval->>'payment_id')::uuid;
@@ -187,7 +203,7 @@ BEGIN
   v_transition := public.direct_delivery_ticket_transition(
     v_store, v_ticket, (v_transition->>'version')::integer, 'ready'
   );
-  PERFORM public.direct_order_set_dispatch(
+  PERFORM public.direct_order_set_dispatch_with_payment_mode(
     v_store,
     v_request,
     'https://grab.onelink.me/test/direct-order-production-rollback-e2e',
