@@ -228,19 +228,29 @@ class QrOrderLine {
 class QrActiveOrder {
   const QrActiveOrder({
     required this.isActive,
+    this.orderId = '',
+    this.lastClosedOrderId = '',
     required this.orderCode,
     required this.status,
     this.fulfillmentMode = 'pos_print',
     required this.items,
     this.leftoverPackagingStatus,
+    this.displayVersion = 0,
+    this.displayResetAt,
+    this.resetDueAt,
   });
 
   final bool isActive;
+  final String orderId;
+  final String lastClosedOrderId;
   final String orderCode;
   final String status;
   final String fulfillmentMode;
   final List<QrActiveOrderItem> items;
   final String? leftoverPackagingStatus;
+  final int displayVersion;
+  final DateTime? displayResetAt;
+  final DateTime? resetDueAt;
 
   bool get isPaperless => fulfillmentMode == 'paperless';
 
@@ -248,10 +258,17 @@ class QrActiveOrder {
     final itemsRaw = json['items'];
     return QrActiveOrder(
       isActive: json['active'] == true,
+      orderId: json['order_id']?.toString() ?? '',
+      lastClosedOrderId: json['last_closed_order_id']?.toString() ?? '',
       orderCode: json['order_code']?.toString() ?? '',
       status: json['status']?.toString() ?? 'pending',
       fulfillmentMode: json['fulfillment_mode']?.toString() ?? 'pos_print',
       leftoverPackagingStatus: json['leftover_packaging_status']?.toString(),
+      displayVersion: _jsonInt(json['display_version']),
+      displayResetAt: DateTime.tryParse(
+        json['display_reset_at']?.toString() ?? '',
+      ),
+      resetDueAt: DateTime.tryParse(json['reset_due_at']?.toString() ?? ''),
       items: itemsRaw is List
           ? itemsRaw
                 .whereType<Map>()
@@ -370,6 +387,7 @@ class QrFulfillmentPart {
 
 class QrOrderResult {
   const QrOrderResult({
+    this.orderId = '',
     required this.orderCode,
     required this.batchNo,
     required this.tableNumber,
@@ -377,6 +395,7 @@ class QrOrderResult {
     required this.items,
   });
 
+  final String orderId;
   final String orderCode;
   final int batchNo;
   final String tableNumber;
@@ -386,6 +405,7 @@ class QrOrderResult {
   factory QrOrderResult.fromJson(Map<String, dynamic> json) {
     final itemsRaw = json['items'];
     return QrOrderResult(
+      orderId: json['order_id']?.toString() ?? '',
       orderCode: json['order_code']?.toString() ?? '',
       batchNo: switch (json['batch_no']) {
         int value => value,
@@ -455,6 +475,7 @@ class QrOrderService {
     required String token,
     required List<QrOrderLine> items,
     required String clientOrderId,
+    String? expectedOrderId,
   }) async {
     final result = await supabase.rpc(
       'qr_place_order',
@@ -463,6 +484,7 @@ class QrOrderService {
         'p_items': items.map((item) => item.toJson()).toList(),
         'p_client_order_id': clientOrderId,
         'p_validate_combo_choices': true,
+        'p_expected_order_id': expectedOrderId,
       },
     );
     return QrOrderResult.fromJson(Map<String, dynamic>.from(result as Map));

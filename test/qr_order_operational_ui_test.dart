@@ -21,6 +21,7 @@ class _FakeQrOrderService extends QrOrderService {
     String token,
     List<QrOrderLine> items,
     String clientOrderId,
+    String? expectedOrderId,
   )
   place;
   final Future<Map<String, dynamic>> Function(String token, String requestId)?
@@ -37,7 +38,8 @@ class _FakeQrOrderService extends QrOrderService {
     required String token,
     required List<QrOrderLine> items,
     required String clientOrderId,
-  }) => place(token, items, clientOrderId);
+    String? expectedOrderId,
+  }) => place(token, items, clientOrderId, expectedOrderId);
 
   @override
   Future<Map<String, dynamic>> requestLeftoverPackaging({
@@ -76,6 +78,7 @@ const _menu = QrOrderMenu(
 );
 
 const _result = QrOrderResult(
+  orderId: 'order-a',
   orderCode: 'QR-2026-001',
   batchNo: 2,
   tableNumber: 'A-108',
@@ -103,6 +106,7 @@ _FakeQrOrderService _service({
     String token,
     List<QrOrderLine> items,
     String clientOrderId,
+    String? expectedOrderId,
   )?
   place,
   Future<Map<String, dynamic>> Function(String token, String requestId)?
@@ -111,7 +115,7 @@ _FakeQrOrderService _service({
   return _FakeQrOrderService(
     fetch: fetch ?? (_) async => _menu,
     fetchActive: fetchActive ?? (_) async => _noActiveOrder,
-    place: place ?? (_, __, ___) async => _result,
+    place: place ?? (_, __, ___, ____) async => _result,
     requestLeftover: requestLeftover,
   );
 }
@@ -164,7 +168,7 @@ void main() {
     await _pumpQr(
       tester,
       service: _service(
-        place: (_, items, __) async {
+        place: (_, items, __, ___) async {
           submitted = items;
           return _result;
         },
@@ -395,7 +399,7 @@ void main() {
       tester,
       service: _service(
         fetch: (_) async => comboMenu,
-        place: (_, items, __) async {
+        place: (_, items, __, ___) async {
           submitted = items;
           return _result;
         },
@@ -477,7 +481,7 @@ void main() {
       final pendingOrder = Completer<QrOrderResult>();
       await _pumpQr(
         tester,
-        service: _service(place: (_, __, ___) => pendingOrder.future),
+        service: _service(place: (_, __, ___, ____) => pendingOrder.future),
       );
 
       final add = find.byKey(const Key('qr_add_food'));
@@ -533,6 +537,7 @@ void main() {
     var activeOrderReads = 0;
     const activeOrder = QrActiveOrder(
       isActive: true,
+      orderId: 'order-a',
       orderCode: 'paid-later',
       status: 'confirmed',
       fulfillmentMode: 'paperless',
@@ -576,6 +581,154 @@ void main() {
     _expectNoLayoutFailure(tester);
   });
 
+  testWidgets('ten-minute display version reset keeps an in-progress cart', (
+    tester,
+  ) async {
+    var activeOrderReads = 0;
+    final resetDueAt = DateTime.now().add(const Duration(seconds: 2));
+    final beforeReset = QrActiveOrder(
+      isActive: true,
+      orderId: 'order-a',
+      orderCode: 'order-a',
+      status: 'serving',
+      displayVersion: 0,
+      resetDueAt: resetDueAt,
+      items: const [
+        QrActiveOrderItem(name: 'Pho', quantity: 1, status: 'served'),
+      ],
+    );
+    final afterReset = QrActiveOrder(
+      isActive: true,
+      orderId: 'order-a',
+      orderCode: 'order-a',
+      status: 'serving',
+      displayVersion: 1,
+      displayResetAt: resetDueAt,
+      resetDueAt: resetDueAt,
+      items: const [],
+    );
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetchActive: (_) async =>
+            activeOrderReads++ == 0 ? beforeReset : afterReset,
+      ),
+    );
+
+    expect(find.byKey(const Key('qr_active_order_summary')), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('qr_menu_scroll')),
+      const Offset(0, -420),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_add_food')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('qr_open_review')))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('qr_active_order_summary')), findsNothing);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('qr_open_review')))
+          .onPressed,
+      isNotNull,
+    );
+    _expectNoLayoutFailure(tester);
+  });
+
+  testWidgets('a new table order clears the previous order cart context', (
+    tester,
+  ) async {
+    var activeOrderReads = 0;
+    const firstOrder = QrActiveOrder(
+      isActive: true,
+      orderId: 'order-a',
+      orderCode: 'order-a',
+      status: 'serving',
+      items: [],
+    );
+    const nextOrder = QrActiveOrder(
+      isActive: true,
+      orderId: 'order-b',
+      orderCode: 'order-b',
+      status: 'pending',
+      items: [],
+    );
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetchActive: (_) async =>
+            activeOrderReads++ == 0 ? firstOrder : nextOrder,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('qr_add_food')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('qr_open_review')))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('qr_open_review')))
+          .onPressed,
+      isNull,
+    );
+    _expectNoLayoutFailure(tester);
+  });
+
+  testWidgets('submission sends the active order context to the server', (
+    tester,
+  ) async {
+    String? submittedExpectedOrderId;
+    const activeOrder = QrActiveOrder(
+      isActive: true,
+      orderId: 'order-a',
+      orderCode: 'order-a',
+      status: 'serving',
+      items: [],
+    );
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetchActive: (_) async => activeOrder,
+        place: (_, __, ___, expectedOrderId) async {
+          submittedExpectedOrderId = expectedOrderId;
+          return _result;
+        },
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(const Key('qr_menu_scroll')),
+      const Offset(0, -420),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_add_food')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('qr_open_review')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+    await tester.pumpAndSettle();
+
+    expect(submittedExpectedOrderId, 'order-a');
+    expect(find.byKey(const Key('qr_state_success')), findsOneWidget);
+    _expectNoLayoutFailure(tester);
+  });
+
   testWidgets('rate-limit and offline retry reuse the same client order id', (
     tester,
   ) async {
@@ -584,7 +737,7 @@ void main() {
     await _pumpQr(
       tester,
       service: _service(
-        place: (_, __, clientOrderId) async {
+        place: (_, __, clientOrderId, ___) async {
           clientOrderIds.add(clientOrderId);
           attempt += 1;
           if (attempt == 1) throw Exception('QR_TOO_FREQUENT');
@@ -617,6 +770,7 @@ void main() {
     tester,
   ) async {
     const cases = <String, String>{
+      'QR_ORDER_CONTEXT_CHANGED': 'qr_state_order_context_changed',
       'QR_ORDER_PAYMENT_IN_PROGRESS': 'qr_state_payment_processing',
       'QR_TOO_FREQUENT': 'qr_state_rate_limit',
       'QR_MENU_ITEM_UNAVAILABLE': 'qr_state_item_unavailable',
@@ -627,7 +781,7 @@ void main() {
     for (final entry in cases.entries) {
       await _pumpQr(
         tester,
-        service: _service(place: (_, __, ___) => Future.error(entry.key)),
+        service: _service(place: (_, __, ___, ____) => Future.error(entry.key)),
       );
       await tester.tap(find.byKey(const Key('qr_add_food')));
       await tester.pump();

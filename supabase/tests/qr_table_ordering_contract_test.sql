@@ -38,6 +38,9 @@ DECLARE
   v_order_status text;
   v_appended_item_id uuid;
   v_append_print_item jsonb;
+  v_reset_payload jsonb;
+  v_after_reset_result jsonb;
+  v_new_order_result jsonb;
 BEGIN
   INSERT INTO public.restaurants (id, name, address, is_active, brand_id, tax_entity_id)
   SELECT v_store, 'QR Contract Store', 'test', true, r.brand_id, r.tax_entity_id
@@ -138,6 +141,17 @@ BEGIN
     NOT has_table_privilege('anon', 'public.table_qr_tokens', 'select')
       AND NOT has_table_privilege('anon', 'public.qr_order_batches', 'select')
       AND NOT has_table_privilege('anon', 'public.orders', 'insert')
+      AND NOT has_function_privilege(
+        'anon', 'public.qr_place_order(text,jsonb,uuid)', 'execute'
+      )
+      AND NOT has_function_privilege(
+        'anon', 'public.qr_place_order(text,jsonb,uuid,boolean)', 'execute'
+      )
+      AND has_function_privilege(
+        'anon',
+        'public.qr_place_order(text,jsonb,uuid,boolean,uuid)',
+        'execute'
+      )
       AND NOT has_function_privilege('anon', 'public.admin_generate_table_qr(uuid)', 'execute'),
     'anon grants'
   );
@@ -380,13 +394,89 @@ BEGIN
       jsonb_build_array(
         jsonb_build_object('menu_item_id', v_public_item, 'quantity', 1)
       ),
-      'f1000000-0000-4000-8000-0000000000e3'
+      'f1000000-0000-4000-8000-0000000000e3',
+      true,
+      v_order
     );
   EXCEPTION WHEN OTHERS THEN
-    v_blocked := SQLERRM LIKE '%QR_ORDER_PAYMENT_IN_PROGRESS%';
+    v_blocked := true;
   END;
   INSERT INTO _qr_results
-  VALUES ('QR append blocked during payment', v_blocked, 'payment guard');
+  VALUES (
+    'QR append remains on the open order after partial payment',
+    NOT v_blocked
+      AND EXISTS (
+        SELECT 1 FROM public.qr_order_batches
+        WHERE client_order_id = 'f1000000-0000-4000-8000-0000000000e3'
+          AND order_id = v_order
+      ),
+    'partial payment append'
+  );
+
+  UPDATE public.order_items
+  SET status = 'served'
+  WHERE order_id = v_order
+    AND status <> 'cancelled';
+  UPDATE public.orders SET status = 'serving' WHERE id = v_order;
+  PERFORM public.qr_refresh_order_display_state(v_order);
+  UPDATE public.qr_order_display_states
+  SET all_served_at = statement_timestamp() - interval '11 minutes',
+      reset_due_at = statement_timestamp() - interval '1 minute',
+      reset_applied_at = NULL
+  WHERE order_id = v_order;
+
+  v_reset_payload := public.qr_get_active_order('qr-contract-token');
+  INSERT INTO _qr_results
+  VALUES (
+    'QR list resets ten minutes after every item reaches the floor',
+    (v_reset_payload->>'order_id')::uuid = v_order
+      AND (v_reset_payload->>'display_version')::bigint = 1
+      AND jsonb_array_length(v_reset_payload->'items') = 0,
+    v_reset_payload::text
+  );
+
+  UPDATE public.qr_order_batches
+  SET created_at = now() - interval '30 seconds'
+  WHERE table_id = v_table;
+  v_after_reset_result := public.qr_place_order(
+    'qr-contract-token',
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', v_public_item, 'quantity', 1)
+    ),
+    'f1000000-0000-4000-8000-0000000000e7',
+    true,
+    v_order
+  );
+  v_reset_payload := public.qr_get_active_order('qr-contract-token');
+  INSERT INTO _qr_results
+  VALUES (
+    'QR post-reset unpaid submission stays on the existing order',
+    (v_after_reset_result->>'order_id')::uuid = v_order
+      AND (v_reset_payload->>'order_id')::uuid = v_order
+      AND jsonb_array_length(v_reset_payload->'items') = 1,
+    v_reset_payload::text
+  );
+
+  v_blocked := false;
+  BEGIN
+    PERFORM public.qr_place_order(
+      'qr-contract-token',
+      jsonb_build_array(
+        jsonb_build_object('menu_item_id', v_public_item, 'quantity', 1)
+      ),
+      'f1000000-0000-4000-8000-0000000000e8',
+      true,
+      'f1000000-0000-4000-8000-000000000099'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_blocked := SQLERRM LIKE '%QR_ORDER_CONTEXT_CHANGED%';
+  END;
+  INSERT INTO _qr_results
+  VALUES (
+    'QR stale order context cannot append to the table order',
+    v_blocked,
+    'order context guard'
+  );
 
   v_blocked := false;
   BEGIN
@@ -414,6 +504,32 @@ BEGIN
     (v_search->>'id')::uuid = v_order
       AND v_search->'tables'->>'table_number' = 'QR-7',
     COALESCE(v_search::text, 'null')
+  );
+
+  UPDATE public.orders
+  SET status = 'completed', updated_at = clock_timestamp()
+  WHERE id = v_order;
+  UPDATE public.tables SET status = 'available' WHERE id = v_table;
+  v_reset_payload := public.qr_get_active_order('qr-contract-token');
+  UPDATE public.qr_order_batches
+  SET created_at = now() - interval '30 seconds'
+  WHERE table_id = v_table;
+  v_new_order_result := public.qr_place_order(
+    'qr-contract-token',
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', v_public_item, 'quantity', 1)
+    ),
+    'f1000000-0000-4000-8000-0000000000e9',
+    true,
+    NULL
+  );
+  INSERT INTO _qr_results
+  VALUES (
+    'QR submission after completed payment state creates a new order',
+    COALESCE((v_reset_payload->>'active')::boolean, false) = false
+      AND (v_reset_payload->>'last_closed_order_id')::uuid = v_order
+      AND (v_new_order_result->>'order_id')::uuid <> v_order,
+    COALESCE(v_new_order_result::text, 'null')
   );
 END;
 $seed$;
