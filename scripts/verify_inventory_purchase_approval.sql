@@ -21,6 +21,9 @@ BEGIN
   IF to_regclass('public.inventory_purchase_approval_events') IS NULL
      OR to_regclass('public.inventory_purchase_documents') IS NULL
      OR to_regclass('public.inventory_supplier_item_price_history') IS NULL
+     OR to_regclass(
+       'public.inventory_receipt_confirmation_attempts'
+     ) IS NULL
      OR to_regclass('public.user_tax_entity_access') IS NULL
      OR to_regclass('public.legal_entity_fixed_account_requirements') IS NULL THEN
     RAISE EXCEPTION 'INVENTORY_PURCHASE_APPROVAL_TABLES_MISSING';
@@ -66,7 +69,8 @@ BEGIN
        '%INVENTORY_RECEIPT_DRAFT_AND_VERIFIER_REQUIRED%'
      OR v_verify_access_definition NOT LIKE '%inventory_accounting%'
      OR v_store_scope_definition NOT LIKE '%user_tax_entity_access%'
-     OR v_brand_definition NOT LIKE '%status = ''ordered''%' THEN
+     OR v_brand_definition NOT LIKE '%status = ''ordered''%'
+     OR v_brand_definition NOT LIKE '%extensions.digest(convert_to(%' THEN
     RAISE EXCEPTION 'INVENTORY_RECEIPT_STOCK_GATE_INVALID';
   END IF;
 
@@ -81,6 +85,20 @@ BEGIN
   IF has_function_privilege('anon', v_verify, 'EXECUTE')
      OR NOT has_function_privilege('authenticated', v_verify, 'EXECUTE') THEN
     RAISE EXCEPTION 'INVENTORY_PURCHASE_APPROVAL_PRIVILEGES_INVALID';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE n.nspname = 'public'
+      AND t.relname = 'inventory_receipt_confirmation_attempts'
+      AND c.contype = 'u'
+      AND pg_get_constraintdef(c.oid)
+        LIKE '%purchase_order_id, attempt_key%'
+  ) THEN
+    RAISE EXCEPTION 'INVENTORY_RECEIPT_ATTEMPT_IDEMPOTENCY_INVALID';
   END IF;
 
   IF NOT EXISTS (
