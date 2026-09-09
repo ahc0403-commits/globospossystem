@@ -5,9 +5,13 @@ void main() {
   test('paperless active order parses bounded delivery progress fields', () {
     final order = QrActiveOrder.fromJson({
       'active': true,
+      'order_id': 'f1000000-0000-4000-8000-000000000001',
       'order_code': 'abcd1234',
       'status': 'serving',
       'fulfillment_mode': 'paperless',
+      'display_version': 3,
+      'display_reset_at': '2026-09-09T12:10:00Z',
+      'reset_due_at': '2026-09-09T12:20:00Z',
       'items': [
         {
           'name': 'Tteokbokki',
@@ -35,6 +39,10 @@ void main() {
     });
 
     expect(order.isPaperless, isTrue);
+    expect(order.orderId, 'f1000000-0000-4000-8000-000000000001');
+    expect(order.displayVersion, 3);
+    expect(order.displayResetAt, DateTime.utc(2026, 9, 9, 12, 10));
+    expect(order.resetDueAt, DateTime.utc(2026, 9, 9, 12, 20));
     expect(order.items.single.servedQuantity, 4);
     expect(order.items.single.remainingQuantity, 1);
     expect(order.items.single.fulfillmentParts, hasLength(2));
@@ -53,5 +61,16 @@ void main() {
     expect(order.isPaperless, isFalse);
     expect(order.items.single.servedQuantity, 0);
     expect(order.items.single.remainingQuantity, 2);
+  });
+
+  test('completed-order marker is parsed without exposing an active order', () {
+    final order = QrActiveOrder.fromJson({
+      'active': false,
+      'last_closed_order_id': 'f1000000-0000-4000-8000-000000000099',
+      'items': <Object>[],
+    });
+
+    expect(order.isActive, isFalse);
+    expect(order.lastClosedOrderId, 'f1000000-0000-4000-8000-000000000099');
   });
 }

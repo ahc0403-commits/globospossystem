@@ -9,7 +9,7 @@ const _migrationPath =
 
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      '3be65edc63f943e3fddd1f4e4b25fca8b842d430e5fc803d54c76c9d75e7f49b',
+      'eb4604c8832420efbe6329a85538dde2d8e6857e8c0030e5685334c6ffc9440a',
   'lib/features/cashier/cashier_screen.dart':
       '1c3c2c096eae8c5f4a0327fe5c8f68dd55bdeea49bc527a6aaa5103d25b8bfc7',
   // Bounded history and event-scoped reads are exercised with the real SDK

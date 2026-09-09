@@ -40,10 +40,13 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   bool _isSubmitting = false;
   bool _isRequestingLeftoverPackaging = false;
   bool _submittedOrderObserved = false;
+  int _loadRequestSerial = 0;
+  int _orderContextEpoch = 0;
   String _languageCode = 'vi';
   final Map<String, int> _cart = <String, int>{};
   final Map<String, List<String>> _comboDrinkChoices = <String, List<String>>{};
   Timer? _menuRefreshTimer;
+  Timer? _displayResetTimer;
   Timer? _liveMenuDebounceTimer;
   RealtimeChannel? _menuChannel;
   String? _subscribedStoreId;
@@ -76,6 +79,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _menuRefreshTimer?.cancel();
+    _displayResetTimer?.cancel();
     _liveMenuDebounceTimer?.cancel();
     _menuChannel?.unsubscribe();
     super.dispose();
@@ -121,6 +125,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   }
 
   Future<void> _loadMenu({bool showLoading = true}) async {
+    final requestSerial = ++_loadRequestSerial;
     if (showLoading) {
       setState(() {
         _isLoading = true;
@@ -134,17 +139,11 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       ]);
       final menu = responses[0] as QrOrderMenu;
       final activeOrder = responses[1] as QrActiveOrder;
-      if (!mounted) return;
+      if (!mounted || requestSerial != _loadRequestSerial) return;
       unawaited(_subscribeMenuEvents(menu.storeId));
       setState(() {
         _menu = menu;
-        _activeOrder = activeOrder;
-        if (_result != null &&
-            _submittedOrderObserved &&
-            !activeOrder.isActive) {
-          _result = null;
-          _submittedOrderObserved = false;
-        }
+        _applyActiveOrder(activeOrder);
         final categoryStillExists = menu.categories.any(
           (category) => category.id == _selectedCategoryId,
         );
@@ -183,13 +182,67 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         _isLoading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestSerial != _loadRequestSerial) return;
       if (!showLoading && _menu != null) return;
       setState(() {
         _failure = _copy.failureFor(error);
         _isLoading = false;
       });
     }
+  }
+
+  void _applyActiveOrder(QrActiveOrder next) {
+    final previous = _activeOrder;
+    final previousId = previous?.isActive == true ? previous!.orderId : '';
+    final nextId = next.isActive ? next.orderId : '';
+    final resultId = _result?.orderId ?? '';
+    final orderClosed =
+        !next.isActive &&
+        (previous?.isActive == true ||
+            (resultId.isNotEmpty && next.lastClosedOrderId == resultId) ||
+            _submittedOrderObserved);
+    final orderChanged =
+        next.isActive &&
+        nextId.isNotEmpty &&
+        ((previousId.isNotEmpty && previousId != nextId) ||
+            (previousId.isEmpty && resultId.isNotEmpty && resultId != nextId));
+    final displayReset =
+        next.isActive &&
+        previous?.isActive == true &&
+        previousId.isNotEmpty &&
+        previousId == nextId &&
+        next.displayVersion > previous!.displayVersion;
+
+    _activeOrder = next;
+    if (orderClosed || orderChanged) {
+      _result = null;
+      _cart.clear();
+      _comboDrinkChoices.clear();
+      _clientOrderId = null;
+      _isRequestingLeftoverPackaging = false;
+      _submittedOrderObserved = false;
+      _failure = null;
+      _orderContextEpoch += 1;
+    } else if (displayReset) {
+      _result = null;
+      _submittedOrderObserved = false;
+    }
+    _scheduleDisplayResetRefresh(next);
+  }
+
+  void _scheduleDisplayResetRefresh(QrActiveOrder order) {
+    _displayResetTimer?.cancel();
+    _displayResetTimer = null;
+    final resetDueAt = order.resetDueAt;
+    if (!order.isActive || resetDueAt == null) return;
+    final resetAppliedAt = order.displayResetAt;
+    if (resetAppliedAt != null && !resetAppliedAt.isBefore(resetDueAt)) return;
+
+    final remaining = resetDueAt.difference(DateTime.now());
+    _displayResetTimer = Timer(
+      remaining.isNegative ? Duration.zero : remaining,
+      () => unawaited(_loadMenu(showLoading: false)),
+    );
   }
 
   QrOrderCopy get _copy {
@@ -318,11 +371,17 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       _clientOrderId ??= _uuid.v4();
     });
 
+    final expectedOrderId =
+        _activeOrder?.isActive == true && _activeOrder!.orderId.isNotEmpty
+        ? _activeOrder!.orderId
+        : null;
+    final submissionEpoch = _orderContextEpoch;
     try {
       final submittedItems = _cartItems;
       final result = await _service.placeOrder(
         token: widget.token,
         clientOrderId: _clientOrderId!,
+        expectedOrderId: expectedOrderId,
         items: [
           for (final line in submittedItems)
             QrOrderLine(
@@ -335,8 +394,14 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         ],
       );
       if (!mounted) return;
+      if (submissionEpoch != _orderContextEpoch) {
+        setState(() => _isSubmitting = false);
+        unawaited(_loadMenu(showLoading: false));
+        return;
+      }
       setState(() {
         _result = QrOrderResult(
+          orderId: result.orderId,
           orderCode: result.orderCode,
           batchNo: result.batchNo,
           tableNumber: result.tableNumber,
@@ -361,7 +426,13 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       setState(() {
         _failure = _copy.failureFor(error);
         _isSubmitting = false;
+        if (error.toString().contains('QR_ORDER_CONTEXT_CHANGED')) {
+          _clientOrderId = null;
+        }
       });
+      if (error.toString().contains('QR_ORDER_CONTEXT_CHANGED')) {
+        unawaited(_loadMenu(showLoading: false));
+      }
     }
   }
 
@@ -370,8 +441,8 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       final activeOrder = await _service.fetchActiveOrder(widget.token);
       if (!mounted || _result == null) return;
       setState(() {
-        _activeOrder = activeOrder;
-        _submittedOrderObserved = activeOrder.isActive;
+        _applyActiveOrder(activeOrder);
+        _submittedOrderObserved = _result != null && activeOrder.isActive;
       });
     } catch (_) {
       // The success snapshot remains available and the regular refresh loop
@@ -407,7 +478,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       );
       final refreshed = await _service.fetchActiveOrder(widget.token);
       if (!mounted) return;
-      setState(() => _activeOrder = refreshed);
+      setState(() => _applyActiveOrder(refreshed));
     } catch (error) {
       if (!mounted) return;
       setState(() => _failure = _copy.failureFor(error));
@@ -2112,6 +2183,7 @@ class _QrCenteredState extends StatelessWidget {
 
 enum QrOrderFailureKind {
   invalidExpiredOrUnavailable,
+  orderContextChanged,
   paymentInProgress,
   rateLimit,
   itemUnavailable,
@@ -2134,6 +2206,7 @@ class QrOrderFailurePresentation {
   Key get stateKey => Key(switch (kind) {
     QrOrderFailureKind.invalidExpiredOrUnavailable =>
       'qr_state_invalid_expired_unavailable',
+    QrOrderFailureKind.orderContextChanged => 'qr_state_order_context_changed',
     QrOrderFailureKind.paymentInProgress => 'qr_state_payment_processing',
     QrOrderFailureKind.rateLimit => 'qr_state_rate_limit',
     QrOrderFailureKind.itemUnavailable => 'qr_state_item_unavailable',
@@ -2144,6 +2217,7 @@ class QrOrderFailurePresentation {
 
   IconData get icon => switch (kind) {
     QrOrderFailureKind.invalidExpiredOrUnavailable => Icons.qr_code_2_rounded,
+    QrOrderFailureKind.orderContextChanged => Icons.refresh_rounded,
     QrOrderFailureKind.paymentInProgress => Icons.point_of_sale_rounded,
     QrOrderFailureKind.rateLimit => Icons.schedule_rounded,
     QrOrderFailureKind.itemUnavailable => Icons.no_food_rounded,
@@ -2510,6 +2584,23 @@ class QrOrderCopy {
             'Mã QR không hợp lệ, đã hết hạn hoặc hiện không khả dụng. Vui lòng gọi nhân viên.',
           _ =>
             'This QR is invalid, expired, or unavailable. Please call staff.',
+        },
+      );
+    }
+    if (raw.contains('QR_ORDER_CONTEXT_CHANGED')) {
+      return QrOrderFailurePresentation(
+        kind: QrOrderFailureKind.orderContextChanged,
+        title: switch (code) {
+          'ko' => '테이블 주문이 변경되었습니다',
+          'vi' => 'Đơn của bàn đã thay đổi',
+          _ => 'The table order changed',
+        },
+        body: switch (code) {
+          'ko' => '최신 주문을 다시 확인했습니다. 장바구니를 확인한 뒤 다시 주문해 주세요.',
+          'vi' =>
+            'Đã tải lại đơn mới nhất. Vui lòng kiểm tra giỏ món rồi gửi lại.',
+          _ =>
+            'The latest order was loaded. Check the cart, then submit again.',
         },
       );
     }

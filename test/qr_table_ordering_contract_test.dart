@@ -18,6 +18,8 @@ void main() {
       'supabase/migrations/20260812000000_qr_paperless_delivery_progress.sql';
   const qrPaperlessProgressVerification =
       'scripts/verify_qr_paperless_delivery_progress.sql';
+  const qrDisplayResetMigration =
+      'supabase/migrations/20260909160000_qr_order_display_reset.sql';
 
   test('qr table ordering migration exposes only token-backed anon RPCs', () {
     final migration = readRepoFile(
@@ -230,6 +232,45 @@ void main() {
       ),
     );
     expect(verification, contains('QR_PRINT_DELTA_VERIFY_CONTRACT_MISSING'));
+  });
+
+  test('QR display reset keeps the fixed token and enforces order context', () {
+    final migration = readRepoFile(qrDisplayResetMigration);
+
+    expect(migration, contains('CREATE TABLE public.qr_order_display_states'));
+    expect(migration, contains("interval '10 minutes'"));
+    expect(
+      migration,
+      contains(
+        'CREATE OR REPLACE FUNCTION public.qr_order_is_fully_floor_served',
+      ),
+    );
+    expect(
+      migration,
+      contains(
+        'CREATE OR REPLACE FUNCTION public.qr_apply_due_order_display_reset',
+      ),
+    );
+    expect(migration, contains("RAISE EXCEPTION 'QR_ORDER_CONTEXT_CHANGED'"));
+    expect(migration, contains('p_expected_order_id uuid'));
+    expect(
+      migration,
+      contains("reset_due_at = all_served_at + interval '10 minutes'"),
+    );
+    expect(
+      migration,
+      contains(
+        'GRANT EXECUTE ON FUNCTION public.qr_place_order(\n  text, jsonb, uuid, boolean, uuid',
+      ),
+    );
+    expect(
+      migration,
+      contains(
+        'REVOKE ALL ON FUNCTION public.qr_place_order(text, jsonb, uuid, boolean)',
+      ),
+    );
+    expect(migration, contains("'last_closed_order_id'"));
+    expect(migration, contains("'display_version'"));
   });
 
   test('confirmation slips reuse print routing and render cashier-only copy', () {

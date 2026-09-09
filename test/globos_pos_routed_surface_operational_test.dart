@@ -107,6 +107,7 @@ class _FixtureQrOrderService extends QrOrderService {
     required String token,
     required List<QrOrderLine> items,
     required String clientOrderId,
+    String? expectedOrderId,
   }) async => const QrOrderResult(
     orderCode: 'ROUTE-1',
     batchNo: 1,
