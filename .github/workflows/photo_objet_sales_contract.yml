@@ -50,5 +50,15 @@ jobs:
           sudo timeout 3m apt-get "${apt_options[@]}" update
           sudo timeout 3m apt-get "${apt_options[@]}" install --yes postgresql-client
           psql --version
+      - name: Prime SQL test images from Docker Hub
+        run: |
+          docker pull supabase/postgres:17.6.1.104
+          docker tag \
+            supabase/postgres:17.6.1.104 \
+            public.ecr.aws/supabase/postgres:17.6.1.104
+          docker pull postgrest/postgrest:v14.5
+          docker tag \
+            postgrest/postgrest:v14.5 \
+            public.ecr.aws/supabase/postgrest:v14.5
       - name: Validate repository
         run: bash scripts/check_repo.sh
