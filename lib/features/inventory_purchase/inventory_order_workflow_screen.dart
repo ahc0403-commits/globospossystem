@@ -1405,12 +1405,18 @@ class _InventoryOrderWorkflowScreenState
   }
 
   Future<void> _createDraft() async {
-    final input = await showDialog<_DraftOrderInput>(
+    final input = await showDialog<InventoryPurchaseDraftOrderInput>(
       context: context,
-      builder: (_) => _DraftOrderDialog(
+      builder: (_) => InventoryPurchaseDraftOrderDialog(
         key: const Key('inventory_order_create_draft_dialog'),
         suppliers: _suppliers,
         supplierItems: _supplierItems,
+        loadSupplierItems: (supplierId) =>
+            inventoryService.fetchInventorySupplierItems(
+              storeId: _storeId!,
+              supplierId: supplierId,
+              orderableOnly: true,
+            ),
       ),
     );
     if (input == null || _storeId == null) return;
@@ -1431,12 +1437,18 @@ class _InventoryOrderWorkflowScreenState
     Map<String, dynamic> order,
     List<Map<String, dynamic>> lines,
   ) async {
-    final input = await showDialog<_DraftOrderInput>(
+    final input = await showDialog<InventoryPurchaseDraftOrderInput>(
       context: context,
-      builder: (_) => _DraftOrderDialog(
+      builder: (_) => InventoryPurchaseDraftOrderDialog(
         key: const Key('inventory_order_edit_draft_dialog'),
         suppliers: _suppliers,
         supplierItems: _supplierItems,
+        loadSupplierItems: (supplierId) =>
+            inventoryService.fetchInventorySupplierItems(
+              storeId: _storeId!,
+              supplierId: supplierId,
+              orderableOnly: true,
+            ),
         initialOrder: order,
         initialLines: lines,
       ),
@@ -1834,6 +1846,16 @@ class _InventoryOrderWorkflowScreenState
     final raw = error.toString();
     final code = RegExp(r'INVENTORY_[A-Z0-9_]+').firstMatch(raw)?.group(0);
     return switch (code) {
+      'INVENTORY_PURCHASE_CATALOG_FORBIDDEN' => _text(
+        ko: '이 계정의 발주 품목 조회 권한을 확인해 주세요.',
+        en: 'Check this account\'s permission to view purchase items.',
+        vi: 'Vui lòng kiểm tra quyền xem mặt hàng đặt mua của tài khoản.',
+      ),
+      'INVENTORY_PURCHASE_SUPPLIER_ITEM_SCOPE_INVALID' => _text(
+        ko: '선택한 원재료가 현재 매장·거래처의 발주 품목이 아닙니다.',
+        en: 'The selected ingredient is not orderable for this store and supplier.',
+        vi: 'Nguyên liệu đã chọn không thuộc cửa hàng và nhà cung cấp này.',
+      ),
       'INVENTORY_PURCHASE_SELF_APPROVAL_FORBIDDEN' => _text(
         ko: '본인이 작성하거나 앞 단계에서 승인한 발주는 승인할 수 없습니다.',
         en: 'You cannot approve an order you created or approved earlier.',
@@ -1855,8 +1877,8 @@ class _InventoryOrderWorkflowScreenState
   }
 }
 
-class _DraftOrderInput {
-  const _DraftOrderInput({
+class InventoryPurchaseDraftOrderInput {
+  const InventoryPurchaseDraftOrderInput({
     required this.supplierId,
     required this.deliveryDate,
     required this.lines,
@@ -1869,30 +1891,42 @@ class _DraftOrderInput {
   final String? memo;
 }
 
-class _DraftOrderDialog extends StatefulWidget {
-  const _DraftOrderDialog({
+typedef InventoryPurchaseSupplierItemLoader =
+    Future<List<Map<String, dynamic>>> Function(String supplierId);
+
+class InventoryPurchaseDraftOrderDialog extends StatefulWidget {
+  const InventoryPurchaseDraftOrderDialog({
     super.key,
     required this.suppliers,
     required this.supplierItems,
+    required this.loadSupplierItems,
     this.initialOrder,
     this.initialLines = const [],
   });
 
   final List<Map<String, dynamic>> suppliers;
   final List<Map<String, dynamic>> supplierItems;
+  final InventoryPurchaseSupplierItemLoader loadSupplierItems;
   final Map<String, dynamic>? initialOrder;
   final List<Map<String, dynamic>> initialLines;
 
   @override
-  State<_DraftOrderDialog> createState() => _DraftOrderDialogState();
+  State<InventoryPurchaseDraftOrderDialog> createState() =>
+      _InventoryPurchaseDraftOrderDialogState();
 }
 
-class _DraftOrderDialogState extends State<_DraftOrderDialog> {
+class _InventoryPurchaseDraftOrderDialogState
+    extends State<InventoryPurchaseDraftOrderDialog> {
   late String? _supplierId;
   late DateTime _deliveryDate;
   late final TextEditingController _memoController;
+  late final TextEditingController _searchController;
   late List<_DraftLine> _lines;
+  late List<Map<String, dynamic>> _catalogItems;
   String? _newSupplierItemId;
+  Object? _catalogError;
+  bool _catalogLoading = false;
+  int _catalogRequest = 0;
 
   @override
   void initState() {
@@ -1907,6 +1941,8 @@ class _DraftOrderDialogState extends State<_DraftOrderDialog> {
     _memoController = TextEditingController(
       text: _string(widget.initialOrder?['memo']),
     );
+    _searchController = TextEditingController()..addListener(_refreshSearch);
+    _catalogItems = List<Map<String, dynamic>>.from(widget.supplierItems);
     _lines = widget.initialLines
         .map(
           (line) => _DraftLine(
@@ -1918,28 +1954,201 @@ class _DraftOrderDialogState extends State<_DraftOrderDialog> {
           ),
         )
         .toList();
+    if (_supplierId != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _loadSupplierItems(_supplierId!),
+      );
+    }
   }
 
   @override
   void dispose() {
+    _catalogRequest += 1;
     _memoController.dispose();
+    _searchController
+      ..removeListener(_refreshSearch)
+      ..dispose();
     super.dispose();
   }
 
-  List<Map<String, dynamic>> get _availableItems => widget.supplierItems
-      .where(
-        (item) =>
-            _string(item['supplier_id']) == _supplierId &&
-            item['is_active'] != false,
-      )
-      .toList();
+  void _refreshSearch() {
+    if (mounted) setState(() {});
+  }
+
+  String _text({required String ko, required String en, required String vi}) {
+    return switch (Localizations.localeOf(context).languageCode) {
+      'en' => en,
+      'vi' => vi,
+      _ => ko,
+    };
+  }
+
+  Future<void> _loadSupplierItems(String supplierId) async {
+    final request = ++_catalogRequest;
+    setState(() {
+      _catalogLoading = true;
+      _catalogError = null;
+      _newSupplierItemId = null;
+    });
+    try {
+      final loaded = await widget.loadSupplierItems(supplierId);
+      if (!mounted || request != _catalogRequest || supplierId != _supplierId) {
+        return;
+      }
+      final retainedIds = _lines.map((line) => line.supplierItemId).toSet();
+      final merged = <String, Map<String, dynamic>>{
+        for (final item in _catalogItems)
+          if (retainedIds.contains(_id(item))) _id(item): item,
+        for (final item in loaded) _id(item): item,
+      };
+      setState(() {
+        _catalogItems = merged.values.toList();
+        _catalogLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || request != _catalogRequest || supplierId != _supplierId) {
+        return;
+      }
+      setState(() {
+        _catalogError = error;
+        _catalogLoading = false;
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> get _availableItems => _catalogItems.where((item) {
+    final product = item['product'];
+    final supplier = item['supplier'];
+    return _string(item['supplier_id']) == _supplierId &&
+        item['is_active'] != false &&
+        product is Map &&
+        product['is_active'] != false &&
+        product['is_orderable'] != false &&
+        supplier is Map &&
+        (supplier['status'] == null || supplier['status'] == 'active');
+  }).toList();
+
+  List<Map<String, dynamic>> get _selectableItems {
+    final query = _searchController.text.trim().toLowerCase();
+    return _availableItems.where((item) {
+      if (_lines.any((line) => line.supplierItemId == _id(item))) return false;
+      return query.isEmpty || _productName(item).toLowerCase().contains(query);
+    }).toList();
+  }
+
+  Map<String, dynamic> _lineItem(_DraftLine line) => _catalogItems.firstWhere(
+    (row) => _id(row) == line.supplierItemId,
+    orElse: () => const {},
+  );
+
+  String? _lineError(_DraftLine line) {
+    final item = _lineItem(line);
+    if (item.isEmpty) {
+      return _text(
+        ko: '원재료 정보를 다시 불러와 주세요.',
+        en: 'Reload the ingredient information.',
+        vi: 'Vui lòng tải lại thông tin nguyên liệu.',
+      );
+    }
+    final minimum = _number(item['min_order_quantity'], fallback: 1);
+    if (line.quantity < minimum) {
+      return _text(
+        ko: '최소 발주량은 ${_quantity(minimum)}입니다.',
+        en: 'Minimum order is ${_quantity(minimum)}.',
+        vi: 'Số lượng tối thiểu là ${_quantity(minimum)}.',
+      );
+    }
+    if (line.unitPrice < 0) {
+      return _text(
+        ko: '단가는 0 이상이어야 합니다.',
+        en: 'Unit price must be zero or greater.',
+        vi: 'Đơn giá phải từ 0 trở lên.',
+      );
+    }
+    return null;
+  }
+
+  String _catalogStatusText() {
+    if (_supplierId == null) {
+      return _text(
+        ko: '거래처를 먼저 선택해 주세요.',
+        en: 'Select a supplier first.',
+        vi: 'Vui lòng chọn nhà cung cấp trước.',
+      );
+    }
+    if (_catalogLoading) {
+      return _text(
+        ko: '발주 가능 원재료를 불러오는 중입니다.',
+        en: 'Loading orderable ingredients.',
+        vi: 'Đang tải nguyên liệu có thể đặt.',
+      );
+    }
+    if (_catalogError != null) {
+      final forbidden = _catalogError.toString().contains(
+        'INVENTORY_PURCHASE_CATALOG_FORBIDDEN',
+      );
+      return forbidden
+          ? _text(
+              ko: '이 계정의 발주 품목 조회 권한을 확인해 주세요.',
+              en: 'Check this account\'s permission to view purchase items.',
+              vi: 'Vui lòng kiểm tra quyền xem mặt hàng đặt mua của tài khoản.',
+            )
+          : _text(
+              ko: '원재료를 불러오지 못했습니다.',
+              en: 'Could not load ingredients.',
+              vi: 'Không thể tải nguyên liệu.',
+            );
+    }
+    if (_availableItems.isEmpty) {
+      return _text(
+        ko: '이 매장·거래처에 등록된 발주 가능 원재료가 없습니다.',
+        en: 'No orderable ingredients are registered for this store and supplier.',
+        vi: 'Không có nguyên liệu có thể đặt cho cửa hàng và nhà cung cấp này.',
+      );
+    }
+    if (_selectableItems.isEmpty && _searchController.text.trim().isEmpty) {
+      return _text(
+        ko: '추가 가능한 품목을 모두 선택했습니다.',
+        en: 'All available ingredients have been added.',
+        vi: 'Đã thêm tất cả nguyên liệu có thể chọn.',
+      );
+    }
+    if (_selectableItems.isEmpty) {
+      return _text(
+        ko: '검색 결과가 없습니다.',
+        en: 'No ingredients match your search.',
+        vi: 'Không có nguyên liệu phù hợp.',
+      );
+    }
+    return _text(
+      ko: '원재료를 선택한 뒤 추가 버튼을 누르세요.',
+      en: 'Select an ingredient, then tap Add.',
+      vi: 'Chọn nguyên liệu rồi nhấn Thêm.',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final editing = widget.initialOrder != null;
+    final canSave =
+        _supplierId != null &&
+        _lines.isNotEmpty &&
+        _lines.every((line) => _lineError(line) == null);
     return AlertDialog(
       key: widget.key,
-      title: Text(editing ? '발주 초안 수정' : '새 발주 초안'),
+      title: Text(
+        editing
+            ? _text(
+                ko: '발주 초안 수정',
+                en: 'Edit purchase draft',
+                vi: 'Sửa bản nháp đặt hàng',
+              )
+            : _text(
+                ko: '새 발주 초안',
+                en: 'New purchase draft',
+                vi: 'Tạo bản nháp đặt hàng',
+              ),
+      ),
       content: SizedBox(
         width: 760,
         child: SingleChildScrollView(
@@ -1947,10 +2156,16 @@ class _DraftOrderDialogState extends State<_DraftOrderDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
+                key: const Key('inventory_draft_supplier_dropdown'),
                 initialValue: _supplierId,
-                decoration: const InputDecoration(
-                  labelText: '거래처',
-                  border: OutlineInputBorder(),
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: _text(
+                    ko: '거래처',
+                    en: 'Supplier',
+                    vi: 'Nhà cung cấp',
+                  ),
+                  border: const OutlineInputBorder(),
                 ),
                 items: widget.suppliers
                     .where(
@@ -1966,16 +2181,31 @@ class _DraftOrderDialogState extends State<_DraftOrderDialog> {
                     .toList(),
                 onChanged: editing
                     ? null
-                    : (value) => setState(() {
-                        _supplierId = value;
-                        _lines = [];
-                        _newSupplierItemId = null;
-                      }),
+                    : (value) {
+                        _catalogRequest += 1;
+                        setState(() {
+                          _supplierId = value;
+                          _lines = [];
+                          _newSupplierItemId = null;
+                          _catalogError = null;
+                          _catalogLoading = false;
+                          _searchController.clear();
+                        });
+                        if (value != null) {
+                          unawaited(_loadSupplierItems(value));
+                        }
+                      },
               ),
               const SizedBox(height: 12),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('납품 요청일'),
+                title: Text(
+                  _text(
+                    ko: '납품 요청일',
+                    en: 'Requested delivery date',
+                    vi: 'Ngày yêu cầu giao hàng',
+                  ),
+                ),
                 subtitle: Text(DateFormat('yyyy-MM-dd').format(_deliveryDate)),
                 trailing: IconButton(
                   onPressed: () async {
@@ -1990,39 +2220,70 @@ class _DraftOrderDialogState extends State<_DraftOrderDialog> {
                   icon: const Icon(Icons.calendar_month_outlined),
                 ),
               ),
+              TextField(
+                key: const Key('inventory_draft_ingredient_search'),
+                controller: _searchController,
+                enabled: _supplierId != null && !_catalogLoading,
+                decoration: InputDecoration(
+                  labelText: _text(
+                    ko: '원재료 검색',
+                    en: 'Search ingredients',
+                    vi: 'Tìm nguyên liệu',
+                  ),
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey(_newSupplierItemId),
-                      initialValue: _newSupplierItemId,
-                      decoration: const InputDecoration(
-                        labelText: '원재료 추가',
-                        border: OutlineInputBorder(),
+                    child: SizedBox(
+                      key: const Key('inventory_draft_supplier_item_dropdown'),
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey(
+                          'inventory_draft_supplier_item_${_supplierId}_${_newSupplierItemId ?? ''}',
+                        ),
+                        initialValue: _newSupplierItemId,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: _text(
+                            ko: '발주 원재료',
+                            en: 'Purchase ingredient',
+                            vi: 'Nguyên liệu đặt mua',
+                          ),
+                          border: const OutlineInputBorder(),
+                        ),
+                        items: _selectableItems
+                            .map(
+                              (item) => DropdownMenuItem(
+                                value: _id(item),
+                                child: Text(
+                                  '${_productName(item)} · ${_quantity(_number(item['min_order_quantity'], fallback: 1))} ${_string(item['order_unit'])} · ${_money(item['unit_price'])}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged:
+                            _supplierId == null ||
+                                _catalogLoading ||
+                                _catalogError != null ||
+                                _selectableItems.isEmpty
+                            ? null
+                            : (value) =>
+                                  setState(() => _newSupplierItemId = value),
                       ),
-                      items: _availableItems
-                          .where(
-                            (item) => !_lines.any(
-                              (line) => line.supplierItemId == _id(item),
-                            ),
-                          )
-                          .map(
-                            (item) => DropdownMenuItem(
-                              value: _id(item),
-                              child: Text(_productName(item)),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) =>
-                          setState(() => _newSupplierItemId = value),
                     ),
                   ),
                   const SizedBox(width: 8),
                   IconButton.filledTonal(
+                    key: const Key('inventory_draft_add_ingredient'),
                     onPressed: _newSupplierItemId == null
                         ? null
                         : () {
-                            final item = _availableItems.firstWhere(
+                            final item = _selectableItems.firstWhere(
                               (row) => _id(row) == _newSupplierItemId,
                             );
                             setState(() {
@@ -2040,7 +2301,47 @@ class _DraftOrderDialogState extends State<_DraftOrderDialog> {
                             });
                           },
                     icon: const Icon(Icons.add),
+                    tooltip: _text(
+                      ko: '발주에 추가',
+                      en: 'Add to purchase order',
+                      vi: 'Thêm vào đơn đặt hàng',
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  if (_catalogLoading) ...[
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      _catalogStatusText(),
+                      key: const Key('inventory_draft_catalog_status'),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: _catalogError == null
+                            ? Theme.of(context).colorScheme.onSurfaceVariant
+                            : Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                  if (_catalogError != null && _supplierId != null)
+                    TextButton.icon(
+                      key: const Key('inventory_draft_catalog_retry'),
+                      onPressed: _catalogLoading
+                          ? null
+                          : () => _loadSupplierItems(_supplierId!),
+                      icon: const Icon(Icons.refresh),
+                      label: Text(
+                        _text(ko: '다시 불러오기', en: 'Retry', vi: 'Tải lại'),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -2049,7 +2350,9 @@ class _DraftOrderDialogState extends State<_DraftOrderDialog> {
               TextField(
                 controller: _memoController,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: '메모'),
+                decoration: InputDecoration(
+                  labelText: _text(ko: '메모', en: 'Memo', vi: 'Ghi chú'),
+                ),
               ),
             ],
           ),
@@ -2058,72 +2361,104 @@ class _DraftOrderDialogState extends State<_DraftOrderDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('취소'),
+          child: Text(_text(ko: '취소', en: 'Cancel', vi: 'Hủy')),
         ),
         FilledButton(
-          onPressed: _supplierId == null || _lines.isEmpty
+          key: const Key('inventory_draft_save'),
+          onPressed: !canSave
               ? null
               : () => Navigator.pop(
                   context,
-                  _DraftOrderInput(
+                  InventoryPurchaseDraftOrderInput(
                     supplierId: _supplierId!,
                     deliveryDate: _deliveryDate,
                     memo: _memoController.text.trim(),
                     lines: _lines.map((line) => line.toJson()).toList(),
                   ),
                 ),
-          child: const Text('저장'),
+          child: Text(_text(ko: '저장', en: 'Save', vi: 'Lưu')),
         ),
       ],
     );
   }
 
   Widget _buildLine(int index, _DraftLine line) {
-    final item = _availableItems.firstWhere(
-      (row) => _id(row) == line.supplierItemId,
-      orElse: () => const {},
+    final item = _lineItem(line);
+    final minimum = _number(item['min_order_quantity'], fallback: 1);
+    final quantityError = line.quantity < minimum
+        ? _text(
+            ko: '최소 ${_quantity(minimum)}',
+            en: 'Minimum ${_quantity(minimum)}',
+            vi: 'Tối thiểu ${_quantity(minimum)}',
+          )
+        : null;
+    final priceError = line.unitPrice < 0
+        ? _text(ko: '0 이상', en: 'Zero or greater', vi: 'Từ 0 trở lên')
+        : null;
+    final quantityField = TextFormField(
+      key: ValueKey('draft_qty_${line.supplierItemId}'),
+      initialValue: _quantity(line.quantity),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: _text(ko: '수량', en: 'Quantity', vi: 'Số lượng'),
+        suffixText: _string(item['order_unit']),
+        errorText: quantityError,
+      ),
+      onChanged: (value) => setState(() {
+        line.quantity = _parseNumber(value);
+      }),
+    );
+    final priceField = TextFormField(
+      key: ValueKey('draft_price_${line.supplierItemId}'),
+      initialValue: _quantity(line.unitPrice),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: _text(ko: '단가', en: 'Unit price', vi: 'Đơn giá'),
+        suffixText: 'VND',
+        errorText: priceError,
+      ),
+      onChanged: (value) => setState(() {
+        line.unitPrice = _parseNumber(value);
+      }),
+    );
+    final removeButton = IconButton(
+      onPressed: () => setState(() => _lines.removeAt(index)),
+      tooltip: _text(ko: '삭제', en: 'Remove', vi: 'Xóa'),
+      icon: const Icon(Icons.remove_circle_outline),
     );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(10),
-        child: Row(
-          children: [
-            Expanded(flex: 3, child: Text(_productName(item))),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextFormField(
-                key: ValueKey('draft_qty_${line.supplierItemId}'),
-                initialValue: _quantity(line.quantity),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: InputDecoration(
-                  labelText: '수량',
-                  suffixText: _string(item['order_unit']),
-                ),
-                onChanged: (value) => line.quantity = _parseNumber(value),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextFormField(
-                key: ValueKey('draft_price_${line.supplierItemId}'),
-                initialValue: _quantity(line.unitPrice),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: '단가',
-                  suffixText: 'VND',
-                ),
-                onChanged: (value) => line.unitPrice = _parseNumber(value),
-              ),
-            ),
-            IconButton(
-              onPressed: () => setState(() => _lines.removeAt(index)),
-              icon: const Icon(Icons.remove_circle_outline),
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 620) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: Text(_productName(item))),
+                      removeButton,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  quantityField,
+                  const SizedBox(height: 8),
+                  priceField,
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(flex: 3, child: Text(_productName(item))),
+                const SizedBox(width: 8),
+                Expanded(child: quantityField),
+                const SizedBox(width: 8),
+                Expanded(child: priceField),
+                removeButton,
+              ],
+            );
+          },
         ),
       ),
     );

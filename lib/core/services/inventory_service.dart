@@ -711,21 +711,48 @@ class InventoryService {
 
   Future<List<Map<String, dynamic>>> fetchInventorySupplierItems({
     required String storeId,
+    String? supplierId,
+    bool orderableOnly = false,
   }) async {
-    final result = await supabase
-        .from('inventory_supplier_items')
-        .select(
-          'id, supplier_id, product_id, supplier_sku, order_unit, order_unit_quantity_base, min_order_quantity, unit_price, tax_rate, lead_time_days, is_preferred, is_active, created_at, updated_at, supplier:inventory_suppliers(id, supplier_name, status), product:inventory_products(id, restaurant_id, name, product_code, category, stock_unit, base_unit, base_unit_factor, is_orderable, is_active)',
-        )
-        .order('updated_at', ascending: false);
-    return List<Map<String, dynamic>>.from(result as List)
-        .where((row) {
-          final product = row['product'];
-          return product is Map &&
-              product['restaurant_id']?.toString() == storeId;
-        })
-        .map(Map<String, dynamic>.from)
-        .toList();
+    final canRead = await supabase.rpc(
+      'can_read_inventory_purchase_store',
+      params: {'p_store_id': storeId},
+    );
+    if (canRead != true) {
+      throw StateError('INVENTORY_PURCHASE_CATALOG_FORBIDDEN');
+    }
+
+    const pageSize = 500;
+    final rows = <Map<String, dynamic>>[];
+    for (var offset = 0; ; offset += pageSize) {
+      dynamic query = supabase
+          .from('inventory_supplier_items')
+          .select(
+            'id, supplier_id, product_id, supplier_sku, order_unit, order_unit_quantity_base, min_order_quantity, unit_price, tax_rate, lead_time_days, is_preferred, is_active, created_at, updated_at, supplier:inventory_suppliers!inner(id, supplier_name, status), product:inventory_products!inner(id, restaurant_id, name, product_code, category, stock_unit, base_unit, base_unit_factor, is_orderable, is_active)',
+          );
+      query = query.eq('product.restaurant_id', storeId);
+      if (supplierId != null && supplierId.isNotEmpty) {
+        query = query.eq('supplier_id', supplierId);
+      }
+      if (orderableOnly) {
+        query = query
+            .eq('is_active', true)
+            .eq('supplier.status', 'active')
+            .eq('product.is_active', true)
+            .eq('product.is_orderable', true);
+      }
+
+      final result = await query
+          .order('updated_at', ascending: false)
+          .order('id')
+          .range(offset, offset + pageSize - 1);
+      final page = List<Map<String, dynamic>>.from(
+        result as List,
+      ).map(Map<String, dynamic>.from).toList();
+      rows.addAll(page);
+      if (page.length < pageSize) break;
+    }
+    return rows;
   }
 
   Future<Map<String, dynamic>> upsertInventorySupplierItem({
