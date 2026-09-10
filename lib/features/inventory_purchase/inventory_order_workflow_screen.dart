@@ -290,6 +290,14 @@ class _InventoryOrderWorkflowScreenState
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh),
           ),
+          IconButton(
+            key: const Key('inventory_order_workflow_logout_button'),
+            tooltip: context.l10n.logout,
+            onPressed: () async {
+              await ref.read(authProvider.notifier).logout();
+            },
+            icon: const Icon(Icons.logout_rounded),
+          ),
           if (!const {
             'inventory_orderer',
             'inventory_accounting',

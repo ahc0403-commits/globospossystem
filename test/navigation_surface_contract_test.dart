@@ -93,6 +93,16 @@ void main() {
     expect(nav, contains('final logoutOnly = showLogout && veryCompact'));
   });
 
+  test('inventory order workflow exposes a working logout control', () {
+    final screen = readRepoFile(
+      'lib/features/inventory_purchase/inventory_order_workflow_screen.dart',
+    );
+
+    expect(screen, contains("Key('inventory_order_workflow_logout_button')"));
+    expect(screen, contains('tooltip: context.l10n.logout'));
+    expect(screen, contains('authProvider.notifier).logout()'));
+  });
+
   test('super admin store navigation keeps route and active scope aligned', () {
     final nav = readRepoFile('lib/widgets/app_nav_bar.dart');
     final superAdmin = readRepoFile(
