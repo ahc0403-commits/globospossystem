@@ -13,6 +13,9 @@ dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
 flutter test
 
+printf 'CHECK_REPO_STEP=inventory_purchase_orderer_catalog_sql\n'
+bash test/inventory_purchase_orderer_catalog_sql_test.sh
+
 printf 'CHECK_REPO_STEP=payroll_attendance_sql_api\n'
 bash scripts/test_payroll_attendance_postgrest.sh
 
