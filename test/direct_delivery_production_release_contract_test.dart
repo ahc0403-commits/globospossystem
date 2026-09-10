@@ -37,6 +37,16 @@ void main() {
     expect(alertVerify, contains('STOREFRONT_UNEXPECTEDLY_ENABLED'));
     expect(alertVerify, contains('AFTER INSERT'));
 
+    final customerPaymentMigration = File(
+      'supabase/migrations/'
+      '20260910130000_direct_order_customer_payment_and_status.sql',
+    );
+    expect(customerPaymentMigration.existsSync(), isTrue);
+    expect(orderingVerify, contains('direct_order_proof_review_requests'));
+    expect(orderingVerify, contains('v_function_count <> 44'));
+    expect(orderingVerify, contains('direct_order_public_status_v2'));
+    expect(orderingVerify, contains('direct_order_cashier_complete_delivery'));
+
     final pilotHoursMigration = File(
       'supabase/migrations/'
       '20260824013000_direct_delivery_pilot_open_hours.sql',

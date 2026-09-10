@@ -146,7 +146,7 @@ class DirectOrderStaffService {
     int limit = 100,
   }) async {
     final raw = await supabase.rpc(
-      'direct_order_staff_list',
+      'direct_order_staff_list_v2',
       params: {'p_store_id': storeId, 'p_states': states, 'p_limit': limit},
     );
     return _list(raw);
@@ -158,7 +158,7 @@ class DirectOrderStaffService {
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_detail',
+        'direct_order_staff_detail_v2',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
@@ -427,6 +427,44 @@ class DirectOrderStaffService {
           'p_ticket_id': ticketId,
           'p_expected_version': expectedVersion,
           'p_next_status': nextStatus,
+        },
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> requestProofResubmission({
+    required String storeId,
+    required String requestId,
+    required String targetMessageId,
+    required String reasonCode,
+    String? reasonNote,
+  }) async {
+    return _map(
+      await supabase.rpc(
+        'direct_order_staff_request_proof_resubmission',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_target_message_id': targetMessageId,
+          'p_reason_code': reasonCode,
+          'p_reason_note': reasonNote,
+        },
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> completeDelivery({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+  }) async {
+    return _map(
+      await supabase.rpc(
+        'direct_order_cashier_complete_delivery',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_expected_version': expectedVersion,
         },
       ),
     );

@@ -172,18 +172,20 @@ void main() {
     'cashier approval copy says kitchen handoff is manual in all locales',
     () {
       const progress = {
-        'ko': ['주문 확인', '입금 확인', '메뉴 조리 중', 'Grab 기사 전달 완료'],
+        'ko': ['주문 확인', '입금 확인', '메뉴 조리 중', '배달 중', '주문 완료'],
         'vi': [
           'Đã xác nhận đơn',
           'Đã xác nhận thanh toán',
           'Đang chuẩn bị món',
-          'Đã bàn giao cho tài xế Grab',
+          'Đang giao',
+          'Hoàn tất đơn',
         ],
         'en': [
           'Order confirmed',
           'Payment confirmed',
           'Preparing food',
-          'Handed to Grab driver',
+          'Out for delivery',
+          'Order complete',
         ],
       };
       for (final language in ['ko', 'vi', 'en']) {
@@ -196,6 +198,7 @@ void main() {
           copy.progressPaymentConfirmed,
           copy.progressPreparing,
           copy.progressGrabHandoff,
+          copy.progressCompleted,
         ], progress[language]);
       }
 
@@ -204,7 +207,19 @@ void main() {
       ).readAsStringSync();
       expect(cashier, contains("'DIRECT_ORDER_REJECTED_BY_STORE'"));
       expect(cashier, contains("Key('direct_order_approval_confirm')"));
+      expect(
+        cashier,
+        contains("Key('direct_order_request_proof_resubmission')"),
+      );
+      expect(cashier, contains("Key('direct_order_complete_delivery')"));
+      expect(cashier, contains('directOrderStaffService.completeDelivery('));
       expect(cashier, isNot(contains('CheckboxListTile(')));
+
+      final kitchen = File(
+        'lib/features/direct_order/direct_order_kitchen_screen.dart',
+      ).readAsStringSync();
+      expect(kitchen, isNot(contains("'dispatched': 'completed'")));
+      expect(DirectOrderCopy('ko').stateLabel('completed'), '주문이 완료되었습니다');
     },
   );
 

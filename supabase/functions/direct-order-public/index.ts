@@ -33,10 +33,14 @@ export const directOrderActionRegistry = Object.freeze(
     create_session: { actor: "public", rateLimit: 60 },
     submit: { actor: "public", rateLimit: 60 },
     status: { actor: "public", rateLimit: 60 },
+    status_v2: { actor: "public", rateLimit: 60 },
+    orders_v2: { actor: "public", rateLimit: 60 },
     message: { actor: "public", rateLimit: 60 },
     cancel: { actor: "public", rateLimit: 60 },
     proof_upload_url: { actor: "public", rateLimit: 10 },
+    proof_upload_url_v2: { actor: "public", rateLimit: 10 },
     proof_commit: { actor: "public", rateLimit: 60 },
+    proof_commit_v2: { actor: "public", rateLimit: 60 },
     staff_proof_url: { actor: "staff", rateLimit: null },
     cleanup_expired_pii: { actor: "internal", rateLimit: null },
   } as const,
@@ -487,6 +491,17 @@ export const sqlDomainErrorRegistry: Readonly<
     "DIRECT_ORDER_REQUEST_NOT_CANCELLABLE",
   ),
   DIRECT_ORDER_PROOF_NOT_ALLOWED: conflict("DIRECT_ORDER_PROOF_NOT_ALLOWED"),
+  DIRECT_ORDER_PROOF_NOT_FOUND: unavailable("DIRECT_ORDER_PROOF_NOT_FOUND"),
+  DIRECT_ORDER_PROOF_REVIEW_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_PROOF_REVIEW_NOT_ALLOWED: conflict(
+    "DIRECT_ORDER_PROOF_REVIEW_NOT_ALLOWED",
+  ),
+  DIRECT_ORDER_PROOF_REVIEW_ALREADY_OPEN: conflict(
+    "DIRECT_ORDER_PROOF_REVIEW_ALREADY_OPEN",
+  ),
+  DIRECT_ORDER_PROOF_RESUBMISSION_PENDING: conflict(
+    "DIRECT_ORDER_PROOF_RESUBMISSION_PENDING",
+  ),
   DIRECT_ORDER_QUOTE_EXPIRED: conflict("DIRECT_ORDER_QUOTE_EXPIRED"),
   DIRECT_ORDER_PROOF_PATH_INVALID: invalidRequest("INVALID_PROOF"),
   DIRECT_ORDER_LIMIT_INVALID: invalidRequest("INVALID_REQUEST"),
@@ -554,6 +569,9 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_DELIVERY_TICKET_TRANSITION_INVALID: conflict(
     "DIRECT_DELIVERY_TICKET_TRANSITION_INVALID",
   ),
+  DIRECT_ORDER_DELIVERY_NOT_DISPATCHED: conflict(
+    "DIRECT_ORDER_DELIVERY_NOT_DISPATCHED",
+  ),
   DIRECT_ORDER_DISPATCH_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_CASH_PAYOUT_LOCKED: conflict(
     "DIRECT_ORDER_CASH_PAYOUT_LOCKED",
@@ -575,6 +593,8 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_VERIFIED_PAYMENT_MIGRATION_FAILED: internalFailure,
   DIRECT_ORDER_PILOT_SAFETY_MIGRATION_FAILED: internalFailure,
   DIRECT_ORDER_PILOT_SAFETY_VERIFY_FAILED: internalFailure,
+  DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_FAILED: internalFailure,
+  DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_VERIFY_FAILED: internalFailure,
 });
 
 export function normalizeRpcError(message: string): SafeHttpError {
@@ -737,6 +757,25 @@ function productionDependencies(): DirectOrderDependencies {
           p_request_id: requestId,
         });
       }
+      case "status_v2": {
+        const sessionId = requiredUuid(body, "session_id");
+        const requestId = requiredUuid(body, "request_id");
+        const secret = requiredString(body, "secret", 128, secretPattern);
+        return await rpc(service, "direct_order_public_status_v2", {
+          p_session_id: sessionId,
+          p_secret_hash: await sha256Hex(secret),
+          p_request_id: requestId,
+        });
+      }
+      case "orders_v2": {
+        const sessionId = requiredUuid(body, "session_id");
+        const secret = requiredString(body, "secret", 128, secretPattern);
+        return await rpc(service, "direct_order_public_orders_v2", {
+          p_session_id: sessionId,
+          p_secret_hash: await sha256Hex(secret),
+          p_limit: 50,
+        });
+      }
       case "message": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
@@ -759,7 +798,9 @@ function productionDependencies(): DirectOrderDependencies {
           p_request_id: requestId,
         });
       }
-      case "proof_upload_url": {
+      case "proof_upload_url":
+      case "proof_upload_url_v2": {
+        const isV2 = body.action === "proof_upload_url_v2";
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
@@ -775,7 +816,9 @@ function productionDependencies(): DirectOrderDependencies {
         const status = asObject(
           await rpc(
             service,
-            "direct_order_public_status",
+            isV2
+              ? "direct_order_public_status_v2"
+              : "direct_order_public_status",
             {
               p_session_id: sessionId,
               p_secret_hash: await sha256Hex(secret),
@@ -788,6 +831,47 @@ function productionDependencies(): DirectOrderDependencies {
           : "";
         if (!uuidPattern.test(storeId)) {
           throw new SafeHttpError(503, "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE");
+        }
+        if (isV2) {
+          const quoteId = requiredUuid(body, "quote_id");
+          const reviewRequestId = body.review_request_id == null
+            ? null
+            : requiredUuid(body, "review_request_id");
+          if (
+            !status.quote || typeof status.quote !== "object" ||
+            Array.isArray(status.quote)
+          ) {
+            throw new SafeHttpError(409, "DIRECT_ORDER_PROOF_NOT_ALLOWED");
+          }
+          const quote = status.quote as JsonObject;
+          if (quote.id !== quoteId) {
+            throw new SafeHttpError(409, "DIRECT_ORDER_PROOF_NOT_ALLOWED");
+          }
+          if (reviewRequestId == null) {
+            if (status.state !== "quoted" || quote.status !== "active") {
+              throw new SafeHttpError(409, "DIRECT_ORDER_PROOF_NOT_ALLOWED");
+            }
+          } else {
+            if (
+              !status.proof_review ||
+              typeof status.proof_review !== "object" ||
+              Array.isArray(status.proof_review)
+            ) {
+              throw new SafeHttpError(
+                409,
+                "DIRECT_ORDER_PROOF_REVIEW_NOT_ALLOWED",
+              );
+            }
+            const review = status.proof_review as JsonObject;
+            if (
+              review.id !== reviewRequestId || review.can_resubmit !== true
+            ) {
+              throw new SafeHttpError(
+                409,
+                "DIRECT_ORDER_PROOF_REVIEW_NOT_ALLOWED",
+              );
+            }
+          }
         }
         const objectId = crypto.randomUUID();
         const path = `${storeId}/${requestId}/${objectId}.${extension}`;
@@ -805,7 +889,9 @@ function productionDependencies(): DirectOrderDependencies {
           mime_type: mimeType,
         };
       }
-      case "proof_commit": {
+      case "proof_commit":
+      case "proof_commit_v2": {
+        const isV2 = body.action === "proof_commit_v2";
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
@@ -833,6 +919,20 @@ function productionDependencies(): DirectOrderDependencies {
         if (!proofBytes || !validateProofImage(proofBytes, extension)) {
           await service.storage.from("direct-order-proofs").remove([path]);
           throw new SafeHttpError(400, "INVALID_PROOF");
+        }
+        if (isV2) {
+          const quoteId = requiredUuid(body, "quote_id");
+          const reviewRequestId = body.review_request_id == null
+            ? null
+            : requiredUuid(body, "review_request_id");
+          return await rpc(service, "direct_order_public_commit_proof_v2", {
+            p_session_id: sessionId,
+            p_secret_hash: await sha256Hex(secret),
+            p_request_id: requestId,
+            p_quote_id: quoteId,
+            p_storage_path: path,
+            p_review_request_id: reviewRequestId,
+          });
         }
         return await rpc(service, "direct_order_public_commit_proof", {
           p_session_id: sessionId,

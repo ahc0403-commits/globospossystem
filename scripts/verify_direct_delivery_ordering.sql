@@ -17,6 +17,7 @@ BEGIN
     'direct_order_location_facts',
     'direct_order_messages',
     'direct_order_quotes',
+    'direct_order_proof_review_requests',
     'direct_order_sepay_candidates',
     'direct_order_financials',
     'direct_delivery_fulfillment_tickets',
@@ -54,7 +55,7 @@ BEGIN
       procedure_row.proname LIKE 'direct_order_%'
       OR procedure_row.proname LIKE 'direct_delivery_%'
     );
-  IF v_function_count <> 37 THEN
+  IF v_function_count <> 44 THEN
     RAISE EXCEPTION 'DIRECT_ORDER_FUNCTION_COUNT_DRIFT:%', v_function_count;
   END IF;
 
@@ -74,8 +75,82 @@ BEGIN
     'public.direct_order_staff_set_paused(uuid,boolean)'
   ) IS NULL OR to_regprocedure(
     'public.direct_order_analytics(uuid,date,date)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_staff_request_proof_resubmission(uuid,uuid,uuid,text,text)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_public_commit_proof_v2(uuid,text,uuid,uuid,text,uuid)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_public_status_v2(uuid,text,uuid)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_public_orders_v2(uuid,text,integer)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_staff_list_v2(uuid,text[],integer)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_staff_detail_v2(uuid,uuid)'
+  ) IS NULL OR to_regprocedure(
+    'public.direct_order_cashier_complete_delivery(uuid,uuid,integer)'
   ) IS NULL THEN
     RAISE EXCEPTION 'DIRECT_ORDER_CRITICAL_FUNCTION_MISSING';
+  END IF;
+
+  IF has_function_privilege(
+    'anon',
+    'public.direct_order_public_status_v2(uuid,text,uuid)',
+    'EXECUTE'
+  ) OR has_function_privilege(
+    'authenticated',
+    'public.direct_order_public_status_v2(uuid,text,uuid)',
+    'EXECUTE'
+  ) OR NOT has_function_privilege(
+    'service_role',
+    'public.direct_order_public_status_v2(uuid,text,uuid)',
+    'EXECUTE'
+  ) OR has_function_privilege(
+    'anon',
+    'public.direct_order_public_orders_v2(uuid,text,integer)',
+    'EXECUTE'
+  ) OR has_function_privilege(
+    'authenticated',
+    'public.direct_order_public_orders_v2(uuid,text,integer)',
+    'EXECUTE'
+  ) OR NOT has_function_privilege(
+    'service_role',
+    'public.direct_order_public_orders_v2(uuid,text,integer)',
+    'EXECUTE'
+  ) OR has_function_privilege(
+    'anon',
+    'public.direct_order_public_commit_proof_v2(uuid,text,uuid,uuid,text,uuid)',
+    'EXECUTE'
+  ) OR has_function_privilege(
+    'authenticated',
+    'public.direct_order_public_commit_proof_v2(uuid,text,uuid,uuid,text,uuid)',
+    'EXECUTE'
+  ) OR NOT has_function_privilege(
+    'service_role',
+    'public.direct_order_public_commit_proof_v2(uuid,text,uuid,uuid,text,uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'DIRECT_ORDER_PUBLIC_V2_RPC_PRIVILEGE_DRIFT';
+  END IF;
+
+  IF has_function_privilege(
+    'anon',
+    'public.direct_order_staff_request_proof_resubmission(uuid,uuid,uuid,text,text)',
+    'EXECUTE'
+  ) OR NOT has_function_privilege(
+    'authenticated',
+    'public.direct_order_staff_request_proof_resubmission(uuid,uuid,uuid,text,text)',
+    'EXECUTE'
+  ) OR has_function_privilege(
+    'anon',
+    'public.direct_order_cashier_complete_delivery(uuid,uuid,integer)',
+    'EXECUTE'
+  ) OR NOT has_function_privilege(
+    'authenticated',
+    'public.direct_order_cashier_complete_delivery(uuid,uuid,integer)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'DIRECT_ORDER_STAFF_V2_RPC_PRIVILEGE_DRIFT';
   END IF;
 
   IF has_function_privilege(

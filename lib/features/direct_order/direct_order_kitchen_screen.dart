@@ -247,13 +247,11 @@ class _TicketCard extends StatelessWidget {
     final next = switch (status) {
       'pending' => 'preparing',
       'preparing' => 'ready',
-      'dispatched' => 'completed',
       _ => null,
     };
     final actionLabel = switch (next) {
       'preparing' => copy.startPreparing,
       'ready' => copy.markReady,
-      'completed' => copy.markCompleted,
       _ => copy.waitingForDispatch,
     };
 

@@ -135,6 +135,18 @@ INSERT INTO _expected_direct_columns VALUES
 ('direct_order_quotes','expires_at','timestamp with time zone',true,false),
 ('direct_order_quotes','locked_at','timestamp with time zone',false,false),
 ('direct_order_quotes','created_at','timestamp with time zone',true,true),
+('direct_order_proof_review_requests','id','uuid',true,true),
+('direct_order_proof_review_requests','request_id','uuid',true,false),
+('direct_order_proof_review_requests','restaurant_id','uuid',true,false),
+('direct_order_proof_review_requests','quote_id','uuid',true,false),
+('direct_order_proof_review_requests','target_message_id','uuid',true,false),
+('direct_order_proof_review_requests','replacement_message_id','uuid',false,false),
+('direct_order_proof_review_requests','reason_code','text',true,false),
+('direct_order_proof_review_requests','reason_note','text',false,false),
+('direct_order_proof_review_requests','status','text',true,true),
+('direct_order_proof_review_requests','requested_by','uuid',true,false),
+('direct_order_proof_review_requests','requested_at','timestamp with time zone',true,true),
+('direct_order_proof_review_requests','resolved_at','timestamp with time zone',false,false),
 ('direct_order_sepay_candidates','id','uuid',true,true),
 ('direct_order_sepay_candidates','request_id','uuid',true,false),
 ('direct_order_sepay_candidates','restaurant_id','uuid',true,false),
@@ -249,6 +261,7 @@ WITH required_default(table_name, column_name, expression_pattern) AS (VALUES
   ('direct_order_request_addresses','location_verified','false'),
   ('direct_order_messages','metadata','{}'),
   ('direct_order_quotes','status','active'),
+  ('direct_order_proof_review_requests','status','requested'),
   ('direct_delivery_fulfillment_tickets','status','pending'),
   ('direct_delivery_fulfillment_tickets','version','1')
 )
@@ -321,10 +334,16 @@ INSERT INTO _expected_direct_function_access VALUES
 ('public.direct_order_public_cancel(uuid,text,uuid)',false,true),
 ('public.direct_order_public_commit_proof(uuid,text,uuid,text)',false,true),
 ('public.direct_order_public_status(uuid,text,uuid)',false,true),
+('public.direct_order_public_commit_proof_v2(uuid,text,uuid,uuid,text,uuid)',false,true),
+('public.direct_order_public_status_v2(uuid,text,uuid)',false,true),
+('public.direct_order_public_orders_v2(uuid,text,integer)',false,true),
 ('public.direct_order_admin_upsert_storefront(uuid,text,boolean,boolean,time without time zone,time without time zone,numeric,integer,numeric,numeric,text,text,text,text,numeric,integer,integer,boolean)',true,true),
 ('public.direct_order_admin_get_storefront(uuid)',true,true),
 ('public.direct_order_staff_list(uuid,text[],timestamp with time zone,uuid,integer)',true,true),
 ('public.direct_order_staff_detail(uuid,uuid)',true,true),
+('public.direct_order_staff_list_v2(uuid,text[],integer)',true,true),
+('public.direct_order_staff_detail_v2(uuid,uuid)',true,true),
+('public.direct_order_staff_request_proof_resubmission(uuid,uuid,uuid,text,text)',true,true),
 ('public.direct_order_staff_get_availability(uuid)',true,true),
 ('public.direct_order_staff_set_paused(uuid,boolean)',true,true),
 ('public.direct_order_staff_quote(uuid,uuid,numeric,text)',true,true),
@@ -342,6 +361,7 @@ INSERT INTO _expected_direct_function_access VALUES
 ('public.enqueue_direct_order_customer_receipt_after_payment()',false,true),
 ('public.direct_delivery_ticket_list(uuid,text[],timestamp with time zone,uuid,integer)',true,true),
 ('public.direct_delivery_ticket_transition(uuid,uuid,integer,text)',true,true),
+('public.direct_order_cashier_complete_delivery(uuid,uuid,integer)',true,true),
 ('public.direct_order_set_dispatch(uuid,uuid,text,numeric)',true,true),
 ('public.direct_order_set_dispatch_with_payment_mode(uuid,uuid,text,numeric)',true,true),
 ('public.direct_order_analytics(uuid,date,date)',true,true),
@@ -393,7 +413,8 @@ WITH expected(table_name, constraint_count) AS (VALUES
  ('direct_order_public_access_limits',2), ('direct_order_requests',9),
  ('direct_order_request_items',9), ('direct_order_request_addresses',11),
  ('direct_order_location_facts',3), ('direct_order_messages',10),
- ('direct_order_quotes',21), ('direct_order_sepay_candidates',6),
+ ('direct_order_quotes',21), ('direct_order_proof_review_requests',11),
+ ('direct_order_sepay_candidates',6),
  ('direct_order_financials',18), ('direct_delivery_fulfillment_tickets',8),
  ('direct_delivery_fulfillment_ticket_items',6), ('direct_order_dispatches',8)
 ), actual AS (
@@ -432,6 +453,8 @@ WITH required(name) AS (VALUES
  ('direct_order_messages_attachment_valid'),
  ('direct_order_quotes_expiry_valid'),
  ('direct_order_quotes_note_valid'),
+ ('direct_order_proof_review_note_valid'),
+ ('direct_order_proof_review_resolution_valid'),
  ('direct_order_financials_reference_valid'),
  ('direct_delivery_ticket_pickup_code_valid'),
  ('direct_delivery_ticket_item_note_valid'),
@@ -468,6 +491,12 @@ INSERT INTO _expected_direct_fks VALUES
 ('direct_order_quotes','request_id','public','direct_order_requests','c'),
 ('direct_order_quotes','restaurant_id','public','restaurants','c'),
 ('direct_order_quotes','created_by','auth','users','a'),
+('direct_order_proof_review_requests','request_id','public','direct_order_requests','c'),
+('direct_order_proof_review_requests','restaurant_id','public','restaurants','c'),
+('direct_order_proof_review_requests','quote_id','public','direct_order_quotes','r'),
+('direct_order_proof_review_requests','target_message_id','public','direct_order_messages','r'),
+('direct_order_proof_review_requests','replacement_message_id','public','direct_order_messages','r'),
+('direct_order_proof_review_requests','requested_by','auth','users','a'),
 ('direct_order_sepay_candidates','request_id','public','direct_order_requests','c'),
 ('direct_order_sepay_candidates','restaurant_id','public','restaurants','c'),
 ('direct_order_sepay_candidates','sepay_transaction_id','public','sepay_transactions','r'),
@@ -515,7 +544,6 @@ CREATE TEMP TABLE _expected_direct_indexes (
   is_unique boolean NOT NULL, has_predicate boolean NOT NULL
 );
 INSERT INTO _expected_direct_indexes VALUES
-('direct_order_requests_one_open_per_session','session_id',true,true),
 ('direct_order_requests_store_state_created','restaurant_id,state,created_at,id',false,false),
 ('direct_order_requests_session_created','session_id,created_at',false,false),
 ('direct_order_request_items_store_request','restaurant_id,request_id',false,false),
@@ -528,6 +556,9 @@ INSERT INTO _expected_direct_indexes VALUES
 ('direct_order_messages_attachment_unique','attachment_storage_path',true,true),
 ('direct_order_quotes_one_live','request_id',true,true),
 ('direct_order_quotes_store_created','restaurant_id,created_at',false,false),
+('direct_order_proof_review_one_open','request_id',true,true),
+('direct_order_proof_review_request_history','request_id,requested_at,id',false,false),
+('direct_order_proof_review_store_requested','restaurant_id,requested_at',false,false),
 ('direct_order_sepay_candidates_store','restaurant_id,linked_at',false,false),
 ('direct_order_sepay_candidates_transaction','sepay_transaction_id',false,false),
 ('direct_order_sepay_one_request_per_transaction','sepay_transaction_id',true,false),
@@ -560,11 +591,14 @@ LEFT JOIN actual USING (index_name,key_columns,is_unique,has_predicate)
 WHERE actual.index_name IS NULL;
 
 INSERT INTO _direct_schema_failures
-SELECT 'open-request partial index predicate drift'
+SELECT 'single-open-request index still exists'
+WHERE to_regclass('public.direct_order_requests_one_open_per_session') IS NOT NULL;
+INSERT INTO _direct_schema_failures
+SELECT 'proof-review partial index predicate drift'
 WHERE NOT EXISTS (
  SELECT 1 FROM pg_indexes
- WHERE schemaname='public' AND indexname='direct_order_requests_one_open_per_session'
-   AND indexdef LIKE '%awaiting_quote%quoted%awaiting_payment_review%'
+ WHERE schemaname='public' AND indexname='direct_order_proof_review_one_open'
+   AND indexdef LIKE '%status = ''requested''%'
 );
 INSERT INTO _direct_schema_failures
 SELECT 'live-quote partial index predicate drift'

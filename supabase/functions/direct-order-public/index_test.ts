@@ -214,7 +214,7 @@ Deno.test("requires JSON and enforces the 64 KiB limit in UTF-8 bytes", async ()
   assertEquals(utf8Oversized.status, 413, "UTF-8 byte limit status");
 });
 
-Deno.test("action registry is exact and dispatches all 10 boundaries", async () => {
+Deno.test("action registry is exact and dispatches all 14 boundaries", async () => {
   assertEquals(
     Object.keys(directOrderActionRegistry),
     [
@@ -222,10 +222,14 @@ Deno.test("action registry is exact and dispatches all 10 boundaries", async () 
       "create_session",
       "submit",
       "status",
+      "status_v2",
+      "orders_v2",
       "message",
       "cancel",
       "proof_upload_url",
+      "proof_upload_url_v2",
       "proof_commit",
+      "proof_commit_v2",
       "staff_proof_url",
       "cleanup_expired_pii",
     ],
@@ -358,7 +362,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    73,
+    81,
     "registered SQL error count",
   );
   const conflict = normalizeRpcError(
@@ -373,6 +377,17 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
   const forbidden = normalizeRpcError("DIRECT_ORDER_FORBIDDEN");
   assertEquals(forbidden.status, 403, "forbidden status");
   assertEquals(forbidden.code, "REQUEST_FORBIDDEN", "forbidden public code");
+  const proofReview = normalizeRpcError(
+    "DIRECT_ORDER_PROOF_REVIEW_NOT_ALLOWED private detail",
+  );
+  assertEquals(proofReview.status, 409, "proof review conflict status");
+  assertEquals(
+    proofReview.code,
+    "DIRECT_ORDER_PROOF_REVIEW_NOT_ALLOWED",
+    "proof review public code",
+  );
+  const delivery = normalizeRpcError("DIRECT_ORDER_DELIVERY_NOT_DISPATCHED");
+  assertEquals(delivery.status, 409, "delivery completion conflict status");
   const internal = normalizeRpcError(
     "DIRECT_ORDER_FINANCIAL_RECONCILIATION_FAILED sql private detail",
   );

@@ -8,18 +8,21 @@ import 'package:globos_pos_system/features/direct_order/direct_order_models.dart
 import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_storefront_screen.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _StorefrontFixtureService extends DirectOrderService {
   _StorefrontFixtureService({
     this.savedAddress,
     this.activeStatus,
+    this.orderSummaries,
     this.paused = false,
     this.pauseOnSubmit = false,
   });
 
   final DirectOrderAddress? savedAddress;
   final DirectOrderStatus? activeStatus;
+  final List<DirectOrderSummary>? orderSummaries;
   final bool paused;
   final bool pauseOnSubmit;
   DirectOrderAddress? submittedAddress;
@@ -94,6 +97,28 @@ class _StorefrontFixtureService extends DirectOrderService {
       activeStatus?.requestId;
 
   @override
+  Future<List<DirectOrderSummary>> listOrders({
+    required DirectOrderSession session,
+  }) async {
+    if (orderSummaries != null) return orderSummaries!;
+    final status = activeStatus;
+    if (status == null) return const [];
+    return [
+      DirectOrderSummary(
+        requestId: status.requestId,
+        referenceCode: status.referenceCode,
+        state: status.state,
+        createdAt: DateTime.utc(2026, 8, 24, 2),
+        itemCount: 1,
+        finalTotal: status.quote?.finalTotal,
+        fulfillmentStatus: status.fulfillmentStatus,
+        completedAt: status.completedAt,
+        hasOpenProofReview: status.proofReview != null,
+      ),
+    ];
+  }
+
+  @override
   Future<void> clearActiveRequest(String slug) async {
     clearActiveRequestCalls += 1;
   }
@@ -139,6 +164,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   Future<DirectOrderSubmission> submit({
     required String slug,
     required DirectOrderSession session,
+    String? draftId,
     required String locale,
     required Map<String, int> cart,
     required Map<String, String> itemNotes,
@@ -188,7 +214,7 @@ Future<void> _openAddress(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('completed order automatically returns to a reusable menu', (
+  testWidgets('completed order remains visible with an explicit final status', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(const {});
@@ -213,18 +239,187 @@ void main() {
     await tester.pumpWidget(_fixtureApp(service: service));
     await tester.pumpAndSettle();
 
-    expect(service.clearActiveRequestCalls, 1);
-    expect(
-      find.byKey(const Key('direct_order_completed_auto_reset')),
-      findsOneWidget,
-    );
+    expect(service.clearActiveRequestCalls, 0);
     expect(find.text('D87654321'), findsOneWidget);
-    expect(find.text('Tokbokki cay'), findsOneWidget);
-    expect(find.byKey(const Key('direct_order_status_title')), findsNothing);
+    expect(find.text('Đơn hàng đã hoàn tất'), findsWidgets);
+    expect(find.byKey(const Key('direct_order_status_title')), findsOneWidget);
+    expect(find.byKey(const Key('direct_customer_my_orders')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('paused storefront shows a localized apology without a session', (
+  testWidgets('order history shows each order with its own status', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    const selected = DirectOrderStatus(
+      requestId: 'order-a',
+      referenceCode: 'DAAAAAAAA',
+      state: 'approved',
+      fulfillmentStatus: 'dispatched',
+      messages: [],
+    );
+    final service = _StorefrontFixtureService(
+      activeStatus: selected,
+      orderSummaries: [
+        DirectOrderSummary(
+          requestId: 'order-a',
+          referenceCode: 'DAAAAAAAA',
+          state: 'approved',
+          createdAt: DateTime.utc(2026, 9, 10, 10),
+          itemCount: 2,
+          hasOpenProofReview: false,
+          finalTotal: 200000,
+          fulfillmentStatus: 'dispatched',
+        ),
+        DirectOrderSummary(
+          requestId: 'order-b',
+          referenceCode: 'DBBBBBBBB',
+          state: 'quoted',
+          createdAt: DateTime.utc(2026, 9, 10, 9),
+          itemCount: 1,
+          hasOpenProofReview: false,
+          finalTotal: 125000,
+        ),
+        DirectOrderSummary(
+          requestId: 'order-c',
+          referenceCode: 'DCCCCCCCC',
+          state: 'approved',
+          createdAt: DateTime.utc(2026, 9, 10, 8),
+          itemCount: 3,
+          hasOpenProofReview: false,
+          finalTotal: 340000,
+          fulfillmentStatus: 'completed',
+          completedAt: DateTime.utc(2026, 9, 10, 9),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('ko')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('direct_customer_my_orders')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('#DAAAAAAAA'), findsOneWidget);
+    expect(find.text('#DBBBBBBBB'), findsOneWidget);
+    expect(find.text('#DCCCCCCCC'), findsOneWidget);
+    expect(find.text('배달 중 · 메뉴 2개'), findsOneWidget);
+    expect(find.text('견적 완료 · 메뉴 1개'), findsOneWidget);
+    expect(find.text('주문이 완료되었습니다 · 메뉴 3개'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('quoted order shows VAT and complete bank transfer details', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    final service = _StorefrontFixtureService(
+      activeStatus: DirectOrderStatus(
+        requestId: 'quoted-request',
+        referenceCode: 'D1234VAT1',
+        state: 'quoted',
+        quote: DirectOrderQuote(
+          id: 'quote-vat',
+          version: 2,
+          menuTotal: 200000,
+          serviceChargeTotal: 10000,
+          deliveryFeeTotal: 30000,
+          finalTotal: 240000,
+          status: 'active',
+          expiresAt: DateTime.utc(2099),
+          menuPretax: 181818,
+          menuVat: 18182,
+          serviceChargePretax: 9091,
+          serviceChargeVat: 909,
+          deliveryFeePretax: 30000,
+          deliveryFeeVat: 0,
+          vatTotal: 19091,
+        ),
+        messages: const [],
+      ),
+    );
+
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('ko')),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('direct_open_payment_details')),
+    );
+    await tester.tap(find.byKey(const Key('direct_open_payment_details')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('계좌이체 안내'), findsOneWidget);
+    expect(find.text('포함된 VAT'), findsWidgets);
+    expect(find.textContaining('Vietcombank'), findsOneWidget);
+    expect(find.textContaining('123456789'), findsOneWidget);
+    expect(find.text('GLOBOS VN'), findsOneWidget);
+    expect(find.text('#D1234VAT1'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(
+      find.byKey(const Key('direct_upload_payment_proof')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'proof review asks for an image without asking for payment again',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: DirectOrderStatus(
+          requestId: 'proof-review-request',
+          referenceCode: 'DPROOF01',
+          state: 'awaiting_payment_review',
+          quote: DirectOrderQuote(
+            id: 'proof-review-quote',
+            version: 1,
+            menuTotal: 125000,
+            serviceChargeTotal: 0,
+            deliveryFeeTotal: 0,
+            finalTotal: 125000,
+            status: 'locked',
+            expiresAt: DateTime.utc(2099),
+            vatTotal: 9259,
+          ),
+          messages: const [],
+          proofReview: DirectOrderProofReview(
+            id: 'proof-review-1',
+            reasonCode: 'blurry',
+            reasonNote: '거래번호가 보이게 촬영해 주세요.',
+            requestedAt: DateTime.utc(2026, 9, 10, 10),
+            canResubmit: true,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('direct_open_payment_details')),
+      );
+
+      expect(find.textContaining('이미지가 흐림'), findsOneWidget);
+      expect(find.textContaining('다시 송금하지 마세요'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('direct_open_payment_details')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('이미지 다시 보내기'), findsWidgets);
+      expect(find.byType(QrImageView), findsNothing);
+      expect(find.textContaining('다시 송금하지 마세요'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('paused storefront shows an apology and loads order history', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(const {});
@@ -245,7 +440,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('즉석 떡볶이'), findsNothing);
-    expect(service.ensureSessionCalls, 0);
+    expect(service.ensureSessionCalls, 1);
     expect(tester.takeException(), isNull);
   });
 
@@ -312,7 +507,7 @@ void main() {
         expect(find.text(copy.pausedMessage), findsOneWidget);
         expect(find.text(copy.checkAgain), findsOneWidget);
         expect(find.text('🙏'), findsOneWidget);
-        expect(service.ensureSessionCalls, 0);
+        expect(service.ensureSessionCalls, 1);
         expect(tester.takeException(), isNull, reason: '$locale:$size');
         await tester.pumpWidget(const SizedBox.shrink());
       }
@@ -510,11 +705,26 @@ void main() {
       state: 'awaiting_quote',
       messages: [],
     );
-    final service = _StorefrontFixtureService(activeStatus: status);
+    final service = _StorefrontFixtureService(
+      activeStatus: status,
+      orderSummaries: [
+        DirectOrderSummary(
+          requestId: status.requestId,
+          referenceCode: status.referenceCode,
+          state: 'cancelled',
+          createdAt: DateTime.utc(2026, 9, 10),
+          itemCount: 1,
+          hasOpenProofReview: false,
+        ),
+      ],
+    );
 
     await tester.pumpWidget(_fixtureApp(service: service));
     await tester.pumpAndSettle();
     expect(service.fetchStatusCalls, 1);
+
+    await tester.drag(find.byType(ListView).last, const Offset(0, -800));
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.widgetWithText(TextField, 'Nhập tin nhắn'),
@@ -524,9 +734,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Gửi'));
     await tester.pumpAndSettle();
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
 
-    expect(find.text('Xin chào'), findsOneWidget);
     expect(service.sendMessageCalls, 1);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    expect(find.text('Xin chào', skipOffstage: false), findsOneWidget);
     expect(
       service.fetchStatusCalls,
       1,
@@ -538,7 +752,7 @@ void main() {
   });
 
   testWidgets(
-    'customer sees the four-stage delivery progress in their locale',
+    'customer sees the five-stage delivery progress in their locale',
     (tester) async {
       SharedPreferences.setMockInitialValues(const {});
       const status = DirectOrderStatus(
@@ -564,12 +778,13 @@ void main() {
       expect(find.text('주문 확인'), findsOneWidget);
       expect(find.text('입금 확인'), findsOneWidget);
       expect(find.text('메뉴 조리 중'), findsOneWidget);
-      expect(find.text('Grab 기사 전달 완료'), findsOneWidget);
+      expect(find.text('배달 중'), findsOneWidget);
+      expect(find.text('주문 완료'), findsOneWidget);
       final statusTitle = tester.widget<Text>(
         find.byKey(const Key('direct_order_status_title')),
       );
       expect(statusTitle.data, '조리 중');
-      for (var index = 0; index < 4; index++) {
+      for (var index = 0; index < 5; index++) {
         expect(
           find.byKey(Key('direct_order_progress_step_$index')),
           findsOneWidget,
