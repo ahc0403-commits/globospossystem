@@ -12,7 +12,8 @@ Scope: source-complete feature; production remains disabled
   `20260821140000_direct_delivery_arrival_alerts.sql`, followed by the effective
   later direct-delivery migrations including
   `20260907150000_cashier_direct_delivery_availability.sql` and
-  `20260908120000_direct_order_pilot_safety.sql`, only through the normal
+  `20260908120000_direct_order_pilot_safety.sql`, ending with
+  `20260910130000_direct_order_customer_payment_and_status.sql`, only through the normal
   guarded deployment workflow.
 - Do not enable a storefront until accounting approval, a real Google Maps check, and a controlled store pilot are recorded.
 - Rollback is link removal plus `is_enabled=false`. Do not roll back the additive migration after orders exist.
@@ -60,6 +61,18 @@ Google Cloud Translation or require a translation credential.
 12. Print the first customer Bill on the configured receipt destination, break
     the printer connection, recover the same failed batch, and then perform one
     explicit reprint. Confirm payment and inventory remain single throughout.
+13. From one customer session, submit two orders and verify each order keeps its
+    own reference, amount, proof-review, fulfillment state, and completion time.
+14. Send a quote and verify the customer sees total VAT separately and receives
+    one sound/vibration alert per newly observed quote. Open `결제하기` and
+    confirm the QR, bank name, holder, account-copy, and transfer reference.
+15. Request a payment-proof replacement from cashier. Confirm approval is
+    blocked until the customer uploads a replacement, and confirm retrying the
+    same upload does not create a second proof.
+16. Dispatch with a Grab link. Confirm kitchen cannot complete the order, then
+    have cashier verify delivery in Grab and press the completion button. The
+    customer must see the exact localized completed state and one completion
+    message.
 
 ### Arrival-alert telemetry
 

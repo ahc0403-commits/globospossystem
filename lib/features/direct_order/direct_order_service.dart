@@ -9,7 +9,7 @@ import '../../main.dart';
 import 'direct_order_models.dart';
 
 typedef DirectOrderInvoker =
-    Future<Map<String, dynamic>> Function(Map<String, dynamic> body);
+    Future<Object?> Function(Map<String, dynamic> body);
 
 class DirectOrderException implements Exception {
   const DirectOrderException(this.code);
@@ -52,9 +52,11 @@ class DirectOrderService {
   static const _addressKeyPrefix = 'direct_order_address_v1_';
   static const _requestKeyPrefix = 'direct_order_request_v1_';
   static const _pendingSubmitKeyPrefix = 'direct_order_pending_submit_v1_';
+  static const _alertEnabledKeyPrefix = 'direct_order_payment_alert_v1_';
+  static const _seenAlertKeyPrefix = 'direct_order_seen_alerts_v1_';
   final DirectOrderInvoker? _invoker;
 
-  Future<Map<String, dynamic>> _invoke(Map<String, dynamic> body) async {
+  Future<Object?> _invokeValue(Map<String, dynamic> body) async {
     final injected = _invoker;
     if (injected != null) return injected(body);
     final response = await supabase.functions.invoke(
@@ -80,6 +82,11 @@ class DirectOrderService {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
     }
     final data = envelope['data'];
+    return data;
+  }
+
+  Future<Map<String, dynamic>> _invoke(Map<String, dynamic> body) async {
+    final data = await _invokeValue(body);
     if (data is! Map) {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
     }
@@ -126,6 +133,7 @@ class DirectOrderService {
   Future<DirectOrderSubmission> submit({
     required String slug,
     required DirectOrderSession session,
+    String? draftId,
     required String locale,
     required Map<String, int> cart,
     required Map<String, String> itemNotes,
@@ -134,7 +142,9 @@ class DirectOrderService {
     String? customerNote,
   }) async {
     final preferences = await SharedPreferences.getInstance();
-    final pendingKey = '$_pendingSubmitKeyPrefix$slug';
+    final pendingKey = draftId == null
+        ? '$_pendingSubmitKeyPrefix$slug'
+        : '$_pendingSubmitKeyPrefix${slug}_$draftId';
     var clientRequestId = preferences.getString(pendingKey);
     if (clientRequestId == null || !_uuidPattern.hasMatch(clientRequestId)) {
       clientRequestId = const Uuid().v4();
@@ -210,10 +220,44 @@ class DirectOrderService {
     }
   }
 
+  Future<void> saveSelectedRequest(String slug, String requestId) async {
+    final preferences = await SharedPreferences.getInstance();
+    final saved = await preferences.setString(
+      '$_requestKeyPrefix$slug',
+      jsonEncode({'request_id': requestId}),
+    );
+    if (!saved) {
+      throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
+    }
+  }
+
   Future<void> clearActiveRequest(String slug) async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove('$_requestKeyPrefix$slug');
     await preferences.remove('$_pendingSubmitKeyPrefix$slug');
+  }
+
+  Future<bool> loadPaymentAlertEnabled(String slug) async {
+    final preferences = await SharedPreferences.getInstance();
+    return preferences.getBool('$_alertEnabledKeyPrefix$slug') ?? true;
+  }
+
+  Future<void> setPaymentAlertEnabled(String slug, bool enabled) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool('$_alertEnabledKeyPrefix$slug', enabled);
+  }
+
+  Future<bool> markAlertSeen(String slug, String eventKey) async {
+    final preferences = await SharedPreferences.getInstance();
+    final key = '$_seenAlertKeyPrefix$slug';
+    final seen = preferences.getStringList(key) ?? const <String>[];
+    if (seen.contains(eventKey)) return false;
+    final updated = [...seen, eventKey];
+    final trimmed = updated.length > 100
+        ? updated.sublist(updated.length - 100)
+        : updated;
+    await preferences.setStringList(key, trimmed);
+    return true;
   }
 
   Future<DirectOrderStatus> fetchStatus({
@@ -221,12 +265,33 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status',
+      'action': 'status_v2',
       'session_id': session.id,
       'secret': session.secret,
       'request_id': requestId,
     });
     return DirectOrderStatus.fromJson(data);
+  }
+
+  Future<List<DirectOrderSummary>> listOrders({
+    required DirectOrderSession session,
+  }) async {
+    final data = await _invokeValue({
+      'action': 'orders_v2',
+      'session_id': session.id,
+      'secret': session.secret,
+    });
+    if (data is! List) {
+      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+    }
+    return data
+        .map((row) {
+          if (row is! Map) {
+            throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+          }
+          return DirectOrderSummary.fromJson(Map<String, dynamic>.from(row));
+        })
+        .toList(growable: false);
   }
 
   Future<DirectOrderMessage> sendMessage({
@@ -268,20 +333,23 @@ class DirectOrderService {
     if (_requiredResponseString(data, 'state') != 'cancelled') {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
     }
-    await clearActiveRequest(slug);
   }
 
   Future<void> uploadPaymentProof({
     required DirectOrderSession session,
     required String requestId,
+    required String quoteId,
+    String? reviewRequestId,
     required Uint8List bytes,
     required String mimeType,
   }) async {
     final upload = await _invoke({
-      'action': 'proof_upload_url',
+      'action': 'proof_upload_url_v2',
       'session_id': session.id,
       'secret': session.secret,
       'request_id': requestId,
+      'quote_id': quoteId,
+      'review_request_id': reviewRequestId,
       'mime_type': mimeType,
       'size_bytes': bytes.length,
     });
@@ -312,15 +380,23 @@ class DirectOrderService {
           FileOptions(contentType: mimeType, upsert: false),
         );
     final commit = await _invoke({
-      'action': 'proof_commit',
+      'action': 'proof_commit_v2',
       'session_id': session.id,
       'secret': session.secret,
       'request_id': requestId,
+      'quote_id': quoteId,
+      'review_request_id': reviewRequestId,
       'path': path,
     });
-    _expectExactResponseFields(commit, const {'message_id', 'state'});
+    _expectExactResponseFields(commit, const {
+      'message_id',
+      'state',
+      'review_request_id',
+      'idempotent',
+    });
     _requiredResponseString(commit, 'message_id');
-    if (_requiredResponseString(commit, 'state') != 'awaiting_payment_review') {
+    if (_requiredResponseString(commit, 'state') != 'awaiting_payment_review' ||
+        commit['idempotent'] is! bool) {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
     }
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_theme.dart';
@@ -87,10 +88,26 @@ class _DirectOrderCashierScreenState
     final revision = ++_refreshRevision;
     if (!silent) setState(() => _loading = true);
     try {
-      final rows = await directOrderStaffService.listRequests(
+      final fulfillmentFilter = const {
+        'preparing',
+        'ready',
+        'dispatched',
+        'completed',
+      }.contains(_stateFilter);
+      final allRows = await directOrderStaffService.listRequests(
         storeId: storeId,
-        states: _stateFilter == null ? null : [_stateFilter!],
+        states: _stateFilter == null || fulfillmentFilter
+            ? null
+            : [_stateFilter!],
       );
+      final rows = fulfillmentFilter
+          ? allRows
+                .where(
+                  (row) =>
+                      row['fulfillment_status']?.toString() == _stateFilter,
+                )
+                .toList(growable: false)
+          : allRows;
       Map<String, dynamic>? detail;
       final requestedSelection = _selectedId;
       final selectedId =
@@ -527,6 +544,128 @@ class _DirectOrderCashierScreenState
     );
   }
 
+  Future<void> _requestProofResubmission(String targetMessageId) async {
+    var reasonCode = 'blurry';
+    final note = TextEditingController();
+    final confirmed = await showDirectOrderDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(_copy.requestProofAgain),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  key: const Key('direct_order_proof_review_reason'),
+                  initialValue: reasonCode,
+                  items:
+                      const [
+                            'blurry',
+                            'details_unreadable',
+                            'wrong_transaction',
+                            'amount_unreadable',
+                            'other',
+                          ]
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(_copy.proofReviewReason(value)),
+                            ),
+                          )
+                          .toList(growable: false),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => reasonCode = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: note,
+                  maxLength: 500,
+                  maxLines: 3,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(labelText: _copy.proofReasonNote),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(_copy.close),
+            ),
+            FilledButton(
+              key: const Key('direct_order_proof_review_confirm'),
+              onPressed: reasonCode == 'other' && note.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(context, true),
+              child: Text(_copy.requestProofAgain),
+            ),
+          ],
+        ),
+      ),
+    );
+    final reasonNote = note.text.trim();
+    note.dispose();
+    if (confirmed != true || _storeId == null || _selectedId == null) return;
+    await _act(
+      () => directOrderStaffService.requestProofResubmission(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        targetMessageId: targetMessageId,
+        reasonCode: reasonCode,
+        reasonNote: reasonNote.isEmpty ? null : reasonNote,
+      ),
+      _copy.proofRequestSent,
+    );
+  }
+
+  Future<void> _completeDelivery() async {
+    final fulfillment = _map(_detail?['fulfillment']);
+    final request = _map(_detail?['request']);
+    if (_storeId == null ||
+        _selectedId == null ||
+        fulfillment['status'] != 'dispatched') {
+      return;
+    }
+    final confirmed = await showDirectOrderDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(_copy.completeOrderConfirmTitle),
+        content: Text(
+          '#${request['reference_code'] ?? ''}\n\n'
+          '${_copy.completeOrderConfirmMessage}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(_copy.close),
+          ),
+          FilledButton.icon(
+            key: const Key('direct_order_complete_confirm'),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.check_circle_outline_rounded),
+            label: Text(_copy.completeOrder),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _act(
+      () => directOrderStaffService.completeDelivery(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        expectedVersion: (fulfillment['version'] as num?)?.toInt() ?? 0,
+      ),
+      _copy.orderCompletedSuccess,
+    );
+  }
+
   void _seedOrderInputs(Map<String, dynamic> detail) {
     _feeController.clear();
     _quoteNoteController.clear();
@@ -682,6 +821,10 @@ class _DirectOrderCashierScreenState
       'quoted',
       'awaiting_payment_review',
       'approved',
+      'preparing',
+      'ready',
+      'dispatched',
+      'completed',
     ];
     return Column(
       children: [
@@ -728,7 +871,11 @@ class _DirectOrderCashierScreenState
               itemBuilder: (context, index) {
                 final row = _requests[index];
                 final id = row['id']?.toString() ?? '';
-                final state = row['state']?.toString() ?? '';
+                final requestState = row['state']?.toString() ?? '';
+                final state =
+                    row['fulfillment_status']?.toString().isNotEmpty == true
+                    ? row['fulfillment_status'].toString()
+                    : requestState;
                 return ListTile(
                   selected: id == _selectedId,
                   selectedTileColor: PosColors.selectedRow,
@@ -778,6 +925,9 @@ class _DirectOrderCashierScreenState
     final quote = _activeQuote;
     final financial = _detail?['financial'];
     final state = request['state']?.toString() ?? '';
+    final fulfillment = _map(_detail?['fulfillment']);
+    final fulfillmentStatus = fulfillment['status']?.toString() ?? '';
+    final displayState = fulfillmentStatus.isEmpty ? state : fulfillmentStatus;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -789,7 +939,7 @@ class _DirectOrderCashierScreenState
               '#${request['reference_code'] ?? ''}',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
-            Chip(label: Text(_copy.stateLabel(state))),
+            Chip(label: Text(_copy.stateLabel(displayState))),
           ],
         ),
         const SizedBox(height: 12),
@@ -963,9 +1113,63 @@ class _DirectOrderCashierScreenState
                   value: _vnd(quote['final_total']),
                   strong: true,
                 ),
+                _AmountRow(
+                  label: _copy.includedVat,
+                  value: _vnd(
+                    _number(quote['menu_vat']) +
+                        _number(quote['service_charge_vat']) +
+                        _number(quote['delivery_fee_vat']),
+                  ),
+                ),
               ],
             ),
           ),
+          if (fulfillmentStatus == 'dispatched' ||
+              fulfillmentStatus == 'completed') ...[
+            const SizedBox(height: 12),
+            _Section(
+              title: _copy.stateLabel(fulfillmentStatus),
+              icon: fulfillmentStatus == 'completed'
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.local_shipping_outlined,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_grabUrlController.text.isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final uri = Uri.tryParse(_grabUrlController.text);
+                        if (uri != null) {
+                          launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: Text(_copy.openGrab),
+                    ),
+                  if (fulfillmentStatus == 'dispatched') ...[
+                    const SizedBox(height: 8),
+                    Text(_copy.completeOrderConfirmMessage),
+                    const SizedBox(height: 10),
+                    FilledButton.icon(
+                      key: const Key('direct_order_complete_delivery'),
+                      onPressed: _busy ? null : _completeDelivery,
+                      icon: const Icon(Icons.check_circle_outline_rounded),
+                      label: Text(_copy.completeOrder),
+                    ),
+                  ],
+                  if (fulfillmentStatus == 'completed' &&
+                      fulfillment['completed_at'] != null)
+                    Text(
+                      DateFormat('yyyy-MM-dd HH:mm').format(
+                        DateTime.parse(
+                          fulfillment['completed_at'].toString(),
+                        ).toLocal(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
         if (const {'quoted', 'awaiting_payment_review'}.contains(state)) ...[
           const SizedBox(height: 12),
@@ -977,52 +1181,53 @@ class _DirectOrderCashierScreenState
           const SizedBox(height: 12),
           _buildDriverReceiptSection(),
           const SizedBox(height: 12),
-          _Section(
-            title: _copy.grabTrackingUrl,
-            icon: Icons.delivery_dining,
-            child: Column(
-              children: [
-                TextField(
-                  controller: _grabUrlController,
-                  decoration: InputDecoration(
-                    labelText: _copy.grabTrackingUrl,
-                    hintText: 'https://...',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (DirectOrderDeliveryPaymentMode.fromValue(
-                      financial['delivery_payment_mode'],
-                    ) ==
-                    DirectOrderDeliveryPaymentMode.storePrepaid)
+          if (fulfillmentStatus != 'completed')
+            _Section(
+              title: _copy.grabTrackingUrl,
+              icon: Icons.delivery_dining,
+              child: Column(
+                children: [
                   TextField(
-                    key: const Key('direct_order_actual_grab_fee_input'),
-                    controller: _actualGrabFeeController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: const [DirectOrderVndInputFormatter()],
+                    controller: _grabUrlController,
                     decoration: InputDecoration(
-                      labelText: _copy.actualGrabFeeCashPayout,
-                      suffixText: 'VND',
+                      labelText: _copy.grabTrackingUrl,
+                      hintText: 'https://...',
                     ),
-                  )
-                else
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(_copy.customerPaysDriver),
-                    subtitle: Text(_copy.noStoreCashPayout),
                   ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _busy ? null : _sendGrab,
-                    icon: const Icon(Icons.send_outlined),
-                    label: Text(_copy.sendGrabLink),
+                  const SizedBox(height: 8),
+                  if (DirectOrderDeliveryPaymentMode.fromValue(
+                        financial['delivery_payment_mode'],
+                      ) ==
+                      DirectOrderDeliveryPaymentMode.storePrepaid)
+                    TextField(
+                      key: const Key('direct_order_actual_grab_fee_input'),
+                      controller: _actualGrabFeeController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: const [DirectOrderVndInputFormatter()],
+                      decoration: InputDecoration(
+                        labelText: _copy.actualGrabFeeCashPayout,
+                        suffixText: 'VND',
+                      ),
+                    )
+                  else
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.person_outline),
+                      title: Text(_copy.customerPaysDriver),
+                      subtitle: Text(_copy.noStoreCashPayout),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _sendGrab,
+                      icon: const Icon(Icons.send_outlined),
+                      label: Text(_copy.sendGrabLink),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
         if (!{'approved', 'rejected', 'cancelled'}.contains(state)) ...[
           const SizedBox(height: 12),
@@ -1046,6 +1251,11 @@ class _DirectOrderCashierScreenState
     final proofs = messages
         .where((m) => m['message_type'] == 'payment_proof')
         .toList();
+    final proofReviews = _maps(_detail?['proof_reviews']);
+    final openReviews = proofReviews
+        .where((review) => review['status'] == 'requested')
+        .toList();
+    final openReview = openReviews.isEmpty ? null : openReviews.first;
     return _Section(
       title: _copy.paymentReview,
       icon: Icons.verified_user_outlined,
@@ -1058,6 +1268,31 @@ class _DirectOrderCashierScreenState
               icon: const Icon(Icons.image_outlined),
               label: Text(_copy.viewProof),
             ),
+          if (openReview != null)
+            Card(
+              color: PosColors.warningMuted,
+              child: ListTile(
+                leading: const Icon(Icons.hourglass_top_rounded),
+                title: Text(_copy.replaceProof),
+                subtitle: Text(
+                  '${_copy.proofReviewReason(openReview['reason_code']?.toString() ?? 'other')}'
+                  '${openReview['reason_note']?.toString().isNotEmpty == true ? '\n${openReview['reason_note']}' : ''}',
+                ),
+              ),
+            ),
+          if (proofs.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('direct_order_request_proof_resubmission'),
+              onPressed: _busy || openReview != null
+                  ? null
+                  : () => _requestProofResubmission(
+                      proofs.last['id']?.toString() ?? '',
+                    ),
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text(_copy.requestProofAgain),
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
             _copy.supportingEvidence,
@@ -1122,7 +1357,8 @@ class _DirectOrderCashierScreenState
           const SizedBox(height: 12),
           FilledButton.icon(
             key: const Key('direct_order_verified_approval'),
-            onPressed: _busy || _verifiedPaymentEvidence == null
+            onPressed:
+                _busy || _verifiedPaymentEvidence == null || openReview != null
                 ? null
                 : _showApproval,
             icon: const Icon(Icons.check_circle_outline),

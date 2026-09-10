@@ -23,7 +23,7 @@ actual changes write one old/new audit, while a same-value replay is idempotent.
 |---|---|---|---|
 | `awaiting_quote` | successful public submit | cashier quote -> `quoted`; cashier reject -> `rejected`; customer cancel -> `cancelled`; chat | no legacy order/payment/ticket exists |
 | `quoted` | first or replacement cashier quote | re-quote stays `quoted` with next version; proof commit -> `awaiting_payment_review`; reject/cancel; chat | only one active quote; old active quote becomes superseded |
-| `awaiting_payment_review` | structurally validated proof commit or verified SePay link | verified cashier approve -> `approved`; cashier reject -> `rejected`; chat | customer cancel and re-quote forbidden; an image alone cannot authorize approval and SePay never auto-approves |
+| `awaiting_payment_review` | structurally validated proof commit or verified SePay link | cashier requests proof replacement while state remains unchanged; replacement proof resolves the request; verified cashier approve -> `approved`; cashier reject -> `rejected`; chat | approval is blocked while a proof replacement request is open; customer cancel and re-quote forbidden; an image alone cannot authorize approval and SePay never auto-approves |
 | `approved` | successful atomic manual approval | chat; Grab dispatch and direct kitchen lifecycle | request remains approved while ticket progresses; approve replay returns same financial IDs |
 | `rejected` | cashier rejection from any pre-approval state | no state transition | chat/cancel/quote/approve forbidden |
 | `cancelled` | customer cancel from awaiting_quote/quoted | no state transition | chat/quote/approve/reject forbidden |
@@ -72,6 +72,9 @@ pending -> preparing -> ready -> dispatched -> completed
   lifecycle timestamp.
 - Sending a valid Grab link automatically changes `ready -> dispatched` and
   increments the same version. Other ticket states are not silently changed.
+- Only cashier/admin may confirm `dispatched -> completed`, after checking the
+  Grab delivery result. The operation writes one customer-visible completion
+  message and is idempotent on replay. Kitchen cannot enter `completed`.
 - `completed` and `cancelled` are terminal.
 - This is a direct-only ticket domain. Existing KDS state/providers/functions
   are never used or modified.
@@ -110,6 +113,8 @@ bridge, request/message/audit changes together.
 | approve vs cancel | no state is eligible for both operations: approval requires payment-review while cancel allows only awaiting_quote/quoted. From payment-review, approval may win and cancel must return not-cancellable; no mixed graph |
 | two ticket updates at same version | first increments version; second returns version conflict |
 | dispatch vs explicit ready->dispatched | ticket row lock/version contract permits one state change; replay observes dispatched and must not regress |
+| proof reupload vs approval | the open review row blocks approval; only a replacement bound to that exact quote/review resolves it, after which approval may continue |
+| two completion confirmations | the first moves dispatched to completed and writes one message/audit; replay returns the same completed ticket without duplicate messages |
 | OPEN vs CLOSED from two cashier terminals | storefront row lock serializes both set-to-value calls; each caller uses the returned server state and the last committed call becomes the persisted state |
 | public submit vs cashier CLOSED | storefront share/update locks serialize the boundary; a submit that observes CLOSED creates no request, while a request committed first is an existing request and remains processable |
 

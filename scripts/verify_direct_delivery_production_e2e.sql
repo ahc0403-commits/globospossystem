@@ -44,7 +44,9 @@ DECLARE
   v_ticket uuid;
   v_transaction uuid;
   v_transition jsonb;
+  v_completion_replay jsonb;
   v_status jsonb;
+  v_orders jsonb;
   v_analytics jsonb;
 BEGIN
   IF current_setting('codex.direct_delivery_e2e_confirm') <> 'YES' THEN
@@ -169,12 +171,14 @@ BEGIN
     'rollback-only delivery quote',
     'store_prepaid'
   );
-  PERFORM public.direct_order_public_commit_proof(
+  PERFORM public.direct_order_public_commit_proof_v2(
     v_session,
     v_secret_hash,
     v_request,
+    (v_quote->>'id')::uuid,
     v_store::text || '/' || v_request::text || '/' ||
-      gen_random_uuid()::text || '.jpg'
+      gen_random_uuid()::text || '.jpg',
+    NULL
   );
   INSERT INTO public.sepay_transactions(
     sepay_transaction_id, restaurant_id, gateway, account_number,
@@ -212,12 +216,18 @@ BEGIN
   SELECT jsonb_build_object('version', ticket.version) INTO v_transition
   FROM public.direct_delivery_fulfillment_tickets ticket
   WHERE ticket.id = v_ticket;
-  PERFORM public.direct_delivery_ticket_transition(
-    v_store, v_ticket, (v_transition->>'version')::integer, 'completed'
+  v_transition := public.direct_order_cashier_complete_delivery(
+    v_store, v_request, (v_transition->>'version')::integer
+  );
+  v_completion_replay := public.direct_order_cashier_complete_delivery(
+    v_store, v_request, (v_transition->>'version')::integer
   );
 
-  v_status := public.direct_order_public_status(
+  v_status := public.direct_order_public_status_v2(
     v_session, v_secret_hash, v_request
+  );
+  v_orders := public.direct_order_public_orders_v2(
+    v_session, v_secret_hash, 50
   );
   v_analytics := public.direct_order_analytics(
     v_store,
@@ -227,6 +237,15 @@ BEGIN
 
   IF (v_status->>'state') <> 'approved'
      OR (v_status->'fulfillment'->>'status') <> 'completed'
+     OR (v_status->'fulfillment'->>'completed_at') IS NULL
+     OR NOT (v_status->'quote' ? 'vat_total')
+     OR (v_completion_replay->>'idempotent')::boolean IS DISTINCT FROM true
+     OR NOT EXISTS (
+       SELECT 1
+       FROM jsonb_array_elements(v_orders) order_summary
+       WHERE order_summary->>'request_id' = v_request::text
+         AND order_summary->>'fulfillment_status' = 'completed'
+     )
      OR (v_status->'dispatch'->>'grab_tracking_url') <>
        'https://grab.onelink.me/test/direct-order-production-rollback-e2e'
      OR NOT EXISTS (
@@ -241,6 +260,12 @@ BEGIN
          AND message.sender_type = 'cashier'
          AND message.body = 'Địa chỉ đã được xác nhận.'
      )
+     OR (
+       SELECT count(*) FROM public.direct_order_messages message
+       WHERE message.request_id = v_request
+         AND message.message_type = 'system'
+         AND message.body = 'DIRECT_ORDER_DELIVERY_COMPLETED'
+     ) <> 1
      OR NOT EXISTS (
        SELECT 1 FROM public.orders order_row
        WHERE order_row.id = v_order

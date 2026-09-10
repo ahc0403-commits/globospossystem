@@ -112,4 +112,58 @@ void main() {
     expect(message.body, 'Please call when you arrive.');
     expect(message.createdAt, DateTime.utc(2026, 8, 22, 10, 2));
   });
+
+  test('separate order drafts use separate idempotency keys', () async {
+    SharedPreferences.setMockInitialValues(const {});
+    final clientRequestIds = <String>[];
+    var responseSequence = 0;
+    final service = DirectOrderService(
+      invoker: (body) async {
+        clientRequestIds.add(body['client_request_id'] as String);
+        responseSequence += 1;
+        return {
+          'request_id': responseSequence == 1
+              ? 'dd000000-0000-4000-8000-000000000301'
+              : 'dd000000-0000-4000-8000-000000000302',
+          'reference_code': responseSequence == 1 ? 'DORDER001' : 'DORDER002',
+          'state': 'awaiting_quote',
+          'idempotent': false,
+        };
+      },
+    );
+    final session = DirectOrderSession(
+      id: 'dd000000-0000-4000-8000-000000000303',
+      secret: 'fixture-session-secret',
+      expiresAt: DateTime.now().add(const Duration(hours: 1)),
+    );
+    const address = DirectOrderAddress(
+      customerName: 'Nguyen Van A',
+      customerPhone: '+84901234567',
+      formattedAddress: '123 Nguyen Hue, District 1, HCMC',
+      detailAddress: 'Floor 4, room 401',
+      latitude: 10.775,
+      longitude: 106.704,
+      addressSource: 'search',
+      locationVerified: true,
+    );
+
+    Future<void> submitDraft(String draftId) async {
+      await service.submit(
+        slug: 'multi-order-store',
+        session: session,
+        draftId: draftId,
+        locale: 'en',
+        cart: const {'dd000000-0000-4000-8000-000000000304': 1},
+        itemNotes: const {},
+        address: address,
+        rememberAddress: false,
+      );
+    }
+
+    await submitDraft('tab-a');
+    await submitDraft('tab-b');
+
+    expect(clientRequestIds, hasLength(2));
+    expect(clientRequestIds[0], isNot(clientRequestIds[1]));
+  });
 }

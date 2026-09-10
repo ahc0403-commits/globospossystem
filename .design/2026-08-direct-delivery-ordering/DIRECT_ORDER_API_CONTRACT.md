@@ -5,7 +5,7 @@ Authorities:
 - Edge: `supabase/functions/direct-order-public/index.ts`
 - SQL: `supabase/migrations/20260821130000_direct_delivery_ordering.sql`
   through
-  `supabase/migrations/20260908120000_direct_order_pilot_safety.sql`
+  `supabase/migrations/20260910130000_direct_order_customer_payment_and_status.sql`
 - Flutter customer decode: `lib/features/direct_order/direct_order_models.dart`
 - Catalog enforcement: `supabase/tests/direct_delivery_schema_contract_test.sql`
 
@@ -115,8 +115,9 @@ staff viewer's current app locale. See `DIRECT_ORDER_LOCALE_CONTRACT.md`.
   and system message rows. It never creates a legacy order. Replay of the same
   owning-session `client_request_id` returns the existing identity. The browser
   persists that pending UUID before the first call and reuses it after a lost
-  response. Another session cannot claim or inspect the UUID; a second open
-  request for the owning session conflicts.
+  response. Another session cannot claim or inspect the UUID. Each new order
+  draft receives a new UUID, and one session may own multiple simultaneous
+  orders whose states remain independent.
 - Availability rule: `is_paused=true` (cashier UI: `CLOSED`) rejects only a
   new, non-idempotent submission. It does not cancel or block an already
   submitted request.
@@ -133,6 +134,26 @@ staff viewer's current app locale. See `DIRECT_ORDER_LOCALE_CONTRACT.md`.
   `has_attachment`; exact address is not returned by this action.
 - Side effect/idempotency: updates session `last_seen_at`; otherwise read-only.
 - Errors: unavailable session/request and temporary failure.
+
+### `status_v2`
+
+- Actor/rate: owning session, 60.
+- Input: session ID, secret, request UUID.
+- Output: the V1 status projection plus quote version, pretax and VAT amounts,
+  `vat_total`, delivery payment mode, nullable open proof-review request, and
+  fulfillment version/update/completion timestamps.
+- Side effect/idempotency: updates session `last_seen_at`; otherwise read-only.
+- Errors: unavailable session/request and temporary failure.
+
+### `orders_v2`
+
+- Actor/rate: owning session, 60.
+- Input: session ID and secret. Edge uses the SQL maximum page size of 50.
+- Output: newest-first summaries for only that session's orders, including
+  reference, request and fulfillment states, item count, final total, completion
+  time, and whether payment-proof reupload is pending.
+- Side effect/idempotency: updates session `last_seen_at`; otherwise read-only.
+- Errors: invalid limit, unavailable session, or temporary failure.
 
 ### `message`
 
@@ -164,6 +185,16 @@ staff viewer's current app locale. See `DIRECT_ORDER_LOCALE_CONTRACT.md`.
   random signed upload; non-idempotent and does not approve/lock the order.
 - Errors: invalid proof, unavailable ownership, or temporary upload failure.
 
+### `proof_upload_url_v2`
+
+- Actor/rate: owning session, 10.
+- Input/output: V1 fields plus the exact active/locked `quote_id` and nullable
+  `review_request_id` from `status_v2`.
+- Side effect/idempotency: reserves a random upload only after confirming the
+  quote belongs to the request and either the first proof is allowed or the
+  specified reupload request is still open.
+- Errors: V1 proof errors plus quote/review ownership or state conflict.
+
 ### `proof_commit`
 
 - Actor/rate: owning session, 60.
@@ -179,6 +210,19 @@ staff viewer's current app locale. See `DIRECT_ORDER_LOCALE_CONTRACT.md`.
   message, and a partial unique index prevents duplicate proof rows.
 - Errors: incomplete/missing/invalid proof, state conflict, expired quote,
   unavailable session, or temporary storage failure.
+
+### `proof_commit_v2`
+
+- Actor/rate: owning session, 60.
+- Input: V1 ownership/path fields plus exact `quote_id` and nullable
+  `review_request_id`.
+- Output: `message_id`, state `awaiting_payment_review`, nullable review ID,
+  and boolean `idempotent`.
+- Side effect/idempotency: the first proof locks its exact quote. A requested
+  replacement adds a new proof message and resolves that exact review request
+  without charging or submitting a new order. Exact-path replay returns the
+  same message.
+- Errors: V1 proof errors plus stale or mismatched quote/review conflicts.
 
 ### `staff_proof_url`
 
@@ -221,10 +265,16 @@ for super_admin, staff functions require the requested store in
 | `direct_order_public_cancel(uuid,text,uuid) -> jsonb` | S/session | Request `FOR UPDATE`; terminal transition/message; first call only | not found/not cancellable |
 | `direct_order_public_commit_proof(uuid,text,uuid,text) -> jsonb` | S/session | Request `FOR UPDATE`; locks quote; exact path replay returns one proof message; no approval | proof state/path, quote expired |
 | `direct_order_public_status(uuid,text,uuid) -> jsonb` | S/session | Owning request snapshot; only session last_seen write; retry-safe | session/request not found |
+| `direct_order_public_commit_proof_v2(uuid,text,uuid,uuid,text,uuid) -> jsonb` | S/session | Binds proof to exact quote/review; resolves one requested reupload; exact-path replay is idempotent | proof/quote/review state or ownership |
+| `direct_order_public_status_v2(uuid,text,uuid) -> jsonb` | S/session | Adds VAT, payment mode, open review, and versioned fulfillment to owning snapshot | session/request not found |
+| `direct_order_public_orders_v2(uuid,text,int) -> jsonb` | S/session | Returns up to 50 independent summaries owned by the session; retry-safe | session, limit |
 | `direct_order_admin_upsert_storefront(uuid,text,bool,bool,time,time,numeric,int,numeric,numeric,text,text,text,text,numeric,int,int,bool) -> jsonb` | A/store | Config upsert + audit; accounting gate in DB; idempotent for same values | actor/input/check violations |
 | `direct_order_admin_get_storefront(uuid) -> jsonb` | A/store | Config read with null result object if absent; retry-safe | forbidden |
 | `direct_order_staff_list(uuid,text[],timestamptz,uuid,int) -> jsonb` | C/A store | Cursor queue read, <=100; no proof path; retry-safe | forbidden, limit |
 | `direct_order_staff_detail(uuid,uuid) -> jsonb` | C/A store | Exact address/items/quotes/chat/financial/dispatch read; attachment becomes boolean | forbidden, request not found |
+| `direct_order_staff_list_v2(uuid,text[],int) -> jsonb` | C/A store | Current-day plus still-actionable queue with proof-review and fulfillment summary fields, <=200 | forbidden, limit |
+| `direct_order_staff_detail_v2(uuid,uuid) -> jsonb` | C/A store | Adds full direct fulfillment and sanitized proof-review history to scoped detail | forbidden, request not found |
+| `direct_order_staff_request_proof_resubmission(uuid,uuid,uuid,text,text) -> jsonb` | C/A store | Opens one quote/proof-bound review request and system message; identical open replay is idempotent; approval waits until replacement | proof/review/state conflict |
 | `direct_order_staff_get_availability(uuid) -> jsonb` | C/A store | Returns exactly `configured`, `enabled`, `paused`, `updated_at`; no bank/accounting/map configuration is exposed; retry-safe | forbidden |
 | `direct_order_staff_set_paused(uuid,bool) -> jsonb` | C/A store | Storefront `FOR UPDATE`; changes only pause/operator timestamp fields; actual changes write one old/new audit; same-value replay returns the current state without audit churn | forbidden, invalid input, storefront disabled/unconfigured |
 | `direct_order_staff_quote(uuid,uuid,numeric,text) -> jsonb` | C/A store | Request `FOR UPDATE`; price/menu revalidation; supersedes quote, updates request/message; versioned; an existing request remains quotable while new intake is paused | quote input/state, store enabled/accounting/menu/minimum |
@@ -241,7 +291,8 @@ for super_admin, staff functions require the requested store in
 | `enqueue_direct_order_customer_receipt(uuid,uuid,bool) -> jsonb` | C/A store | First-copy retries reuse batch 1; reprint requires a completed copy and creates explicit history | request not approved, reprint unavailable |
 | `enqueue_direct_order_customer_receipt_after_payment() -> trigger` | S/trigger | Best-effort first customer Bill enqueue after the financial bridge insert; print failures are isolated from payment | none propagated to approval |
 | `direct_delivery_ticket_list(uuid,text[],timestamptz,uuid,int) -> jsonb` | K/C/A store | Direct-only ticket/item cursor read <=200; retry-safe | forbidden, limit |
-| `direct_delivery_ticket_transition(uuid,uuid,int,text) -> jsonb` | K/C/A store | Ticket `FOR UPDATE`; expected-version and allowed edge; increments once | ticket not found/version/transition |
+| `direct_delivery_ticket_transition(uuid,uuid,int,text) -> jsonb` | K/C/A store | Ticket `FOR UPDATE`; expected-version and allowed edge; increments once; kitchen cannot enter `completed` | ticket not found/version/transition |
+| `direct_order_cashier_complete_delivery(uuid,uuid,int) -> jsonb` | C/A store | Confirms a dispatched Grab order completed, writes one customer-visible system message/audit, and returns idempotently on replay | ticket/version/not dispatched |
 | `direct_order_set_dispatch(uuid,uuid,text,numeric) -> jsonb` | C/A store | Requires approved financial; dispatch upsert, ticket state update, fixed Grab-link message/audit; same URL/cost converges | invalid URL/cost, not approved |
 | `direct_order_set_dispatch_with_payment_mode(uuid,uuid,text,numeric) -> jsonb` | C/A store | Store-prepaid delegates to the existing cash payout path; customer-direct stores no fee, variance, or cash-paid timestamp | mode conflict, invalid URL/cost, not approved |
 | `direct_order_analytics(uuid,date,date) -> jsonb` | A/store | Read financial/dispatch/coarse facts <=366 days; privacy-suppressed regions | forbidden, range invalid |
@@ -254,9 +305,10 @@ for super_admin, staff functions require the requested store in
 Function signatures and grants are executable catalog contracts. Adding an
 overload, changing argument identity, exposing an uncontracted execute grant, or
 adding a direct function makes `direct_delivery_schema_contract_test.sql` fail.
-The current exact catalog contains 37 `direct_order_*`/`direct_delivery_*`
+The current exact catalog contains 44 `direct_order_*`/`direct_delivery_*`
 functions, including the isolated cashier arrival cursor, verified-payment,
-customer Bill, delivery-mode, driver-receipt, and cashier availability RPCs.
+customer Bill, delivery-mode, driver-receipt, cashier availability, customer
+order-history, proof-review, and cashier completion RPCs.
 None of these staff RPCs is an Edge public action.
 
 ## Explicit SQL error registry
