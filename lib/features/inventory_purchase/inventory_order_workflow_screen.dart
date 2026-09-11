@@ -887,6 +887,7 @@ class _InventoryOrderWorkflowScreenState
     }
     final order = _map(_detail!['order']);
     final lines = _maps(_detail!['lines']);
+    final documents = _maps(_detail!['documents']);
     return RefreshIndicator(
       onRefresh: () => _loadDetail(_selectedOrderId!),
       child: ListView(
@@ -904,11 +905,11 @@ class _InventoryOrderWorkflowScreenState
           else ...[
             _buildApprovalTimeline(),
             const SizedBox(height: 16),
-            _buildDocumentPanel(order, lines),
+            _buildDocumentPanel(order, lines, documents),
           ],
           if (receivingMode) ...[
             const SizedBox(height: 16),
-            _buildDocumentPanel(order, lines),
+            _buildDocumentPanel(order, lines, documents),
           ],
         ],
       ),
@@ -999,6 +1000,7 @@ class _InventoryOrderWorkflowScreenState
             label: Text(_text(ko: '삭제', en: 'Delete', vi: 'Xóa')),
           ),
           FilledButton.icon(
+            key: const Key('inventory_order_submit'),
             onPressed: _busy ? null : () => _submitDraft(order, version),
             icon: const Icon(Icons.send_outlined),
             label: Text(_text(ko: '승인 요청', en: 'Submit', vi: 'Gửi duyệt')),
@@ -1148,6 +1150,7 @@ class _InventoryOrderWorkflowScreenState
   Widget _buildDocumentPanel(
     Map<String, dynamic> order,
     List<Map<String, dynamic>> lines,
+    List<Map<String, dynamic>> documents,
   ) {
     final status = _string(order['status']);
     final documentStatus = _string(order['document_status'], fallback: 'none');
@@ -1160,9 +1163,9 @@ class _InventoryOrderWorkflowScreenState
           children: [
             Text(
               _text(
-                ko: '승인 발주서 PDF',
-                en: 'Approved order PDF',
-                vi: 'PDF đơn đã duyệt',
+                ko: '승인 발주서',
+                en: 'Approved purchase order',
+                vi: 'Đơn đặt hàng đã duyệt',
               ),
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -1195,19 +1198,24 @@ class _InventoryOrderWorkflowScreenState
                   ),
                 if (documentStatus == 'ready')
                   OutlinedButton.icon(
-                    onPressed: () =>
-                        inventoryPurchaseDocumentService.layoutPurchaseOrderPdf(
-                          order: order,
-                          lines: lines,
-                          l10n: context.l10n,
-                        ),
-                    icon: const Icon(Icons.download_outlined),
+                    key: const Key('inventory_approved_pdf_download'),
+                    onPressed: _busy
+                        ? null
+                        : () => _openApprovedDocument(order, documents),
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
                     label: Text(
-                      _text(
-                        ko: 'PDF 열기/다운로드',
-                        en: 'Open/download PDF',
-                        vi: 'Mở/tải PDF',
-                      ),
+                      _text(ko: 'PDF 저장', en: 'Save PDF', vi: 'Lưu PDF'),
+                    ),
+                  ),
+                if (documentStatus == 'ready')
+                  OutlinedButton.icon(
+                    key: const Key('inventory_approved_image_download'),
+                    onPressed: _busy
+                        ? null
+                        : () => _saveApprovedDocumentImages(order, documents),
+                    icon: const Icon(Icons.image_outlined),
+                    label: Text(
+                      _text(ko: '이미지 저장', en: 'Save image', vi: 'Lưu hình ảnh'),
                     ),
                   ),
               ],
@@ -1223,9 +1231,9 @@ class _InventoryOrderWorkflowScreenState
             const SizedBox(height: 8),
             Text(
               _text(
-                ko: '브랜드 승인과 동시에 발주가 완료되며 승인 PDF가 생성됩니다.',
-                en: 'Brand approval completes the order and generates the approved PDF.',
-                vi: 'Duyệt thương hiệu hoàn tất đơn và tạo PDF đã duyệt.',
+                ko: '브랜드 승인과 동시에 발주가 완료되며, 같은 승인 문서를 PDF 또는 이미지로 저장할 수 있습니다.',
+                en: 'Brand approval completes the order. The same approved document can be saved as PDF or images.',
+                vi: 'Duyệt thương hiệu hoàn tất đơn. Có thể lưu cùng chứng từ đã duyệt dưới dạng PDF hoặc hình ảnh.',
               ),
             ),
           ],
@@ -1851,22 +1859,117 @@ class _InventoryOrderWorkflowScreenState
   }
 
   Future<void> _submitDraft(Map<String, dynamic> order, int version) async {
-    final confirmed = await _confirm(
-      title: _text(ko: '승인 요청', en: 'Submit for approval', vi: 'Gửi duyệt'),
-      message: _text(
-        ko: '제출 후에는 발주 담당자가 수정하거나 삭제할 수 없습니다.',
-        en: 'The orderer cannot edit or delete after submission.',
-        vi: 'Sau khi gửi, người đặt không thể sửa hoặc xóa.',
-      ),
-    );
-    if (!confirmed) return;
     await _runBusy(() async {
+      final warningResult = await _service
+          .fetchInventoryPurchaseQuantityWarnings(
+            purchaseOrderId: _id(order),
+            expectedVersion: version,
+          );
+      if (!mounted) return;
+      final warnings = _maps(warningResult['warnings']);
+      final confirmed = warnings.isEmpty
+          ? await _confirm(
+              title: _text(
+                ko: '승인 요청',
+                en: 'Submit for approval',
+                vi: 'Gửi duyệt',
+              ),
+              message: _text(
+                ko: '제출 후에는 발주 담당자가 수정하거나 삭제할 수 없습니다.',
+                en: 'The orderer cannot edit or delete after submission.',
+                vi: 'Sau khi gửi, người đặt không thể sửa hoặc xóa.',
+              ),
+            )
+          : await _confirmQuantityWarnings(warnings);
+      if (!confirmed || !mounted) return;
       await _service.submitInventoryPurchaseOrder(
         purchaseOrderId: _id(order),
         expectedVersion: version,
+        warningToken: _nullable(warningResult['warning_token']),
       );
       await _load();
     });
+  }
+
+  Future<bool> _confirmQuantityWarnings(
+    List<Map<String, dynamic>> warnings,
+  ) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            key: const Key('inventory_quantity_warning_dialog'),
+            title: Text(
+              _text(
+                ko: '평소보다 많은 발주 수량',
+                en: 'Unusually high order quantity',
+                vi: 'Số lượng đặt hàng cao bất thường',
+              ),
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _text(
+                        ko: '아래 품목은 최근 평소 발주량의 6배 이상입니다. 수량을 다시 확인하세요.',
+                        en: 'The items below are at least 6 times their recent usual order quantity. Check them before continuing.',
+                        vi: 'Các mặt hàng dưới đây cao ít nhất gấp 6 lần lượng đặt hàng thông thường gần đây. Vui lòng kiểm tra lại.',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    for (final warning in warnings)
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.orange,
+                        ),
+                        title: Text(
+                          _string(warning['product_name'], fallback: '-'),
+                        ),
+                        subtitle: Text(
+                          _text(
+                            ko: '평소 ${_quantity(_number(warning['usual_quantity_unit']))} ${_string(warning['order_unit'])} · 입력 ${_quantity(_number(warning['ordered_quantity_unit']))} ${_string(warning['order_unit'])} · ${_quantity(_number(warning['ratio']))}배',
+                            en: 'Usual ${_quantity(_number(warning['usual_quantity_unit']))} ${_string(warning['order_unit'])} · Entered ${_quantity(_number(warning['ordered_quantity_unit']))} ${_string(warning['order_unit'])} · ${_quantity(_number(warning['ratio']))}×',
+                            vi: 'Thông thường ${_quantity(_number(warning['usual_quantity_unit']))} ${_string(warning['order_unit'])} · Đã nhập ${_quantity(_number(warning['ordered_quantity_unit']))} ${_string(warning['order_unit'])} · gấp ${_quantity(_number(warning['ratio']))}',
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                key: const Key('inventory_quantity_warning_edit'),
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(
+                  _text(
+                    ko: '돌아가서 수정',
+                    en: 'Go back and edit',
+                    vi: 'Quay lại chỉnh sửa',
+                  ),
+                ),
+              ),
+              FilledButton(
+                key: const Key('inventory_quantity_warning_continue'),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(
+                  _text(
+                    ko: '확인 후 계속',
+                    en: 'Continue to confirm',
+                    vi: 'Tiếp tục xác nhận',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<void> _storeDecision(
@@ -1996,6 +2099,40 @@ class _InventoryOrderWorkflowScreenState
     } else {
       await _runBusy(publish);
     }
+  }
+
+  Future<void> _openApprovedDocument(
+    Map<String, dynamic> order,
+    List<Map<String, dynamic>> documents,
+  ) async {
+    await _runBusy(() async {
+      await inventoryPurchaseDocumentService.layoutApprovedPurchaseOrderPdf(
+        order: order,
+        documents: documents,
+      );
+    });
+  }
+
+  Future<void> _saveApprovedDocumentImages(
+    Map<String, dynamic> order,
+    List<Map<String, dynamic>> documents,
+  ) async {
+    await _runBusy(() async {
+      final pageCount = await inventoryPurchaseDocumentService
+          .saveApprovedPurchaseOrderImages(order: order, documents: documents);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _text(
+              ko: '발주서 이미지 $pageCount개를 저장했습니다.',
+              en: 'Saved $pageCount purchase order image(s).',
+              vi: 'Đã lưu $pageCount hình ảnh đơn đặt hàng.',
+            ),
+          ),
+        ),
+      );
+    });
   }
 
   Future<void> _editStatement(Map<String, dynamic> draft) async {
@@ -2375,6 +2512,33 @@ class _InventoryOrderWorkflowScreenState
         en: 'Brand approval requires a different approver from the store step.',
         vi: 'Người duyệt thương hiệu phải khác người duyệt cửa hàng.',
       ),
+      'INVENTORY_MANUAL_PURCHASE_QUANTITY_INVALID' ||
+      'INVENTORY_PURCHASE_LINE_QUANTITY_INVALID' => _text(
+        ko: '발주 수량은 0보다 크고 소수점 세 자리 이하여야 합니다.',
+        en: 'Order quantity must be greater than 0 with no more than 3 decimals.',
+        vi: 'Số lượng đặt phải lớn hơn 0 và có tối đa 3 chữ số thập phân.',
+      ),
+      'INVENTORY_PURCHASE_MINIMUM_QUANTITY' => _text(
+        ko: '이 품목의 거래처 최소 발주량을 확인하세요.',
+        en: 'Check the supplier minimum order quantity for this item.',
+        vi: 'Kiểm tra số lượng đặt tối thiểu của nhà cung cấp cho mặt hàng này.',
+      ),
+      'INVENTORY_PURCHASE_QUANTITY_CONFIRMATION_REQUIRED' => _text(
+        ko: '평소보다 많은 수량이 변경되었습니다. 최신 수량을 다시 확인하세요.',
+        en: 'An unusually high quantity changed. Review the latest quantity again.',
+        vi: 'Số lượng cao bất thường đã thay đổi. Vui lòng kiểm tra lại số lượng mới nhất.',
+      ),
+      'INVENTORY_PURCHASE_APPROVED_DOCUMENT_NOT_READY' => _text(
+        ko: '승인 발주서가 아직 준비되지 않았습니다. PDF 상태를 확인하세요.',
+        en: 'The approved purchase order is not ready. Check its PDF status.',
+        vi: 'Đơn đặt hàng đã duyệt chưa sẵn sàng. Hãy kiểm tra trạng thái PDF.',
+      ),
+      'INVENTORY_PURCHASE_DOCUMENT_HASH_MISMATCH' ||
+      'INVENTORY_PURCHASE_IMAGE_EXPORT_EMPTY' => _text(
+        ko: '발주서 파일을 확인하거나 이미지로 변환하지 못했습니다. 다시 시도하세요.',
+        en: 'The purchase order file could not be verified or converted. Try again.',
+        vi: 'Không thể xác minh hoặc chuyển đổi tệp đơn đặt hàng. Vui lòng thử lại.',
+      ),
       'INVENTORY_RECEIPT_MAKER_CHECKER_REQUIRED' => _text(
         ko: '입고 입력에 참여하지 않은 회계 담당자가 최종 검증해야 합니다.',
         en: 'An accountant who did not submit this receipt must verify it.',
@@ -2557,7 +2721,24 @@ class _InventoryPurchaseDraftOrderDialogState
     orElse: () => const {},
   );
 
-  String? _lineError(_DraftLine line) {
+  String _catalogQuantityRule(Map<String, dynamic> item) {
+    final unit = _string(item['order_unit']);
+    if (_allowsFractionalOrderQuantity(item)) {
+      return _text(
+        ko: '소수점 수량 가능 $unit',
+        en: 'Decimal quantity allowed $unit',
+        vi: 'Cho phép số lượng thập phân $unit',
+      );
+    }
+    final minimum = _number(item['min_order_quantity'], fallback: 1);
+    return _text(
+      ko: '최소 ${_quantity(minimum)} $unit',
+      en: 'Minimum ${_quantity(minimum)} $unit',
+      vi: 'Tối thiểu ${_quantity(minimum)} $unit',
+    );
+  }
+
+  String? _quantityError(_DraftLine line) {
     final item = _lineItem(line);
     if (item.isEmpty) {
       return _text(
@@ -2566,16 +2747,28 @@ class _InventoryPurchaseDraftOrderDialogState
         vi: 'Vui lòng tải lại thông tin nguyên liệu.',
       );
     }
+    final quantity = line.quantity;
+    if (quantity == null) {
+      return _text(
+        ko: '0보다 큰 수량을 소수점 세 자리까지 입력하세요. 소수점은 점(.)을 사용합니다.',
+        en: 'Enter a quantity greater than 0 with up to 3 decimals. Use a decimal point (.).',
+        vi: 'Nhập số lượng lớn hơn 0 với tối đa 3 chữ số thập phân. Dùng dấu chấm (.).',
+      );
+    }
     final minimum = _number(item['min_order_quantity'], fallback: 1);
-    if (!line.quantity.isFinite ||
-        line.quantity <= 0 ||
-        line.quantity < minimum) {
+    if (!_allowsFractionalOrderQuantity(item) && quantity < minimum) {
       return _text(
         ko: '최소 발주량은 ${_quantity(minimum)}입니다.',
         en: 'Minimum order is ${_quantity(minimum)}.',
         vi: 'Số lượng tối thiểu là ${_quantity(minimum)}.',
       );
     }
+    return null;
+  }
+
+  String? _lineError(_DraftLine line) {
+    final quantityError = _quantityError(line);
+    if (quantityError != null) return quantityError;
     if (!line.unitPrice.isFinite || line.unitPrice < 0) {
       return _text(
         ko: '단가는 0 이상이어야 합니다.',
@@ -2777,7 +2970,7 @@ class _InventoryPurchaseDraftOrderDialogState
                               (item) => DropdownMenuItem(
                                 value: _id(item),
                                 child: Text(
-                                  '${_productName(item)} · ${_quantity(_number(item['min_order_quantity'], fallback: 1))} ${_string(item['order_unit'])}'
+                                  '${_productName(item)} · ${_catalogQuantityRule(item)}'
                                   '${widget.canEditPrice ? ' · ${_money(item['unit_price'])}' : ''}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -2903,28 +3096,42 @@ class _InventoryPurchaseDraftOrderDialogState
 
   Widget _buildLine(int index, _DraftLine line) {
     final item = _lineItem(line);
-    final minimum = _number(item['min_order_quantity'], fallback: 1);
-    final quantityError = line.quantity < minimum
-        ? _text(
-            ko: '최소 ${_quantity(minimum)}',
-            en: 'Minimum ${_quantity(minimum)}',
-            vi: 'Tối thiểu ${_quantity(minimum)}',
-          )
+    final quantityError = _quantityError(line);
+    final quantity = line.quantity;
+    final usualQuantity = _number(item['usual_order_quantity_unit']);
+    final usualSampleCount = _integer(item['usual_order_sample_count']);
+    final unusualRatio =
+        quantity != null &&
+            usualSampleCount >= 5 &&
+            usualQuantity > 0 &&
+            quantity >= usualQuantity * 6
+        ? quantity / usualQuantity
         : null;
     final priceError = line.unitPrice < 0
         ? _text(ko: '0 이상', en: 'Zero or greater', vi: 'Từ 0 trở lên')
         : null;
     final quantityField = TextFormField(
       key: ValueKey('draft_qty_${line.supplierItemId}'),
-      initialValue: _quantity(line.quantity),
+      initialValue: line.quantityText,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       decoration: InputDecoration(
         labelText: _text(ko: '수량', en: 'Quantity', vi: 'Số lượng'),
         suffixText: _string(item['order_unit']),
         errorText: quantityError,
+        helperText: unusualRatio != null
+            ? _text(
+                ko: '평소 ${_quantity(usualQuantity)}의 ${_quantity(unusualRatio)}배입니다. 상신 전에 다시 확인합니다.',
+                en: '${_quantity(unusualRatio)}× the usual ${_quantity(usualQuantity)}. You will confirm it before submission.',
+                vi: 'Gấp ${_quantity(unusualRatio)} lần mức thông thường ${_quantity(usualQuantity)}. Bạn sẽ xác nhận trước khi gửi.',
+              )
+            : null,
+        helperMaxLines: 2,
+        helperStyle: unusualRatio != null
+            ? const TextStyle(color: Colors.orange)
+            : null,
       ),
       onChanged: (value) => setState(() {
-        line.quantity = _parseNumber(value);
+        line.quantityText = value;
       }),
     );
     final priceField = TextFormField(
@@ -2993,17 +3200,19 @@ class _InventoryPurchaseDraftOrderDialogState
 class _DraftLine {
   _DraftLine({
     required this.supplierItemId,
-    required this.quantity,
+    required double quantity,
     required this.unitPrice,
     this.lineId = '',
     this.memo = '',
-  });
+  }) : quantityText = _quantity(quantity);
 
   final String lineId;
   final String supplierItemId;
-  double quantity;
+  String quantityText;
   double unitPrice;
   final String memo;
+
+  double? get quantity => parseInventoryOrderQuantity(quantityText);
 
   Map<String, dynamic> toJson() => {
     'line_id': lineId.isEmpty ? null : lineId,
@@ -3365,6 +3574,16 @@ double _conversion(Map<String, dynamic> line) {
 }
 
 String _quantity(double value) => NumberFormat('#,##0.###').format(value);
+
+bool _allowsFractionalOrderQuantity(Map<String, dynamic> item) {
+  if (item['allows_fractional_quantity'] == true) return true;
+  return const {
+    'KG',
+    'KGS',
+    'KILOGRAM',
+    'KILOGRAMS',
+  }.contains(_string(item['order_unit']).toUpperCase());
+}
 
 String _money(Object? value) =>
     '${NumberFormat('#,##0', 'vi_VN').format(_number(value))} VND';

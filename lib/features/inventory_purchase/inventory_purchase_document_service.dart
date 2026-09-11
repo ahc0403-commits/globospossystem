@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -12,6 +13,12 @@ import '../../core/services/inventory_service.dart';
 import '../../core/ui/app_fonts.dart';
 import '../../l10n/app_localizations.dart';
 import '../../main.dart';
+
+typedef InventoryPurchasePdfLoader = Future<Uint8List> Function(String path);
+typedef InventoryPurchasePngRasterizer =
+    Stream<Uint8List> Function(Uint8List pdfBytes);
+typedef InventoryPurchasePngSaver =
+    Future<void> Function(String name, Uint8List bytes);
 
 class InventoryPurchasePublishedDocument {
   const InventoryPurchasePublishedDocument({
@@ -26,7 +33,17 @@ class InventoryPurchasePublishedDocument {
 }
 
 class InventoryPurchaseDocumentService {
-  const InventoryPurchaseDocumentService();
+  const InventoryPurchaseDocumentService({
+    InventoryPurchasePdfLoader? pdfLoader,
+    InventoryPurchasePngRasterizer? pngRasterizer,
+    InventoryPurchasePngSaver? pngSaver,
+  }) : _pdfLoader = pdfLoader,
+       _pngRasterizer = pngRasterizer,
+       _pngSaver = pngSaver;
+
+  final InventoryPurchasePdfLoader? _pdfLoader;
+  final InventoryPurchasePngRasterizer? _pngRasterizer;
+  final InventoryPurchasePngSaver? _pngSaver;
 
   Future<InventoryPurchasePublishedDocument> publishApprovedPurchaseOrder({
     required Map<String, dynamic> order,
@@ -100,6 +117,82 @@ class InventoryPurchaseDocumentService {
       onLayout: (_) =>
           buildPurchaseOrderPdf(order: order, lines: lines, l10n: l10n),
     );
+  }
+
+  Future<bool> layoutApprovedPurchaseOrderPdf({
+    required Map<String, dynamic> order,
+    required List<Map<String, dynamic>> documents,
+  }) async {
+    final bytes = await loadApprovedPurchaseOrderPdf(
+      order: order,
+      documents: documents,
+    );
+    final orderNo = _string(
+      order['purchase_order_no'],
+      fallback: 'purchase_order',
+    );
+    return Printing.layoutPdf(
+      name: '$orderNo.pdf',
+      onLayout: (_) async => bytes,
+    );
+  }
+
+  Future<Uint8List> loadApprovedPurchaseOrderPdf({
+    required Map<String, dynamic> order,
+    required List<Map<String, dynamic>> documents,
+  }) async {
+    final snapshotVersion = _num(order['approval_snapshot_version']).toInt();
+    final document = documents.cast<Map<String, dynamic>?>().firstWhere(
+      (row) =>
+          row != null &&
+          _string(row['status']) == 'ready' &&
+          _num(row['snapshot_version']).toInt() == snapshotVersion &&
+          _string(row['storage_path']).isNotEmpty,
+      orElse: () => null,
+    );
+    if (snapshotVersion <= 0 || document == null) {
+      throw StateError('INVENTORY_PURCHASE_APPROVED_DOCUMENT_NOT_READY');
+    }
+    final path = _string(document['storage_path']);
+    final bytes =
+        await (_pdfLoader?.call(path) ??
+            supabase.storage
+                .from('inventory-purchase-documents')
+                .download(path));
+    final expectedHash = _string(document['sha256']);
+    if (expectedHash.isNotEmpty &&
+        sha256.convert(bytes).toString() != expectedHash) {
+      throw StateError('INVENTORY_PURCHASE_DOCUMENT_HASH_MISMATCH');
+    }
+    return bytes;
+  }
+
+  Future<int> saveApprovedPurchaseOrderImages({
+    required Map<String, dynamic> order,
+    required List<Map<String, dynamic>> documents,
+  }) async {
+    final pdfBytes = await loadApprovedPurchaseOrderPdf(
+      order: order,
+      documents: documents,
+    );
+    final rasterizer = _pngRasterizer ?? _rasterApprovedPdf;
+    final saver = _pngSaver ?? _savePng;
+    final baseName = _safeFileName(
+      _string(order['purchase_order_no'], fallback: 'purchase_order'),
+    );
+    final version = _num(order['approval_snapshot_version']).toInt();
+    var page = 0;
+    await for (final pngBytes in rasterizer(pdfBytes)) {
+      page += 1;
+      await saver(
+        '${baseName}_v${version}_p${page.toString().padLeft(2, '0')}',
+        pngBytes,
+      );
+    }
+    if (page == 0) {
+      throw StateError('INVENTORY_PURCHASE_IMAGE_EXPORT_EMPTY');
+    }
+    return page;
   }
 
   Future<Uint8List> buildPurchaseOrderPdf({
@@ -453,6 +546,20 @@ class InventoryPurchaseDocumentService {
 }
 
 const inventoryPurchaseDocumentService = InventoryPurchaseDocumentService();
+
+Stream<Uint8List> _rasterApprovedPdf(Uint8List pdfBytes) async* {
+  await for (final page in Printing.raster(pdfBytes, dpi: 150)) {
+    yield await page.toPng();
+  }
+}
+
+Future<void> _savePng(String name, Uint8List bytes) => FileSaver.instance
+    .saveFile(name: name, bytes: bytes, ext: 'png', mimeType: MimeType.png);
+
+String _safeFileName(String value) {
+  final safe = value.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_');
+  return safe.isEmpty ? 'purchase_order' : safe;
+}
 
 String _money(Object? value) {
   final formatter = NumberFormat('#,###', 'vi_VN');

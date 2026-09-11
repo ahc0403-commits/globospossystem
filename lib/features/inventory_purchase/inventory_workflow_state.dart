@@ -22,3 +22,14 @@ double? parseInventoryQuantity(String text) {
   final value = double.tryParse(cleaned);
   return value != null && value.isFinite && value >= 0 ? value : null;
 }
+
+/// Purchase order quantities are stored as NUMERIC(12,3). Reject ambiguous
+/// decimal commas and excess precision instead of silently changing the value.
+double? parseInventoryOrderQuantity(String text) {
+  final cleaned = text.trim();
+  if (!RegExp(r'^\d+(?:\.\d{1,3})?$').hasMatch(cleaned)) return null;
+  final value = double.tryParse(cleaned);
+  return value != null && value.isFinite && value > 0 && value <= 999999999.999
+      ? value
+      : null;
+}

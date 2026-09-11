@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/inventory_purchase/inventory_order_workflow_screen.dart';
+import 'package:globos_pos_system/features/inventory_purchase/inventory_workflow_state.dart';
 
 const _supplier = <String, dynamic>{
   'id': 'supplier-1',
@@ -25,7 +26,35 @@ const _supplierItem = <String, dynamic>{
   },
 };
 
+const _fractionalSupplierItem = <String, dynamic>{
+  'id': 'supplier-item-kg',
+  'supplier_id': 'supplier-1',
+  'order_unit': 'KG',
+  'min_order_quantity': 1,
+  'allows_fractional_quantity': true,
+  'usual_order_quantity_unit': 2,
+  'usual_order_sample_count': 5,
+  'unit_price': 30000,
+  'is_active': true,
+  'supplier': _supplier,
+  'product': <String, dynamic>{
+    'id': 'product-kg',
+    'name': 'Lettuce',
+    'is_active': true,
+    'is_orderable': true,
+  },
+};
+
 void main() {
+  test('order quantity parser preserves supported decimal precision', () {
+    for (final value in ['0.001', '0.2', '0.5', '0.75', '1.25']) {
+      expect(parseInventoryOrderQuantity(value), double.parse(value));
+    }
+    for (final value in ['', '0', '-1', '0,5', '0.0001', 'NaN']) {
+      expect(parseInventoryOrderQuantity(value), isNull, reason: value);
+    }
+  });
+
   testWidgets(
     'loads supplier items, adds a line, and validates the minimum quantity',
     (tester) async {
@@ -66,7 +95,7 @@ void main() {
         '1',
       );
       await tester.pump();
-      expect(find.text('Tối thiểu 2'), findsOneWidget);
+      expect(find.text('Số lượng tối thiểu là 2.'), findsOneWidget);
       saveButton = tester.widget<FilledButton>(
         find.byKey(const Key('inventory_draft_save')),
       );
@@ -115,6 +144,45 @@ void main() {
       );
     },
   );
+
+  testWidgets('KG quantity accepts 0.5 and shows the six-times warning', (
+    tester,
+  ) async {
+    await _openDialog(tester, loader: (_) async => [_fractionalSupplierItem]);
+    await _selectSupplier(tester);
+    await tester.tap(
+      find.byKey(const Key('inventory_draft_supplier_item_dropdown')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Lettuce').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('inventory_draft_add_ingredient')));
+    await tester.pumpAndSettle();
+
+    final quantity = find.byKey(const ValueKey('draft_qty_supplier-item-kg'));
+    await tester.enterText(quantity, '0.5');
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('inventory_draft_save')))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.enterText(quantity, '12');
+    await tester.pump();
+    expect(find.textContaining('6배'), findsOneWidget);
+
+    await tester.enterText(quantity, '0,5');
+    await tester.pump();
+    expect(find.textContaining('소수점 세 자리'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('inventory_draft_save')))
+          .onPressed,
+      isNull,
+    );
+  });
 
   testWidgets('distinguishes access failure and retries without closing', (
     tester,
