@@ -51,7 +51,14 @@ class PermissionUtils {
   ) => hasPermission(role, extraPermissions, 'inventory_count');
 
   static bool canCreateInventoryPurchaseOrder(String? role) =>
-      role == 'inventory_orderer' || isAdminLike(role);
+      role == 'inventory_orderer' || canManageInventorySupplierPrices(role);
+
+  static bool canManageInventorySupplierPrices(String? role) => const {
+    'admin',
+    'store_admin',
+    'brand_admin',
+    'super_admin',
+  }.contains(role);
 
   static bool canVerifyInventoryReceipt(
     String? role,

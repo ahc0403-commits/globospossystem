@@ -1,0 +1,37 @@
+name: Inventory workflow contract
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/inventory_workflow_all_stores_test.sql'
+      - 'scripts/test_inventory_workflow_all_stores.sh'
+      - 'scripts/tests/inventory_workflow_*.py'
+      - 'scripts/verify_inventory_workflow_all_stores.sql'
+      - 'test/fixtures/inventory_workflow_setup.sql'
+      - '.github/workflows/inventory_workflow_contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/inventory_workflow_all_stores_test.sql'
+      - 'scripts/test_inventory_workflow_all_stores.sh'
+      - 'scripts/tests/inventory_workflow_*.py'
+      - 'scripts/verify_inventory_workflow_all_stores.sql'
+      - 'test/fixtures/inventory_workflow_setup.sql'
+      - '.github/workflows/inventory_workflow_contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  all-store-workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Install disposable database tools
+        run: sudo apt-get update && sudo apt-get install -y postgresql postgresql-contrib
+      - name: Verify roles, approval, receiving and concurrent retries
+        run: bash scripts/test_inventory_workflow_all_stores.sh
