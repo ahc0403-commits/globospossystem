@@ -70,9 +70,15 @@ void main() {
     expect(_text(photo[9]), 'TM');
     expect(_text(photo[10]), 'Photo booth');
     expect(_text(photo[11]), 'Lần');
-    expect(_number(photo[14]), 111111);
+    expect(_number(photo[13]), 111111.11);
+    expect(_number(photo[14]), 111111.11);
     expect(_number(photo[15]), 8);
-    expect(_number(photo[16]), 8889);
+    expect(_number(photo[16]), 8888.89);
+    expect(_number(photo[14]) + _number(photo[16]), 120000);
+    expect(
+      (_number(photo[14]) * _number(photo[15]) / 100 * 100).round() / 100,
+      _number(photo[16]),
+    );
 
     final restaurant = sheet.rows[9];
     expect(_number(restaurant[0]), 2);
@@ -97,6 +103,34 @@ void main() {
     final rows = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows;
     expect(_number(rows[8][0]), 1);
     expect(_number(rows[9][0]), 1);
+  });
+
+  test('keeps the reported 290000 VND Photo receipt arithmetically exact', () {
+    final bytes = buildMisaPendingInvoiceWorkbook([
+      {
+        'source_system': 'photo_objet_moers',
+        'created_at': '2026-09-11T13:54:59Z',
+        'payment_method_snapshot': 'CASH',
+        'line_items_snapshot': [
+          {
+            'display_name': 'Dịch vụ chụp ảnh',
+            'quantity': 1,
+            'paying_amount_inc_tax': 290000,
+          },
+        ],
+      },
+    ]);
+
+    final row = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows[8];
+    expect(_number(row[13]), 268518.52);
+    expect(_number(row[14]), 268518.52);
+    expect(_number(row[15]), 8);
+    expect(_number(row[16]), 21481.48);
+    expect(_number(row[14]) + _number(row[16]), 290000);
+    expect(
+      (_number(row[14]) * _number(row[15]) / 100 * 100).round() / 100,
+      _number(row[16]),
+    );
   });
 
   test('refuses an empty pending queue export', () {

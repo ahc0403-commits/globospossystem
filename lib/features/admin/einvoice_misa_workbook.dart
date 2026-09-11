@@ -146,12 +146,12 @@ _photoAmounts(Map<String, dynamic> line, double quantity) {
     line['paying_amount_inc_tax'] ?? line['AmountAfterTax'],
     fallback: _number(line['unit_price']) * quantity,
   );
-  final supply = (gross / 1.08).roundToDouble();
+  final supply = _roundMoney(gross / 1.08);
   return (
-    unitPrice: (supply / quantity).roundToDouble(),
+    unitPrice: _roundMoney(supply / quantity),
     supplyAmount: supply,
     vatRate: rate,
-    vatAmount: gross - supply,
+    vatAmount: _roundMoney(gross - supply),
   );
 }
 
@@ -212,6 +212,8 @@ double _number(Object? value, {double fallback = 0}) {
   if (value is num) return value.toDouble();
   return double.tryParse(_text(value)) ?? fallback;
 }
+
+double _roundMoney(double value) => (value * 100).roundToDouble() / 100;
 
 DateTime _date(Object? value) =>
     DateTime.tryParse(_text(value)) ?? DateTime.fromMillisecondsSinceEpoch(0);
