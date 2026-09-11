@@ -933,6 +933,9 @@ test('health, backfill, contract, and release proof are independent workflows', 
   assert.match(contract, /Acquire::ForceIPv4=true/);
   assert.match(contract, /Acquire::Retries=3/);
   assert.match(contract, /timeout 3m apt-get/);
+  assert.match(contract, /command -v psql/);
+  assert.match(contract, /for attempt in 1 2/);
+  assert.match(contract, /--fix-missing postgresql-client/);
   assert.doesNotMatch(contract, /subosito\/flutter-action/);
   assert.match(contract, /flutter_linux_3\.41\.6-stable\.tar\.xz/);
   assert.match(contract, /503b3e6b7d352fca5d21b6474eca95ad544d8fc3b053782eab63a360c7fc7569/);

@@ -38,6 +38,11 @@ jobs:
           deno-version: 'v2.7.13'
       - name: Install PostgreSQL client
         run: |
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+
           sudo sed -i \
             's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' \
             /etc/apt/sources.list.d/ubuntu.sources
@@ -48,7 +53,16 @@ jobs:
             -o Acquire::https::Timeout=30
           )
           sudo timeout 3m apt-get "${apt_options[@]}" update
-          sudo timeout 3m apt-get "${apt_options[@]}" install --yes postgresql-client
+          for attempt in 1 2; do
+            if sudo timeout 3m apt-get "${apt_options[@]}" install \
+              --yes --fix-missing postgresql-client; then
+              break
+            fi
+            if [[ "${attempt}" -eq 2 ]]; then
+              exit 1
+            fi
+            sudo apt-get clean
+          done
           psql --version
       - name: Prime SQL test images from Docker Hub
         run: |
