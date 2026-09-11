@@ -1,6 +1,6 @@
 import 'package:excel/excel.dart';
 
-// VND exports allow at most one dong of rounding, never a missing tax line.
+// MISA's discrepancy warning compares VND amounts after rounding to whole dong.
 bool isMisaVatConsistent(double supply, double rate, double vat) =>
     supply.isFinite &&
     rate.isFinite &&
@@ -9,12 +9,61 @@ bool isMisaVatConsistent(double supply, double rate, double vat) =>
     rate >= 0 &&
     rate <= 100 &&
     vat >= 0 &&
-    (supply * rate / 100 - vat).abs() <= 1;
+    _roundVnd(supply * rate / 100) == _roundVnd(vat);
+
+bool isMisaLineTotalConsistent(
+  double quantity,
+  double unitPrice,
+  double totalAmount,
+) =>
+    quantity.isFinite &&
+    unitPrice.isFinite &&
+    totalAmount.isFinite &&
+    quantity > 0 &&
+    unitPrice >= 0 &&
+    totalAmount >= 0 &&
+    _roundVnd(quantity * unitPrice) == _roundVnd(totalAmount);
+
+({double supplyAmount, double vatAmount}) splitMisaGrossAmount(
+  double gross,
+  double vatRate,
+) {
+  final safeGross = gross.isFinite && gross >= 0 ? gross : 0.0;
+  final safeRate = vatRate.isFinite && vatRate >= 0 && vatRate <= 100
+      ? vatRate
+      : 0.0;
+
+  // Source amounts are stored to two decimals, but use progressively finer
+  // precision for a half-dong boundary. This keeps the original gross while
+  // making MISA's rounded VAT comparison exact.
+  for (final scale in const [100, 1000, 10000, 100000, 1000000]) {
+    final grossUnits = (safeGross * scale).round();
+    if ((grossUnits / scale - safeGross).abs() > 0.5 / scale) continue;
+    final idealSupplyUnits = (grossUnits * 100 / (100 + safeRate)).round();
+    for (var offset = 0; offset <= 10; offset++) {
+      for (final supplyUnits
+          in offset == 0
+              ? [idealSupplyUnits]
+              : [idealSupplyUnits - offset, idealSupplyUnits + offset]) {
+        if (supplyUnits < 0 || supplyUnits > grossUnits) continue;
+        final supply = supplyUnits / scale;
+        final vat = (grossUnits - supplyUnits) / scale;
+        if (isMisaVatConsistent(supply, safeRate, vat)) {
+          return (supplyAmount: supply, vatAmount: vat);
+        }
+      }
+    }
+  }
+
+  final supply = safeGross / (1 + safeRate / 100);
+  return (supplyAmount: supply, vatAmount: supply * safeRate / 100);
+}
 
 /// Builds the one-sheet MISA desktop import workbook used by POS operations.
 ///
-/// Photo sales are VAT-inclusive, so their 8% VAT is derived from the gross
-/// amount. Restaurant snapshots already contain VAT-exclusive supply values.
+/// Every receipt is normalized to one VAT-inclusive service row per tax rate.
+/// This preserves the paid total while keeping MISA's quantity, amount, and
+/// VAT arithmetic internally consistent.
 List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
   if (jobs.isEmpty) {
     throw const FormatException('MISA_PENDING_EXPORT_EMPTY');
@@ -53,21 +102,10 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
             'Bán cho người tiêu dùng',
           ]);
 
-    for (final line in lines) {
-      final quantity = _number(line['quantity'], fallback: 1).clamp(1, 999999);
-      final amounts = isPhoto
-          ? _photoAmounts(line, quantity.toDouble())
-          : _restaurantAmounts(line, quantity.toDouble());
-      if (!isMisaVatConsistent(
-            amounts.supplyAmount,
-            amounts.vatRate,
-            amounts.vatAmount,
-          ) ||
-          (!isPhoto &&
-              line['item_type'] == 'wet_tissue_charge' &&
-              amounts.vatRate != 8)) {
-        throw const FormatException('MISA_EXPORT_VAT_MISMATCH');
-      }
+    final preparedLines = _prepareMisaLines(lines, isPhoto: isPhoto);
+    for (final prepared in preparedLines) {
+      final line = prepared.line;
+      final amounts = prepared.amounts;
       sheet.appendRow([
         IntCellValue(invoiceIndex + 1),
         TextCellValue(_invoiceDate(_saleDate(job))),
@@ -92,7 +130,7 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
         TextCellValue(
           _firstText([line['misa_unit_name'], isPhoto ? 'Lần' : 'Phần']),
         ),
-        DoubleCellValue(quantity.toDouble()),
+        const DoubleCellValue(1),
         DoubleCellValue(amounts.unitPrice),
         DoubleCellValue(amounts.supplyAmount),
         DoubleCellValue(amounts.vatRate),
@@ -108,6 +146,59 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
     });
   }
   return workbook.encode()!;
+}
+
+List<
+  ({
+    Map<String, dynamic> line,
+    ({double unitPrice, double supplyAmount, double vatRate, double vatAmount})
+    amounts,
+  })
+>
+_prepareMisaLines(List<Map<String, dynamic>> lines, {required bool isPhoto}) {
+  final grouped = <double, List<Map<String, dynamic>>>{};
+  for (final line in lines) {
+    final rawRate = isPhoto ? 8.0 : _restaurantVatRate(line);
+    final rate = rawRate.isFinite && rawRate >= 0 && rawRate <= 100
+        ? rawRate
+        : 0.0;
+    grouped.putIfAbsent(rate, () => []).add(line);
+  }
+
+  return grouped.entries
+      .map((entry) {
+        final groupedLines = entry.value;
+        final gross = groupedLines.fold<double>(
+          0,
+          (total, line) =>
+              total + _lineGross(line, entry.key, isPhoto: isPhoto),
+        );
+        final split = splitMisaGrossAmount(gross, entry.key);
+        final first = groupedLines.first;
+        final line = <String, dynamic>{
+          ...first,
+          'display_name': isPhoto
+              ? _firstText([first['display_name'], 'Dịch vụ chụp ảnh'])
+              : groupedLines.length == 1
+              ? _firstText([
+                  first['display_name'],
+                  first['label'],
+                  'Dịch vụ ăn uống',
+                ])
+              : 'Dịch vụ ăn uống',
+          'misa_unit_name': 'Lần',
+        };
+        return (
+          line: line,
+          amounts: (
+            unitPrice: split.supplyAmount,
+            supplyAmount: split.supplyAmount,
+            vatRate: entry.key,
+            vatAmount: split.vatAmount,
+          ),
+        );
+      })
+      .toList(growable: false);
 }
 
 const _instructions = <String>[
@@ -139,38 +230,40 @@ const _headers = <String>[
   'Tiền thuế GTGT',
 ];
 
-({double unitPrice, double supplyAmount, double vatRate, double vatAmount})
-_photoAmounts(Map<String, dynamic> line, double quantity) {
-  const rate = 8.0;
-  final gross = _number(
-    line['paying_amount_inc_tax'] ?? line['AmountAfterTax'],
-    fallback: _number(line['unit_price']) * quantity,
+double _restaurantVatRate(Map<String, dynamic> line) {
+  final supply = _number(
+    line['total_amount_ex_tax'] ?? line['AmountWithoutVAT'],
+    fallback:
+        _number(line['unit_price']) * _number(line['quantity'], fallback: 1),
   );
-  final supply = _roundMoney(gross / 1.08);
-  return (
-    unitPrice: _roundMoney(supply / quantity),
-    supplyAmount: supply,
-    vatRate: rate,
-    vatAmount: _roundMoney(gross - supply),
+  final vat = _number(line['vat_amount'] ?? line['VATAmount']);
+  return _number(
+    line['vat_rate'],
+    fallback: supply == 0 ? 0 : vat / supply * 100,
   );
 }
 
-({double unitPrice, double supplyAmount, double vatRate, double vatAmount})
-_restaurantAmounts(Map<String, dynamic> line, double quantity) {
+double _lineGross(
+  Map<String, dynamic> line,
+  double vatRate, {
+  required bool isPhoto,
+}) {
+  final quantity = _number(line['quantity'], fallback: 1).clamp(1, 999999);
+  if (isPhoto) {
+    return _number(
+      line['paying_amount_inc_tax'] ?? line['AmountAfterTax'],
+      fallback: _number(line['unit_price']) * quantity,
+    );
+  }
+  final suppliedGross = line['paying_amount_inc_tax'] ?? line['AmountAfterTax'];
+  if (suppliedGross != null) return _number(suppliedGross);
   final supply = _number(
     line['total_amount_ex_tax'] ?? line['AmountWithoutVAT'],
     fallback: _number(line['unit_price']) * quantity,
   );
-  final vat = _number(line['vat_amount'] ?? line['VATAmount']);
-  return (
-    unitPrice: supply / quantity,
-    supplyAmount: supply,
-    vatRate: _number(
-      line['vat_rate'],
-      fallback: supply == 0 ? 0 : vat / supply * 100,
-    ),
-    vatAmount: vat,
-  );
+  final rawVat = line['vat_amount'] ?? line['VATAmount'];
+  final vat = rawVat == null ? supply * vatRate / 100 : _number(rawVat);
+  return supply + vat;
 }
 
 String _paymentCode(Object? value) {
@@ -213,7 +306,7 @@ double _number(Object? value, {double fallback = 0}) {
   return double.tryParse(_text(value)) ?? fallback;
 }
 
-double _roundMoney(double value) => (value * 100).roundToDouble() / 100;
+int _roundVnd(double value) => value.round();
 
 DateTime _date(Object? value) =>
     DateTime.tryParse(_text(value)) ?? DateTime.fromMillisecondsSinceEpoch(0);

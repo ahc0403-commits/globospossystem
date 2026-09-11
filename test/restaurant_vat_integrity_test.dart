@@ -95,11 +95,26 @@ void main() {
       );
       expect(() => build(export), throwsFormatException);
     });
-    test('blocks the reported arithmetic mismatch, combined=$combined', () {
+    test('repairs the reported arithmetic mismatch, combined=$combined', () {
       final line = _line(299000, 8)..['vat_amount'] = 23600;
       final export = _export([line]);
       expect(export.receipts.single.issues, contains('VAT_AMOUNT_MISMATCH'));
-      expect(() => build(export), throwsFormatException);
+      expect(export.isReadyForDownload, isTrue);
+      final row = Excel.decodeBytes(build(export)).tables.values.single.rows[8];
+      expect(_value(row, 12), 1);
+      expect(_value(row, 13), _value(row, 14));
+      expect(_value(row, 14) + _value(row, 16), 322600);
+      expect(isMisaVatConsistent(_value(row, 14), 8, _value(row, 16)), isTrue);
+    });
+    test('reconciles line totals to the paid receipt, combined=$combined', () {
+      final export = _export([_line(100, 8)], paidGross: 110);
+      expect(export.receipts.single.issues, contains('AMOUNT_MISMATCH'));
+      expect(export.isReadyForDownload, isTrue);
+      final row = Excel.decodeBytes(build(export)).tables.values.single.rows[8];
+      expect(_value(row, 12), 1);
+      expect(_value(row, 13), _value(row, 14));
+      expect(_value(row, 14) + _value(row, 16), 110);
+      expect(isMisaVatConsistent(_value(row, 14), 8, _value(row, 16)), isTrue);
     });
     test(
       'retains actual rates and net discounted bases, combined=$combined',
@@ -124,29 +139,41 @@ void main() {
       },
     );
     test(
-      'preserves rounded source lines when aggregation exceeds tolerance, combined=$combined',
+      'reconciles same-rate VAT totals before export, combined=$combined',
       () {
         final export = _export(
           List.generate(4, (_) => _line(10, 8)..['vat_amount'] = 1.3),
         );
+        expect(export.isReadyForDownload, isTrue);
         final rows = Excel.decodeBytes(
           build(export),
         ).tables.values.single.rows.skip(8).toList();
-        expect(rows, hasLength(4));
-        expect(rows.map((r) => _value(r, 0)).toSet(), {1});
+        expect(rows, hasLength(1));
+        expect(_value(rows.single, 14) + _value(rows.single, 16), 45.2);
+        expect(
+          isMisaVatConsistent(
+            _value(rows.single, 14),
+            8,
+            _value(rows.single, 16),
+          ),
+          isTrue,
+        );
       },
     );
   }
-  test('pending workbook independently rejects invalid arithmetic', () {
-    expect(
-      () => buildMisaPendingInvoiceWorkbook([
+  test('pending workbook independently reconciles invalid arithmetic', () {
+    final row = Excel.decodeBytes(
+      buildMisaPendingInvoiceWorkbook([
         {
           'source_system': 'restaurant_pos',
           'line_items_snapshot': [_line(299000, 8)..['vat_amount'] = 23600],
         },
       ]),
-      throwsFormatException,
-    );
+    ).tables.values.single.rows[8];
+    expect(_value(row, 12), 1);
+    expect(_value(row, 13), _value(row, 14));
+    expect(_value(row, 14) + _value(row, 16), 322600);
+    expect(isMisaVatConsistent(_value(row, 14), 8, _value(row, 16)), isTrue);
   });
 }
 
@@ -165,12 +192,16 @@ Map<String, dynamic> _line(
   'vat_rate': rate,
   'vat_amount': supply * rate / 100,
 };
-RestaurantSalesExport _export(List<Map<String, dynamic>> lines) {
-  final gross = lines.fold<double>(
+RestaurantSalesExport _export(
+  List<Map<String, dynamic>> lines, {
+  double? paidGross,
+}) {
+  final lineGross = lines.fold<double>(
     0,
     (sum, l) =>
         sum + (l['total_amount_ex_tax'] as num) + (l['vat_amount'] as num),
   );
+  final gross = paidGross ?? lineGross;
   return createRestaurantSalesExport({
     'business_date': '2026-09-05',
     'status': 'finalized',

@@ -83,13 +83,14 @@ void main() {
     final restaurant = sheet.rows[9];
     expect(_number(restaurant[0]), 2);
     expect(_text(restaurant[9]), 'CK');
-    expect(_text(restaurant[11]), 'Phần');
-    expect(_number(restaurant[13]), 50000);
+    expect(_text(restaurant[11]), 'Lần');
+    expect(_number(restaurant[12]), 1);
+    expect(_number(restaurant[13]), 100000);
     expect(_number(restaurant[14]), 100000);
     expect(_number(restaurant[16]), 8000);
   });
 
-  test('keeps all lines from one job under one invoice sequence', () {
+  test('combines equal-rate lines into one warning-free invoice row', () {
     final bytes = buildMisaPendingInvoiceWorkbook([
       {
         'source_system': 'globos_pos',
@@ -101,8 +102,13 @@ void main() {
       },
     ]);
     final rows = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows;
+    expect(rows, hasLength(9));
     expect(_number(rows[8][0]), 1);
-    expect(_number(rows[9][0]), 1);
+    expect(_number(rows[8][12]), 1);
+    expect(_number(rows[8][13]), 300);
+    expect(_number(rows[8][14]), 300);
+    expect(_number(rows[8][15]), 0);
+    expect(_number(rows[8][16]), 0);
   });
 
   test('keeps the reported 290000 VND Photo receipt arithmetically exact', () {
@@ -131,6 +137,96 @@ void main() {
       (_number(row[14]) * _number(row[15]) / 100 * 100).round() / 100,
       _number(row[16]),
     );
+  });
+
+  test('matches every MISA arithmetic check used by the Photo workbook', () {
+    final bytes = buildMisaPendingInvoiceWorkbook([
+      for (final gross in [70000, 200000, 290000, 340000])
+        {
+          'source_system': 'photo_objet_moers',
+          'created_at': '2026-09-11T13:54:59Z',
+          'line_items_snapshot': [
+            {
+              'display_name': 'Dịch vụ chụp ảnh',
+              'quantity': 1,
+              'paying_amount_inc_tax': gross,
+            },
+          ],
+        },
+    ]);
+
+    final rows = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows.skip(8);
+    for (final row in rows) {
+      final quantity = _number(row[12]).toDouble();
+      final unitPrice = _number(row[13]).toDouble();
+      final totalAmount = _number(row[14]).toDouble();
+      final vatRate = _number(row[15]).toDouble();
+      final vatAmount = _number(row[16]).toDouble();
+      expect(
+        isMisaLineTotalConsistent(quantity, unitPrice, totalAmount),
+        isTrue,
+      );
+      expect(isMisaVatConsistent(totalAmount, vatRate, vatAmount), isTrue);
+    }
+
+    final headers = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows[7];
+    expect(
+      headers.map(_text).where((value) => value.contains('chiết khấu')),
+      isEmpty,
+    );
+  });
+
+  test('rejects the original whole-dong VAT mismatch', () {
+    expect(isMisaVatConsistent(268519, 8, 21481), isFalse);
+  });
+
+  test('rejects a quantity times unit-price mismatch', () {
+    expect(isMisaLineTotalConsistent(2, 100, 199), isFalse);
+  });
+
+  test('repairs quantity, line VAT, and same-rate total mismatches', () {
+    final bytes = buildMisaPendingInvoiceWorkbook([
+      {
+        'source_system': 'restaurant_pos',
+        'line_items_snapshot': [
+          for (var index = 0; index < 4; index++)
+            {
+              'display_name': 'Food',
+              'quantity': 2,
+              'unit_price': 100,
+              'total_amount_ex_tax': 10,
+              'vat_rate': 8,
+              'vat_amount': 1.3,
+            },
+        ],
+      },
+    ]);
+
+    final rows = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows;
+    expect(rows, hasLength(9));
+    final row = rows[8];
+    final quantity = _number(row[12]).toDouble();
+    final unitPrice = _number(row[13]).toDouble();
+    final supply = _number(row[14]).toDouble();
+    final rate = _number(row[15]).toDouble();
+    final vat = _number(row[16]).toDouble();
+    expect(quantity, 1);
+    expect(supply + vat, closeTo(45.2, 0.000001));
+    expect(isMisaLineTotalConsistent(quantity, unitPrice, supply), isTrue);
+    expect(isMisaVatConsistent(supply, rate, vat), isTrue);
+  });
+
+  test('preserves VND gross amounts while producing MISA-consistent VAT', () {
+    for (final rate in [0.0, 5.0, 8.0, 10.0]) {
+      final maxGross = rate == 8 ? 1000000 : 100000;
+      for (var gross = 1; gross <= maxGross; gross++) {
+        final split = splitMisaGrossAmount(gross.toDouble(), rate);
+        if ((split.supplyAmount + split.vatAmount - gross).abs() > 0.000001 ||
+            !isMisaVatConsistent(split.supplyAmount, rate, split.vatAmount)) {
+          fail('MISA split failed for gross=$gross rate=$rate');
+        }
+      }
+    }
   });
 
   test('refuses an empty pending queue export', () {
