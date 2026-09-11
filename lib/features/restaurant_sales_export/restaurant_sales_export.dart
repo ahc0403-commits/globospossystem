@@ -1,5 +1,10 @@
 import '../admin/einvoice_misa_workbook.dart';
 
+const _misaReconciledIssues = {'VAT_AMOUNT_MISMATCH', 'AMOUNT_MISMATCH'};
+
+bool _isBlockingRestaurantIssue(String issue) =>
+    !_misaReconciledIssues.contains(issue);
+
 class RestaurantSalesLineItem {
   const RestaurantSalesLineItem({
     required this.name,
@@ -101,8 +106,11 @@ class RestaurantSalesExport {
       receipts.fold(0, (total, receipt) => total + receipt.supplyAmount);
   double get vatAmount =>
       receipts.fold(0, (total, receipt) => total + receipt.vatAmount);
-  int get blockingIssueCount =>
-      receipts.fold(0, (total, receipt) => total + receipt.issues.length);
+  int get blockingIssueCount => receipts.fold(
+    0,
+    (total, receipt) =>
+        total + receipt.issues.where(_isBlockingRestaurantIssue).length,
+  );
   bool get isReadyForDownload => receiptCount > 0 && blockingIssueCount == 0;
 }
 
@@ -460,55 +468,57 @@ List<int> buildRestaurantSalesWorkbook(RestaurantSalesExport export) {
 }
 
 /// Keep one invoice number per receipt, and one summary per actual tax rate.
-/// Use the settled net amounts, including any allocated discounts.
+/// Reconcile each tax-rate group to the paid receipt total before MISA export.
 Map<String, dynamic> buildRestaurantMisaJob(RestaurantSalesReceipt receipt) {
   if (receipt.lineItems.isEmpty ||
-      receipt.issues.isNotEmpty ||
-      (receipt.supplyAmount + receipt.vatAmount - receipt.grossSales).abs() >
-          1) {
+      receipt.issues.any(_isBlockingRestaurantIssue)) {
     throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
   }
   final groups = <double, List<RestaurantSalesLineItem>>{};
   for (final line in receipt.lineItems) {
-    if (!isMisaVatConsistent(line.supplyAmount, line.vatRate, line.vatAmount) ||
-        (line.itemType == 'wet_tissue_charge' && line.vatRate != 8)) {
+    if (line.itemType == 'wet_tissue_charge' && line.vatRate != 8) {
       throw const FormatException('MISA_EXPORT_VAT_MISMATCH');
     }
     groups.putIfAbsent(line.vatRate, () => []).add(line);
   }
+  final sourceGross = <double, double>{
+    for (final entry in groups.entries)
+      entry.key: entry.value.fold<double>(
+        0,
+        (sum, line) => sum + line.grossAmount,
+      ),
+  };
+  final sourceGrossTotal = sourceGross.values.fold<double>(
+    0,
+    (sum, value) => sum + value,
+  );
   final lines = <Map<String, dynamic>>[];
-  for (final entry in groups.entries) {
-    final supply = entry.value.fold<double>(
-      0,
-      (sum, line) => sum + line.supplyAmount,
-    );
-    final vat = entry.value.fold<double>(
-      0,
-      (sum, line) => sum + line.vatAmount,
-    );
-    if (isMisaVatConsistent(supply, entry.key, vat)) {
-      lines.add({
-        'display_name': 'Dịch vụ ăn uống',
-        'misa_unit_name': 'Lần',
-        'quantity': 1,
-        'total_amount_ex_tax': supply,
-        'vat_rate': entry.key,
-        'vat_amount': vat,
-      });
-    } else {
-      // Preserve independently rounded source lines if grouping would exceed
-      // the one-dong arithmetic tolerance. Never change tax to force a total.
-      for (final line in entry.value) {
-        lines.add({
-          'display_name': line.name,
-          'misa_unit_name': 'Lần',
-          'quantity': 1,
-          'total_amount_ex_tax': line.supplyAmount,
-          'vat_rate': line.vatRate,
-          'vat_amount': line.vatAmount,
-        });
-      }
-    }
+  var allocatedGross = 0.0;
+  final entries = groups.entries.toList(growable: false);
+  for (var index = 0; index < entries.length; index++) {
+    final entry = entries[index];
+    final rawRemainingGross = receipt.grossSales - allocatedGross;
+    final remainingGross = rawRemainingGross > 0 ? rawRemainingGross : 0.0;
+    final gross = index == entries.length - 1
+        ? remainingGross
+        : sourceGrossTotal == 0
+        ? 0.0
+        : ((receipt.grossSales *
+                          sourceGross[entry.key]! /
+                          sourceGrossTotal *
+                          100)
+                      .roundToDouble() /
+                  100)
+              .clamp(0, remainingGross)
+              .toDouble();
+    allocatedGross += gross;
+    lines.add({
+      'display_name': 'Dịch vụ ăn uống',
+      'misa_unit_name': 'Lần',
+      'quantity': 1,
+      'paying_amount_inc_tax': gross,
+      'vat_rate': entry.key,
+    });
   }
   final buyerName = receipt.isRedInvoice ? receipt.buyerLegalName : '';
   return {
