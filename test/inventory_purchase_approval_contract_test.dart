@@ -123,6 +123,7 @@ void main() {
     expect(screen, contains('inventory_order_create_draft_dialog'));
     expect(screen, contains('inventory_order_edit_draft_dialog'));
     expect(screen, contains('inventory_order_confirmation_dialog'));
+    expect(screen, contains('inventory_quantity_warning_dialog'));
     expect(screen, contains('inventory_order_text_input_dialog'));
     expect(screen, contains('inventory_receipt_statement_dialog'));
     expect(service, contains("'upsert_inventory_receipt_draft_line'"));
@@ -136,6 +137,10 @@ void main() {
     expect(screen, contains('constraints.maxWidth < 720'));
     expect(screen, contains('Align(alignment: Alignment.centerRight'));
     expect(document, contains("from('inventory-purchase-documents')"));
+    expect(screen, contains('inventory_approved_pdf_download'));
+    expect(screen, contains('inventory_approved_image_download'));
+    expect(document, contains('loadApprovedPurchaseOrderPdf'));
+    expect(document, contains('Printing.raster(pdfBytes, dpi: 150)'));
     expect(screen, isNot(contains('requestInventoryPurchaseDispatch')));
     expect(
       File(
@@ -212,5 +217,44 @@ void main() {
 
     expect(bytes.length, greaterThan(5000));
     expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+  });
+
+  test('approved PDF exports every page as a versioned PNG', () async {
+    final loadedPdf = Uint8List.fromList([37, 80, 68, 70]);
+    final savedNames = <String>[];
+    final savedPages = <Uint8List>[];
+    final service = InventoryPurchaseDocumentService(
+      pdfLoader: (path) async {
+        expect(path, 'store/order/v3.pdf');
+        return loadedPdf;
+      },
+      pngRasterizer: (bytes) async* {
+        expect(bytes, loadedPdf);
+        yield Uint8List.fromList([137, 80, 78, 71, 1]);
+        yield Uint8List.fromList([137, 80, 78, 71, 2]);
+      },
+      pngSaver: (name, bytes) async {
+        savedNames.add(name);
+        savedPages.add(bytes);
+      },
+    );
+
+    final count = await service.saveApprovedPurchaseOrderImages(
+      order: {
+        'purchase_order_no': 'PO/2026 001',
+        'approval_snapshot_version': 3,
+      },
+      documents: [
+        {
+          'snapshot_version': 3,
+          'status': 'ready',
+          'storage_path': 'store/order/v3.pdf',
+        },
+      ],
+    );
+
+    expect(count, 2);
+    expect(savedNames, ['PO_2026_001_v3_p01', 'PO_2026_001_v3_p02']);
+    expect(savedPages, hasLength(2));
   });
 }

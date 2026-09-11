@@ -891,6 +891,17 @@ class InventoryService {
         params: {'p_purchase_order_id': orderId},
       );
 
+  Future<Map<String, dynamic>> fetchInventoryPurchaseQuantityWarnings({
+    required String purchaseOrderId,
+    required int expectedVersion,
+  }) => _rpcMap(
+    'get_inventory_purchase_quantity_warnings',
+    params: {
+      'p_purchase_order_id': purchaseOrderId,
+      'p_expected_version': expectedVersion,
+    },
+  );
+
   Future<Map<String, dynamic>> submitInventoryReceiptBatch(
     Map<String, dynamic> params,
   ) => _rpcMap('submit_inventory_receipt_batch', params: params);
@@ -1001,11 +1012,13 @@ class InventoryService {
   Future<Map<String, dynamic>> submitInventoryPurchaseOrder({
     required String purchaseOrderId,
     required int expectedVersion,
+    String? warningToken,
   }) => _rpcMap(
     'submit_inventory_purchase_order',
     params: {
       'p_purchase_order_id': purchaseOrderId,
       'p_expected_version': expectedVersion,
+      'p_warning_token': warningToken,
     },
   );
 

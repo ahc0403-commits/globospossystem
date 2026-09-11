@@ -28,6 +28,7 @@ run_sql() { psql -X -h 127.0.0.1 -p "$INVENTORY_PORT" -d postgres -v ON_ERROR_ST
 run_sql "$INVENTORY_ROOT/test/fixtures/inventory_workflow_setup.sql" >/dev/null
 run_sql "$INVENTORY_TMP/base.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20260911100000_inventory_workflow_all_stores.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20260911150000_inventory_order_quantity_image_warning.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/inventory_workflow_all_stores_test.sql"
 python3 "$INVENTORY_ROOT/scripts/tests/inventory_workflow_concurrency.py" "$INVENTORY_PORT"
 run_sql "$INVENTORY_ROOT/scripts/verify_inventory_workflow_all_stores.sql"

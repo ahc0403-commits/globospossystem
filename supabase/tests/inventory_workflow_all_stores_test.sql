@@ -20,16 +20,32 @@ INSERT INTO public.inventory_suppliers(id,supplier_name) VALUES(test_uuid(201),'
 INSERT INTO public.inventory_items(id,restaurant_id) VALUES(test_uuid(501),test_uuid(101)),(test_uuid(502),test_uuid(102));
 INSERT INTO public.inventory_products(id,restaurant_id,name,inventory_item_id) VALUES
 (test_uuid(301),test_uuid(101),'A item',test_uuid(501)),
-(test_uuid(302),test_uuid(102),'B item',test_uuid(502));
-INSERT INTO public.inventory_supplier_items(id,supplier_id,product_id,order_unit,order_unit_quantity_base,unit_price) VALUES
-(test_uuid(401),test_uuid(201),test_uuid(301),'box',10,100),
-(test_uuid(402),test_uuid(201),test_uuid(302),'box',10,200);
+(test_uuid(302),test_uuid(102),'B item',test_uuid(502)),
+(test_uuid(303),test_uuid(101),'Lettuce',test_uuid(501)),
+(test_uuid(304),test_uuid(101),'Minimum item',test_uuid(501));
+INSERT INTO public.inventory_supplier_items(id,supplier_id,product_id,order_unit,order_unit_quantity_base,min_order_quantity,unit_price) VALUES
+(test_uuid(401),test_uuid(201),test_uuid(301),'box',10,1,100),
+(test_uuid(402),test_uuid(201),test_uuid(302),'box',10,1,200),
+(test_uuid(403),test_uuid(201),test_uuid(303),'KG',1000,1,30000),
+(test_uuid(404),test_uuid(201),test_uuid(304),'box',10,2,100);
 INSERT INTO storage.objects(bucket_id,name,metadata,owner_id) VALUES
 ('inventory-receipt-statements',test_uuid(101)||'/'||test_uuid(701)||'/receipt.pdf','{"mimetype":"application/pdf","size":120}',test_uuid(1)::text),
 ('inventory-receipt-statements',test_uuid(101)||'/'||test_uuid(702)||'/receipt.pdf','{"mimetype":"application/pdf","size":120}',test_uuid(1)::text),
 ('inventory-receipt-statements',test_uuid(101)||'/'||test_uuid(703)||'/receipt.pdf','{"mimetype":"application/pdf","size":120}',test_uuid(2)::text);
 INSERT INTO public.inventory_purchase_orders(purchase_order_no,restaurant_id,supplier_id,status,created_at)
 SELECT 'history-'||i,test_uuid(101),test_uuid(201),'ordered',now() FROM generate_series(1,300) i;
+INSERT INTO public.inventory_purchase_orders(
+  id,purchase_order_no,restaurant_id,supplier_id,status,created_at,updated_at,brand_approved_at
+)
+SELECT test_uuid(609+i),'quantity-baseline-'||i,test_uuid(101),test_uuid(201),'ordered',
+  now()-i*interval '1 day',now()-i*interval '1 day',now()-i*interval '1 day'
+FROM generate_series(1,5) i;
+INSERT INTO public.inventory_purchase_order_lines(
+  purchase_order_id,product_id,supplier_item_id,recommended_quantity_base,
+  ordered_quantity_base,ordered_quantity_unit,order_unit,unit_price,supply_amount,tax_amount
+)
+SELECT test_uuid(609+i),test_uuid(303),test_uuid(403),0,2000,2,'KG',30000,60000,0
+FROM generate_series(1,5) i;
 INSERT INTO public.inventory_purchase_orders(id,purchase_order_no,restaurant_id,supplier_id,status,created_at)
 VALUES(test_uuid(601),'old-pending',test_uuid(101),test_uuid(201),'submitted','2020-01-01');
 CREATE FUNCTION public.test_expect_error(p_sql text,p_error text) RETURNS void LANGUAGE plpgsql AS $$
@@ -70,14 +86,21 @@ BEGIN
   PERFORM public.test_expect_error(format('SELECT public.bulk_update_inventory_supplier_prices(%L,%L::jsonb,false)',test_uuid(101),'[]'), 'INVENTORY_PRICE_IMPORT_FORBIDDEN');
 
   page:=public.get_inventory_order_catalog(test_uuid(101));
-  ASSERT jsonb_array_length(page->'items')=1;
+  ASSERT jsonb_array_length(page->'items')=3;
   ASSERT NOT ((page->'items'->0) ? 'unit_price');
+  ASSERT EXISTS(
+    SELECT 1 FROM jsonb_array_elements(page->'items') item
+    WHERE item->>'id'=test_uuid(403)::text
+      AND (item->>'allows_fractional_quantity')::boolean
+      AND (item->>'usual_order_quantity_unit')::numeric=2
+      AND (item->>'usual_order_sample_count')::int=5
+  ), 'KG item must expose decimal capability and usual quantity without price';
   PERFORM public.test_expect_error(format('SELECT public.get_inventory_order_catalog(%L)',test_uuid(102)), 'INVENTORY_PURCHASE_FORBIDDEN');
   page:=public.get_inventory_workflow_orders(test_uuid(101),ARRAY['submitted'],false,0,80);
   ASSERT jsonb_array_length(page->'orders')=1 AND page->'orders'->0->>'id'=test_uuid(601)::text;
-  ASSERT (page->'counts'->>'ordered')::int=300;
+  ASSERT (page->'counts'->>'ordered')::int=305;
   page:=public.get_inventory_workflow_orders(test_uuid(101),ARRAY['ordered'],false,240,80);
-  ASSERT jsonb_array_length(page->'orders')=60 AND (page->>'total')::int=300;
+  ASSERT jsonb_array_length(page->'orders')=65 AND (page->>'total')::int=305;
   -- Actual database role checks, rather than string matching the source.
   lines:=jsonb_build_array(jsonb_build_object('supplier_item_id',test_uuid(401),'ordered_quantity_unit',2,'unit_price',1));
   po:=public.create_manual_inventory_purchase_order(test_uuid(101),test_uuid(201),lines,current_date,NULL);
@@ -87,6 +110,42 @@ BEGIN
   ASSERT (detail->'lines'->0->>'unit_price')::numeric=100, 'Orderer cannot choose master price';
   ASSERT NOT ((detail->'lines'->0) ? 'recommendation_snapshot');
   ASSERT (SELECT count(*) FROM public.inventory_purchase_order_lines)=0, 'Raw recommendation snapshot is not exposed';
+  PERFORM public.test_expect_error(format('SELECT public.create_manual_inventory_purchase_order(%L,%L,%L::jsonb,current_date,NULL)',
+    test_uuid(101),test_uuid(201),jsonb_build_array(jsonb_build_object('supplier_item_id',test_uuid(404),'ordered_quantity_unit',1))),
+    'INVENTORY_PURCHASE_MINIMUM_QUANTITY');
+  PERFORM public.test_expect_error(format('SELECT public.create_manual_inventory_purchase_order(%L,%L,%L::jsonb,current_date,NULL)',
+    test_uuid(101),test_uuid(201),jsonb_build_array(jsonb_build_object('supplier_item_id',test_uuid(403),'ordered_quantity_unit',0.0001))),
+    'INVENTORY_MANUAL_PURCHASE_QUANTITY_INVALID');
+  po2:=public.create_manual_inventory_purchase_order(test_uuid(101),test_uuid(201),
+    jsonb_build_array(jsonb_build_object('supplier_item_id',test_uuid(403),'ordered_quantity_unit',0.5)),current_date,NULL);
+  detail:=public.get_inventory_workflow_detail(po2.id);
+  ASSERT (detail->'lines'->0->>'ordered_quantity_unit')::numeric=0.5;
+  ASSERT (detail->'lines'->0->>'ordered_quantity_base')::numeric=500;
+  ASSERT (detail->'order'->>'total_supply_amount')::numeric=15000;
+  po:=public.create_repeat_inventory_purchase_order(po2.id,current_date,NULL);
+  ASSERT (public.get_inventory_workflow_detail(po.id)->'lines'->0->>'ordered_quantity_unit')::numeric=0.5,
+    'Repeat order must retain the exact fractional quantity';
+  po:=public.create_manual_inventory_purchase_order(test_uuid(101),test_uuid(201),
+    jsonb_build_array(jsonb_build_object('supplier_item_id',test_uuid(403),'ordered_quantity_unit',11.999)),current_date,NULL);
+  page:=public.get_inventory_purchase_quantity_warnings(po.id,po.row_version);
+  ASSERT jsonb_array_length(page->'warnings')=0,
+    '11.999 must remain below a 12 KG six-times boundary';
+  po:=public.create_manual_inventory_purchase_order(test_uuid(101),test_uuid(201),
+    jsonb_build_array(jsonb_build_object('supplier_item_id',test_uuid(403),'ordered_quantity_unit',12)),current_date,NULL);
+  page:=public.get_inventory_purchase_quantity_warnings(po.id,po.row_version);
+  ASSERT jsonb_array_length(page->'warnings')=1;
+  ASSERT (page->'warnings'->0->>'usual_quantity_unit')::numeric=2;
+  ASSERT (page->'warnings'->0->>'ratio')::numeric=6;
+  PERFORM public.test_expect_error(format('SELECT public.submit_inventory_purchase_order(%L,%s,NULL)',po.id,po.row_version),
+    'INVENTORY_PURCHASE_QUANTITY_CONFIRMATION_REQUIRED');
+  po:=public.submit_inventory_purchase_order(po.id,po.row_version,page->>'warning_token');
+  ASSERT po.status='submitted';
+  ASSERT EXISTS(
+    SELECT 1 FROM public.inventory_purchase_approval_events
+    WHERE purchase_order_id=po.id AND action='submitted'
+      AND metadata->>'quantity_warning_confirmed'='true'
+      AND jsonb_array_length(metadata->'quantity_warnings')=1
+  ), 'Confirmed warning must be audited with submission';
   PERFORM public.test_expect_error(format('SELECT public.create_manual_inventory_purchase_order(%L,%L,%L::jsonb,current_date,NULL)',
     test_uuid(101),test_uuid(201),jsonb_build_array(jsonb_build_object('supplier_item_id',test_uuid(402),'ordered_quantity_unit',1))),
     'INVENTORY_PURCHASE_SUPPLIER_ITEM_NOT_FOUND');

@@ -38,6 +38,11 @@ class _Inventory extends InventoryService {
   int listLoads = 0;
   bool failNext = false;
   final submissions = <Map<String, dynamic>>[];
+  final orderSubmissions = <Map<String, dynamic>>[];
+  Map<String, dynamic> quantityWarnings = {
+    'warning_token': null,
+    'warnings': <Map<String, dynamic>>[],
+  };
   final order = <String, dynamic>{
     'id': 'order-1',
     'purchase_order_no': 'PO-OPERATING',
@@ -131,6 +136,28 @@ class _Inventory extends InventoryService {
     receipt['row_version'] = 2;
     receipt['line_details'] = params['p_lines'];
     return {'receipt_id': 'receipt', 'row_version': 2};
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchInventoryPurchaseQuantityWarnings({
+    required String purchaseOrderId,
+    required int expectedVersion,
+  }) async => Map<String, dynamic>.from(quantityWarnings);
+
+  @override
+  Future<Map<String, dynamic>> submitInventoryPurchaseOrder({
+    required String purchaseOrderId,
+    required int expectedVersion,
+    String? warningToken,
+  }) async {
+    orderSubmissions.add({
+      'purchase_order_id': purchaseOrderId,
+      'expected_version': expectedVersion,
+      'warning_token': warningToken,
+    });
+    order['status'] = 'submitted';
+    order['row_version'] = expectedVersion + 1;
+    return Map<String, dynamic>.from(order);
   }
 }
 
@@ -339,6 +366,57 @@ void main() {
       expect(service.detailLoads, baseline + 1);
       expect(find.text('You have unsaved changes.'), findsNothing);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      router.dispose();
+      await events.close();
+    },
+  );
+
+  testWidgets(
+    'six-times quantity requires explicit confirmation before submit',
+    (tester) async {
+      final service = _Inventory();
+      service.order['status'] = 'draft';
+      service.quantityWarnings = {
+        'warning_token': 'warning-token-v1',
+        'warnings': [
+          {
+            'product_name': 'Lettuce',
+            'usual_quantity_unit': 2,
+            'ordered_quantity_unit': 12,
+            'order_unit': 'KG',
+            'ratio': 6,
+          },
+        ],
+      };
+      final events = StreamController<PosLiveEvent>.broadcast();
+      final router = await _mount(tester, service, events);
+
+      await tester.tap(find.byKey(const Key('inventory_order_submit')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('inventory_quantity_warning_dialog')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Lettuce'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const Key('inventory_quantity_warning_edit')),
+      );
+      await tester.pumpAndSettle();
+      expect(service.orderSubmissions, isEmpty);
+
+      await tester.tap(find.byKey(const Key('inventory_order_submit')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('inventory_quantity_warning_continue')),
+      );
+      await tester.pumpAndSettle();
+      expect(service.orderSubmissions, hasLength(1));
+      expect(
+        service.orderSubmissions.single['warning_token'],
+        'warning-token-v1',
+      );
+
       await tester.pumpWidget(const SizedBox.shrink());
       router.dispose();
       await events.close();
