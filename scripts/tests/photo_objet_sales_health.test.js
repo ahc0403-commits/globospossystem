@@ -1013,7 +1013,7 @@ test('all external GitHub Actions are pinned to full commits with release labels
     }
   }
 
-  assert.equal(externalActionCount, 19, 'all expected external Actions must be checked');
+  assert.equal(externalActionCount, 20, 'all expected external Actions must be checked');
 });
 
 test('Flutter SDK archives are official, versioned, and checksum verified', () => {

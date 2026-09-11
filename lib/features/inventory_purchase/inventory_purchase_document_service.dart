@@ -301,6 +301,12 @@ class InventoryPurchaseDocumentService {
             ),
           ],
           pw.SizedBox(height: 18),
+          if (_string(order['urgent_approval_reason']).isNotEmpty)
+            pw.Text(
+              '긴급 승인 / URGENT APPROVAL / DUYỆT KHẨN CẤP\n'
+              '매장 승인 생략 / Store approval skipped / Bỏ bước duyệt cửa hàng\n'
+              '${_string(order['urgent_approval_reason'])}',
+            ),
           pw.Text(
             '승인 이력 / APPROVAL HISTORY',
             style: pw.TextStyle(

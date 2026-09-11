@@ -865,6 +865,66 @@ class InventoryService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> fetchInventoryWorkflowPage({
+    String? storeId,
+    List<String>? statuses,
+    bool mineOnly = false,
+    int offset = 0,
+    int limit = 80,
+  }) => _rpcMap(
+    'get_inventory_workflow_orders',
+    params: {
+      'p_store_id': storeId,
+      'p_statuses': statuses,
+      'p_mine_only': mineOnly,
+      'p_offset': offset,
+      'p_limit': limit,
+    },
+  );
+
+  Future<Map<String, dynamic>> fetchInventoryOrderCatalog(String storeId) =>
+      _rpcMap('get_inventory_order_catalog', params: {'p_store_id': storeId});
+
+  Future<Map<String, dynamic>> fetchInventoryWorkflowDetail(String orderId) =>
+      _rpcMap(
+        'get_inventory_workflow_detail',
+        params: {'p_purchase_order_id': orderId},
+      );
+
+  Future<Map<String, dynamic>> submitInventoryReceiptBatch(
+    Map<String, dynamic> params,
+  ) => _rpcMap('submit_inventory_receipt_batch', params: params);
+
+  Future<Map<String, dynamic>> updateInventoryReceiptMetadataV2(
+    Map<String, dynamic> params,
+  ) => _rpcMap('update_inventory_receipt_metadata_v2', params: params);
+
+  Future<Map<String, dynamic>> urgentApproveInventoryOrder({
+    required String orderId,
+    required int version,
+    required String reason,
+  }) => _rpcMap(
+    'urgent_approve_inventory_purchase_order',
+    params: {
+      'p_purchase_order_id': orderId,
+      'p_expected_version': version,
+      'p_reason': reason,
+    },
+  );
+
+  Future<Map<String, dynamic>> restoreReturnedInventoryDraft({
+    required String orderId,
+    required int version,
+    required String reason,
+  }) => _rpcMap(
+    'restore_returned_inventory_draft',
+    params: {
+      'p_purchase_order_id': orderId,
+      'p_expected_version': version,
+      'p_reason': reason,
+    },
+  );
+
   Future<List<Map<String, dynamic>>> fetchInventoryPurchaseWorkflowOrders({
     required String storeId,
     int limit = 80,
@@ -1037,6 +1097,10 @@ class InventoryService {
       'p_memo': memo,
     },
   );
+
+  Future<String> inventoryReceiptStatementUrl(String path) => supabase.storage
+      .from('inventory-receipt-statements')
+      .createSignedUrl(path, 300);
 
   Future<String> uploadInventoryReceiptStatement({
     required String storeId,

@@ -116,7 +116,8 @@ void main() {
     expect(screen, contains('deleteInventoryPurchaseOrderDraft'));
     expect(screen, contains('storeDecideInventoryPurchaseOrder'));
     expect(screen, contains('brandDecideInventoryPurchaseOrder'));
-    expect(screen, contains('_queueReceiptAutosave'));
+    expect(screen, contains('submitInventoryReceiptBatch'));
+    expect(screen, isNot(contains('_queueReceiptAutosave')));
     expect(screen, contains('verifyInventoryReceipt'));
     expect(screen, contains('parseSupplierPriceImportWorkbook'));
     expect(screen, contains('inventory_order_create_draft_dialog'));

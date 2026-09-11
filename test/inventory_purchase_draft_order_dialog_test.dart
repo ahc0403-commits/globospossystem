@@ -74,6 +74,48 @@ void main() {
     },
   );
 
+  testWidgets(
+    'orderer can select sanitized items without seeing or editing a master price',
+    (tester) async {
+      final sanitized = Map<String, dynamic>.from(_supplierItem)
+        ..remove('unit_price');
+      await _openDialog(
+        tester,
+        locale: const Locale('en'),
+        canEditPrice: false,
+        loader: (_) async => [sanitized],
+      );
+      await _selectSupplier(tester);
+      await tester.tap(
+        find.byKey(const Key('inventory_draft_supplier_item_dropdown')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('VND'), findsNothing);
+      await tester.tap(find.textContaining('Thịt bò').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('inventory_draft_add_ingredient')));
+      await tester.pumpAndSettle();
+      final price = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('draft_price_supplier-item-1')),
+      );
+      expect(price.initialValue, isEmpty);
+      final field = tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const ValueKey('draft_price_supplier-item-1')),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(field.readOnly, isTrue);
+      expect(find.text('Set on save'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('inventory_draft_save')))
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
   testWidgets('distinguishes access failure and retries without closing', (
     tester,
   ) async {
@@ -107,6 +149,7 @@ Future<void> _openDialog(
   WidgetTester tester, {
   required InventoryPurchaseSupplierItemLoader loader,
   Locale locale = const Locale('ko'),
+  bool canEditPrice = true,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(1100, 900);
@@ -132,6 +175,7 @@ Future<void> _openDialog(
                   suppliers: const [_supplier],
                   supplierItems: const [],
                   loadSupplierItems: loader,
+                  canEditPrice: canEditPrice,
                 ),
               ),
               child: const Text('open'),
