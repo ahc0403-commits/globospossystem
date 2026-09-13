@@ -30,6 +30,10 @@ const _superAdminScrollPadding = EdgeInsets.only(bottom: 96);
 const _superAdminScrollPhysics = AlwaysScrollableScrollPhysics(
   parent: ClampingScrollPhysics(),
 );
+const _superAdminContentFirstItemKeys = <Key>[
+  Key('super_admin_nav_reports'),
+  Key('super_admin_nav_sales_tax_report'),
+];
 
 class _SuperAdminHierarchyCopy {
   _SuperAdminHierarchyCopy(BuildContext context)
@@ -142,6 +146,9 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
     final items = groups.expand((group) => group.items).toList(growable: false);
     final safeIndex = _tabIndex.clamp(0, tabs.length - 1);
     final selected = items[safeIndex];
+    final usesContentFirstLayout = _superAdminContentFirstItemKeys.contains(
+      selected.itemKey,
+    );
 
     return ToastSidebar(
       key: const Key('admin_root'),
@@ -268,10 +275,12 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
 
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: contextHeader,
-              ),
+              if (!usesContentFirstLayout)
+                Padding(
+                  key: const Key('super_admin_context_header'),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: contextHeader,
+                ),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -2608,9 +2617,13 @@ class _AllReportsTabState extends State<_AllReportsTab> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final estimatedHeaderHeight = brandRows.isNotEmpty ? 470.0 : 330.0;
+        final compactReport = constraints.maxWidth < 1100;
+        final chartHeight = compactReport ? 180.0 : 220.0;
+        final estimatedHeaderHeight = brandRows.isNotEmpty
+            ? (compactReport ? 454.0 : 484.0)
+            : (compactReport ? 250.0 : 220.0);
         final rawTableHeight = constraints.maxHeight - estimatedHeaderHeight;
-        final tableHeight = rawTableHeight.clamp(320.0, 520.0).toDouble();
+        final tableHeight = rawTableHeight.clamp(180.0, 520.0).toDouble();
 
         return ListView(
           key: const Key('super_admin_reports_scroll'),
@@ -2739,27 +2752,17 @@ class _AllReportsTabState extends State<_AllReportsTab> {
             ),
             const SizedBox(height: 14),
             if (summary != null)
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _summaryCard(
-                    l10n.superAdminTotalRevenue,
-                    '₫${currency.format(summary.totalRevenue)}',
-                  ),
-                  _summaryCard(
-                    l10n.superAdminDineIn,
-                    '₫${currency.format(summary.dineInRevenue)}',
-                  ),
-                  _summaryCard(
-                    l10n.superAdminDelivery,
-                    '₫${currency.format(summary.deliveryRevenue)}',
-                  ),
-                ],
+              _summaryCards(
+                totalLabel: l10n.superAdminTotalRevenue,
+                total: '₫${currency.format(summary.totalRevenue)}',
+                dineInLabel: l10n.superAdminDineIn,
+                dineIn: '₫${currency.format(summary.dineInRevenue)}',
+                deliveryLabel: l10n.superAdminDelivery,
+                delivery: '₫${currency.format(summary.deliveryRevenue)}',
               ),
             if (brandRows.isNotEmpty) ...[
               const SizedBox(height: 12),
-              _BrandRevenueChart(rows: brandRows),
+              _BrandRevenueChart(rows: brandRows, height: chartHeight),
             ],
             const SizedBox(height: 16),
             SizedBox(
@@ -2909,9 +2912,44 @@ class _AllReportsTabState extends State<_AllReportsTab> {
     );
   }
 
-  Widget _summaryCard(String title, String value) {
+  Widget _summaryCards({
+    required String totalLabel,
+    required String total,
+    required String dineInLabel,
+    required String dineIn,
+    required String deliveryLabel,
+    required String delivery,
+  }) {
+    final entries = [
+      (totalLabel, total),
+      (dineInLabel, dineIn),
+      (deliveryLabel, delivery),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columnCount = constraints.maxWidth >= 720
+            ? 3
+            : constraints.maxWidth >= 480
+            ? 2
+            : 1;
+        final cardWidth =
+            (constraints.maxWidth - (columnCount - 1) * 10) / columnCount;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final entry in entries)
+              _summaryCard(entry.$1, entry.$2, width: cardWidth),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _summaryCard(String title, String value, {required double width}) {
     return Container(
-      width: 220,
+      width: width,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface1,
@@ -2927,9 +2965,17 @@ class _AllReportsTabState extends State<_AllReportsTab> {
               fontSize: 12,
             ),
           ),
-          Text(
-            value,
-            style: AppFonts.system(color: AppColors.amber500, fontSize: 30),
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: AppFonts.system(color: AppColors.amber500, fontSize: 30),
+              ),
+            ),
           ),
         ],
       ),
@@ -3010,9 +3056,10 @@ class _RevenueGroupRow {
 }
 
 class _BrandRevenueChart extends StatelessWidget {
-  const _BrandRevenueChart({required this.rows});
+  const _BrandRevenueChart({required this.rows, required this.height});
 
   final List<_BrandRevenueRow> rows;
+  final double height;
 
   double _axisInterval(double maxY) {
     if (maxY <= 0) return 1;
@@ -3048,7 +3095,7 @@ class _BrandRevenueChart extends StatelessWidget {
     final interval = _axisInterval(chartMaxY);
 
     return Container(
-      height: 300,
+      height: height,
       padding: const EdgeInsets.fromLTRB(8, 14, 14, 8),
       decoration: BoxDecoration(
         color: AppColors.surface1,

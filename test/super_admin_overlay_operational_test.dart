@@ -146,6 +146,27 @@ class _InactiveSuperAdminNotifier extends _SuperAdminNotifier {
   }
 }
 
+class _ReportSuperAdminNotifier extends _SuperAdminNotifier {
+  _ReportSuperAdminNotifier() {
+    state = state.copyWith(
+      reportSummary: const SuperAdminReportSummary(
+        totalRevenue: 437273620,
+        dineInRevenue: 436001940,
+        deliveryRevenue: 1271680,
+        rows: [
+          SuperAdminRestaurantReport(
+            storeId: _storeId,
+            restaurantName: 'GLOBOS Nguyễn Huệ',
+            dineIn: 436001940,
+            delivery: 1271680,
+            total: 437273620,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TemplateNotifier extends QcTemplateNotifier {
   _TemplateNotifier() {
     state = const QcTemplateState();
@@ -411,6 +432,72 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reporting surfaces prioritize the full viewport', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1512, 849);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final router = GoRouter(
+      initialLocation: '/super-admin',
+      routes: [
+        GoRoute(
+          path: '/super-admin',
+          builder: (_, __) => const SuperAdminScreen(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((ref) => _AuthNotifier()),
+          superAdminProvider.overrideWith((ref) => _ReportSuperAdminNotifier()),
+          qcTemplateProvider.overrideWith((ref) => _TemplateNotifier()),
+          globalQcTemplatesProvider.overrideWith((ref) async => const []),
+        ],
+        child: MaterialApp.router(
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.build(),
+          locale: const Locale('ko'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('super_admin_context_header')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('super_admin_nav_reports')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('super_admin_context_header')), findsNothing);
+    final tableRegion = find.byKey(
+      const Key('super_admin_reports_table_region'),
+    );
+    expect(tableRegion, findsOneWidget);
+    expect(tester.getBottomRight(tableRegion).dy, lessThanOrEqualTo(849));
+
+    await tester.tap(find.byKey(const Key('super_admin_nav_sales_tax_report')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('super_admin_context_header')), findsNothing);
+    final salesReport = find.byKey(const Key('restaurant_sales_export_screen'));
+    expect(salesReport, findsOneWidget);
+    expect(tester.getTopLeft(salesReport).dy, lessThan(100));
     expect(tester.takeException(), isNull);
   });
 

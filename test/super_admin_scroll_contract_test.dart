@@ -55,6 +55,14 @@ void main() {
     expect(source, contains("Key('super_admin_reports_scroll')"));
     expect(source, contains("Key('super_admin_reports_table_region')"));
     expect(source, contains('final tableHeight = rawTableHeight.clamp'));
+    expect(
+      source,
+      contains('final chartHeight = compactReport ? 180.0 : 220.0'),
+    );
+    expect(
+      source,
+      contains('_BrandRevenueChart(rows: brandRows, height: chartHeight)'),
+    );
     expect(source, contains('String _formatAxisCurrency(double value)'));
     expect(source, contains('String _shortAxisLabel(String value)'));
     expect(source, contains('reservedSize: 62'));
@@ -66,6 +74,25 @@ void main() {
     expect(source, contains('maxLines: 2'));
     expect(source, contains('overflow: TextOverflow.ellipsis'));
   });
+
+  test(
+    'reporting tabs prioritize full-height content over duplicate context',
+    () {
+      final source = readRepoFile(
+        'lib/features/super_admin/super_admin_screen.dart',
+      );
+
+      expect(
+        source,
+        contains('const _superAdminContentFirstItemKeys = <Key>['),
+      );
+      expect(source, contains("Key('super_admin_nav_reports')"));
+      expect(source, contains("Key('super_admin_nav_sales_tax_report')"));
+      expect(source, contains('usesContentFirstLayout'));
+      expect(source, contains('if (!usesContentFirstLayout)'));
+      expect(source, contains("Key('super_admin_context_header')"));
+    },
+  );
 
   test('super admin action headers avoid narrow Row overflow', () {
     final source = readRepoFile(
