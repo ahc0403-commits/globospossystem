@@ -18,6 +18,7 @@ bash test/inventory_purchase_orderer_catalog_sql_test.sh
 
 printf 'CHECK_REPO_STEP=inventory_workflow_sql\n'
 bash scripts/test_inventory_workflow_all_stores.sh
+bash scripts/test_procurement_v2.sh
 
 printf 'CHECK_REPO_STEP=payroll_attendance_sql_api\n'
 bash scripts/test_payroll_attendance_postgrest.sh

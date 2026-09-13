@@ -1,0 +1,20 @@
+name: Procurement v2 contract
+on:
+  pull_request:
+    paths: ['supabase/**', 'scripts/test_procurement*', 'test/fixtures/**', '.github/workflows/procurement_contract.yml']
+  push:
+    branches: [main]
+    paths: ['supabase/**', 'scripts/test_procurement*', 'test/fixtures/**', '.github/workflows/procurement_contract.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  procurement-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Install disposable database tools
+        run: sudo apt-get update && sudo apt-get install -y postgresql postgresql-contrib
+      - name: Verify purchase and stock invariants
+        run: bash scripts/test_procurement_v2.sh

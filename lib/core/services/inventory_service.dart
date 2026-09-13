@@ -35,6 +35,28 @@ Map<String, dynamic> normalizeInventoryItemPatch(Map<String, dynamic> data) {
 }
 
 class InventoryService {
+  Future<Map<String, dynamic>> fetchProcurementWorkspace(String storeId) =>
+      _rpcMap('procurement_workspace', params: {'p_store_id': storeId});
+
+  Future<Map<String, dynamic>> executeProcurementCommand({
+    required String storeId,
+    required String action,
+    String? recordId,
+    required int version,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+  }) => _rpcMap(
+    'procurement_command',
+    params: {
+      'p_store_id': storeId,
+      'p_action': action,
+      'p_record_id': recordId,
+      'p_expected_version': version,
+      'p_idempotency_key': idempotencyKey,
+      'p_payload': payload,
+    },
+  );
+
   Future<Map<String, dynamic>> upsertPhotoObjetInventoryItem({
     required String storeId,
     String? itemId,

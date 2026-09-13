@@ -14,6 +14,8 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import 'inventory_workflow_state.dart';
+import '../procurement/procurement_workspace.dart';
+import '../procurement/procurement_inspection_dialog.dart';
 import '../../core/utils/permission_utils.dart';
 import '../auth/auth_provider.dart';
 import 'inventory_purchase_document_service.dart';
@@ -434,6 +436,57 @@ class _InventoryOrderWorkflowScreenState
             ),
           ),
           actions: [
+            IconButton(
+              key: const Key('inventory_procurement_workspace'),
+              tooltip: _text(
+                ko: '구매요청·발주',
+                en: 'Purchase requests',
+                vi: 'Yêu cầu mua hàng',
+              ),
+              icon: const Icon(Icons.playlist_add_check),
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final storeId = _isAccounting
+                          ? _selectedAccountingStoreId
+                          : _storeId;
+                      if (storeId == null ||
+                          !await _leaveReceipt() ||
+                          !context.mounted) {
+                        return;
+                      }
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProcurementWorkspacePage(
+                            load: () =>
+                                _service.fetchProcurementWorkspace(storeId),
+                            openEvidence: (receiptId, path) async {
+                              final url = await _service
+                                  .inventoryReceiptStatementUrl(path);
+                              if (!await launchUrl(
+                                Uri.parse(url),
+                                mode: LaunchMode.externalApplication,
+                              )) {
+                                throw StateError(
+                                  'PROCUREMENT_EVIDENCE_UNAVAILABLE',
+                                );
+                              }
+                            },
+                            execute: (action, id, version, key, payload) =>
+                                _service.executeProcurementCommand(
+                                  storeId: storeId,
+                                  action: action,
+                                  recordId: id,
+                                  version: version,
+                                  idempotencyKey: key,
+                                  payload: payload,
+                                ),
+                          ),
+                        ),
+                      );
+                      if (mounted) await _load();
+                    },
+            ),
             IconButton(
               tooltip: _text(ko: '새로고침', en: 'Refresh', vi: 'Làm mới'),
               onPressed: _loading ? null : _load,
@@ -1699,6 +1752,29 @@ class _InventoryOrderWorkflowScreenState
       setState(() {});
       return;
     }
+    if (_integer(order['workflow_version'], fallback: 1) == 2 &&
+        _pendingReceiptSubmission == null) {
+      _receiptId ??= draft == null ? const Uuid().v4() : _id(draft);
+      final inspected = await showDialog<List<Map<String, dynamic>>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => ProcurementInspectionDialog(
+          lines: lines,
+          payload: payload,
+          uploadPhoto: (file) async => _service.uploadInventoryReceiptStatement(
+            storeId: _string(order['restaurant_id']),
+            receiptId: _receiptId!,
+            fileName: '${const Uuid().v4()}-${file.name}',
+            bytes: await file.readAsBytes(),
+            contentType: _statementContentType(file.name),
+          ),
+        ),
+      );
+      if (inspected == null || !mounted) return;
+      payload
+        ..clear()
+        ..addAll(inspected);
+    }
     final changedLineIds = <String>{
       for (var i = 0; i < lines.length; i++)
         if ((_number(payload[i]['received_quantity_base']) -
@@ -1728,7 +1804,9 @@ class _InventoryOrderWorkflowScreenState
       final input = _statementInput!;
       for (final row in payload) {
         if (changedLineIds.contains(row['purchase_order_line_id'])) {
-          row['discrepancy_reason'] = input.memo.trim();
+          if (_string(row['discrepancy_reason']).trim().isEmpty) {
+            row['discrepancy_reason'] = input.memo.trim();
+          }
         }
       }
       _receiptId ??= draft == null ? const Uuid().v4() : _id(draft);
