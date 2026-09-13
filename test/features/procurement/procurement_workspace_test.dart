@@ -181,8 +181,9 @@ void main() {
         }
         await tester.pumpAndSettle();
         expect(calls.single['action'], action);
-        if (action == 'return_request')
+        if (action == 'return_request') {
           expect(calls.single['payload'], {'reason': 'Check quantity'});
+        }
       },
     );
   }
