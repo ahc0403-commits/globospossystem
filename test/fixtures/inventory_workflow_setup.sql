@@ -17,8 +17,8 @@ CREATE TABLE public.user_store_access(user_id uuid,store_id uuid,is_active boole
 CREATE TABLE public.user_tax_entity_access(user_id uuid,tax_entity_id uuid,is_active boolean DEFAULT true);
 CREATE FUNCTION public.has_any_role(roles text[]) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER AS $$
  SELECT EXISTS(SELECT 1 FROM public.users WHERE auth_id=auth.uid() AND is_active AND role=ANY(roles)) $$;
-CREATE TABLE public.inventory_items(id uuid PRIMARY KEY,restaurant_id uuid,current_stock numeric DEFAULT 0,quantity numeric DEFAULT 0,updated_at timestamptz);
-CREATE TABLE public.inventory_transactions(id uuid DEFAULT gen_random_uuid(),restaurant_id uuid,ingredient_id uuid,transaction_type text,quantity_g numeric,reference_type text,reference_id uuid,note text,created_by uuid);
+CREATE TABLE public.inventory_items(id uuid PRIMARY KEY,restaurant_id uuid,current_stock numeric DEFAULT 0,quantity numeric DEFAULT 0,updated_at timestamptz,reorder_point numeric);
+CREATE TABLE public.inventory_transactions(id uuid DEFAULT gen_random_uuid(),restaurant_id uuid,ingredient_id uuid,transaction_type text,quantity_g numeric,reference_type text,reference_id uuid,note text,created_by uuid,created_at timestamptz DEFAULT now());
 CREATE TABLE public.audit_logs(id uuid DEFAULT gen_random_uuid(),actor_id uuid,action text,entity_type text,entity_id uuid,details jsonb);
 CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text,metadata jsonb,owner_id text);
 CREATE FUNCTION public.test_uuid(n integer) RETURNS uuid LANGUAGE sql IMMUTABLE AS $$ SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid $$;

@@ -16,6 +16,12 @@ BEGIN
     OR definition NOT LIKE '%INVENTORY_PURCHASE_DISTINCT_APPROVER_REQUIRED%'
     OR definition NOT LIKE '%extensions.digest%' THEN RAISE EXCEPTION 'INVENTORY_BRAND_APPROVAL_CONTRACT_INVALID'; END IF;
   SELECT pg_get_functiondef('public.verify_inventory_receipt(uuid,integer,text,jsonb,text)'::regprocedure) INTO definition;
+  IF definition LIKE '%verify_inventory_receipt_p1%' THEN
+    IF definition NOT LIKE '%PROCUREMENT_SUPPLIER_CONFIRMATION_REQUIRED%'
+      OR has_function_privilege('authenticated','public.verify_inventory_receipt_p1(uuid,integer,text,jsonb,text)','EXECUTE') THEN
+      RAISE EXCEPTION 'INVENTORY_RECEIVING_WRAPPER_UNSAFE'; END IF;
+    SELECT pg_get_functiondef('public.verify_inventory_receipt_p1(uuid,integer,text,jsonb,text)'::regprocedure) INTO definition;
+  END IF;
   IF definition NOT LIKE '%INVENTORY_RECEIPT_MAKER_CHECKER_REQUIRED%'
     OR definition NOT LIKE '%validate_inventory_receipt_attachment%'
     OR definition NOT LIKE '%UPDATE public.inventory_items%' THEN
