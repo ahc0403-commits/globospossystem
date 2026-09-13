@@ -126,6 +126,7 @@ void main() {
     expect(screen, contains('inventory_quantity_warning_dialog'));
     expect(screen, contains('inventory_order_text_input_dialog'));
     expect(screen, contains('inventory_receipt_statement_dialog'));
+    expect(screen, contains('ProcurementInspectionDialog'));
     expect(service, contains("'upsert_inventory_receipt_draft_line'"));
     expect(service, contains("'bulk_update_inventory_supplier_prices'"));
     expect(
