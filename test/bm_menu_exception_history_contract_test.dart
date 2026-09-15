@@ -1,11 +1,19 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/utils/permission_utils.dart';
+import 'package:globos_pos_system/features/admin/providers/daily_closing_provider.dart';
+import 'package:globos_pos_system/features/admin/tabs/reports_tab.dart';
+import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/report/bm_menu_exception_history.dart';
+import 'package:globos_pos_system/features/report/menu_sales_analytics.dart';
+import 'package:globos_pos_system/features/report/report_provider.dart';
+import 'package:globos_pos_system/l10n/app_localizations.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class _FakeHistoryLoader implements BmMenuExceptionHistoryLoader {
   _FakeHistoryLoader(this.result);
@@ -27,6 +35,32 @@ class _FakeHistoryLoader implements BmMenuExceptionHistoryLoader {
     callCount++;
     return result;
   }
+}
+
+final _bmTestClient = SupabaseClient('http://localhost:54321', 'test-anon-key');
+
+class _BmAuthNotifier extends AuthNotifier {
+  _BmAuthNotifier() : super(client: _bmTestClient) {
+    _bmTestClient.auth.stopAutoRefresh();
+    state = const PosAuthState(
+      role: 'brand_admin',
+      storeId: 'store-1',
+      primaryStoreId: 'store-1',
+      accessibleStores: [AccessibleStore(id: 'store-1', name: 'Bunsik')],
+    );
+  }
+}
+
+class _IdleReportNotifier extends ReportNotifier {
+  _IdleReportNotifier() {
+    state = ReportState(
+      startDate: DateTime(2026, 9, 1),
+      endDate: DateTime(2026, 9, 15),
+    );
+  }
+
+  @override
+  Future<void> loadReport(String storeId) async {}
 }
 
 BmMenuExceptionHistoryPage _widgetPage() {
@@ -219,4 +253,55 @@ void main() {
     expect(find.byKey(const Key('bm_menu_history_lookup')), findsOneWidget);
     expect(find.text('Service Tteokbokki'), findsOneWidget);
   });
+
+  testWidgets(
+    'BM report shows the history entry in the initial phone viewport',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => _BmAuthNotifier()),
+            reportProvider.overrideWith((ref) => _IdleReportNotifier()),
+            menuSalesAnalyticsProvider.overrideWith(
+              (ref, params) async => MenuSalesAnalytics.fromJson(const {}),
+            ),
+            dailyClosingHistoryProvider.overrideWith(
+              (ref, storeId) async => const [],
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('ko'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const ReportsTab(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('bm_menu_exception_history_entry')).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('bm_menu_exception_history_entry')).hitTestable(),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('bm_menu_exception_history_screen')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

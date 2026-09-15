@@ -47,6 +47,13 @@ double _reportDouble(dynamic value) => switch (value) {
   _ => 0,
 };
 
+String _bmMenuHistoryEntryLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Lịch sử món phục vụ và hủy',
+      'en' => 'Service and cancelled items',
+      _ => '서비스·취소 메뉴 내역',
+    };
+
 String _reportPaymentMethodLabel(BuildContext context, String method) {
   final normalized = normalizePaymentMethodInput(method);
   return switch (normalized) {
@@ -69,6 +76,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final storeId = widget.overrideStoreId ?? ref.watch(authProvider).storeId;
+    final canViewBmHistory = PermissionUtils.canViewServiceCancellationHistory(
+      ref.watch(authProvider).role,
+    );
     final reportState = ref.watch(reportProvider);
     final reportNotifier = ref.read(reportProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');
@@ -117,6 +127,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       currency: currency,
       dateFormat: dateFormat,
       menuSalesAnalytics: menuSalesAnalytics,
+      showBmHistoryEntry: false,
     );
 
     void refreshReports() {
@@ -325,6 +336,24 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
           maxWidth: 1460,
           padding: const EdgeInsets.all(12),
           children: [
+            if (canViewBmHistory) ...[
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  key: const Key('bm_menu_exception_history_entry'),
+                  onPressed: () => _openBmMenuExceptionHistory(
+                    storeId: storeId,
+                    reportState: reportState,
+                  ),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                  ),
+                  icon: const Icon(Icons.manage_search_outlined, size: 20),
+                  label: Text(_bmMenuHistoryEntryLabel(context)),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             if (storeId != null && menuSalesParams != null) ...[
               ReportAnalysisLaunchers(
                 storeId: storeId,
@@ -688,6 +717,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     required NumberFormat currency,
     required DateFormat dateFormat,
     required MenuSalesAnalytics? menuSalesAnalytics,
+    bool showBmHistoryEntry = true,
   }) {
     final l10n = context.l10n;
     final totalRevenue = summary == null
@@ -886,34 +916,39 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                   _ => '오늘 영수증 원장',
                 }),
               ),
-              if (PermissionUtils.canViewServiceCancellationHistory(
-                ref.watch(authProvider).role,
-              ))
+              if (showBmHistoryEntry &&
+                  PermissionUtils.canViewServiceCancellationHistory(
+                    ref.watch(authProvider).role,
+                  ))
                 OutlinedButton.icon(
                   key: const Key('bm_menu_exception_history_entry'),
-                  onPressed: () {
-                    final auth = ref.read(authProvider);
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => BmMenuExceptionHistoryScreen(
-                          stores: auth.accessibleStores,
-                          initialStoreId: storeId,
-                          initialStartDate: reportState.startDate,
-                          initialEndDate: reportState.endDate,
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: () => _openBmMenuExceptionHistory(
+                    storeId: storeId,
+                    reportState: reportState,
+                  ),
                   icon: const Icon(Icons.manage_search_outlined, size: 16),
-                  label: Text(switch (localeCode) {
-                    'vi' => 'Lịch sử món phục vụ và hủy',
-                    'en' => 'Service and cancelled items',
-                    _ => '서비스·취소 메뉴 내역',
-                  }),
+                  label: Text(_bmMenuHistoryEntryLabel(context)),
                 ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _openBmMenuExceptionHistory({
+    required String? storeId,
+    required ReportState reportState,
+  }) {
+    final auth = ref.read(authProvider);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BmMenuExceptionHistoryScreen(
+          stores: auth.accessibleStores,
+          initialStoreId: storeId,
+          initialStartDate: reportState.startDate,
+          initialEndDate: reportState.endDate,
+        ),
       ),
     );
   }
