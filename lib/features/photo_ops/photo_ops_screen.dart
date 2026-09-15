@@ -930,10 +930,12 @@ class _PhotoOpsHeaderSummary extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            ToastStatusBadge(
-              label: _surfaceLabel(context, selectedSurface.kind),
-              color: _surfaceTone(selectedSurface.kind),
-              compact: true,
+            Flexible(
+              child: ToastStatusBadge(
+                label: _surfaceLabel(context, selectedSurface.kind),
+                color: _surfaceTone(selectedSurface.kind),
+                compact: true,
+              ),
             ),
           ],
         ),
@@ -1053,14 +1055,25 @@ class _SectionWarning extends StatelessWidget {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(AppSpacing.md),
       backgroundColor: PosColors.warningMuted,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: PosColors.warning),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(context.l10n.photoOpsSectionLoadFailed(section)),
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: PosColors.warning),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(context.l10n.photoOpsSectionLoadFailed(section)),
+              ),
+            ],
           ),
-          TextButton(onPressed: onRetry, child: Text(context.l10n.retry)),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onRetry,
+              child: Text(context.l10n.retry),
+            ),
+          ),
         ],
       ),
     );

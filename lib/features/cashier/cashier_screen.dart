@@ -1,3 +1,4 @@
+import '../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -150,7 +151,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   bool _isPublishingCustomerDisplay = false;
   final TextEditingController _orderSearchController = TextEditingController();
   CashierOrderSearchResult? _orderSearchResult;
-  String? _orderSearchFeedback;
+  String Function(AppLocalizations)? _orderSearchFeedback;
   List<Map<String, dynamic>> _deliveryTickets = const [];
   bool _deliveryTicketsLoading = false;
   bool _deliveryTicketsFailed = false;
@@ -1062,7 +1063,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
     if (storeId == null) {
-      showErrorToast(context, 'Store context missing.');
+      showErrorToast(context, context.l10n.cashierSearchSelectStore);
       return;
     }
 
@@ -1083,7 +1084,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
       if (result == null) {
         setState(() {
-          _orderSearchFeedback = 'No active order found for "$query".';
+          _orderSearchFeedback = (l10n) => l10n.cashierSearchNotFound(query);
           _isOrderSearchLoading = false;
         });
         return;
@@ -1092,8 +1093,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       if (!result.isPayable) {
         setState(() {
           _orderSearchResult = result;
-          _orderSearchFeedback =
-              'Kitchen in progress. This order will appear here when every active item is ready.';
+          _orderSearchFeedback = (l10n) => l10n.cashierSearchKitchenPending;
           _isOrderSearchLoading = false;
         });
         return;
@@ -1118,8 +1118,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       if (payableOrder == null) {
         setState(() {
           _orderSearchResult = result;
-          _orderSearchFeedback =
-              'Kitchen in progress. This order is not payable yet.';
+          _orderSearchFeedback = (l10n) => l10n.cashierSearchNotPayable;
           _isOrderSearchLoading = false;
         });
         return;
@@ -1130,7 +1129,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         _prepareWetTissueForOrder(payableOrder!);
         _showPaymentQueueOnCompact = false;
         _orderSearchResult = result;
-        _orderSearchFeedback = 'Order ready for cashier payment.';
+        _orderSearchFeedback = (l10n) => l10n.cashierSearchReady;
         _isOrderSearchLoading = false;
       });
       notifier.selectOrder(payableOrder);
@@ -1139,10 +1138,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         return;
       }
       setState(() {
-        _orderSearchFeedback = 'Order search failed. Please retry.';
+        _orderSearchFeedback = (l10n) => l10n.cashierSearchFailed;
         _isOrderSearchLoading = false;
       });
-      showErrorToast(context, 'Order search failed: $error');
+      showErrorToast(context, context.l10n.cashierSearchFailed);
     }
   }
 
@@ -1421,7 +1420,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
             _CashierOrderSearchFeedback(
               key: const Key('cashier_order_search_status'),
               result: _orderSearchResult,
-              message: _orderSearchFeedback!,
+              message: _orderSearchFeedback!(l10n),
             ),
           ],
           if (_isCombinedPaymentMode) ...[
@@ -1449,7 +1448,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       title: l10n.cashierNoPayableOrdersTitle,
                       subtitle: orderSearchQuery.isEmpty
                           ? l10n.cashierNoPayableOrdersMessage
-                          : 'No payable order in the cashier queue for "$orderSearchQuery".',
+                          : l10n.cashierSearchNoPayable(orderSearchQuery),
                       isOnline: isOnline,
                       onRefresh: storeId == null
                           ? null
@@ -2890,7 +2889,7 @@ class _CashierQueueWithHistory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final content = Column(
       children: [
         Expanded(child: queuePane),
         const SizedBox(height: 12),
@@ -2940,6 +2939,17 @@ class _CashierQueueWithHistory extends StatelessWidget {
           ),
         ),
       ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Translated headings and enlarged text need room above the queue.
+        // Scroll the complete workspace when the viewport cannot fit them.
+        final minimumHeight = MediaQuery.textScalerOf(context).scale(350) + 190;
+        if (constraints.maxHeight >= minimumHeight) return content;
+        return SingleChildScrollView(
+          child: SizedBox(height: minimumHeight, child: content),
+        );
+      },
     );
   }
 }
@@ -5721,13 +5731,13 @@ class _CashierOrderSearchToolbar extends StatelessWidget {
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => onSearch(),
             decoration: InputDecoration(
-              labelText: 'Order or table search',
-              hintText: '8-char order code or table number',
+              labelText: context.l10n.cashierSearchLabel,
+              hintText: context.l10n.cashierSearchHint,
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: hasQuery
                   ? IconButton(
                       key: const Key('cashier_order_search_clear'),
-                      tooltip: 'Clear search',
+                      tooltip: context.l10n.cashierSearchClear,
                       onPressed: onClear,
                       icon: const Icon(Icons.close_rounded),
                     )
@@ -5738,7 +5748,7 @@ class _CashierOrderSearchToolbar extends StatelessWidget {
         const SizedBox(width: 8),
         IconButton.filledTonal(
           key: const Key('cashier_order_search_action'),
-          tooltip: 'Search order',
+          tooltip: context.l10n.cashierSearchOrder,
           onPressed: isSearching ? null : onSearch,
           icon: isSearching
               ? const SizedBox(
@@ -5774,11 +5784,11 @@ class _CashierOrderSearchFeedback extends StatelessWidget {
 
     return PosExceptionAlert(
       label: result == null
-          ? 'Order search'
-          : '#${result.orderCode} · Table ${result.tableNumber}',
+          ? context.l10n.cashierSearchOrder
+          : '#${result.orderCode} · ${context.l10n.cashierTableLabel(result.tableNumber)}',
       detail: result == null
           ? message
-          : '$message ${result.isQrOrder ? 'QR order.' : 'Staff order.'}',
+          : '$message ${result.isQrOrder ? context.l10n.cashierSearchQrOrder : context.l10n.cashierSearchStaffOrder}',
       color: color,
       icon: result == null
           ? Icons.search_off_rounded
@@ -6540,7 +6550,7 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
             key: const Key('cashier_combined_paper_receipt'),
             onPressed: () => unawaited(onPaperReceipt!()),
             icon: const Icon(Icons.print_outlined, size: 18),
-            label: const Text('종이 출력'),
+            label: Text(l10n.cashierPrintPaperReceipt),
           ),
         if (hasPrintedOrders && onReprint != null)
           TextButton.icon(

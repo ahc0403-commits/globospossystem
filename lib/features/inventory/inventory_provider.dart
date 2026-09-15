@@ -239,7 +239,16 @@ class RecipeNotifier extends StateNotifier<RecipeState> {
       final recipes = await inventoryService.fetchAllRecipes(storeId);
       final menuItems = await inventoryService.fetchMenuItems(storeId);
       state = state.copyWith(
-        allRecipes: recipes,
+        allRecipes: [
+          for (final recipe in recipes)
+            {
+              ...recipe,
+              for (final menu in menuItems)
+                if (menu['id'] == recipe['menu_item_id'])
+                  for (final code in ['ko', 'vi', 'en'])
+                    'name_$code': menu['name_$code'],
+            },
+        ],
         menuItems: menuItems,
         isLoading: false,
       );

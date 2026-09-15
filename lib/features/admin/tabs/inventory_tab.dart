@@ -1,3 +1,4 @@
+import '../../../core/i18n/menu_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
@@ -913,7 +914,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ...menuItems.map(
                 (m) => DropdownMenuItem<String?>(
                   value: m['id']?.toString(),
-                  child: Text(m['name']?.toString() ?? '-'),
+                  child: Text(context.menuName(m)),
                 ),
               ),
             ],
@@ -974,7 +975,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    row['menu_item_name']?.toString() ?? '-',
+                                    context.menuName({
+                                      ...row,
+                                      'name': row['menu_item_name'],
+                                    }),
                                     style: AppFonts.system(
                                       color: AppColors.textPrimary,
                                       fontWeight: FontWeight.w700,
@@ -6598,7 +6602,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         .map(
                           (item) => DropdownMenuItem<String>(
                             value: item['id'].toString(),
-                            child: Text(item['name']?.toString() ?? '-'),
+                            child: Text(context.menuName(item)),
                           ),
                         )
                         .toList(),

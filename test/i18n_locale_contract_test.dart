@@ -1,4 +1,8 @@
+import 'package:globos_pos_system/core/i18n/locale_controller.dart';
+import 'package:globos_pos_system/core/i18n/locale_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,6 +24,42 @@ List<String> readTopLevelArbKeys(String path) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'selected language is hydrated, updated and restored from preferences',
+    () async {
+      SharedPreferences.setMockInitialValues({'app_locale': 'en'});
+      final controller = LocaleController();
+      addTearDown(controller.dispose);
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.state.language, AppLanguage.english);
+      await controller.setLocale(AppLanguage.vietnamese);
+      expect(controller.state.language, AppLanguage.vietnamese);
+      expect(
+        (await SharedPreferences.getInstance()).getString('app_locale'),
+        'vi',
+      );
+      final restored = LocaleController();
+      addTearDown(restored.dispose);
+      await Future<void>.delayed(Duration.zero);
+      expect(restored.state.language, AppLanguage.vietnamese);
+    },
+  );
+  test('English and Vietnamese UI catalogs contain no Korean leftovers', () {
+    for (final code in ['en', 'vi']) {
+      final messages =
+          jsonDecode(readRepoFile('lib/l10n/app_$code.arb')) as Map;
+      final leftovers = messages.entries
+          .where(
+            (entry) =>
+                entry.value is String &&
+                RegExp(r'[가-힣]').hasMatch(entry.value as String),
+          )
+          .map((entry) => entry.key)
+          .toList();
+      expect(leftovers, isEmpty, reason: '$code contains Korean UI messages');
+    }
+  });
   test('main wires generated localizations and locale provider', () {
     final mainFile = readRepoFile('lib/main.dart');
 

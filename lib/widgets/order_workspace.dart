@@ -1,3 +1,4 @@
+import '../core/i18n/menu_localization.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -412,7 +413,7 @@ class _MenuBrowser extends StatelessWidget {
                       return ToastFilterChip(
                         label: _localizedMenuDataLabel(
                           context,
-                          category['name'],
+                          context.menuName(category),
                         ),
                         selected: selected,
                         onSelected: categoryId.isEmpty
@@ -472,7 +473,7 @@ class _MenuBrowser extends StatelessWidget {
                           final name = item['name']?.toString() ?? '-';
                           final displayName = _localizedMenuDataLabel(
                             context,
-                            name,
+                            context.menuName(item),
                           );
                           final imageUrl = item['image_url']?.toString().trim();
                           final rawPrice = item['price'];
@@ -487,6 +488,9 @@ class _MenuBrowser extends StatelessWidget {
                                   CartItem(
                                     menuItemId: menuItemId,
                                     name: name,
+                                    nameKo: item['name_ko']?.toString(),
+                                    nameVi: item['name_vi']?.toString(),
+                                    nameEn: item['name_en']?.toString(),
                                     price: price,
                                     quantity: 1,
                                   ),
@@ -725,7 +729,7 @@ class _SelectedMenuListItem extends StatelessWidget {
         : 'pending_cart_item_${item.menuItemId}';
     return Container(
       key: ValueKey<String>(itemKey),
-      width: 168,
+      width: 248,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: PosColors.surface,
@@ -740,7 +744,9 @@ class _SelectedMenuListItem extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  item.name,
+                  item.localizedName(
+                    Localizations.localeOf(context).languageCode,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -763,6 +769,8 @@ class _SelectedMenuListItem extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Text(
                       item.isTakeout ? l10n.takeout : l10n.dineIn,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: item.isTakeout
                             ? PosColors.warning
@@ -922,7 +930,9 @@ class _PendingOrderReviewLine extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.name,
+                  item.localizedName(
+                    Localizations.localeOf(context).languageCode,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1674,7 +1684,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                                                     for (final component
                                                         in item.comboComponents)
                                                       Text(
-                                                        '• ${_localizedMenuDataLabel(context, component.label)} ×${component.displayQuantity(item.quantity)}',
+                                                        '• ${_localizedMenuDataLabel(context, component.localizedName(Localizations.localeOf(context).languageCode))} ×${component.displayQuantity(item.quantity)}',
                                                         maxLines: 1,
                                                         overflow: TextOverflow
                                                             .ellipsis,
@@ -2178,7 +2188,7 @@ class _CurrentTicketDetailSheet extends StatelessWidget {
                                   const SizedBox(height: 4),
                                   for (final component in item.comboComponents)
                                     Text(
-                                      '• ${_localizedMenuDataLabel(context, component.label)} ×${component.displayQuantity(item.quantity)}',
+                                      '• ${_localizedMenuDataLabel(context, component.localizedName(Localizations.localeOf(context).languageCode))} ×${component.displayQuantity(item.quantity)}',
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodySmall

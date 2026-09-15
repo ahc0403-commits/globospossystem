@@ -1,3 +1,4 @@
+import '../../../core/i18n/menu_localization.dart';
 import 'dart:typed_data';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -414,7 +415,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     for (final category in categories) {
       if (category['id']?.toString() == categoryId) {
-        return category['name']?.toString() ?? '-';
+        return context.menuName(category);
       }
     }
 
@@ -890,7 +891,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
   ) async {
     final l10n = context.l10n;
     final categoryId = category['id']?.toString() ?? '';
-    final name = category['name']?.toString() ?? '-';
+    final name = context.menuName(category);
     if (categoryId.isEmpty) return;
 
     await showDialog<void>(
@@ -1643,7 +1644,7 @@ class _ComboCandidateRow extends StatelessWidget {
             ),
       controlAffinity: ListTileControlAffinity.leading,
       title: Text(
-        candidate['name']?.toString() ?? '-',
+        context.menuName(candidate),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1944,7 +1945,7 @@ class _CategoryPanel extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            category['name']?.toString() ?? '-',
+                            context.menuName(category),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: AppFonts.system(
@@ -2109,7 +2110,7 @@ class _ItemsPanel extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final item = selectedItems[index];
                   final itemId = item['id']?.toString() ?? '';
-                  final name = item['name']?.toString() ?? '-';
+                  final name = context.menuName(item);
                   final priceRaw = item['price'];
                   final isAvailable = item['is_available'] == true;
                   final isVisiblePublic = item['is_visible_public'] != false;
@@ -2171,9 +2172,9 @@ class _ItemsPanel extends StatelessWidget {
                                                 component['component'];
                                             final componentName =
                                                 componentItem is Map
-                                                ? componentItem['name']
-                                                          ?.toString() ??
-                                                      '-'
+                                                ? context.menuName(
+                                                    componentItem,
+                                                  )
                                                 : '-';
                                             final quantity =
                                                 component['quantity']

@@ -265,110 +265,112 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       maxWidth: 720,
       padding: EdgeInsets.zero,
       child: Center(
-        child: ToastWorkSurface(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                context.l10n.attendanceEnterEmployeeNumber,
-                textAlign: TextAlign.center,
-                style: AppFonts.system(
-                  color: AppColors.textPrimary,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                context.l10n.attendanceEmployeeNumberOnlyHint,
-                textAlign: TextAlign.center,
-                style: AppFonts.system(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                key: const Key('attendance_employee_number_field'),
-                controller: _employeeNumberController,
-                focusNode: _employeeNumberFocus,
-                textCapitalization: TextCapitalization.characters,
-                textAlign: TextAlign.center,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9_-]')),
-                ],
-                onSubmitted: (_) =>
-                    isOnline ? _beginAttendance('clock_in') : null,
-                decoration: InputDecoration(
-                  labelText: context.l10n.attendanceEmployeeNumber,
-                  hintText: context.l10n.attendanceEmployeeNumberHint,
-                ),
-                style: AppFonts.system(
-                  color: AppColors.textPrimary,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      key: const Key('attendance_employee_clock_in'),
-                      onPressed: isOnline
-                          ? () => _beginAttendance('clock_in')
-                          : null,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(72),
-                        backgroundColor: AppColors.amber500,
-                        foregroundColor: AppColors.surface0,
-                      ),
-                      child: Text(
-                        context.l10n.clockIn,
-                        style: AppFonts.system(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: OutlinedButton(
-                      key: const Key('attendance_employee_clock_out'),
-                      onPressed: isOnline
-                          ? () => _beginAttendance('clock_out')
-                          : null,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(72),
-                      ),
-                      child: Text(
-                        context.l10n.clockOut,
-                        style: AppFonts.system(
-                          color: AppColors.textPrimary,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (!isOnline) ...[
-                const SizedBox(height: 14),
+        child: SingleChildScrollView(
+          child: ToastWorkSurface(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Text(
-                  context.l10n.attendanceOnlineRequired,
+                  context.l10n.attendanceEnterEmployeeNumber,
                   textAlign: TextAlign.center,
                   style: AppFonts.system(
-                    color: AppColors.statusOccupied,
-                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  context.l10n.attendanceEmployeeNumberOnlyHint,
+                  textAlign: TextAlign.center,
+                  style: AppFonts.system(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  key: const Key('attendance_employee_number_field'),
+                  controller: _employeeNumberController,
+                  focusNode: _employeeNumberFocus,
+                  textCapitalization: TextCapitalization.characters,
+                  textAlign: TextAlign.center,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9_-]')),
+                  ],
+                  onSubmitted: (_) =>
+                      isOnline ? _beginAttendance('clock_in') : null,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.attendanceEmployeeNumber,
+                    hintText: context.l10n.attendanceEmployeeNumberHint,
+                  ),
+                  style: AppFonts.system(
+                    color: AppColors.textPrimary,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        key: const Key('attendance_employee_clock_in'),
+                        onPressed: isOnline
+                            ? () => _beginAttendance('clock_in')
+                            : null,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(72),
+                          backgroundColor: AppColors.amber500,
+                          foregroundColor: AppColors.surface0,
+                        ),
+                        child: Text(
+                          context.l10n.clockIn,
+                          style: AppFonts.system(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: OutlinedButton(
+                        key: const Key('attendance_employee_clock_out'),
+                        onPressed: isOnline
+                            ? () => _beginAttendance('clock_out')
+                            : null,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(72),
+                        ),
+                        child: Text(
+                          context.l10n.clockOut,
+                          style: AppFonts.system(
+                            color: AppColors.textPrimary,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (!isOnline) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    context.l10n.attendanceOnlineRequired,
+                    textAlign: TextAlign.center,
+                    style: AppFonts.system(
+                      color: AppColors.statusOccupied,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

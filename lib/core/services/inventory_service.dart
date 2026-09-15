@@ -210,7 +210,7 @@ class InventoryService {
       _selectStoreScoped(
         table: 'menu_items',
         storeId: storeId,
-        columns: 'id, name, sort_order',
+        columns: 'id, name, name_ko, name_vi, name_en, sort_order',
         orderBy: 'sort_order',
       );
 
@@ -218,7 +218,7 @@ class InventoryService {
       _selectStoreScoped(
         table: 'menu_categories',
         storeId: storeId,
-        columns: 'id, name, sort_order',
+        columns: 'id, name, name_ko, name_vi, name_en, sort_order',
         orderBy: 'sort_order',
       );
 

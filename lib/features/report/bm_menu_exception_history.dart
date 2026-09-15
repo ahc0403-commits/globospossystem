@@ -1,3 +1,5 @@
+import '../../l10n/app_localizations.dart';
+import '../../core/i18n/menu_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -35,6 +37,7 @@ class BmMenuExceptionHistoryItem {
     required this.actorName,
     required this.currentState,
     required this.dataIncomplete,
+    this.itemNames = const [],
     this.orderNumber,
     this.orderCreatedAt,
     this.tableNumber,
@@ -58,6 +61,13 @@ class BmMenuExceptionHistoryItem {
   final DateTime? orderCreatedAt;
   final String? tableNumber;
   final String itemName;
+  final List<Map<String, dynamic>> itemNames;
+
+  String localizedName(String languageCode) => itemNames.isEmpty
+      ? localizedMenuName({'name': itemName}, languageCode)
+      : itemNames
+            .map((name) => localizedMenuName(name, languageCode))
+            .join(', ');
   final double? quantity;
   final double? unitPrice;
   final double? referenceAmount;
@@ -82,6 +92,12 @@ class BmMenuExceptionHistoryItem {
       orderCreatedAt: _dateTimeOrNull(json['order_created_at']),
       tableNumber: _textOrNull(json['table_number']),
       itemName: json['item_name']?.toString() ?? 'Unknown item',
+      itemNames: json['item_names'] is List
+          ? (json['item_names'] as List)
+                .whereType<Map>()
+                .map((name) => Map<String, dynamic>.from(name))
+                .toList(growable: false)
+          : const [],
       quantity: _doubleOrNull(json['quantity']),
       unitPrice: _doubleOrNull(json['unit_price']),
       referenceAmount: _doubleOrNull(json['reference_amount']),
@@ -105,10 +121,15 @@ class BmOriginalOrderItem {
     required this.referenceAmount,
     required this.status,
     required this.isServiceItem,
+    this.translations = const {},
   });
 
   final String id;
   final String name;
+  final Map<String, dynamic> translations;
+
+  String localizedName(String languageCode) =>
+      localizedMenuName({'name': name, ...translations}, languageCode);
   final double quantity;
   final double unitPrice;
   final double referenceAmount;
@@ -119,6 +140,10 @@ class BmOriginalOrderItem {
     return BmOriginalOrderItem(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Unknown item',
+      translations: {
+        'item_type': json['item_type'],
+        for (final code in ['ko', 'en', 'vi']) 'name_$code': json['name_$code'],
+      },
       quantity: _doubleValue(json['quantity']),
       unitPrice: _doubleValue(json['unit_price']),
       referenceAmount: _doubleValue(json['reference_amount']),
@@ -489,73 +514,79 @@ class _BmMenuExceptionHistoryScreenState
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: 0.82,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            key: const Key('bm_menu_history_detail'),
-            children: [
-              Text(
-                copy.eventLabel(item.eventType),
-                style: Theme.of(sheetContext).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 16),
-              _detailRow(
-                copy.eventTime,
-                dateTime.format(_vnTime(item.eventAt)),
-              ),
-              _detailRow(copy.store, item.storeName),
-              if (item.orderId.isEmpty)
-                _detailRow(copy.originalOrder, copy.notRecorded)
-              else
-                _detailActionRow(
-                  copy.originalOrder,
-                  '#${_orderNumber(item)}',
-                  () {
-                    Navigator.of(sheetContext).pop();
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _showOriginalOrder(item, copy);
-                    });
-                  },
-                ),
-              _detailRow(copy.table, item.tableNumber ?? copy.notRecorded),
-              _detailRow(copy.item, item.itemName),
-              _detailRow(copy.quantity, _quantity(item.quantity)),
-              _detailRow(
-                copy.unitPrice,
-                _moneyOrMissing(money, item.unitPrice, copy),
-              ),
-              _detailRow(
-                copy.referenceAmount,
-                _moneyOrMissing(money, item.referenceAmount, copy),
-              ),
-              if (item.sourceKind == 'cancellation')
-                _detailRow(
-                  copy.cancelledAmount,
-                  _moneyOrMissing(money, item.cancelledAmount, copy),
-                ),
-              _detailRow(copy.actor, item.actorName),
-              _detailRow(copy.reason, item.reason ?? copy.notRecorded),
-              _detailRow(copy.currentState, copy.stateLabel(item.currentState)),
-              if (item.dataIncomplete) ...[
-                const SizedBox(height: 12),
+      builder: (sheetContext) {
+        final copy = _BmHistoryCopy(AppLocalizations.of(sheetContext)!);
+        return FractionallySizedBox(
+          heightFactor: 0.82,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: ListView(
+              key: const Key('bm_menu_history_detail'),
+              children: [
                 Text(
-                  copy.incompleteNotice,
-                  style: TextStyle(
-                    color: Theme.of(sheetContext).colorScheme.error,
+                  copy.eventLabel(item.eventType),
+                  style: Theme.of(sheetContext).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 16),
+                _detailRow(
+                  copy.eventTime,
+                  dateTime.format(_vnTime(item.eventAt)),
+                ),
+                _detailRow(copy.store, copy.storeName(item.storeName)),
+                if (item.orderId.isEmpty)
+                  _detailRow(copy.originalOrder, copy.notRecorded)
+                else
+                  _detailActionRow(
+                    copy.originalOrder,
+                    '#${_orderNumber(item)}',
+                    () {
+                      Navigator.of(sheetContext).pop();
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _showOriginalOrder(item, copy);
+                      });
+                    },
                   ),
+                _detailRow(copy.table, item.tableNumber ?? copy.notRecorded),
+                _detailRow(copy.item, item.localizedName(copy.languageCode)),
+                _detailRow(copy.quantity, _quantity(item.quantity)),
+                _detailRow(
+                  copy.unitPrice,
+                  _moneyOrMissing(money, item.unitPrice, copy),
+                ),
+                _detailRow(
+                  copy.referenceAmount,
+                  _moneyOrMissing(money, item.referenceAmount, copy),
+                ),
+                if (item.sourceKind == 'cancellation')
+                  _detailRow(
+                    copy.cancelledAmount,
+                    _moneyOrMissing(money, item.cancelledAmount, copy),
+                  ),
+                _detailRow(copy.actor, copy.actorName(item.actorName)),
+                _detailRow(copy.reason, item.reason ?? copy.notRecorded),
+                _detailRow(
+                  copy.currentState,
+                  copy.stateLabel(item.currentState),
+                ),
+                if (item.dataIncomplete) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    copy.incompleteNotice,
+                    style: TextStyle(
+                      color: Theme.of(sheetContext).colorScheme.error,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: Text(copy.close),
                 ),
               ],
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () => Navigator.of(sheetContext).pop(),
-                child: Text(copy.close),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -570,124 +601,135 @@ class _BmMenuExceptionHistoryScreenState
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: 0.9,
-        child: FutureBuilder<BmOriginalOrderDetail>(
-          future: request,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError || !snapshot.hasData) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline, size: 40),
-                      const SizedBox(height: 12),
-                      Text(
-                        copy.originalOrderError(snapshot.error),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: () => Navigator.of(sheetContext).pop(),
-                        child: Text(copy.close),
-                      ),
-                    ],
+      builder: (sheetContext) {
+        final copy = _BmHistoryCopy(AppLocalizations.of(sheetContext)!);
+        return FractionallySizedBox(
+          heightFactor: 0.9,
+          child: FutureBuilder<BmOriginalOrderDetail>(
+            future: request,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError || !snapshot.hasData) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline, size: 40),
+                        const SizedBox(height: 12),
+                        Text(
+                          copy.originalOrderError(snapshot.error),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: Text(copy.close),
+                        ),
+                      ],
+                    ),
                   ),
+                );
+              }
+
+              final order = snapshot.data!;
+              final orderNumber = order.orderNumber.isEmpty
+                  ? _shortId(order.orderId)
+                  : order.orderNumber;
+              return Padding(
+                padding: const EdgeInsets.all(20),
+                child: ListView(
+                  key: const Key('bm_original_order_detail'),
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${copy.originalOrderDetails} #$orderNumber',
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('bm_original_order_close'),
+                          tooltip: copy.close,
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _detailRow(
+                      copy.orderedAt,
+                      dateTime.format(_vnTime(order.createdAt)),
+                    ),
+                    _detailRow(copy.store, copy.storeName(order.storeName)),
+                    _detailRow(
+                      copy.table,
+                      order.tableNumber ?? copy.notRecorded,
+                    ),
+                    _detailRow(copy.orderStatus, copy.stateLabel(order.status)),
+                    _detailRow(
+                      copy.orderPurpose,
+                      copy.purposeLabel(order.orderPurpose),
+                    ),
+                    _detailRow(
+                      copy.salesChannel,
+                      copy.channelLabel(order.salesChannel),
+                    ),
+                    _detailRow(
+                      copy.orderedBy,
+                      copy.actorName(order.createdByName),
+                    ),
+                    _detailRow(copy.notes, order.notes ?? copy.notRecorded),
+                    _detailRow(copy.quantity, _quantity(order.totalQuantity)),
+                    _detailRow(
+                      copy.referenceAmount,
+                      _moneyOrMissing(money, order.referenceAmount, copy),
+                    ),
+                    const Divider(height: 32),
+                    Text(
+                      copy.originalOrderItems(order.itemCount),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    if (order.items.isEmpty)
+                      Text(copy.noOrderItems)
+                    else
+                      for (final orderItem in order.items)
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            title: Text(
+                              orderItem.localizedName(copy.languageCode),
+                            ),
+                            subtitle: Text(
+                              '${copy.quantity} ${_quantity(orderItem.quantity)} · '
+                              '${copy.unitPrice} ${money.format(orderItem.unitPrice)} VND\n'
+                              '${copy.currentState} ${copy.stateLabel(orderItem.status)}'
+                              '${orderItem.isServiceItem ? ' · ${copy.serviceItem}' : ''}',
+                            ),
+                            isThreeLine: true,
+                            trailing: Text(
+                              '${money.format(orderItem.referenceAmount)} VND',
+                              textAlign: TextAlign.end,
+                            ),
+                          ),
+                        ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      child: Text(copy.close),
+                    ),
+                  ],
                 ),
               );
-            }
-
-            final order = snapshot.data!;
-            final orderNumber = order.orderNumber.isEmpty
-                ? _shortId(order.orderId)
-                : order.orderNumber;
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: ListView(
-                key: const Key('bm_original_order_detail'),
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${copy.originalOrderDetails} #$orderNumber',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                      ),
-                      IconButton(
-                        key: const Key('bm_original_order_close'),
-                        tooltip: copy.close,
-                        onPressed: () => Navigator.of(sheetContext).pop(),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _detailRow(
-                    copy.orderedAt,
-                    dateTime.format(_vnTime(order.createdAt)),
-                  ),
-                  _detailRow(copy.store, order.storeName),
-                  _detailRow(copy.table, order.tableNumber ?? copy.notRecorded),
-                  _detailRow(copy.orderStatus, copy.stateLabel(order.status)),
-                  _detailRow(
-                    copy.orderPurpose,
-                    copy.purposeLabel(order.orderPurpose),
-                  ),
-                  _detailRow(
-                    copy.salesChannel,
-                    copy.channelLabel(order.salesChannel),
-                  ),
-                  _detailRow(copy.orderedBy, order.createdByName),
-                  _detailRow(copy.notes, order.notes ?? copy.notRecorded),
-                  _detailRow(copy.quantity, _quantity(order.totalQuantity)),
-                  _detailRow(
-                    copy.referenceAmount,
-                    _moneyOrMissing(money, order.referenceAmount, copy),
-                  ),
-                  const Divider(height: 32),
-                  Text(
-                    copy.originalOrderItems(order.itemCount),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  if (order.items.isEmpty)
-                    Text(copy.noOrderItems)
-                  else
-                    for (final orderItem in order.items)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(orderItem.name),
-                          subtitle: Text(
-                            '${copy.quantity} ${_quantity(orderItem.quantity)} · '
-                            '${copy.unitPrice} ${money.format(orderItem.unitPrice)} VND\n'
-                            '${copy.currentState} ${copy.stateLabel(orderItem.status)}'
-                            '${orderItem.isServiceItem ? ' · ${copy.serviceItem}' : ''}',
-                          ),
-                          isThreeLine: true,
-                          trailing: Text(
-                            '${money.format(orderItem.referenceAmount)} VND',
-                            textAlign: TextAlign.end,
-                          ),
-                        ),
-                      ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    child: Text(copy.close),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -712,7 +754,7 @@ class _BmMenuExceptionHistoryScreenState
 
   @override
   Widget build(BuildContext context) {
-    final copy = _BmHistoryCopy(Localizations.localeOf(context).languageCode);
+    final copy = _BmHistoryCopy(AppLocalizations.of(context)!);
     final role = ref.watch(bmMenuHistoryRoleProvider);
     if (!PermissionUtils.canViewServiceCancellationHistory(role)) {
       return Scaffold(
@@ -1041,20 +1083,20 @@ class _BmMenuExceptionHistoryScreenState
                     };
                     final title = item.sourceKind == 'staff_meal'
                         ? '${copy.staffMealOrder} #${_orderNumber(item)}'
-                        : item.itemName;
+                        : item.localizedName(copy.languageCode);
                     final subtitle = item.sourceKind == 'staff_meal'
-                        ? '${copy.items} ${item.itemName}\n'
+                        ? '${copy.items} ${item.localizedName(copy.languageCode)}\n'
                               '${copy.eventLabel(item.eventType)} · '
-                              '${item.storeName} · '
+                              '${copy.storeName(item.storeName)} · '
                               '${dateTime.format(_vnTime(item.eventAt))}\n'
                               '${copy.quantity} ${_quantity(item.quantity)} · '
-                              '${copy.actor} ${item.actorName} · '
+                              '${copy.actor} ${copy.actorName(item.actorName)} · '
                               '${copy.currentState} ${copy.stateLabel(item.currentState)}'
                         : '${copy.eventLabel(item.eventType)} · '
-                              '${item.storeName} · '
+                              '${copy.storeName(item.storeName)} · '
                               '${dateTime.format(_vnTime(item.eventAt))}\n'
                               '${copy.quantity} ${_quantity(item.quantity)} · '
-                              '${copy.actor} ${item.actorName} · '
+                              '${copy.actor} ${copy.actorName(item.actorName)} · '
                               '${copy.currentState} ${copy.stateLabel(item.currentState)}';
                     if (isNarrow) {
                       return Card(
@@ -1234,193 +1276,129 @@ class _BmMenuExceptionHistoryScreenState
 }
 
 class _BmHistoryCopy {
-  const _BmHistoryCopy(this.languageCode);
-  final String languageCode;
+  const _BmHistoryCopy(this.l10n);
+  final AppLocalizations l10n;
+  String get languageCode => l10n.localeName;
+  String actorName(String value) =>
+      value == 'Unknown actor' || value.isEmpty ? l10n.menuUnknownActor : value;
+  String storeName(String value) =>
+      value == 'Unknown store' || value.isEmpty ? l10n.menuUnknownStore : value;
 
-  String pick(String ko, String vi, String en) => switch (languageCode) {
-    'vi' => vi,
-    'en' => en,
-    _ => ko,
-  };
-
-  String get title => pick(
-    '서비스·취소·직원식사 메뉴 내역',
-    'Lịch sử món phục vụ, hủy và bữa ăn nhân viên',
-    'Service, cancelled, and staff-meal menu history',
-  );
-  String get forbidden => pick(
-    'BM 권한만 이 내역을 조회할 수 있습니다.',
-    'Chỉ BM mới có thể xem lịch sử này.',
-    'Only BM accounts can view this history.',
-  );
-  String get allStores => pick('전체 매장', 'Tất cả cửa hàng', 'All stores');
-  String get today => pick('오늘', 'Hôm nay', 'Today');
-  String get thisWeek => pick('이번 주', 'Tuần này', 'This week');
-  String get thisMonth => pick('이번 달', 'Tháng này', 'This month');
-  String get allPeriod => pick('전체 기간', 'Toàn bộ', 'All time');
-  String get store => pick('매장', 'Cửa hàng', 'Store');
-  String get from => pick('시작', 'Từ', 'From');
-  String get to => pick('종료', 'Đến', 'To');
-  String get search => pick(
-    '메뉴·주문·처리자 검색',
-    'Tìm món, đơn, người xử lý',
-    'Search item, order, actor',
-  );
-  String get includeReversals =>
-      pick('해제·복구 포함', 'Gồm bỏ phục vụ và khôi phục', 'Include reversals');
-  String get lookup => pick('조회', 'Tra cứu', 'Search');
-  String get refresh => pick('새로고침', 'Làm mới', 'Refresh');
-  String get retry => pick('다시 시도', 'Thử lại', 'Retry');
-  String get close => pick('닫기', 'Đóng', 'Close');
-  String get empty => pick(
-    '선택한 조건의 내역이 없습니다.',
-    'Không có lịch sử phù hợp.',
-    'No history matches the selected filters.',
-  );
-  String get scopeNotice => pick(
-    'POS 주문 메뉴 기준입니다. 접수 전 직접배달 요청 취소·거절은 포함하지 않습니다.',
-    'Dữ liệu dựa trên món POS; không gồm yêu cầu giao trực tiếp bị hủy hoặc từ chối trước khi nhận.',
-    'Based on POS order items; direct-delivery requests cancelled or rejected before acceptance are excluded.',
-  );
-  String get serviceEvents => pick('서비스 처리', 'Lần phục vụ', 'Service events');
-  String get serviceAmount =>
-      pick('서비스 기준금액', 'Giá trị món phục vụ', 'Service reference amount');
-  String get cancellationEvents =>
-      pick('취소 처리', 'Lần hủy', 'Cancellation events');
-  String get cancelledAmount => pick('취소금액', 'Số tiền hủy', 'Cancelled amount');
-  String get staffMealEvents =>
-      pick('직원식사 주문', 'Đơn ăn nhân viên', 'Staff-meal orders');
-  String get staffMealAmount => pick(
-    '직원식사 기준금액',
-    'Giá trị bữa ăn nhân viên',
-    'Staff-meal reference amount',
-  );
-  String get reversalEvents => pick('해제·복구', 'Bỏ/khôi phục', 'Reversals');
-  String get totalRows => pick('내역 건수', 'Số bản ghi', 'History records');
-  String get previous => pick('이전', 'Trước', 'Previous');
-  String get next => pick('다음', 'Tiếp', 'Next');
-  String page(int page) => pick('$page 페이지', 'Trang $page', 'Page $page');
-  String get eventTime => pick('처리 시각', 'Thời gian xử lý', 'Event time');
-  String get order => pick('주문', 'Đơn hàng', 'Order');
-  String get originalOrder => pick('원 주문번호', 'Mã đơn gốc', 'Original order');
-  String get originalOrderDetails =>
-      pick('원 주문 상세', 'Chi tiết đơn gốc', 'Original order details');
-  String get orderedAt => pick('주문 시각', 'Thời gian đặt', 'Ordered at');
-  String get orderStatus => pick('주문 상태', 'Trạng thái đơn', 'Order status');
-  String get orderPurpose => pick('주문 구분', 'Loại đơn', 'Order type');
-  String get salesChannel => pick('판매 채널', 'Kênh bán hàng', 'Sales channel');
-  String get orderedBy => pick('주문 생성자', 'Người tạo đơn', 'Created by');
-  String get notes => pick('주문 메모', 'Ghi chú đơn', 'Order notes');
-  String get items => pick('메뉴 구성:', 'Món:', 'Items:');
-  String get staffMealOrder =>
-      pick('직원식사 주문', 'Đơn ăn nhân viên', 'Staff-meal order');
-  String get serviceItem => pick('서비스', 'Phục vụ', 'Service');
-  String get noOrderItems => pick(
-    '저장된 주문 메뉴가 없습니다.',
-    'Không có món đã lưu.',
-    'No order items were stored.',
-  );
-  String originalOrderItems(int count) => pick(
-    '원 주문 메뉴 $count개',
-    '$count món trong đơn gốc',
-    '$count original order items',
-  );
-  String get table => pick('테이블', 'Bàn', 'Table');
-  String get item => pick('메뉴', 'Món', 'Item');
-  String get quantity => pick('수량', 'Số lượng', 'Quantity');
-  String get unitPrice => pick('단가', 'Đơn giá', 'Unit price');
-  String get referenceAmount =>
-      pick('기준금액', 'Giá trị tham chiếu', 'Reference amount');
-  String get actor => pick('처리자', 'Người xử lý', 'Actor');
-  String get reason => pick('사유', 'Lý do', 'Reason');
-  String get currentState =>
-      pick('현재 상태', 'Trạng thái hiện tại', 'Current state');
-  String get notRecorded => pick('기록 없음', 'Không có dữ liệu', 'Not recorded');
-  String get incompleteNotice => pick(
-    '과거 기록의 일부 상세 정보가 저장되어 있지 않습니다.',
-    'Một số chi tiết không được lưu trong dữ liệu cũ.',
-    'Some details were not stored in the historical record.',
-  );
+  String get title => l10n.bmHistoryTitle;
+  String get forbidden => l10n.bmHistoryForbidden;
+  String get allStores => l10n.bmHistoryAllStores;
+  String get today => l10n.bmHistoryToday;
+  String get thisWeek => l10n.bmHistoryThisWeek;
+  String get thisMonth => l10n.bmHistoryThisMonth;
+  String get allPeriod => l10n.bmHistoryAllPeriod;
+  String get store => l10n.bmHistoryStore;
+  String get from => l10n.bmHistoryFrom;
+  String get to => l10n.bmHistoryTo;
+  String get search => l10n.bmHistorySearch;
+  String get includeReversals => l10n.bmHistoryIncludeReversals;
+  String get lookup => l10n.bmHistoryLookup;
+  String get refresh => l10n.bmHistoryRefresh;
+  String get retry => l10n.bmHistoryRetry;
+  String get close => l10n.bmHistoryClose;
+  String get empty => l10n.bmHistoryEmpty;
+  String get scopeNotice => l10n.bmHistoryScopeNotice;
+  String get serviceEvents => l10n.bmHistoryServiceEvents;
+  String get serviceAmount => l10n.bmHistoryServiceAmount;
+  String get cancellationEvents => l10n.bmHistoryCancellationEvents;
+  String get cancelledAmount => l10n.bmHistoryCancelledAmount;
+  String get staffMealEvents => l10n.bmHistoryStaffMealEvents;
+  String get staffMealAmount => l10n.bmHistoryStaffMealAmount;
+  String get reversalEvents => l10n.bmHistoryReversalEvents;
+  String get totalRows => l10n.bmHistoryTotalRows;
+  String get previous => l10n.bmHistoryPrevious;
+  String get next => l10n.bmHistoryNext;
+  String page(int page) => l10n.bmHistoryPage(page);
+  String get eventTime => l10n.bmHistoryEventTime;
+  String get order => l10n.bmHistoryOrder;
+  String get originalOrder => l10n.bmHistoryOriginalOrder;
+  String get originalOrderDetails => l10n.bmHistoryOriginalOrderDetails;
+  String get orderedAt => l10n.bmHistoryOrderedAt;
+  String get orderStatus => l10n.bmHistoryOrderStatus;
+  String get orderPurpose => l10n.bmHistoryOrderPurpose;
+  String get salesChannel => l10n.bmHistorySalesChannel;
+  String get orderedBy => l10n.bmHistoryOrderedBy;
+  String get notes => l10n.bmHistoryNotes;
+  String get items => l10n.bmHistoryItems;
+  String get staffMealOrder => l10n.bmHistoryStaffMealOrder;
+  String get serviceItem => l10n.bmHistoryServiceItem;
+  String get noOrderItems => l10n.bmHistoryNoOrderItems;
+  String originalOrderItems(int count) =>
+      l10n.bmHistoryOriginalOrderItems(count);
+  String get table => l10n.bmHistoryTable;
+  String get item => l10n.bmHistoryItem;
+  String get quantity => l10n.bmHistoryQuantity;
+  String get unitPrice => l10n.bmHistoryUnitPrice;
+  String get referenceAmount => l10n.bmHistoryReferenceAmount;
+  String get actor => l10n.bmHistoryActor;
+  String get reason => l10n.bmHistoryReason;
+  String get currentState => l10n.bmHistoryCurrentState;
+  String get notRecorded => l10n.bmHistoryNotRecorded;
+  String get incompleteNotice => l10n.bmHistoryIncompleteNotice;
 
   String typeLabel(BmMenuHistoryType type) => switch (type) {
-    BmMenuHistoryType.all => pick('전체', 'Tất cả', 'All'),
-    BmMenuHistoryType.service => pick('서비스', 'Phục vụ', 'Service'),
-    BmMenuHistoryType.cancellation => pick('취소', 'Hủy', 'Cancellation'),
-    BmMenuHistoryType.staffMeal => pick(
-      '직원식사',
-      'Bữa ăn nhân viên',
-      'Staff meal',
-    ),
+    BmMenuHistoryType.all => l10n.bmHistoryTypeLabelAll,
+    BmMenuHistoryType.service => l10n.bmHistoryTypeLabelService,
+    BmMenuHistoryType.cancellation => l10n.bmHistoryTypeLabelCancellation,
+    BmMenuHistoryType.staffMeal => l10n.bmHistoryTypeLabelStaffMeal,
   };
 
   String eventLabel(String type) => switch (type) {
-    'service_marked' => pick('서비스 처리', 'Đánh dấu phục vụ', 'Marked as service'),
-    'service_unmarked' => pick('서비스 해제', 'Bỏ phục vụ', 'Service removed'),
-    'order_cancelled' => pick('주문 전체 취소', 'Hủy toàn bộ đơn', 'Order cancelled'),
-    'item_cancelled' => pick('메뉴 취소', 'Hủy món', 'Item cancelled'),
-    'order_restored' => pick('주문 복구', 'Khôi phục đơn', 'Order restored'),
-    'item_restored' => pick('메뉴 복구', 'Khôi phục món', 'Item restored'),
-    'staff_meal_created' => pick(
-      '직원식사 생성',
-      'Tạo bữa ăn nhân viên',
-      'Staff meal created',
-    ),
+    'service_marked' => l10n.bmHistoryTypeServiceMarked,
+    'service_unmarked' => l10n.bmHistoryTypeServiceUnmarked,
+    'order_cancelled' => l10n.bmHistoryTypeOrderCancelled,
+    'item_cancelled' => l10n.bmHistoryTypeItemCancelled,
+    'order_restored' => l10n.bmHistoryTypeOrderRestored,
+    'item_restored' => l10n.bmHistoryTypeItemRestored,
+    'staff_meal_created' => l10n.bmHistoryTypeStaffMealCreated,
     _ => type,
   };
 
   String stateLabel(String state) => switch (state) {
-    'pending' => pick('대기', 'Đang chờ', 'Pending'),
-    'confirmed' => pick('접수', 'Đã xác nhận', 'Confirmed'),
-    'preparing' => pick('조리 중', 'Đang chuẩn bị', 'Preparing'),
-    'ready' => pick('준비 완료', 'Sẵn sàng', 'Ready'),
-    'serving' => pick('제공 중', 'Đang phục vụ', 'Serving'),
-    'served' => pick('제공 완료', 'Đã phục vụ', 'Served'),
-    'completed' => pick('완료', 'Hoàn tất', 'Completed'),
-    'service' => pick('서비스 유지', 'Đang phục vụ', 'Service active'),
-    'charged' => pick('서비스 해제됨', 'Đã bỏ phục vụ', 'Service removed'),
-    'cancelled' => pick('취소 유지', 'Vẫn bị hủy', 'Still cancelled'),
-    'restored' => pick('복구됨', 'Đã khôi phục', 'Restored'),
-    'cancelled_again' => pick('다시 취소됨', 'Đã hủy lại', 'Cancelled again'),
-    'changed' => pick('이후 변경됨', 'Đã thay đổi sau đó', 'Changed later'),
-    'staff_meal_pending' => pick('접수 대기', 'Đang chờ', 'Pending'),
-    'staff_meal_confirmed' => pick('접수됨', 'Đã xác nhận', 'Confirmed'),
-    'staff_meal_serving' => pick('제공 중', 'Đang phục vụ', 'Serving'),
-    'staff_meal_completed' => pick('완료', 'Hoàn tất', 'Completed'),
-    'staff_meal_cancelled' => pick('취소됨', 'Đã hủy', 'Cancelled'),
-    'staff_meal_item_cancelled' => pick(
-      '메뉴 취소됨',
-      'Món đã hủy',
-      'Item cancelled',
-    ),
-    _ => pick('확인 불가', 'Không xác định', 'Unknown'),
+    'pending' => l10n.bmHistoryStatePending,
+    'confirmed' => l10n.bmHistoryStateConfirmed,
+    'preparing' => l10n.bmHistoryStatePreparing,
+    'ready' => l10n.bmHistoryStateReady,
+    'serving' => l10n.bmHistoryStateServing,
+    'served' => l10n.bmHistoryStateServed,
+    'completed' => l10n.bmHistoryStateCompleted,
+    'service' => l10n.bmHistoryStateService,
+    'charged' => l10n.bmHistoryStateCharged,
+    'cancelled' => l10n.bmHistoryStateCancelled,
+    'restored' => l10n.bmHistoryStateRestored,
+    'cancelled_again' => l10n.bmHistoryStateCancelledAgain,
+    'changed' => l10n.bmHistoryStateChanged,
+    'staff_meal_pending' => l10n.bmHistoryStateStaffMealPending,
+    'staff_meal_confirmed' => l10n.bmHistoryStateStaffMealConfirmed,
+    'staff_meal_serving' => l10n.bmHistoryStateStaffMealServing,
+    'staff_meal_completed' => l10n.bmHistoryStateStaffMealCompleted,
+    'staff_meal_cancelled' => l10n.bmHistoryStateStaffMealCancelled,
+    'staff_meal_item_cancelled' => l10n.bmHistoryStateStaffMealItemCancelled,
+    _ => l10n.bmHistoryState,
   };
 
   String errorMessage(Object error) {
     final text = error is PostgrestException ? error.message : error.toString();
     if (text.contains('BM_MENU_HISTORY_FORBIDDEN')) return forbidden;
     if (text.contains('BM_MENU_HISTORY_RANGE_INVALID')) {
-      return pick(
-        '조회 기간을 확인하세요.',
-        'Kiểm tra khoảng ngày.',
-        'Check the date range.',
-      );
+      return l10n.bmHistoryErrorMessage;
     }
-    return pick(
-      '내역을 불러오지 못했습니다.',
-      'Không thể tải lịch sử.',
-      'Failed to load history.',
-    );
+    return l10n.bmHistoryErrorMessage2;
   }
 
   String purposeLabel(String purpose) => switch (purpose) {
-    'staff_meal' => pick('직원식사', 'Bữa ăn nhân viên', 'Staff meal'),
-    _ => pick('고객 주문', 'Đơn khách', 'Customer order'),
+    'staff_meal' => l10n.bmHistoryPurposeStaffMeal,
+    _ => l10n.bmHistoryPurpose,
   };
 
   String channelLabel(String channel) => switch (channel) {
-    'takeaway' => pick('포장', 'Mang đi', 'Takeaway'),
-    'delivery' => pick('배달', 'Giao hàng', 'Delivery'),
-    _ => pick('매장', 'Tại chỗ', 'Dine in'),
+    'takeaway' => l10n.bmHistoryChannelTakeaway,
+    'delivery' => l10n.bmHistoryChannelDelivery,
+    _ => l10n.bmHistoryChannel,
   };
 
   String originalOrderError(Object? error) {
@@ -1429,17 +1407,9 @@ class _BmHistoryCopy {
         : error?.toString() ?? '';
     if (text.contains('BM_MENU_HISTORY_FORBIDDEN')) return forbidden;
     if (text.contains('BM_ORDER_HISTORY_NOT_FOUND')) {
-      return pick(
-        '원 주문 기록을 찾을 수 없습니다.',
-        'Không tìm thấy đơn gốc.',
-        'The original order could not be found.',
-      );
+      return l10n.bmHistoryOriginalOrderError;
     }
-    return pick(
-      '원 주문을 불러오지 못했습니다.',
-      'Không thể tải đơn gốc.',
-      'Failed to load the original order.',
-    );
+    return l10n.bmHistoryOriginalOrderError2;
   }
 }
 

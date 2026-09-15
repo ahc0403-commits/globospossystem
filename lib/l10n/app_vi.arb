@@ -1236,7 +1236,7 @@
   "superAdminPurgeStoreHasAccounts": "Hãy gỡ hoặc chuyển toàn bộ tài khoản và quyền truy cập của cửa hàng trước.",
   "superAdminPurgeStoreRequiresInactive": "Hãy vô hiệu hóa cửa hàng trước khi xóa vĩnh viễn.",
   "superAdminPurgeStoreFailed": "Không thể xóa vĩnh viễn. Hãy kiểm tra dữ liệu liên kết rồi thử lại.",
-  "superAdminCloseStore": "Đóng cửa hàng (폐업)",
+  "superAdminCloseStore": "Đóng cửa hàng",
   "superAdminCloseStoreTitle": "Đóng cửa hàng vĩnh viễn",
   "superAdminCloseStoreMessage": "Thao tác này vô hiệu hóa cửa hàng, thu hồi mọi quyền truy cập của nhân viên và tắt máy in. Dữ liệu doanh thu cũ được giữ lại để phục vụ kiểm tra thuế. Phải tất toán các đơn đang mở trước.",
   "superAdminCloseStoreReasonLabel": "Lý do đóng cửa (bắt buộc)",
@@ -3470,5 +3470,152 @@
   "leftoverPackagingRequest": "Yêu cầu gói đồ ăn thừa",
   "leftoverPackagingRequested": "Đã gửi yêu cầu gói đồ ăn thừa",
   "leftoverPackagingConfirmTitle": "Gói đồ ăn thừa mang về?",
-  "leftoverPackagingConfirmMessage": "Yêu cầu sẽ báo cho tầng phụ trách trước."
+  "leftoverPackagingConfirmMessage": "Yêu cầu sẽ báo cho tầng phụ trách trước.",
+  "bmHistoryTitle": "Lịch sử món phục vụ, hủy và bữa ăn nhân viên",
+  "bmHistoryForbidden": "Chỉ BM mới có thể xem lịch sử này.",
+  "bmHistoryAllStores": "Tất cả cửa hàng",
+  "bmHistoryToday": "Hôm nay",
+  "bmHistoryThisWeek": "Tuần này",
+  "bmHistoryThisMonth": "Tháng này",
+  "bmHistoryAllPeriod": "Toàn bộ",
+  "bmHistoryStore": "Cửa hàng",
+  "bmHistoryFrom": "Từ",
+  "bmHistoryTo": "Đến",
+  "bmHistorySearch": "Tìm món, đơn, người xử lý",
+  "bmHistoryIncludeReversals": "Gồm bỏ phục vụ và khôi phục",
+  "bmHistoryLookup": "Tra cứu",
+  "bmHistoryRefresh": "Làm mới",
+  "bmHistoryRetry": "Thử lại",
+  "bmHistoryClose": "Đóng",
+  "bmHistoryEmpty": "Không có lịch sử phù hợp.",
+  "bmHistoryScopeNotice": "Dữ liệu dựa trên món POS; không gồm yêu cầu giao trực tiếp bị hủy hoặc từ chối trước khi nhận.",
+  "bmHistoryServiceEvents": "Lần phục vụ",
+  "bmHistoryServiceAmount": "Giá trị món phục vụ",
+  "bmHistoryCancellationEvents": "Lần hủy",
+  "bmHistoryCancelledAmount": "Số tiền hủy",
+  "bmHistoryStaffMealEvents": "Đơn ăn nhân viên",
+  "bmHistoryStaffMealAmount": "Giá trị bữa ăn nhân viên",
+  "bmHistoryReversalEvents": "Bỏ/khôi phục",
+  "bmHistoryTotalRows": "Số bản ghi",
+  "bmHistoryPrevious": "Trước",
+  "bmHistoryNext": "Tiếp",
+  "bmHistoryPage": "Trang {page}",
+  "@bmHistoryPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "bmHistoryEventTime": "Thời gian xử lý",
+  "bmHistoryOrder": "Đơn hàng",
+  "bmHistoryOriginalOrder": "Mã đơn gốc",
+  "bmHistoryOriginalOrderDetails": "Chi tiết đơn gốc",
+  "bmHistoryOrderedAt": "Thời gian đặt",
+  "bmHistoryOrderStatus": "Trạng thái đơn",
+  "bmHistoryOrderPurpose": "Loại đơn",
+  "bmHistorySalesChannel": "Kênh bán hàng",
+  "bmHistoryOrderedBy": "Người tạo đơn",
+  "bmHistoryNotes": "Ghi chú đơn",
+  "bmHistoryItems": "Món:",
+  "bmHistoryStaffMealOrder": "Đơn ăn nhân viên",
+  "bmHistoryServiceItem": "Phục vụ",
+  "bmHistoryNoOrderItems": "Không có món đã lưu.",
+  "bmHistoryOriginalOrderItems": "{count} món trong đơn gốc",
+  "@bmHistoryOriginalOrderItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bmHistoryTable": "Bàn",
+  "bmHistoryItem": "Món",
+  "bmHistoryQuantity": "Số lượng",
+  "bmHistoryUnitPrice": "Đơn giá",
+  "bmHistoryReferenceAmount": "Giá trị tham chiếu",
+  "bmHistoryActor": "Người xử lý",
+  "bmHistoryReason": "Lý do",
+  "bmHistoryCurrentState": "Trạng thái hiện tại",
+  "bmHistoryNotRecorded": "Không có dữ liệu",
+  "bmHistoryIncompleteNotice": "Một số chi tiết không được lưu trong dữ liệu cũ.",
+  "bmHistoryTypeLabelAll": "Tất cả",
+  "bmHistoryTypeLabelService": "Phục vụ",
+  "bmHistoryTypeLabelCancellation": "Hủy",
+  "bmHistoryTypeLabelStaffMeal": "Bữa ăn nhân viên",
+  "bmHistoryTypeServiceMarked": "Đánh dấu phục vụ",
+  "bmHistoryTypeServiceUnmarked": "Bỏ phục vụ",
+  "bmHistoryTypeOrderCancelled": "Hủy toàn bộ đơn",
+  "bmHistoryTypeItemCancelled": "Hủy món",
+  "bmHistoryTypeOrderRestored": "Khôi phục đơn",
+  "bmHistoryTypeItemRestored": "Khôi phục món",
+  "bmHistoryTypeStaffMealCreated": "Tạo bữa ăn nhân viên",
+  "bmHistoryStatePending": "Đang chờ",
+  "bmHistoryStateConfirmed": "Đã xác nhận",
+  "bmHistoryStatePreparing": "Đang chuẩn bị",
+  "bmHistoryStateReady": "Sẵn sàng",
+  "bmHistoryStateServing": "Đang phục vụ",
+  "bmHistoryStateServed": "Đã phục vụ",
+  "bmHistoryStateCompleted": "Hoàn tất",
+  "bmHistoryStateService": "Đang phục vụ",
+  "bmHistoryStateCharged": "Đã bỏ phục vụ",
+  "bmHistoryStateCancelled": "Vẫn bị hủy",
+  "bmHistoryStateRestored": "Đã khôi phục",
+  "bmHistoryStateCancelledAgain": "Đã hủy lại",
+  "bmHistoryStateChanged": "Đã thay đổi sau đó",
+  "bmHistoryStateStaffMealPending": "Đang chờ",
+  "bmHistoryStateStaffMealConfirmed": "Đã xác nhận",
+  "bmHistoryStateStaffMealServing": "Đang phục vụ",
+  "bmHistoryStateStaffMealCompleted": "Hoàn tất",
+  "bmHistoryStateStaffMealCancelled": "Đã hủy",
+  "bmHistoryStateStaffMealItemCancelled": "Món đã hủy",
+  "bmHistoryState": "Không xác định",
+  "bmHistoryErrorMessage": "Kiểm tra khoảng ngày.",
+  "bmHistoryErrorMessage2": "Không thể tải lịch sử.",
+  "bmHistoryPurposeStaffMeal": "Bữa ăn nhân viên",
+  "bmHistoryPurpose": "Đơn khách",
+  "bmHistoryChannelTakeaway": "Mang đi",
+  "bmHistoryChannelDelivery": "Giao hàng",
+  "bmHistoryChannel": "Tại chỗ",
+  "bmHistoryOriginalOrderError": "Không tìm thấy đơn gốc.",
+  "bmHistoryOriginalOrderError2": "Không thể tải đơn gốc.",
+  "menuUnknownItem": "Món không xác định",
+  "menuUnknownActor": "Không rõ người xử lý",
+  "menuUnknownStore": "Cửa hàng không xác định",
+  "cashierPrintPaperReceipt": "In hóa đơn giấy",
+  "photoSalesReceiptCount": "{count} hóa đơn",
+  "@photoSalesReceiptCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cashierSearchNotFound": "Không tìm thấy đơn đang hoạt động cho \"{query}\".",
+  "@cashierSearchNotFound": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "cashierSearchKitchenPending": "Bếp đang chuẩn bị. Đơn sẽ xuất hiện khi tất cả món đã sẵn sàng.",
+  "cashierSearchNotPayable": "Bếp đang chuẩn bị. Chưa thể thanh toán đơn này.",
+  "cashierSearchReady": "Đơn đã sẵn sàng thanh toán.",
+  "cashierSearchFailed": "Tìm đơn thất bại. Vui lòng thử lại.",
+  "cashierSearchNoPayable": "Không có đơn có thể thanh toán cho \"{query}\" trong hàng đợi.",
+  "@cashierSearchNoPayable": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "cashierSearchLabel": "Tìm đơn hoặc bàn",
+  "cashierSearchHint": "Mã đơn 8 ký tự hoặc số bàn",
+  "cashierSearchClear": "Xóa tìm kiếm",
+  "cashierSearchOrder": "Tìm đơn",
+  "cashierSearchQrOrder": "Đơn QR.",
+  "cashierSearchStaffOrder": "Đơn do nhân viên tạo.",
+  "cashierSearchSelectStore": "Chọn cửa hàng trước khi tìm đơn hàng."
 }

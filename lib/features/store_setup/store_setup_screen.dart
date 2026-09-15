@@ -90,7 +90,9 @@ class StoreSetupScreen extends ConsumerWidget {
                     onStepTapped: notifier.goToStep,
                     controlsBuilder: (context, details) => Padding(
                       padding: const EdgeInsets.only(top: 20),
-                      child: Row(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
                           if (state.step > 0)
                             OutlinedButton(
@@ -102,7 +104,6 @@ class StoreSetupScreen extends ConsumerWidget {
                                   : () => notifier.goToStep(state.step - 1),
                               child: Text(context.l10n.storeSetupPrevious),
                             ),
-                          const SizedBox(width: 8),
                           if (state.step < 5)
                             FilledButton(
                               key: ValueKey(

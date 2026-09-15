@@ -1,3 +1,4 @@
+import '../../core/i18n/menu_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/i18n/locale_extensions.dart';
@@ -75,7 +76,7 @@ class _CashierSoldOutDialogState extends State<CashierSoldOutDialog> {
               current,
         ];
       });
-      final name = item['name']?.toString() ?? '-';
+      final name = context.menuName(item);
       showSuccessToast(
         context,
         isAvailable
@@ -153,7 +154,7 @@ class _CashierSoldOutDialogState extends State<CashierSoldOutDialog> {
                         final isAvailable = item['is_available'] == true;
                         final isUpdating = _updatingItemIds.contains(itemId);
                         return ListTile(
-                          title: Text(item['name']?.toString() ?? '-'),
+                          title: Text(context.menuName(item)),
                           subtitle: Text(
                             isAvailable ? l10n.menuAvailable : l10n.menuSoldOut,
                           ),

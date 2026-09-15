@@ -19,10 +19,10 @@ class _ViewportLocale {
   final Locale locale;
 }
 
-const _viewportLocales = <_ViewportLocale>[
-  _ViewportLocale(Size(390, 844), Locale('ko')),
-  _ViewportLocale(Size(1024, 768), Locale('en')),
-  _ViewportLocale(Size(1440, 900), Locale('vi')),
+final _viewportLocales = <_ViewportLocale>[
+  for (final size in const [Size(390, 844), Size(1024, 768), Size(1440, 900)])
+    for (final locale in const [Locale('ko'), Locale('en'), Locale('vi')])
+      _ViewportLocale(size, locale),
 ];
 
 class _OverlayHost extends StatefulWidget {

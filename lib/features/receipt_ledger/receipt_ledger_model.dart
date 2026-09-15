@@ -1,3 +1,5 @@
+import '../../core/i18n/menu_localization.dart';
+
 class ReceiptLedgerSummary {
   const ReceiptLedgerSummary({
     required this.receiptCount,
@@ -36,6 +38,7 @@ class ReceiptLedgerPayment {
 class ReceiptLedgerItem {
   const ReceiptLedgerItem({
     required this.name,
+    this.translations = const {},
     required this.quantity,
     required this.unitPrice,
     this.orderId,
@@ -45,6 +48,10 @@ class ReceiptLedgerItem {
   factory ReceiptLedgerItem.fromJson(Map<String, dynamic> json) =>
       ReceiptLedgerItem(
         name: json['name']?.toString() ?? 'Item',
+        translations: {
+          for (final code in ['ko', 'vi', 'en'])
+            'name_$code': json['name_$code'],
+        },
         quantity: _int(json['quantity']),
         unitPrice: _double(json['unit_price']),
         orderId: json['order_id']?.toString(),
@@ -52,6 +59,10 @@ class ReceiptLedgerItem {
       );
 
   final String name;
+  final Map<String, dynamic> translations;
+
+  String localizedName(String languageCode) =>
+      localizedMenuName({'name': name, ...translations}, languageCode);
   final int quantity;
   final double unitPrice;
   final String? orderId;

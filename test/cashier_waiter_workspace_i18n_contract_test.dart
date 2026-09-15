@@ -347,7 +347,8 @@ void main() {
       expect(workspace, contains('if (cart.isNotEmpty)'));
       expect(workspace, contains("key: const Key('menu_item_grid')"));
       expect(workspace, contains('height: 96'));
-      expect(workspace, contains('width: 168'));
+      // Translated takeout labels must fit beside quantity controls.
+      expect(workspace, contains('width: 248'));
       expect(workspace, contains('ListView.separated('));
       expect(workspace, isNot(contains('bottom: cart.isEmpty ? 0 : 76')));
       expect(workspace, contains("pending_cart_item_\${item.menuItemId}"));

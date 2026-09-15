@@ -376,7 +376,11 @@ void main() {
       contains("key: const Key('cashier_qr_order_ledger_dialog')"),
     );
     expect(cashierScreen, contains('class _CashierQrOrderLedgerDialog'));
-    expect(cashierScreen, contains('Kitchen in progress'));
+    expect(cashierScreen, contains('l10n.cashierSearchKitchenPending'));
+    expect(
+      readRepoFile('lib/l10n/app_en.arb'),
+      contains('Kitchen in progress'),
+    );
     expect(cashierScreen, contains('_filterCashierOrders'));
     expect(cashierScreen, contains('_handleOrderSearch'));
     expect(menuService, contains('togglePublicVisibility'));

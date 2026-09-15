@@ -24,9 +24,9 @@ const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '9db6f26a839d5e2744e9430b7589e8dcb838df67844a413c8fb4a0858a74707c',
   'lib/features/cashier/cashier_screen.dart':
-      '1c3c2c096eae8c5f4a0327fe5c8f68dd55bdeea49bc527a6aaa5103d25b8bfc7',
+      'ccc8309241d2ca29d38fe4b4c7e5f62b5c501b5508eb63cb765801ad5bdb34d1',
   'lib/features/kitchen/kitchen_screen.dart':
-      'e3cdc57c2a55ab67d948f7445fe18cac7305957153ef63ffff38b139bc5b5fa6',
+      '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   // Intentional event-merge fix; behavioral regressions live in
   // scalability_live_consumer_regression_test.dart.
   'lib/core/services/bank_transfer_alert_coordinator.dart':
@@ -49,16 +49,16 @@ const _frozenAlertFiles = <String, String>{
       '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
-  // Only the daily-closing cash-payout label was added in KO/VI/EN.
+  // Menu/history/search labels now use ARB in KO/VI/EN.
   // Arrival copy behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      'c0fe5b696b33d7d1a20bc495037d6c4b994d1735028c704d74ef691cf22a77fa',
+      'a3a978a06d2064226add9e27c16595f2cedbd7b9cfb60484fe024f2aad42f923',
   'lib/l10n/app_localizations_ko.dart':
-      '5f28f367cfa5a7b6a23e644ddf89126126be01d2fd07308b6a0145ed0dfe0814',
+      '66a8c63a67c485b20eb0f4177001ac43724e3a12f9ad34a6499d5d57e5373b76',
   'lib/l10n/app_localizations_vi.dart':
-      'ef790a71c8f44ab47a962176d835bb556af704d8355106c6e740fb7a47c4c342',
+      '9df5700683a39db8dfc2ef0ef7331246a148eb9ff2ce8894dc11c0583ff8b43a',
   'lib/l10n/app_localizations_en.dart':
-      '6b91899dcdcd98985b44ddc25b98adb776f1ee0f7e9ac72d1ecdfaadc85c08d8',
+      'd2f462cfdf6cfc8b9e6b46f25183c5b60892e310b60f98eb678efa1aacf1fa70',
 };
 
 void main() {

@@ -244,6 +244,9 @@ Widget _historyApp({required String role, required _FakeHistoryLoader loader}) {
   return ProviderScope(
     overrides: [bmMenuHistoryRoleProvider.overrideWith((ref) => role)],
     child: MaterialApp(
+      locale: const Locale('en'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: BmMenuExceptionHistoryScreen(
         stores: const [AccessibleStore(id: 'store-1', name: 'Bunsik')],
         initialStoreId: 'store-1',

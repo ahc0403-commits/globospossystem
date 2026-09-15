@@ -1,3 +1,4 @@
+import '../../core/i18n/locale_extensions.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -370,7 +371,7 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
                     ),
                   ),
                   Text(
-                    '${branch.receiptCount}건 · ${currency.format(branch.totalAmount)} ₫',
+                    '${context.l10n.photoSalesReceiptCount(branch.receiptCount)} · ${currency.format(branch.totalAmount)} ₫',
                     style: AppFonts.system(
                       color: ToastColorTokens.textPrimary,
                       fontSize: 12,

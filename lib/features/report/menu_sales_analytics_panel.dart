@@ -110,6 +110,7 @@ class _MenuSalesAnalyticsPanelState
       final bytes = buildMenuSalesAnalyticsWorkbook(
         analytics: analytics,
         params: params,
+        languageCode: Localizations.localeOf(context).languageCode,
       );
       if (bytes.isEmpty) return;
       final dateFormat = DateFormat('yyyyMMdd');
@@ -274,7 +275,9 @@ class _MenuSalesAnalyticsPanelState
                   label: _scope == MenuSalesScope.combo
                       ? context.l10n.menuSalesTopCombo
                       : context.l10n.menuSalesTopMenu,
-                  value: topMenu.displayName,
+                  value: topMenu.localizedName(
+                    Localizations.localeOf(context).languageCode,
+                  ),
                   detail:
                       '${context.l10n.menuSalesUnits(topMenu.soldQuantity)} · '
                       '${context.l10n.menuSalesOrders(topMenu.orderCount)} · '
@@ -325,7 +328,11 @@ class _MenuSalesAnalyticsPanelState
                   _MenuSalesMetricCard(
                     key: const Key('menu_sales_top_combo'),
                     label: context.l10n.menuSalesTopCombo,
-                    value: topCombo?.displayName ?? '—',
+                    value:
+                        topCombo?.localizedName(
+                          Localizations.localeOf(context).languageCode,
+                        ) ??
+                        '—',
                     detail: topCombo == null
                         ? context.l10n.menuSalesNoComboDataTitle
                         : '${context.l10n.menuSalesUnits(topCombo.soldQuantity)} · '
@@ -951,7 +958,7 @@ class _MenuSalesTableRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       label:
-          '${context.l10n.menuSalesRank(displayRank)}, ${row.displayName}, ${context.l10n.menuSalesUnits(row.soldQuantity)}, ${context.l10n.menuSalesOrders(row.orderCount)}',
+          '${context.l10n.menuSalesRank(displayRank)}, ${row.localizedName(Localizations.localeOf(context).languageCode)}, ${context.l10n.menuSalesUnits(row.soldQuantity)}, ${context.l10n.menuSalesOrders(row.orderCount)}',
       child: Container(
         constraints: const BoxConstraints(minHeight: 52),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1099,7 +1106,7 @@ class _MenuSalesName extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          row.displayName,
+          row.localizedName(Localizations.localeOf(context).languageCode),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w700),
@@ -1179,7 +1186,9 @@ class _MenuSalesHourly extends StatelessWidget {
   Widget build(BuildContext context) {
     final topMenus = <String, String>{};
     for (final row in analytics.topMenuHourRows) {
-      topMenus[row.menuKey] = row.displayName;
+      topMenus[row.menuKey] = row.localizedName(
+        Localizations.localeOf(context).languageCode,
+      );
     }
     final selectedKey = topMenus.containsKey(selectedMenuKey)
         ? selectedMenuKey
@@ -1407,7 +1416,9 @@ class _MenuSalesHeatmap extends StatelessWidget {
                   SizedBox(
                     width: 100,
                     child: Text(
-                      entry.value.first.displayName,
+                      entry.value.first.localizedName(
+                        Localizations.localeOf(context).languageCode,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -1419,12 +1430,12 @@ class _MenuSalesHeatmap extends StatelessWidget {
                     Expanded(
                       child: Tooltip(
                         message:
-                            '${row.displayName} · ${row.hour.toString().padLeft(2, '0')}:00 · '
+                            '${row.localizedName(Localizations.localeOf(context).languageCode)} · ${row.hour.toString().padLeft(2, '0')}:00 · '
                             '${context.l10n.menuSalesUnits(row.soldQuantity)} · '
                             '${currency.format(row.menuSalesAmount)} VND',
                         child: Semantics(
                           label:
-                              '${row.displayName}, ${row.hour}:00, '
+                              '${row.localizedName(Localizations.localeOf(context).languageCode)}, ${row.hour}:00, '
                               '${context.l10n.menuSalesUnits(row.soldQuantity)}, '
                               '${currency.format(row.menuSalesAmount)} VND',
                           child: Container(

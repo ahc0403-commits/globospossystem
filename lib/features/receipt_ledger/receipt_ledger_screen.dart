@@ -509,7 +509,11 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: Text(item.name)),
+        Expanded(
+          child: Text(
+            item.localizedName(Localizations.localeOf(context).languageCode),
+          ),
+        ),
         const SizedBox(width: 12),
         Text('× ${item.quantity}'),
         const SizedBox(width: 18),

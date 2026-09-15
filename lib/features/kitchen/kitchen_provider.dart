@@ -1,3 +1,4 @@
+import '../../core/i18n/menu_localization.dart';
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,9 +15,14 @@ class KitchenComboComponent {
     required this.label,
     required this.quantity,
     this.isTotalQuantity = false,
+    this.translations = const {},
   });
 
   final String label;
+  final Map<String, dynamic> translations;
+
+  String localizedName(String languageCode) =>
+      localizedMenuName({'name': label, ...translations}, languageCode);
   final int quantity;
   final bool isTotalQuantity;
 
@@ -26,6 +32,9 @@ class KitchenComboComponent {
   factory KitchenComboComponent.fromJson(Map<String, dynamic> json) {
     return KitchenComboComponent(
       label: json['label']?.toString() ?? 'Item',
+      translations: {
+        for (final code in ['ko', 'vi', 'en']) 'name_$code': json['name_$code'],
+      },
       quantity: switch (json['quantity']) {
         int value => value,
         num value => value.toInt(),

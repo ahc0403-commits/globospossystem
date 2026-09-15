@@ -1,3 +1,5 @@
+import '../../core/i18n/menu_localization.dart';
+
 class CartItem {
   const CartItem({
     required this.menuItemId,
@@ -5,6 +7,9 @@ class CartItem {
     required this.price,
     required this.quantity,
     this.isTakeout = false,
+    this.nameKo,
+    this.nameVi,
+    this.nameEn,
   });
 
   final String menuItemId;
@@ -12,6 +17,16 @@ class CartItem {
   final double price;
   final int quantity;
   final bool isTakeout;
+  final String? nameKo;
+  final String? nameVi;
+  final String? nameEn;
+
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   String get lineKey => '$menuItemId:${isTakeout ? 'takeout' : 'dine_in'}';
 
@@ -28,6 +43,9 @@ class CartItem {
       price: price ?? this.price,
       quantity: quantity ?? this.quantity,
       isTakeout: isTakeout ?? this.isTakeout,
+      nameKo: nameKo,
+      nameVi: nameVi,
+      nameEn: nameEn,
     );
   }
 }
@@ -196,9 +214,14 @@ class OrderComboComponent {
     required this.label,
     required this.quantity,
     this.isTotalQuantity = false,
+    this.translations = const {},
   });
 
   final String label;
+  final Map<String, dynamic> translations;
+
+  String localizedName(String languageCode) =>
+      localizedMenuName({'name': label, ...translations}, languageCode);
   final int quantity;
   final bool isTotalQuantity;
 
@@ -208,6 +231,9 @@ class OrderComboComponent {
   factory OrderComboComponent.fromJson(Map<String, dynamic> json) {
     return OrderComboComponent(
       label: json['label']?.toString() ?? 'Item',
+      translations: {
+        for (final code in ['ko', 'vi', 'en']) 'name_$code': json['name_$code'],
+      },
       quantity: switch (json['quantity']) {
         int value => value,
         num value => value.toInt(),

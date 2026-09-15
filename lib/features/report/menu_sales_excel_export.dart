@@ -6,6 +6,7 @@ import 'menu_sales_analytics.dart';
 List<int> buildMenuSalesAnalyticsWorkbook({
   required MenuSalesAnalytics analytics,
   required MenuSalesAnalyticsParams params,
+  String languageCode = 'en',
 }) {
   final dateFormat = DateFormat('dd/MM/yyyy');
   final excel = Excel.createExcel();
@@ -53,7 +54,7 @@ List<int> buildMenuSalesAnalyticsWorkbook({
   final topCombo = analytics.topCombo;
   menuSheet.appendRow([
     TextCellValue('Top Combo'),
-    TextCellValue(topCombo?.displayName ?? ''),
+    TextCellValue(topCombo?.localizedName(languageCode) ?? ''),
     TextCellValue('Top Combo Sales Amount'),
     DoubleCellValue(topCombo?.menuSalesAmount ?? 0),
   ]);
@@ -79,7 +80,7 @@ List<int> buildMenuSalesAnalyticsWorkbook({
     final row = menuRows[index];
     menuSheet.appendRow([
       IntCellValue(index + 1),
-      TextCellValue(row.displayName),
+      TextCellValue(row.localizedName(languageCode)),
       IntCellValue(row.soldQuantity),
       IntCellValue(row.orderCount),
       DoubleCellValue(row.menuSalesAmount),
@@ -127,7 +128,7 @@ List<int> buildMenuSalesAnalyticsWorkbook({
   for (final row in analytics.topMenuHourRows) {
     hourlySheet.appendRow([
       IntCellValue(row.rank),
-      TextCellValue(row.displayName),
+      TextCellValue(row.localizedName(languageCode)),
       TextCellValue('${row.hour.toString().padLeft(2, '0')}:00'),
       IntCellValue(row.soldQuantity),
       DoubleCellValue(row.menuSalesAmount),

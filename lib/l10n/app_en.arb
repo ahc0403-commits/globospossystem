@@ -1237,7 +1237,7 @@
   "superAdminPurgeStoreHasAccounts": "Remove or reassign all store accounts and access first.",
   "superAdminPurgeStoreRequiresInactive": "Deactivate the store before permanent deletion.",
   "superAdminPurgeStoreFailed": "Permanent deletion failed. Check the store dependencies and try again.",
-  "superAdminCloseStore": "Close Store (폐업)",
+  "superAdminCloseStore": "Close Store",
   "superAdminCloseStoreTitle": "Close store permanently",
   "superAdminCloseStoreMessage": "This deactivates the store, revokes all staff access, and turns off its printers. Past sales are preserved for tax audit. Live orders must be settled first.",
   "superAdminCloseStoreReasonLabel": "Closure reason (required)",
@@ -3471,5 +3471,152 @@
   "leftoverPackagingRequest": "Pack leftover food",
   "leftoverPackagingRequested": "Leftover packaging requested",
   "leftoverPackagingConfirmTitle": "Pack the leftover food?",
-  "leftoverPackagingConfirmMessage": "The request will alert the assigned floor first."
+  "leftoverPackagingConfirmMessage": "The request will alert the assigned floor first.",
+  "bmHistoryTitle": "Service, cancelled, and staff-meal menu history",
+  "bmHistoryForbidden": "Only BM accounts can view this history.",
+  "bmHistoryAllStores": "All stores",
+  "bmHistoryToday": "Today",
+  "bmHistoryThisWeek": "This week",
+  "bmHistoryThisMonth": "This month",
+  "bmHistoryAllPeriod": "All time",
+  "bmHistoryStore": "Store",
+  "bmHistoryFrom": "From",
+  "bmHistoryTo": "To",
+  "bmHistorySearch": "Search item, order, actor",
+  "bmHistoryIncludeReversals": "Include reversals",
+  "bmHistoryLookup": "Search",
+  "bmHistoryRefresh": "Refresh",
+  "bmHistoryRetry": "Retry",
+  "bmHistoryClose": "Close",
+  "bmHistoryEmpty": "No history matches the selected filters.",
+  "bmHistoryScopeNotice": "Based on POS order items; direct-delivery requests cancelled or rejected before acceptance are excluded.",
+  "bmHistoryServiceEvents": "Service events",
+  "bmHistoryServiceAmount": "Service reference amount",
+  "bmHistoryCancellationEvents": "Cancellation events",
+  "bmHistoryCancelledAmount": "Cancelled amount",
+  "bmHistoryStaffMealEvents": "Staff-meal orders",
+  "bmHistoryStaffMealAmount": "Staff-meal reference amount",
+  "bmHistoryReversalEvents": "Reversals",
+  "bmHistoryTotalRows": "History records",
+  "bmHistoryPrevious": "Previous",
+  "bmHistoryNext": "Next",
+  "bmHistoryPage": "Page {page}",
+  "@bmHistoryPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "bmHistoryEventTime": "Event time",
+  "bmHistoryOrder": "Order",
+  "bmHistoryOriginalOrder": "Original order",
+  "bmHistoryOriginalOrderDetails": "Original order details",
+  "bmHistoryOrderedAt": "Ordered at",
+  "bmHistoryOrderStatus": "Order status",
+  "bmHistoryOrderPurpose": "Order type",
+  "bmHistorySalesChannel": "Sales channel",
+  "bmHistoryOrderedBy": "Created by",
+  "bmHistoryNotes": "Order notes",
+  "bmHistoryItems": "Items:",
+  "bmHistoryStaffMealOrder": "Staff-meal order",
+  "bmHistoryServiceItem": "Service",
+  "bmHistoryNoOrderItems": "No order items were stored.",
+  "bmHistoryOriginalOrderItems": "{count} original order items",
+  "@bmHistoryOriginalOrderItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bmHistoryTable": "Table",
+  "bmHistoryItem": "Item",
+  "bmHistoryQuantity": "Quantity",
+  "bmHistoryUnitPrice": "Unit price",
+  "bmHistoryReferenceAmount": "Reference amount",
+  "bmHistoryActor": "Actor",
+  "bmHistoryReason": "Reason",
+  "bmHistoryCurrentState": "Current state",
+  "bmHistoryNotRecorded": "Not recorded",
+  "bmHistoryIncompleteNotice": "Some details were not stored in the historical record.",
+  "bmHistoryTypeLabelAll": "All",
+  "bmHistoryTypeLabelService": "Service",
+  "bmHistoryTypeLabelCancellation": "Cancellation",
+  "bmHistoryTypeLabelStaffMeal": "Staff meal",
+  "bmHistoryTypeServiceMarked": "Marked as service",
+  "bmHistoryTypeServiceUnmarked": "Service removed",
+  "bmHistoryTypeOrderCancelled": "Order cancelled",
+  "bmHistoryTypeItemCancelled": "Item cancelled",
+  "bmHistoryTypeOrderRestored": "Order restored",
+  "bmHistoryTypeItemRestored": "Item restored",
+  "bmHistoryTypeStaffMealCreated": "Staff meal created",
+  "bmHistoryStatePending": "Pending",
+  "bmHistoryStateConfirmed": "Confirmed",
+  "bmHistoryStatePreparing": "Preparing",
+  "bmHistoryStateReady": "Ready",
+  "bmHistoryStateServing": "Serving",
+  "bmHistoryStateServed": "Served",
+  "bmHistoryStateCompleted": "Completed",
+  "bmHistoryStateService": "Service active",
+  "bmHistoryStateCharged": "Service removed",
+  "bmHistoryStateCancelled": "Still cancelled",
+  "bmHistoryStateRestored": "Restored",
+  "bmHistoryStateCancelledAgain": "Cancelled again",
+  "bmHistoryStateChanged": "Changed later",
+  "bmHistoryStateStaffMealPending": "Pending",
+  "bmHistoryStateStaffMealConfirmed": "Confirmed",
+  "bmHistoryStateStaffMealServing": "Serving",
+  "bmHistoryStateStaffMealCompleted": "Completed",
+  "bmHistoryStateStaffMealCancelled": "Cancelled",
+  "bmHistoryStateStaffMealItemCancelled": "Item cancelled",
+  "bmHistoryState": "Unknown",
+  "bmHistoryErrorMessage": "Check the date range.",
+  "bmHistoryErrorMessage2": "Failed to load history.",
+  "bmHistoryPurposeStaffMeal": "Staff meal",
+  "bmHistoryPurpose": "Customer order",
+  "bmHistoryChannelTakeaway": "Takeaway",
+  "bmHistoryChannelDelivery": "Delivery",
+  "bmHistoryChannel": "Dine in",
+  "bmHistoryOriginalOrderError": "The original order could not be found.",
+  "bmHistoryOriginalOrderError2": "Failed to load the original order.",
+  "menuUnknownItem": "Unknown item",
+  "menuUnknownActor": "Unknown actor",
+  "menuUnknownStore": "Unknown store",
+  "cashierPrintPaperReceipt": "Print paper receipt",
+  "photoSalesReceiptCount": "{count} receipts",
+  "@photoSalesReceiptCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cashierSearchNotFound": "No active order found for \"{query}\".",
+  "@cashierSearchNotFound": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "cashierSearchKitchenPending": "Kitchen in progress. This order will appear here when every active item is ready.",
+  "cashierSearchNotPayable": "Kitchen in progress. This order is not payable yet.",
+  "cashierSearchReady": "Order ready for cashier payment.",
+  "cashierSearchFailed": "Order search failed. Please retry.",
+  "cashierSearchNoPayable": "No payable order in the cashier queue for \"{query}\".",
+  "@cashierSearchNoPayable": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "cashierSearchLabel": "Order or table search",
+  "cashierSearchHint": "8-char order code or table number",
+  "cashierSearchClear": "Clear search",
+  "cashierSearchOrder": "Search order",
+  "cashierSearchQrOrder": "QR order.",
+  "cashierSearchStaffOrder": "Staff order.",
+  "cashierSearchSelectStore": "Select a store before searching for an order."
 }
