@@ -302,6 +302,12 @@ const _coverage = <_OperationalCoverage>[
     markers: ['reports_issue_detail_list', 'daily_closing_cash_dialog'],
   ),
   _OperationalCoverage(
+    source: 'lib/features/report/bm_menu_exception_history.dart',
+    directCalls: 1,
+    test: 'test/bm_menu_exception_history_contract_test.dart',
+    markers: ['bm_menu_history_detail'],
+  ),
+  _OperationalCoverage(
     source: 'lib/features/receipt_ledger/receipt_ledger_screen.dart',
     directCalls: 2,
     test: 'test/receipt_ledger_contract_test.dart',
@@ -337,7 +343,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 121 dialog and sheet entrypoints map to operational tests', () {
+  test('all 122 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -349,10 +355,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 120);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 121);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      121,
+      122,
     );
 
     final settings = File(

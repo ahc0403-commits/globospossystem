@@ -15,6 +15,9 @@ class PermissionUtils {
       role == 'brand_admin' ||
       role == 'photo_objet_master';
 
+  static bool canViewServiceCancellationHistory(String? role) =>
+      role == 'brand_admin';
+
   static bool isPhotoObjetRole(String? role) =>
       role == 'photo_objet_master' || role == 'photo_objet_store_operator';
 
