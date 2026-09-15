@@ -49,9 +49,9 @@ double _reportDouble(dynamic value) => switch (value) {
 
 String _bmMenuHistoryEntryLabel(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Lịch sử món phục vụ và hủy',
-      'en' => 'Service and cancelled items',
-      _ => '서비스·취소 메뉴 내역',
+      'vi' => 'Món phục vụ, hủy và bữa ăn nhân viên',
+      'en' => 'Service, cancelled, and staff-meal items',
+      _ => '서비스·취소·직원식사 메뉴 내역',
     };
 
 String _reportPaymentMethodLabel(BuildContext context, String method) {

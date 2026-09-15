@@ -1,4 +1,4 @@
--- Runtime contract for BM service/cancellation menu history.
+-- Runtime contract for BM service/cancellation/staff-meal menu history.
 -- Run after all migrations with:
 --   psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/bm_menu_exception_history_test.sql
 
@@ -93,14 +93,26 @@ BEGIN
   );
 
   INSERT INTO public.orders(
-    id, restaurant_id, status, created_by, created_at
-  ) VALUES (
-    'b1000000-0000-4000-8000-000000000010',
-    'b1000000-0000-4000-8000-000000000005',
-    'confirmed',
-    'b1000000-0000-4000-8000-0000000000a1',
-    '2026-09-15 02:00:00+00'
-  );
+    id, restaurant_id, status, order_purpose, notes, created_by, created_at
+  ) VALUES
+    (
+      'b1000000-0000-4000-8000-000000000010',
+      'b1000000-0000-4000-8000-000000000005',
+      'confirmed',
+      'customer',
+      NULL,
+      'b1000000-0000-4000-8000-0000000000a1',
+      '2026-09-15 02:00:00+00'
+    ),
+    (
+      'b1000000-0000-4000-8000-000000000013',
+      'b1000000-0000-4000-8000-000000000005',
+      'completed',
+      'staff_meal',
+      'staff dinner',
+      'b1000000-0000-4000-8000-0000000000a1',
+      '2026-09-15 02:30:00+00'
+    );
 
   INSERT INTO public.menu_items(id, restaurant_id, name, price)
   VALUES (
@@ -113,19 +125,33 @@ BEGIN
   INSERT INTO public.order_items(
     id, restaurant_id, order_id, menu_item_id, item_type, label, display_name,
     unit_price, quantity, status, paying_amount_inc_tax
-  ) VALUES (
-    'b1000000-0000-4000-8000-000000000011',
-    'b1000000-0000-4000-8000-000000000005',
-    'b1000000-0000-4000-8000-000000000010',
-    'b1000000-0000-4000-8000-000000000012',
-    'menu_item',
-    'Test noodle',
-    'Test noodle',
-    50000,
-    2,
-    'cancelled',
-    110000
-  );
+  ) VALUES
+    (
+      'b1000000-0000-4000-8000-000000000011',
+      'b1000000-0000-4000-8000-000000000005',
+      'b1000000-0000-4000-8000-000000000010',
+      'b1000000-0000-4000-8000-000000000012',
+      'menu_item',
+      'Test noodle',
+      'Test noodle',
+      50000,
+      2,
+      'cancelled',
+      110000
+    ),
+    (
+      'b1000000-0000-4000-8000-000000000014',
+      'b1000000-0000-4000-8000-000000000005',
+      'b1000000-0000-4000-8000-000000000013',
+      'b1000000-0000-4000-8000-000000000012',
+      'menu_item',
+      'Staff rice',
+      'Staff rice',
+      50000,
+      1,
+      'served',
+      50000
+    );
 
   INSERT INTO public.audit_logs(
     id, actor_id, action, entity_type, entity_id, details, created_at
@@ -229,14 +255,17 @@ BEGIN
     50
   );
 
-  IF jsonb_array_length(v_result -> 'items') <> 4
-     OR (v_result #>> '{summary,total_rows}')::integer <> 4
+  IF jsonb_array_length(v_result -> 'items') <> 5
+     OR (v_result #>> '{summary,total_rows}')::integer <> 5
      OR (v_result #>> '{summary,service_event_count}')::integer <> 1
      OR (v_result #>> '{summary,service_quantity}')::numeric <> 2
      OR (v_result #>> '{summary,service_reference_amount}')::numeric <> 100000
      OR (v_result #>> '{summary,cancellation_event_count}')::integer <> 1
      OR (v_result #>> '{summary,cancelled_quantity}')::numeric <> 2
      OR (v_result #>> '{summary,cancelled_amount}')::numeric <> 110000
+     OR (v_result #>> '{summary,staff_meal_event_count}')::integer <> 1
+     OR (v_result #>> '{summary,staff_meal_quantity}')::numeric <> 1
+     OR (v_result #>> '{summary,staff_meal_reference_amount}')::numeric <> 50000
      OR (v_result #>> '{summary,reversal_event_count}')::integer <> 2 THEN
     RAISE EXCEPTION 'BM history aggregation mismatch: %', v_result;
   END IF;
@@ -257,6 +286,25 @@ BEGIN
      OR (v_result #>> '{summary,total_rows}')::integer <> 2
      OR COALESCE((v_result ->> 'has_more')::boolean, false) IS NOT TRUE THEN
     RAISE EXCEPTION 'BM history filter or pagination mismatch: %', v_result;
+  END IF;
+
+  v_result := public.get_bm_menu_exception_history(
+    'b1000000-0000-4000-8000-000000000005',
+    '2026-09-01 00:00:00+00',
+    '2026-10-01 00:00:00+00',
+    'staff_meal',
+    true,
+    NULL,
+    '2026-10-01 00:00:00+00',
+    0,
+    50
+  );
+
+  IF jsonb_array_length(v_result -> 'items') <> 1
+     OR (v_result #>> '{summary,total_rows}')::integer <> 1
+     OR (v_result #>> '{items,0,source_kind}') <> 'staff_meal'
+     OR (v_result #>> '{items,0,item_name}') <> 'Staff rice' THEN
+    RAISE EXCEPTION 'BM staff meal filter mismatch: %', v_result;
   END IF;
 
   BEGIN
