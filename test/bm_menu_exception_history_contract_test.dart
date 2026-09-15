@@ -21,6 +21,8 @@ class _FakeHistoryLoader implements BmMenuExceptionHistoryLoader {
   final BmMenuExceptionHistoryPage result;
   final Map<BmMenuHistoryType, BmMenuExceptionHistoryPage> resultsByType;
   int callCount = 0;
+  int orderDetailCallCount = 0;
+  String? requestedOrderId;
   final requestedTypes = <BmMenuHistoryType>[];
 
   @override
@@ -37,6 +39,15 @@ class _FakeHistoryLoader implements BmMenuExceptionHistoryLoader {
     callCount++;
     requestedTypes.add(historyType);
     return resultsByType[historyType] ?? result;
+  }
+
+  @override
+  Future<BmOriginalOrderDetail> fetchOrderDetail({
+    required String orderId,
+  }) async {
+    orderDetailCallCount++;
+    requestedOrderId = orderId;
+    return _originalOrderDetailFixture();
   }
 }
 
@@ -77,6 +88,7 @@ BmMenuExceptionHistoryPage _widgetPage() {
         'store_id': 'store-1',
         'store_name': 'Bunsik',
         'order_id': 'order-widget',
+        'order_number': '12345',
         'item_name': 'Service Tteokbokki',
         'quantity': 1,
         'unit_price': 50000,
@@ -116,6 +128,7 @@ BmMenuExceptionHistoryPage _cancellationWidgetPage() {
         'store_id': 'store-1',
         'store_name': 'Bunsik',
         'order_id': 'order-cancellation-widget',
+        'order_number': '23456',
         'item_name': 'Cancelled Kimbap',
         'quantity': 2,
         'unit_price': 30000,
@@ -156,10 +169,11 @@ BmMenuExceptionHistoryPage _staffMealWidgetPage() {
         'store_id': 'store-1',
         'store_name': 'Bunsik',
         'order_id': 'order-staff-meal-widget',
-        'item_name': 'Staff Bibimbap',
-        'quantity': 1,
-        'unit_price': 45000,
-        'reference_amount': 45000,
+        'order_number': '34567',
+        'item_name': 'Staff Bibimbap, Staff Soup',
+        'quantity': 3,
+        'unit_price': null,
+        'reference_amount': 65000,
         'is_service_item': false,
         'actor_name': 'BM 1',
         'reason': 'staff dinner',
@@ -176,14 +190,53 @@ BmMenuExceptionHistoryPage _staffMealWidgetPage() {
       'cancelled_quantity': 0,
       'cancelled_amount': 0,
       'staff_meal_event_count': 1,
-      'staff_meal_quantity': 1,
-      'staff_meal_reference_amount': 45000,
+      'staff_meal_quantity': 3,
+      'staff_meal_reference_amount': 65000,
       'reversal_event_count': 0,
     },
     'page': 0,
     'page_size': 50,
     'has_more': false,
     'fetched_at': '2026-09-15T06:00:00Z',
+  });
+}
+
+BmOriginalOrderDetail _originalOrderDetailFixture() {
+  return BmOriginalOrderDetail.fromJson({
+    'order_id': 'order-widget',
+    'order_number': '12345',
+    'created_at': '2026-09-15T04:30:00Z',
+    'store_id': 'store-1',
+    'store_name': 'Bunsik',
+    'table_number': 'A1',
+    'status': 'completed',
+    'order_purpose': 'customer',
+    'sales_channel': 'dine_in',
+    'created_by_name': 'Waiter 1',
+    'notes': 'Original guest order',
+    'item_count': 2,
+    'total_quantity': 3,
+    'reference_amount': 65000,
+    'items': [
+      {
+        'id': 'item-1',
+        'name': 'Original Bibimbap',
+        'quantity': 1,
+        'unit_price': 45000,
+        'reference_amount': 45000,
+        'status': 'served',
+        'is_service_item': false,
+      },
+      {
+        'id': 'item-2',
+        'name': 'Original Soup',
+        'quantity': 2,
+        'unit_price': 10000,
+        'reference_amount': 20000,
+        'status': 'served',
+        'is_service_item': true,
+      },
+    ],
   });
 }
 
@@ -276,13 +329,29 @@ void main() {
     expect(page.items.single.sourceKind, 'staff_meal');
     expect(page.items.single.currentState, 'staff_meal_completed');
     expect(page.summary.staffMealEventCount, 1);
-    expect(page.summary.staffMealQuantity, 1);
-    expect(page.summary.staffMealReferenceAmount, 45000);
+    expect(page.summary.staffMealQuantity, 3);
+    expect(page.summary.staffMealReferenceAmount, 65000);
+    expect(page.items.single.itemName, 'Staff Bibimbap, Staff Soup');
+    expect(page.items.single.orderNumber, '34567');
+  });
+
+  test('original order detail preserves the full order and item states', () {
+    final detail = _originalOrderDetailFixture();
+
+    expect(detail.orderNumber, '12345');
+    expect(detail.itemCount, 2);
+    expect(detail.totalQuantity, 3);
+    expect(detail.referenceAmount, 65000);
+    expect(detail.items.map((item) => item.name), [
+      'Original Bibimbap',
+      'Original Soup',
+    ]);
+    expect(detail.items.last.isServiceItem, isTrue);
   });
 
   test('migration enforces BM role, store scope, and server pagination', () {
     final migration = File(
-      'supabase/migrations/20260915170000_bm_staff_meal_history.sql',
+      'supabase/migrations/20260915180000_bm_order_drilldown_staff_meal_grouping.sql',
     ).readAsStringSync();
     final runtime = File(
       'supabase/tests/bm_menu_exception_history_test.sql',
@@ -299,6 +368,9 @@ void main() {
     expect(migration, contains("order_row.order_purpose = 'staff_meal'"));
     expect(migration, contains("'staff_meal_created'"));
     expect(migration, contains('orders_bm_staff_meal_history_idx'));
+    expect(migration, contains('string_agg('));
+    expect(migration, contains('get_bm_order_history_detail'));
+    expect(migration, contains("'order_number'"));
     expect(runtime, contains('Non-BM history access was not rejected'));
     expect(runtime, contains('BM out-of-scope store access was not rejected'));
     expect(runtime, contains('BM history aggregation mismatch'));
@@ -336,6 +408,51 @@ void main() {
     expect(find.byKey(const Key('bm_menu_history_list')), findsNothing);
   });
 
+  testWidgets(
+    'service and cancellation order numbers open the original order',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final servicePage = _widgetPage();
+      final cancellationPage = _cancellationWidgetPage();
+      final loader = _FakeHistoryLoader(
+        servicePage,
+        resultsByType: {BmMenuHistoryType.cancellation: cancellationPage},
+      );
+
+      await tester.pumpWidget(_historyApp(role: 'brand_admin', loader: loader));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('bm_original_order_order-widget_desktop_0')),
+      );
+      await tester.pumpAndSettle();
+      expect(loader.requestedOrderId, 'order-widget');
+      expect(find.byKey(const Key('bm_original_order_detail')), findsOneWidget);
+      expect(find.text('Original order details #12345'), findsOneWidget);
+      expect(find.text('Original Bibimbap'), findsOneWidget);
+      expect(find.text('Original Soup'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('bm_original_order_close')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('bm_menu_history_type_cancellation')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const Key('bm_original_order_order-cancellation-widget_desktop_0'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(loader.orderDetailCallCount, 2);
+      expect(loader.requestedOrderId, 'order-cancellation-widget');
+      expect(find.byKey(const Key('bm_original_order_detail')), findsOneWidget);
+    },
+  );
+
   testWidgets('BM history stays usable on a phone-sized screen', (
     tester,
   ) async {
@@ -350,6 +467,14 @@ void main() {
 
     expect(find.byKey(const Key('bm_menu_history_lookup')), findsOneWidget);
     expect(find.text('Service Tteokbokki'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('bm_original_order_order-widget_mobile_0')),
+    );
+    await tester.pumpAndSettle();
+    expect(loader.requestedOrderId, 'order-widget');
+    expect(find.byKey(const Key('bm_original_order_detail')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('type buttons load service, cancellation, and staff meals', (
@@ -398,7 +523,8 @@ void main() {
     expect(loader.requestedTypes.last, BmMenuHistoryType.staffMeal);
     expect(find.text('Service Tteokbokki'), findsNothing);
     expect(find.text('Cancelled Kimbap'), findsNothing);
-    expect(find.text('Staff Bibimbap'), findsOneWidget);
+    expect(find.text('Staff-meal order #34567'), findsOneWidget);
+    expect(find.textContaining('Staff Bibimbap, Staff Soup'), findsOneWidget);
   });
 
   testWidgets(
