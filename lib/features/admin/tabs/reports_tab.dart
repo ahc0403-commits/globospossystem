@@ -15,8 +15,10 @@ import '../../../core/payments/payment_method_contract.dart';
 import '../../../core/services/daily_closing_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
+import '../../../core/utils/permission_utils.dart';
 import '../../../main.dart';
 import '../../auth/auth_provider.dart';
+import '../../report/bm_menu_exception_history.dart';
 import '../../report/menu_sales_analytics.dart';
 import '../../report/report_provider.dart';
 import '../report_analysis_screens.dart';
@@ -884,6 +886,31 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                   _ => '오늘 영수증 원장',
                 }),
               ),
+              if (PermissionUtils.canViewServiceCancellationHistory(
+                ref.watch(authProvider).role,
+              ))
+                OutlinedButton.icon(
+                  key: const Key('bm_menu_exception_history_entry'),
+                  onPressed: () {
+                    final auth = ref.read(authProvider);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => BmMenuExceptionHistoryScreen(
+                          stores: auth.accessibleStores,
+                          initialStoreId: storeId,
+                          initialStartDate: reportState.startDate,
+                          initialEndDate: reportState.endDate,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.manage_search_outlined, size: 16),
+                  label: Text(switch (localeCode) {
+                    'vi' => 'Lịch sử món phục vụ và hủy',
+                    'en' => 'Service and cancelled items',
+                    _ => '서비스·취소 메뉴 내역',
+                  }),
+                ),
             ],
           ),
         ],
