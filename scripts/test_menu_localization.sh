@@ -22,7 +22,7 @@ if run_sql < test/sql/menu_localization_test.sql >"$fixture_log" 2>&1; then
   printf 'Expected the previous read functions to fail the translation regression.\n' >&2
   exit 1
 fi
-if ! rg -q 'English search lost|History translations lost' "$fixture_log"; then
+if ! grep -Eq 'English search lost|History translations lost' "$fixture_log"; then
   cat "$fixture_log" >&2
   exit 1
 fi
