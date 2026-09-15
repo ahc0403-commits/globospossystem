@@ -8,6 +8,7 @@ DO $test$
 DECLARE
   v_result jsonb;
   v_forbidden boolean := false;
+  v_detail_forbidden boolean := false;
   v_scope_forbidden boolean := false;
 BEGIN
   INSERT INTO public.companies(id, name)
@@ -151,6 +152,19 @@ BEGIN
       1,
       'served',
       50000
+    ),
+    (
+      'b1000000-0000-4000-8000-000000000015',
+      'b1000000-0000-4000-8000-000000000005',
+      'b1000000-0000-4000-8000-000000000013',
+      'b1000000-0000-4000-8000-000000000012',
+      'menu_item',
+      'Staff soup',
+      'Staff soup',
+      10000,
+      2,
+      'served',
+      20000
     );
 
   INSERT INTO public.audit_logs(
@@ -264,8 +278,8 @@ BEGIN
      OR (v_result #>> '{summary,cancelled_quantity}')::numeric <> 2
      OR (v_result #>> '{summary,cancelled_amount}')::numeric <> 110000
      OR (v_result #>> '{summary,staff_meal_event_count}')::integer <> 1
-     OR (v_result #>> '{summary,staff_meal_quantity}')::numeric <> 1
-     OR (v_result #>> '{summary,staff_meal_reference_amount}')::numeric <> 50000
+     OR (v_result #>> '{summary,staff_meal_quantity}')::numeric <> 3
+     OR (v_result #>> '{summary,staff_meal_reference_amount}')::numeric <> 70000
      OR (v_result #>> '{summary,reversal_event_count}')::integer <> 2 THEN
     RAISE EXCEPTION 'BM history aggregation mismatch: %', v_result;
   END IF;
@@ -303,8 +317,26 @@ BEGIN
   IF jsonb_array_length(v_result -> 'items') <> 1
      OR (v_result #>> '{summary,total_rows}')::integer <> 1
      OR (v_result #>> '{items,0,source_kind}') <> 'staff_meal'
-     OR (v_result #>> '{items,0,item_name}') <> 'Staff rice' THEN
+     OR (v_result #>> '{items,0,item_name}') <> 'Staff rice, Staff soup'
+     OR (v_result #>> '{items,0,quantity}')::numeric <> 3
+     OR (v_result #>> '{items,0,reference_amount}')::numeric <> 70000 THEN
     RAISE EXCEPTION 'BM staff meal filter mismatch: %', v_result;
+  END IF;
+
+  v_result := public.get_bm_order_history_detail(
+    'b1000000-0000-4000-8000-000000000013'
+  );
+
+  IF (v_result ->> 'order_id')::uuid <>
+       'b1000000-0000-4000-8000-000000000013'::uuid
+     OR length(v_result ->> 'order_number') <> 5
+     OR (v_result ->> 'item_count')::integer <> 2
+     OR (v_result ->> 'total_quantity')::numeric <> 3
+     OR (v_result ->> 'reference_amount')::numeric <> 70000
+     OR jsonb_array_length(v_result -> 'items') <> 2
+     OR (v_result #>> '{items,0,name}') <> 'Staff rice'
+     OR (v_result #>> '{items,1,name}') <> 'Staff soup' THEN
+    RAISE EXCEPTION 'BM original order detail mismatch: %', v_result;
   END IF;
 
   BEGIN
@@ -347,6 +379,18 @@ BEGIN
 
   IF NOT v_forbidden THEN
     RAISE EXCEPTION 'Non-BM history access was not rejected';
+  END IF;
+
+  BEGIN
+    PERFORM public.get_bm_order_history_detail(
+      'b1000000-0000-4000-8000-000000000013'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_detail_forbidden := SQLERRM LIKE '%BM_MENU_HISTORY_FORBIDDEN%';
+  END;
+
+  IF NOT v_detail_forbidden THEN
+    RAISE EXCEPTION 'Non-BM original order detail access was not rejected';
   END IF;
 END;
 $test$;
