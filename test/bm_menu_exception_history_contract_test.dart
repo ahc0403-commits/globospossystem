@@ -145,6 +145,48 @@ BmMenuExceptionHistoryPage _cancellationWidgetPage() {
   });
 }
 
+BmMenuExceptionHistoryPage _staffMealWidgetPage() {
+  return BmMenuExceptionHistoryPage.fromJson({
+    'items': [
+      {
+        'source_kind': 'staff_meal',
+        'event_type': 'staff_meal_created',
+        'event_id': 'event-staff-meal-widget',
+        'event_at': '2026-09-15T05:45:00Z',
+        'store_id': 'store-1',
+        'store_name': 'Bunsik',
+        'order_id': 'order-staff-meal-widget',
+        'item_name': 'Staff Bibimbap',
+        'quantity': 1,
+        'unit_price': 45000,
+        'reference_amount': 45000,
+        'is_service_item': false,
+        'actor_name': 'BM 1',
+        'reason': 'staff dinner',
+        'current_state': 'staff_meal_completed',
+        'data_incomplete': false,
+      },
+    ],
+    'summary': {
+      'total_rows': 1,
+      'service_event_count': 0,
+      'service_quantity': 0,
+      'service_reference_amount': 0,
+      'cancellation_event_count': 0,
+      'cancelled_quantity': 0,
+      'cancelled_amount': 0,
+      'staff_meal_event_count': 1,
+      'staff_meal_quantity': 1,
+      'staff_meal_reference_amount': 45000,
+      'reversal_event_count': 0,
+    },
+    'page': 0,
+    'page_size': 50,
+    'has_more': false,
+    'fetched_at': '2026-09-15T06:00:00Z',
+  });
+}
+
 Widget _historyApp({required String role, required _FakeHistoryLoader loader}) {
   return ProviderScope(
     overrides: [bmMenuHistoryRoleProvider.overrideWith((ref) => role)],
@@ -228,9 +270,19 @@ void main() {
     }
   });
 
+  test('staff meal models preserve their separate summary', () {
+    final page = _staffMealWidgetPage();
+
+    expect(page.items.single.sourceKind, 'staff_meal');
+    expect(page.items.single.currentState, 'staff_meal_completed');
+    expect(page.summary.staffMealEventCount, 1);
+    expect(page.summary.staffMealQuantity, 1);
+    expect(page.summary.staffMealReferenceAmount, 45000);
+  });
+
   test('migration enforces BM role, store scope, and server pagination', () {
     final migration = File(
-      'supabase/migrations/20260915120000_bm_service_cancellation_history.sql',
+      'supabase/migrations/20260915170000_bm_staff_meal_history.sql',
     ).readAsStringSync();
     final runtime = File(
       'supabase/tests/bm_menu_exception_history_test.sql',
@@ -244,6 +296,9 @@ void main() {
     expect(migration, contains("'order_restored'"));
     expect(migration, contains('order_cancellation_ledger'));
     expect(migration, contains('order_cancellation_reversals'));
+    expect(migration, contains("order_row.order_purpose = 'staff_meal'"));
+    expect(migration, contains("'staff_meal_created'"));
+    expect(migration, contains('orders_bm_staff_meal_history_idx'));
     expect(runtime, contains('Non-BM history access was not rejected'));
     expect(runtime, contains('BM out-of-scope store access was not rejected'));
     expect(runtime, contains('BM history aggregation mismatch'));
@@ -297,7 +352,7 @@ void main() {
     expect(find.text('Service Tteokbokki'), findsOneWidget);
   });
 
-  testWidgets('service and cancellation buttons load separate histories', (
+  testWidgets('type buttons load service, cancellation, and staff meals', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -306,11 +361,13 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final servicePage = _widgetPage();
     final cancellationPage = _cancellationWidgetPage();
+    final staffMealPage = _staffMealWidgetPage();
     final loader = _FakeHistoryLoader(
       servicePage,
       resultsByType: {
         BmMenuHistoryType.service: servicePage,
         BmMenuHistoryType.cancellation: cancellationPage,
+        BmMenuHistoryType.staffMeal: staffMealPage,
       },
     );
 
@@ -333,6 +390,15 @@ void main() {
     expect(loader.requestedTypes.last, BmMenuHistoryType.cancellation);
     expect(find.text('Service Tteokbokki'), findsNothing);
     expect(find.text('Cancelled Kimbap'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('bm_menu_history_type_staff_meal')).hitTestable(),
+    );
+    await tester.pumpAndSettle();
+    expect(loader.requestedTypes.last, BmMenuHistoryType.staffMeal);
+    expect(find.text('Service Tteokbokki'), findsNothing);
+    expect(find.text('Cancelled Kimbap'), findsNothing);
+    expect(find.text('Staff Bibimbap'), findsOneWidget);
   });
 
   testWidgets(

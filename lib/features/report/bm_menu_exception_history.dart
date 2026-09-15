@@ -11,7 +11,8 @@ import '../auth/auth_state.dart';
 enum BmMenuHistoryType {
   all('all'),
   service('service'),
-  cancellation('cancellation');
+  cancellation('cancellation'),
+  staffMeal('staff_meal');
 
   const BmMenuHistoryType(this.wireValue);
   final String wireValue;
@@ -101,6 +102,9 @@ class BmMenuExceptionHistorySummary {
     required this.cancellationEventCount,
     required this.cancelledQuantity,
     required this.cancelledAmount,
+    required this.staffMealEventCount,
+    required this.staffMealQuantity,
+    required this.staffMealReferenceAmount,
     required this.reversalEventCount,
   });
 
@@ -111,6 +115,9 @@ class BmMenuExceptionHistorySummary {
   final int cancellationEventCount;
   final double cancelledQuantity;
   final double cancelledAmount;
+  final int staffMealEventCount;
+  final double staffMealQuantity;
+  final double staffMealReferenceAmount;
   final int reversalEventCount;
 
   factory BmMenuExceptionHistorySummary.fromJson(Map<String, dynamic> json) {
@@ -122,6 +129,11 @@ class BmMenuExceptionHistorySummary {
       cancellationEventCount: _intValue(json['cancellation_event_count']),
       cancelledQuantity: _doubleValue(json['cancelled_quantity']),
       cancelledAmount: _doubleValue(json['cancelled_amount']),
+      staffMealEventCount: _intValue(json['staff_meal_event_count']),
+      staffMealQuantity: _doubleValue(json['staff_meal_quantity']),
+      staffMealReferenceAmount: _doubleValue(
+        json['staff_meal_reference_amount'],
+      ),
       reversalEventCount: _intValue(json['reversal_event_count']),
     );
   }
@@ -345,6 +357,12 @@ class _BmMenuExceptionHistoryScreenState
     _load(resetPage: true);
   }
 
+  void _selectHistoryType(BmMenuHistoryType nextType) {
+    if (_loading || nextType == _historyType) return;
+    setState(() => _historyType = nextType);
+    _load(resetPage: true);
+  }
+
   void _showDetails(BmMenuExceptionHistoryItem item, _BmHistoryCopy copy) {
     final money = NumberFormat('#,###', 'vi_VN');
     final dateTime = DateFormat('dd/MM/yyyy HH:mm');
@@ -519,31 +537,54 @@ class _BmMenuExceptionHistoryScreenState
               ),
             ),
             const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<BmMenuHistoryType>(
-                key: const Key('bm_menu_history_type_filter'),
-                segments: [
-                  for (final type in BmMenuHistoryType.values)
-                    ButtonSegment<BmMenuHistoryType>(
-                      value: type,
-                      label: Text(
-                        copy.typeLabel(type),
-                        key: ValueKey('bm_menu_history_type_${type.wireValue}'),
-                      ),
-                    ),
-                ],
-                selected: {_historyType},
-                showSelectedIcon: false,
-                onSelectionChanged: _loading
-                    ? null
-                    : (selection) {
-                        final nextType = selection.single;
-                        if (nextType == _historyType) return;
-                        setState(() => _historyType = nextType);
-                        _load(resetPage: true);
-                      },
-              ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 600) {
+                  return Wrap(
+                    key: const Key('bm_menu_history_type_filter'),
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final type in BmMenuHistoryType.values)
+                        ChoiceChip(
+                          key: ValueKey(
+                            'bm_menu_history_type_${type.wireValue}',
+                          ),
+                          label: Text(copy.typeLabel(type)),
+                          selected: type == _historyType,
+                          onSelected: _loading
+                              ? null
+                              : (selected) {
+                                  if (selected) _selectHistoryType(type);
+                                },
+                        ),
+                    ],
+                  );
+                }
+                return SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<BmMenuHistoryType>(
+                    key: const Key('bm_menu_history_type_filter'),
+                    segments: [
+                      for (final type in BmMenuHistoryType.values)
+                        ButtonSegment<BmMenuHistoryType>(
+                          value: type,
+                          label: Text(
+                            copy.typeLabel(type),
+                            key: ValueKey(
+                              'bm_menu_history_type_${type.wireValue}',
+                            ),
+                          ),
+                        ),
+                    ],
+                    selected: {_historyType},
+                    showSelectedIcon: false,
+                    onSelectionChanged: _loading
+                        ? null
+                        : (selection) => _selectHistoryType(selection.single),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -681,6 +722,14 @@ class _BmMenuExceptionHistoryScreenState
                 '${money.format(result.summary.cancelledAmount)} VND',
               ),
               _summaryCard(
+                copy.staffMealEvents,
+                '${result.summary.staffMealEventCount}',
+              ),
+              _summaryCard(
+                copy.staffMealAmount,
+                '${money.format(result.summary.staffMealReferenceAmount)} VND',
+              ),
+              _summaryCard(
                 copy.reversalEvents,
                 '${result.summary.reversalEventCount}',
               ),
@@ -701,6 +750,11 @@ class _BmMenuExceptionHistoryScreenState
                     final amount = item.sourceKind == 'cancellation'
                         ? item.cancelledAmount
                         : item.referenceAmount;
+                    final icon = switch (item.sourceKind) {
+                      'service' => Icons.redeem_outlined,
+                      'staff_meal' => Icons.restaurant_outlined,
+                      _ => Icons.cancel_outlined,
+                    };
                     final subtitle =
                         '${copy.eventLabel(item.eventType)} · '
                         '${item.storeName} · '
@@ -720,11 +774,7 @@ class _BmMenuExceptionHistoryScreenState
                               children: [
                                 Row(
                                   children: [
-                                    Icon(
-                                      item.sourceKind == 'service'
-                                          ? Icons.redeem_outlined
-                                          : Icons.cancel_outlined,
-                                    ),
+                                    Icon(icon),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
@@ -761,13 +811,7 @@ class _BmMenuExceptionHistoryScreenState
                         key: ValueKey(
                           'bm_menu_history_${item.eventId}_${item.eventType}_$index',
                         ),
-                        leading: CircleAvatar(
-                          child: Icon(
-                            item.sourceKind == 'service'
-                                ? Icons.redeem_outlined
-                                : Icons.cancel_outlined,
-                          ),
-                        ),
+                        leading: CircleAvatar(child: Icon(icon)),
                         title: Text(item.itemName),
                         subtitle: Text(subtitle),
                         isThreeLine: true,
@@ -880,9 +924,9 @@ class _BmHistoryCopy {
   };
 
   String get title => pick(
-    '서비스·취소 메뉴 내역',
-    'Lịch sử món phục vụ và hủy',
-    'Service and cancelled menu history',
+    '서비스·취소·직원식사 메뉴 내역',
+    'Lịch sử món phục vụ, hủy và bữa ăn nhân viên',
+    'Service, cancelled, and staff-meal menu history',
   );
   String get forbidden => pick(
     'BM 권한만 이 내역을 조회할 수 있습니다.',
@@ -924,6 +968,13 @@ class _BmHistoryCopy {
   String get cancellationEvents =>
       pick('취소 처리', 'Lần hủy', 'Cancellation events');
   String get cancelledAmount => pick('취소금액', 'Số tiền hủy', 'Cancelled amount');
+  String get staffMealEvents =>
+      pick('직원식사 주문', 'Đơn ăn nhân viên', 'Staff-meal orders');
+  String get staffMealAmount => pick(
+    '직원식사 기준금액',
+    'Giá trị bữa ăn nhân viên',
+    'Staff-meal reference amount',
+  );
   String get reversalEvents => pick('해제·복구', 'Bỏ/khôi phục', 'Reversals');
   String get totalRows => pick('메뉴 행', 'Dòng món', 'Menu rows');
   String get previous => pick('이전', 'Trước', 'Previous');
@@ -952,6 +1003,11 @@ class _BmHistoryCopy {
     BmMenuHistoryType.all => pick('전체', 'Tất cả', 'All'),
     BmMenuHistoryType.service => pick('서비스', 'Phục vụ', 'Service'),
     BmMenuHistoryType.cancellation => pick('취소', 'Hủy', 'Cancellation'),
+    BmMenuHistoryType.staffMeal => pick(
+      '직원식사',
+      'Bữa ăn nhân viên',
+      'Staff meal',
+    ),
   };
 
   String eventLabel(String type) => switch (type) {
@@ -961,6 +1017,11 @@ class _BmHistoryCopy {
     'item_cancelled' => pick('메뉴 취소', 'Hủy món', 'Item cancelled'),
     'order_restored' => pick('주문 복구', 'Khôi phục đơn', 'Order restored'),
     'item_restored' => pick('메뉴 복구', 'Khôi phục món', 'Item restored'),
+    'staff_meal_created' => pick(
+      '직원식사 생성',
+      'Tạo bữa ăn nhân viên',
+      'Staff meal created',
+    ),
     _ => type,
   };
 
@@ -971,6 +1032,16 @@ class _BmHistoryCopy {
     'restored' => pick('복구됨', 'Đã khôi phục', 'Restored'),
     'cancelled_again' => pick('다시 취소됨', 'Đã hủy lại', 'Cancelled again'),
     'changed' => pick('이후 변경됨', 'Đã thay đổi sau đó', 'Changed later'),
+    'staff_meal_pending' => pick('접수 대기', 'Đang chờ', 'Pending'),
+    'staff_meal_confirmed' => pick('접수됨', 'Đã xác nhận', 'Confirmed'),
+    'staff_meal_serving' => pick('제공 중', 'Đang phục vụ', 'Serving'),
+    'staff_meal_completed' => pick('완료', 'Hoàn tất', 'Completed'),
+    'staff_meal_cancelled' => pick('취소됨', 'Đã hủy', 'Cancelled'),
+    'staff_meal_item_cancelled' => pick(
+      '메뉴 취소됨',
+      'Món đã hủy',
+      'Item cancelled',
+    ),
     _ => pick('확인 불가', 'Không xác định', 'Unknown'),
   };
 
