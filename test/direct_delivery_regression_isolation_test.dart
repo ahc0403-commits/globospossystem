@@ -10,17 +10,19 @@ const _migrationPath =
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
       'eb4604c8832420efbe6329a85538dde2d8e6857e8c0030e5685334c6ffc9440a',
+  // 2026-09-15: locale-aware menu/search rendering and compact translated layout.
+  // menu_language_switch_test + routed/overlay operational suites cover behavior.
   'lib/features/cashier/cashier_screen.dart':
-      '1c3c2c096eae8c5f4a0327fe5c8f68dd55bdeea49bc527a6aaa5103d25b8bfc7',
+      'ccc8309241d2ca29d38fe4b4c7e5f62b5c501b5508eb63cb765801ad5bdb34d1',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
   'lib/features/kitchen/kitchen_provider.dart':
-      '202e0233d184734301e089d9a7141dd7a3abee38054f9c1997fc70411ecb52c0',
+      'ed1bc663f89f23b51d705cb1b26610a848092758446372ffb519636441da271b',
   'lib/features/kitchen/kitchen_screen.dart':
-      'e3cdc57c2a55ab67d948f7445fe18cac7305957153ef63ffff38b139bc5b5fa6',
+      '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   'lib/core/services/payment_service.dart':
-      'ceb62497c8f43ed6cd0cd100ad3ac1c2f7ae5a9131184a4a48a7b002236ee28e',
+      '8dedccd5c59bfb01b7b3fe4089fedca2450d2f2b031f801a24cd3b4ccba20402',
   'lib/core/payments/payment_total_calculator.dart':
       'a6fe830f387dac0775a794f466fb5fb33103a64f4e0f6d8c0863ea3e87b47076',
   // Phase 4D moves the reconciled sales report to a server aggregate.

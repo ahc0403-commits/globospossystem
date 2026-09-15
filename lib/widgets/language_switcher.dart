@@ -6,6 +6,7 @@ import '../core/i18n/locale_extensions.dart';
 import '../core/i18n/locale_state.dart';
 import '../core/ui/app_theme.dart';
 import '../core/ui/pos_design_tokens.dart';
+import 'error_toast.dart';
 
 class LanguageSwitcher extends ConsumerWidget {
   const LanguageSwitcher({super.key, this.compact = false});
@@ -17,11 +18,18 @@ class LanguageSwitcher extends ConsumerWidget {
     final localeState = ref.watch(localeControllerProvider);
     final useCompact = compact || MediaQuery.sizeOf(context).width < 720;
 
+    Future<void> selectLanguage(AppLanguage language) async {
+      await ref.read(localeControllerProvider.notifier).setLocale(language);
+      if (!context.mounted) return;
+      if (ref.read(localeControllerProvider).hasPersistenceError) {
+        showErrorToast(context, context.l10n.languageSaveFailed);
+      }
+    }
+
     if (useCompact) {
       return _LanguageMenu(
         currentLanguage: localeState.language,
-        onSelected: (language) =>
-            ref.read(localeControllerProvider.notifier).setLocale(language),
+        onSelected: selectLanguage,
       );
     }
 
@@ -44,9 +52,7 @@ class LanguageSwitcher extends ConsumerWidget {
                 child: _LanguageChip(
                   language: language,
                   isSelected: localeState.language == language,
-                  onTap: () => ref
-                      .read(localeControllerProvider.notifier)
-                      .setLocale(language),
+                  onTap: () => selectLanguage(language),
                 ),
               ),
             )

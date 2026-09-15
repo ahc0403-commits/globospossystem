@@ -1,12 +1,14 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
+import '../../core/ui/app_fonts.dart';
 
 typedef DirectOrderQrRenderer = Future<Uint8List> Function(String url);
 typedef DirectOrderQrSaver =
@@ -84,7 +86,11 @@ class DirectOrderQrExportService {
     );
   }
 
-  Future<void> printQr({required String slug, required String url}) async {
+  Future<void> printQr({
+    required String slug,
+    required String url,
+    required String title,
+  }) async {
     final bytes = await buildPng(url);
     final name = 'external_order_qr_${_safeSlug(slug)}';
     final printer = _printer;
@@ -93,7 +99,11 @@ class DirectOrderQrExportService {
       return;
     }
 
-    final document = pw.Document();
+    final fontData = await rootBundle.load(AppFonts.assetPath);
+    final font = pw.Font.ttf(fontData);
+    final document = pw.Document(
+      theme: pw.ThemeData.withFont(base: font, bold: font),
+    );
     document.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a5,
@@ -103,7 +113,7 @@ class DirectOrderQrExportService {
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
             pw.Text(
-              'External Order',
+              title,
               style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 20),

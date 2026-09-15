@@ -1,3 +1,4 @@
+import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -195,6 +196,9 @@ void main() {
     final registration = Completer<PhotoSalesRegistrationResult>();
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: PhotoSalesImportScreen(
             todayOverride: DateTime(2026, 9, 2),

@@ -1,3 +1,4 @@
+import '../../../core/i18n/menu_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
@@ -11,8 +12,9 @@ import '../../../core/utils/permission_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
-import '../providers/admin_scope_provider.dart';
 import '../../inventory/inventory_provider.dart';
+import '../../inventory/inventory_runtime_localization.dart';
+import '../providers/admin_scope_provider.dart';
 
 class InventoryTab extends ConsumerStatefulWidget {
   const InventoryTab({super.key, this.autoLoad = true});
@@ -913,7 +915,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ...menuItems.map(
                 (m) => DropdownMenuItem<String?>(
                   value: m['id']?.toString(),
-                  child: Text(m['name']?.toString() ?? '-'),
+                  child: Text(context.menuName(m)),
                 ),
               ),
             ],
@@ -974,7 +976,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    row['menu_item_name']?.toString() ?? '-',
+                                    context.menuName({
+                                      ...row,
+                                      'name': row['menu_item_name'],
+                                    }),
                                     style: AppFonts.system(
                                       color: AppColors.textPrimary,
                                       fontWeight: FontWeight.w700,
@@ -2061,7 +2066,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  summary.nextOperatorAction,
+                  _inventoryRuntimeText(summary.nextOperatorAction),
                   style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 12,
@@ -2085,26 +2090,28 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                summary.selectedPurchaseOrderRuntimeLabel,
+                _inventoryRuntimeText(
+                  summary.selectedPurchaseOrderRuntimeLabel,
+                ),
               ),
               _buildIngredientMetaChip(
-                summary.handoffTarget,
+                _inventoryRuntimeText(summary.handoffTarget),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                summary.approvalHandoffReadinessLabel,
+                _inventoryRuntimeText(summary.approvalHandoffReadinessLabel),
                 color: _inventoryApprovalRuntimeStateColor(
                   summary.approvalHandoffReadinessLabel,
                 ),
               ),
               _buildIngredientMetaChip(
-                summary.receivingReadinessLabel,
+                _inventoryRuntimeText(summary.receivingReadinessLabel),
                 color: _inventoryReceivingRuntimeStateColor(
                   summary.receivingReadinessLabel,
                 ),
               ),
               _buildIngredientMetaChip(
-                summary.recommendationRuntimeStateLabel,
+                _inventoryRuntimeText(summary.recommendationRuntimeStateLabel),
                 color:
                     summary.recommendationRuntimeStateLabel.endsWith('blocked')
                     ? AppColors.statusOccupied
@@ -2112,9 +2119,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ? AppColors.statusAvailable
                     : AppColors.amber500,
               ),
-              _buildIngredientMetaChip(summary.latestSnapshotStateLabel),
               _buildIngredientMetaChip(
-                summary.purchaseOrderCreationReadinessLabel,
+                _inventoryRuntimeText(summary.latestSnapshotStateLabel),
+              ),
+              _buildIngredientMetaChip(
+                _inventoryRuntimeText(
+                  summary.purchaseOrderCreationReadinessLabel,
+                ),
                 color:
                     summary.purchaseOrderCreationReadinessLabel.contains(
                       'ready',
@@ -2169,7 +2180,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             Column(
               children: summary.blockedReasons
                   .map(
-                    (reason) => _buildInventoryRuntimeBlockedReasonRow(reason),
+                    (reason) => _buildInventoryRuntimeBlockedReasonRow(
+                      _inventoryRuntimeText(reason),
+                    ),
                   )
                   .toList(),
             ),
@@ -2182,7 +2195,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           _buildInventoryReconciliationSummarySection(context, reconciliation),
           const SizedBox(height: 10),
           Text(
-            summary.operatingNarrative,
+            _inventoryRuntimeText(summary.operatingNarrative),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -2258,7 +2271,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                summary.mismatchIndicatorLabel,
+                _inventoryRuntimeText(summary.mismatchIndicatorLabel),
                 color: _inventoryOperationalToneColor(
                   summary.mismatchIndicatorTone,
                 ),
@@ -2267,7 +2280,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 8),
           Text(
-            summary.narrative,
+            _inventoryRuntimeText(summary.narrative),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -2363,7 +2376,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${queueItem.purchaseOrderNo} · ${queueItem.supplierLabel}',
+                      '${queueItem.purchaseOrderNo} · ${_inventorySupplierLabel(queueItem.supplierLabel)}',
                       style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -2372,7 +2385,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      queueItem.operatorReason,
+                      _inventoryRuntimeText(queueItem.operatorReason),
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -2382,7 +2395,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ),
               _buildIngredientMetaChip(
-                queueItem.priorityBucket,
+                _inventoryRuntimeText(queueItem.priorityBucket),
                 color: severityColor,
               ),
             ],
@@ -2392,13 +2405,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildIngredientMetaChip(queueItem.staleLabel),
               _buildIngredientMetaChip(
-                queueItem.handoffTarget,
+                _inventoryRuntimeText(queueItem.staleLabel),
+              ),
+              _buildIngredientMetaChip(
+                _inventoryRuntimeText(queueItem.handoffTarget),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                queueItem.blockerSeverity.toUpperCase(),
+                _inventoryRuntimeText(queueItem.blockerSeverity),
                 color: severityColor,
               ),
               if (queueItem.isSelected)
@@ -2410,7 +2425,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 8),
           Text(
-            l10n.inventoryPurchaseNextAction(queueItem.nextAction),
+            l10n.inventoryPurchaseNextAction(
+              _inventoryRuntimeText(queueItem.nextAction),
+            ),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -2495,7 +2512,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      bottleneck.supplierLabel,
+                      _inventorySupplierLabel(bottleneck.supplierLabel),
                       style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -2504,7 +2521,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      bottleneck.narrative,
+                      _inventoryRuntimeText(bottleneck.narrative),
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -2514,7 +2531,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ),
               _buildIngredientMetaChip(
-                bottleneck.severity.toUpperCase(),
+                _inventoryRuntimeText(bottleneck.severity),
                 color: severityColor,
               ),
             ],
@@ -2530,13 +2547,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
                 color: AppColors.statusAvailable,
               ),
-              _buildIngredientMetaChip(bottleneck.blockedReasonCluster),
+              _buildIngredientMetaChip(
+                _inventoryRuntimeText(bottleneck.blockedReasonCluster),
+              ),
               _buildIngredientMetaChip(
                 l10n.inventoryPurchaseOldestWait(bottleneck.oldestWaitingAge),
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                bottleneck.nextFollowUpTarget,
+                _inventoryRuntimeText(bottleneck.nextFollowUpTarget),
                 color: severityColor,
               ),
             ],
@@ -2588,7 +2607,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Latest Recommendation Snapshot',
+                      context.l10n.inventoryRuntimeLatestSnapshotTitle,
                       style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -2597,7 +2616,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Read the most recent recommendation run before deciding whether the next tracked slice should create purchase orders.',
+                      context.l10n.inventoryRuntimeLatestSnapshotSubtitle,
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -2621,7 +2640,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                             .loadLatest(storeId);
                         await _loadPurchaseOrderSummaryAndDetail(storeId);
                       },
-                tooltip: 'Refresh Recommendation Snapshot',
+                tooltip: context.l10n.inventoryRuntimeRefreshSnapshot,
                 icon: snapshot.isLoading || orderSummary.isLoading
                     ? const SizedBox(
                         width: 18,
@@ -2646,7 +2665,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ] else if (run == null) ...[
             const SizedBox(height: 12),
             Text(
-              'No recommendation snapshot detail has been generated for this store yet.',
+              context.l10n.inventoryRuntimeNoSnapshotDetail,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -2684,8 +2703,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         : const Icon(Icons.shopping_cart_checkout),
                     label: Text(
                       orderCreation.isCreating
-                          ? 'Creating Purchase Orders...'
-                          : 'Create Purchase Orders',
+                          ? context.l10n.inventoryRuntimeCreatingOrders
+                          : context.l10n.inventoryRuntimeCreateOrders,
                     ),
                   ),
                 ),
@@ -2696,19 +2715,35 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               spacing: 8,
               runSpacing: 8,
               children: [
-                _buildIngredientMetaChip('Run Date $runDate'),
                 _buildIngredientMetaChip(
-                  'Target ${targetDays?.toStringAsFixed(0) ?? '-'} day(s)',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricRunDate,
+                    runDate,
+                  ),
+                ),
+                _buildIngredientMetaChip(
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricTargetDays,
+                    targetDays?.toStringAsFixed(0) ?? '-',
+                  ),
                   color: AppColors.amber500,
                 ),
                 _buildIngredientMetaChip(
-                  'Visible Lines $lineCount',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricVisibleLines,
+                    lineCount,
+                  ),
                   color: AppColors.statusAvailable,
                 ),
                 _buildIngredientMetaChip(
                   createdAt == null
-                      ? 'Created time unavailable'
-                      : 'Created ${DateFormat('yyyy-MM-dd HH:mm').format(createdAt)}',
+                      ? _inventoryRuntimeUnavailable(
+                          context.l10n.inventoryRuntimeMetricCreated,
+                        )
+                      : _inventoryRuntimeLabeled(
+                          context.l10n.inventoryRuntimeMetricCreated,
+                          DateFormat('yyyy-MM-dd HH:mm').format(createdAt),
+                        ),
                 ),
               ],
             ),
@@ -2729,7 +2764,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             if (snapshot.lines.isEmpty)
               Text(
-                'This snapshot exists, but no recommendation lines are currently visible in the tracked POS scope.',
+                context.l10n.inventoryRuntimeSnapshotEmpty,
                 style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -2760,7 +2795,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Latest Purchase Order Creation',
+            context.l10n.inventoryRuntimeLatestCreation,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -2770,8 +2805,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             orders.isEmpty
-                ? 'The latest snapshot did not produce any supplier-qualified purchase orders.'
-                : '${orders.length} submitted purchase order(s) were created from the latest recommendation snapshot.',
+                ? context.l10n.inventoryRuntimeEmptyCreation
+                : context.l10n.inventoryRuntimeCreatedSubmittedOrders(
+                    orders.length,
+                  ),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -2786,7 +2823,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 final orderNo = order['purchase_order_no']?.toString() ?? '-';
                 final status = order['status']?.toString() ?? 'submitted';
                 return _buildIngredientMetaChip(
-                  '$orderNo · ${status.toUpperCase()}',
+                  '$orderNo · ${_inventoryRuntimeText(status)}',
                   color: AppColors.amber500,
                 );
               }).toList(),
@@ -2842,7 +2879,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Recent Purchase Orders',
+                      context.l10n.inventoryRuntimeRecentOrders,
                       style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -2851,7 +2888,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Read the latest POS-created purchase orders, then use only the runtime actions that backend truth currently supports.',
+                      context.l10n.inventoryRuntimeRecentOrdersSubtitle,
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -2864,7 +2901,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 onPressed: storeId == null || summary.isLoading
                     ? null
                     : () => _loadPurchaseOrderSummaryAndDetail(storeId),
-                tooltip: 'Refresh Purchase Orders',
+                tooltip: context.l10n.inventoryRuntimeRefreshOrders,
                 icon: summary.isLoading
                     ? const SizedBox(
                         width: 18,
@@ -2889,7 +2926,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ] else if (summary.orders.isEmpty) ...[
             const SizedBox(height: 12),
             Text(
-              'No recent purchase orders are visible for this store yet.',
+              context.l10n.inventoryRuntimeNoRecentOrders,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -2980,8 +3017,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       const SizedBox(height: 4),
                       Text(
                         supplierName == null || supplierName.isEmpty
-                            ? 'Supplier unavailable'
-                            : 'Supplier $supplierName',
+                            ? _inventoryRuntimeUnavailable(
+                                context.l10n.inventoryRuntimeMetricSupplier,
+                              )
+                            : _inventoryRuntimeLabeled(
+                                context.l10n.inventoryRuntimeMetricSupplier,
+                                supplierName,
+                              ),
                         style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 12,
@@ -2991,7 +3033,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   ),
                 ),
                 _buildIngredientMetaChip(
-                  status.toUpperCase(),
+                  _inventoryRuntimeText(status),
                   color: AppColors.amber500,
                 ),
               ],
@@ -3002,38 +3044,58 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               runSpacing: 8,
               children: [
                 _buildIngredientMetaChip(
-                  'Lines $lineCount',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricLines,
+                    lineCount,
+                  ),
                   color: AppColors.statusAvailable,
                 ),
                 _buildIngredientMetaChip(
-                  'Total ${_formatCurrencyCompact(totalAmount)}',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricTotal,
+                    _formatCurrencyCompact(totalAmount),
+                  ),
                   color: AppColors.amber500,
                 ),
                 _buildIngredientMetaChip(
                   requestedDate == null || requestedDate.isEmpty
-                      ? 'Requested date not set'
-                      : 'Requested $requestedDate',
+                      ? _inventoryRuntimeUnavailable(
+                          context.l10n.inventoryRuntimeMetricRequestedDate,
+                        )
+                      : _inventoryRuntimeLabeled(
+                          context.l10n.inventoryRuntimeMetricRequestedDate,
+                          requestedDate,
+                        ),
                 ),
                 _buildIngredientMetaChip(
                   createdAt == null
-                      ? 'Created time unavailable'
-                      : 'Created ${DateFormat('yyyy-MM-dd HH:mm').format(createdAt)}',
+                      ? _inventoryRuntimeUnavailable(
+                          context.l10n.inventoryRuntimeMetricCreated,
+                        )
+                      : _inventoryRuntimeLabeled(
+                          context.l10n.inventoryRuntimeMetricCreated,
+                          DateFormat('yyyy-MM-dd HH:mm').format(createdAt),
+                        ),
                 ),
                 if (queueEntry != null)
                   _buildIngredientMetaChip(
-                    queueEntry.priorityBucket,
+                    _inventoryRuntimeText(queueEntry.priorityBucket),
                     color: _inventoryReceivingBlockerSeverityColor(
                       queueEntry.blockerSeverity,
                     ),
                   ),
                 if (queueEntry != null)
-                  _buildIngredientMetaChip(queueEntry.staleLabel),
+                  _buildIngredientMetaChip(
+                    _inventoryRuntimeText(queueEntry.staleLabel),
+                  ),
               ],
             ),
             if (queueEntry != null) ...[
               const SizedBox(height: 8),
               Text(
-                'Queue next action: ${queueEntry.nextAction}',
+                context.l10n.inventoryRuntimeQueueNextAction(
+                  _inventoryRuntimeText(queueEntry.nextAction),
+                ),
                 style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -3092,7 +3154,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Purchase Order Detail',
+                      context.l10n.inventoryRuntimeOrderDetail,
                       style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -3101,7 +3163,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Inspect the selected order line-by-line, keep approval inside the Office-owned boundary, and open receiving only when backend truth supports it.',
+                      context.l10n.inventoryRuntimeOrderDetailSubtitle,
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -3116,7 +3178,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     : () => ref
                           .read(inventoryPurchaseOrderDetailProvider.notifier)
                           .load(selectedOrderId),
-                tooltip: 'Refresh Selected Order',
+                tooltip: context.l10n.inventoryRuntimeRefreshSelectedOrder,
                 icon: detail.isLoading
                     ? const SizedBox(
                         width: 18,
@@ -3141,7 +3203,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ] else if (!hasOrders) ...[
             const SizedBox(height: 12),
             Text(
-              'Select a purchase order to inspect line-level detail once orders exist in the tracked POS scope.',
+              context.l10n.inventoryRuntimeSelectOrder,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -3150,7 +3212,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ] else if (order == null) ...[
             const SizedBox(height: 12),
             Text(
-              'Select a recent purchase order card above to inspect line-level detail.',
+              context.l10n.inventoryRuntimeSelectRecentOrder,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -3167,27 +3229,46 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   color: AppColors.amber500,
                 ),
                 _buildIngredientMetaChip(
-                  status.toUpperCase(),
+                  _inventoryRuntimeText(status),
                   color: AppColors.statusAvailable,
                 ),
                 _buildIngredientMetaChip(
                   supplierName == null || supplierName.isEmpty
-                      ? 'Supplier unavailable'
-                      : 'Supplier $supplierName',
+                      ? _inventoryRuntimeUnavailable(
+                          context.l10n.inventoryRuntimeMetricSupplier,
+                        )
+                      : _inventoryRuntimeLabeled(
+                          context.l10n.inventoryRuntimeMetricSupplier,
+                          supplierName,
+                        ),
                 ),
                 _buildIngredientMetaChip(
                   requestedDate == null || requestedDate.isEmpty
-                      ? 'Requested date not set'
-                      : 'Requested $requestedDate',
+                      ? _inventoryRuntimeUnavailable(
+                          context.l10n.inventoryRuntimeMetricRequestedDate,
+                        )
+                      : _inventoryRuntimeLabeled(
+                          context.l10n.inventoryRuntimeMetricRequestedDate,
+                          requestedDate,
+                        ),
                 ),
                 _buildIngredientMetaChip(
-                  'Supply ${_formatCurrencyCompact(supplyAmount)}',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricSupply,
+                    _formatCurrencyCompact(supplyAmount),
+                  ),
                 ),
                 _buildIngredientMetaChip(
-                  'Tax ${_formatCurrencyCompact(taxAmount)}',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricTax,
+                    _formatCurrencyCompact(taxAmount),
+                  ),
                 ),
                 _buildIngredientMetaChip(
-                  'Total ${_formatCurrencyCompact(totalAmount)}',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricTotal,
+                    _formatCurrencyCompact(totalAmount),
+                  ),
                   color: AppColors.amber500,
                 ),
               ],
@@ -3195,7 +3276,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             if (memo != null && memo.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                'Order memo: $memo',
+                context.l10n.inventoryRuntimeOrderMemo(memo),
                 style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -3250,7 +3331,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             if (sortedLines.isEmpty)
               Text(
-                'No line items are visible for the selected order.',
+                context.l10n.inventoryRuntimeNoOrderLines,
                 style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -3300,7 +3381,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Receiving Readiness Summary',
+            context.l10n.inventoryRuntimeReceivingReadiness,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -3309,7 +3390,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Review inbound receiving posture before opening receipt history or line provenance detail.',
+            context.l10n.inventoryRuntimeReceivingReadinessSubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -3321,25 +3402,31 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Receiving readiness ${runtimeSurface.receivingReadinessLabel}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricReceivingReadiness,
+                  _inventoryRuntimeText(runtimeSurface.receivingReadinessLabel),
+                ),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.receivingReadinessTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.receivedLineSummaryLabel,
+                _inventoryRuntimeText(runtimeSurface.receivedLineSummaryLabel),
                 color: receivedLineCount > 0
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.remainingLineSummaryLabel,
+                _inventoryRuntimeText(runtimeSurface.remainingLineSummaryLabel),
                 color: pendingLineCount > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Attention lines $attentionLineCount',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricAttentionLines,
+                  attentionLineCount,
+                ),
                 color: attentionLineCount > 0
                     ? AppColors.statusOccupied
                     : AppColors.statusAvailable,
@@ -3374,7 +3461,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Receiving Blockers Detail',
+            context.l10n.inventoryRuntimeReceivingBlockers,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -3383,7 +3470,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Read the current receiving blockers without opening receipt confirmation, supplier approval, or stock mutation workflows.',
+            context.l10n.inventoryRuntimeReceivingBlockersSubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -3430,7 +3517,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
+                      _inventoryRuntimeText(title),
                       style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -3439,7 +3526,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      narrative,
+                      _inventoryRuntimeText(narrative),
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -3449,7 +3536,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ),
               _buildIngredientMetaChip(
-                severity.toUpperCase(),
+                _inventoryRuntimeText(severity),
                 color: _inventoryReceivingBlockerSeverityColor(severity),
               ),
             ],
@@ -3474,7 +3561,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 context.l10n.inventoryPurchaseOldestWait(oldestWaitingAge),
               ),
               _buildIngredientMetaChip(
-                context.l10n.inventoryPurchaseNextHint(nextHint),
+                context.l10n.inventoryPurchaseNextHint(
+                  _inventoryRuntimeText(nextHint),
+                ),
                 color: AppColors.statusAvailable,
               ),
             ],
@@ -3497,8 +3586,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       runtimeSurface.approvalStateTone,
     );
     final latestReceiptLabel = runtimeSurface.latestReceiptStatus == null
-        ? 'Latest receipt unavailable'
-        : 'Latest receipt ${runtimeSurface.receiptVisibilityStatusLabel}';
+        ? _inventoryRuntimeUnavailable(
+            context.l10n.inventoryRuntimeMetricLatestReceipt,
+          )
+        : _inventoryRuntimeLabeled(
+            context.l10n.inventoryRuntimeMetricLatestReceipt,
+            _inventoryRuntimeText(runtimeSurface.receiptVisibilityStatusLabel),
+          );
 
     return Container(
       width: double.infinity,
@@ -3512,7 +3606,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Inventory Mutation Readiness Phase',
+            context.l10n.inventoryRuntimeMutationReadiness,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -3521,7 +3615,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Use these guardrails to confirm POS remains responsible for visibility, readiness, and operator checklist coverage before any Office-owned approval, receipt confirmation, or stock mutation workflow is considered.',
+            context.l10n.inventoryRuntimeMutationReadinessSubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -3529,7 +3623,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 8),
           _buildInventoryMutationReadinessCard(
-            title: 'Approval Handoff',
+            title: context.l10n.inventoryRuntimeApprovalHandoff,
             borderColor: approvalHandoffColor,
             chips: [
               _buildIngredientMetaChip(
@@ -3537,55 +3631,64 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 color: approvalHandoffColor,
               ),
               _buildIngredientMetaChip(
-                'Execution owner Office',
+                context.l10n.inventoryRuntimeExecutionOwnerOffice,
                 color: AppColors.statusOccupied,
               ),
               _buildIngredientMetaChip(
-                'POS role Visibility and checklist only',
+                context.l10n.inventoryRuntimePosVisibilityOnly,
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.readyStateLabel,
+                _inventoryRuntimeText(runtimeSurface.readyStateLabel),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.readyStateTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                'Open blockers ${blockerRows.length}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricOpenBlockers,
+                  blockerRows.length,
+                ),
                 color: blockerRows.isNotEmpty
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
             ],
-            narrative: runtimeSurface.approvalNarrative,
+            narrative: _inventoryRuntimeText(runtimeSurface.approvalNarrative),
           ),
           const SizedBox(height: 8),
           _buildInventoryMutationReadinessCard(
-            title: 'Receiving Confirmation Readiness',
+            title: context.l10n.inventoryRuntimeReceivingConfirmationReadiness,
             borderColor: _inventoryOperationalToneColor(
               runtimeSurface.receivingReadinessTone,
             ),
             chips: [
               _buildIngredientMetaChip(
-                'Readiness ${runtimeSurface.receivingReadinessLabel}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricReadiness,
+                  _inventoryRuntimeText(runtimeSurface.receivingReadinessLabel),
+                ),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.receivingReadinessTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.receivedLineSummaryLabel,
+                _inventoryRuntimeText(runtimeSurface.receivedLineSummaryLabel),
                 color: receivedLineCount > 0
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.remainingLineSummaryLabel,
+                _inventoryRuntimeText(runtimeSurface.remainingLineSummaryLabel),
                 color: pendingLineCount > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Attention lines $attentionLineCount',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricAttentionLines,
+                  attentionLineCount,
+                ),
                 color: attentionLineCount > 0
                     ? AppColors.statusOccupied
                     : AppColors.statusAvailable,
@@ -3595,35 +3698,38 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 8),
           _buildInventoryMutationReadinessCard(
-            title: 'Stock Mutation Guardrail',
+            title: context.l10n.inventoryRuntimeStockMutationGuardrail,
             borderColor: AppColors.surface2,
             chips: [
               _buildIngredientMetaChip(
-                runtimeSurface.blockedStateLabel,
+                _inventoryRuntimeText(runtimeSurface.blockedStateLabel),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.blockedStateTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.staleStateLabel,
+                _inventoryRuntimeText(runtimeSurface.staleStateLabel),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.staleStateTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                'Confirmed receipts ${runtimeSurface.confirmedReceiptCount}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricConfirmedReceipts,
+                  runtimeSurface.confirmedReceiptCount,
+                ),
                 color: runtimeSurface.confirmedReceiptCount > 0
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(latestReceiptLabel),
               _buildIngredientMetaChip(
-                'Domain boundary Payment / order / menu untouched',
+                context.l10n.inventoryRuntimeDomainBoundary,
                 color: AppColors.statusAvailable,
               ),
             ],
             narrative:
-                '${runtimeSurface.operationalPhaseNarrative} Tracked inbound quantities stay operator-facing signals only. This phase does not mutate stock, does not connect payment, order, or menu mutation flows, and does not transfer Office-owned execution into POS.',
+                '${_inventoryRuntimeText(runtimeSurface.operationalPhaseNarrative)} ${context.l10n.inventoryRuntimeMutationBoundaryNarrative}',
           ),
         ],
       ),
@@ -3683,11 +3789,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     if (result == null) return;
 
     if (result.kind == InventoryPurchaseRuntimeResultKind.success) {
-      showSuccessToast(context, result.message);
+      showSuccessToast(context, _inventoryRuntimeText(result.message));
       return;
     }
 
-    showErrorToast(context, result.message);
+    showErrorToast(context, _inventoryRuntimeText(result.message));
   }
 
   Future<void> _showConfirmInventoryPurchaseReceiptDialog(
@@ -3702,7 +3808,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       if (!context.mounted) return;
       final result = ref.read(inventoryPurchaseReceivingRuntimeProvider).result;
       if (result != null) {
-        showErrorToast(context, result.message);
+        showErrorToast(context, _inventoryRuntimeText(result.message));
       }
       return;
     }
@@ -3771,7 +3877,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     if (!success) {
       noteController.dispose();
       if (result != null) {
-        showErrorToast(context, result.message);
+        showErrorToast(context, _inventoryRuntimeText(result.message));
       }
       return;
     }
@@ -3788,7 +3894,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     }
 
     if (result != null) {
-      showSuccessToast(context, result.message);
+      showSuccessToast(context, _inventoryRuntimeText(result.message));
     }
     noteController.dispose();
   }
@@ -3817,7 +3923,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Inventory Runtime Path',
+            context.l10n.inventoryRuntimePath,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -3826,7 +3932,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Open only the action states that the current POS runtime can support truthfully. Approval remains Office-owned, while receiving is enabled only when the backend receipt contract can safely update stock.',
+            context.l10n.inventoryRuntimePathSubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -3836,21 +3942,26 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           _buildInventoryRuntimeClosureSection(runtimeSurface: runtimeSurface),
           const SizedBox(height: 8),
           _buildInventoryRuntimePathCard(
-            title: 'Approval Runtime Path',
-            statusLabel: runtimeClosure.approvalStateLabel,
+            title: context.l10n.inventoryRuntimeApprovalPath,
+            statusLabel: _inventoryRuntimeText(
+              runtimeClosure.approvalStateLabel,
+            ),
             statusColor: _inventoryOperationalToneColor(
               runtimeSurface.approvalStateTone,
             ),
-            narrative: runtimeSurface.approvalNarrative,
+            narrative: _inventoryRuntimeText(runtimeSurface.approvalNarrative),
             metrics: [
               _buildIngredientMetaChip(
-                'Blocked lines $blockedLineCount',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricBlockedLines,
+                  blockedLineCount,
+                ),
                 color: blockedLineCount > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Office-owned execution',
+                context.l10n.inventoryRuntimeOfficeOwnedExecution,
                 color: AppColors.statusOccupied,
               ),
             ],
@@ -3866,27 +3977,35 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.rule_folder_outlined),
-              label: const Text('Check Approval Handoff'),
+              label: Text(context.l10n.inventoryRuntimeCheckApproval),
             ),
             result: approvalRuntime.result,
           ),
           const SizedBox(height: 8),
           _buildInventoryRuntimePathCard(
-            title: 'Receiving Runtime Path',
-            statusLabel: runtimeClosure.receivingStateLabel,
+            title: context.l10n.inventoryRuntimeReceivingPath,
+            statusLabel: _inventoryRuntimeText(
+              runtimeClosure.receivingStateLabel,
+            ),
             statusColor: _inventoryOperationalToneColor(
               runtimeSurface.receivingStateTone,
             ),
-            narrative: runtimeSurface.receivingNarrative,
+            narrative: _inventoryRuntimeText(runtimeSurface.receivingNarrative),
             metrics: [
               _buildIngredientMetaChip(
-                'Confirmed receipts ${runtimeSurface.confirmedReceiptCount}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricConfirmedReceipts,
+                  runtimeSurface.confirmedReceiptCount,
+                ),
                 color: runtimeSurface.confirmedReceiptCount > 0
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(
-                'Remaining base ${runtimeSurface.remainingBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRemainingBase,
+                  runtimeSurface.remainingBase.toStringAsFixed(3),
+                ),
                 color: runtimeSurface.remainingBase > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
@@ -3943,7 +4062,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Receiving Execution Safety Layer',
+            context.l10n.inventoryRuntimeReceivingSafety,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -3952,7 +4071,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Reduce duplicate receiving fear by showing the last runtime result, retry discipline, unknown outcome handling, and the next safe recovery step from provider truth.',
+            context.l10n.inventoryRuntimeReceivingSafetySubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -3964,23 +4083,25 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                receivingSafety.lastAttemptLabel,
+                _inventoryRuntimeText(receivingSafety.lastAttemptLabel),
                 color: _inventoryOperationalToneColor(receivingSafety.tone),
               ),
-              _buildIngredientMetaChip(receivingSafety.retryDisciplineLabel),
               _buildIngredientMetaChip(
-                receivingSafety.unknownOutcomeLabel,
+                _inventoryRuntimeText(receivingSafety.retryDisciplineLabel),
+              ),
+              _buildIngredientMetaChip(
+                _inventoryRuntimeText(receivingSafety.unknownOutcomeLabel),
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                receivingSafety.followUpGuidanceLabel,
+                _inventoryRuntimeText(receivingSafety.followUpGuidanceLabel),
                 color: AppColors.statusAvailable,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            receivingSafety.narrative,
+            _inventoryRuntimeText(receivingSafety.narrative),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4007,7 +4128,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Inventory Runtime Closure',
+            context.l10n.inventoryRuntimeClosure,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -4016,7 +4137,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Keep the remaining purchase-order runtime understandable in one operational pass: approval handoff, receiving readiness, blockers, handoff target, and the last known runtime state all stay visible without leaving the POS inventory surface.',
+            context.l10n.inventoryRuntimeClosureSubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4028,31 +4149,31 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                runtimeSurface.operationalPhaseLabel,
+                _inventoryRuntimeText(runtimeSurface.operationalPhaseLabel),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.operationalPhaseTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.readyStateLabel,
+                _inventoryRuntimeText(runtimeSurface.readyStateLabel),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.readyStateTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.blockedStateLabel,
+                _inventoryRuntimeText(runtimeSurface.blockedStateLabel),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.blockedStateTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeSurface.staleStateLabel,
+                _inventoryRuntimeText(runtimeSurface.staleStateLabel),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.staleStateTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeClosure.lastRuntimeStateLabel,
+                _inventoryRuntimeText(runtimeClosure.lastRuntimeStateLabel),
                 color: runtimeClosure.lastRuntimeResult == null
                     ? AppColors.surface2
                     : _inventoryRuntimeResultColor(
@@ -4060,14 +4181,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       ),
               ),
               _buildIngredientMetaChip(
-                runtimeClosure.handoffTarget,
+                _inventoryRuntimeText(runtimeClosure.handoffTarget),
                 color: AppColors.statusAvailable,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            runtimeClosure.operatorSummary,
+            _inventoryRuntimeText(runtimeClosure.operatorSummary),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4075,7 +4196,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 8),
           Text(
-            'Next best operator action: ${runtimeSurface.nextBestOperatorAction}',
+            context.l10n.inventoryRuntimeNextBestAction(
+              _inventoryRuntimeText(runtimeSurface.nextBestOperatorAction),
+            ),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4083,7 +4206,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 10),
           Text(
-            'Blocked reasons',
+            context.l10n.inventoryRuntimeBlockedReasons,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -4093,7 +4216,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 6),
           if (runtimeClosure.blockedReasons.isEmpty)
             Text(
-              'No extra blocked reason is visible beyond the tracked runtime labels.',
+              context.l10n.inventoryRuntimeNoExtraBlocker,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -4102,12 +4225,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           else
             Column(
               children: runtimeClosure.blockedReasons
-                  .map(_buildInventoryRuntimeBlockedReasonRow)
+                  .map(
+                    (reason) => _buildInventoryRuntimeBlockedReasonRow(
+                      _inventoryRuntimeText(reason),
+                    ),
+                  )
                   .toList(),
             ),
           const SizedBox(height: 10),
           Text(
-            'Runtime line context',
+            context.l10n.inventoryRuntimeLineContext,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -4117,7 +4244,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 6),
           if (runtimeSurface.lineContexts.isEmpty)
             Text(
-              'No line-level runtime context is visible for the selected order.',
+              context.l10n.inventoryRuntimeNoLineContext,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -4180,30 +4307,45 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                lineContext.statusLabel,
+                _inventoryRuntimeText(lineContext.statusLabel),
                 color: _inventoryOperationalToneColor(lineContext.statusTone),
               ),
               _buildIngredientMetaChip(
-                'Expected ${lineContext.expectedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricExpected,
+                  lineContext.expectedBase.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Received ${lineContext.receivedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricReceived,
+                  lineContext.receivedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Remaining ${lineContext.remainingBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRemaining,
+                  lineContext.remainingBase.toStringAsFixed(3),
+                ),
                 color: lineContext.remainingBase > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Ordered ${lineContext.orderedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricOrdered,
+                  lineContext.orderedBase.toStringAsFixed(3),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            'Line-level risk / quantity / expected / received context: ${lineContext.riskSummary}. ${lineContext.narrative}',
+            context.l10n.inventoryRuntimeLineRiskContext(
+              _inventoryRuntimeText(lineContext.riskSummary),
+              _inventoryRuntimeText(lineContext.narrative),
+            ),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4278,7 +4420,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    result.title,
+                    _inventoryRuntimeText(result.title),
                     style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,
@@ -4287,7 +4429,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    result.message,
+                    _inventoryRuntimeText(result.message),
                     style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 12,
@@ -4345,7 +4487,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Order Attention Banner',
+            context.l10n.inventoryRuntimeOrderAttention,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -4354,7 +4496,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Review the current order-level risk posture before scanning individual line supplier signals.',
+            context.l10n.inventoryRuntimeOrderAttentionSubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4365,9 +4507,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildIngredientMetaChip(attentionLabel, color: attentionColor),
               _buildIngredientMetaChip(
-                'Highlighted lines $highlightedLines',
+                _inventoryRuntimeText(attentionLabel),
+                color: attentionColor,
+              ),
+              _buildIngredientMetaChip(
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricHighlightedLines,
+                  highlightedLines,
+                ),
                 color: highlightedLines > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
@@ -4377,7 +4525,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           if (topHighlights.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              'Top attention items',
+              context.l10n.inventoryRuntimeTopAttention,
               style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
@@ -4443,7 +4591,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Supplier Attention Ordering',
+            context.l10n.inventoryRuntimeSupplierAttention,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -4452,7 +4600,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Higher-risk supplier lines are shown first so receipt pending, price-up, or overdue lead-time items surface before stable lines.',
+            context.l10n.inventoryRuntimeSupplierAttentionSubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4464,19 +4612,28 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Escalation lines $escalations',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricEscalationLines,
+                  escalations,
+                ),
                 color: escalations > 0
                     ? AppColors.statusOccupied
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Watch lines $watchLines',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricWatchLines,
+                  watchLines,
+                ),
                 color: watchLines > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Stable lines ${lineItems.length - escalations - watchLines}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricStableLines,
+                  lineItems.length - escalations - watchLines,
+                ),
                 color: AppColors.statusAvailable,
               ),
             ],
@@ -4505,7 +4662,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Supplier Context History',
+            context.l10n.inventoryRuntimeSupplierHistory,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -4514,7 +4671,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Review recent purchase and receipt history for the same supplier item without opening approval, receipt confirmation, or stock mutation workflows.',
+            context.l10n.inventoryRuntimeSupplierHistorySubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4523,7 +4680,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           if (linesWithHistory.isEmpty)
             Text(
-              'No prior supplier history is visible for the current purchase-order lines.',
+              context.l10n.inventoryRuntimeNoSupplierHistory,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -4585,8 +4742,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             supplierSku == null || supplierSku.isEmpty
-                ? 'Supplier SKU unavailable'
-                : 'Supplier SKU $supplierSku',
+                ? _inventoryRuntimeUnavailable(
+                    context.l10n.inventoryRuntimeMetricSupplierSku,
+                  )
+                : _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricSupplierSku,
+                    supplierSku,
+                  ),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4598,10 +4760,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Current unit ${_formatCurrencyCompact(currentUnitPrice)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricCurrentUnit,
+                  _formatCurrencyCompact(currentUnitPrice),
+                ),
               ),
               _buildIngredientMetaChip(
-                unitPriceDriftLabel,
+                _inventoryRuntimeText(unitPriceDriftLabel),
                 color: unitPriceDriftColor,
               ),
             ],
@@ -4660,47 +4825,80 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                orderStatus.toUpperCase(),
+                _inventoryRuntimeText(orderStatus),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
                 orderedAt == null
-                    ? 'Ordered date unavailable'
-                    : 'Ordered ${DateFormat('yyyy-MM-dd').format(orderedAt)}',
+                    ? _inventoryRuntimeUnavailable(
+                        context.l10n.inventoryRuntimeMetricOrderedDate,
+                      )
+                    : _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricOrderedDate,
+                        DateFormat('yyyy-MM-dd').format(orderedAt),
+                      ),
               ),
               _buildIngredientMetaChip(
-                'Recent unit ${_formatCurrencyCompact(unitPrice)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRecentUnit,
+                  _formatCurrencyCompact(unitPrice),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Recent order ${orderedUnits.toStringAsFixed(3)} $orderUnit',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRecentOrder,
+                  '${orderedUnits.toStringAsFixed(3)} $orderUnit',
+                ),
               ),
               _buildIngredientMetaChip(
-                'Recent order base ${orderedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRecentOrderBase,
+                  orderedBase.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Recent received ${receivedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRecentReceived,
+                  receivedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Recent accepted ${acceptedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRecentAccepted,
+                  acceptedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Recent rejected ${rejectedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRecentRejected,
+                  rejectedBase.toStringAsFixed(3),
+                ),
                 color: rejectedBase > 0
                     ? AppColors.statusOccupied
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(
                 lastReceiptStatus == null
-                    ? 'Receipt status unavailable'
-                    : 'Receipt ${lastReceiptStatus.toUpperCase()}',
+                    ? _inventoryRuntimeUnavailable(
+                        context.l10n.inventoryRuntimeMetricReceiptStatus,
+                      )
+                    : _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricReceiptStatus,
+                        _inventoryRuntimeText(lastReceiptStatus),
+                      ),
                 color: _receiptVisibilityColor(lastReceiptStatus ?? 'draft'),
               ),
               _buildIngredientMetaChip(
                 lastReceiptAt == null
-                    ? 'Latest receipt unavailable'
-                    : 'Latest receipt ${DateFormat('yyyy-MM-dd').format(lastReceiptAt)}',
+                    ? _inventoryRuntimeUnavailable(
+                        context.l10n.inventoryRuntimeMetricLatestReceipt,
+                      )
+                    : _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricLatestReceipt,
+                        DateFormat('yyyy-MM-dd').format(lastReceiptAt),
+                      ),
               ),
             ],
           ),
@@ -4722,7 +4920,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Recent Receipts',
+            context.l10n.inventoryRuntimeRecentReceipts,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -4731,7 +4929,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Review receipt history in timeline form without opening receipt confirmation or stock mutation workflows.',
+            context.l10n.inventoryRuntimeRecentReceiptsSubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4740,7 +4938,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           if (receipts.isEmpty)
             Text(
-              'No receipt records are visible for this purchase order yet.',
+              context.l10n.inventoryRuntimeNoReceipts,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -4808,8 +5006,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 Expanded(
                   child: Text(
                     receivedAt == null
-                        ? 'Receipt time unavailable'
-                        : 'Receipt ${DateFormat('yyyy-MM-dd HH:mm').format(receivedAt)}',
+                        ? _inventoryRuntimeUnavailable(
+                            context.l10n.inventoryRuntimeMetricReceiptTime,
+                          )
+                        : _inventoryRuntimeLabeled(
+                            context.l10n.inventoryRuntimeMetricReceiptTime,
+                            DateFormat('yyyy-MM-dd HH:mm').format(receivedAt),
+                          ),
                     style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,
@@ -4817,7 +5020,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   ),
                 ),
                 _buildIngredientMetaChip(
-                  status.toUpperCase(),
+                  _inventoryRuntimeText(status),
                   color: _receiptVisibilityColor(status),
                 ),
               ],
@@ -4828,18 +5031,30 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               runSpacing: 8,
               children: [
                 _buildIngredientMetaChip(
-                  'Lines $lineCount',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricLines,
+                    lineCount,
+                  ),
                   color: AppColors.statusAvailable,
                 ),
                 _buildIngredientMetaChip(
-                  'Received ${receivedBase.toStringAsFixed(3)} base',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricReceived,
+                    receivedBase.toStringAsFixed(3),
+                  ),
                 ),
                 _buildIngredientMetaChip(
-                  'Accepted ${acceptedBase.toStringAsFixed(3)} base',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricAccepted,
+                    acceptedBase.toStringAsFixed(3),
+                  ),
                   color: AppColors.amber500,
                 ),
                 _buildIngredientMetaChip(
-                  'Rejected ${rejectedBase.toStringAsFixed(3)} base',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricRejected,
+                    rejectedBase.toStringAsFixed(3),
+                  ),
                   color: rejectedBase > 0
                       ? AppColors.statusOccupied
                       : AppColors.surface2,
@@ -4849,7 +5064,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             if (memo != null && memo.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                'Receipt memo: $memo',
+                context.l10n.inventoryRuntimeReceiptMemo(memo),
                 style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -4877,7 +5092,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Receipt Visibility',
+            context.l10n.inventoryRuntimeReceiptVisibility,
             style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -4886,7 +5101,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Track receipt readiness and already recorded inbound quantities before deciding whether the backend receipt contract is ready to run.',
+            context.l10n.inventoryRuntimeReceiptVisibilitySubtitle,
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4898,63 +5113,100 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Receipt status ${runtimeSurface.receiptVisibilityStatusLabel}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricReceiptStatus,
+                  _inventoryRuntimeText(
+                    runtimeSurface.receiptVisibilityStatusLabel,
+                  ),
+                ),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.receiptVisibilityStatusTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                'Readiness ${runtimeSurface.receivingReadinessLabel}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricReadiness,
+                  _inventoryRuntimeText(runtimeSurface.receivingReadinessLabel),
+                ),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.receivingReadinessTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                'Expected ${runtimeSurface.expectedBase.toStringAsFixed(3)} base',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricExpected,
+                  runtimeSurface.expectedBase.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Received ${runtimeSurface.receivedBase.toStringAsFixed(3)} base',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricReceived,
+                  runtimeSurface.receivedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Accepted ${runtimeSurface.acceptedBase.toStringAsFixed(3)} base',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricAccepted,
+                  runtimeSurface.acceptedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                'Remaining ${runtimeSurface.remainingBase.toStringAsFixed(3)} base',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRemaining,
+                  runtimeSurface.remainingBase.toStringAsFixed(3),
+                ),
                 color: _inventoryOperationalToneColor(
                   runtimeSurface.receivingReadinessTone,
                 ),
               ),
               if (runtimeSurface.rejectedBase > 0)
                 _buildIngredientMetaChip(
-                  'Rejected ${runtimeSurface.rejectedBase.toStringAsFixed(3)} base',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricRejected,
+                    runtimeSurface.rejectedBase.toStringAsFixed(3),
+                  ),
                   color: AppColors.statusOccupied,
                 ),
               _buildIngredientMetaChip(
-                'Confirmed receipts ${runtimeSurface.confirmedReceiptCount}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricConfirmedReceipts,
+                  runtimeSurface.confirmedReceiptCount,
+                ),
                 color: AppColors.statusAvailable,
               ),
               if (runtimeSurface.draftReceiptCount > 0)
                 _buildIngredientMetaChip(
-                  'Draft receipts ${runtimeSurface.draftReceiptCount}',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricDraftReceipts,
+                    runtimeSurface.draftReceiptCount,
+                  ),
                   color: AppColors.statusOccupied,
                 ),
               if (runtimeSurface.cancelledReceiptCount > 0)
                 _buildIngredientMetaChip(
-                  'Cancelled receipts ${runtimeSurface.cancelledReceiptCount}',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricCancelledReceipts,
+                    runtimeSurface.cancelledReceiptCount,
+                  ),
                   color: AppColors.statusCancelled,
                 ),
               _buildIngredientMetaChip(
                 runtimeSurface.latestReceiptAt == null
-                    ? 'No receipt timestamp yet'
-                    : 'Latest receipt ${DateFormat('yyyy-MM-dd HH:mm').format(runtimeSurface.latestReceiptAt!)}',
+                    ? context.l10n.inventoryRuntimeNoReceiptTimestamp
+                    : _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricLatestReceipt,
+                        DateFormat(
+                          'yyyy-MM-dd HH:mm',
+                        ).format(runtimeSurface.latestReceiptAt!),
+                      ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            runtimeSurface.receiptVisibilityNarrative,
+            _inventoryRuntimeText(runtimeSurface.receiptVisibilityNarrative),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -5079,8 +5331,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 4),
                     Text(
                       supplierSku == null || supplierSku.isEmpty
-                          ? 'Supplier SKU unavailable'
-                          : 'Supplier SKU $supplierSku',
+                          ? _inventoryRuntimeUnavailable(
+                              context.l10n.inventoryRuntimeMetricSupplierSku,
+                            )
+                          : _inventoryRuntimeLabeled(
+                              context.l10n.inventoryRuntimeMetricSupplierSku,
+                              supplierSku,
+                            ),
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -5090,14 +5347,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ),
               _buildIngredientMetaChip(
-                riskStatus.toUpperCase(),
+                _inventoryRuntimeText(riskStatus),
                 color: _recommendationRiskColor(riskStatus),
               ),
             ],
           ),
           const SizedBox(height: 8),
           _buildIngredientMetaChip(
-            combinedRiskSummary,
+            _inventoryRuntimeText(combinedRiskSummary),
             color: combinedRiskColor,
           ),
           const SizedBox(height: 8),
@@ -5106,7 +5363,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Attention rank $attentionRank',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricAttentionRank,
+                  attentionRank,
+                ),
                 color: attentionRank == 1
                     ? AppColors.statusOccupied
                     : attentionRank <= 3
@@ -5114,79 +5374,132 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Ordered ${orderedUnits.toStringAsFixed(3)} $orderUnit',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricOrdered,
+                  '${orderedUnits.toStringAsFixed(3)} $orderUnit',
+                ),
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                'Ordered base ${orderedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricOrdered,
+                  orderedBase.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Received ${receivedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricReceived,
+                  receivedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Accepted ${acceptedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricAccepted,
+                  acceptedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                'Remaining ${remainingBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRemaining,
+                  remainingBase.toStringAsFixed(3),
+                ),
                 color: _receiptVisibilityColor(receiptVisibilityStatus),
               ),
               if (rejectedBase > 0)
                 _buildIngredientMetaChip(
-                  'Rejected ${rejectedBase.toStringAsFixed(3)}',
+                  _inventoryRuntimeLabeled(
+                    context.l10n.inventoryRuntimeMetricRejected,
+                    rejectedBase.toStringAsFixed(3),
+                  ),
                   color: AppColors.statusOccupied,
                 ),
               _buildIngredientMetaChip(
-                'Recommended ${recommendedBase.toStringAsFixed(3)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricRecommended,
+                  recommendedBase.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Unit ${_formatCurrencyCompact(unitPrice)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricUnitPrice,
+                  _formatCurrencyCompact(unitPrice),
+                ),
               ),
               _buildIngredientMetaChip(
-                unitPriceDriftLabel,
+                _inventoryRuntimeText(unitPriceDriftLabel),
                 color: unitPriceDriftColor,
               ),
               _buildIngredientMetaChip(
-                'Supply ${_formatCurrencyCompact(supplyAmount)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricSupply,
+                  _formatCurrencyCompact(supplyAmount),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Tax ${_formatCurrencyCompact(taxAmount)}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricTax,
+                  _formatCurrencyCompact(taxAmount),
+                ),
               ),
               _buildIngredientMetaChip(
                 snapshotRunId == null
-                    ? 'Recommendation provenance unavailable'
-                    : 'Recommendation ${snapshotRunId.substring(0, 8)}',
+                    ? _inventoryRuntimeUnavailable(
+                        context.l10n.inventoryRuntimeMetricRecommendation,
+                      )
+                    : _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricRecommendation,
+                        snapshotRunId.substring(0, 8),
+                      ),
                 color: _recommendationRiskColor(riskStatus),
               ),
               _buildIngredientMetaChip(
-                'Receipt ${receiptVisibilityStatus.toUpperCase()}',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricReceiptStatus,
+                  _inventoryRuntimeText(receiptVisibilityStatus),
+                ),
                 color: _receiptVisibilityColor(receiptVisibilityStatus),
               ),
               _buildIngredientMetaChip(
                 supplierBaseFactor > 0
-                    ? 'Base factor ${supplierBaseFactor.toStringAsFixed(3)}'
-                    : 'Base factor unavailable',
+                    ? _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricBaseFactor,
+                        supplierBaseFactor.toStringAsFixed(3),
+                      )
+                    : _inventoryRuntimeUnavailable(
+                        context.l10n.inventoryRuntimeMetricBaseFactor,
+                      ),
               ),
               _buildIngredientMetaChip(
                 supplierMinOrder > 0
-                    ? 'Min order ${supplierMinOrder.toStringAsFixed(3)}'
-                    : 'Min order unavailable',
+                    ? _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricMinimumOrder,
+                        supplierMinOrder.toStringAsFixed(3),
+                      )
+                    : _inventoryRuntimeUnavailable(
+                        context.l10n.inventoryRuntimeMetricMinimumOrder,
+                      ),
               ),
               _buildIngredientMetaChip(
                 supplierLeadTimeDays > 0
-                    ? 'Lead time $supplierLeadTimeDays day(s)'
-                    : 'Lead time unavailable',
+                    ? _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricLeadTime,
+                        supplierLeadTimeDays,
+                      )
+                    : _inventoryRuntimeUnavailable(
+                        context.l10n.inventoryRuntimeMetricLeadTime,
+                      ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                leadTimeRiskLabel,
+                _inventoryRuntimeText(leadTimeRiskLabel),
                 color: leadTimeRiskColor,
               ),
               _buildIngredientMetaChip(
                 supplierPreferred
-                    ? 'Preferred supplier item'
-                    : 'Fallback supplier item',
+                    ? context.l10n.inventoryRuntimePreferredSupplierItem
+                    : context.l10n.inventoryRuntimeFallbackSupplierItem,
                 color: supplierPreferred
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
@@ -5196,7 +5509,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           if (memo != null && memo.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              'Line memo: $memo',
+              context.l10n.inventoryRuntimeLineMemo(memo),
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -5255,8 +5568,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 4),
                     Text(
                       supplierName == null || supplierName.isEmpty
-                          ? 'Supplier not assigned'
-                          : 'Supplier $supplierName',
+                          ? _inventoryRuntimeUnavailable(
+                              context.l10n.inventoryRuntimeMetricSupplier,
+                            )
+                          : _inventoryRuntimeLabeled(
+                              context.l10n.inventoryRuntimeMetricSupplier,
+                              supplierName,
+                            ),
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -5266,7 +5584,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ),
               _buildIngredientMetaChip(
-                riskStatus.toUpperCase(),
+                _inventoryRuntimeText(riskStatus),
                 color: _recommendationRiskColor(riskStatus),
               ),
             ],
@@ -5277,22 +5595,39 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Order ${recommendedUnits.toStringAsFixed(0)} unit(s)',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricOrderUnits,
+                  recommendedUnits.toStringAsFixed(0),
+                ),
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                'Need ${recommendedQuantity.toStringAsFixed(3)} base',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricNeedBase,
+                  recommendedQuantity.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Stock ${currentStock.toStringAsFixed(3)} base',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricStockBase,
+                  currentStock.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Daily ${avgDailyConsumption.toStringAsFixed(3)} base',
+                _inventoryRuntimeLabeled(
+                  context.l10n.inventoryRuntimeMetricDailyBase,
+                  avgDailyConsumption.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
                 daysRemaining == null
-                    ? 'Days remaining unavailable'
-                    : 'Days left ${daysRemaining.toStringAsFixed(1)}',
+                    ? _inventoryRuntimeUnavailable(
+                        context.l10n.inventoryRuntimeMetricDaysLeft,
+                      )
+                    : _inventoryRuntimeLabeled(
+                        context.l10n.inventoryRuntimeMetricDaysLeft,
+                        daysRemaining.toStringAsFixed(1),
+                      ),
                 color: _recommendationRiskColor(riskStatus),
               ),
             ],
@@ -5607,7 +5942,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               '-';
           final riskSummary =
               line['supplier_risk_summary']?.toString() ?? 'risk unavailable';
-          return '$productName · $riskSummary';
+          return '$productName · ${_inventoryRuntimeText(riskSummary)}';
         })
         .toList();
   }
@@ -5722,7 +6057,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               key: const Key('admin_inventory_recommendation_run_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
-                'Inventory Recommendation Trigger',
+                dialogContext.l10n.inventoryRuntimeRecommendationTrigger,
                 style: AppFonts.system(color: AppColors.textPrimary),
               ),
               content: SizedBox(
@@ -5732,7 +6067,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Create a store-scoped recommendation snapshot only. This does not create purchase orders or update stock.',
+                      dialogContext
+                          .l10n
+                          .inventoryRuntimeRecommendationTriggerSubtitle,
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -5744,8 +6081,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Target stock days',
+                      decoration: InputDecoration(
+                        labelText:
+                            dialogContext.l10n.inventoryPurchaseTargetStockDays,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -5763,7 +6101,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       },
                       icon: const Icon(Icons.event),
                       label: Text(
-                        'As of ${DateFormat('yyyy-MM-dd').format(selectedDate)}',
+                        dialogContext.l10n.inventoryRuntimeAsOfDate(
+                          DateFormat.yMd(
+                            Localizations.localeOf(dialogContext).languageCode,
+                          ).format(selectedDate),
+                        ),
                       ),
                     ),
                   ],
@@ -5772,7 +6114,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(dialogContext.l10n.cancel),
                 ),
                 FilledButton(
                   onPressed: () async {
@@ -5782,7 +6124,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     if (targetStockDays == null || targetStockDays <= 0) {
                       showErrorToast(
                         dialogContext,
-                        'Target stock days must be greater than zero.',
+                        dialogContext
+                            .l10n
+                            .inventoryPurchaseRecommendationInvalidTargetDays,
                       );
                       return;
                     }
@@ -5805,7 +6149,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       showErrorToast(
                         dialogContext,
                         latest.error ??
-                            'Failed to generate recommendation snapshot.',
+                            dialogContext
+                                .l10n
+                                .inventoryPurchaseRecommendationFailed,
                       );
                       return;
                     }
@@ -5822,7 +6168,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     if (!dialogContext.mounted) return;
                     showSuccessToast(
                       dialogContext,
-                      'Recommendation snapshot created.',
+                      dialogContext
+                          .l10n
+                          .inventoryPurchaseRecommendationGenerated,
                     );
                     Navigator.of(dialogContext).pop();
                   },
@@ -5830,7 +6178,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     backgroundColor: AppColors.amber500,
                     foregroundColor: AppColors.surface0,
                   ),
-                  child: const Text('Run Snapshot'),
+                  child: Text(dialogContext.l10n.inventoryRuntimeRunSnapshot),
                 ),
               ],
             );
@@ -5859,7 +6207,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               key: const Key('admin_inventory_create_purchase_orders_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
-                'Create Purchase Orders',
+                dialogContext.l10n.inventoryRuntimeCreateOrders,
                 style: AppFonts.system(color: AppColors.textPrimary),
               ),
               content: SizedBox(
@@ -5869,7 +6217,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Create submitted purchase orders grouped by supplier from the latest recommendation snapshot. This still does not confirm receipts or mutate stock.',
+                      dialogContext.l10n.inventoryRuntimeCreateOrdersSubtitle,
                       style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -5877,7 +6225,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Snapshot ${snapshotRun['id']?.toString().substring(0, 8) ?? '-'}',
+                      dialogContext.l10n.inventoryRuntimeSnapshotId(
+                        snapshotRun['id']?.toString().substring(0, 8) ?? '-',
+                      ),
                       style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w600,
@@ -5904,8 +6254,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       icon: const Icon(Icons.local_shipping_outlined),
                       label: Text(
                         requestedDeliveryDate == null
-                            ? 'Requested delivery date (optional)'
-                            : 'Requested ${DateFormat('yyyy-MM-dd').format(requestedDeliveryDate!)}',
+                            ? dialogContext
+                                  .l10n
+                                  .inventoryRuntimeRequestedDateOptional
+                            : dialogContext.l10n.inventoryRuntimeRequestedDate(
+                                DateFormat.yMd(
+                                  Localizations.localeOf(
+                                    dialogContext,
+                                  ).languageCode,
+                                ).format(requestedDeliveryDate!),
+                              ),
                       ),
                     ),
                   ],
@@ -5914,7 +6272,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(dialogContext.l10n.cancel),
                 ),
                 FilledButton(
                   onPressed: () async {
@@ -5933,7 +6291,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       showErrorToast(
                         dialogContext,
                         latest.error ??
-                            'Failed to create supplier-grouped purchase orders.',
+                            dialogContext
+                                .l10n
+                                .inventoryPurchaseOrderCreateFailed,
                       );
                       return;
                     }
@@ -5951,8 +6311,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     showSuccessToast(
                       dialogContext,
                       latest.createdOrders.isEmpty
-                          ? 'No supplier-qualified purchase orders were created.'
-                          : '${latest.createdOrders.length} purchase order(s) created.',
+                          ? dialogContext.l10n.inventoryPurchaseNoCreatedOrders
+                          : dialogContext.l10n.inventoryPurchaseOrdersCreated(
+                              latest.createdOrders.length,
+                            ),
                     );
                     Navigator.of(dialogContext).pop();
                   },
@@ -5960,7 +6322,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     backgroundColor: AppColors.amber500,
                     foregroundColor: AppColors.surface0,
                   ),
-                  child: const Text('Create Orders'),
+                  child: Text(
+                    dialogContext.l10n.inventoryRuntimeCreateOrdersAction,
+                  ),
                 ),
               ],
             );
@@ -5971,15 +6335,31 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   String _txTypeLabel(String type) => switch (type) {
-    'deduct' => 'Deduction',
-    'restock' => 'Stock In',
-    'waste' => 'Waste',
-    'adjust' => 'Adjustment',
+    'deduct' => context.l10n.inventoryTransactionDeduction,
+    'restock' => context.l10n.inventoryTransactionStockIn,
+    'waste' => context.l10n.inventoryTransactionWaste,
+    'adjust' => context.l10n.inventoryTransactionAdjustment,
     _ => type,
   };
 
   String _formatCurrencyCompact(double value) =>
       '${NumberFormat('#,###', 'vi_VN').format(value.round())} VND';
+
+  String _inventoryRuntimeLabeled(String label, Object value) =>
+      context.l10n.inventoryRuntimeLabeledValue(label, value.toString());
+
+  String _inventoryRuntimeUnavailable(String label) =>
+      context.l10n.inventoryRuntimeValueUnavailable(label);
+
+  String _inventoryRuntimeText(String value) =>
+      localizeInventoryRuntimeText(context.l10n, value);
+
+  String _inventorySupplierLabel(String value) =>
+      value == 'Supplier unavailable'
+      ? _inventoryRuntimeUnavailable(
+          context.l10n.inventoryRuntimeMetricSupplier,
+        )
+      : value;
 
   Widget _summaryCard(String label, double value) {
     return Container(
@@ -6070,8 +6450,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               children: [
                 _buildIngredientMetaChip(
                   context.l10n.inventorySelectedReceipt(
-                    selectedReceipt['status']?.toString().toUpperCase() ??
-                        'DRAFT',
+                    _inventoryRuntimeText(
+                      selectedReceipt['status']?.toString() ?? 'draft',
+                    ),
                   ),
                   color: _receiptVisibilityColor(
                     selectedReceipt['status']?.toString() ?? 'draft',
@@ -6151,7 +6532,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ),
               _buildIngredientMetaChip(
-                riskStatus.toUpperCase(),
+                _inventoryRuntimeText(riskStatus),
                 color: _recommendationRiskColor(riskStatus),
               ),
             ],
@@ -6598,7 +6979,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         .map(
                           (item) => DropdownMenuItem<String>(
                             value: item['id'].toString(),
-                            child: Text(item['name']?.toString() ?? '-'),
+                            child: Text(context.menuName(item)),
                           ),
                         )
                         .toList(),

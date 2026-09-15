@@ -3,27 +3,27 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/admin_audit_service.dart';
 
-String mapAdminAuditError(Object error) {
+enum AdminAuditErrorKind { loadFailed, storeRequired, forbidden }
+
+AdminAuditErrorKind classifyAdminAuditError(Object error) {
   if (error is! PostgrestException) {
-    return 'Failed to load recent changes.';
+    return AdminAuditErrorKind.loadFailed;
   }
 
   final message = error.message;
   if (message.contains('AUDIT_TRACE_RESTAURANT_REQUIRED')) {
-    return 'Cannot load change history without store info.';
+    return AdminAuditErrorKind.storeRequired;
   }
   if (message.contains('AUDIT_TRACE_FORBIDDEN')) {
-    return 'No permission to view recent changes.';
+    return AdminAuditErrorKind.forbidden;
   }
 
-  return 'Failed to load recent changes.';
+  return AdminAuditErrorKind.loadFailed;
 }
 
 final adminAuditTraceProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, storeId) async {
-      return adminAuditService.fetchRecentMutationTrace(
-        storeId: storeId,
-      );
+      return adminAuditService.fetchRecentMutationTrace(storeId: storeId);
     });
 
 class TodaySummary {
@@ -94,8 +94,6 @@ class TodaySummary {
 
 final adminTodaySummaryProvider = FutureProvider.autoDispose
     .family<TodaySummary, String>((ref, storeId) async {
-      final json = await adminAuditService.fetchTodaySummary(
-        storeId: storeId,
-      );
+      final json = await adminAuditService.fetchTodaySummary(storeId: storeId);
       return TodaySummary.fromJson(json);
     });

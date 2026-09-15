@@ -1,4 +1,9 @@
+import 'package:globos_pos_system/core/i18n/locale_controller.dart';
+import 'package:globos_pos_system/core/i18n/locale_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -19,7 +24,131 @@ List<String> readTopLevelArbKeys(String path) {
       .toList();
 }
 
+class _ControlledLocaleStore implements LocalePreferenceStore {
+  _ControlledLocaleStore({Completer<String?>? readCompleter})
+    : readCompleter = readCompleter ?? (Completer<String?>()..complete(null));
+
+  final Completer<String?> readCompleter;
+  final List<String> writes = [];
+  final List<Completer<void>> writeCompleters = [];
+  bool failReads = false;
+  bool failWrites = false;
+
+  @override
+  Future<String?> read() {
+    if (failReads) return Future<String?>.error(StateError('read failed'));
+    return readCompleter.future;
+  }
+
+  @override
+  Future<void> write(String languageCode) {
+    writes.add(languageCode);
+    if (failWrites) return Future<void>.error(StateError('write failed'));
+    final completer = Completer<void>();
+    writeCompleters.add(completer);
+    return completer.future;
+  }
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'selected language is hydrated, updated and restored from preferences',
+    () async {
+      SharedPreferences.setMockInitialValues({'app_locale': 'en'});
+      final controller = LocaleController();
+      addTearDown(controller.dispose);
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.state.language, AppLanguage.english);
+      await controller.setLocale(AppLanguage.vietnamese);
+      expect(controller.state.language, AppLanguage.vietnamese);
+      expect(
+        (await SharedPreferences.getInstance()).getString('app_locale'),
+        'vi',
+      );
+      final restored = LocaleController();
+      addTearDown(restored.dispose);
+      await Future<void>.delayed(Duration.zero);
+      expect(restored.state.language, AppLanguage.vietnamese);
+    },
+  );
+  test('locale codes normalize regional and underscore variants', () {
+    expect(AppLanguage.fromCode(' EN-us '), AppLanguage.english);
+    expect(AppLanguage.fromCode('vi_VN'), AppLanguage.vietnamese);
+    expect(AppLanguage.fromCode('ko-KR'), AppLanguage.korean);
+    expect(AppLanguage.fromCode('unsupported'), AppLanguage.korean);
+  });
+  test('late hydration cannot overwrite a newer operator selection', () async {
+    final read = Completer<String?>();
+    final store = _ControlledLocaleStore(readCompleter: read);
+    final controller = LocaleController(store: store);
+    addTearDown(controller.dispose);
+
+    final selection = controller.setLocale(AppLanguage.english);
+    expect(controller.state.language, AppLanguage.english);
+    read.complete('vi');
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.state.language, AppLanguage.english);
+
+    store.writeCompleters.single.complete();
+    await selection;
+    expect(controller.state.language, AppLanguage.english);
+    expect(controller.state.isHydrated, isTrue);
+  });
+  test(
+    'rapid selections serialize storage and preserve the final choice',
+    () async {
+      final store = _ControlledLocaleStore();
+      final controller = LocaleController(store: store);
+      addTearDown(controller.dispose);
+      await Future<void>.delayed(Duration.zero);
+
+      final first = controller.setLocale(AppLanguage.english);
+      await Future<void>.delayed(Duration.zero);
+      final second = controller.setLocale(AppLanguage.vietnamese);
+      expect(controller.state.language, AppLanguage.vietnamese);
+      expect(store.writes, ['en']);
+
+      store.writeCompleters.first.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(store.writes, ['en', 'vi']);
+      store.writeCompleters.last.complete();
+      await Future.wait([first, second]);
+
+      expect(controller.state.language, AppLanguage.vietnamese);
+      expect(controller.state.isPersisting, isFalse);
+      expect(controller.state.hasPersistenceError, isFalse);
+    },
+  );
+  test(
+    'storage failures keep the selected language visible and retryable',
+    () async {
+      final store = _ControlledLocaleStore()..failWrites = true;
+      final controller = LocaleController(store: store);
+      addTearDown(controller.dispose);
+      await Future<void>.delayed(Duration.zero);
+
+      await controller.setLocale(AppLanguage.english);
+      expect(controller.state.language, AppLanguage.english);
+      expect(controller.state.hasPersistenceError, isTrue);
+      expect(controller.state.isPersisting, isFalse);
+    },
+  );
+  test('English and Vietnamese UI catalogs contain no Korean leftovers', () {
+    for (final code in ['en', 'vi']) {
+      final messages =
+          jsonDecode(readRepoFile('lib/l10n/app_$code.arb')) as Map;
+      final leftovers = messages.entries
+          .where(
+            (entry) =>
+                entry.value is String &&
+                RegExp(r'[가-힣]').hasMatch(entry.value as String),
+          )
+          .map((entry) => entry.key)
+          .toList();
+      expect(leftovers, isEmpty, reason: '$code contains Korean UI messages');
+    }
+  });
   test('main wires generated localizations and locale provider', () {
     final mainFile = readRepoFile('lib/main.dart');
 

@@ -153,14 +153,29 @@ class _MenuNotifier extends MenuNotifier {
   _MenuNotifier() : super(_storeId) {
     state = const MenuState(
       categories: AsyncValue.data([
-        {'id': _categoryId, 'name': 'Phở'},
-        {'id': _emptyCategoryId, 'name': 'Món mới'},
+        {
+          'id': _categoryId,
+          'name': 'Phở',
+          'name_ko': '쌀국수',
+          'name_vi': 'Phở',
+          'name_en': 'Noodle soup',
+        },
+        {
+          'id': _emptyCategoryId,
+          'name': 'Món mới',
+          'name_ko': '새 메뉴',
+          'name_vi': 'Món mới',
+          'name_en': 'New menu',
+        },
       ]),
       items: AsyncValue.data([
         {
           'id': _menuItemId,
           'category_id': _categoryId,
           'name': 'Phở bò đặc biệt',
+          'name_ko': '특선 소고기 쌀국수',
+          'name_vi': 'Phở bò đặc biệt',
+          'name_en': 'Special beef pho',
           'price': 85000,
           'is_available': true,
           'is_visible_public': true,

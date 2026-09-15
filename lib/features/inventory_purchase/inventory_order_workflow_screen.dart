@@ -1207,6 +1207,12 @@ class _InventoryOrderWorkflowScreenState
   ) {
     final status = _string(order['status']);
     final documentStatus = _string(order['document_status'], fallback: 'none');
+    final documentStatusLabel = switch (documentStatus) {
+      'pending' => _text(ko: '생성 중', en: 'Generating', vi: 'Đang tạo'),
+      'ready' => _text(ko: '준비됨', en: 'Ready', vi: 'Sẵn sàng'),
+      'failed' => _text(ko: '생성 실패', en: 'Failed', vi: 'Tạo thất bại'),
+      _ => _text(ko: '없음', en: 'None', vi: 'Không có'),
+    };
     final canGenerate = const {'brand_admin', 'super_admin'}.contains(_role);
     return Card(
       child: Padding(
@@ -1228,7 +1234,7 @@ class _InventoryOrderWorkflowScreenState
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Chip(label: Text('PDF: $documentStatus')),
+                Chip(label: Text('PDF: $documentStatusLabel')),
                 if (const {
                       'ordered',
                       'partially_received',
@@ -1678,7 +1684,11 @@ class _InventoryOrderWorkflowScreenState
                             child: ExpansionTile(
                               initiallyExpanded: grouped.length <= 3,
                               title: Text(entry.key),
-                              subtitle: Text('${entry.value.length} items'),
+                              subtitle: Text(
+                                context.l10n.inventoryPurchaseCountItems(
+                                  entry.value.length,
+                                ),
+                              ),
                               children: [
                                 for (final item in entry.value)
                                   ListTile(

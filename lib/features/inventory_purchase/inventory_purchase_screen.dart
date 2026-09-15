@@ -1,3 +1,4 @@
+import '../../core/i18n/menu_localization.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -2292,8 +2293,7 @@ class _InventoryPurchaseScreenState
                           controller: codeController,
                           decoration: InputDecoration(
                             labelText: '${l10n.inventoryPurchaseProductCode} *',
-                            helperText:
-                                'Unique ingredient code within this store.',
+                            helperText: l10n.inventoryProductCodeHelp,
                           ),
                         ),
                         TextField(
@@ -2312,8 +2312,8 @@ class _InventoryPurchaseScreenState
                           decoration: InputDecoration(
                             labelText: l10n.inventoryPurchaseSupplierRequired,
                             helperText: selectableSuppliers.isEmpty
-                                ? 'Register an active supplier first.'
-                                : 'The preferred source for this ingredient.',
+                                ? l10n.inventoryProductSupplierRequiredHelp
+                                : l10n.inventoryProductPreferredSupplierHelp,
                           ),
                           items: [
                             for (final supplier in selectableSuppliers)
@@ -2342,16 +2342,14 @@ class _InventoryPurchaseScreenState
                           controller: supplierSkuController,
                           decoration: InputDecoration(
                             labelText: l10n.inventoryPurchaseSupplierSku,
-                            helperText:
-                                'Optional code used by the selected supplier.',
+                            helperText: l10n.inventoryProductSupplierSkuHelp,
                           ),
                         ),
                         TextField(
                           controller: categoryController,
                           decoration: InputDecoration(
                             labelText: '${l10n.superAdminCategory} *',
-                            helperText:
-                                'Choose an existing category below or enter a new category name.',
+                            helperText: l10n.inventoryProductCategoryHelp,
                           ),
                         ),
                         TextField(
@@ -2411,8 +2409,7 @@ class _InventoryPurchaseScreenState
                           decoration: InputDecoration(
                             labelText:
                                 '${l10n.inventoryPurchaseShelfLifeDays} *',
-                            helperText:
-                                'Required for pilot receiving and expiry checks.',
+                            helperText: l10n.inventoryProductShelfLifeHelp,
                           ),
                         ),
                       ],
@@ -3316,7 +3313,7 @@ class _InventoryPurchaseScreenState
                       for (final menu in selectableMenus)
                         DropdownMenuItem(
                           value: menu['id'].toString(),
-                          child: Text(_string(menu['name'], fallback: '-')),
+                          child: Text(context.menuName(menu)),
                         ),
                     ],
                     onChanged: (value) {
@@ -3486,9 +3483,7 @@ class _InventoryPurchaseScreenState
                             for (final category in categories)
                               DropdownMenuItem<String?>(
                                 value: category['id']?.toString(),
-                                child: Text(
-                                  _string(category['name'], fallback: '-'),
-                                ),
+                                child: Text(context.menuName(category)),
                               ),
                           ],
                           onChanged: (value) =>
@@ -6035,7 +6030,10 @@ class _RecipeLineRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _string(recipe['menu_item_name'], fallback: '-'),
+                  context.menuName({
+                    ...recipe,
+                    'name': recipe['menu_item_name'],
+                  }),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _textStyle(

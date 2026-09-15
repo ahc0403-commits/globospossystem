@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/i18n/menu_localization.dart';
 import '../../core/models/fulfillment_mode.dart';
 import '../../core/services/emergency_web_bridge.dart';
 import '../../core/utils/live_sync_scope.dart';
@@ -120,24 +121,24 @@ class EmergencyComboComponent {
   int displayQuantity(int parentQuantity) =>
       isTotalQuantity ? quantity : quantity * parentQuantity;
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
-    'en' => nameEn.trim().isEmpty ? 'Item' : nameEn,
-    _ => nameKo.trim().isEmpty ? '메뉴' : nameKo,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
-  factory EmergencyComboComponent.fromJson(
-    Map<String, dynamic> json,
-  ) => EmergencyComboComponent(
-    menuItemId: json['menu_item_id']?.toString() ?? '',
-    nameKo: json['name_ko']?.toString() ?? json['label']?.toString() ?? '메뉴',
-    nameVi: json['name_vi']?.toString() ?? json['label']?.toString() ?? 'Món',
-    nameEn: json['name_en']?.toString() ?? json['label']?.toString() ?? 'Item',
-    quantity: _asInt(json['quantity']),
-    isTotalQuantity: json['is_total_quantity'] == true,
-    fulfillmentRoute:
-        json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
-  );
+  factory EmergencyComboComponent.fromJson(Map<String, dynamic> json) =>
+      EmergencyComboComponent(
+        menuItemId: json['menu_item_id']?.toString() ?? '',
+        nameKo: json['name_ko']?.toString() ?? '',
+        nameVi: json['name_vi']?.toString() ?? '',
+        nameEn: json['name_en']?.toString() ?? '',
+        quantity: _asInt(json['quantity']),
+        isTotalQuantity: json['is_total_quantity'] == true,
+        fulfillmentRoute:
+            json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
+      );
 }
 
 class EmergencyFulfillmentDisplayItem {
@@ -177,11 +178,12 @@ class EmergencyFulfillmentDisplayItem {
 
   String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
-    'en' => nameEn.trim().isEmpty ? 'Item' : nameEn,
-    _ => nameKo.trim().isEmpty ? '메뉴' : nameKo,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 }
 
 class EmergencyFulfillmentItem {
@@ -312,11 +314,12 @@ class EmergencyFulfillmentItem {
     return 1;
   }
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
-    'en' => nameEn.trim().isEmpty ? 'Item' : nameEn,
-    _ => nameKo.trim().isEmpty ? '메뉴' : nameKo,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   int quantityForStage(String stage) => switch (stage) {
     'kitchen_done' => kitchenDoneQuantity,
@@ -389,9 +392,9 @@ class EmergencyFulfillmentItem {
     return EmergencyFulfillmentItem(
       id: json['id']?.toString() ?? '',
       orderItemId: json['order_item_id']?.toString() ?? '',
-      nameKo: json['name_ko']?.toString() ?? '메뉴',
-      nameVi: json['name_vi']?.toString() ?? 'Món',
-      nameEn: json['name_en']?.toString() ?? 'Item',
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
       orderedQuantity: _asInt(json['ordered_quantity']),
       kitchenDoneQuantity: _asInt(json['kitchen_done_quantity']),
       trayReceivedQuantity: _asInt(json['tray_received_quantity']),
@@ -2176,3 +2179,11 @@ int _asInt(Object? value) => switch (value) {
   String text => int.tryParse(text) ?? 0,
   _ => 0,
 };
+
+String? _firstEmergencyMenuName(String ko, String vi, String en) {
+  for (final value in [ko, vi, en]) {
+    final cleaned = value.trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  return null;
+}

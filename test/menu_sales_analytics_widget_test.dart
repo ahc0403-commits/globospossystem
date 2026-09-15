@@ -20,6 +20,9 @@ MenuSalesAnalytics _analytics() {
       'rank': rank,
       'menu_key': 'menu-$rank',
       'display_name': rank == 1 ? '쌀국수 스페셜' : '메뉴 $rank',
+      'name_ko': rank == 1 ? '쌀국수 스페셜' : '메뉴 $rank',
+      'name_en': rank == 1 ? 'Special pho' : 'Menu $rank',
+      'name_vi': rank == 1 ? 'Phở đặc biệt' : 'Món $rank',
       'identity_quality': rank == 12 ? 'name_fallback' : 'stable_id',
       'name_changed_in_period': rank == 11,
       'sold_quantity': 20 - index,
@@ -49,6 +52,9 @@ MenuSalesAnalytics _analytics() {
         'rank': rank,
         'menu_key': 'menu-$rank',
         'display_name': rank == 1 ? '쌀국수 스페셜' : '메뉴 $rank',
+        'name_ko': rank == 1 ? '쌀국수 스페셜' : '메뉴 $rank',
+        'name_en': rank == 1 ? 'Special pho' : 'Menu $rank',
+        'name_vi': rank == 1 ? 'Phở đặc biệt' : 'Món $rank',
         'hour': hour,
         'sold_quantity': hour == 12 + rank % 3 ? 10 - rank : 0,
         'menu_sales_amount': hour == 12 + rank % 3 ? rank * 100000 : 0,
@@ -75,6 +81,7 @@ MenuSalesAnalytics _analytics() {
 }
 
 Widget _app({
+  Locale locale = const Locale('ko'),
   Future<MenuSalesAnalytics> Function()? loader,
   Future<MenuSalesAnalytics> Function(MenuSalesAnalyticsParams)? paramsLoader,
   MenuSalesAnalyticsParams? params,
@@ -95,7 +102,7 @@ Widget _app({
       ),
     ],
     child: MaterialApp(
-      locale: const Locale('ko'),
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       builder: textScaler == null
@@ -144,6 +151,22 @@ Widget _launcherApp() {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final code in ['en', 'vi']) {
+    testWidgets('rankings and chart labels use $code menu data', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1024, 768));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_app(locale: Locale(code)));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(code == 'en' ? 'Special pho' : 'Phở đặc biệt'),
+        findsWidgets,
+      );
+      expect(find.textContaining('쌀국수'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final size in const [
     Size(390, 844),

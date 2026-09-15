@@ -196,6 +196,7 @@ class _DirectOrderSettingsScreenState
       await directOrderQrExportService.printQr(
         slug: _slug.text.trim(),
         url: url,
+        title: _copy.externalOrderQr,
       );
     } catch (_) {
       if (!mounted) return;

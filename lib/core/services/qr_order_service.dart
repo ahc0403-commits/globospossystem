@@ -1,3 +1,4 @@
+import '../i18n/menu_localization.dart';
 import '../../main.dart';
 
 class QrOrderMenu {
@@ -68,20 +69,21 @@ class QrMenuCategory {
   final String nameVi;
   final String nameEn;
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'ko' => nameKo.isEmpty ? name : nameKo,
-    'vi' => nameVi.isEmpty ? name : nameVi,
-    _ => nameEn.isEmpty ? name : nameEn,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   factory QrMenuCategory.fromJson(Map<String, dynamic> json) {
     final fallback = json['name']?.toString() ?? '';
     return QrMenuCategory(
       id: json['id']?.toString() ?? '',
       name: fallback,
-      nameKo: json['name_ko']?.toString() ?? fallback,
-      nameVi: json['name_vi']?.toString() ?? fallback,
-      nameEn: json['name_en']?.toString() ?? fallback,
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
     );
   }
 }
@@ -119,11 +121,12 @@ class QrMenuItem {
   final int comboDrinkChoiceCount;
   final List<QrComboDrinkOption> comboDrinkOptions;
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'ko' => nameKo.isEmpty ? name : nameKo,
-    'vi' => nameVi.isEmpty ? name : nameVi,
-    _ => nameEn.isEmpty ? name : nameEn,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   factory QrMenuItem.fromJson(Map<String, dynamic> json) {
     final priceRaw = json['price'];
@@ -132,9 +135,9 @@ class QrMenuItem {
       id: json['id']?.toString() ?? '',
       categoryId: json['category_id']?.toString(),
       name: fallback,
-      nameKo: json['name_ko']?.toString() ?? fallback,
-      nameVi: json['name_vi']?.toString() ?? fallback,
-      nameEn: json['name_en']?.toString() ?? fallback,
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
       description: json['description']?.toString(),
       imageUrl: json['image_url']?.toString(),
       price: _jsonDouble(priceRaw),
@@ -173,20 +176,21 @@ class QrComboDrinkOption {
   final String nameVi;
   final String nameEn;
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'ko' => nameKo.isEmpty ? name : nameKo,
-    'vi' => nameVi.isEmpty ? name : nameVi,
-    _ => nameEn.isEmpty ? name : nameEn,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   factory QrComboDrinkOption.fromJson(Map<String, dynamic> json) {
     final fallback = json['name']?.toString() ?? '';
     return QrComboDrinkOption(
       id: json['id']?.toString() ?? '',
       name: fallback,
-      nameKo: json['name_ko']?.toString() ?? fallback,
-      nameVi: json['name_vi']?.toString() ?? fallback,
-      nameEn: json['name_en']?.toString() ?? fallback,
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
     );
   }
 }
@@ -308,19 +312,20 @@ class QrActiveOrderItem {
 
   int get remainingQuantity => (quantity - servedQuantity).clamp(0, quantity);
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'ko' => nameKo.isEmpty ? name : nameKo,
-    'vi' => nameVi.isEmpty ? name : nameVi,
-    _ => nameEn.isEmpty ? name : nameEn,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   factory QrActiveOrderItem.fromJson(Map<String, dynamic> json) {
     final fallback = json['name']?.toString() ?? '';
     return QrActiveOrderItem(
       name: fallback,
-      nameKo: json['name_ko']?.toString() ?? fallback,
-      nameVi: json['name_vi']?.toString() ?? fallback,
-      nameEn: json['name_en']?.toString() ?? fallback,
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
       quantity: _jsonInt(json['quantity']),
       status: json['status']?.toString() ?? 'pending',
       servedQuantity: _jsonInt(json['served_quantity']),
@@ -363,20 +368,21 @@ class QrFulfillmentPart {
 
   int get remainingQuantity => (quantity - servedQuantity).clamp(0, quantity);
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'ko' => nameKo.isEmpty ? name : nameKo,
-    'vi' => nameVi.isEmpty ? name : nameVi,
-    _ => nameEn.isEmpty ? name : nameEn,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   factory QrFulfillmentPart.fromJson(Map<String, dynamic> json) {
     final fallback = json['name']?.toString() ?? '';
     return QrFulfillmentPart(
       lineKey: json['line_key']?.toString() ?? 'base',
       name: fallback,
-      nameKo: json['name_ko']?.toString() ?? fallback,
-      nameVi: json['name_vi']?.toString() ?? fallback,
-      nameEn: json['name_en']?.toString() ?? fallback,
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
       quantity: _jsonInt(json['quantity']),
       servedQuantity: _jsonInt(json['served_quantity']),
       fulfillmentRoute:

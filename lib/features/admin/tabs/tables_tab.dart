@@ -2254,7 +2254,7 @@ class _AdminTableOrderLine extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'x$quantity · $status',
+                  'x$quantity · ${_orderItemStatusLabel(context, status)}',
                   style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 12,
@@ -2275,6 +2275,18 @@ class _AdminTableOrderLine extends StatelessWidget {
       ),
     );
   }
+}
+
+String _orderItemStatusLabel(BuildContext context, String status) {
+  final l10n = context.l10n;
+  return switch (status.trim().toLowerCase()) {
+    'pending' => l10n.orderStatusPending,
+    'preparing' => l10n.orderStatusPreparing,
+    'ready' => l10n.ready,
+    'served' => l10n.orderStatusServed,
+    'cancelled' => l10n.orderStatusCancelled,
+    _ => l10n.adminAuditUnknownValue,
+  };
 }
 
 class _RestaurantMissingView extends StatelessWidget {

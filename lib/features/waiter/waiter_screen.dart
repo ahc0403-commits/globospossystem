@@ -1,3 +1,4 @@
+import '../../core/i18n/menu_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
@@ -990,7 +991,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                         itemBuilder: (context, index) {
                           final item = menuItems[index];
                           final id = item['id']?.toString() ?? '';
-                          final name = item['name']?.toString() ?? 'Item';
+                          final name = context.menuName(item);
                           final quantity = quantities[id] ?? 0;
                           return ListTile(
                             title: Text(

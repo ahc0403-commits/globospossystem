@@ -174,10 +174,10 @@ class _ViewportLocale {
   final Locale locale;
 }
 
-const _viewportLocales = <_ViewportLocale>[
-  _ViewportLocale(Size(390, 844), Locale('ko')),
-  _ViewportLocale(Size(1024, 768), Locale('en')),
-  _ViewportLocale(Size(1440, 900), Locale('vi')),
+final _viewportLocales = <_ViewportLocale>[
+  for (final size in const [Size(390, 844), Size(1024, 768), Size(1440, 900)])
+    for (final locale in const [Locale('ko'), Locale('en'), Locale('vi')])
+      _ViewportLocale(size, locale),
 ];
 
 typedef _LocalizedLabel = String Function(AppLocalizations l10n, Locale locale);
@@ -524,6 +524,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       expect(_routeSurfaces, hasLength(18));
+      final layoutFailures = <String>[];
 
       GoRouter? previousRouter;
       for (final fixture in _viewportLocales) {
@@ -556,17 +557,17 @@ void main() {
             isNotNull,
             reason: '${surface.location} has no keyboard focus path',
           );
-          expect(
-            tester.takeException(),
-            isNull,
-            reason:
-                '${surface.location} overflowed at ${fixture.size} '
-                '${fixture.locale} with 200% text',
-          );
+          final layoutError = tester.takeException();
+          if (layoutError != null) {
+            layoutFailures.add(
+              '${surface.location} ${fixture.size} ${fixture.locale}: $layoutError',
+            );
+          }
         }
       }
       previousRouter?.dispose();
       semantics.dispose();
+      expect(layoutFailures, isEmpty, reason: layoutFailures.join('\n'));
     },
   );
 

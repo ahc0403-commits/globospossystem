@@ -72,7 +72,11 @@ void main() {
       );
       const url = 'https://example.com/order/sample-store';
 
-      await service.printQr(slug: 'sample-store', url: url);
+      await service.printQr(
+        slug: 'sample-store',
+        url: url,
+        title: 'External order QR code',
+      );
 
       expect(printedName, 'external_order_qr_sample-store');
       expect(printedBytes, [137, 80, 78, 71]);

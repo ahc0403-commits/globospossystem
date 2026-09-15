@@ -1,3 +1,4 @@
+import '../../core/i18n/menu_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../main.dart';
@@ -96,6 +97,7 @@ class MenuSalesRow {
     required this.rank,
     required this.menuKey,
     required this.displayName,
+    this.translations = const {},
     required this.identityQuality,
     required this.nameChangedInPeriod,
     required this.soldQuantity,
@@ -113,6 +115,10 @@ class MenuSalesRow {
   final int rank;
   final String menuKey;
   final String displayName;
+  final Map<String, dynamic> translations;
+
+  String localizedName(String languageCode) =>
+      localizedMenuName({'name': displayName, ...translations}, languageCode);
   final String identityQuality;
   final bool nameChangedInPeriod;
   final int soldQuantity;
@@ -133,6 +139,9 @@ class MenuSalesRow {
       rank: menuSalesInt(json['rank']),
       menuKey: json['menu_key']?.toString() ?? '',
       displayName: json['display_name']?.toString() ?? '',
+      translations: {
+        for (final code in ['ko', 'vi', 'en']) 'name_$code': json['name_$code'],
+      },
       identityQuality: json['identity_quality']?.toString() ?? 'stable_id',
       nameChangedInPeriod: json['name_changed_in_period'] == true,
       soldQuantity: menuSalesInt(json['sold_quantity']),
@@ -177,6 +186,7 @@ class TopMenuSalesHour {
     required this.rank,
     required this.menuKey,
     required this.displayName,
+    this.translations = const {},
     required this.hour,
     required this.soldQuantity,
     required this.menuSalesAmount,
@@ -185,6 +195,10 @@ class TopMenuSalesHour {
   final int rank;
   final String menuKey;
   final String displayName;
+  final Map<String, dynamic> translations;
+
+  String localizedName(String languageCode) =>
+      localizedMenuName({'name': displayName, ...translations}, languageCode);
   final int hour;
   final int soldQuantity;
   final double menuSalesAmount;
@@ -194,6 +208,9 @@ class TopMenuSalesHour {
       rank: menuSalesInt(json['rank']),
       menuKey: json['menu_key']?.toString() ?? '',
       displayName: json['display_name']?.toString() ?? '',
+      translations: {
+        for (final code in ['ko', 'vi', 'en']) 'name_$code': json['name_$code'],
+      },
       hour: menuSalesInt(json['hour']).clamp(0, 23).toInt(),
       soldQuantity: menuSalesInt(json['sold_quantity']),
       menuSalesAmount: menuSalesDouble(json['menu_sales_amount']),

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../core/i18n/menu_localization.dart';
+
 Never _invalidModel(String field) =>
     throw FormatException('DIRECT_ORDER_RESPONSE_INVALID:$field');
 
@@ -130,11 +132,11 @@ class DirectOrderCategory {
     );
   }
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'ko' => nameKo,
-    'en' => nameEn,
-    _ => nameVi,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 }
 
 class DirectOrderMenuItem {
@@ -189,11 +191,11 @@ class DirectOrderMenuItem {
     );
   }
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'ko' => nameKo,
-    'en' => nameEn,
-    _ => nameVi,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 }
 
 class DirectOrderStorefront {

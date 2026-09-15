@@ -1,3 +1,5 @@
+import '../../core/i18n/menu_localization.dart';
+
 class CartItem {
   const CartItem({
     required this.menuItemId,
@@ -5,6 +7,9 @@ class CartItem {
     required this.price,
     required this.quantity,
     this.isTakeout = false,
+    this.nameKo,
+    this.nameVi,
+    this.nameEn,
   });
 
   final String menuItemId;
@@ -12,6 +17,16 @@ class CartItem {
   final double price;
   final int quantity;
   final bool isTakeout;
+  final String? nameKo;
+  final String? nameVi;
+  final String? nameEn;
+
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   String get lineKey => '$menuItemId:${isTakeout ? 'takeout' : 'dine_in'}';
 
@@ -28,6 +43,9 @@ class CartItem {
       price: price ?? this.price,
       quantity: quantity ?? this.quantity,
       isTakeout: isTakeout ?? this.isTakeout,
+      nameKo: nameKo,
+      nameVi: nameVi,
+      nameEn: nameEn,
     );
   }
 }
@@ -114,11 +132,13 @@ class OrderItem {
     final menuItemRaw = json['menu_items'];
     final comboRaw = json['combo_components'];
     String? menuItemName;
+    String? menuItemNameKo;
     String? menuItemNameVi;
     String? menuItemNameEn;
     String? vatCategory;
     if (menuItemRaw is Map) {
       menuItemName = menuItemRaw['name']?.toString();
+      menuItemNameKo = menuItemRaw['name_ko']?.toString();
       menuItemNameVi = menuItemRaw['name_vi']?.toString();
       menuItemNameEn = menuItemRaw['name_en']?.toString();
       vatCategory = menuItemRaw['vat_category']?.toString();
@@ -142,7 +162,7 @@ class OrderItem {
       },
       status: json['status']?.toString() ?? 'pending',
       itemType: json['item_type']?.toString() ?? 'menu_item',
-      nameKo: menuItemName,
+      nameKo: menuItemNameKo,
       nameVi: menuItemNameVi,
       nameEn: menuItemNameEn,
       isServiceItem: switch (json['is_service_item']) {
@@ -175,20 +195,13 @@ class OrderItem {
     );
   }
 
-  String localizedName(String languageCode) {
-    final localized = switch (languageCode) {
-      'vi' => nameVi,
-      'en' => nameEn,
-      _ => nameKo,
-    };
-    final value = localized?.trim() ?? '';
-    if (value.isNotEmpty) return value;
-    return switch (languageCode) {
-      'vi' => 'Món',
-      'en' => 'Item',
-      _ => '메뉴',
-    };
-  }
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': label,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+    'item_type': itemType,
+  }, languageCode);
 }
 
 class OrderComboComponent {
@@ -196,9 +209,14 @@ class OrderComboComponent {
     required this.label,
     required this.quantity,
     this.isTotalQuantity = false,
+    this.translations = const {},
   });
 
   final String label;
+  final Map<String, dynamic> translations;
+
+  String localizedName(String languageCode) =>
+      localizedMenuName({'name': label, ...translations}, languageCode);
   final int quantity;
   final bool isTotalQuantity;
 
@@ -208,6 +226,9 @@ class OrderComboComponent {
   factory OrderComboComponent.fromJson(Map<String, dynamic> json) {
     return OrderComboComponent(
       label: json['label']?.toString() ?? 'Item',
+      translations: {
+        for (final code in ['ko', 'vi', 'en']) 'name_$code': json['name_$code'],
+      },
       quantity: switch (json['quantity']) {
         int value => value,
         num value => value.toInt(),

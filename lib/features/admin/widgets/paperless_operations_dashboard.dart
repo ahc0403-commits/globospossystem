@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/i18n/menu_localization.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../main.dart';
 import '../../report/report_provider.dart';
@@ -2058,9 +2059,11 @@ class _StationMetric {
 class _MenuOperationMetric {
   const _MenuOperationMetric({
     required this.menuKey,
+    required this.originalName,
     required this.nameKo,
     required this.nameVi,
     required this.nameEn,
+    required this.originalCategoryName,
     required this.categoryNameKo,
     required this.categoryNameVi,
     required this.categoryNameEn,
@@ -2072,40 +2075,49 @@ class _MenuOperationMetric {
   });
 
   final String menuKey;
+  final String originalName;
   final String nameKo;
   final String nameVi;
   final String nameEn;
   final String categoryNameKo;
   final String categoryNameVi;
   final String categoryNameEn;
+  final String originalCategoryName;
   final int sampleCount;
   final int? kitchenAverageSeconds;
   final int? trayAverageSeconds;
   final int? floorAverageSeconds;
   final int operationAverageSeconds;
 
-  String name(String languageCode) => switch (languageCode) {
-    'vi' => nameVi,
-    'en' => nameEn,
-    _ => nameKo,
-  };
+  String name(String languageCode) => localizedMenuName({
+    'name': originalName,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
-  String categoryName(String languageCode) => switch (languageCode) {
-    'vi' => categoryNameVi,
-    'en' => categoryNameEn,
-    _ => categoryNameKo,
-  };
+  String categoryName(String languageCode) => localizedMenuName({
+    'name': originalCategoryName,
+    'name_ko': categoryNameKo,
+    'name_vi': categoryNameVi,
+    'name_en': categoryNameEn,
+  }, languageCode);
 
   factory _MenuOperationMetric.fromJson(Map<String, dynamic> json) {
     final fallback = json['name']?.toString() ?? 'Menu';
     return _MenuOperationMetric(
       menuKey: json['menu_key']?.toString() ?? fallback,
-      nameKo: json['name_ko']?.toString() ?? fallback,
-      nameVi: json['name_vi']?.toString() ?? fallback,
-      nameEn: json['name_en']?.toString() ?? fallback,
-      categoryNameKo: json['category_name_ko']?.toString() ?? '미분류',
-      categoryNameVi: json['category_name_vi']?.toString() ?? 'Chưa phân loại',
-      categoryNameEn: json['category_name_en']?.toString() ?? 'Uncategorized',
+      originalName: fallback,
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
+      originalCategoryName:
+          json['category_name']?.toString() ??
+          json['category_name_ko']?.toString() ??
+          'Uncategorized',
+      categoryNameKo: json['category_name_ko']?.toString() ?? '',
+      categoryNameVi: json['category_name_vi']?.toString() ?? '',
+      categoryNameEn: json['category_name_en']?.toString() ?? '',
       sampleCount: _int(json['sample_count']),
       kitchenAverageSeconds: _nullableInt(json['kitchen_average_seconds']),
       trayAverageSeconds: _nullableInt(json['tray_average_seconds']),
@@ -2119,12 +2131,14 @@ class _MenuOperationMetric {
     final kitchen = _int(json['average_seconds']);
     return _MenuOperationMetric(
       menuKey: name,
-      nameKo: name,
-      nameVi: name,
-      nameEn: name,
-      categoryNameKo: '미분류',
-      categoryNameVi: 'Chưa phân loại',
-      categoryNameEn: 'Uncategorized',
+      originalName: name,
+      nameKo: '',
+      nameVi: '',
+      nameEn: '',
+      originalCategoryName: 'Uncategorized',
+      categoryNameKo: '',
+      categoryNameVi: '',
+      categoryNameEn: '',
       sampleCount: _int(json['sample_count']),
       kitchenAverageSeconds: kitchen,
       trayAverageSeconds: null,
@@ -2137,6 +2151,7 @@ class _MenuOperationMetric {
 class _CategoryOperationMetric {
   const _CategoryOperationMetric({
     required this.categoryKey,
+    required this.originalName,
     required this.nameKo,
     required this.nameVi,
     required this.nameEn,
@@ -2145,25 +2160,28 @@ class _CategoryOperationMetric {
   });
 
   final String categoryKey;
+  final String originalName;
   final String nameKo;
   final String nameVi;
   final String nameEn;
   final int sampleCount;
   final int operationAverageSeconds;
 
-  String name(String languageCode) => switch (languageCode) {
-    'vi' => nameVi,
-    'en' => nameEn,
-    _ => nameKo,
-  };
+  String name(String languageCode) => localizedMenuName({
+    'name': originalName,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   factory _CategoryOperationMetric.fromJson(Map<String, dynamic> json) {
     final fallback = json['name']?.toString() ?? 'Uncategorized';
     return _CategoryOperationMetric(
       categoryKey: json['category_key']?.toString() ?? 'uncategorized',
-      nameKo: json['name_ko']?.toString() ?? fallback,
-      nameVi: json['name_vi']?.toString() ?? fallback,
-      nameEn: json['name_en']?.toString() ?? fallback,
+      originalName: fallback,
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
       sampleCount: _int(json['sample_count']),
       operationAverageSeconds: _int(json['operation_average_seconds']),
     );

@@ -311,6 +311,16 @@ void main() {
     }
   });
 
+  test('snapshot names never borrow a different registered language', () {
+    expect(
+      localizedDirectOrderSnapshotName(
+        const {'name': '한국어 메뉴', 'name_ko': '한국어 메뉴'},
+        'en-US',
+      ),
+      '한국어 메뉴 · English name missing',
+    );
+  });
+
   test('free chat preserves the author original in every viewer locale', () {
     for (final locale in directOrderLocales) {
       expect(
