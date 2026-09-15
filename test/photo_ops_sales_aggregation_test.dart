@@ -49,7 +49,10 @@ void main() {
     expect(snapshot.activeStoreSales, 150000);
     expect(snapshot.networkSales, 230000);
     expect(snapshot.activeStoreTransactions, 4);
-    expect(snapshot.lastSalesPulledAt, DateTime.parse('2026-07-11T09:00:00Z'));
+    expect(
+      snapshot.lastSalesImportedAt,
+      DateTime.parse('2026-07-11T09:00:00Z'),
+    );
     expect(snapshot.rows.map((row) => row.storeName), [
       'Store A',
       'Store B',
@@ -90,6 +93,6 @@ void main() {
     expect(snapshot.activeStoreSales, 0);
     expect(snapshot.networkSales, 0);
     expect(snapshot.activeStoreTransactions, 0);
-    expect(snapshot.lastSalesPulledAt, isNull);
+    expect(snapshot.lastSalesImportedAt, isNull);
   });
 }

@@ -352,11 +352,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      final message =
-          error is FormatException &&
-              error.message.toString().startsWith('PHOTO_EXPORT_NOT_READY:')
-          ? context.l10n.photoOpsSalesExportNotReady
-          : context.l10n.photoOpsSalesExportFailed('$error');
+      final message = context.l10n.photoOpsSalesExportFailed('$error');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));

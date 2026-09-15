@@ -573,7 +573,7 @@ void main() {
           activeMachines: 2,
         ),
       ],
-      salesWarningCode: 'PHOTO_SALES_PULL_PARTIAL',
+      salesWarningCode: 'PHOTO_SALES_IMPORT_PARTIAL',
       salesWarningDetail: 'One terminal is delayed',
     );
     await _pump(

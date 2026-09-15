@@ -1,4 +1,4 @@
-name: Photo Objet Sales Contract
+name: POS Release Contract
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   contract:
-    name: Photo Objet contract
+    name: POS release contract
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

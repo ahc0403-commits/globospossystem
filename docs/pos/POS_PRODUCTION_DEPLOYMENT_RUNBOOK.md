@@ -48,7 +48,7 @@ scripts/deploy_pos_production.sh
 This default path runs:
 
 1. Clean Git worktree and exact freshly fetched `origin/main` SHA preflight.
-2. Successful required GitHub Actions check (`Photo Objet contract`) for that
+2. Successful required GitHub Actions check (`POS release contract`) for that
    exact SHA.
 3. Production target preflight.
 4. Required production Auth and test-data hygiene check with
@@ -65,7 +65,7 @@ This default path runs:
 Before any production database or Vercel mutation, the script fetches
 `origin/main` into `refs/remotes/origin/main` and requires that freshly fetched
 commit to equal `HEAD`. It then reads GitHub check runs for the same SHA and
-requires the branch-protection check `Photo Objet contract` from GitHub
+requires the branch-protection check `POS release contract` from GitHub
 Actions to have completed successfully. A feature branch, a stale local
 `origin/main`, a pending check, and a failed or unavailable check all stop
 before DB, Edge Function, or Vercel mutation. There is no provenance or check

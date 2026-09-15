@@ -152,7 +152,7 @@ for check_mode in pending api-failure; do
   set -e
   [[ "$check_status" -ne 0 ]]
   if [[ "$check_mode" == pending ]]; then
-    [[ "$check_output" == *"Required GitHub Actions check 'Photo Objet contract' has not succeeded"* ]]
+    [[ "$check_output" == *"Required GitHub Actions check 'POS release contract' has not succeeded"* ]]
   else
     [[ "$check_output" == *'Could not read required GitHub Actions checks'* ]]
   fi

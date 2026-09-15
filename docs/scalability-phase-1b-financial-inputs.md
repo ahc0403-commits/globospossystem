@@ -54,8 +54,9 @@ store report's sales-portion basis and is not silently redefined here.
 Super-admin timestamp bounds now use the same Ho Chi Minh calendar-date helper
 as store reports: inclusive first midnight, exclusive next midnight. This fixes
 the old timezone-less timestamps and the lost final fractional milliseconds.
-The 23:00 cash close, restaurant cutoff/finalization and Photo Objet collection
-schedules are untouched.
+The 23:00 cash close and restaurant cutoff/finalization schedules are untouched.
+Photo Objet automatic sales collection was permanently retired on 2026-09-16;
+this historical scalability change does not authorize its return.
 
 Both report providers clear previous totals when starting a new load or changing
 the period. Errors leave no old exportable total. Request generations prevent

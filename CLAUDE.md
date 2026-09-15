@@ -89,7 +89,11 @@ This means:
 - Authentication users and workforce employees are separate concepts connected
   by explicit mappings where required.
 - Fulfillment has both standard POS/print flows and paperless emergency/KDS flows.
-- Photo Objet collection uses the implemented 22:00 Asia/Ho_Chi_Minh schedule.
+- **Photo Objet automatic sales collection is permanently retired.** There is
+  no active schedule, backfill, recovery, slot-health monitor, collection
+  alert, or Photo-specific release gate. Historical tables and migrations are
+  retained as provenance. Current Photo sales data may enter POS only through
+  the explicit Super Admin Excel import.
 - The current login surface defines 12 roles and the repository contains 16
   Supabase Edge Functions. Recount from source whenever this changes.
 
@@ -102,8 +106,12 @@ This means:
   effective SQL by migration order rather than relying on an older phase file.
 - General daily cash close runs at 23:00 Asia/Ho_Chi_Minh. Restaurant order
   cutoff/finalization is a separate contract: 21:30 cutoff, 21:45 grace end,
-  and 22:20 finalization. Photo Objet collection is another separate 22:00
-  contract. Do not collapse these schedules into one "daily close" rule.
+  and 22:20 finalization.
+- **Never re-enable or describe Photo Objet automatic sales collection as an
+  active contract.** Reintroduction requires an explicit new user decision,
+  a new migration that removes the database retirement guard, and a new ADR.
+  Missing historical Photo collection slots are not release failures and must
+  not create alerts or block POS deployment.
 - MISA portal handles red invoice lifecycle. POS does not duplicate.
 
 ## 8. Workflow

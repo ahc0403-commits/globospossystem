@@ -11,7 +11,7 @@ readonly POS_VERCEL_PROJECT_ID="prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ"
 readonly POS_VERCEL_ORG_ID="team_4AfACJKDlP09zRqoJKce3Tib"
 readonly POS_GITHUB_ORG="ahc0403-commits"
 readonly POS_GITHUB_REPO="globospossystem"
-readonly POS_REQUIRED_GITHUB_CHECK="Photo Objet contract"
+readonly POS_REQUIRED_GITHUB_CHECK="POS release contract"
 readonly LIVE_URL="https://globospossystem.vercel.app"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.local}"
 MIGRATION_FILE="${MIGRATION_FILE:-}"
@@ -673,28 +673,7 @@ run_linked_psql_file() {
   local -a policy_psql_args=()
   [[ -f "$file" ]] || fail "Missing SQL file: $file"
 
-  if [[ "$(basename "$file")" == "apply_photo_objet_expected_slot_ledger.sql" ]]; then
-    local variable
-    for variable in \
-      PHOTO_OBJET_MONITORING_EFFECTIVE_FROM \
-      PHOTO_OBJET_BIENHOA_STORE_ID \
-      PHOTO_OBJET_DIAN_STORE_ID \
-      PHOTO_OBJET_LONGTHANH_STORE_ID \
-      PHOTO_OBJET_THAODIEN_STORE_ID \
-      PHOTO_OBJET_QUANGTRUNG_STORE_ID \
-      PHOTO_OBJET_NOWZONE_STORE_ID; do
-      [[ -n "${!variable:-}" ]] || fail "$variable is required for Photo Objet policy rollout."
-    done
-    policy_psql_args=(
-      -v "photo_policy_effective_from=$PHOTO_OBJET_MONITORING_EFFECTIVE_FROM"
-      -v "photo_store_bienhoa=$PHOTO_OBJET_BIENHOA_STORE_ID"
-      -v "photo_store_dian=$PHOTO_OBJET_DIAN_STORE_ID"
-      -v "photo_store_longthanh=$PHOTO_OBJET_LONGTHANH_STORE_ID"
-      -v "photo_store_thaodien=$PHOTO_OBJET_THAODIEN_STORE_ID"
-      -v "photo_store_quangtrung=$PHOTO_OBJET_QUANGTRUNG_STORE_ID"
-      -v "photo_store_nowzone=$PHOTO_OBJET_NOWZONE_STORE_ID"
-    )
-  elif [[ "$(basename "$file")" == "apply_restaurant_daily_cutoff.sql" ]]; then
+  if [[ "$(basename "$file")" == "apply_restaurant_daily_cutoff.sql" ]]; then
     [[ -n "${RESTAURANT_CUTOFF_STORE_IDS:-}" ]] ||
       fail "RESTAURANT_CUTOFF_STORE_IDS is required for Restaurant cutoff rollout."
     [[ "$RESTAURANT_CUTOFF_STORE_IDS" =~ ^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36})*$ ]] ||
@@ -720,11 +699,7 @@ END;
   printf '+ supabase db dump --linked --schema public --dry-run <captured>\n'
   printf '+ PGSSLMODE=require psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET_ROLE_POSTGRES --command VERIFY_ROLE'
   if [[ "${#policy_psql_args[@]}" -gt 0 ]]; then
-    if [[ "$(basename "$file")" == "apply_photo_objet_expected_slot_ledger.sql" ]]; then
-      printf ' --set PHOTO_POLICY_VALUES=<validated>'
-    else
-      printf ' --set RESTAURANT_CUTOFF_VALUES=<validated>'
-    fi
+    printf ' --set RESTAURANT_CUTOFF_VALUES=<validated>'
   fi
   printf ' --file %q\n' "$file"
   if [[ "$DRY_RUN" == "1" ]]; then
