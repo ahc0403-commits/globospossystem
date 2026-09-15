@@ -14,7 +14,7 @@ void main() {
     expect(deploy, contains('enforce_clean_git'));
     expect(deploy, contains('enforce_origin_main_ancestry'));
     expect(deploy, contains('enforce_required_github_check'));
-    expect(deploy, contains('POS_REQUIRED_GITHUB_CHECK="Photo Objet contract"'));
+    expect(deploy, contains('POS_REQUIRED_GITHUB_CHECK="POS release contract"'));
     expect(
       deploy,
       contains('+refs/heads/main:refs/remotes/origin/main'),
@@ -37,9 +37,12 @@ void main() {
     expect(deploy, contains('apply_migration_by_convention'));
     expect(
       deploy,
-      contains('PHOTO_OBJET_MONITORING_EFFECTIVE_FROM'),
+      isNot(contains('PHOTO_OBJET_MONITORING_EFFECTIVE_FROM')),
     );
-    expect(deploy, contains('PHOTO_POLICY_VALUES=<validated>'));
+    expect(
+      deploy,
+      isNot(contains('apply_photo_objet_expected_slot_ledger.sql')),
+    );
 
     final migrationGate = File(
       'scripts/lib/production_migration_gate.sh',

@@ -136,15 +136,12 @@ BEGIN
     RAISE EXCEPTION 'RESTAURANT_CUTOFF_VERIFY_CALLER_IDENTITY_FAILED';
   END IF;
 
-  IF to_regclass('public.photo_objet_monitoring_policies') IS NOT NULL THEN
-    SELECT count(*) INTO v_photo_overlap
-    FROM public.restaurant_cutoff_policies restaurant_policy
-    JOIN public.photo_objet_monitoring_policies photo_policy
-      ON photo_policy.store_id = restaurant_policy.restaurant_id
-     AND photo_policy.is_enabled = true
-     AND photo_policy.effective_to IS NULL
-    WHERE restaurant_policy.is_enabled = true;
-  END IF;
+  SELECT count(*) INTO v_photo_overlap
+  FROM public.restaurant_cutoff_policies restaurant_policy
+  JOIN public.restaurants store
+    ON store.id = restaurant_policy.restaurant_id
+  WHERE restaurant_policy.is_enabled = true
+    AND store.brand_id = '77000000-0000-0000-0000-000000000001'::uuid;
   IF v_photo_overlap <> 0 THEN
     RAISE EXCEPTION 'RESTAURANT_CUTOFF_VERIFY_PHOTO_OVERLAP: %', v_photo_overlap;
   END IF;

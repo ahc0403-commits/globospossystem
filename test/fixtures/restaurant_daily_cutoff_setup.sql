@@ -10,6 +10,7 @@ CREATE TABLE public.restaurants (
   id uuid PRIMARY KEY,
   name text NOT NULL,
   address text,
+  brand_id uuid,
   is_active boolean NOT NULL DEFAULT true
 );
 
@@ -61,13 +62,6 @@ CREATE TABLE public.external_sales (
   completed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE public.photo_objet_monitoring_policies (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  store_id uuid NOT NULL REFERENCES public.restaurants(id),
-  is_enabled boolean NOT NULL DEFAULT true,
-  effective_to timestamptz
 );
 
 CREATE TABLE public.photo_objet_sales_raw (
@@ -123,15 +117,17 @@ BEGIN
   RETURN v_result;
 END $$;
 
-INSERT INTO public.restaurants (id, name, address) VALUES
-  ('81000000-0000-4000-8000-000000000001', 'Restaurant fixture', 'HCM'),
-  ('81000000-0000-4000-8000-000000000002', 'Photo fixture', 'HCM');
+INSERT INTO public.restaurants (id, name, address, brand_id) VALUES
+  ('81000000-0000-4000-8000-000000000001', 'Restaurant fixture', 'HCM', NULL),
+  (
+    '81000000-0000-4000-8000-000000000002',
+    'Photo fixture',
+    'HCM',
+    '77000000-0000-0000-0000-000000000001'
+  );
 
 INSERT INTO public.restaurant_settings (restaurant_id) VALUES
   ('81000000-0000-4000-8000-000000000001'),
-  ('81000000-0000-4000-8000-000000000002');
-
-INSERT INTO public.photo_objet_monitoring_policies (store_id) VALUES
   ('81000000-0000-4000-8000-000000000002');
 
 GRANT USAGE ON SCHEMA public, auth TO authenticated, service_role;

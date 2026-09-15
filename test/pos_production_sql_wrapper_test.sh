@@ -63,23 +63,23 @@ export SECRET PSQL_LOG
 
 output="$(ENV_FILE="$TMP_DIR/pos.env" \
   bash "$ROOT_DIR/scripts/run_pos_production_sql.sh" \
-  "$ROOT_DIR/scripts/preflight_photo_objet_interval_rebuild.sql" \
-  'Photo interval preflight' 2>&1)"
-[[ "$output" == *'PASS: Photo interval preflight'* ]]
+  "$ROOT_DIR/supabase/migrations/20260916060000_retire_photo_objet_automatic_sales_collection.sql" \
+  'Production SQL wrapper fixture' 2>&1)"
+[[ "$output" == *'PASS: Production SQL wrapper fixture'* ]]
 [[ "$output" != *"$SECRET"* ]]
 grep -q -- '--single-transaction' "$PSQL_LOG"
 grep -q -- '--command SET ROLE postgres;' "$PSQL_LOG"
-grep -q -- '--file .*preflight_photo_objet_interval_rebuild.sql' "$PSQL_LOG"
+grep -q -- '--file .*20260916060000_retire_photo_objet_automatic_sales_collection.sql' "$PSQL_LOG"
 
 set +e
 failed_output="$(WRAPPER_FORCE_FAIL=1 ENV_FILE="$TMP_DIR/pos.env" \
   bash "$ROOT_DIR/scripts/run_pos_production_sql.sh" \
-  "$ROOT_DIR/scripts/preflight_photo_objet_interval_rebuild.sql" \
-  'Photo interval forced failure' 2>&1)"
+  "$ROOT_DIR/supabase/migrations/20260916060000_retire_photo_objet_automatic_sales_collection.sql" \
+  'Production SQL wrapper forced failure' 2>&1)"
 failed_status=$?
 set -e
 [[ "$failed_status" -ne 0 ]]
-[[ "$failed_output" != *'PASS: Photo interval forced failure'* ]]
+[[ "$failed_output" != *'PASS: Production SQL wrapper forced failure'* ]]
 [[ "$failed_output" != *"$SECRET"* ]]
 
 printf 'PASS: POS production SQL wrapper target pinning and fail-fast behavior\n'

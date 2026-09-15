@@ -56,7 +56,7 @@ deno test --config supabase/functions/direct-order-public/deno.json \
 printf 'CHECK_REPO_STEP=node_contracts\n'
 (
   cd scripts
-  PUPPETEER_SKIP_DOWNLOAD=true npm ci
+  npm ci
   npm test
   npm audit
   npm run security-scan
@@ -74,8 +74,10 @@ printf 'CHECK_REPO_STEP=deploy_psql_runner_contract\n'
 bash test/pos_deploy_psql_runner_test.sh
 printf 'CHECK_REPO_STEP=production_sql_wrapper_contract\n'
 bash test/pos_production_sql_wrapper_test.sh
-printf 'CHECK_REPO_STEP=photo_expected_slot_contract\n'
-bash test/photo_objet_expected_slot_ledger_test.sh
+printf 'CHECK_REPO_STEP=photo_sales_collection_retirement_contract\n'
+bash test/photo_objet_sales_collection_retirement_contract_test.sh
+printf 'CHECK_REPO_STEP=photo_sales_collection_retirement_sql\n'
+bash test/photo_objet_sales_collection_retirement_sql_test.sh
 printf 'CHECK_REPO_STEP=photo_manual_import_contract\n'
 bash test/photo_sales_manual_import_sql_test.sh
 

@@ -26,14 +26,10 @@ BEGIN
     RAISE EXCEPTION 'RESTAURANT_CUTOFF_APPROVED_STORE_INVALID: %', v_invalid;
   END IF;
 
-  IF to_regclass('public.photo_objet_monitoring_policies') IS NOT NULL THEN
-    SELECT count(*) INTO v_photo_overlap
-    FROM approved_restaurant_cutoff_stores approved
-    JOIN public.photo_objet_monitoring_policies photo
-      ON photo.store_id = approved.store_id
-     AND photo.is_enabled = true
-     AND photo.effective_to IS NULL;
-  END IF;
+  SELECT count(*) INTO v_photo_overlap
+  FROM approved_restaurant_cutoff_stores approved
+  JOIN public.restaurants store ON store.id = approved.store_id
+  WHERE store.brand_id = '77000000-0000-0000-0000-000000000001'::uuid;
   IF v_photo_overlap <> 0 THEN
     RAISE EXCEPTION 'RESTAURANT_CUTOFF_PHOTO_STORE_FORBIDDEN: %', v_photo_overlap;
   END IF;

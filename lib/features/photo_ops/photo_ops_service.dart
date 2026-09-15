@@ -17,7 +17,7 @@ class PhotoOpsKpi {
     this.activeStoreSales = 0,
     this.networkSales = 0,
     this.activeStoreTransactions = 0,
-    this.lastSalesPulledAt,
+    this.lastSalesImportedAt,
   });
 
   final int allAttendanceEvents;
@@ -35,8 +35,8 @@ class PhotoOpsKpi {
   /// Transaction count for the active store in the selected sales period.
   final int activeStoreTransactions;
 
-  /// Timestamp of the most recent sales pull in the accessible scope.
-  final DateTime? lastSalesPulledAt;
+  /// Timestamp of the most recent manual sales import in the accessible scope.
+  final DateTime? lastSalesImportedAt;
 }
 
 class PhotoOpsAttendanceRow {
@@ -94,7 +94,7 @@ class PhotoOpsSalesRow {
     required this.totalTransactions,
     required this.serviceAmount,
     required this.activeMachines,
-    this.lastPulledAt,
+    this.lastImportedAt,
   });
 
   final String storeId;
@@ -104,7 +104,7 @@ class PhotoOpsSalesRow {
   final int totalTransactions;
   final double serviceAmount;
   final int activeMachines;
-  final DateTime? lastPulledAt;
+  final DateTime? lastImportedAt;
 }
 
 class PhotoOpsDashboardData {
@@ -135,7 +135,7 @@ class PhotoOpsDashboardData {
   final List<PhotoOpsSalesRow> salesSummary;
 
   /// Wave 1.6 sales-overlay: warning code emitted by the sales loader
-  /// when the dashboard window is degraded (e.g. partial pull).
+  /// when the dashboard window is degraded (e.g. partial import).
   final String? salesWarningCode;
 
   /// Wave 1.6 sales-overlay: human-readable diagnostic for the warning
@@ -152,14 +152,14 @@ class PhotoOpsSalesSnapshot {
     required this.activeStoreSales,
     required this.networkSales,
     required this.activeStoreTransactions,
-    required this.lastSalesPulledAt,
+    required this.lastSalesImportedAt,
   });
 
   final List<PhotoOpsSalesRow> rows;
   final double activeStoreSales;
   final double networkSales;
   final int activeStoreTransactions;
-  final DateTime? lastSalesPulledAt;
+  final DateTime? lastSalesImportedAt;
 }
 
 String photoOpsHcmDate(DateTime value) {
@@ -177,7 +177,7 @@ PhotoOpsSalesSnapshot summarizePhotoOpsSales({
   var activeStoreSales = 0.0;
   var networkSales = 0.0;
   var activeStoreTransactions = 0;
-  DateTime? lastSalesPulledAt;
+  DateTime? lastSalesImportedAt;
 
   for (final row in rows) {
     final storeId = row['store_id']?.toString().trim() ?? '';
@@ -186,7 +186,9 @@ PhotoOpsSalesSnapshot summarizePhotoOpsSales({
 
     final grossSales = _photoOpsDouble(row['total_gross_sales']);
     final totalTransactions = _photoOpsInt(row['total_transactions']);
-    final pulledAt = DateTime.tryParse(row['last_pulled_at']?.toString() ?? '');
+    final importedAt = DateTime.tryParse(
+      row['last_pulled_at']?.toString() ?? '',
+    );
     final salesRow = PhotoOpsSalesRow(
       storeId: storeId,
       storeName: row['store_name']?.toString().trim().isNotEmpty == true
@@ -197,7 +199,7 @@ PhotoOpsSalesSnapshot summarizePhotoOpsSales({
       totalTransactions: totalTransactions,
       serviceAmount: _photoOpsDouble(row['total_service_amount']),
       activeMachines: _photoOpsInt(row['active_machines']),
-      lastPulledAt: pulledAt,
+      lastImportedAt: importedAt,
     );
     salesRows.add(salesRow);
     networkSales += grossSales;
@@ -206,9 +208,10 @@ PhotoOpsSalesSnapshot summarizePhotoOpsSales({
       activeStoreSales += grossSales;
       activeStoreTransactions += totalTransactions;
     }
-    if (pulledAt != null &&
-        (lastSalesPulledAt == null || pulledAt.isAfter(lastSalesPulledAt))) {
-      lastSalesPulledAt = pulledAt;
+    if (importedAt != null &&
+        (lastSalesImportedAt == null ||
+            importedAt.isAfter(lastSalesImportedAt))) {
+      lastSalesImportedAt = importedAt;
     }
   }
 
@@ -222,7 +225,7 @@ PhotoOpsSalesSnapshot summarizePhotoOpsSales({
     activeStoreSales: activeStoreSales,
     networkSales: networkSales,
     activeStoreTransactions: activeStoreTransactions,
-    lastSalesPulledAt: lastSalesPulledAt,
+    lastSalesImportedAt: lastSalesImportedAt,
   );
 }
 
@@ -297,58 +300,28 @@ class PhotoOpsService {
     if (accessibleStoreIds.isEmpty) {
       throw const FormatException('PHOTO_EXPORT_NO_ACCESSIBLE_STORES');
     }
-
-    final policyResponse = await supabase
-        .from('photo_objet_monitoring_policies')
-        .select('store_id')
-        .inFilter('store_id', accessibleStoreIds)
-        .inFilter('schedule_version', ['hcm-eod-2220-v3', 'hcm-eod-2200-v4'])
-        .eq('is_enabled', true)
-        .isFilter('effective_to', null);
-    final configuredStoreIds = List<Map<String, dynamic>>.from(
-      policyResponse,
-    ).map((row) => row['store_id'].toString()).toList();
-    if (configuredStoreIds.isEmpty) {
-      throw const FormatException('PHOTO_EXPORT_NO_CONFIGURED_STORES');
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(saleDate)) {
+      throw const FormatException('PHOTO_EXPORT_INVALID_SALE_DATE');
     }
+    final parsedSaleDate = DateTime.tryParse('${saleDate}T00:00:00Z');
+    if (parsedSaleDate == null) {
+      throw const FormatException('PHOTO_EXPORT_INVALID_SALE_DATE');
+    }
+    final nextSaleDate = parsedSaleDate
+        .add(const Duration(days: 1))
+        .toIso8601String()
+        .substring(0, 10);
 
     final storeResponse = await supabase
         .from('restaurants')
         .select('id, name, tax_entity_id')
-        .inFilter('id', configuredStoreIds)
+        .inFilter('id', accessibleStoreIds)
         .eq('brand_id', _photoObjetBrandId);
     final stores = List<Map<String, dynamic>>.from(storeResponse);
     if (stores.isEmpty) {
       throw const FormatException('PHOTO_EXPORT_NO_ACCESSIBLE_STORES');
     }
     final exportStoreIds = stores.map((row) => row['id'].toString()).toList();
-
-    final expectedSlotResponse = await supabase
-        .from('photo_objet_expected_slots')
-        .select('store_id, slot_time_hcm')
-        .inFilter('store_id', exportStoreIds)
-        .eq('slot_date_hcm', saleDate);
-    final exportSlotTime = resolvePhotoOpsSalesExportSlot(
-      stores: stores,
-      expectedSlots: List<Map<String, dynamic>>.from(expectedSlotResponse),
-    );
-
-    final completedRunResponse = await supabase.rpc(
-      'photo_objet_sales_export_runs',
-      params: {'p_sale_date': saleDate},
-    );
-    final exactCompletedRuns =
-        List<Map<String, dynamic>>.from(completedRunResponse).where((run) {
-          final storeId = run['store_id']?.toString();
-          final slotTime = run['slot_time_hcm']?.toString();
-          return exportStoreIds.contains(storeId) &&
-              slotTime != null &&
-              slotTime.startsWith(exportSlotTime.substring(0, 5));
-        }).toList();
-    validatePhotoOpsSalesExportReady(
-      stores: stores,
-      completedRuns: exactCompletedRuns,
-    );
 
     final rawSales = <Map<String, dynamic>>[];
     for (var offset = 0; ; offset += _photoSalesExportPageSize) {
@@ -361,7 +334,7 @@ class PhotoOpsService {
           .inFilter('store_id', exportStoreIds)
           .eq('sale_date', saleDate)
           .gte('sold_at', '${saleDate}T00:00:00+07:00')
-          .lt('sold_at', '${saleDate}T$exportSlotTime+07:00')
+          .lt('sold_at', '${nextSaleDate}T00:00:00+07:00')
           .order('sold_at')
           .order('id')
           .range(offset, offset + _photoSalesExportPageSize - 1);
@@ -516,7 +489,7 @@ class PhotoOpsService {
         activeStoreSales: sales.activeStoreSales,
         networkSales: sales.networkSales,
         activeStoreTransactions: sales.activeStoreTransactions,
-        lastSalesPulledAt: sales.lastSalesPulledAt,
+        lastSalesImportedAt: sales.lastSalesImportedAt,
       ),
       recentAttendance: recentAttendance,
       inventoryAlerts: inventoryAlerts,

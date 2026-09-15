@@ -1,5 +1,5 @@
 {
-  "name": "globos-pos-photo-objet-sales-pull",
+  "name": "globos-pos-operations-tools",
   "version": "1.0.0",
   "private": true,
   "engines": {
@@ -11,8 +11,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.2",
-    "pg": "8.22.0",
-    "puppeteer": "25.3.0",
-    "xlsx": "file:vendor/xlsx-0.20.3.tgz"
+    "pg": "8.22.0"
   }
 }
