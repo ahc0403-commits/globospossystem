@@ -2293,8 +2293,7 @@ class _InventoryPurchaseScreenState
                           controller: codeController,
                           decoration: InputDecoration(
                             labelText: '${l10n.inventoryPurchaseProductCode} *',
-                            helperText:
-                                'Unique ingredient code within this store.',
+                            helperText: l10n.inventoryProductCodeHelp,
                           ),
                         ),
                         TextField(
@@ -2313,8 +2312,8 @@ class _InventoryPurchaseScreenState
                           decoration: InputDecoration(
                             labelText: l10n.inventoryPurchaseSupplierRequired,
                             helperText: selectableSuppliers.isEmpty
-                                ? 'Register an active supplier first.'
-                                : 'The preferred source for this ingredient.',
+                                ? l10n.inventoryProductSupplierRequiredHelp
+                                : l10n.inventoryProductPreferredSupplierHelp,
                           ),
                           items: [
                             for (final supplier in selectableSuppliers)
@@ -2343,16 +2342,14 @@ class _InventoryPurchaseScreenState
                           controller: supplierSkuController,
                           decoration: InputDecoration(
                             labelText: l10n.inventoryPurchaseSupplierSku,
-                            helperText:
-                                'Optional code used by the selected supplier.',
+                            helperText: l10n.inventoryProductSupplierSkuHelp,
                           ),
                         ),
                         TextField(
                           controller: categoryController,
                           decoration: InputDecoration(
                             labelText: '${l10n.superAdminCategory} *',
-                            helperText:
-                                'Choose an existing category below or enter a new category name.',
+                            helperText: l10n.inventoryProductCategoryHelp,
                           ),
                         ),
                         TextField(
@@ -2412,8 +2409,7 @@ class _InventoryPurchaseScreenState
                           decoration: InputDecoration(
                             labelText:
                                 '${l10n.inventoryPurchaseShelfLifeDays} *',
-                            helperText:
-                                'Required for pilot receiving and expiry checks.',
+                            helperText: l10n.inventoryProductShelfLifeHelp,
                           ),
                         ),
                       ],

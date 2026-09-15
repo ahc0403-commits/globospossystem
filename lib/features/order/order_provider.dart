@@ -179,7 +179,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, guest_count, leftover_packaging_requests(status), order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, is_takeout, item_type, combo_components, menu_items(name, name_vi, name_en))',
+            'id, table_id, status, created_at, guest_count, leftover_packaging_requests(status), order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, is_takeout, item_type, combo_components, menu_items(name, name_ko, name_vi, name_en))',
           )
           .eq('table_id', tableId)
           .eq('restaurant_id', storeId)

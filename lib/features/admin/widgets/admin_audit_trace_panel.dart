@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
 import '../../../main.dart';
 import '../providers/admin_audit_provider.dart';
 
@@ -13,7 +14,7 @@ class AdminAuditTracePanel extends ConsumerWidget {
     this.storeId,
     this.allowedEntityTypes,
     this.maxItems = 5,
-    this.emptyMessage = 'No recent changes to display.',
+    this.emptyMessage,
     this.showRetry = false,
     this.compact = false,
   });
@@ -22,12 +23,13 @@ class AdminAuditTracePanel extends ConsumerWidget {
   final String? storeId;
   final Set<String>? allowedEntityTypes;
   final int maxItems;
-  final String emptyMessage;
+  final String? emptyMessage;
   final bool showRetry;
   final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return auditTraceAsync.when(
       data: (rows) {
         final filteredRows = rows
@@ -45,7 +47,7 @@ class AdminAuditTracePanel extends ConsumerWidget {
         if (filteredRows.isEmpty) {
           return _panelContainer(
             child: Text(
-              emptyMessage,
+              emptyMessage ?? l10n.adminAuditNoRecentChanges,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: compact ? 12 : 13,
@@ -82,7 +84,7 @@ class AdminAuditTracePanel extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              mapAdminAuditError(error),
+              _errorMessage(context, classifyAdminAuditError(error)),
               style: AppFonts.system(
                 color: AppColors.statusCancelled,
                 fontSize: compact ? 12 : 13,
@@ -95,7 +97,7 @@ class AdminAuditTracePanel extends ConsumerWidget {
                 child: OutlinedButton(
                   onPressed: () =>
                       ref.refresh(adminAuditTraceProvider(storeId!)),
-                  child: const Text('Retry'),
+                  child: Text(l10n.retry),
                 ),
               ),
             ],
@@ -131,13 +133,15 @@ class _AuditTraceRow extends StatelessWidget {
     final createdAt = createdAtRaw == null
         ? null
         : DateTime.tryParse(createdAtRaw)?.toLocal();
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final l10n = context.l10n;
     final timestamp = createdAt == null
         ? '-'
-        : DateFormat('dd/MM HH:mm').format(createdAt);
-    final actorName = row['actor_name']?.toString() ?? 'Unknown';
+        : DateFormat.yMd(languageCode).add_Hm().format(createdAt);
+    final actorName = row['actor_name']?.toString().trim();
     final entityType = row['entity_type']?.toString() ?? '';
     final action = row['action']?.toString() ?? '';
-    final changedFields = _extractChangedFields(row['changed_fields']);
+    final changedFields = _extractChangedFields(context, row['changed_fields']);
 
     return Padding(
       padding: EdgeInsets.symmetric(vertical: compact ? 8 : 10),
@@ -149,7 +153,7 @@ class _AuditTraceRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '${_entityLabel(entityType)} · ${_actionLabel(action)}',
+                  '${_entityLabel(context, entityType)} · ${_actionLabel(context, action)}',
                   style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontSize: compact ? 12 : 13,
@@ -169,7 +173,11 @@ class _AuditTraceRow extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Actor: $actorName',
+            l10n.adminAuditActor(
+              actorName == null || actorName.isEmpty
+                  ? l10n.adminAuditUnknownActor
+                  : actorName,
+            ),
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: compact ? 11 : 12,
@@ -178,7 +186,7 @@ class _AuditTraceRow extends StatelessWidget {
           if (changedFields.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              'Changed fields: ${changedFields.join(', ')}',
+              l10n.adminAuditChangedFields(changedFields.join(', ')),
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: compact ? 11 : 12,
@@ -190,83 +198,96 @@ class _AuditTraceRow extends StatelessWidget {
     );
   }
 
-  List<String> _extractChangedFields(dynamic raw) {
+  List<String> _extractChangedFields(BuildContext context, dynamic raw) {
     if (raw is! List) {
       return const [];
     }
 
-    return raw.map((field) => _fieldLabel(field.toString())).toList();
+    return raw.map((field) => _fieldLabel(context, field.toString())).toList();
   }
 
-  String _entityLabel(String entityType) {
+  String _entityLabel(BuildContext context, String entityType) {
+    final l10n = context.l10n;
     return switch (entityType) {
-      'restaurants' => 'Store',
-      'tables' => 'Table',
-      'menu_categories' => 'Category',
-      'menu_items' => 'Menu',
-      'orders' => 'Order',
-      'order_items' => 'Order Items',
-      'payments' => 'Payment',
-      _ => entityType,
+      'restaurants' => l10n.adminAuditEntityStore,
+      'tables' => l10n.adminAuditEntityTable,
+      'menu_categories' => l10n.adminAuditEntityCategory,
+      'menu_items' => l10n.adminAuditEntityMenu,
+      'orders' => l10n.adminAuditEntityOrder,
+      'order_items' => l10n.adminAuditEntityOrderItems,
+      'payments' => l10n.adminAuditEntityPayment,
+      _ => l10n.adminAuditUnknownValue,
     };
   }
 
-  String _actionLabel(String action) {
+  String _actionLabel(BuildContext context, String action) {
+    final l10n = context.l10n;
     return switch (action) {
-      'admin_create_restaurant' => 'Created',
-      'admin_update_restaurant' => 'Edit',
-      'admin_update_restaurant_settings' => 'Settings Updated',
-      'admin_deactivate_restaurant' => 'Deactivated',
-      'admin_create_table' => 'Add',
-      'admin_update_table' => 'Edit',
-      'admin_delete_table' => 'Delete',
-      'admin_create_menu_category' => 'Add',
-      'admin_update_menu_category' => 'Edit',
-      'admin_delete_menu_category' => 'Delete',
-      'admin_create_menu_item' => 'Add',
-      'admin_update_menu_item' => 'Edit',
-      'admin_delete_menu_item' => 'Delete',
-      'create_order' => 'Order Created',
-      'create_buffet_order' => 'Buffet Order',
-      'add_items_to_order' => 'Add Item',
-      'cancel_order' => 'Cancel Order',
-      'cancel_order_item' => 'Cancel Item',
-      'edit_order_item_quantity' => 'Change Quantity',
-      'transfer_order_table' => 'Move Table',
-      'process_payment' => 'Process Payment',
-      'update_order_item_status' => 'Status Changed',
-      _ => action,
+      'admin_create_restaurant' => l10n.adminAuditActionCreated,
+      'admin_update_restaurant' => l10n.edit,
+      'admin_update_restaurant_settings' =>
+        l10n.adminAuditActionSettingsUpdated,
+      'admin_deactivate_restaurant' => l10n.adminAuditActionDeactivated,
+      'admin_create_table' ||
+      'admin_create_menu_category' ||
+      'admin_create_menu_item' => l10n.add,
+      'admin_update_table' ||
+      'admin_update_menu_category' ||
+      'admin_update_menu_item' => l10n.edit,
+      'admin_delete_table' ||
+      'admin_delete_menu_category' ||
+      'admin_delete_menu_item' => l10n.adminAuditActionDeleted,
+      'create_order' => l10n.adminAuditActionOrderCreated,
+      'create_buffet_order' => l10n.adminAuditActionBuffetOrder,
+      'add_items_to_order' => l10n.adminAuditActionItemAdded,
+      'cancel_order' => l10n.adminAuditActionOrderCancelled,
+      'cancel_order_item' => l10n.adminAuditActionItemCancelled,
+      'edit_order_item_quantity' => l10n.adminAuditActionQuantityChanged,
+      'transfer_order_table' => l10n.adminAuditActionTableMoved,
+      'process_payment' => l10n.adminAuditActionPaymentProcessed,
+      'update_order_item_status' => l10n.statusChanged,
+      _ => l10n.adminAuditUnknownValue,
     };
   }
 
-  String _fieldLabel(String field) {
+  String _fieldLabel(BuildContext context, String field) {
+    final l10n = context.l10n;
     return switch (field) {
-      'name' => 'Name',
-      'address' => 'Address',
-      'slug' => 'Slug',
-      'operation_mode' => 'Operation Mode',
-      'per_person_charge' => 'Per-person Charge',
-      'brand_id' => 'Brand',
-      'store_type' => 'Store Type',
-      'is_active' => 'Active Status',
-      'table_number' => 'Table Number',
-      'seat_count' => 'Seat Count',
-      'floor_label' => 'Floor Label',
-      'status' => 'Status',
-      'layout_x' => 'Layout X',
-      'layout_y' => 'Layout Y',
-      'layout_w' => 'Layout Width',
-      'layout_h' => 'Layout Height',
-      'layout_rotation' => 'Layout Rotation',
-      'layout_shape' => 'Layout Shape',
-      'layout_sort_order' => 'Layout Order',
-      'sort_order' => 'Sort Order',
-      'category_id' => 'Category',
-      'description' => 'Description',
-      'price' => 'Price',
-      'is_available' => 'Available',
-      'is_visible_public' => 'Public',
-      _ => field,
+      'name' => l10n.name,
+      'address' => l10n.address,
+      'slug' => l10n.adminAuditFieldSlug,
+      'operation_mode' => l10n.adminAuditFieldOperationMode,
+      'per_person_charge' => l10n.adminAuditFieldPerPersonCharge,
+      'brand_id' => l10n.adminAuditFieldBrand,
+      'store_type' => l10n.adminAuditFieldStoreType,
+      'is_active' => l10n.adminAuditFieldActiveStatus,
+      'table_number' => l10n.adminAuditFieldTableNumber,
+      'seat_count' => l10n.adminAuditFieldSeatCount,
+      'floor_label' => l10n.adminAuditFieldFloorLabel,
+      'status' => l10n.status,
+      'layout_x' => l10n.adminAuditFieldLayoutX,
+      'layout_y' => l10n.adminAuditFieldLayoutY,
+      'layout_w' => l10n.adminAuditFieldLayoutWidth,
+      'layout_h' => l10n.adminAuditFieldLayoutHeight,
+      'layout_rotation' => l10n.adminAuditFieldLayoutRotation,
+      'layout_shape' => l10n.adminAuditFieldLayoutShape,
+      'layout_sort_order' => l10n.adminAuditFieldLayoutOrder,
+      'sort_order' => l10n.adminAuditFieldSortOrder,
+      'category_id' => l10n.adminAuditFieldCategory,
+      'description' => l10n.adminAuditFieldDescription,
+      'price' => l10n.adminAuditFieldPrice,
+      'is_available' => l10n.adminAuditFieldAvailable,
+      'is_visible_public' => l10n.adminAuditFieldPublic,
+      _ => l10n.adminAuditUnknownValue,
     };
   }
+}
+
+String _errorMessage(BuildContext context, AdminAuditErrorKind kind) {
+  final l10n = context.l10n;
+  return switch (kind) {
+    AdminAuditErrorKind.loadFailed => l10n.adminAuditLoadFailed,
+    AdminAuditErrorKind.storeRequired => l10n.adminAuditStoreRequired,
+    AdminAuditErrorKind.forbidden => l10n.adminAuditForbidden,
+  };
 }

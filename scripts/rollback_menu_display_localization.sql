@@ -1,5 +1,43 @@
--- Restore the four preceding read functions without modifying business data.
+-- Restore the preceding read functions without modifying business data.
 BEGIN;
+
+DO $$
+BEGIN
+  IF to_regprocedure(
+    'public.get_paperless_operations_insights_report_pre_menu_localization(uuid,timestamp with time zone,timestamp with time zone)'
+  ) IS NOT NULL THEN
+    DROP FUNCTION public.get_paperless_operations_insights_report(
+      uuid, timestamptz, timestamptz
+    );
+    ALTER FUNCTION public.get_paperless_operations_insights_report_pre_menu_localization(
+      uuid, timestamptz, timestamptz
+    ) RENAME TO get_paperless_operations_insights_report;
+    REVOKE ALL ON FUNCTION public.get_paperless_operations_insights_report(
+      uuid, timestamptz, timestamptz
+    ) FROM PUBLIC, anon;
+    GRANT EXECUTE ON FUNCTION public.get_paperless_operations_insights_report(
+      uuid, timestamptz, timestamptz
+    ) TO authenticated;
+  END IF;
+
+  IF to_regprocedure(
+    'public.get_paperless_operations_report_pre_menu_localization(uuid,timestamp with time zone,timestamp with time zone)'
+  ) IS NOT NULL THEN
+    DROP FUNCTION public.get_paperless_operations_report(
+      uuid, timestamptz, timestamptz
+    );
+    ALTER FUNCTION public.get_paperless_operations_report_pre_menu_localization(
+      uuid, timestamptz, timestamptz
+    ) RENAME TO get_paperless_operations_report;
+    REVOKE ALL ON FUNCTION public.get_paperless_operations_report(
+      uuid, timestamptz, timestamptz
+    ) FROM PUBLIC, anon;
+    GRANT EXECUTE ON FUNCTION public.get_paperless_operations_report(
+      uuid, timestamptz, timestamptz
+    ) TO authenticated;
+  END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.get_bm_menu_exception_history(
   p_store_id uuid DEFAULT NULL,
   p_start_at timestamptz DEFAULT NULL,

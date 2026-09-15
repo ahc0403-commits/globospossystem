@@ -1,5 +1,10 @@
 # POS language audit — 2026-09-15
 
+Subsequent scope correction: the [whole-app improvement plan](app_language_quality_plan_20260915.md)
+now requires all active screens, embedded sections, overlays, states, and outputs.
+Inventory detail and audit-trace copy are mandatory completion items in that plan.
+The findings and validation below remain evidence for the earlier, narrower repair.
+
 ## Finding
 
 The English interface in the reported BM staff-meal detail was using Korean
@@ -43,25 +48,25 @@ or every category, ingredient, and user-entered note.
 | HIGH | Menu browser/cart, menu administration, sold-out controls, staff-meal selection, recipe selectors, combo components, menu analytics, and receipt ledger had paths that ignored translated names. | Fixed at data selection/model/render boundaries. |
 | MEDIUM | BM copy was a separate inline three-language dictionary; cashier search, paper-print label, and imported-receipt count bypassed ARB. | Moved affected copy to ARB, including persistent search feedback. |
 | MEDIUM | Long translated text and 200% text scaling overflowed cashier, Photo Ops, store setup, and offline attendance layouts. | Fixed and checked in the expanded viewport/locale matrix. |
-| MEDIUM | Inventory's expanded purchase/recommendation/runtime detail still contains English-only copy and provider-generated English summaries. | Confirmed remaining localization debt; not converted in this menu-data repair. |
-| MEDIUM | Administrator audit trace has English-only actor/action/field labels, retry, and error copy. | Confirmed remaining localization debt; not converted in this menu-data repair. |
+| MEDIUM | Inventory's expanded purchase/recommendation/runtime detail contained English-only copy and provider-generated English summaries. | Fixed across the expanded inventory surface; provider copy now passes through an exhaustive KO/EN/VI runtime localizer contract. |
+| MEDIUM | Administrator audit trace had English-only actor/action/field labels, retry, and error copy. | Fixed with ARB-backed action, entity, field, empty, retry, timestamp, and error labels. |
 | CONFIRMED | Locale persistence, main app localization delegates, and ARB key parity. | Tests pass. |
 
-The remaining inventory and audit findings mean that **the entire app is not
-yet uniformly localized**. Passing the route matrix does not prove every
-expanded detail or every possible data state is translated.
+The whole-app follow-up adds an AST source gate, route language-policy contract,
+inventory provider-copy contract, exact menu field contract, and locale-race
+tests. Passing them establishes the source and automated-fixture result; final
+production status still requires migration, web release, and operating-data checks.
 
-### Remaining copy locations
+### Whole-app follow-up completed in source
 
-- `lib/features/admin/tabs/inventory_tab.dart`: expanded recommendation,
-  purchase-order, receiving, runtime, and supplier-history sections; English
-  `Text` literals and interpolated operator summaries.
-- `lib/features/inventory/inventory_provider.dart`: display-oriented English
-  inventory summaries used by those detail sections.
-- `lib/features/admin/widgets/admin_audit_trace_panel.dart`: default empty
-  state, retry, actor, actions, entity names, and changed-field names.
-- `lib/features/admin/providers/admin_audit_provider.dart`: English error
-  messages supplied to the audit panel.
+- Expanded inventory details and provider-generated operational copy now render
+  through selected-language ARB/runtime mappings.
+- Administrator audit actions, entities, fields, retry, empty and error states
+  render through ARB.
+- The static surface test now parses every current Dart UI source and rejects
+  direct user-facing literals outside documented output policies.
+- The paperless operations and category analytics RPC wrappers now replace
+  masked fallback fields with exact catalog translations.
 
 ## Changes
 
@@ -162,7 +167,8 @@ repository's exact-head GitHub and release gates. No release PASS is claimed.
 
 ## Priority follow-up
 
-1. Review and release the menu-data fix and its migration together.
-2. Verify the original BM history detail in production in EN, VI, and KO.
-3. Move the remaining inventory detail and audit-trace English copy into ARB,
-   and add populated expanded-detail tests for those sections.
+1. Review and release the whole-app source change and its migration together.
+2. Verify the original BM history detail and paperless analytics in production
+   in EN, VI, and KO.
+3. Record the deployed commit, migration version, cache version, and operating
+   screenshots before marking production complete.

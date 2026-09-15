@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "supported_languages": ["ko", "en", "vi"],
+  "routes": [
+    {"path": "/qr/:token", "policy": "customer_selected"},
+    {"path": "/order/:slug", "policy": "customer_selected"},
+    {"path": "/receipt", "policy": "fixed_vi_customer_receipt"},
+    {"path": "/login", "policy": "staff_selected"},
+    {"path": "/change-initial-password", "policy": "staff_selected"},
+    {"path": "/change-password", "policy": "staff_selected"},
+    {"path": "/privacy-consent", "policy": "staff_selected"},
+    {"path": "/onboarding", "policy": "staff_selected"},
+    {"path": "/waiter", "policy": "staff_selected"},
+    {"path": "/kitchen", "policy": "staff_selected"},
+    {"path": "/inventory-orders", "policy": "staff_selected"},
+    {"path": "/inventory-orders/:orderId", "policy": "staff_selected"},
+    {"path": "/print-station", "policy": "staff_selected_fixed_vi_ticket"},
+    {"path": "/cashier", "policy": "staff_selected"},
+    {"path": "/cashier/direct-orders", "policy": "staff_selected"},
+    {"path": "/kitchen/direct-orders", "policy": "staff_selected"},
+    {"path": "/direct-delivery/analytics", "policy": "staff_selected"},
+    {"path": "/direct-delivery/settings", "policy": "staff_selected"},
+    {"path": "/customer-display", "policy": "fixed_vi_customer_display"},
+    {"path": "/emergency", "policy": "staff_selected_fixed_vi_ticket"},
+    {"path": "/attendance-kiosk", "policy": "staff_selected"},
+    {"path": "/qc-check", "policy": "staff_selected"},
+    {"path": "/qc-review", "policy": "staff_selected"},
+    {"path": "/photo-ops", "policy": "staff_selected"},
+    {"path": "/payments/:paymentId", "policy": "staff_selected"},
+    {"path": "/receipts/today", "policy": "staff_selected"},
+    {"path": "/super-admin", "policy": "staff_selected"},
+    {"path": "/restaurant-sales-export", "policy": "staff_selected_snapshot_at_export"},
+    {"path": "/red-invoice-export", "policy": "staff_selected_legal_schema_fixed"},
+    {"path": "/store-setup/:storeId", "policy": "staff_selected"},
+    {"path": "/admin", "policy": "staff_selected"},
+    {"path": "/admin/:storeId", "policy": "staff_selected"}
+  ],
+  "fixed_language_policies": [
+    {
+      "id": "customer_display_vi",
+      "sources": ["lib/features/customer_display/customer_display_screen.dart"],
+      "reason": "The dedicated customer display is an explicitly Vietnamese customer surface."
+    },
+    {
+      "id": "operational_receipt_vi",
+      "sources": ["lib/core/hardware/receipt_builder.dart", "lib/core/services/digital_receipt_pdf_service.dart", "lib/features/digital_receipt/digital_receipt_screen.dart"],
+      "reason": "Restaurant customer and kitchen tickets use the approved Vietnamese operational output policy."
+    },
+    {
+      "id": "approved_procurement_document_multilingual",
+      "sources": ["lib/features/inventory_purchase/inventory_purchase_document_service.dart"],
+      "reason": "The approved procurement PDF intentionally prints the established Korean, English, and Vietnamese labels together for cross-role handoff."
+    },
+    {
+      "id": "brand_and_external_identifiers",
+      "sources": ["lib/features/auth/login_screen.dart", "lib/features/payment/einvoice_status_badge.dart"],
+      "reason": "GLOBOS and MISA are external identifiers, not interface translations."
+    }
+  ]
+}

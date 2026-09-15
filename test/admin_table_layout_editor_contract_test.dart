@@ -86,9 +86,12 @@ void main() {
       expect(floorLayout, contains('class _FloorStatusBadge'));
       expect(floorLayout, contains('PosNumericText.tableId'));
       expect(provider, contains('Future<bool> updateTableLayout'));
-      expect(audit, contains("'floor_label' => 'Floor Label'"));
-      expect(audit, contains("'layout_x' => 'Layout X'"));
-      expect(audit, contains("'layout_y' => 'Layout Y'"));
+      expect(
+        audit,
+        contains("'floor_label' => l10n.adminAuditFieldFloorLabel"),
+      );
+      expect(audit, contains("'layout_x' => l10n.adminAuditFieldLayoutX"));
+      expect(audit, contains("'layout_y' => l10n.adminAuditFieldLayoutY"));
       expect(tableModel, contains('final String floorLabel;'));
       expect(tableModel, contains("json['floor_label']"));
       expect(service, contains("'p_floor_label': floorLabel"));
@@ -106,10 +109,7 @@ void main() {
         adminTables,
         contains('value: displayFloorLabel(table.floorLabel)'),
       );
-      expect(
-        adminTables,
-        contains('storedFloorLabel(floorController.text)'),
-      );
+      expect(adminTables, contains('storedFloorLabel(floorController.text)'));
       expect(c2Migration, contains('p_floor_label text DEFAULT'));
       expect(c2Migration, contains('floor_label = v_floor_label'));
     },

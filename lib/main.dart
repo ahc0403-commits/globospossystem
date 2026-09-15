@@ -121,7 +121,9 @@ class _GlobosPosAppState extends ConsumerState<GlobosPosApp> {
       ],
       builder: (context, child) => BankTransferAlertCoordinator(
         storeId: alertStoreId,
-        child: child ?? const SizedBox.shrink(),
+        child: localeState.isHydrated
+            ? child ?? const SizedBox.shrink()
+            : const ColoredBox(color: Color(0xFF101114)),
       ),
       routerConfig: widget.router,
     );

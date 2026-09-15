@@ -1,3 +1,4 @@
+import '../../core/i18n/menu_localization.dart';
 import 'direct_order_copy.dart';
 
 const directOrderLocales = {'ko', 'vi', 'en'};
@@ -6,26 +7,17 @@ String localizedDirectOrderSnapshotName(
   Map<String, dynamic> item,
   String viewerLanguageCode,
 ) {
-  final localizedKeys = switch (viewerLanguageCode) {
-    'ko' => const ['name_ko', 'display_name_ko'],
-    'en' => const ['name_en', 'display_name_en'],
-    _ => const ['name_vi', 'display_name_vi'],
-  };
-  final fallbackKeys = <String>{
-    ...localizedKeys,
-    'name_vi',
-    'display_name_vi',
-    'display_name',
-    'name_ko',
-    'display_name_ko',
-    'name_en',
-    'display_name_en',
-  };
-  for (final key in fallbackKeys) {
-    final value = item[key]?.toString().trim() ?? '';
-    if (value.isNotEmpty) return value;
-  }
-  return '';
+  return localizedMenuName({
+    'name':
+        item['display_name'] ??
+        item['name'] ??
+        item['name_ko'] ??
+        item['name_vi'] ??
+        item['name_en'],
+    'name_ko': item['name_ko'] ?? item['display_name_ko'],
+    'name_vi': item['name_vi'] ?? item['display_name_vi'],
+    'name_en': item['name_en'] ?? item['display_name_en'],
+  }, viewerLanguageCode);
 }
 
 String localizedDirectOrderMessage({

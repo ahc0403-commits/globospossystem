@@ -1384,6 +1384,198 @@ COMMENT ON FUNCTION public.get_receipt_ledger(
   date, uuid, text, text, integer, integer
 ) IS 'Role-scoped receipt ledger with one row per combined tender and order allocations in its detail.';
 
+-- Paperless analytics historically filled every language field from the
+-- Korean/original display name. Keep the established timing and permission
+-- logic intact, then replace only fields backed by the current menu catalog.
+DO $$
+BEGIN
+  IF to_regprocedure(
+    'public.get_paperless_operations_report_pre_menu_localization(uuid,timestamp with time zone,timestamp with time zone)'
+  ) IS NULL THEN
+    ALTER FUNCTION public.get_paperless_operations_report(
+      uuid, timestamptz, timestamptz
+    ) RENAME TO get_paperless_operations_report_pre_menu_localization;
+    REVOKE ALL ON FUNCTION public.get_paperless_operations_report_pre_menu_localization(
+      uuid, timestamptz, timestamptz
+    ) FROM PUBLIC, anon, authenticated;
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.get_paperless_operations_report(
+  p_store_id uuid,
+  p_from timestamptz,
+  p_to timestamptz
+) RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'auth'
+AS $$
+DECLARE
+  v_result jsonb;
+  v_menu_operation_times jsonb;
+BEGIN
+  v_result := public.get_paperless_operations_report_pre_menu_localization(
+    p_store_id, p_from, p_to
+  );
+
+  SELECT COALESCE(
+    jsonb_agg(
+      CASE
+        WHEN menu.id IS NULL THEN entry.metric
+        ELSE entry.metric || jsonb_build_object(
+          'name', COALESCE(
+            NULLIF(entry.metric ->> 'name', ''),
+            NULLIF(menu.name, ''),
+            NULLIF(menu.name_ko, ''),
+            NULLIF(menu.name_vi, ''),
+            NULLIF(menu.name_en, ''),
+            'Menu'
+          ),
+          'name_ko', NULLIF(menu.name_ko, ''),
+          'name_vi', NULLIF(menu.name_vi, ''),
+          'name_en', NULLIF(menu.name_en, '')
+        )
+      END
+      ORDER BY entry.ordinality
+    ),
+    '[]'::jsonb
+  )
+  INTO v_menu_operation_times
+  FROM jsonb_array_elements(COALESCE(
+    v_result -> 'menu_operation_times', '[]'::jsonb
+  )) WITH ORDINALITY AS entry(metric, ordinality)
+  LEFT JOIN public.menu_items menu
+    ON menu.id::text = entry.metric ->> 'menu_key'
+   AND menu.restaurant_id = p_store_id;
+
+  RETURN (v_result - 'menu_operation_times') || jsonb_build_object(
+    'menu_operation_times', v_menu_operation_times
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_paperless_operations_report(
+  uuid, timestamptz, timestamptz
+) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_paperless_operations_report(
+  uuid, timestamptz, timestamptz
+) TO authenticated;
+
+COMMENT ON FUNCTION public.get_paperless_operations_report(
+  uuid, timestamptz, timestamptz
+) IS 'Returns established paperless operation metrics with exact menu-language fields from the current catalog.';
+
+DO $$
+BEGIN
+  IF to_regprocedure(
+    'public.get_paperless_operations_insights_report_pre_menu_localization(uuid,timestamp with time zone,timestamp with time zone)'
+  ) IS NULL THEN
+    ALTER FUNCTION public.get_paperless_operations_insights_report(
+      uuid, timestamptz, timestamptz
+    ) RENAME TO get_paperless_operations_insights_report_pre_menu_localization;
+    REVOKE ALL ON FUNCTION public.get_paperless_operations_insights_report_pre_menu_localization(
+      uuid, timestamptz, timestamptz
+    ) FROM PUBLIC, anon, authenticated;
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.get_paperless_operations_insights_report(
+  p_store_id uuid,
+  p_from timestamptz,
+  p_to timestamptz
+) RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'auth'
+AS $$
+DECLARE
+  v_result jsonb;
+  v_menu_operation_times jsonb;
+  v_category_operation_times jsonb;
+BEGIN
+  v_result := public.get_paperless_operations_insights_report_pre_menu_localization(
+    p_store_id, p_from, p_to
+  );
+
+  SELECT COALESCE(
+    jsonb_agg(
+      CASE
+        WHEN category.id IS NULL THEN entry.metric
+        ELSE entry.metric || jsonb_build_object(
+          'category_name', COALESCE(
+            NULLIF(category.name, ''),
+            NULLIF(category.name_ko, ''),
+            NULLIF(category.name_vi, ''),
+            NULLIF(category.name_en, ''),
+            'Uncategorized'
+          ),
+          'category_name_ko', NULLIF(category.name_ko, ''),
+          'category_name_vi', NULLIF(category.name_vi, ''),
+          'category_name_en', NULLIF(category.name_en, '')
+        )
+      END
+      ORDER BY entry.ordinality
+    ),
+    '[]'::jsonb
+  )
+  INTO v_menu_operation_times
+  FROM jsonb_array_elements(COALESCE(
+    v_result -> 'menu_operation_times', '[]'::jsonb
+  )) WITH ORDINALITY AS entry(metric, ordinality)
+  LEFT JOIN public.menu_categories category
+    ON category.id::text = entry.metric ->> 'category_key'
+   AND category.restaurant_id = p_store_id;
+
+  SELECT COALESCE(
+    jsonb_agg(
+      CASE
+        WHEN category.id IS NULL THEN entry.metric
+        ELSE entry.metric || jsonb_build_object(
+          'name', COALESCE(
+            NULLIF(category.name, ''),
+            NULLIF(category.name_ko, ''),
+            NULLIF(category.name_vi, ''),
+            NULLIF(category.name_en, ''),
+            'Uncategorized'
+          ),
+          'name_ko', NULLIF(category.name_ko, ''),
+          'name_vi', NULLIF(category.name_vi, ''),
+          'name_en', NULLIF(category.name_en, '')
+        )
+      END
+      ORDER BY entry.ordinality
+    ),
+    '[]'::jsonb
+  )
+  INTO v_category_operation_times
+  FROM jsonb_array_elements(COALESCE(
+    v_result -> 'category_operation_times', '[]'::jsonb
+  )) WITH ORDINALITY AS entry(metric, ordinality)
+  LEFT JOIN public.menu_categories category
+    ON category.id::text = entry.metric ->> 'category_key'
+   AND category.restaurant_id = p_store_id;
+
+  RETURN (v_result - 'menu_operation_times' - 'category_operation_times')
+    || jsonb_build_object(
+      'menu_operation_times', v_menu_operation_times,
+      'category_operation_times', v_category_operation_times
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_paperless_operations_insights_report(
+  uuid, timestamptz, timestamptz
+) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_paperless_operations_insights_report(
+  uuid, timestamptz, timestamptz
+) TO authenticated;
+
+COMMENT ON FUNCTION public.get_paperless_operations_insights_report(
+  uuid, timestamptz, timestamptz
+) IS 'Returns established paperless insights with exact menu and category language fields from the current catalog.';
+
 DO $$
 DECLARE
   v_function regprocedure :=
@@ -1404,6 +1596,37 @@ BEGIN
      OR position('receipt_scope' IN v_definition) = 0
      OR position('payment_group.primary_order_id' IN v_definition) = 0 THEN
     RAISE EXCEPTION 'COMBINED_PAYMENT_LEDGER_GROUPING_VERIFY_FAILED';
+  END IF;
+END;
+$$;
+
+DO $$
+DECLARE
+  v_report regprocedure :=
+    'public.get_paperless_operations_report(uuid,timestamptz,timestamptz)'::regprocedure;
+  v_insights regprocedure :=
+    'public.get_paperless_operations_insights_report(uuid,timestamptz,timestamptz)'::regprocedure;
+  v_report_definition text;
+  v_insights_definition text;
+BEGIN
+  v_report_definition := pg_get_functiondef(v_report);
+  v_insights_definition := pg_get_functiondef(v_insights);
+
+  IF to_regprocedure(
+       'public.get_paperless_operations_report_pre_menu_localization(uuid,timestamp with time zone,timestamp with time zone)'
+     ) IS NULL
+     OR to_regprocedure(
+       'public.get_paperless_operations_insights_report_pre_menu_localization(uuid,timestamp with time zone,timestamp with time zone)'
+     ) IS NULL
+     OR position('NULLIF(menu.name_en' IN v_report_definition) = 0
+     OR position('NULLIF(menu.name_vi' IN v_report_definition) = 0
+     OR position('NULLIF(category.name_en' IN v_insights_definition) = 0
+     OR position('NULLIF(category.name_vi' IN v_insights_definition) = 0
+     OR has_function_privilege('anon', v_report, 'EXECUTE')
+     OR has_function_privilege('anon', v_insights, 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', v_report, 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', v_insights, 'EXECUTE') THEN
+    RAISE EXCEPTION 'PAPERLESS_MENU_LOCALIZATION_VERIFY_FAILED';
   END IF;
 END;
 $$;

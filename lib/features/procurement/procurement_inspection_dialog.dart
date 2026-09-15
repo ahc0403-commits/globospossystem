@@ -249,8 +249,8 @@ class _ProcurementInspectionDialogState
                                   : () async {
                                       final file = await openFile(
                                         acceptedTypeGroups: [
-                                          const XTypeGroup(
-                                            label: 'Photos',
+                                          XTypeGroup(
+                                            label: t('사진', 'Photos', 'Ảnh'),
                                             extensions: ['jpg', 'jpeg', 'png'],
                                           ),
                                         ],

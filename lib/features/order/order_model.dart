@@ -132,11 +132,13 @@ class OrderItem {
     final menuItemRaw = json['menu_items'];
     final comboRaw = json['combo_components'];
     String? menuItemName;
+    String? menuItemNameKo;
     String? menuItemNameVi;
     String? menuItemNameEn;
     String? vatCategory;
     if (menuItemRaw is Map) {
       menuItemName = menuItemRaw['name']?.toString();
+      menuItemNameKo = menuItemRaw['name_ko']?.toString();
       menuItemNameVi = menuItemRaw['name_vi']?.toString();
       menuItemNameEn = menuItemRaw['name_en']?.toString();
       vatCategory = menuItemRaw['vat_category']?.toString();
@@ -160,7 +162,7 @@ class OrderItem {
       },
       status: json['status']?.toString() ?? 'pending',
       itemType: json['item_type']?.toString() ?? 'menu_item',
-      nameKo: menuItemName,
+      nameKo: menuItemNameKo,
       nameVi: menuItemNameVi,
       nameEn: menuItemNameEn,
       isServiceItem: switch (json['is_service_item']) {
@@ -193,20 +195,13 @@ class OrderItem {
     );
   }
 
-  String localizedName(String languageCode) {
-    final localized = switch (languageCode) {
-      'vi' => nameVi,
-      'en' => nameEn,
-      _ => nameKo,
-    };
-    final value = localized?.trim() ?? '';
-    if (value.isNotEmpty) return value;
-    return switch (languageCode) {
-      'vi' => 'Món',
-      'en' => 'Item',
-      _ => '메뉴',
-    };
-  }
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': label,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+    'item_type': itemType,
+  }, languageCode);
 }
 
 class OrderComboComponent {

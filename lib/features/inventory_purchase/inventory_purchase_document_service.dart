@@ -239,26 +239,13 @@ class InventoryPurchaseDocumentService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      '발 주 서',
-                      style: pw.TextStyle(
-                        color: PdfColors.white,
-                        fontSize: 26,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(
-                      'PURCHASE ORDER',
-                      style: const pw.TextStyle(
-                        color: PdfColor.fromInt(0xffd8eafa),
-                        fontSize: 10,
-                        letterSpacing: 1.8,
-                      ),
-                    ),
-                  ],
+                pw.Text(
+                  l10n.inventoryPurchasePdfTitle,
+                  style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 24,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
                 pw.Container(
                   padding: const pw.EdgeInsets.symmetric(

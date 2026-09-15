@@ -184,6 +184,14 @@ void main() {
       localizedMenuName(_names.first, 'en-US'),
       'Stone Pot Bulgogi Bibimbap',
     );
+    final missing = resolveMenuName({
+      'name': '원본명',
+      'name_ko': '한국어명',
+      'name_vi': 'Tên tiếng Việt',
+      'name_en': ' ',
+    }, 'en_US');
+    expect(missing.match, MenuNameMatch.missingTranslation);
+    expect(missing.value, '원본명 · English name missing');
   });
 
   for (final size in [const Size(390, 844), const Size(1440, 900)]) {

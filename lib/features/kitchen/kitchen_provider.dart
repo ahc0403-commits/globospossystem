@@ -75,20 +75,12 @@ class KitchenItem {
   final String? nameVi;
   final String? nameEn;
 
-  String localizedName(String languageCode) {
-    final localized = switch (languageCode) {
-      'vi' => nameVi,
-      'en' => nameEn,
-      _ => nameKo,
-    };
-    final value = localized?.trim() ?? '';
-    if (value.isNotEmpty) return value;
-    return switch (languageCode) {
-      'vi' => 'Món',
-      'en' => 'Item',
-      _ => '메뉴',
-    };
-  }
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': label,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   KitchenItem copyWith({
     String? itemId,
@@ -121,10 +113,12 @@ class KitchenItem {
     final createdAtRaw = json['created_at']?.toString();
     final menuItemRaw = json['menu_items'];
     String? menuItemName;
+    String? menuItemNameKo;
     String? menuItemNameVi;
     String? menuItemNameEn;
     if (menuItemRaw is Map<String, dynamic>) {
       menuItemName = menuItemRaw['name']?.toString();
+      menuItemNameKo = menuItemRaw['name_ko']?.toString();
       menuItemNameVi = menuItemRaw['name_vi']?.toString();
       menuItemNameEn = menuItemRaw['name_en']?.toString();
     }
@@ -157,7 +151,7 @@ class KitchenItem {
           ? DateTime.tryParse(createdAtRaw) ?? DateTime.now().toUtc()
           : DateTime.now().toUtc(),
       comboComponents: comboComponents,
-      nameKo: menuItemName,
+      nameKo: menuItemNameKo,
       nameVi: menuItemNameVi,
       nameEn: menuItemNameEn,
     );
@@ -480,7 +474,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   ) => _db
       .from('orders')
       .select(
-        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_vi, name_en))',
+        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_ko, name_vi, name_en))',
       )
       .eq('restaurant_id', storeId)
       .gte('created_at', businessDay.startIso8601)

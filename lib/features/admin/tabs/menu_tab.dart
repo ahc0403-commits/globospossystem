@@ -804,8 +804,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final categoryId = category['id']?.toString() ?? '';
     final originalNameKo =
         category['name_ko']?.toString() ?? category['name']?.toString() ?? '';
-    final originalNameVi = category['name_vi']?.toString() ?? originalNameKo;
-    final originalNameEn = category['name_en']?.toString() ?? originalNameKo;
+    final originalNameVi = category['name_vi']?.toString() ?? '';
+    final originalNameEn = category['name_en']?.toString() ?? '';
     if (categoryId.isEmpty) return;
     final nameKoController = TextEditingController(text: originalNameKo);
     final nameViController = TextEditingController(text: originalNameVi);
@@ -1153,10 +1153,10 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     }
     final originalNameKo =
         item['name_ko']?.toString() ?? item['name']?.toString() ?? '';
-    final originalNameVi = item['name_vi']?.toString() ?? originalNameKo;
+    final originalNameVi = item['name_vi']?.toString() ?? '';
     final originalPaperlessNameVi =
         item['paperless_name_vi']?.toString().trim() ?? '';
-    final originalNameEn = item['name_en']?.toString() ?? originalNameKo;
+    final originalNameEn = item['name_en']?.toString() ?? '';
     final nameKoController = TextEditingController(text: originalNameKo);
     final nameViController = TextEditingController(text: originalNameVi);
     final paperlessNameViController = TextEditingController(
@@ -2233,7 +2233,7 @@ class _ItemsPanel extends StatelessWidget {
                               compact: true,
                             ),
                             Tooltip(
-                              message: 'Show on QR menu',
+                              message: l10n.menuQrVisibilityTooltip,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -2263,8 +2263,12 @@ class _ItemsPanel extends StatelessWidget {
                                             showSuccessToast(
                                               context,
                                               value
-                                                  ? '$name visible on QR menu'
-                                                  : '$name hidden from QR menu',
+                                                  ? l10n.menuQrVisibilityShown(
+                                                      name,
+                                                    )
+                                                  : l10n.menuQrVisibilityHidden(
+                                                      name,
+                                                    ),
                                             );
                                           },
                                   ),

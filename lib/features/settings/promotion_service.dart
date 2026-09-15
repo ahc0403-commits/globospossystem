@@ -1,3 +1,4 @@
+import '../../core/i18n/menu_localization.dart';
 import '../../main.dart';
 
 const String promotionScopeAllMenu = 'all_menu';
@@ -64,9 +65,9 @@ class PromotionMenuItem {
     return PromotionMenuItem(
       id: json['id']?.toString() ?? '',
       name: fallback,
-      nameKo: json['name_ko']?.toString() ?? fallback,
-      nameVi: json['name_vi']?.toString() ?? fallback,
-      nameEn: json['name_en']?.toString() ?? fallback,
+      nameKo: json['name_ko']?.toString() ?? '',
+      nameVi: json['name_vi']?.toString() ?? '',
+      nameEn: json['name_en']?.toString() ?? '',
       price: (json['price'] as num?)?.toDouble() ?? 0,
       isAvailable: json['is_available'] == true,
     );
@@ -80,11 +81,12 @@ class PromotionMenuItem {
   final double price;
   final bool isAvailable;
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'ko' => nameKo.isEmpty ? name : nameKo,
-    'vi' => nameVi.isEmpty ? name : nameVi,
-    _ => nameEn.isEmpty ? name : nameEn,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 }
 
 class PromotionService {

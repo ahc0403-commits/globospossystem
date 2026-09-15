@@ -1465,7 +1465,7 @@ class _EmergencyCardMenuList extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 item.isTakeout
-                                    ? '[MANG VỀ] ${item.paperlessName}'
+                                    ? '[${context.l10n.salesChannelTakeaway}] ${item.paperlessName}'
                                     : item.paperlessName,
                                 key: Key('emergency_card_menu_${item.id}'),
                                 maxLines: 1,

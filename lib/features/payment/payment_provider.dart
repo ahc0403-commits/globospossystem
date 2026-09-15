@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/i18n/menu_localization.dart';
 import '../../core/models/fulfillment_mode.dart';
 import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/order_service.dart';
@@ -117,11 +118,12 @@ class CashierFulfillmentProgress {
 
   bool get isComplete => floorServedQuantity >= orderedQuantity;
 
-  String localizedName(String languageCode) => switch (languageCode) {
-    'vi' => nameVi.isEmpty ? nameEn : nameVi,
-    'en' => nameEn.isEmpty ? nameKo : nameEn,
-    _ => nameKo.isEmpty ? nameEn : nameKo,
-  };
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstRegisteredMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   factory CashierFulfillmentProgress.fromJson(Map<String, dynamic> json) =>
       CashierFulfillmentProgress(
@@ -131,9 +133,9 @@ class CashierFulfillmentProgress {
         sourceKind: json['source_kind']?.toString() ?? 'order_item',
         fulfillmentRoute:
             json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
-        nameKo: json['name_ko']?.toString() ?? '메뉴',
-        nameVi: json['name_vi']?.toString() ?? 'Món',
-        nameEn: json['name_en']?.toString() ?? 'Item',
+        nameKo: json['name_ko']?.toString() ?? '',
+        nameVi: json['name_vi']?.toString() ?? '',
+        nameEn: json['name_en']?.toString() ?? '',
         orderedQuantity: _toIntValue(json['ordered_quantity']),
         floorServedQuantity: _toIntValue(json['floor_served_quantity']),
       );
@@ -318,25 +320,20 @@ class QrOrderLedgerItem {
     );
   }
 
-  String localizedName(String languageCode) {
-    final localized = switch (languageCode) {
-      'vi' => nameVi,
-      'en' => nameEn,
-      _ => nameKo,
-    };
-    final value = localized?.trim() ?? '';
-    if (value.isNotEmpty) return value;
-    return switch (languageCode) {
-      'vi' => 'Món',
-      'en' => 'Item',
-      _ => '메뉴',
-    };
-  }
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': name,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 
   factory QrOrderLedgerItem.fromJson(Map<String, dynamic> json) {
     return QrOrderLedgerItem(
       menuItemId: json['menu_item_id']?.toString() ?? '',
       name: json['name']?.toString() ?? '-',
+      nameKo: json['name_ko']?.toString(),
+      nameVi: json['name_vi']?.toString(),
+      nameEn: json['name_en']?.toString(),
       quantity: switch (json['quantity']) {
         int value => value,
         num value => value.toInt(),
@@ -445,7 +442,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await _db
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
+            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -658,7 +655,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await _db
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
+          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -844,7 +841,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
     final menuRows = await _db
         .from('menu_items')
-        .select('id, name, name_vi, name_en')
+        .select('id, name, name_ko, name_vi, name_en')
         .inFilter('id', menuItemIds);
     final namesById = <String, Map<String, dynamic>>{
       for (final row in menuRows)
@@ -859,7 +856,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
                   final names = namesById[item.menuItemId];
                   if (names == null) return item;
                   return item.copyWith(
-                    nameKo: names['name']?.toString(),
+                    nameKo: names['name_ko']?.toString(),
                     nameVi: names['name_vi']?.toString(),
                     nameEn: names['name_en']?.toString(),
                   );
@@ -1970,4 +1967,12 @@ int _toIntValue(dynamic value) {
     String v => int.tryParse(v) ?? 0,
     _ => 0,
   };
+}
+
+String? _firstRegisteredMenuName(String ko, String vi, String en) {
+  for (final value in [ko, vi, en]) {
+    final cleaned = value.trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  return null;
 }

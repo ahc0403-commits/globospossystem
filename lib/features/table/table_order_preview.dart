@@ -1,3 +1,5 @@
+import '../../core/i18n/menu_localization.dart';
+
 class TableOrderPreviewLine {
   const TableOrderPreviewLine({
     required this.label,
@@ -13,20 +15,12 @@ class TableOrderPreviewLine {
   final String? nameVi;
   final String? nameEn;
 
-  String localizedName(String languageCode) {
-    final localized = switch (languageCode) {
-      'vi' => nameVi,
-      'en' => nameEn,
-      _ => nameKo,
-    };
-    final value = localized?.trim() ?? '';
-    if (value.isNotEmpty) return value;
-    return switch (languageCode) {
-      'vi' => 'Món',
-      'en' => 'Item',
-      _ => '메뉴',
-    };
-  }
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': label,
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
 }
 
 class TableOrderPreview {

@@ -15,6 +15,7 @@ void main() {
       'item_type': 'menu_item',
       'menu_items': {
         'name': '김밥',
+        'name_ko': '김밥',
         'name_vi': 'Cơm cuộn Hàn Quốc',
         'name_en': 'Korean rice roll',
       },
@@ -40,8 +41,7 @@ void main() {
       'menu_items': {'name': '김밥', 'name_en': 'Korean rice roll'},
     });
 
-    expect(item.localizedName('vi'), 'Món');
-    expect(item.localizedName('vi'), isNot(contains('김밥')));
+    expect(item.localizedName('vi'), '김밥 · Thiếu tên tiếng Việt');
   });
 
   test('floor order item keeps snapshotted combo drink selections', () {

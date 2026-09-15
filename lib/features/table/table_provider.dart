@@ -221,7 +221,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
     final response = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, created_at, order_items(id, created_at, label, quantity, status, menu_items(name, name_vi, name_en))',
+          'id, table_id, status, created_at, order_items(id, created_at, label, quantity, status, menu_items(name, name_ko, name_vi, name_en))',
         )
         .eq('restaurant_id', storeId)
         .not('status', 'in', '(completed,cancelled)')
@@ -268,7 +268,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
             return TableOrderPreviewLine(
               label: label,
               quantity: quantity,
-              nameKo: menuItem['name']?.toString(),
+              nameKo: menuItem['name_ko']?.toString(),
               nameVi: menuItem['name_vi']?.toString(),
               nameEn: menuItem['name_en']?.toString(),
             );

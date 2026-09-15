@@ -18,11 +18,11 @@ const _frozenFiles = <String, String>{
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
   'lib/features/kitchen/kitchen_provider.dart':
-      '5901f89f1bd3f46c4c0cfc34ac89089370a1dde138aa6afcf6d0f8eeca7ecd00',
+      'ed1bc663f89f23b51d705cb1b26610a848092758446372ffb519636441da271b',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   'lib/core/services/payment_service.dart':
-      'ceb62497c8f43ed6cd0cd100ad3ac1c2f7ae5a9131184a4a48a7b002236ee28e',
+      '8dedccd5c59bfb01b7b3fe4089fedca2450d2f2b031f801a24cd3b4ccba20402',
   'lib/core/payments/payment_total_calculator.dart':
       'a6fe830f387dac0775a794f466fb5fb33103a64f4e0f6d8c0863ea3e87b47076',
   // Phase 4D moves the reconciled sales report to a server aggregate.
