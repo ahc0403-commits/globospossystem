@@ -519,6 +519,33 @@ class _BmMenuExceptionHistoryScreenState
               ),
             ),
             const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<BmMenuHistoryType>(
+                key: const Key('bm_menu_history_type_filter'),
+                segments: [
+                  for (final type in BmMenuHistoryType.values)
+                    ButtonSegment<BmMenuHistoryType>(
+                      value: type,
+                      label: Text(
+                        copy.typeLabel(type),
+                        key: ValueKey('bm_menu_history_type_${type.wireValue}'),
+                      ),
+                    ),
+                ],
+                selected: {_historyType},
+                showSelectedIcon: false,
+                onSelectionChanged: _loading
+                    ? null
+                    : (selection) {
+                        final nextType = selection.single;
+                        if (nextType == _historyType) return;
+                        setState(() => _historyType = nextType);
+                        _load(resetPage: true);
+                      },
+              ),
+            ),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -548,30 +575,6 @@ class _BmMenuExceptionHistoryScreenState
                     onChanged: _loading
                         ? null
                         : (value) => setState(() => _storeValue = value ?? ''),
-                  ),
-                ),
-                SizedBox(
-                  width: 190,
-                  child: DropdownButtonFormField<BmMenuHistoryType>(
-                    key: const Key('bm_menu_history_type_filter'),
-                    initialValue: _historyType,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: copy.type,
-                      isDense: true,
-                    ),
-                    items: [
-                      for (final type in BmMenuHistoryType.values)
-                        DropdownMenuItem(
-                          value: type,
-                          child: Text(copy.typeLabel(type)),
-                        ),
-                    ],
-                    onChanged: _loading
-                        ? null
-                        : (value) => setState(
-                            () => _historyType = value ?? BmMenuHistoryType.all,
-                          ),
                   ),
                 ),
                 OutlinedButton.icon(
@@ -892,7 +895,6 @@ class _BmHistoryCopy {
   String get thisMonth => pick('이번 달', 'Tháng này', 'This month');
   String get allPeriod => pick('전체 기간', 'Toàn bộ', 'All time');
   String get store => pick('매장', 'Cửa hàng', 'Store');
-  String get type => pick('유형', 'Loại', 'Type');
   String get from => pick('시작', 'Từ', 'From');
   String get to => pick('종료', 'Đến', 'To');
   String get search => pick(

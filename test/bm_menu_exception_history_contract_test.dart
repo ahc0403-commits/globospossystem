@@ -16,10 +16,12 @@ import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class _FakeHistoryLoader implements BmMenuExceptionHistoryLoader {
-  _FakeHistoryLoader(this.result);
+  _FakeHistoryLoader(this.result, {this.resultsByType = const {}});
 
   final BmMenuExceptionHistoryPage result;
+  final Map<BmMenuHistoryType, BmMenuExceptionHistoryPage> resultsByType;
   int callCount = 0;
+  final requestedTypes = <BmMenuHistoryType>[];
 
   @override
   Future<BmMenuExceptionHistoryPage> fetch({
@@ -33,7 +35,8 @@ class _FakeHistoryLoader implements BmMenuExceptionHistoryLoader {
     DateTime? snapshotAt,
   }) async {
     callCount++;
-    return result;
+    requestedTypes.add(historyType);
+    return resultsByType[historyType] ?? result;
   }
 }
 
@@ -93,6 +96,46 @@ BmMenuExceptionHistoryPage _widgetPage() {
       'cancellation_event_count': 0,
       'cancelled_quantity': 0,
       'cancelled_amount': 0,
+      'reversal_event_count': 0,
+    },
+    'page': 0,
+    'page_size': 50,
+    'has_more': false,
+    'fetched_at': '2026-09-15T06:00:00Z',
+  });
+}
+
+BmMenuExceptionHistoryPage _cancellationWidgetPage() {
+  return BmMenuExceptionHistoryPage.fromJson({
+    'items': [
+      {
+        'source_kind': 'cancellation',
+        'event_type': 'item_cancelled',
+        'event_id': 'event-cancellation-widget',
+        'event_at': '2026-09-15T05:30:00Z',
+        'store_id': 'store-1',
+        'store_name': 'Bunsik',
+        'order_id': 'order-cancellation-widget',
+        'item_name': 'Cancelled Kimbap',
+        'quantity': 2,
+        'unit_price': 30000,
+        'reference_amount': 60000,
+        'cancelled_amount': 60000,
+        'is_service_item': false,
+        'actor_name': 'BM 1',
+        'reason': 'guest request',
+        'current_state': 'cancelled',
+        'data_incomplete': false,
+      },
+    ],
+    'summary': {
+      'total_rows': 1,
+      'service_event_count': 0,
+      'service_quantity': 0,
+      'service_reference_amount': 0,
+      'cancellation_event_count': 1,
+      'cancelled_quantity': 2,
+      'cancelled_amount': 60000,
       'reversal_event_count': 0,
     },
     'page': 0,
@@ -252,6 +295,44 @@ void main() {
 
     expect(find.byKey(const Key('bm_menu_history_lookup')), findsOneWidget);
     expect(find.text('Service Tteokbokki'), findsOneWidget);
+  });
+
+  testWidgets('service and cancellation buttons load separate histories', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final servicePage = _widgetPage();
+    final cancellationPage = _cancellationWidgetPage();
+    final loader = _FakeHistoryLoader(
+      servicePage,
+      resultsByType: {
+        BmMenuHistoryType.service: servicePage,
+        BmMenuHistoryType.cancellation: cancellationPage,
+      },
+    );
+
+    await tester.pumpWidget(_historyApp(role: 'brand_admin', loader: loader));
+    await tester.pumpAndSettle();
+
+    expect(loader.requestedTypes, [BmMenuHistoryType.all]);
+    await tester.tap(
+      find.byKey(const Key('bm_menu_history_type_service')).hitTestable(),
+    );
+    await tester.pumpAndSettle();
+    expect(loader.requestedTypes.last, BmMenuHistoryType.service);
+    expect(find.text('Service Tteokbokki'), findsOneWidget);
+    expect(find.text('Cancelled Kimbap'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const Key('bm_menu_history_type_cancellation')).hitTestable(),
+    );
+    await tester.pumpAndSettle();
+    expect(loader.requestedTypes.last, BmMenuHistoryType.cancellation);
+    expect(find.text('Service Tteokbokki'), findsNothing);
+    expect(find.text('Cancelled Kimbap'), findsOneWidget);
   });
 
   testWidgets(
