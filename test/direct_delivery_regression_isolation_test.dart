@@ -9,7 +9,7 @@ const _migrationPath =
 
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      'eb4604c8832420efbe6329a85538dde2d8e6857e8c0030e5685334c6ffc9440a',
+      'cc34d252a0cef434c5535b89a9749e8c91f8cf6cd102d6c9806237c420dd5cd3',
   // 2026-09-15: locale-aware menu/search rendering and compact translated layout.
   // menu_language_switch_test + routed/overlay operational suites cover behavior.
   'lib/features/cashier/cashier_screen.dart':

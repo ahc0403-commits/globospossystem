@@ -161,8 +161,15 @@ class _QrOrderScreenState extends State<QrOrderScreen>
           (lineKey, _) =>
               !availableIds.contains(_menuItemIdFromLineKey(lineKey)),
         );
+        if (!menu.isTakeoutEnabled) {
+          _cart.removeWhere((lineKey, _) => lineKey.endsWith('|takeout'));
+          _comboDrinkChoices.removeWhere(
+            (lineKey, _) => lineKey.endsWith('|takeout'),
+          );
+        }
         for (final item in menu.items) {
-          for (final isTakeout in const [false, true]) {
+          for (final isTakeout
+              in menu.isTakeoutEnabled ? const [false, true] : const [false]) {
             final lineKey = _lineKey(item.id, isTakeout);
             final quantity = _cart[lineKey] ?? 0;
             if (quantity == 0 || item.comboDrinkChoiceCount == 0) continue;
@@ -263,7 +270,8 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     if (menu == null) return const [];
     return [
       for (final item in menu.items)
-        for (final isTakeout in const [false, true])
+        for (final isTakeout
+            in menu.isTakeoutEnabled ? const [false, true] : const [false])
           if ((_cart[_lineKey(item.id, isTakeout)] ?? 0) > 0)
             (
               item: item,
@@ -298,6 +306,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     int quantity, {
     required bool isTakeout,
   }) async {
+    if (isTakeout && _menu?.isTakeoutEnabled != true) return;
     final lineKey = _lineKey(item.id, isTakeout);
     final currentQuantity = _cart[lineKey] ?? 0;
     final choiceCount = item.comboDrinkChoiceCount;
@@ -426,11 +435,18 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       setState(() {
         _failure = _copy.failureFor(error);
         _isSubmitting = false;
+        if (error.toString().contains('QR_TAKEOUT_UNAVAILABLE')) {
+          _cart.removeWhere((lineKey, _) => lineKey.endsWith('|takeout'));
+          _comboDrinkChoices.removeWhere(
+            (lineKey, _) => lineKey.endsWith('|takeout'),
+          );
+        }
         if (error.toString().contains('QR_ORDER_CONTEXT_CHANGED')) {
           _clientOrderId = null;
         }
       });
-      if (error.toString().contains('QR_ORDER_CONTEXT_CHANGED')) {
+      if (error.toString().contains('QR_ORDER_CONTEXT_CHANGED') ||
+          error.toString().contains('QR_TAKEOUT_UNAVAILABLE')) {
         unawaited(_loadMenu(showLoading: false));
       }
     }
@@ -614,7 +630,9 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                         child: _QrErrorBanner(
                           failure: _failure!,
                           retryLabel: _copy.retry,
-                          onRetry: _submitOrder,
+                          onRetry: _cart.isEmpty
+                              ? () => _loadMenu(showLoading: false)
+                              : _submitOrder,
                         ),
                       ),
                     ),
@@ -652,6 +670,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                                 _cart[_lineKey(item.id, false)] ?? 0,
                             takeoutQuantity:
                                 _cart[_lineKey(item.id, true)] ?? 0,
+                            takeoutEnabled: menu.isTakeoutEnabled,
                             priceLabel: '${_currency.format(item.price)} VND',
                             originalPriceLabel:
                                 item.discountPercent > 0 &&
@@ -1181,6 +1200,7 @@ class _QrMenuItemTile extends StatelessWidget {
     required this.languageCode,
     required this.dineInQuantity,
     required this.takeoutQuantity,
+    required this.takeoutEnabled,
     required this.priceLabel,
     this.originalPriceLabel,
     required this.copy,
@@ -1192,6 +1212,7 @@ class _QrMenuItemTile extends StatelessWidget {
   final String languageCode;
   final int dineInQuantity;
   final int takeoutQuantity;
+  final bool takeoutEnabled;
   final String priceLabel;
   final String? originalPriceLabel;
   final QrOrderCopy copy;
@@ -1292,22 +1313,25 @@ class _QrMenuItemTile extends StatelessWidget {
           copy: copy,
           onChanged: onDineInChanged,
         ),
-        const SizedBox(height: ToastSpacingTokens.sm),
-        _QrLabeledStepper(
-          label: copy.takeout,
-          itemId: '${item.id}_takeout',
-          itemName: '$itemName ${copy.takeout}',
-          quantity: takeoutQuantity,
-          copy: copy,
-          onChanged: onTakeoutChanged,
-        ),
+        if (takeoutEnabled) ...[
+          const SizedBox(height: ToastSpacingTokens.sm),
+          _QrLabeledStepper(
+            label: copy.takeout,
+            itemId: '${item.id}_takeout',
+            itemName: '$itemName ${copy.takeout}',
+            quantity: takeoutQuantity,
+            copy: copy,
+            onChanged: onTakeoutChanged,
+          ),
+        ],
       ],
     );
     return Semantics(
       key: Key('qr_menu_item_${item.id}'),
       container: true,
-      label:
-          '$itemName, $priceLabel, ${copy.dineIn} ${copy.quantityLabel(dineInQuantity)}, ${copy.takeout} ${copy.quantityLabel(takeoutQuantity)}',
+      label: takeoutEnabled
+          ? '$itemName, $priceLabel, ${copy.dineIn} ${copy.quantityLabel(dineInQuantity)}, ${copy.takeout} ${copy.quantityLabel(takeoutQuantity)}'
+          : '$itemName, $priceLabel, ${copy.dineIn} ${copy.quantityLabel(dineInQuantity)}',
       child: ToastWorkSurface(
         padding: const EdgeInsets.all(ToastSpacingTokens.md),
         child: LayoutBuilder(
@@ -2187,6 +2211,7 @@ enum QrOrderFailureKind {
   paymentInProgress,
   rateLimit,
   itemUnavailable,
+  takeoutUnavailable,
   invalidItems,
   offline,
   unavailable,
@@ -2210,6 +2235,7 @@ class QrOrderFailurePresentation {
     QrOrderFailureKind.paymentInProgress => 'qr_state_payment_processing',
     QrOrderFailureKind.rateLimit => 'qr_state_rate_limit',
     QrOrderFailureKind.itemUnavailable => 'qr_state_item_unavailable',
+    QrOrderFailureKind.takeoutUnavailable => 'qr_state_takeout_unavailable',
     QrOrderFailureKind.invalidItems => 'qr_state_invalid_items',
     QrOrderFailureKind.offline => 'qr_state_offline_retry',
     QrOrderFailureKind.unavailable => 'qr_state_unavailable',
@@ -2221,6 +2247,7 @@ class QrOrderFailurePresentation {
     QrOrderFailureKind.paymentInProgress => Icons.point_of_sale_rounded,
     QrOrderFailureKind.rateLimit => Icons.schedule_rounded,
     QrOrderFailureKind.itemUnavailable => Icons.no_food_rounded,
+    QrOrderFailureKind.takeoutUnavailable => Icons.takeout_dining_outlined,
     QrOrderFailureKind.invalidItems => Icons.edit_note_rounded,
     QrOrderFailureKind.offline => Icons.wifi_off_rounded,
     QrOrderFailureKind.unavailable => Icons.error_outline_rounded,
@@ -2646,6 +2673,23 @@ class QrOrderCopy {
           'ko' => '메뉴를 다시 불러온 뒤 장바구니를 확인해 주세요.',
           'vi' => 'Tải lại thực đơn rồi kiểm tra giỏ món.',
           _ => 'Reload the menu, then check the cart.',
+        },
+      );
+    }
+    if (raw.contains('QR_TAKEOUT_UNAVAILABLE')) {
+      return QrOrderFailurePresentation(
+        kind: QrOrderFailureKind.takeoutUnavailable,
+        title: switch (code) {
+          'ko' => '포장 주문이 잠시 중단되었습니다',
+          'vi' => 'Đơn mang đi đang tạm dừng',
+          _ => 'Takeout ordering is paused',
+        },
+        body: switch (code) {
+          'ko' => '포장 메뉴는 장바구니에서 제외했습니다. 홀 주문은 계속 이용할 수 있습니다.',
+          'vi' =>
+            'Các món mang đi đã được bỏ khỏi giỏ. Bạn vẫn có thể gọi món tại bàn.',
+          _ =>
+            'Takeout items were removed from the cart. Dine-in ordering is still available.',
         },
       );
     }

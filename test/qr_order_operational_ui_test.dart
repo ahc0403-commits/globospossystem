@@ -161,6 +161,47 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('disabled takeout exposes dine-in controls only', (tester) async {
+    List<QrOrderLine>? submitted;
+    const dineInOnlyMenu = QrOrderMenu(
+      storeName: 'BunsikClub',
+      tableNumber: '8',
+      floorLabel: '1F',
+      isTakeoutEnabled: false,
+      categories: [QrMenuCategory(id: 'main', name: 'Main')],
+      items: [
+        QrMenuItem(
+          id: 'food',
+          categoryId: 'main',
+          name: 'Tteokbokki',
+          price: 125000,
+        ),
+      ],
+    );
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetch: (_) async => dineInOnlyMenu,
+        place: (_, items, __, ___) async {
+          submitted = items;
+          return _result;
+        },
+      ),
+    );
+
+    expect(find.byKey(const Key('qr_add_food')), findsOneWidget);
+    expect(find.byKey(const Key('qr_add_food_takeout')), findsNothing);
+    await tester.tap(find.byKey(const Key('qr_add_food')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_open_review')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+    await tester.pumpAndSettle();
+
+    expect(submitted, hasLength(1));
+    expect(submitted!.single.isTakeout, isFalse);
+  });
+
   testWidgets('same menu keeps separate dine-in and takeout lines', (
     tester,
   ) async {
