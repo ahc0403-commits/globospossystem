@@ -52,13 +52,13 @@ const _frozenAlertFiles = <String, String>{
   // Menu/history/search labels now use ARB in KO/VI/EN.
   // Arrival copy behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      '6570ab9805937763114c377a54b9b56bd171e0acd41053b7b21f930bb8e38f8c',
+      '60de6643dbef8e7899974cdbf24004de5744d6db170133d58f5315dbfa05c855',
   'lib/l10n/app_localizations_ko.dart':
-      'f1192a4ca97d25a154db49be8df6c0d6d68a6a2f03d08070575cd8618b13d14b',
+      'dcab37c50f34cff969644f9650ee6592cf4dedeec6c808c10c8f31397377bbc4',
   'lib/l10n/app_localizations_vi.dart':
-      '86006e49f7739887c91d93a56ed4cba1543b3af00753cfe4bedbaa84aa0fff48',
+      'c3651ba9835c585d9c697370b3c36b721ab425c1163fb2eaabcfd65cd0fd1d65',
   'lib/l10n/app_localizations_en.dart':
-      'be7729256c56813a0c2dfbd6cc1b543621bf8111551c9ad9b86d2e76a3e3cbad',
+      '72d55962ac62d2d81cc30e550e65e6a8011322db8a2488e7bdd0d050414e7fa5',
 };
 
 void main() {
