@@ -6,7 +6,7 @@ import '../../../core/hardware/print_agent_coordinator_provider.dart';
 import '../../../core/hardware/printer_service.dart';
 import '../../../core/hardware/receipt_builder.dart';
 import '../../../core/i18n/locale_extensions.dart';
-import '../../../core/layout/platform_info.dart';
+import '../../../core/layout/adaptive_layout.dart';
 import '../../../core/services/printer_destination_service.dart';
 import '../../../core/services/pin_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
@@ -533,13 +533,16 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       backgroundColor: AppColors.surface0,
       body: LayoutBuilder(
         builder: (context, viewport) {
-          final categoryPane = _buildCategoryPane(categories);
+          final layout = PosLayoutSpec.from(context, viewport);
+          final categoryPane = _buildCategoryPane(
+            categories,
+            horizontal: layout.prefersSingleColumn,
+          );
 
-          if (viewport.maxWidth < 1120 ||
-              MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+          if (layout.prefersSingleColumn) {
             return ToastResponsiveScrollBody(
               maxWidth: 1480,
-              padding: const EdgeInsets.all(16),
+              padding: layout.pagePadding,
               children: [
                 header,
                 const SizedBox(height: 16),
@@ -563,7 +566,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
           return ToastResponsiveBody(
             maxWidth: 1480,
-            padding: const EdgeInsets.all(16),
+            padding: layout.pagePadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -667,8 +670,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                 color: PosColors.accent,
                 compact: true,
               );
-              if (constraints.maxWidth < 620 ||
-                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+              if (PosLayoutSpec.from(
+                context,
+                constraints,
+              ).prefersStackedControls) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -700,7 +705,28 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     );
   }
 
-  Widget _buildCategoryPane(List<_SettingsCategory> categories) {
+  Widget _buildCategoryPane(
+    List<_SettingsCategory> categories, {
+    required bool horizontal,
+  }) {
+    if (horizontal) {
+      return ToastWorkSurface(
+        key: const Key('settings_configuration_queue'),
+        padding: const EdgeInsets.all(8),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          child: Row(
+            children: [
+              for (final category in categories) ...[
+                _settingsCategoryTile(category, compact: true),
+                if (category != categories.last) const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
     return ToastWorkSurface(
       padding: const EdgeInsets.all(12),
       child: SingleChildScrollView(
@@ -710,52 +736,62 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final category in categories) ...[
-              Builder(
-                builder: (context) {
-                  final selected = _selectedCategory == category.id;
-                  return InkWell(
-                    key: Key('settings_category_${category.id}'),
-                    onTap: () =>
-                        setState(() => _selectedCategory = category.id),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? PosColors.accentMuted
-                            : PosColors.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: selected ? PosColors.accent : PosColors.border,
-                          width: selected ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            category.label,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: selected
-                                      ? PosColors.accent
-                                      : PosColors.textPrimary,
-                                ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            category.summary,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: PosColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
+              _settingsCategoryTile(category, compact: false),
               if (category != categories.last) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _settingsCategoryTile(
+    _SettingsCategory category, {
+    required bool compact,
+  }) {
+    final selected = _selectedCategory == category.id;
+    return InkWell(
+      key: Key('settings_category_${category.id}'),
+      onTap: () => setState(() => _selectedCategory = category.id),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: compact ? 168 : null,
+        constraints: compact ? const BoxConstraints(minHeight: 48) : null,
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 12 : 14,
+          vertical: compact ? 10 : 14,
+        ),
+        decoration: BoxDecoration(
+          color: selected ? PosColors.accentMuted : PosColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? PosColors.accent : PosColors.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              category.label,
+              maxLines: compact ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: selected ? PosColors.accent : PosColors.textPrimary,
+              ),
+            ),
+            if (!compact) ...[
+              const SizedBox(height: 4),
+              Text(
+                category.summary,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+              ),
             ],
           ],
         ),
@@ -786,7 +822,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
           scrollable: scrollable,
         );
       case 'payment':
-        return _buildPaymentPanel(storeId: storeId);
+        return _settingsPanelBody(
+          scrollable: scrollable,
+          child: _buildPaymentPanel(storeId: storeId),
+        );
       case 'receipt':
         return _buildReceiptPanel(
           context: context,
@@ -2096,8 +2135,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             ),
           ],
         );
-        if (constraints.maxWidth < 560 ||
-            MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+        if (PosLayoutSpec.from(context, constraints).prefersStackedControls) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [titleBlock, const SizedBox(height: 10), badge],

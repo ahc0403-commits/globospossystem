@@ -62,6 +62,23 @@ class StaffPayroll {
       grossAmount + totalMealAllowance + totalParkingAllowance;
 }
 
+StaffPayroll? payrollForEmployee(
+  Iterable<StaffPayroll> payrolls,
+  String? employeeId,
+) {
+  if (employeeId == null || employeeId.isEmpty) return null;
+  for (final payroll in payrolls) {
+    if (payroll.userId == employeeId) return payroll;
+  }
+  return null;
+}
+
+double overtimeHoursForPayroll(StaffPayroll payroll) =>
+    payroll.dailyRecords.fold<double>(
+      0,
+      (sum, record) => sum + (record.hours - 8).clamp(0, 99).toDouble(),
+    );
+
 class PayrollService {
   PayrollService({AttendanceService? attendanceSource})
     : _attendanceService = attendanceSource ?? attendanceService;

@@ -46,7 +46,9 @@ void main() {
   test('settings compact stack does not nest panel vertical scroll', () {
     final source = readRepoFile('lib/features/admin/tabs/settings_tab.dart');
 
-    expect(source, contains('viewport.maxWidth < 1120'));
+    expect(source, contains('PosLayoutSpec.from(context, viewport)'));
+    expect(source, contains('layout.prefersSingleColumn'));
+    expect(source, contains('horizontal: layout.prefersSingleColumn'));
     expect(source, contains('ToastResponsiveScrollBody('));
     expect(source, contains('settingsPanel(scrollable: false)'));
     expect(source, contains('settingsPanel(scrollable: true)'));

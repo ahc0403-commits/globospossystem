@@ -97,7 +97,10 @@ void main() {
         'lib/core/ui/toast/toast_primitives_extended.dart',
       );
 
-      expect(primitives, contains('_toastSingleScrollOwnerBreakpoint = 1120'));
+      expect(
+        primitives,
+        contains('_toastSingleScrollOwnerBreakpoint = PosBreakpoints.wide'),
+      );
       expect(primitives, contains('_toastCompactPageMinHeight = 1600'));
       expect(primitives, contains('this.fitToViewportWhenNarrow = false'));
       expect(primitives, contains('final useSingleScrollOwner'));
@@ -138,7 +141,8 @@ void main() {
       final admin = readRepoFile('lib/features/admin/admin_screen.dart');
 
       expect(sidebar, contains('final useCompactShell'));
-      expect(sidebar, contains('viewport.shortestSide < 600'));
+      expect(sidebar, contains('layout.prefersCompactShell'));
+      expect(sidebar, contains('final useCompactRail = !layout.isLarge'));
       expect(sidebar, contains('class _ToastSidebarCompactNav'));
       expect(sidebar, contains('class _ToastSidebarCompactSelectNav'));
       expect(sidebar, contains("Key('toast_compact_section_selector')"));

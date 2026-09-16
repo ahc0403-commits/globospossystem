@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../i18n/locale_extensions.dart';
+import '../../layout/adaptive_layout.dart';
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
 import 'toast_primitives.dart';
@@ -445,7 +446,10 @@ class ToastShell extends StatelessWidget {
             children: [
               if (topbar != null) topbar!,
               Expanded(
-                child: Padding(padding: contentPadding, child: child),
+                child: Padding(
+                  padding: contentPadding,
+                  child: ToastContentViewport(child: child),
+                ),
               ),
             ],
           ),
@@ -466,17 +470,41 @@ class ToastShell extends StatelessWidget {
   }
 }
 
-EdgeInsets _toastResponsivePagePadding(double width) {
-  if (width < 560) {
-    return const EdgeInsets.all(12);
+/// Makes responsive descendants see the space actually assigned by the shell.
+///
+/// Without this adapter a page beside a navigation rail receives the full
+/// device width from [MediaQuery] and can incorrectly choose a wide layout even
+/// though the rail has already consumed part of that width.
+class ToastContentViewport extends StatelessWidget {
+  const ToastContentViewport({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final media = MediaQuery.of(context);
+        final width = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : media.size.width;
+        final height = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : media.size.height;
+        return MediaQuery(
+          data: media.copyWith(size: Size(width, height)),
+          child: child,
+        );
+      },
+    );
   }
-  if (width < 960) {
-    return const EdgeInsets.all(16);
-  }
-  return const EdgeInsets.all(20);
 }
 
-const double _toastSingleScrollOwnerBreakpoint = 1120;
+EdgeInsets _toastResponsivePagePadding(double width) {
+  return PosLayoutSpec.fromWidth(width: width).pagePadding;
+}
+
+const double _toastSingleScrollOwnerBreakpoint = PosBreakpoints.wide;
 const double _toastCompactPageMinHeight = 1600;
 
 class ToastResponsiveBody extends StatelessWidget {
@@ -800,41 +828,57 @@ class PosPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.textSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = PosLayoutSpec.from(context, constraints);
+        final titleBlock = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.headlineLarge),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle!,
+                maxLines: layout.isCompact ? 2 : 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: PosColors.textSecondary,
+                  fontSize: layout.isCompact ? 12 : 13,
                 ),
               ),
-              if (trailing != null) ...[const SizedBox(width: 16), trailing!],
+            ],
+          ],
+        );
+        final header = trailing != null && layout.prefersStackedControls
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  titleBlock,
+                  const SizedBox(height: 10),
+                  Align(alignment: Alignment.centerLeft, child: trailing!),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: titleBlock),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 16),
+                    Flexible(child: trailing!),
+                  ],
+                ],
+              );
+        return Padding(
+          padding: padding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              header,
+              if (bottom != null) ...[const SizedBox(height: 12), bottom!],
             ],
           ),
-          if (bottom != null) ...[const SizedBox(height: 16), bottom!],
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -919,8 +963,7 @@ class PosToolbar extends StatelessWidget {
             children: children,
           );
           if (trailing != null &&
-              (constraints.maxWidth < 560 ||
-                  MediaQuery.textScalerOf(context).scale(1) > 1.5)) {
+              PosLayoutSpec.from(context, constraints).prefersStackedControls) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -995,8 +1038,10 @@ class PosDataPanel extends StatelessWidget {
                   );
                   if (trailing != null &&
                       canStackHeader &&
-                      (headerConstraints.maxWidth < 560 ||
-                          MediaQuery.textScalerOf(context).scale(1) > 1.5)) {
+                      PosLayoutSpec.from(
+                        context,
+                        headerConstraints,
+                      ).prefersStackedControls) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [

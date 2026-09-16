@@ -11,11 +11,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/layout/adaptive_layout.dart';
 import '../../../core/payments/payment_method_contract.dart';
 import '../../../core/services/daily_closing_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/permission_utils.dart';
+import '../../../core/utils/time_utils.dart';
 import '../../../main.dart';
 import '../../auth/auth_provider.dart';
 import '../../report/bm_menu_exception_history.dart';
@@ -352,15 +354,15 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       );
     }
 
-    final usesLargeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
-    if (MediaQuery.sizeOf(context).width < 1080 || usesLargeText) {
+    final pageLayout = PosLayoutSpec.fromMediaQuery(context);
+    if (pageLayout.prefersSingleColumn) {
       return Scaffold(
         key: const Key('reports_root'),
         backgroundColor: AppColors.surface0,
         body: ToastResponsiveScrollBody(
           key: const Key('reports_compact_scroll'),
           maxWidth: 1460,
-          padding: const EdgeInsets.all(12),
+          padding: pageLayout.densePagePadding,
           children: [
             if (canViewBmHistory) ...[
               SizedBox(
@@ -410,7 +412,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       backgroundColor: AppColors.surface0,
       body: ToastResponsiveBody(
         maxWidth: 1460,
-        padding: const EdgeInsets.all(12),
+        padding: pageLayout.densePagePadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -830,8 +832,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 color: hasException ? PosColors.warning : PosColors.success,
                 compact: true,
               );
-              if (constraints.maxWidth < 620 ||
-                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+              if (PosLayoutSpec.from(
+                context,
+                constraints,
+              ).prefersStackedControls) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -3195,6 +3199,13 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
               ),
             ],
           ),
+          const SizedBox(height: 2),
+          Text(
+            context.l10n.reportsClosingPosScopeSubtitle,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+          ),
           const SizedBox(height: 8),
         ],
         if (_closingSucceeded)
@@ -3258,31 +3269,41 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
                     color: AppColors.surface1,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Column(
-                    children: [
-                      _closingTableHeader(),
-                      Expanded(
-                        child: ListView(
-                          children: records
-                              .take(10)
-                              .toList()
-                              .asMap()
-                              .entries
-                              .map((entry) {
-                                final index = entry.key;
-                                final record = entry.value;
-                                return _closingTableRow(
-                                  record: record,
-                                  currency: currency,
-                                  bgColor: index.isEven
-                                      ? AppColors.surface1
-                                      : AppColors.surface0,
-                                );
-                              })
-                              .toList(),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SingleChildScrollView(
+                      key: const Key('daily_closing_table_horizontal_scroll'),
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: 1600,
+                        child: Column(
+                          children: [
+                            _closingTableHeader(),
+                            Expanded(
+                              child: ListView(
+                                children: records
+                                    .take(10)
+                                    .toList()
+                                    .asMap()
+                                    .entries
+                                    .map((entry) {
+                                      final index = entry.key;
+                                      final record = entry.value;
+                                      return _closingTableRow(
+                                        record: record,
+                                        currency: currency,
+                                        bgColor: index.isEven
+                                            ? AppColors.surface1
+                                            : AppColors.surface0,
+                                      );
+                                    })
+                                    .toList(),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
           loading: () => const SizedBox(
@@ -3338,6 +3359,16 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
     required NumberFormat currency,
   }) {
     final statusColor = record.isClosed ? PosColors.success : PosColors.warning;
+    final basisLabel = record.isClosed
+        ? context.l10n.reportsClosingSnapshot
+        : context.l10n.reportsClosingLiveLedger;
+    final ledgerAsOf = record.ledgerAsOf == null
+        ? null
+        : context.l10n.reportsClosingLedgerAsOf(
+            DateFormat(
+              'yyyy-MM-dd HH:mm',
+            ).format(TimeUtils.toVietnam(record.ledgerAsOf!)),
+          );
 
     return Container(
       key: ValueKey('daily_closing_card_${record.closingDate}'),
@@ -3387,6 +3418,27 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          PosExceptionAlert(
+            key: ValueKey('daily_closing_basis_${record.closingDate}'),
+            label: basisLabel,
+            detail: ledgerAsOf ?? context.l10n.reportsClosingPosScopeSubtitle,
+            color: record.isClosed ? PosColors.info : PosColors.success,
+            icon: record.isClosed
+                ? Icons.inventory_2_outlined
+                : Icons.sync_outlined,
+          ),
+          if (record.isClosed && record.reconciliationDelta != 0) ...[
+            const SizedBox(height: 8),
+            PosExceptionAlert(
+              key: ValueKey(
+                'daily_closing_reconciliation_warning_${record.closingDate}',
+              ),
+              label: context.l10n.reportsClosingLateLedgerWarning,
+              color: PosColors.warning,
+              icon: Icons.difference_outlined,
+            ),
+          ],
           const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -3424,9 +3476,29 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
                       title: context.l10n.reportsRevenue,
                       metrics: [
                         _DailyClosingMetric(
-                          label: context.l10n.reportsRevenue,
+                          label: basisLabel,
                           value: _formatVnd(currency, record.paymentsTotal),
                         ),
+                        if (record.isClosed)
+                          _DailyClosingMetric(
+                            label: context.l10n.reportsClosingCurrentLedger,
+                            value: _formatVnd(
+                              currency,
+                              record.ledgerPaymentsTotal,
+                            ),
+                          ),
+                        if (record.isClosed)
+                          _DailyClosingMetric(
+                            label:
+                                context.l10n.reportsClosingReconciliationDelta,
+                            value: _formatVnd(
+                              currency,
+                              record.reconciliationDelta,
+                            ),
+                            valueColor: record.reconciliationDelta == 0
+                                ? PosColors.success
+                                : PosColors.warning,
+                          ),
                         _DailyClosingMetric(
                           label: context.l10n.reportsCash,
                           value: _formatVnd(currency, record.paymentsCash),
@@ -3519,7 +3591,7 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
           _hCell(context.l10n.reportsOrder),
           _hCell(context.l10n.reportsDone),
           _hCell(context.l10n.reportsCancel),
-          _hCell(context.l10n.reportsRevenue),
+          _hCell(context.l10n.reportsClosingBasisSales),
           _hCell(context.l10n.reportsCash),
           _hCell(context.l10n.reportsPay),
           _hCell(context.l10n.reportsCard),
@@ -3528,6 +3600,7 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
           _hCell(context.l10n.reportsCashVariance),
           _hCell(context.l10n.reportsCashFloat),
           _hCell(context.l10n.reportsDepositTotal),
+          _hCell(context.l10n.reportsClosingReconciliationDelta),
           _hCell(context.l10n.reportsAssignee),
           _hCell(context.l10n.reportsClosingStatus, flex: 2),
         ],
@@ -3563,6 +3636,11 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
           _dCell(_formatVnd(currency, record.cashVariance)),
           _dCell(_formatVnd(currency, record.openingCashAmount)),
           _dCell(_formatVnd(currency, record.depositTotal)),
+          _dCell(
+            record.isClosed
+                ? _formatVnd(currency, record.reconciliationDelta)
+                : '-',
+          ),
           _dCell(record.closedByName, overflow: true),
           Expanded(
             flex: 2,
@@ -3653,7 +3731,7 @@ class _DailyClosingMetricGroup extends StatelessWidget {
             builder: (context, constraints) {
               final singleColumn =
                   constraints.maxWidth < 300 ||
-                  MediaQuery.textScalerOf(context).scale(1) > 1.3;
+                  PosLayoutSpec.from(context, constraints).usesLargeText;
               final metricWidth = singleColumn
                   ? constraints.maxWidth
                   : (constraints.maxWidth - 8) / 2;

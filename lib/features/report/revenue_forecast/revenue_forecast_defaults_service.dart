@@ -5,16 +5,77 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/floor_label.dart';
 import 'revenue_forecast_engine.dart';
 
+enum RevenueForecastInputField {
+  floorLabel,
+  tableCount,
+  floorServiceRate,
+  firstServeMinutes,
+  diningMinutes,
+  paymentWaitMinutes,
+  cleanupMinutes,
+  kitchenRate,
+  checkerRate,
+  operatingMinutes,
+  averageTicket,
+}
+
+enum RevenueForecastInputSource {
+  selectedPeriodAverage,
+  registeredConfiguration,
+  savedProfile,
+  manualAssumption,
+  unavailable,
+}
+
+class RevenueForecastInputEvidence {
+  const RevenueForecastInputEvidence({
+    required this.source,
+    this.sampleCount = 0,
+    this.observedDays = 0,
+    this.isProxy = false,
+  });
+
+  final RevenueForecastInputSource source;
+  final int sampleCount;
+  final int observedDays;
+  final bool isProxy;
+
+  Map<String, dynamic> toJson() => {
+    'source': source.name,
+    'sample_count': sampleCount,
+    'observed_days': observedDays,
+    'is_proxy': isProxy,
+  };
+}
+
 class RevenueForecastOperationalDefaults {
   const RevenueForecastOperationalDefaults({
     required this.profile,
     required this.usesMeasuredOperations,
     required this.usesFallbackAssumptions,
+    this.evidence = const {},
+    this.periodStart,
+    this.periodEnd,
   });
 
   final RestaurantForecastProfile profile;
   final bool usesMeasuredOperations;
+  // Kept for serialized/test compatibility. New defaults never inject fallback
+  // numbers: unavailable inputs stay blank until a manager enters a value.
   final bool usesFallbackAssumptions;
+  final Map<RevenueForecastInputField, RevenueForecastInputEvidence> evidence;
+  final DateTime? periodStart;
+  final DateTime? periodEnd;
+
+  bool get hasUnavailableInputs => evidence.values.any(
+    (item) => item.source == RevenueForecastInputSource.unavailable,
+  );
+
+  RevenueForecastInputEvidence evidenceFor(RevenueForecastInputField field) =>
+      evidence[field] ??
+      const RevenueForecastInputEvidence(
+        source: RevenueForecastInputSource.unavailable,
+      );
 }
 
 abstract interface class RevenueForecastDefaultsRepository {
@@ -43,28 +104,56 @@ class RevenueForecastDefaultsService
     if (tables.isEmpty) return null;
 
     Map<String, dynamic> operations = const {};
-    try {
-      final range = _reportUtcRange(trainingStart, trainingEnd);
-      final response = await _client.rpc(
-        'get_paperless_operations_insights_report',
-        params: {
+    final periodStart = _dateOnly(trainingStart);
+    final requestedEnd = _dateOnly(trainingEnd);
+    final lastCompletedDay = _lastCompletedHoChiMinhDay();
+    final periodEnd = requestedEnd.isBefore(lastCompletedDay)
+        ? requestedEnd
+        : lastCompletedDay;
+    if (!periodEnd.isBefore(periodStart)) {
+      try {
+        final range = _reportUtcRange(periodStart, periodEnd);
+        final params = {
           'p_store_id': storeId,
           'p_from': range.startUtc.toIso8601String(),
           'p_to': range.endExclusiveUtc.toIso8601String(),
-        },
-      );
-      if (response is Map) {
-        operations = Map<String, dynamic>.from(response);
+        };
+        dynamic response;
+        try {
+          response = await _client.rpc(
+            'get_revenue_forecast_operating_averages',
+            params: params,
+          );
+        } catch (_) {
+          // Supports a rolling deployment. The legacy report has the same
+          // authorization boundary; fields it cannot measure remain unavailable.
+          response = await _client.rpc(
+            'get_paperless_operations_insights_report',
+            params: params,
+          );
+        }
+        if (response is Map) {
+          operations = Map<String, dynamic>.from(response);
+        }
+      } catch (_) {
+        // Registered table configuration is still useful. We deliberately do
+        // not replace missing measurements with invented constants.
       }
-    } catch (_) {
-      // Table configuration is still authoritative and useful when a store
-      // has no paperless timing samples or the optional analytics RPC fails.
     }
+
+    final completedObservations = observations
+        .where((row) {
+          final date = _dateOnly(row.date);
+          return !date.isBefore(periodStart) && !date.isAfter(periodEnd);
+        })
+        .toList(growable: false);
 
     return deriveRestaurantForecastDefaults(
       tables: tables,
       operations: operations,
-      observations: observations,
+      observations: completedObservations,
+      periodStart: periodStart,
+      periodEnd: periodEnd,
     );
   }
 
@@ -97,6 +186,8 @@ RevenueForecastOperationalDefaults? deriveRestaurantForecastDefaults({
   required List<Map<String, dynamic>> tables,
   required Map<String, dynamic> operations,
   required List<RevenueForecastObservation> observations,
+  DateTime? periodStart,
+  DateTime? periodEnd,
 }) {
   final tableCounts = <String, int>{};
   for (final table in tables) {
@@ -114,43 +205,40 @@ RevenueForecastOperationalDefaults? deriveRestaurantForecastDefaults({
   );
 
   final measuredFirstServeSeconds = _positiveNumber(
-    operations['average_operation_seconds'] ??
-        operations['average_total_seconds'],
+    operations['average_first_serve_seconds'],
   );
   final measuredDiningSeconds = _positiveNumber(
     operations['average_dining_seconds'],
   );
   final firstServeMinutes = measuredFirstServeSeconds == null
-      ? 15.0
-      : (measuredFirstServeSeconds / 60).clamp(1, 180).toDouble();
+      ? 0.0
+      : _roundTwoDecimals(measuredFirstServeSeconds / 60);
   final diningMinutes = measuredDiningSeconds == null
-      ? 60.0
-      : (measuredDiningSeconds / 60).clamp(10, 240).toDouble();
-  const paymentWaitMinutes = 5.0;
-  const cleanupMinutes = 10.0;
-  final tableCycleMinutes =
-      firstServeMinutes + diningMinutes + paymentWaitMinutes + cleanupMinutes;
+      ? 0.0
+      : _roundTwoDecimals(measuredDiningSeconds / 60);
+  const paymentWaitMinutes = 0.0;
+  const cleanupMinutes = 0.0;
 
-  final hourlyRows = _maps(operations['hourly_orders']);
-  final peakOrders = hourlyRows.fold<double>(
+  final forecastHourlyRows = _maps(operations['forecast_hourly_orders']);
+  final hourlyRows = forecastHourlyRows.isNotEmpty
+      ? forecastHourlyRows
+      : _maps(operations['hourly_orders']);
+  final activeHourlyRows = hourlyRows
+      .where((row) => _number(row['order_count']) > 0)
+      .toList(growable: false);
+  final totalCompleted = activeHourlyRows.fold<double>(
     0,
-    (peak, row) => math.max(peak, _number(row['order_count'])),
+    (sum, row) => sum + math.max(0, _number(row['completed_count'])),
   );
-  final peakCompleted = hourlyRows.fold<double>(
-    0,
-    (peak, row) => math.max(peak, _number(row['completed_count'])),
-  );
-  final operatingMinutes = _operatingMinutes(hourlyRows) ?? 720;
-  final neutralHourlyCapacity = totalTables * 60 / tableCycleMinutes;
-  final kitchenRate = peakOrders > 0
-      ? math.max(1.0, peakOrders * 1.15)
-      : math.max(1.0, neutralHourlyCapacity);
-  final checkerRate = peakCompleted > 0
-      ? math.max(1.0, peakCompleted * 1.15)
-      : math.max(1.0, neutralHourlyCapacity);
-  final floorTotalRate = peakCompleted > 0
-      ? math.max(1.0, peakCompleted * 1.15)
-      : math.max(1.0, neutralHourlyCapacity);
+  final kitchenRate = activeHourlyRows.isEmpty || totalCompleted <= 0
+      ? 0.0
+      : _roundTwoDecimals(totalCompleted / activeHourlyRows.length);
+  final checkerRate = activeHourlyRows.isEmpty || totalCompleted <= 0
+      ? 0.0
+      : _roundTwoDecimals(totalCompleted / activeHourlyRows.length);
+  final floorTotalRate = checkerRate;
+  final operatingStats = _averageOperatingMinutes(activeHourlyRows);
+  final operatingMinutes = operatingStats?.minutes ?? 0;
 
   final floors = <RestaurantFloorCapacity>[
     for (final label in floorLabels)
@@ -158,7 +246,7 @@ RevenueForecastOperationalDefaults? deriveRestaurantForecastDefaults({
         label: displayFloorLabel(label),
         tableCount: tableCounts[label]!,
         serviceUnitsPerHour: math.max(
-          0.1,
+          0,
           floorTotalRate * tableCounts[label]! / totalTables,
         ),
       ),
@@ -169,35 +257,103 @@ RevenueForecastOperationalDefaults? deriveRestaurantForecastDefaults({
       if (row.revenueVnd > 0 || row.dineInRevenueVnd > 0) row.date.weekday,
   };
   if (operatingWeekdays.isEmpty) {
-    operatingWeekdays.addAll(const {1, 2, 3, 4, 5, 6, 7});
+    operatingWeekdays.addAll(_weekdaysFromHourlyRows(activeHourlyRows));
   }
 
-  final observedUnits = observations.fold<double>(
-    0,
-    (sum, row) => sum + ((row.units ?? 0) > 0 ? row.units! : 0),
+  final ticketRows = observations.where(
+    (row) =>
+        (row.units ?? 0) > 0 &&
+        row.dineInRevenueVnd.isFinite &&
+        row.dineInRevenueVnd > 0,
   );
-  final dineInRevenue = observations.fold<double>(
+  final observedUnits = ticketRows.fold<double>(
     0,
-    (sum, row) => sum + math.max(0, row.dineInRevenueVnd),
+    (sum, row) => sum + row.units!,
   );
-  final totalRevenue = observations.fold<double>(
+  final dineInRevenue = ticketRows.fold<double>(
     0,
-    (sum, row) => sum + math.max(0, row.revenueVnd),
+    (sum, row) => sum + row.dineInRevenueVnd,
   );
-  final operationOrderCount = _positiveNumber(operations['order_count']);
   final averageTicket = observedUnits > 0 && dineInRevenue > 0
       ? dineInRevenue / observedUnits
-      : operationOrderCount != null && totalRevenue > 0
-      ? totalRevenue / operationOrderCount
-      : 250000.0;
+      : 0.0;
 
-  final usesMeasuredOperations =
-      measuredFirstServeSeconds != null ||
-      measuredDiningSeconds != null ||
-      hourlyRows.isNotEmpty;
-  // Payment wait and cleanup do not yet have dedicated event timestamps, so
-  // every generated profile includes at least those conservative assumptions.
-  const usesFallbackAssumptions = true;
+  final firstServeSamples = _nonNegativeInt(
+    operations['first_serve_sample_count'],
+  );
+  final diningSamples = _nonNegativeInt(operations['dining_order_count']);
+  final evidence = <RevenueForecastInputField, RevenueForecastInputEvidence>{
+    RevenueForecastInputField.floorLabel: const RevenueForecastInputEvidence(
+      source: RevenueForecastInputSource.registeredConfiguration,
+    ),
+    RevenueForecastInputField.tableCount: const RevenueForecastInputEvidence(
+      source: RevenueForecastInputSource.registeredConfiguration,
+    ),
+    RevenueForecastInputField.floorServiceRate: RevenueForecastInputEvidence(
+      source: checkerRate > 0
+          ? RevenueForecastInputSource.selectedPeriodAverage
+          : RevenueForecastInputSource.unavailable,
+      sampleCount: totalCompleted.round(),
+      observedDays: operatingStats?.dayCount ?? 0,
+    ),
+    RevenueForecastInputField.firstServeMinutes: RevenueForecastInputEvidence(
+      source: measuredFirstServeSeconds != null && firstServeSamples > 0
+          ? RevenueForecastInputSource.selectedPeriodAverage
+          : RevenueForecastInputSource.unavailable,
+      sampleCount: firstServeSamples,
+      observedDays: operatingStats?.dayCount ?? 0,
+      isProxy: measuredFirstServeSeconds != null && firstServeSamples > 0,
+    ),
+    RevenueForecastInputField.diningMinutes: RevenueForecastInputEvidence(
+      source: measuredDiningSeconds != null && diningSamples > 0
+          ? RevenueForecastInputSource.selectedPeriodAverage
+          : RevenueForecastInputSource.unavailable,
+      sampleCount: diningSamples,
+      observedDays: operatingStats?.dayCount ?? 0,
+    ),
+    RevenueForecastInputField.paymentWaitMinutes:
+        const RevenueForecastInputEvidence(
+          source: RevenueForecastInputSource.unavailable,
+        ),
+    RevenueForecastInputField.cleanupMinutes:
+        const RevenueForecastInputEvidence(
+          source: RevenueForecastInputSource.unavailable,
+        ),
+    RevenueForecastInputField.kitchenRate: RevenueForecastInputEvidence(
+      source: kitchenRate > 0
+          ? RevenueForecastInputSource.selectedPeriodAverage
+          : RevenueForecastInputSource.unavailable,
+      sampleCount: totalCompleted.round(),
+      observedDays: operatingStats?.dayCount ?? 0,
+      isProxy: kitchenRate > 0,
+    ),
+    RevenueForecastInputField.checkerRate: RevenueForecastInputEvidence(
+      source: checkerRate > 0
+          ? RevenueForecastInputSource.selectedPeriodAverage
+          : RevenueForecastInputSource.unavailable,
+      sampleCount: totalCompleted.round(),
+      observedDays: operatingStats?.dayCount ?? 0,
+      isProxy: checkerRate > 0,
+    ),
+    RevenueForecastInputField.operatingMinutes: RevenueForecastInputEvidence(
+      source: operatingStats == null
+          ? RevenueForecastInputSource.unavailable
+          : RevenueForecastInputSource.selectedPeriodAverage,
+      observedDays: operatingStats?.dayCount ?? 0,
+      isProxy: operatingStats != null,
+    ),
+    RevenueForecastInputField.averageTicket: RevenueForecastInputEvidence(
+      source: averageTicket > 0
+          ? RevenueForecastInputSource.selectedPeriodAverage
+          : RevenueForecastInputSource.unavailable,
+      sampleCount: ticketRows.length,
+      observedDays: ticketRows.length,
+    ),
+  };
+
+  final usesMeasuredOperations = evidence.values.any(
+    (item) => item.source == RevenueForecastInputSource.selectedPeriodAverage,
+  );
 
   return RevenueForecastOperationalDefaults(
     profile: RestaurantForecastProfile(
@@ -213,8 +369,23 @@ RevenueForecastOperationalDefaults? deriveRestaurantForecastDefaults({
       averageTicketVnd: _roundVnd(averageTicket),
     ),
     usesMeasuredOperations: usesMeasuredOperations,
-    usesFallbackAssumptions: usesFallbackAssumptions,
+    usesFallbackAssumptions: false,
+    evidence: Map.unmodifiable(evidence),
+    periodStart: periodStart,
+    periodEnd: periodEnd,
   );
+}
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime.utc(value.year, value.month, value.day);
+
+DateTime _lastCompletedHoChiMinhDay() {
+  final localNow = DateTime.now().toUtc().add(const Duration(hours: 7));
+  return DateTime.utc(
+    localNow.year,
+    localNow.month,
+    localNow.day,
+  ).subtract(const Duration(days: 1));
 }
 
 ({DateTime startUtc, DateTime endExclusiveUtc}) _reportUtcRange(
@@ -232,7 +403,9 @@ RevenueForecastOperationalDefaults? deriveRestaurantForecastDefaults({
   );
 }
 
-int? _operatingMinutes(List<Map<String, dynamic>> hourlyRows) {
+({int minutes, int dayCount})? _averageOperatingMinutes(
+  List<Map<String, dynamic>> hourlyRows,
+) {
   final hoursByDay = <String, List<int>>{};
   final hourPattern = RegExp(r'^(\d{4}-\d{2}-\d{2})T(\d{2})');
   for (final row in hourlyRows) {
@@ -243,13 +416,30 @@ int? _operatingMinutes(List<Map<String, dynamic>> hourlyRows) {
     hoursByDay.putIfAbsent(match.group(1)!, () => <int>[]).add(hour);
   }
   if (hoursByDay.isEmpty) return null;
-  var longest = 0;
+  var totalMinutes = 0;
   for (final hours in hoursByDay.values) {
     final first = hours.reduce(math.min);
     final last = hours.reduce(math.max);
-    longest = math.max(longest, (last - first + 1) * 60);
+    totalMinutes += (last - first + 1) * 60;
   }
-  return longest.clamp(360, 960);
+  return (
+    minutes: (totalMinutes / hoursByDay.length).round().clamp(60, 1440).toInt(),
+    dayCount: hoursByDay.length,
+  );
+}
+
+Set<int> _weekdaysFromHourlyRows(List<Map<String, dynamic>> hourlyRows) {
+  final weekdays = <int>{};
+  final datePattern = RegExp(r'^(\d{4})-(\d{2})-(\d{2})T');
+  for (final row in hourlyRows) {
+    final match = datePattern.firstMatch(row['hour']?.toString() ?? '');
+    if (match == null) continue;
+    final date = DateTime.tryParse(
+      '${match.group(1)}-${match.group(2)}-${match.group(3)}',
+    );
+    if (date != null) weekdays.add(date.weekday);
+  }
+  return weekdays;
 }
 
 int _compareFloorLabels(String left, String right) {
@@ -285,6 +475,10 @@ double? _positiveNumber(dynamic value) {
 }
 
 double _roundVnd(double value) {
-  if (!value.isFinite || value <= 0) return 250000;
+  if (!value.isFinite || value <= 0) return 0;
   return (value / 1000).round() * 1000.0;
 }
+
+double _roundTwoDecimals(double value) => (value * 100).round() / 100;
+
+int _nonNegativeInt(dynamic value) => math.max(0, _number(value).round());

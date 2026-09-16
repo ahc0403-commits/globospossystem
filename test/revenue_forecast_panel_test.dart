@@ -80,6 +80,37 @@ class _MemoryDefaultsRepository implements RevenueForecastDefaultsRepository {
   }) async => defaults;
 }
 
+RevenueForecastOperationalDefaults _periodDefaults(
+  RestaurantForecastProfile profile, {
+  Set<RevenueForecastInputField> unavailable = const {
+    RevenueForecastInputField.paymentWaitMinutes,
+    RevenueForecastInputField.cleanupMinutes,
+  },
+}) => RevenueForecastOperationalDefaults(
+  profile: profile,
+  usesMeasuredOperations: true,
+  usesFallbackAssumptions: false,
+  periodStart: DateTime.utc(2026, 7, 1),
+  periodEnd: DateTime.utc(2026, 8, 4),
+  evidence: {
+    for (final field in RevenueForecastInputField.values)
+      field: RevenueForecastInputEvidence(
+        source:
+            field == RevenueForecastInputField.floorLabel ||
+                field == RevenueForecastInputField.tableCount
+            ? RevenueForecastInputSource.registeredConfiguration
+            : unavailable.contains(field)
+            ? RevenueForecastInputSource.unavailable
+            : RevenueForecastInputSource.selectedPeriodAverage,
+        sampleCount: unavailable.contains(field) ? 0 : 30,
+        observedDays: unavailable.contains(field) ? 0 : 20,
+        isProxy:
+            field == RevenueForecastInputField.firstServeMinutes ||
+            field == RevenueForecastInputField.operatingMinutes,
+      ),
+  },
+);
+
 class _LocaleSwitchHost extends StatefulWidget {
   const _LocaleSwitchHost({required this.repository});
 
@@ -227,8 +258,8 @@ void main() {
       ],
       seatedToFirstServeMinutes: 12,
       diningMinutes: 48,
-      paymentWaitMinutes: 5,
-      cleanupMinutes: 10,
+      paymentWaitMinutes: 0,
+      cleanupMinutes: 0,
       kitchenUnitsPerHour: 32,
       checkerUnitsPerHour: 30,
       operatingMinutesPerDay: 720,
@@ -241,11 +272,7 @@ void main() {
       locale: const Locale('ko'),
       width: 1024,
       defaultsRepository: _MemoryDefaultsRepository(
-        const RevenueForecastOperationalDefaults(
-          profile: defaultProfile,
-          usesMeasuredOperations: true,
-          usesFallbackAssumptions: true,
-        ),
+        _periodDefaults(defaultProfile),
       ),
     );
 
@@ -253,7 +280,7 @@ void main() {
       find.byKey(const Key('revenue_forecast_defaults_applied')),
       findsOneWidget,
     );
-    expect(find.textContaining('층·테이블 수를 자동 적용'), findsOneWidget);
+    expect(find.textContaining('측정 가능한 평균만 적용'), findsOneWidget);
     final fields = find.byType(TextField);
     expect(fields, findsNWidgets(14));
     expect(tester.widget<TextField>(fields.at(0)).controller!.text, 'G');
@@ -261,76 +288,96 @@ void main() {
     expect(tester.widget<TextField>(fields.at(3)).controller!.text, '1F');
     expect(tester.widget<TextField>(fields.at(4)).controller!.text, '9');
     expect(tester.widget<TextField>(fields.at(6)).controller!.text, '12');
+    expect(tester.widget<TextField>(fields.at(8)).controller!.text, isEmpty);
+    expect(tester.widget<TextField>(fields.at(9)).controller!.text, isEmpty);
     expect(tester.widget<TextField>(fields.at(13)).controller!.text, '285000');
+    expect(find.textContaining('직접 입력 필요'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('saved profile takes precedence over operational defaults', (
-    tester,
-  ) async {
-    const savedProfile = RestaurantForecastProfile(
-      floors: [
-        RestaurantFloorCapacity(
-          label: 'Saved floor',
-          tableCount: 7,
-          serviceUnitsPerHour: 11,
-        ),
-      ],
-      seatedToFirstServeMinutes: 9,
-      diningMinutes: 50,
-      paymentWaitMinutes: 4,
-      cleanupMinutes: 8,
-      kitchenUnitsPerHour: 20,
-      checkerUnitsPerHour: 18,
-      operatingMinutesPerDay: 660,
-      operatingWeekdays: {1, 2, 3, 4, 5, 6, 7},
-      averageTicketVnd: 275000,
-    );
-    final profileRepository = _MemoryProfileRepository()
-      ..snapshot = RevenueForecastProfileSnapshot(
-        storeId: '00000000-0000-0000-0000-000000000001',
-        revision: 3,
-        businessType: ForecastBusinessType.restaurant,
-        settings: restaurantProfileToJson(savedProfile),
-        effectiveFrom: DateTime.utc(2026, 9, 1),
-      );
-    await _pumpPanel(
-      tester,
-      type: ForecastBusinessType.restaurant,
-      locale: const Locale('en'),
-      width: 1024,
-      profileRepository: profileRepository,
-      defaultsRepository: _MemoryDefaultsRepository(
-        RevenueForecastOperationalDefaults(
-          profile: savedProfile.copyWith(
-            floors: const [
-              RestaurantFloorCapacity(
-                label: 'Generated floor',
-                tableCount: 99,
-                serviceUnitsPerHour: 99,
-              ),
-            ],
+  testWidgets(
+    'period averages load first and saved settings require a choice',
+    (tester) async {
+      const savedProfile = RestaurantForecastProfile(
+        floors: [
+          RestaurantFloorCapacity(
+            label: 'Saved floor',
+            tableCount: 7,
+            serviceUnitsPerHour: 11,
           ),
-          usesMeasuredOperations: true,
-          usesFallbackAssumptions: true,
+        ],
+        seatedToFirstServeMinutes: 9,
+        diningMinutes: 50,
+        paymentWaitMinutes: 4,
+        cleanupMinutes: 8,
+        kitchenUnitsPerHour: 20,
+        checkerUnitsPerHour: 18,
+        operatingMinutesPerDay: 660,
+        operatingWeekdays: {1, 2, 3, 4, 5, 6, 7},
+        averageTicketVnd: 275000,
+      );
+      final profileRepository = _MemoryProfileRepository()
+        ..snapshot = RevenueForecastProfileSnapshot(
+          storeId: '00000000-0000-0000-0000-000000000001',
+          revision: 3,
+          businessType: ForecastBusinessType.restaurant,
+          settings: restaurantProfileToJson(savedProfile),
+          effectiveFrom: DateTime.utc(2026, 9, 1),
+        );
+      await _pumpPanel(
+        tester,
+        type: ForecastBusinessType.restaurant,
+        locale: const Locale('en'),
+        width: 1024,
+        profileRepository: profileRepository,
+        defaultsRepository: _MemoryDefaultsRepository(
+          _periodDefaults(
+            savedProfile.copyWith(
+              floors: const [
+                RestaurantFloorCapacity(
+                  label: 'Generated floor',
+                  tableCount: 99,
+                  serviceUnitsPerHour: 99,
+                ),
+              ],
+            ),
+            unavailable: const {},
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Revision 3'), findsOneWidget);
-    expect(
-      find.byKey(const Key('revenue_forecast_defaults_applied')),
-      findsNothing,
-    );
-    final fields = find.byType(TextField);
-    expect(fields, findsNWidgets(11));
-    expect(
-      tester.widget<TextField>(fields.first).controller!.text,
-      'Saved floor',
-    );
-    expect(tester.widget<TextField>(fields.at(1)).controller!.text, '7');
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.text('Revision 3'), findsOneWidget);
+      expect(
+        find.byKey(const Key('revenue_forecast_defaults_applied')),
+        findsOneWidget,
+      );
+      final fields = find.byType(TextField);
+      expect(fields, findsNWidgets(11));
+      expect(
+        tester.widget<TextField>(fields.first).controller!.text,
+        'Generated floor',
+      );
+      expect(tester.widget<TextField>(fields.at(1)).controller!.text, '99');
+
+      final applySaved = find.byKey(
+        const Key('revenue_forecast_apply_saved_profile'),
+      );
+      await tester.ensureVisible(applySaved);
+      await tester.tap(applySaved);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Saved floor',
+      );
+      expect(
+        find.byKey(const Key('revenue_forecast_apply_period_average')),
+        findsOneWidget,
+      );
+      expect(tester.widget<TextField>(fields.at(1)).controller!.text, '7');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'restaurant forecast calculates and shows six improvement areas',
