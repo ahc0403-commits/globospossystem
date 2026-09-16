@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/i18n/menu_localization.dart';
 import '../../core/models/fulfillment_mode.dart';
@@ -103,7 +104,9 @@ class CashierFulfillmentProgress {
     required this.nameEn,
     required this.orderedQuantity,
     required this.floorServedQuantity,
-  });
+    this.excusedQuantity = 0,
+    int? requiredQuantity,
+  }) : requiredQuantity = requiredQuantity ?? orderedQuantity;
 
   final String fulfillmentItemId;
   final String orderItemId;
@@ -115,8 +118,12 @@ class CashierFulfillmentProgress {
   final String nameEn;
   final int orderedQuantity;
   final int floorServedQuantity;
+  final int excusedQuantity;
+  final int requiredQuantity;
 
-  bool get isComplete => floorServedQuantity >= orderedQuantity;
+  int get unservedQuantity =>
+      (requiredQuantity - floorServedQuantity).clamp(0, requiredQuantity);
+  bool get isComplete => floorServedQuantity >= requiredQuantity;
 
   String localizedName(String languageCode) => localizedMenuName({
     'name': _firstRegisteredMenuName(nameKo, nameVi, nameEn),
@@ -138,6 +145,10 @@ class CashierFulfillmentProgress {
         nameEn: json['name_en']?.toString() ?? '',
         orderedQuantity: _toIntValue(json['ordered_quantity']),
         floorServedQuantity: _toIntValue(json['floor_served_quantity']),
+        excusedQuantity: _toIntValue(json['excused_quantity']),
+        requiredQuantity: json['required_quantity'] == null
+            ? null
+            : _toIntValue(json['required_quantity']),
       );
 }
 
@@ -1403,6 +1414,33 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         error: _mapPaymentError(error, 'Failed to cancel order item'),
       );
       return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> cancelUnservedOrderItem({
+    required String itemId,
+    required String storeId,
+    required int quantity,
+    required String reason,
+  }) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      final result = await orderService.cancelUnservedOrderItem(
+        itemId: itemId,
+        storeId: storeId,
+        quantity: quantity,
+        reason: reason,
+        requestId: const Uuid().v4(),
+      );
+      await loadOrders(storeId);
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return result;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to cancel unserved item'),
+      );
+      return null;
     }
   }
 

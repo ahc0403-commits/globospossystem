@@ -13,7 +13,7 @@ const _frozenFiles = <String, String>{
   // 2026-09-15: locale-aware menu/search rendering and compact translated layout.
   // menu_language_switch_test + routed/overlay operational suites cover behavior.
   'lib/features/cashier/cashier_screen.dart':
-      'ccc8309241d2ca29d38fe4b4c7e5f62b5c501b5508eb63cb765801ad5bdb34d1',
+      'bf5a1e1f781b2e6c8eb55d9516d5c8373fb9b0819dc0b5717b72a807e0b90993',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.

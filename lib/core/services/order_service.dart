@@ -203,6 +203,26 @@ class OrderService {
     );
   }
 
+  Future<Map<String, dynamic>> cancelUnservedOrderItem({
+    required String itemId,
+    required String storeId,
+    required int quantity,
+    required String reason,
+    required String requestId,
+  }) async {
+    final result = await supabase.rpc(
+      'cashier_cancel_unserved_v1',
+      params: {
+        'p_item_id': itemId,
+        'p_store_id': storeId,
+        'p_quantity': quantity,
+        'p_reason': reason,
+        'p_request_id': requestId,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<Map<String, dynamic>> restoreCancelledOrder({
     required String orderId,
     required String storeId,

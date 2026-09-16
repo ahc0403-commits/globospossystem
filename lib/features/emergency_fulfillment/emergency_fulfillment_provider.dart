@@ -199,6 +199,10 @@ class EmergencyFulfillmentItem {
     required this.trayDispatchedQuantity,
     required this.floorServedQuantity,
     required this.needsReview,
+    this.kitchenStartedQuantity = 0,
+    this.excusedQuantity = 0,
+    this.workflowVersion = 1,
+    this.oldestReadySequence,
     this.fulfillmentRoute = 'kitchen_tray_floor',
     this.lineKey = 'base',
     this.sourceKind = 'order_item',
@@ -219,11 +223,15 @@ class EmergencyFulfillmentItem {
   final String nameVi;
   final String nameEn;
   final int orderedQuantity;
+  final int kitchenStartedQuantity;
   final int kitchenDoneQuantity;
   final int trayReceivedQuantity;
   final int trayDispatchedQuantity;
   final int floorServedQuantity;
+  final int excusedQuantity;
   final bool needsReview;
+  final int workflowVersion;
+  final int? oldestReadySequence;
   final String fulfillmentRoute;
   final String lineKey;
   final String sourceKind;
@@ -238,6 +246,11 @@ class EmergencyFulfillmentItem {
   final DateTime? floorLastServedAt;
 
   bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
+  bool get usesStartReadyWorkflow => workflowVersion >= 2 && !isFloorDirect;
+  int get requiredQuantity =>
+      (orderedQuantity - excusedQuantity).clamp(0, orderedQuantity);
+  int get readyUnservedQuantity =>
+      (trayDispatchedQuantity - floorServedQuantity).clamp(0, requiredQuantity);
   String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
 
   DateTime? stationStartedAt(String stationType) => switch (stationType) {
@@ -255,19 +268,29 @@ class EmergencyFulfillmentItem {
   };
 
   bool isActionableAt(String stationType) => switch (stationType) {
-    'kitchen' => !isFloorDirect && kitchenDoneQuantity < orderedQuantity,
+    'kitchen' =>
+      !isFloorDirect &&
+          (usesStartReadyWorkflow
+              ? kitchenStartedQuantity < requiredQuantity
+              : kitchenDoneQuantity < requiredQuantity),
     'tray' =>
       !isFloorDirect &&
-          (trayReceivedQuantity < kitchenDoneQuantity ||
-              trayDispatchedQuantity < kitchenDoneQuantity),
+          (usesStartReadyWorkflow
+              ? kitchenDoneQuantity < kitchenStartedQuantity
+              : trayReceivedQuantity < kitchenDoneQuantity ||
+                    trayDispatchedQuantity < kitchenDoneQuantity),
     'floor' =>
       floorServedQuantity <
-          (isFloorDirect ? orderedQuantity : trayDispatchedQuantity),
+          (isFloorDirect ? requiredQuantity : trayDispatchedQuantity),
     _ => false,
   };
 
   bool isRevertibleAt(String stationType) => switch (stationType) {
-    'kitchen' => !isFloorDirect && kitchenDoneQuantity > trayReceivedQuantity,
+    'kitchen' =>
+      !isFloorDirect &&
+          (usesStartReadyWorkflow
+              ? kitchenStartedQuantity > kitchenDoneQuantity
+              : kitchenDoneQuantity > trayReceivedQuantity),
     'tray' =>
       !isFloorDirect &&
           trayDispatchedQuantity > floorServedQuantity &&
@@ -277,24 +300,28 @@ class EmergencyFulfillmentItem {
   };
 
   bool isCompletedAt(String stationType) => switch (stationType) {
-    'kitchen' => !isFloorDirect && kitchenDoneQuantity >= orderedQuantity,
+    'kitchen' => !isFloorDirect && kitchenDoneQuantity >= requiredQuantity,
     'tray' =>
       !isFloorDirect &&
-          trayReceivedQuantity >= orderedQuantity &&
-          trayDispatchedQuantity >= orderedQuantity,
-    'floor' => floorServedQuantity >= orderedQuantity,
+          trayReceivedQuantity >= requiredQuantity &&
+          trayDispatchedQuantity >= requiredQuantity,
+    'floor' => floorServedQuantity >= requiredQuantity,
     _ => false,
   };
 
   bool isDisplayCompletedAt(String stationType) => switch (stationType) {
-    'kitchen' => !isFloorDirect && kitchenDoneQuantity >= orderedQuantity,
+    'kitchen' =>
+      !isFloorDirect &&
+          (usesStartReadyWorkflow
+              ? kitchenStartedQuantity >= requiredQuantity
+              : kitchenDoneQuantity >= requiredQuantity),
     'tray' =>
       !isFloorDirect &&
           kitchenDoneQuantity > 0 &&
           trayReceivedQuantity >= kitchenDoneQuantity &&
           trayDispatchedQuantity >= kitchenDoneQuantity,
     'floor' => switch (isFloorDirect
-        ? orderedQuantity
+        ? requiredQuantity
         : trayDispatchedQuantity) {
       final limit when limit > 0 => floorServedQuantity >= limit,
       _ => false,
@@ -303,7 +330,11 @@ class EmergencyFulfillmentItem {
   };
 
   bool isReadyFromPreviousStageAt(String stationType) => switch (stationType) {
-    'tray' => !isFloorDirect && kitchenDoneQuantity > trayDispatchedQuantity,
+    'tray' =>
+      !isFloorDirect &&
+          (usesStartReadyWorkflow
+              ? kitchenStartedQuantity > kitchenDoneQuantity
+              : kitchenDoneQuantity > trayDispatchedQuantity),
     'floor' => !isFloorDirect && trayDispatchedQuantity > floorServedQuantity,
     _ => false,
   };
@@ -322,7 +353,9 @@ class EmergencyFulfillmentItem {
   }, languageCode);
 
   int quantityForStage(String stage) => switch (stage) {
+    'kitchen_started' => kitchenStartedQuantity,
     'kitchen_done' => kitchenDoneQuantity,
+    'tray_ready' => kitchenDoneQuantity,
     'tray_received' => trayReceivedQuantity,
     'tray_dispatched' => trayDispatchedQuantity,
     'floor_served' => floorServedQuantity,
@@ -360,19 +393,26 @@ class EmergencyFulfillmentItem {
         nameVi: nameVi,
         nameEn: nameEn,
         orderedQuantity: orderedQuantity,
-        kitchenDoneQuantity: stage == 'kitchen_done'
+        kitchenStartedQuantity: stage == 'kitchen_started'
+            ? quantity
+            : kitchenStartedQuantity,
+        kitchenDoneQuantity: stage == 'kitchen_done' || stage == 'tray_ready'
             ? quantity
             : kitchenDoneQuantity,
-        trayReceivedQuantity: stage == 'tray_received'
+        trayReceivedQuantity: stage == 'tray_received' || stage == 'tray_ready'
             ? quantity
             : trayReceivedQuantity,
-        trayDispatchedQuantity: stage == 'tray_dispatched'
+        trayDispatchedQuantity:
+            stage == 'tray_dispatched' || stage == 'tray_ready'
             ? quantity
             : trayDispatchedQuantity,
         floorServedQuantity: stage == 'floor_served'
             ? quantity
             : floorServedQuantity,
+        excusedQuantity: excusedQuantity,
         needsReview: needsReview,
+        workflowVersion: workflowVersion,
+        oldestReadySequence: oldestReadySequence,
         fulfillmentRoute: fulfillmentRoute,
         lineKey: lineKey,
         sourceKind: sourceKind,
@@ -396,11 +436,19 @@ class EmergencyFulfillmentItem {
       nameVi: json['name_vi']?.toString() ?? '',
       nameEn: json['name_en']?.toString() ?? '',
       orderedQuantity: _asInt(json['ordered_quantity']),
+      kitchenStartedQuantity: json.containsKey('kitchen_started_quantity')
+          ? _asInt(json['kitchen_started_quantity'])
+          : _asInt(json['kitchen_done_quantity']),
       kitchenDoneQuantity: _asInt(json['kitchen_done_quantity']),
       trayReceivedQuantity: _asInt(json['tray_received_quantity']),
       trayDispatchedQuantity: _asInt(json['tray_dispatched_quantity']),
       floorServedQuantity: _asInt(json['floor_served_quantity']),
+      excusedQuantity: _asInt(json['excused_quantity']),
       needsReview: json['needs_review'] == true,
+      workflowVersion: _asInt(json['workflow_version']).clamp(1, 2),
+      oldestReadySequence: json['oldest_ready_sequence'] == null
+          ? null
+          : _asInt(json['oldest_ready_sequence']),
       fulfillmentRoute:
           json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
       lineKey: json['line_key']?.toString() ?? 'base',
@@ -485,6 +533,8 @@ class EmergencyFulfillmentOrder {
     this.lastActionAt,
     this.stationStartedAt,
     this.stationCompletedAt,
+    this.workflowVersion = 1,
+    this.oldestReadySequence,
   });
 
   final String queueId;
@@ -499,8 +549,14 @@ class EmergencyFulfillmentOrder {
   final DateTime? lastActionAt;
   final DateTime? stationStartedAt;
   final DateTime? stationCompletedAt;
+  final int workflowVersion;
+  final int? oldestReadySequence;
 
   bool get isDelivery => salesChannel == 'delivery';
+  bool get usesStartReadyWorkflow => workflowVersion >= 2 && !isDelivery;
+  bool get hasReadyUnservedFood => _operationalItems().any(
+    (item) => !item.isFloorDirect && item.readyUnservedQuantity > 0,
+  );
 
   List<EmergencyFulfillmentItem> _operationalItems() {
     final componentBackedOrderItemIds = items
@@ -531,6 +587,7 @@ class EmergencyFulfillmentOrder {
     final visible = stationType == 'floor'
         ? operationalItems
         : operationalItems.where((item) => !item.isFloorDirect);
+    if (usesStartReadyWorkflow) return visible.toList(growable: false);
     final indexed = visible.indexed.toList(growable: false)
       ..sort((left, right) {
         final priority = left.$2
@@ -554,7 +611,9 @@ class EmergencyFulfillmentOrder {
 
   bool isRecentlyCompleteAt(String stationType) =>
       isCompleteAt(stationType) ||
-      (lastActionId != null && !hasActionableQuantity(stationType));
+      (!usesStartReadyWorkflow &&
+          lastActionId != null &&
+          !hasActionableQuantity(stationType));
 
   Duration stationElapsedAt(DateTime now, String stationType) {
     final startedAt =
@@ -572,15 +631,25 @@ class EmergencyFulfillmentOrder {
 
     (int, int) progressAt(EmergencyFulfillmentItem item) =>
         switch (stationType) {
-          'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
-          'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
+          'kitchen' => (
+            item.usesStartReadyWorkflow
+                ? item.kitchenStartedQuantity
+                : item.kitchenDoneQuantity,
+            item.requiredQuantity,
+          ),
+          'tray' => (
+            item.trayDispatchedQuantity,
+            item.usesStartReadyWorkflow
+                ? item.kitchenStartedQuantity
+                : item.kitchenDoneQuantity,
+          ),
           'floor' => (
             item.floorServedQuantity,
             item.isFloorDirect
-                ? item.orderedQuantity
+                ? item.requiredQuantity
                 : item.trayDispatchedQuantity,
           ),
-          _ => (0, item.orderedQuantity),
+          _ => (0, item.requiredQuantity),
         };
 
     final componentsByParentAndLine = <String, EmergencyFulfillmentItem>{
@@ -614,7 +683,7 @@ class EmergencyFulfillmentOrder {
             nameKo: item.nameKo,
             nameVi: item.nameVi,
             nameEn: item.nameEn,
-            quantity: item.orderedQuantity,
+            quantity: item.requiredQuantity,
             completed: item.isDisplayCompletedAt(stationType),
             readyFromPreviousStage: item.isReadyFromPreviousStageAt(
               stationType,
@@ -649,7 +718,7 @@ class EmergencyFulfillmentOrder {
             nameKo: component.nameKo,
             nameVi: component.nameVi,
             nameEn: component.nameEn,
-            quantity: component.displayQuantity(item.orderedQuantity),
+            quantity: component.displayQuantity(item.requiredQuantity),
             completed: statusItem.isDisplayCompletedAt(stationType),
             readyFromPreviousStage: statusItem.isReadyFromPreviousStageAt(
               stationType,
@@ -665,6 +734,7 @@ class EmergencyFulfillmentOrder {
         );
       }
     }
+    if (usesStartReadyWorkflow) return result;
     final indexed = result.indexed.toList(growable: false)
       ..sort((left, right) {
         int priority(EmergencyFulfillmentDisplayItem item) {
@@ -715,6 +785,9 @@ class EmergencyFulfillmentOrder {
     DateTime? stationCompletedAt,
     bool clearLastAction = false,
     bool clearStationCompletedAt = false,
+    int? workflowVersion,
+    int? oldestReadySequence,
+    bool clearOldestReadySequence = false,
   }) => EmergencyFulfillmentOrder(
     queueId: queueId,
     orderId: orderId,
@@ -730,6 +803,10 @@ class EmergencyFulfillmentOrder {
     stationCompletedAt: clearLastAction || clearStationCompletedAt
         ? null
         : (stationCompletedAt ?? this.stationCompletedAt),
+    workflowVersion: workflowVersion ?? this.workflowVersion,
+    oldestReadySequence: clearOldestReadySequence
+        ? null
+        : (oldestReadySequence ?? this.oldestReadySequence),
   );
 
   bool isCompleteForStage(String stage) {
@@ -737,9 +814,15 @@ class EmergencyFulfillmentOrder {
     return operationalItems.isNotEmpty &&
         operationalItems.every(
           (item) => stage == 'floor_served'
-              ? item.floorServedQuantity >= item.orderedQuantity
+              ? item.floorServedQuantity >= item.requiredQuantity
+              : stage == 'kitchen_started'
+              ? item.isFloorDirect ||
+                    item.kitchenStartedQuantity >= item.requiredQuantity
+              : stage == 'tray_ready'
+              ? item.isFloorDirect ||
+                    item.kitchenDoneQuantity >= item.requiredQuantity
               : item.isFloorDirect ||
-                    item.quantityForStage(stage) >= item.orderedQuantity,
+                    item.quantityForStage(stage) >= item.requiredQuantity,
         );
   }
 
@@ -763,6 +846,10 @@ class EmergencyFulfillmentOrder {
       stationCompletedAt: DateTime.tryParse(
         json['station_completed_at']?.toString() ?? '',
       ),
+      workflowVersion: _asInt(json['workflow_version']).clamp(1, 2),
+      oldestReadySequence: json['oldest_ready_sequence'] == null
+          ? null
+          : _asInt(json['oldest_ready_sequence']),
       items: rawItems is List
           ? rawItems
                 .whereType<Map>()
@@ -776,6 +863,36 @@ class EmergencyFulfillmentOrder {
     );
   }
 }
+
+int compareEmergencyOrdersForStation(
+  EmergencyFulfillmentOrder left,
+  EmergencyFulfillmentOrder right,
+  String stationType,
+) {
+  if (stationType == 'floor') {
+    final leftReady = left.oldestReadySequence;
+    final rightReady = right.oldestReadySequence;
+    if (leftReady != null || rightReady != null) {
+      if (leftReady == null) return 1;
+      if (rightReady == null) return -1;
+      final readyOrder = leftReady.compareTo(rightReady);
+      if (readyOrder != 0) return readyOrder;
+    }
+  }
+  final receivedOrder = left.createdAt.compareTo(right.createdAt);
+  if (receivedOrder != 0) return receivedOrder;
+  final queueOrder = left.queueNo.compareTo(right.queueNo);
+  if (queueOrder != 0) return queueOrder;
+  return left.queueId.compareTo(right.queueId);
+}
+
+List<EmergencyFulfillmentOrder> sortEmergencyOrdersForStation(
+  Iterable<EmergencyFulfillmentOrder> orders,
+  String stationType,
+) => (orders.toList(growable: false)
+  ..sort(
+    (left, right) => compareEmergencyOrdersForStation(left, right, stationType),
+  ));
 
 class LeftoverPackagingTask {
   const LeftoverPackagingTask({
@@ -890,6 +1007,17 @@ class EmergencyFulfillmentState {
     final rawOrders = json['orders'];
     final rawCompletedOrders = json['completed_orders'];
     final rawLeftoverPackagingTasks = json['leftover_packaging_tasks'];
+    final stationType = json['station_type']?.toString() ?? 'kitchen';
+    final parsedOrders = rawOrders is List
+        ? rawOrders
+              .whereType<Map>()
+              .map(
+                (order) => EmergencyFulfillmentOrder.fromJson(
+                  Map<String, dynamic>.from(order),
+                ),
+              )
+              .toList(growable: false)
+        : const <EmergencyFulfillmentOrder>[];
     return EmergencyFulfillmentState(
       assigned: json['assigned'] == true,
       assignmentResolved: json.containsKey('assigned'),
@@ -901,16 +1029,7 @@ class EmergencyFulfillmentState {
       fulfillmentMode: FulfillmentMode.fromValue(
         json['fulfillment_mode'] ?? 'paperless',
       ),
-      orders: rawOrders is List
-          ? rawOrders
-                .whereType<Map>()
-                .map(
-                  (order) => EmergencyFulfillmentOrder.fromJson(
-                    Map<String, dynamic>.from(order),
-                  ),
-                )
-                .toList(growable: false)
-          : const [],
+      orders: sortEmergencyOrdersForStation(parsedOrders, stationType),
       completedOrders: rawCompletedOrders is List
           ? rawCompletedOrders
                 .whereType<Map>()
@@ -1584,12 +1703,13 @@ class EmergencyFulfillmentNotifier
     if (rawTicket != null) {
       ticket = EmergencyFulfillmentOrder.fromJson(rawTicket);
       nextOrders.add(ticket);
-      nextOrders.sort((left, right) {
-        final queueOrder = left.queueNo.compareTo(right.queueNo);
-        return queueOrder != 0
-            ? queueOrder
-            : left.createdAt.compareTo(right.createdAt);
-      });
+      nextOrders.sort(
+        (left, right) => compareEmergencyOrdersForStation(
+          left,
+          right,
+          state.stationType ?? 'kitchen',
+        ),
+      );
     }
     final replacement = ticket;
     final nextCompleted = state.completedOrders
@@ -1679,6 +1799,12 @@ class EmergencyFulfillmentNotifier
                 orderChanged = true;
                 return item
                     .withStage(
+                      'kitchen_started',
+                      row.containsKey('kitchen_started_quantity')
+                          ? _asInt(row['kitchen_started_quantity'])
+                          : item.kitchenStartedQuantity,
+                    )
+                    .withStage(
                       'kitchen_done',
                       _asInt(row['kitchen_done_quantity']),
                     )
@@ -1734,6 +1860,7 @@ class EmergencyFulfillmentNotifier
       'delta': delta,
       'floor_direct': floorDirect,
       'combo_component': comboComponent,
+      'workflow_v2': matchingItem?.usesStartReadyWorkflow == true,
     };
     final previous = state;
     _applyOptimistic(itemId: itemId, stage: stage, delta: delta);
@@ -1766,9 +1893,16 @@ class EmergencyFulfillmentNotifier
   }
 
   Future<bool> completeOrder({required String queueId}) async {
+    final order = state.orders
+        .where((candidate) => candidate.queueId == queueId)
+        .cast<EmergencyFulfillmentOrder?>()
+        .firstWhere((_) => true, orElse: () => null);
     final actionId = _uuid.v4();
     final payload = <String, dynamic>{
-      'kind': 'complete_order',
+      'kind':
+          order?.usesStartReadyWorkflow == true && state.stationType == 'floor'
+          ? 'serve_ready_order'
+          : 'complete_order',
       'queue_id': queueId,
       'action_id': actionId,
     };
@@ -1902,7 +2036,7 @@ class EmergencyFulfillmentNotifier
                     final next = item.quantityForStage(stage) + delta;
                     return item.withStage(
                       stage,
-                      next.clamp(0, item.orderedQuantity),
+                      next.clamp(0, item.requiredQuantity),
                     );
                   })
                   .toList(growable: false),
@@ -1929,6 +2063,9 @@ class EmergencyFulfillmentNotifier
     _applyRealtimeItemRow({
       'id': itemId,
       'is_cancelled': false,
+      'kitchen_started_quantity': result.containsKey('kitchen_started_quantity')
+          ? result['kitchen_started_quantity']
+          : matchingItem.kitchenStartedQuantity,
       'kitchen_done_quantity': result.containsKey('kitchen_done_quantity')
           ? result['kitchen_done_quantity']
           : matchingItem.kitchenDoneQuantity,
@@ -1954,6 +2091,24 @@ class EmergencyFulfillmentNotifier
   Future<Map<String, dynamic>> _sendProgress(
     Map<String, dynamic> payload,
   ) async {
+    if (payload['workflow_v2'] == true) {
+      final sourceKind = payload['floor_direct'] == true
+          ? 'floor_direct'
+          : payload['combo_component'] == true
+          ? 'combo_component'
+          : 'base';
+      final raw = await supabase.rpc(
+        'kds_record_station_progress_v3',
+        params: {
+          'p_item_id': payload['item_id'],
+          'p_source_kind': sourceKind,
+          'p_action': payload['stage'],
+          'p_delta': payload['delta'],
+          'p_event_id': payload['event_id'],
+        },
+      );
+      return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+    }
     if (_syncMode == KdsSyncMode.active) {
       final sourceKind = payload['floor_direct'] == true
           ? 'floor_direct'
@@ -2014,6 +2169,17 @@ class EmergencyFulfillmentNotifier
     // 'emergency_complete_order_stage' / 'emergency_revert_order_action'
     // contracts, then atomically include floor-direct beverage lines.
     switch (payload['kind']) {
+      case 'serve_ready_order':
+        final raw = await supabase.rpc(
+          'kds_serve_ready_order_v3',
+          params: {
+            'p_queue_id': payload['queue_id'],
+            'p_action_id': payload['action_id'],
+          },
+        );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
       case 'complete_order':
         final raw = await _client.rpc(
           _syncMode == KdsSyncMode.active
@@ -2081,7 +2247,7 @@ class EmergencyFulfillmentNotifier
                     return switch (stationType) {
                       'kitchen' => item.withStage(
                         'kitchen_done',
-                        item.orderedQuantity,
+                        item.requiredQuantity,
                       ),
                       'tray' =>
                         item
@@ -2096,7 +2262,7 @@ class EmergencyFulfillmentNotifier
                       'floor' => item.withStage(
                         'floor_served',
                         item.isFloorDirect
-                            ? item.orderedQuantity
+                            ? item.requiredQuantity
                             : item.trayDispatchedQuantity,
                       ),
                       _ => item,

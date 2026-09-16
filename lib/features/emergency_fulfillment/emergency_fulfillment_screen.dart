@@ -38,12 +38,14 @@ class _EmergencyFulfillmentScreenState
   bool _flashing = false;
   bool _showRecent = false;
   bool _actionBusy = false;
+  bool _readyPulseOn = false;
   String? _selectedOrderId;
   int _page = 0;
   Timer? _flashTimer;
   Timer? _additionalOrderAlarmTimer;
   Timer? _handoffAlarmTimer;
   Timer? _floorDirectBeverageAlarmTimer;
+  Timer? _readyPulseTimer;
   int _pendingFloorDirectBeverageCount = 0;
   final Map<String, EmergencyKitchenAdditionalOrderNotice>
   _pendingAdditionalOrderNotices = {};
@@ -75,6 +77,7 @@ class _EmergencyFulfillmentScreenState
     EmergencyFulfillmentState next,
   ) {
     if (next.isLoading) return;
+    _syncReadyPulseTimer(next);
     if (!_initialSnapshotObserved) {
       _initialSnapshotObserved = true;
       return;
@@ -164,12 +167,29 @@ class _EmergencyFulfillmentScreenState
               .firstWhere((_) => true, orElse: () => null);
       final stationType = next.stationType ?? previous?.stationType ?? '';
       final completedSelectedOrder =
-          previousOrder?.hasActionableQuantity(stationType) == true &&
-          nextOrder?.hasActionableQuantity(stationType) == false;
+          previousOrder?.isRecentlyCompleteAt(stationType) == false &&
+          nextOrder?.isRecentlyCompleteAt(stationType) == true;
       if (nextOrder == null || completedSelectedOrder) {
         setState(() => _selectedOrderId = null);
       }
     }
+  }
+
+  void _syncReadyPulseTimer(EmergencyFulfillmentState state) {
+    final needsPulse =
+        state.stationType == 'floor' &&
+        state.orders.any(
+          (order) => order.usesStartReadyWorkflow && order.hasReadyUnservedFood,
+        );
+    if (!needsPulse) {
+      _readyPulseTimer?.cancel();
+      _readyPulseTimer = null;
+      _readyPulseOn = false;
+      return;
+    }
+    _readyPulseTimer ??= Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() => _readyPulseOn = !_readyPulseOn);
+    });
   }
 
   Set<String> _actionableOrderIds(EmergencyFulfillmentState value) => value
@@ -225,6 +245,7 @@ class _EmergencyFulfillmentScreenState
       (total, notice) => total + notice.itemCount,
     );
     _floorDirectBeverageAlarmTimer?.cancel();
+    _readyPulseTimer?.cancel();
     _floorDirectBeverageAlarmTimer = Timer(
       emergencyFloorDirectBeverageAlarmCoalesceDelay,
       () {
@@ -437,14 +458,17 @@ class _EmergencyFulfillmentScreenState
   ) {
     final now = DateTime.now();
     final stationType = state.stationType ?? 'kitchen';
-    final activeOrders = state.orders
-        .where(
-          (order) =>
-              order.displayItemsAt(stationType).isNotEmpty &&
-              (!order.isRecentlyCompleteAt(stationType) ||
-                  state.pendingQueueIds.contains(order.queueId)),
-        )
-        .toList(growable: false);
+    final activeOrders = sortEmergencyOrdersForStation(
+      state.orders
+          .where(
+            (order) =>
+                order.displayItemsAt(stationType).isNotEmpty &&
+                (!order.isRecentlyCompleteAt(stationType) ||
+                    state.pendingQueueIds.contains(order.queueId)),
+          )
+          .toList(growable: false),
+      stationType,
+    );
     final recentByOrderId = <String, EmergencyFulfillmentOrder>{
       for (final order in state.completedOrders) order.orderId: order,
       for (final order in state.orders)
@@ -474,9 +498,13 @@ class _EmergencyFulfillmentScreenState
         busy: _actionBusy,
         pending: state.pendingQueueIds.contains(selected.queueId),
         error: state.error,
+        readyPulseOn: _readyPulseOn,
         onBack: () => setState(() => _selectedOrderId = null),
         onItemAction: (item) => _completeItem(item, stationType),
         onItemRevert: (item) => _revertItem(item, stationType),
+        onServeReady: stationType == 'floor' && selected.hasReadyUnservedFood
+            ? () => _serveReadyOrder(selected)
+            : null,
         onRevert: selected.lastActionId == null
             ? null
             : () => _revertOrder(selected),
@@ -531,6 +559,7 @@ class _EmergencyFulfillmentScreenState
                     requestedPage: _page,
                     now: now,
                     copy: copy,
+                    readyPulseOn: _readyPulseOn,
                     onPageChanged: (page) => setState(() => _page = page),
                     onSelected: (orderId) =>
                         setState(() => _selectedOrderId = orderId),
@@ -551,19 +580,40 @@ class _EmergencyFulfillmentScreenState
     try {
       switch (stationType) {
         case 'kitchen':
-          await notifier.recordProgress(itemId: item.id, stage: 'kitchen_done');
+          await notifier.recordProgress(
+            itemId: item.id,
+            stage: item.usesStartReadyWorkflow
+                ? 'kitchen_started'
+                : 'kitchen_done',
+          );
         case 'tray':
-          await notifier.recordProgress(
-            itemId: item.id,
-            stage: 'tray_received',
-          );
-          await notifier.recordProgress(
-            itemId: item.id,
-            stage: 'tray_dispatched',
-          );
+          if (item.usesStartReadyWorkflow) {
+            await notifier.recordProgress(itemId: item.id, stage: 'tray_ready');
+          } else {
+            await notifier.recordProgress(
+              itemId: item.id,
+              stage: 'tray_received',
+            );
+            await notifier.recordProgress(
+              itemId: item.id,
+              stage: 'tray_dispatched',
+            );
+          }
         case 'floor':
           await notifier.recordProgress(itemId: item.id, stage: 'floor_served');
       }
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  Future<void> _serveReadyOrder(EmergencyFulfillmentOrder order) async {
+    if (_actionBusy || !order.hasReadyUnservedFood) return;
+    setState(() => _actionBusy = true);
+    try {
+      await ref
+          .read(emergencyFulfillmentProvider.notifier)
+          .completeOrder(queueId: order.queueId);
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
@@ -611,20 +661,30 @@ class _EmergencyFulfillmentScreenState
         case 'kitchen':
           await notifier.recordProgress(
             itemId: item.id,
-            stage: 'kitchen_done',
+            stage: item.usesStartReadyWorkflow
+                ? 'kitchen_started'
+                : 'kitchen_done',
             delta: -1,
           );
         case 'tray':
-          await notifier.recordProgress(
-            itemId: item.id,
-            stage: 'tray_dispatched',
-            delta: -1,
-          );
-          await notifier.recordProgress(
-            itemId: item.id,
-            stage: 'tray_received',
-            delta: -1,
-          );
+          if (item.usesStartReadyWorkflow) {
+            await notifier.recordProgress(
+              itemId: item.id,
+              stage: 'tray_ready',
+              delta: -1,
+            );
+          } else {
+            await notifier.recordProgress(
+              itemId: item.id,
+              stage: 'tray_dispatched',
+              delta: -1,
+            );
+            await notifier.recordProgress(
+              itemId: item.id,
+              stage: 'tray_received',
+              delta: -1,
+            );
+          }
         case 'floor':
           await notifier.recordProgress(
             itemId: item.id,
@@ -938,6 +998,7 @@ class _EmergencyOrderBoard extends StatelessWidget {
     required this.requestedPage,
     required this.now,
     required this.copy,
+    required this.readyPulseOn,
     required this.onPageChanged,
     required this.onSelected,
   });
@@ -948,6 +1009,7 @@ class _EmergencyOrderBoard extends StatelessWidget {
   final int requestedPage;
   final DateTime now;
   final _EmergencyCopy copy;
+  final bool readyPulseOn;
   final ValueChanged<int> onPageChanged;
   final ValueChanged<String> onSelected;
 
@@ -1006,6 +1068,7 @@ class _EmergencyOrderBoard extends StatelessWidget {
                     pending: pendingQueueIds.contains(order.queueId),
                     now: now,
                     copy: copy,
+                    readyPulseOn: readyPulseOn,
                     onTap: () => onSelected(order.orderId),
                   );
                 },
@@ -1174,6 +1237,7 @@ class _EmergencyOrderCard extends StatelessWidget {
     required this.pending,
     required this.now,
     required this.copy,
+    required this.readyPulseOn,
     required this.onTap,
   });
 
@@ -1182,6 +1246,7 @@ class _EmergencyOrderCard extends StatelessWidget {
   final bool pending;
   final DateTime now;
   final _EmergencyCopy copy;
+  final bool readyPulseOn;
   final VoidCallback onTap;
 
   @override
@@ -1210,6 +1275,9 @@ class _EmergencyOrderCard extends StatelessWidget {
         : completed
         ? PosColors.success
         : _stationColor(stationType);
+    final borderTone = stationType == 'kitchen' || stationType == 'tray'
+        ? _orderFloorColor(order.floorLabel)
+        : tone;
     final elapsed =
         stationBatches.isEmpty || stationBatches.first.startedAt == null
         ? order.stationElapsedAt(now, stationType)
@@ -1238,7 +1306,7 @@ class _EmergencyOrderCard extends StatelessWidget {
         color: PosColors.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: tone, width: 2),
+          side: BorderSide(color: borderTone, width: 2),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -1257,12 +1325,16 @@ class _EmergencyOrderCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
-                          Text(
-                            '#${order.queueNo}',
-                            key: Key('emergency_order_number_${order.orderId}'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: orderHeaderStyle,
+                          Flexible(
+                            child: Text(
+                              '#${order.queueNo}',
+                              key: Key(
+                                'emergency_order_number_${order.orderId}',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: orderHeaderStyle,
+                            ),
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -1314,7 +1386,11 @@ class _EmergencyOrderCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: _EmergencyCardMenuList(items: visibleItems),
+                        child: _EmergencyCardMenuList(
+                          items: visibleItems,
+                          stationType: stationType,
+                          readyPulseOn: readyPulseOn,
+                        ),
                       ),
                       if (supplementalBatches.isNotEmpty) ...[
                         const SizedBox(height: 4),
@@ -1410,9 +1486,15 @@ class _EmergencyOrderCard extends StatelessWidget {
 }
 
 class _EmergencyCardMenuList extends StatelessWidget {
-  const _EmergencyCardMenuList({required this.items});
+  const _EmergencyCardMenuList({
+    required this.items,
+    required this.stationType,
+    required this.readyPulseOn,
+  });
 
   final List<EmergencyFulfillmentDisplayItem> items;
+  final String stationType;
+  final bool readyPulseOn;
 
   @override
   Widget build(BuildContext context) {
@@ -1458,8 +1540,17 @@ class _EmergencyCardMenuList extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     for (final item in columns[columnIndex])
-                      SizedBox(
+                      Container(
                         height: rowHeight,
+                        decoration: BoxDecoration(
+                          color:
+                              stationType == 'floor' &&
+                                  item.readyFromPreviousStage &&
+                                  readyPulseOn
+                              ? PosColors.info.withValues(alpha: 0.22)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                         child: Row(
                           children: [
                             Expanded(
@@ -1526,9 +1617,11 @@ class _EmergencyOrderDetails extends StatelessWidget {
     required this.busy,
     required this.pending,
     required this.error,
+    required this.readyPulseOn,
     required this.onBack,
     required this.onItemAction,
     required this.onItemRevert,
+    required this.onServeReady,
     required this.onRevert,
   });
 
@@ -1539,9 +1632,11 @@ class _EmergencyOrderDetails extends StatelessWidget {
   final bool busy;
   final bool pending;
   final String? error;
+  final bool readyPulseOn;
   final VoidCallback onBack;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
   final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
+  final VoidCallback? onServeReady;
   final VoidCallback? onRevert;
 
   @override
@@ -1645,6 +1740,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                       foods: foodItems,
                       copy: copy,
                       busy: busy || pending,
+                      readyPulseOn: readyPulseOn,
                       onItemAction: onItemAction,
                       onItemRevert: onItemRevert,
                     )
@@ -1653,6 +1749,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                       stationType: stationType,
                       copy: copy,
                       busy: busy || pending,
+                      readyPulseOn: readyPulseOn,
                       keyPrefix: 'emergency_detail_menu',
                       onItemAction: onItemAction,
                       onItemRevert: onItemRevert,
@@ -1665,6 +1762,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
               copy: copy,
               onHome: onBack,
               onRevert: onRevert,
+              onServeReady: onServeReady,
             ),
           ],
         ),
@@ -1679,6 +1777,7 @@ class _EmergencyFloorItemSections extends StatelessWidget {
     required this.foods,
     required this.copy,
     required this.busy,
+    required this.readyPulseOn,
     required this.onItemAction,
     required this.onItemRevert,
   });
@@ -1687,6 +1786,7 @@ class _EmergencyFloorItemSections extends StatelessWidget {
   final List<_EmergencyMenuEntry> foods;
   final _EmergencyCopy copy;
   final bool busy;
+  final bool readyPulseOn;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
   final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
 
@@ -1706,6 +1806,7 @@ class _EmergencyFloorItemSections extends StatelessWidget {
             items: beverages,
             copy: copy,
             busy: busy,
+            readyPulseOn: readyPulseOn,
             keyPrefix: 'emergency_floor_beverage',
             onItemAction: onItemAction,
             onItemRevert: onItemRevert,
@@ -1722,6 +1823,7 @@ class _EmergencyFloorItemSections extends StatelessWidget {
             items: foods,
             copy: copy,
             busy: busy,
+            readyPulseOn: readyPulseOn,
             keyPrefix: 'emergency_floor_food',
             onItemAction: onItemAction,
             onItemRevert: onItemRevert,
@@ -1741,6 +1843,7 @@ class _EmergencyItemSection extends StatelessWidget {
     required this.items,
     required this.copy,
     required this.busy,
+    required this.readyPulseOn,
     required this.keyPrefix,
     required this.onItemAction,
     required this.onItemRevert,
@@ -1753,6 +1856,7 @@ class _EmergencyItemSection extends StatelessWidget {
   final List<_EmergencyMenuEntry> items;
   final _EmergencyCopy copy;
   final bool busy;
+  final bool readyPulseOn;
   final String keyPrefix;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
   final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
@@ -1804,6 +1908,7 @@ class _EmergencyItemSection extends StatelessWidget {
             stationType: 'floor',
             copy: copy,
             busy: busy,
+            readyPulseOn: readyPulseOn,
             keyPrefix: keyPrefix,
             embedded: true,
             onItemAction: onItemAction,
@@ -1821,6 +1926,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
     required this.stationType,
     required this.copy,
     required this.busy,
+    required this.readyPulseOn,
     required this.keyPrefix,
     required this.onItemAction,
     required this.onItemRevert,
@@ -1831,6 +1937,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
   final String stationType;
   final _EmergencyCopy copy;
   final bool busy;
+  final bool readyPulseOn;
   final String keyPrefix;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
   final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
@@ -1861,6 +1968,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
               stationType: stationType,
               copy: copy,
               busy: busy,
+              readyPulseOn: readyPulseOn,
               onTap: () => onItemAction(items[index].fulfillmentItem),
               onRevert: () => onItemRevert(items[index].fulfillmentItem),
             ),
@@ -1883,6 +1991,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
             stationType: stationType,
             copy: copy,
             busy: busy,
+            readyPulseOn: readyPulseOn,
             onTap: () => onItemAction(items[index].fulfillmentItem),
             onRevert: () => onItemRevert(items[index].fulfillmentItem),
           ),
@@ -1912,6 +2021,7 @@ class _EmergencyMenuRow extends StatelessWidget {
     required this.stationType,
     required this.copy,
     required this.busy,
+    required this.readyPulseOn,
     required this.onTap,
     required this.onRevert,
   });
@@ -1920,6 +2030,7 @@ class _EmergencyMenuRow extends StatelessWidget {
   final String stationType;
   final _EmergencyCopy copy;
   final bool busy;
+  final bool readyPulseOn;
   final VoidCallback onTap;
   final VoidCallback onRevert;
 
@@ -1929,8 +2040,18 @@ class _EmergencyMenuRow extends StatelessWidget {
     final displayItem = entry.displayItem;
     final batch = entry.batch;
     final (value, limit) = switch (stationType) {
-      'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
-      'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
+      'kitchen' => (
+        item.usesStartReadyWorkflow
+            ? item.kitchenStartedQuantity
+            : item.kitchenDoneQuantity,
+        item.orderedQuantity,
+      ),
+      'tray' => (
+        item.trayDispatchedQuantity,
+        item.usesStartReadyWorkflow
+            ? item.kitchenStartedQuantity
+            : item.kitchenDoneQuantity,
+      ),
       'floor' => (
         item.floorServedQuantity,
         item.isFloorDirect ? item.orderedQuantity : item.trayDispatchedQuantity,
@@ -1949,8 +2070,16 @@ class _EmergencyMenuRow extends StatelessWidget {
         (item.isFloorDirect &&
             (stationType == 'kitchen' || stationType == 'tray'));
     final canAdvance =
-        !busy && !disabledAtStation && limit > 0 && value < limit;
+        !busy &&
+        !item.needsReview &&
+        !disabledAtStation &&
+        limit > 0 &&
+        value < limit;
     final canRevert = !busy && item.isRevertibleAt(stationType);
+    final blinkReady =
+        stationType == 'floor' &&
+        !item.isFloorDirect &&
+        item.readyUnservedQuantity > 0;
     return Semantics(
       button: true,
       enabled: canAdvance || canRevert,
@@ -2077,7 +2206,7 @@ class _EmergencyMenuRow extends StatelessWidget {
                   key: ValueKey(
                     'emergency_menu_item_complete_${displayItem.id}',
                   ),
-                  tooltip: copy.completeOne,
+                  tooltip: copy.actionOne(stationType),
                   onPressed: canAdvance ? onTap : null,
                   icon: const Icon(Icons.check_rounded, size: 20),
                 ),
@@ -2086,12 +2215,19 @@ class _EmergencyMenuRow extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: disabledAtStation
+                color: blinkReady && readyPulseOn
+                    ? PosColors.info.withValues(alpha: 0.24)
+                    : disabledAtStation
                     ? PosColors.border.withValues(alpha: 0.35)
                     : PosSurfaceRole.background.fill,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: item.needsReview ? PosColors.danger : PosColors.border,
+                  color: item.needsReview
+                      ? PosColors.danger
+                      : blinkReady
+                      ? PosColors.info
+                      : PosColors.border,
+                  width: blinkReady ? 2 : 1,
                 ),
               ),
               child: compact
@@ -2149,6 +2285,7 @@ class _EmergencyDetailActions extends StatelessWidget {
     required this.copy,
     required this.onHome,
     required this.onRevert,
+    required this.onServeReady,
   });
 
   final bool busy;
@@ -2156,6 +2293,7 @@ class _EmergencyDetailActions extends StatelessWidget {
   final _EmergencyCopy copy;
   final VoidCallback onHome;
   final VoidCallback? onRevert;
+  final VoidCallback? onServeReady;
 
   @override
   Widget build(BuildContext context) {
@@ -2176,6 +2314,13 @@ class _EmergencyDetailActions extends StatelessWidget {
         foregroundColor: PosColors.danger,
       ),
     );
+    final serveReady = FilledButton.icon(
+      key: const Key('emergency_serve_ready_order'),
+      onPressed: !busy ? onServeReady : null,
+      icon: const Icon(Icons.room_service_rounded),
+      label: Text(copy.serveAllReady),
+      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+    );
     return Padding(
       padding: const EdgeInsets.all(12),
       child: LayoutBuilder(
@@ -2183,11 +2328,23 @@ class _EmergencyDetailActions extends StatelessWidget {
           if (constraints.maxWidth < 520) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [home, const SizedBox(height: 8), revert],
+              children: [
+                if (onServeReady != null) ...[
+                  serveReady,
+                  const SizedBox(height: 8),
+                ],
+                home,
+                const SizedBox(height: 8),
+                revert,
+              ],
             );
           }
           return Row(
             children: [
+              if (onServeReady != null) ...[
+                Expanded(child: serveReady),
+                const SizedBox(width: 10),
+              ],
               Expanded(child: home),
               const SizedBox(width: 10),
               Expanded(child: revert),
@@ -2285,6 +2442,13 @@ Color _stationColor(String stationType) => switch (stationType) {
   'floor' => const Color(0xFF7B1FA2),
   _ => const Color(0xFFD84343),
 };
+
+Color _orderFloorColor(String floorLabel) =>
+    switch (floorLabel.trim().toUpperCase()) {
+      '1F' => const Color(0xFF1976D2),
+      '2F' => const Color(0xFFD32F2F),
+      _ => PosColors.textSecondary,
+    };
 
 class _EmergencyCopy {
   const _EmergencyCopy(this.languageCode);
@@ -2488,6 +2652,17 @@ class _EmergencyCopy {
       _pick('취소 (원복)', 'Hủy (hoàn tác)', 'Cancel (undo)');
   String get cancelOne => _pick('1개 취소', 'Hủy 1 món', 'Undo one');
   String get completeOne => _pick('1개 완료', 'Hoàn tất 1 món', 'Complete one');
+  String actionOne(String stationType) => switch (stationType) {
+    'kitchen' => _pick('조리 시작', 'Bắt đầu nấu', 'Start cooking'),
+    'tray' => _pick('조리 완료', 'Nấu xong', 'Cooking complete'),
+    'floor' => _pick('고객 전달', 'Đã phục vụ', 'Serve to customer'),
+    _ => completeOne,
+  };
+  String get serveAllReady => _pick(
+    '준비된 음식 모두 전달',
+    'Phục vụ tất cả món đã sẵn sàng',
+    'Serve all ready food',
+  );
   String elapsedMinutes(int minutes) =>
       _pick('$minutes분 경과', 'Đã chờ $minutes phút', '$minutes min elapsed');
 
