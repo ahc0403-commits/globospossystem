@@ -9,6 +9,7 @@ class QrOrderMenu {
     required this.floorLabel,
     required this.categories,
     required this.items,
+    this.isTakeoutEnabled = true,
     this.promotionName,
     this.promotionDiscountPercent = 0,
   });
@@ -19,6 +20,7 @@ class QrOrderMenu {
   final String floorLabel;
   final List<QrMenuCategory> categories;
   final List<QrMenuItem> items;
+  final bool isTakeoutEnabled;
   final String? promotionName;
   final double promotionDiscountPercent;
 
@@ -30,6 +32,7 @@ class QrOrderMenu {
       storeName: json['store_name']?.toString() ?? '',
       tableNumber: json['table_number']?.toString() ?? '-',
       floorLabel: json['floor_label']?.toString() ?? '-',
+      isTakeoutEnabled: json['takeout_enabled'] != false,
       promotionName: json['promotion_name']?.toString(),
       promotionDiscountPercent: _jsonDouble(json['promotion_discount_percent']),
       categories: categoriesRaw is List

@@ -8,9 +8,10 @@ import '../../widgets/error_toast.dart';
 import 'promotion_service.dart';
 
 class PromotionSettingsCard extends StatefulWidget {
-  const PromotionSettingsCard({super.key, required this.storeId});
+  const PromotionSettingsCard({super.key, required this.storeId, this.service});
 
   final String storeId;
+  final PromotionService? service;
 
   @override
   State<PromotionSettingsCard> createState() => _PromotionSettingsCardState();
@@ -18,15 +19,172 @@ class PromotionSettingsCard extends StatefulWidget {
 
 class _PromotionSettingsCardState extends State<PromotionSettingsCard> {
   late Future<List<StorePromotion>> _future = _load();
+  late Future<QrTakeoutAvailability> _takeoutFuture = _loadTakeout();
+  bool _isSavingTakeout = false;
 
-  Future<List<StorePromotion>> _load() => promotionService.list(widget.storeId);
+  PromotionService get _service => widget.service ?? promotionService;
 
-  void _reload() => setState(() => _future = _load());
+  Future<List<StorePromotion>> _load() => _service.list(widget.storeId);
+
+  Future<QrTakeoutAvailability> _loadTakeout() =>
+      _service.getQrTakeoutAvailability(widget.storeId);
+
+  void _reload() => setState(() {
+    _future = _load();
+    _takeoutFuture = _loadTakeout();
+  });
+
+  Future<void> _setTakeoutAvailability(
+    bool enabled, {
+    DateTime? resumeAt,
+  }) async {
+    if (_isSavingTakeout) return;
+    setState(() => _isSavingTakeout = true);
+    try {
+      final setting = await _service.setQrTakeoutAvailability(
+        storeId: widget.storeId,
+        enabled: enabled,
+        resumeAt: resumeAt,
+      );
+      if (!mounted) return;
+      setState(() => _takeoutFuture = Future.value(setting));
+      showSuccessToast(context, context.l10n.settingsQrTakeoutSaved);
+    } catch (error) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          '${context.l10n.settingsQrTakeoutSaveFailed}: $error',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingTakeout = false);
+    }
+  }
+
+  Future<void> _scheduleTakeoutResume(QrTakeoutAvailability setting) async {
+    final now = DateTime.now();
+    var selected = setting.resumeAt?.isAfter(now) == true
+        ? setting.resumeAt!
+        : DateTime(now.year, now.month, now.day + 1);
+    String? validationMessage;
+    final resumeAt = await showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          key: const Key('settings_qr_takeout_resume_dialog'),
+          title: Text(context.l10n.settingsQrTakeoutScheduleDialogTitle),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('settings_qr_takeout_resume_date'),
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: selected,
+                            firstDate: DateTime(now.year, now.month, now.day),
+                            lastDate: DateTime(now.year + 10),
+                          );
+                          if (date == null) return;
+                          setModalState(() {
+                            selected = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                              selected.hour,
+                              selected.minute,
+                            );
+                            validationMessage = null;
+                          });
+                        },
+                        icon: const Icon(Icons.calendar_today_outlined),
+                        label: Text(
+                          '${context.l10n.settingsQrTakeoutResumeDate}\n'
+                          '${DateFormat('dd/MM/yyyy').format(selected)}',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('settings_qr_takeout_resume_time'),
+                        onPressed: () async {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(selected),
+                          );
+                          if (time == null) return;
+                          setModalState(() {
+                            selected = DateTime(
+                              selected.year,
+                              selected.month,
+                              selected.day,
+                              time.hour,
+                              time.minute,
+                            );
+                            validationMessage = null;
+                          });
+                        },
+                        icon: const Icon(Icons.schedule_outlined),
+                        label: Text(
+                          '${context.l10n.settingsQrTakeoutResumeTime}\n'
+                          '${DateFormat('HH:mm').format(selected)}',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (validationMessage != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    validationMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              key: const Key('settings_qr_takeout_resume_save'),
+              onPressed: () {
+                if (!selected.isAfter(DateTime.now())) {
+                  setModalState(
+                    () => validationMessage =
+                        context.l10n.settingsQrTakeoutFutureRequired,
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, selected);
+              },
+              child: Text(context.l10n.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (resumeAt != null && mounted) {
+      await _setTakeoutAvailability(false, resumeAt: resumeAt);
+    }
+  }
 
   Future<void> _edit([StorePromotion? existing]) async {
     late final List<PromotionMenuItem> menuItems;
     try {
-      menuItems = await promotionService.listMenuItems(widget.storeId);
+      menuItems = await _service.listMenuItems(widget.storeId);
     } catch (error) {
       if (mounted) {
         showErrorToast(
@@ -264,7 +422,7 @@ class _PromotionSettingsCardState extends State<PromotionSettingsCard> {
                   return;
                 }
                 try {
-                  await promotionService.save(
+                  await _service.save(
                     storeId: widget.storeId,
                     id: existing?.id,
                     name: name.text.trim(),
@@ -304,7 +462,7 @@ class _PromotionSettingsCardState extends State<PromotionSettingsCard> {
 
   Future<void> _deactivate(StorePromotion promotion) async {
     try {
-      await promotionService.save(
+      await _service.save(
         storeId: widget.storeId,
         id: promotion.id,
         name: promotion.name,
@@ -364,6 +522,107 @@ class _PromotionSettingsCardState extends State<PromotionSettingsCard> {
                 label: Text(context.l10n.settingsPromotionAdd),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          FutureBuilder<QrTakeoutAvailability>(
+            future: _takeoutFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final setting = snapshot.data;
+              if (setting == null) {
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(context.l10n.settingsQrTakeoutSaveFailed),
+                    ),
+                    IconButton(
+                      key: const Key('settings_qr_takeout_retry'),
+                      onPressed: _reload,
+                      icon: const Icon(Icons.refresh_outlined),
+                    ),
+                  ],
+                );
+              }
+              final resumeLabel = setting.resumeAt == null
+                  ? context.l10n.settingsQrTakeoutNoAutoResume
+                  : context.l10n.settingsQrTakeoutResumeAt(
+                      DateFormat('dd/MM/yyyy HH:mm').format(setting.resumeAt!),
+                    );
+              return Container(
+                key: const Key('settings_qr_takeout_control'),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: PosColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: PosColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SwitchListTile(
+                      key: const Key('settings_qr_takeout_toggle'),
+                      contentPadding: EdgeInsets.zero,
+                      value: setting.effectiveEnabled,
+                      onChanged: _isSavingTakeout
+                          ? null
+                          : (enabled) => _setTakeoutAvailability(enabled),
+                      title: Text(context.l10n.settingsQrTakeoutTitle),
+                      subtitle: Text(context.l10n.settingsQrTakeoutSummary),
+                      secondary: _isSavingTakeout
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              setting.effectiveEnabled
+                                  ? Icons.takeout_dining_outlined
+                                  : Icons.hide_source_outlined,
+                            ),
+                    ),
+                    Row(
+                      children: [
+                        ToastStatusBadge(
+                          key: const Key('settings_qr_takeout_status'),
+                          label: setting.effectiveEnabled
+                              ? context.l10n.settingsQrTakeoutEnabled
+                              : context.l10n.settingsQrTakeoutDisabled,
+                          color: setting.effectiveEnabled
+                              ? PosColors.success
+                              : PosColors.warning,
+                          compact: true,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            setting.effectiveEnabled ? '' : resumeLabel,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (!setting.effectiveEnabled) ...[
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          key: const Key('settings_qr_takeout_schedule_resume'),
+                          onPressed: _isSavingTakeout
+                              ? null
+                              : () => _scheduleTakeoutResume(setting),
+                          icon: const Icon(Icons.event_repeat_outlined),
+                          label: Text(
+                            context.l10n.settingsQrTakeoutScheduleResume,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
           ),
           const SizedBox(height: 12),
           FutureBuilder<List<StorePromotion>>(

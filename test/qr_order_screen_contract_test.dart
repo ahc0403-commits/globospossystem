@@ -54,6 +54,7 @@ void main() {
     expect(screen, contains('QR_ORDER_PAYMENT_IN_PROGRESS'));
     expect(screen, contains('QR_TOO_FREQUENT'));
     expect(screen, contains('QR_MENU_ITEM_UNAVAILABLE'));
+    expect(screen, contains('QR_TAKEOUT_UNAVAILABLE'));
     expect(screen, contains('QR_ITEMS_INVALID'));
     expect(screen, contains('Please call staff'));
     expect(screen, contains('Network error. Please retry with the same cart.'));

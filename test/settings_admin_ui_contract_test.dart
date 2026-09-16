@@ -18,6 +18,10 @@ void main() {
       expect(source, contains('promotionScopeSelectedItems'));
       expect(source, contains('promotion_menu_'));
       expect(source, contains('settingsPromotionMenuRequired'));
+      expect(source, contains('settings_qr_takeout_toggle'));
+      expect(source, contains('settings_qr_takeout_schedule_resume'));
+      expect(source, contains('settings_qr_takeout_resume_dialog'));
+      expect(source, contains('settingsQrTakeoutResumeAt'));
     },
   );
 
