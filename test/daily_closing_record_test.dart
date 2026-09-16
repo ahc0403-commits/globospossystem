@@ -61,4 +61,37 @@ void main() {
 
     expect(record.depositTotal, 0);
   });
+
+  test('record keeps immutable snapshot and live ledger totals separate', () {
+    final record = DailyClosingRecord.fromJson({
+      'closing_id': 'closing-id',
+      'closing_date': '2026-09-16',
+      'closed_by_name': 'Manager',
+      'payments_total': 720360,
+      'payments_cash': 0,
+      'payments_card': 0,
+      'payments_pay': 0,
+      'payments_bank_transfer': 720360,
+      'snapshot_payments_total': 720360,
+      'ledger_payments_count': 34,
+      'ledger_payments_total': 5523660,
+      'ledger_payments_cash': 1391040,
+      'ledger_payments_card': 0,
+      'ledger_payments_pay': 0,
+      'ledger_payments_bank_transfer': 4132620,
+      'reconciliation_delta': 4803300,
+      'ledger_as_of': '2026-09-16T08:30:00Z',
+      'close_source': 'manual',
+      'created_at': '2026-09-16T05:00:00Z',
+    });
+
+    expect(record.paymentsTotal, 720360);
+    expect(record.snapshotPaymentsTotal, 720360);
+    expect(record.ledgerPaymentsCount, 34);
+    expect(record.ledgerPaymentsTotal, 5523660);
+    expect(record.ledgerPaymentsCash, 1391040);
+    expect(record.ledgerPaymentsBankTransfer, 4132620);
+    expect(record.reconciliationDelta, 4803300);
+    expect(record.isClosed, isTrue);
+  });
 }

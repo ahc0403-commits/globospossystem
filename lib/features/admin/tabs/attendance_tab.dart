@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/layout/adaptive_layout.dart';
 import '../../../core/services/attendance_service.dart';
 import '../../../core/services/payroll_service.dart';
 import '../../../core/services/pin_service.dart';
@@ -1282,33 +1283,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         : _staffList
               .where((staff) => staff['role']?.toString() == 'part_timer')
               .length;
-    final totalHours = filteredPayrolls.fold<double>(
-      0,
-      (sum, payroll) => sum + payroll.totalHours,
-    );
-    final overtimeHours = filteredPayrolls.fold<double>(
-      0,
-      (sum, payroll) =>
-          sum +
-          payroll.dailyRecords.fold<double>(
-            0,
-            (dailySum, record) => dailySum + ((record.hours - 8).clamp(0, 99)),
-          ),
-    );
-    final estimatedPayroll = filteredPayrolls.fold<double>(
-      0,
-      (sum, payroll) => sum + payroll.totalAmount,
-    );
-    StaffPayroll? selectedPayroll;
     final selectedUserId = selectedAttendanceRow?['userId']?.toString();
-    if (selectedUserId != null) {
-      for (final payroll in filteredPayrolls) {
-        if (payroll.userId == selectedUserId) {
-          selectedPayroll = payroll;
-          break;
-        }
-      }
-    }
+    final selectedPayroll = payrollForEmployee(
+      filteredPayrolls,
+      selectedUserId,
+    );
     final photoCaptureCount = filteredLogs
         .where((row) => (row['photo_url']?.toString() ?? '').isNotEmpty)
         .length;
@@ -1491,9 +1470,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           selectedPayroll: selectedPayroll,
           filteredPayrolls: filteredPayrolls,
           payrollRequiresUnlock: payrollRequiresUnlock,
-          totalHours: totalHours,
-          overtimeHours: overtimeHours,
-          estimatedPayroll: estimatedPayroll,
           currency: currency,
           employeeMonthLogs: _selectedEmployeeMonthLogs,
           isEmployeeMonthLoading: _isEmployeeMonthLoading,
@@ -1502,14 +1478,14 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           scrollable: scrollable,
         );
 
-    if (MediaQuery.sizeOf(context).width < 1120 ||
-        MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+    final pageLayout = PosLayoutSpec.fromMediaQuery(context);
+    if (pageLayout.prefersSingleColumn) {
       return Scaffold(
         key: const Key('attendance_root'),
         backgroundColor: AppColors.surface0,
         body: ToastResponsiveScrollBody(
           maxWidth: 1480,
-          padding: const EdgeInsets.all(20),
+          padding: pageLayout.pagePadding,
           children: [
             attendanceHeader,
             if (_logsError != null) ...[
@@ -1548,7 +1524,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       backgroundColor: AppColors.surface0,
       body: ToastResponsiveBody(
         maxWidth: 1480,
-        padding: const EdgeInsets.all(20),
+        padding: pageLayout.pagePadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1711,9 +1687,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                   selectedPayroll: selectedPayroll,
                   filteredPayrolls: filteredPayrolls,
                   payrollRequiresUnlock: payrollRequiresUnlock,
-                  totalHours: totalHours,
-                  overtimeHours: overtimeHours,
-                  estimatedPayroll: estimatedPayroll,
                   currency: currency,
                   employeeMonthLogs: _selectedEmployeeMonthLogs,
                   isEmployeeMonthLoading: _isEmployeeMonthLoading,
@@ -1801,8 +1774,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                 color: _payrollUnlocked ? PosColors.success : PosColors.warning,
                 compact: true,
               );
-              if (constraints.maxWidth < 620 ||
-                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+              if (PosLayoutSpec.from(
+                context,
+                constraints,
+              ).prefersStackedControls) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -1916,9 +1891,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     required StaffPayroll? selectedPayroll,
     required List<StaffPayroll> filteredPayrolls,
     required bool payrollRequiresUnlock,
-    required double totalHours,
-    required double overtimeHours,
-    required double estimatedPayroll,
     required NumberFormat currency,
     required List<Map<String, dynamic>> employeeMonthLogs,
     required bool isEmployeeMonthLoading,
@@ -1939,6 +1911,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         : const <Map<String, dynamic>>[];
     final monthlyRows = _buildMonthlyAttendanceRows(employeeMonthLogs);
     final selectedMonth = DateFormat('yyyy-MM').format(attendanceDate);
+    final selectedTotalHours = selectedPayroll?.totalHours;
+    final selectedOvertimeHours = selectedPayroll == null
+        ? null
+        : overtimeHoursForPayroll(selectedPayroll);
+    final selectedGrossPayroll = selectedPayroll?.grossAmount;
     final payrollActionLabel = payrollRequiresUnlock
         ? context.l10n.attendanceUnlockPayrollAction
         : filteredPayrolls.isEmpty
@@ -2203,25 +2180,40 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                             else ...[
                               _summaryMetricRow(
                                 context.l10n.attendanceTotalWorkedHours,
-                                context.l10n.attendanceHoursValue(
-                                  totalHours.toStringAsFixed(1),
-                                ),
+                                selectedTotalHours == null
+                                    ? context.l10n.attendancePreviewRequired
+                                    : context.l10n.attendanceHoursValue(
+                                        selectedTotalHours.toStringAsFixed(1),
+                                      ),
                               ),
                               const SizedBox(height: 10),
                               _summaryMetricRow(
                                 context.l10n.attendanceOvertimeHours,
-                                context.l10n.attendanceHoursValue(
-                                  overtimeHours.toStringAsFixed(1),
-                                ),
-                                tone: overtimeHours > 0
+                                selectedOvertimeHours == null
+                                    ? context.l10n.attendancePreviewRequired
+                                    : context.l10n.attendanceHoursValue(
+                                        selectedOvertimeHours.toStringAsFixed(
+                                          1,
+                                        ),
+                                      ),
+                                tone: (selectedOvertimeHours ?? 0) > 0
                                     ? PosColors.warning
+                                    : selectedOvertimeHours == null
+                                    ? PosColors.textSecondary
                                     : PosColors.textPrimary,
                               ),
                               const SizedBox(height: 10),
                               _summaryMetricRow(
                                 context.l10n.attendanceEstimatedPayroll,
-                                _formatVnd(currency, estimatedPayroll),
-                                tone: PosColors.accent,
+                                selectedGrossPayroll == null
+                                    ? context.l10n.attendancePreviewRequired
+                                    : _formatVnd(
+                                        currency,
+                                        selectedGrossPayroll,
+                                      ),
+                                tone: selectedGrossPayroll == null
+                                    ? PosColors.textSecondary
+                                    : PosColors.accent,
                               ),
                               const SizedBox(height: 10),
                               _summaryMetricRow(

@@ -27,6 +27,15 @@ class DailyClosingRecord {
     required this.serviceTotal,
     required this.lowStockCount,
     required this.closeSource,
+    this.snapshotPaymentsTotal = 0,
+    this.ledgerPaymentsCount = 0,
+    this.ledgerPaymentsTotal = 0,
+    this.ledgerPaymentsCash = 0,
+    this.ledgerPaymentsCard = 0,
+    this.ledgerPaymentsPay = 0,
+    this.ledgerPaymentsBankTransfer = 0,
+    this.reconciliationDelta = 0,
+    this.ledgerAsOf,
     this.notes,
     required this.createdAt,
   });
@@ -53,6 +62,15 @@ class DailyClosingRecord {
   final double serviceTotal;
   final int lowStockCount;
   final String? closeSource;
+  final double snapshotPaymentsTotal;
+  final int ledgerPaymentsCount;
+  final double ledgerPaymentsTotal;
+  final double ledgerPaymentsCash;
+  final double ledgerPaymentsCard;
+  final double ledgerPaymentsPay;
+  final double ledgerPaymentsBankTransfer;
+  final double reconciliationDelta;
+  final DateTime? ledgerAsOf;
   final String? notes;
   final DateTime createdAt;
 
@@ -80,6 +98,27 @@ class DailyClosingRecord {
       serviceTotal: _toDouble(json['service_total']),
       lowStockCount: _toInt(json['low_stock_count']),
       closeSource: json['close_source']?.toString(),
+      snapshotPaymentsTotal: _toDouble(json['snapshot_payments_total']),
+      ledgerPaymentsCount: _toInt(
+        json['ledger_payments_count'] ?? json['payments_count'],
+      ),
+      ledgerPaymentsTotal: _toDouble(
+        json['ledger_payments_total'] ?? json['payments_total'],
+      ),
+      ledgerPaymentsCash: _toDouble(
+        json['ledger_payments_cash'] ?? json['payments_cash'],
+      ),
+      ledgerPaymentsCard: _toDouble(
+        json['ledger_payments_card'] ?? json['payments_card'],
+      ),
+      ledgerPaymentsPay: _toDouble(
+        json['ledger_payments_pay'] ?? json['payments_pay'],
+      ),
+      ledgerPaymentsBankTransfer: _toDouble(
+        json['ledger_payments_bank_transfer'] ?? json['payments_bank_transfer'],
+      ),
+      reconciliationDelta: _toDouble(json['reconciliation_delta']),
+      ledgerAsOf: DateTime.tryParse(json['ledger_as_of']?.toString() ?? ''),
       notes: json['notes']?.toString(),
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??

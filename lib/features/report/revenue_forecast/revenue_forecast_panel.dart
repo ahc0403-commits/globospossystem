@@ -68,11 +68,15 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
   int _horizonMonths = 6;
   int _revision = 0;
   int _loadGeneration = 0;
+  RevenueForecastOperationalDefaults? _periodDefaults;
+  RestaurantForecastProfile? _savedRestaurantProfile;
+  Map<RevenueForecastInputField, RevenueForecastInputEvidence>
+  _restaurantEvidence = const {};
   bool _loadingProfile = false;
   bool _profileUnavailable = false;
   bool _defaultsApplied = false;
   bool _defaultsUnavailable = false;
-  bool _defaultsUseFallbacks = false;
+  bool _usingSavedRestaurantProfile = false;
   bool _saving = false;
   bool _saved = false;
   bool _exporting = false;
@@ -155,7 +159,10 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
     _profileUnavailable = false;
     _defaultsApplied = false;
     _defaultsUnavailable = false;
-    _defaultsUseFallbacks = false;
+    _periodDefaults = null;
+    _savedRestaurantProfile = null;
+    _restaurantEvidence = const {};
+    _usingSavedRestaurantProfile = false;
     _saving = false;
     _exporting = false;
     _saved = false;
@@ -206,16 +213,15 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
 
     if (snapshot != null && snapshot.businessType == widget.businessType) {
       _revision = snapshot.revision;
-      if (!_hasDraftEdits || replaceDraft) {
-        if (widget.businessType == ForecastBusinessType.restaurant) {
-          _applyRestaurantProfile(snapshot.restaurantProfile!);
-        } else {
-          _applyPhotoProfile(snapshot.photoProfile!);
-        }
+      if (widget.businessType == ForecastBusinessType.restaurant) {
+        _savedRestaurantProfile = snapshot.restaurantProfile;
+      } else if (!_hasDraftEdits || replaceDraft) {
+        _applyPhotoProfile(snapshot.photoProfile!);
         _defaultsApplied = false;
-        _defaultsUseFallbacks = false;
       }
-    } else if (widget.businessType == ForecastBusinessType.restaurant &&
+    }
+
+    if (widget.businessType == ForecastBusinessType.restaurant &&
         _defaultsRepository != null) {
       try {
         final defaults = await _defaultsRepository!.loadRestaurant(
@@ -225,10 +231,11 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
           observations: widget.observations,
         );
         if (!mounted || generation != _loadGeneration) return;
+        _periodDefaults = defaults;
         if (defaults != null && (!_hasDraftEdits || replaceDraft)) {
-          _applyRestaurantProfile(defaults.profile);
+          _applyRestaurantDefaults(defaults);
           _defaultsApplied = true;
-          _defaultsUseFallbacks = defaults.usesFallbackAssumptions;
+          _usingSavedRestaurantProfile = false;
         } else if (defaults == null) {
           _defaultsUnavailable = true;
         }
@@ -236,6 +243,8 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
         if (!mounted || generation != _loadGeneration) return;
         _defaultsUnavailable = true;
       }
+    } else if (widget.businessType == ForecastBusinessType.restaurant) {
+      _defaultsUnavailable = true;
     }
     if (!mounted || generation != _loadGeneration) return;
     setState(() {
@@ -271,6 +280,68 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
       ..clear()
       ..addAll(profile.operatingWeekdays);
     _averageTicket.text = _editableNumber(profile.averageTicketVnd);
+  }
+
+  void _applyRestaurantDefaults(RevenueForecastOperationalDefaults defaults) {
+    _applyRestaurantProfile(defaults.profile);
+    _restaurantEvidence = Map.unmodifiable(defaults.evidence);
+    for (final entry in <RevenueForecastInputField, TextEditingController>{
+      RevenueForecastInputField.firstServeMinutes: _firstServe,
+      RevenueForecastInputField.diningMinutes: _dining,
+      RevenueForecastInputField.paymentWaitMinutes: _paymentWait,
+      RevenueForecastInputField.cleanupMinutes: _cleanup,
+      RevenueForecastInputField.kitchenRate: _kitchenRate,
+      RevenueForecastInputField.checkerRate: _checkerRate,
+      RevenueForecastInputField.operatingMinutes: _restaurantOperatingMinutes,
+      RevenueForecastInputField.averageTicket: _averageTicket,
+    }.entries) {
+      if (defaults.evidenceFor(entry.key).source ==
+          RevenueForecastInputSource.unavailable) {
+        entry.value.clear();
+      }
+    }
+    if (defaults
+            .evidenceFor(RevenueForecastInputField.floorServiceRate)
+            .source ==
+        RevenueForecastInputSource.unavailable) {
+      for (final floor in _floors) {
+        floor.serviceRate.clear();
+      }
+    }
+  }
+
+  void _applySavedRestaurantSettings() {
+    final profile = _savedRestaurantProfile;
+    if (profile == null) return;
+    setState(() {
+      _applyRestaurantProfile(profile);
+      _restaurantEvidence = Map.unmodifiable({
+        for (final field in RevenueForecastInputField.values)
+          field: const RevenueForecastInputEvidence(
+            source: RevenueForecastInputSource.savedProfile,
+          ),
+      });
+      _usingSavedRestaurantProfile = true;
+      _defaultsApplied = false;
+      _hasDraftEdits = false;
+      _result = null;
+      _errorCode = null;
+      _saved = false;
+    });
+  }
+
+  void _applyPeriodAverageSettings() {
+    final defaults = _periodDefaults;
+    if (defaults == null) return;
+    setState(() {
+      _applyRestaurantDefaults(defaults);
+      _usingSavedRestaurantProfile = false;
+      _defaultsApplied = true;
+      _hasDraftEdits = _revision > 0;
+      _result = null;
+      _errorCode = null;
+      _saved = false;
+    });
   }
 
   void _applyPhotoProfile(PhotoForecastProfile profile) {
@@ -402,10 +473,12 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
       if (!isCurrentRequest()) return;
       setState(() {
         _revision = snapshot.revision;
+        if (widget.businessType == ForecastBusinessType.restaurant) {
+          _savedRestaurantProfile = snapshot.restaurantProfile;
+        }
         _saved = true;
         _profileUnavailable = false;
         _defaultsApplied = false;
-        _defaultsUseFallbacks = false;
         _hasDraftEdits = false;
       });
     } on FormatException {
@@ -434,7 +507,31 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
     setState(() => _exporting = true);
     try {
       final settings = widget.businessType == ForecastBusinessType.restaurant
-          ? restaurantProfileToJson(_restaurantProfile())
+          ? <String, dynamic>{
+              ...restaurantProfileToJson(_restaurantProfile()),
+              'input_provenance': {
+                for (final entry in _restaurantEvidence.entries)
+                  entry.key.name: entry.value.toJson(),
+              },
+              if (_restaurantEvidence.values.any(
+                    (item) =>
+                        item.source ==
+                        RevenueForecastInputSource.selectedPeriodAverage,
+                  ) &&
+                  _periodDefaults?.periodStart != null)
+                'source_period_start': DateFormat(
+                  'yyyy-MM-dd',
+                ).format(_periodDefaults!.periodStart!),
+              if (_restaurantEvidence.values.any(
+                    (item) =>
+                        item.source ==
+                        RevenueForecastInputSource.selectedPeriodAverage,
+                  ) &&
+                  _periodDefaults?.periodEnd != null)
+                'source_period_end': DateFormat(
+                  'yyyy-MM-dd',
+                ).format(_periodDefaults!.periodEnd!),
+            }
           : photoProfileToJson(_photoProfile());
       final l10n = context.l10n;
       final locale = Localizations.localeOf(context).toString();
@@ -547,6 +644,22 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
     });
   }
 
+  void _markRestaurantFieldDirty(RevenueForecastInputField field, String _) {
+    setState(() {
+      _restaurantEvidence = Map.unmodifiable({
+        ..._restaurantEvidence,
+        field: const RevenueForecastInputEvidence(
+          source: RevenueForecastInputSource.manualAssumption,
+        ),
+      });
+      _usingSavedRestaurantProfile = false;
+      _hasDraftEdits = true;
+      _result = null;
+      _saved = false;
+      _errorCode = null;
+    });
+  }
+
   void _toggleOperatingWeekday(Set<int> weekdays, int weekday) {
     setState(() {
       if (!weekdays.add(weekday)) weekdays.remove(weekday);
@@ -559,6 +672,19 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
 
   void _addFloor() => setState(() {
     _floors.add(_FloorInput());
+    _restaurantEvidence = Map.unmodifiable({
+      ..._restaurantEvidence,
+      RevenueForecastInputField.floorLabel: const RevenueForecastInputEvidence(
+        source: RevenueForecastInputSource.manualAssumption,
+      ),
+      RevenueForecastInputField.tableCount: const RevenueForecastInputEvidence(
+        source: RevenueForecastInputSource.manualAssumption,
+      ),
+      RevenueForecastInputField.floorServiceRate:
+          const RevenueForecastInputEvidence(
+            source: RevenueForecastInputSource.manualAssumption,
+          ),
+    });
     _hasDraftEdits = true;
     _result = null;
     _saved = false;
@@ -568,6 +694,21 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
     if (_floors.length == 1) return;
     setState(() {
       _floors.removeAt(index).dispose();
+      _restaurantEvidence = Map.unmodifiable({
+        ..._restaurantEvidence,
+        RevenueForecastInputField.floorLabel:
+            const RevenueForecastInputEvidence(
+              source: RevenueForecastInputSource.manualAssumption,
+            ),
+        RevenueForecastInputField.tableCount:
+            const RevenueForecastInputEvidence(
+              source: RevenueForecastInputSource.manualAssumption,
+            ),
+        RevenueForecastInputField.floorServiceRate:
+            const RevenueForecastInputEvidence(
+              source: RevenueForecastInputSource.manualAssumption,
+            ),
+      });
       _hasDraftEdits = true;
       _result = null;
       _saved = false;
@@ -639,7 +780,7 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
             const SizedBox(height: 12),
             PosExceptionAlert(
               key: const Key('revenue_forecast_defaults_applied'),
-              label: _defaultsUseFallbacks
+              label: (_periodDefaults?.hasUnavailableInputs ?? false)
                   ? l10n.revenueForecastDefaultsAppliedWithFallbacks
                   : l10n.revenueForecastDefaultsApplied,
               color: PosColors.info,
@@ -664,6 +805,32 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
                     ? null
                     : () => _loadProfile(replaceDraft: true),
               ),
+            ),
+          ],
+          if (widget.businessType == ForecastBusinessType.restaurant &&
+              (_savedRestaurantProfile != null || _periodDefaults != null)) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (_savedRestaurantProfile != null &&
+                    !_usingSavedRestaurantProfile)
+                  PosSecondaryButton(
+                    key: const Key('revenue_forecast_apply_saved_profile'),
+                    label: l10n.revenueForecastApplySavedProfile,
+                    icon: Icons.history_outlined,
+                    onPressed: _applySavedRestaurantSettings,
+                  ),
+                if (_periodDefaults != null &&
+                    (_usingSavedRestaurantProfile || !_defaultsApplied))
+                  PosSecondaryButton(
+                    key: const Key('revenue_forecast_apply_period_average'),
+                    label: l10n.revenueForecastApplyPeriodAverage,
+                    icon: Icons.auto_graph_outlined,
+                    onPressed: _applyPeriodAverageSettings,
+                  ),
+              ],
             ),
           ],
           if (_profileUnavailable || _errorCode == 'PROFILE_UNAVAILABLE') ...[
@@ -769,7 +936,27 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
             index: index,
             canRemove: _floors.length > 1,
             onRemove: () => _removeFloor(index),
-            onChanged: _markDirty,
+            onLabelChanged: (value) => _markRestaurantFieldDirty(
+              RevenueForecastInputField.floorLabel,
+              value,
+            ),
+            onTableCountChanged: (value) => _markRestaurantFieldDirty(
+              RevenueForecastInputField.tableCount,
+              value,
+            ),
+            onServiceRateChanged: (value) => _markRestaurantFieldDirty(
+              RevenueForecastInputField.floorServiceRate,
+              value,
+            ),
+            labelHelper: _restaurantEvidenceText(
+              RevenueForecastInputField.floorLabel,
+            ),
+            tableCountHelper: _restaurantEvidenceText(
+              RevenueForecastInputField.tableCount,
+            ),
+            serviceRateHelper: _restaurantEvidenceText(
+              RevenueForecastInputField.floorServiceRate,
+            ),
           ),
           const SizedBox(height: 10),
         ],
@@ -787,42 +974,90 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
             _ForecastNumberField(
               controller: _firstServe,
               label: l10n.revenueForecastFirstServeMinutes,
-              onChanged: _markDirty,
+              helperText: _restaurantEvidenceText(
+                RevenueForecastInputField.firstServeMinutes,
+              ),
+              onChanged: (value) => _markRestaurantFieldDirty(
+                RevenueForecastInputField.firstServeMinutes,
+                value,
+              ),
             ),
             _ForecastNumberField(
               controller: _dining,
               label: l10n.revenueForecastDiningMinutes,
-              onChanged: _markDirty,
+              helperText: _restaurantEvidenceText(
+                RevenueForecastInputField.diningMinutes,
+              ),
+              onChanged: (value) => _markRestaurantFieldDirty(
+                RevenueForecastInputField.diningMinutes,
+                value,
+              ),
             ),
             _ForecastNumberField(
               controller: _paymentWait,
               label: l10n.revenueForecastPaymentWaitMinutes,
-              onChanged: _markDirty,
+              helperText: _restaurantEvidenceText(
+                RevenueForecastInputField.paymentWaitMinutes,
+              ),
+              onChanged: (value) => _markRestaurantFieldDirty(
+                RevenueForecastInputField.paymentWaitMinutes,
+                value,
+              ),
             ),
             _ForecastNumberField(
               controller: _cleanup,
               label: l10n.revenueForecastCleanupMinutes,
-              onChanged: _markDirty,
+              helperText: _restaurantEvidenceText(
+                RevenueForecastInputField.cleanupMinutes,
+              ),
+              onChanged: (value) => _markRestaurantFieldDirty(
+                RevenueForecastInputField.cleanupMinutes,
+                value,
+              ),
             ),
             _ForecastNumberField(
               controller: _kitchenRate,
               label: l10n.revenueForecastKitchenRate,
-              onChanged: _markDirty,
+              helperText: _restaurantEvidenceText(
+                RevenueForecastInputField.kitchenRate,
+              ),
+              onChanged: (value) => _markRestaurantFieldDirty(
+                RevenueForecastInputField.kitchenRate,
+                value,
+              ),
             ),
             _ForecastNumberField(
               controller: _checkerRate,
               label: l10n.revenueForecastCheckerRate,
-              onChanged: _markDirty,
+              helperText: _restaurantEvidenceText(
+                RevenueForecastInputField.checkerRate,
+              ),
+              onChanged: (value) => _markRestaurantFieldDirty(
+                RevenueForecastInputField.checkerRate,
+                value,
+              ),
             ),
             _ForecastNumberField(
               controller: _restaurantOperatingMinutes,
               label: l10n.revenueForecastOperatingMinutes,
-              onChanged: _markDirty,
+              helperText: _restaurantEvidenceText(
+                RevenueForecastInputField.operatingMinutes,
+              ),
+              onChanged: (value) => _markRestaurantFieldDirty(
+                RevenueForecastInputField.operatingMinutes,
+                value,
+              ),
             ),
             _ForecastNumberField(
               controller: _averageTicket,
               label: l10n.revenueForecastAverageTicket,
-              onChanged: _markDirty,
+              helperText: _restaurantEvidenceText(
+                RevenueForecastInputField.averageTicket,
+              ),
+              onChanged: (value) => _markRestaurantFieldDirty(
+                RevenueForecastInputField.averageTicket,
+                value,
+              ),
             ),
           ],
         ),
@@ -833,6 +1068,34 @@ class _RevenueForecastPanelState extends State<RevenueForecastPanel> {
         ),
       ],
     );
+  }
+
+  String? _restaurantEvidenceText(RevenueForecastInputField field) {
+    final evidence = _restaurantEvidence[field];
+    if (evidence == null) return null;
+    final l10n = context.l10n;
+    final source = switch (evidence.source) {
+      RevenueForecastInputSource.selectedPeriodAverage =>
+        evidence.sampleCount > 0
+            ? l10n.revenueForecastSourcePeriodAverage(
+                evidence.sampleCount,
+                evidence.observedDays,
+              )
+            : l10n.revenueForecastSourcePeriodAverageDays(
+                evidence.observedDays,
+              ),
+      RevenueForecastInputSource.registeredConfiguration =>
+        l10n.revenueForecastSourceRegisteredConfiguration,
+      RevenueForecastInputSource.savedProfile =>
+        l10n.revenueForecastSourceSavedProfile,
+      RevenueForecastInputSource.manualAssumption =>
+        l10n.revenueForecastSourceManualAssumption,
+      RevenueForecastInputSource.unavailable =>
+        l10n.revenueForecastSourceUnavailable,
+    };
+    return evidence.isProxy
+        ? '$source · ${l10n.revenueForecastSourceProxy}'
+        : source;
   }
 
   Widget _buildInputSummary() {
@@ -1526,14 +1789,24 @@ class _FloorInputRow extends StatelessWidget {
     required this.index,
     required this.canRemove,
     required this.onRemove,
-    required this.onChanged,
+    required this.onLabelChanged,
+    required this.onTableCountChanged,
+    required this.onServiceRateChanged,
+    this.labelHelper,
+    this.tableCountHelper,
+    this.serviceRateHelper,
   });
 
   final _FloorInput input;
   final int index;
   final bool canRemove;
   final VoidCallback onRemove;
-  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onLabelChanged;
+  final ValueChanged<String> onTableCountChanged;
+  final ValueChanged<String> onServiceRateChanged;
+  final String? labelHelper;
+  final String? tableCountHelper;
+  final String? serviceRateHelper;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -1543,17 +1816,20 @@ class _FloorInputRow extends StatelessWidget {
           controller: input.label,
           label: context.l10n.revenueForecastFloorLabel,
           numeric: false,
-          onChanged: onChanged,
+          helperText: labelHelper,
+          onChanged: onLabelChanged,
         ),
         _ForecastNumberField(
           controller: input.tableCount,
           label: context.l10n.revenueForecastTableCount,
-          onChanged: onChanged,
+          helperText: tableCountHelper,
+          onChanged: onTableCountChanged,
         ),
         _ForecastNumberField(
           controller: input.serviceRate,
           label: context.l10n.revenueForecastFloorServiceRate,
-          onChanged: onChanged,
+          helperText: serviceRateHelper,
+          onChanged: onServiceRateChanged,
         ),
       ];
       return Container(
@@ -1627,12 +1903,14 @@ class _ForecastNumberField extends StatelessWidget {
     required this.controller,
     required this.label,
     this.numeric = true,
+    this.helperText,
     this.onChanged,
   });
 
   final TextEditingController controller;
   final String label;
   final bool numeric;
+  final String? helperText;
   final ValueChanged<String>? onChanged;
 
   @override
@@ -1651,7 +1929,11 @@ class _ForecastNumberField extends StatelessWidget {
               : TextInputType.text,
           textInputAction: TextInputAction.next,
           onChanged: onChanged,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            helperText: helperText,
+            helperMaxLines: 3,
+          ),
         ),
       ],
     ),

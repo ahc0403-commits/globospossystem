@@ -7,6 +7,53 @@ Map<String, dynamic> _log(String type, String loggedAt) => {
 };
 
 void main() {
+  test(
+    'selected employee payroll summary never falls back to another user',
+    () {
+      final first = StaffPayroll(
+        userId: 'employee-1',
+        userName: 'First',
+        dailyRecords: [
+          DailyRecord(
+            userId: 'employee-1',
+            userName: 'First',
+            date: DateTime(2026, 9, 1),
+            clockIn: null,
+            clockOut: null,
+            hours: 9,
+            amount: 900000,
+            isUnpaired: false,
+          ),
+        ],
+      );
+      final second = StaffPayroll(
+        userId: 'employee-2',
+        userName: 'Second',
+        dailyRecords: [
+          DailyRecord(
+            userId: 'employee-2',
+            userName: 'Second',
+            date: DateTime(2026, 9, 1),
+            clockIn: null,
+            clockOut: null,
+            hours: 4,
+            amount: 400000,
+            isUnpaired: false,
+            mealAllowance: 25000,
+          ),
+        ],
+      );
+
+      expect(payrollForEmployee([first, second], 'employee-2'), second);
+      expect(payrollForEmployee([first, second], 'missing'), isNull);
+      expect(payrollForEmployee([first, second], null), isNull);
+      expect(overtimeHoursForPayroll(first), 1);
+      expect(overtimeHoursForPayroll(second), 0);
+      expect(second.grossAmount, 400000);
+      expect(second.totalAmount, 425000);
+    },
+  );
+
   group('PayrollService attendance pairing', () {
     test('Mai 11:27 to 16:15 is paid as 4.8 scheduled-shift hours', () {
       final service = PayrollService();

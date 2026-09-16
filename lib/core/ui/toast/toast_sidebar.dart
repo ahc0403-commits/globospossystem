@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
+import '../../layout/adaptive_layout.dart';
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
 import 'toast_primitives_extended.dart';
@@ -88,9 +89,9 @@ class ToastSidebar extends StatelessWidget {
         ? 0
         : selectedIndex.clamp(0, entries.length - 1).toInt();
     final selected = entries.isEmpty ? null : entries[safeIndex];
-    final viewport = MediaQuery.sizeOf(context);
-    final useCompactShell = viewport.width < 600 || viewport.shortestSide < 600;
-    final useCompactRail = viewport.width < 1280;
+    final layout = PosLayoutSpec.fromMediaQuery(context);
+    final useCompactShell = layout.prefersCompactShell;
+    final useCompactRail = !layout.isLarge;
 
     if (useCompactShell) {
       return Scaffold(
@@ -110,12 +111,14 @@ class ToastSidebar extends StatelessWidget {
                 bottomItems: bottomItems ?? const <ToastSidebarItem>[],
               ),
               Expanded(
-                child: ToastWorkSurface(
-                  padding: EdgeInsets.zero,
-                  backgroundColor: PosColors.canvas,
-                  borderColor: Colors.transparent,
-                  clip: false,
-                  child: body,
+                child: ToastContentViewport(
+                  child: ToastWorkSurface(
+                    padding: EdgeInsets.zero,
+                    backgroundColor: PosColors.canvas,
+                    borderColor: Colors.transparent,
+                    clip: false,
+                    child: body,
+                  ),
                 ),
               ),
             ],
@@ -147,12 +150,14 @@ class ToastSidebar extends StatelessWidget {
                       height: 52,
                     ),
                     Expanded(
-                      child: ToastWorkSurface(
-                        padding: EdgeInsets.zero,
-                        backgroundColor: PosColors.canvas,
-                        borderColor: Colors.transparent,
-                        clip: false,
-                        child: body,
+                      child: ToastContentViewport(
+                        child: ToastWorkSurface(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: PosColors.canvas,
+                          borderColor: Colors.transparent,
+                          clip: false,
+                          child: body,
+                        ),
                       ),
                     ),
                   ],
@@ -208,8 +213,8 @@ class _ToastSidebarCompactNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewport = MediaQuery.sizeOf(context);
-    if (viewport.width < 560 && entries.length > 5) {
+    final layout = PosLayoutSpec.fromMediaQuery(context);
+    if (layout.isCompact && entries.length > 5) {
       return _ToastSidebarCompactSelectNav(
         entries: entries,
         selectedIndex: selectedIndex,
