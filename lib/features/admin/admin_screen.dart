@@ -146,6 +146,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         role,
         isPhotoObjetContext,
         overrideStoreContext?.name,
+        overrideStoreContext?.brandId,
       );
     }
 
@@ -155,6 +156,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       role,
       isPhotoObjetContext,
       overrideStoreContext?.name,
+      overrideStoreContext?.brandId,
     );
   }
 
@@ -202,11 +204,20 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     ];
   }
 
-  List<Widget> _tabsForRole(String? role, bool isPhotoObjetContext) {
+  List<Widget> _tabsForRole(
+    String? role,
+    bool isPhotoObjetContext,
+    String? overrideStoreName,
+    String? overrideStoreBrandId,
+  ) {
     final tabs = <Widget>[
       if (!isPhotoObjetContext) ...[const TablesTab(), const MenuTab()],
       const StaffTab(),
-      ReportsTab(overrideStoreId: widget.overrideRestaurantId),
+      ReportsTab(
+        overrideStoreId: widget.overrideRestaurantId,
+        overrideStoreName: overrideStoreName,
+        overrideStoreBrandId: overrideStoreBrandId,
+      ),
       AttendanceTab(isPhotoObjetContext: isPhotoObjetContext),
       if (isPhotoObjetContext)
         const PhotoInventoryScreen()
@@ -339,8 +350,14 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     String? role,
     bool isPhotoObjetContext,
     String? overrideStoreName,
+    String? overrideStoreBrandId,
   ) {
-    final tabs = _tabsForRole(role, isPhotoObjetContext);
+    final tabs = _tabsForRole(
+      role,
+      isPhotoObjetContext,
+      overrideStoreName,
+      overrideStoreBrandId,
+    );
     final groups = _sidebarGroupsForRole(role, isPhotoObjetContext);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
@@ -360,8 +377,8 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             )
           : null,
       topBarTrailing: isSuperAdminView
-          ? MediaQuery.sizeOf(context).width < 600 ||
-                    MediaQuery.textScalerOf(context).scale(1) > 1.5
+          ? MediaQuery.sizeOf(context).width < 1280 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.3
                 ? AppNavBar(
                     showLogout: isSuperAdminView,
                     overrideStoreId: widget.overrideRestaurantId,
@@ -415,8 +432,14 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     String? role,
     bool isPhotoObjetContext,
     String? overrideStoreName,
+    String? overrideStoreBrandId,
   ) {
-    final tabs = _tabsForRole(role, isPhotoObjetContext);
+    final tabs = _tabsForRole(
+      role,
+      isPhotoObjetContext,
+      overrideStoreName,
+      overrideStoreBrandId,
+    );
     final groups = _sidebarGroupsForRole(role, isPhotoObjetContext);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
@@ -436,8 +459,8 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             )
           : null,
       topBarTrailing: isSuperAdminView
-          ? MediaQuery.sizeOf(context).width < 600 ||
-                    MediaQuery.textScalerOf(context).scale(1) > 1.5
+          ? MediaQuery.sizeOf(context).width < 1280 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.3
                 ? AppNavBar(
                     showLogout: isSuperAdminView,
                     overrideStoreId: widget.overrideRestaurantId,
