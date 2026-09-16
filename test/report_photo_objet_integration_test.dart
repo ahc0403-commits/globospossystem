@@ -145,12 +145,13 @@ void main() {
 
     expect(
       admin,
-      contains('ReportsTab(overrideStoreId: widget.overrideRestaurantId)'),
+      allOf(
+        contains('ReportsTab('),
+        contains('overrideStoreId: widget.overrideRestaurantId'),
+        contains('overrideStoreBrandId: overrideStoreBrandId'),
+      ),
     );
-    expect(
-      reports,
-      contains('widget.overrideStoreId ?? ref.watch(authProvider).storeId'),
-    );
+    expect(reports, contains('widget.overrideStoreId ?? auth.storeId'));
   });
 
   test('missing proof details and headline count use the same rows', () {

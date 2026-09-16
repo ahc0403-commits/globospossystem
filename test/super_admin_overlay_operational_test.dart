@@ -491,6 +491,21 @@ void main() {
     expect(tableRegion, findsOneWidget);
     expect(tester.getBottomRight(tableRegion).dy, lessThanOrEqualTo(849));
 
+    await tester.tap(
+      find.byKey(const Key('super_admin_nav_detailed_analytics')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('super_admin_context_header')), findsNothing);
+    expect(
+      find.byKey(const Key('super_admin_detailed_analytics')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('super_admin_detailed_analytics_store')),
+      findsOneWidget,
+    );
+
     await tester.tap(find.byKey(const Key('super_admin_nav_sales_tax_report')));
     await tester.pump();
 
@@ -498,6 +513,66 @@ void main() {
     final salesReport = find.byKey(const Key('restaurant_sales_export_screen'));
     expect(salesReport, findsOneWidget);
     expect(tester.getTopLeft(salesReport).dy, lessThan(100));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('top bar does not overflow at tablet width', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(768, 1024);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final router = GoRouter(
+      initialLocation: '/super-admin',
+      routes: [
+        GoRoute(
+          path: '/super-admin',
+          builder: (_, __) => const SuperAdminScreen(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((ref) => _AuthNotifier()),
+          superAdminProvider.overrideWith((ref) => _SuperAdminNotifier()),
+          qcTemplateProvider.overrideWith((ref) => _TemplateNotifier()),
+          globalQcTemplatesProvider.overrideWith((ref) async => const []),
+        ],
+        child: MaterialApp.router(
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.build(),
+          locale: const Locale('ko'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final initialLayoutError = tester.takeException();
+    if (initialLayoutError is FlutterError) {
+      fail(initialLayoutError.toStringDeep());
+    }
+    expect(initialLayoutError, isNull);
+
+    await tester.tap(
+      find.byKey(const Key('super_admin_nav_detailed_analytics')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('super_admin_detailed_analytics')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 

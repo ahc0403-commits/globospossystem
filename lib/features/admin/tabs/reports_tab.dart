@@ -21,6 +21,7 @@ import '../../auth/auth_provider.dart';
 import '../../report/bm_menu_exception_history.dart';
 import '../../report/menu_sales_analytics.dart';
 import '../../report/report_provider.dart';
+import '../../report/revenue_forecast/revenue_forecast_engine.dart';
 import '../report_analysis_screens.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/daily_closing_provider.dart';
@@ -29,9 +30,16 @@ import '../widgets/paperless_operations_dashboard.dart';
 import '../widgets/sales_revenue_analysis_dashboard.dart';
 
 class ReportsTab extends ConsumerStatefulWidget {
-  const ReportsTab({super.key, this.overrideStoreId});
+  const ReportsTab({
+    super.key,
+    this.overrideStoreId,
+    this.overrideStoreName,
+    this.overrideStoreBrandId,
+  });
 
   final String? overrideStoreId;
+  final String? overrideStoreName;
+  final String? overrideStoreBrandId;
 
   @override
   ConsumerState<ReportsTab> createState() => _ReportsTabState();
@@ -75,9 +83,27 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final storeId = widget.overrideStoreId ?? ref.watch(authProvider).storeId;
+    final auth = ref.watch(authProvider);
+    final storeId = widget.overrideStoreId ?? auth.storeId;
+    final selectedStores = auth.accessibleStores.where(
+      (store) => store.id == storeId,
+    );
+    final selectedStore = selectedStores.isEmpty ? null : selectedStores.first;
+    final selectedStoreName = widget.overrideStoreName ?? selectedStore?.name;
+    final selectedStoreBrandId =
+        widget.overrideStoreBrandId ?? selectedStore?.brandId;
+    final forecastBusinessType =
+        PermissionUtils.isPhotoObjetContext(
+          role: auth.role,
+          brandId: selectedStoreBrandId,
+        )
+        ? ForecastBusinessType.photo
+        : ForecastBusinessType.restaurant;
+    final canAccessRevenueForecast = PermissionUtils.canAccessRevenueForecast(
+      auth.role,
+    );
     final canViewBmHistory = PermissionUtils.canViewServiceCancellationHistory(
-      ref.watch(authProvider).role,
+      auth.role,
     );
     final reportState = ref.watch(reportProvider);
     final reportNotifier = ref.read(reportProvider.notifier);
@@ -360,6 +386,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 startDate: reportState.startDate,
                 endDate: reportState.endDate,
                 menuSalesParams: menuSalesParams,
+                storeName: selectedStoreName,
+                forecastBusinessType: forecastBusinessType,
+                showRevenueForecast: canAccessRevenueForecast,
+                canSaveForecastProfile: canAccessRevenueForecast,
               ),
               const SizedBox(height: 8),
             ],
@@ -400,6 +430,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 startDate: reportState.startDate,
                 endDate: reportState.endDate,
                 menuSalesParams: menuSalesParams,
+                storeName: selectedStoreName,
+                forecastBusinessType: forecastBusinessType,
+                showRevenueForecast: canAccessRevenueForecast,
+                canSaveForecastProfile: canAccessRevenueForecast,
               ),
               const SizedBox(height: 8),
             ],
@@ -1456,12 +1490,20 @@ class ReportAnalysisLaunchers extends StatelessWidget {
     required this.startDate,
     required this.endDate,
     required this.menuSalesParams,
+    this.storeName,
+    this.forecastBusinessType = ForecastBusinessType.restaurant,
+    this.showRevenueForecast = false,
+    this.canSaveForecastProfile = false,
   });
 
   final String storeId;
   final DateTime startDate;
   final DateTime endDate;
   final MenuSalesAnalyticsParams menuSalesParams;
+  final String? storeName;
+  final ForecastBusinessType forecastBusinessType;
+  final bool showRevenueForecast;
+  final bool canSaveForecastProfile;
 
   void _openPaperlessOperations(BuildContext context) {
     Navigator.of(context).push(
@@ -1490,6 +1532,10 @@ class ReportAnalysisLaunchers extends StatelessWidget {
           storeId: storeId,
           startDate: startDate,
           endDate: endDate,
+          storeName: storeName,
+          businessType: forecastBusinessType,
+          showRevenueForecast: showRevenueForecast,
+          canSaveForecastProfile: canSaveForecastProfile,
         ),
       ),
     );

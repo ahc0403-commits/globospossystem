@@ -18,6 +18,7 @@ import '../../core/utils/number_input_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
+import '../admin/tabs/reports_tab.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_state.dart';
 import '../emergency_fulfillment/emergency_control_panel.dart';
@@ -32,6 +33,7 @@ const _superAdminScrollPhysics = AlwaysScrollableScrollPhysics(
 );
 const _superAdminContentFirstItemKeys = <Key>[
   Key('super_admin_nav_reports'),
+  Key('super_admin_nav_detailed_analytics'),
   Key('super_admin_nav_sales_tax_report'),
 ];
 
@@ -156,7 +158,9 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       groups: groups,
       selectedIndex: safeIndex,
       onItemSelected: (index) => setState(() => _tabIndex = index),
-      topBarTrailing: MediaQuery.sizeOf(context).width < 600
+      topBarTrailing:
+          MediaQuery.sizeOf(context).width < 1280 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.3
           ? const AppNavBar(showLogout: false)
           : Row(
               mainAxisSize: MainAxisSize.min,
@@ -311,6 +315,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
         },
       ),
       _AllReportsTab(state: state, notifier: notifier),
+      _DetailedAnalyticsTab(restaurants: state.restaurants),
       const RestaurantSalesExportScreen(embedded: true),
       const PhotoSalesImportScreen(),
       const EmergencyControlPanel(),
@@ -339,6 +344,13 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
             urgency: ToastSidebarUrgency.backOffice,
             helperLabel: l10n.superAdminReportsHelper,
             itemKey: const Key('super_admin_nav_reports'),
+          ),
+          ToastSidebarItem(
+            icon: Icons.query_stats_rounded,
+            label: l10n.superAdminDetailedAnalytics,
+            urgency: ToastSidebarUrgency.backOffice,
+            helperLabel: l10n.superAdminDetailedAnalyticsHelper,
+            itemKey: const Key('super_admin_nav_detailed_analytics'),
           ),
           ToastSidebarItem(
             icon: Icons.receipt_long_outlined,
@@ -2499,6 +2511,134 @@ String _legalAccountingText(
   'vi' => vi,
   _ => ko,
 };
+
+class _DetailedAnalyticsTab extends StatefulWidget {
+  const _DetailedAnalyticsTab({required this.restaurants});
+
+  final List<SuperRestaurant> restaurants;
+
+  @override
+  State<_DetailedAnalyticsTab> createState() => _DetailedAnalyticsTabState();
+}
+
+class _DetailedAnalyticsTabState extends State<_DetailedAnalyticsTab> {
+  String? _selectedStoreId;
+
+  @override
+  void didUpdateWidget(covariant _DetailedAnalyticsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final selectedStoreId = _selectedStoreId;
+    if (selectedStoreId != null &&
+        !widget.restaurants.any((store) => store.id == selectedStoreId)) {
+      _selectedStoreId = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final selectedStoreId = _selectedStoreId;
+    final selectedStore = selectedStoreId == null
+        ? null
+        : widget.restaurants
+              .where((store) => store.id == selectedStoreId)
+              .cast<SuperRestaurant?>()
+              .firstWhere((store) => store != null, orElse: () => null);
+
+    return Column(
+      key: const Key('super_admin_detailed_analytics'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ToastWorkSurface(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.superAdminDetailedAnalytics,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l10n.superAdminDetailedAnalyticsHelper,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              );
+              final selector = DropdownButton<String>(
+                key: const Key('super_admin_detailed_analytics_store'),
+                value: selectedStoreId,
+                hint: Text(l10n.superAdminDetailedAnalyticsSelectStore),
+                dropdownColor: AppColors.surface1,
+                items: [
+                  for (final restaurant in widget.restaurants)
+                    DropdownMenuItem<String>(
+                      value: restaurant.id,
+                      child: Text(
+                        restaurant.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (storeId) =>
+                    setState(() => _selectedStoreId = storeId),
+              );
+
+              if (constraints.maxWidth < 720 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [title, const SizedBox(height: 10), selector],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: 16),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 360),
+                    child: selector,
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: selectedStore == null
+              ? Center(
+                  child: Text(
+                    l10n.superAdminDetailedAnalyticsSelectStore,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                )
+              : KeyedSubtree(
+                  key: ValueKey(
+                    'super_admin_detailed_analytics_${selectedStore.id}',
+                  ),
+                  child: ReportsTab(
+                    overrideStoreId: selectedStore.id,
+                    overrideStoreName: selectedStore.name,
+                    overrideStoreBrandId: selectedStore.brandId,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
 
 class _AllReportsTab extends StatefulWidget {
   const _AllReportsTab({required this.state, required this.notifier});

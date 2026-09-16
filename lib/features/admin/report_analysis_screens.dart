@@ -12,6 +12,8 @@ import '../report/menu_sales_analytics_panel.dart';
 import '../report/report_excel_file.dart';
 import '../report/report_provider.dart';
 import '../report/revenue_history_provider.dart';
+import '../report/revenue_forecast/revenue_forecast_engine.dart';
+import '../report/revenue_forecast/revenue_forecast_panel.dart';
 import 'widgets/paperless_operations_dashboard.dart';
 import 'widgets/sales_revenue_analysis_dashboard.dart';
 
@@ -96,12 +98,20 @@ class SalesRevenueAnalyticsScreen extends ConsumerStatefulWidget {
     required this.storeId,
     required this.startDate,
     required this.endDate,
+    this.storeName,
+    this.businessType = ForecastBusinessType.restaurant,
+    this.showRevenueForecast = false,
+    this.canSaveForecastProfile = false,
     this.saveExcelFile,
   });
 
   final String storeId;
   final DateTime startDate;
   final DateTime endDate;
+  final String? storeName;
+  final ForecastBusinessType businessType;
+  final bool showRevenueForecast;
+  final bool canSaveForecastProfile;
   final ReportExcelFileSaver? saveExcelFile;
 
   @override
@@ -221,6 +231,24 @@ class _SalesRevenueAnalyticsScreenState
     final history = days <= 1
         ? const AsyncData<List<DailyRevenue>>([])
         : ref.watch(revenueHistoryProvider(historyRange));
+    final hcmNow = toHoChiMinhBusinessTime(DateTime.now());
+    final yesterday = DateTime.utc(
+      hcmNow.year,
+      hcmNow.month,
+      hcmNow.day,
+    ).subtract(const Duration(days: 1));
+    final trainingEnd = end.isAfter(yesterday) ? yesterday : end;
+    final forecastObservations = reportState.summary?.dailyBreakdown
+        .where((row) => !row.date.isAfter(trainingEnd))
+        .map(
+          (row) => RevenueForecastObservation(
+            date: row.date,
+            revenueVnd: row.total,
+            dineInRevenueVnd: row.dineIn,
+            units: row.teamCount > 0 ? row.teamCount.toDouble() : null,
+          ),
+        )
+        .toList(growable: false);
     return Scaffold(
       key: const Key('sales_revenue_analytics_screen'),
       backgroundColor: AppColors.surface0,
@@ -274,6 +302,20 @@ class _SalesRevenueAnalyticsScreenState
               onRetry: () =>
                   ref.read(reportProvider.notifier).loadReport(widget.storeId),
             ),
+            if (widget.showRevenueForecast &&
+                reportState.summary != null &&
+                !reportState.isLoading) ...[
+              const SizedBox(height: 12),
+              RevenueForecastPanel(
+                storeId: widget.storeId,
+                storeName: widget.storeName,
+                businessType: widget.businessType,
+                trainingStart: start,
+                trainingEnd: trainingEnd,
+                observations: forecastObservations ?? const [],
+                canSaveProfile: widget.canSaveForecastProfile,
+              ),
+            ],
           ],
         ),
       ),

@@ -18,6 +18,12 @@ class PermissionUtils {
   static bool canViewServiceCancellationHistory(String? role) =>
       role == 'brand_admin';
 
+  /// Revenue forecasting is a planning surface for the platform owner and
+  /// brand managers. Store operators keep the existing sales report without
+  /// gaining access to network planning assumptions.
+  static bool canAccessRevenueForecast(String? role) =>
+      const {'super_admin', 'brand_admin', 'photo_objet_master'}.contains(role);
+
   static bool isPhotoObjetRole(String? role) =>
       role == 'photo_objet_master' || role == 'photo_objet_store_operator';
 
