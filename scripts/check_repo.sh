@@ -16,6 +16,9 @@ flutter test
 printf 'CHECK_REPO_STEP=menu_localization_sql\n'
 bash scripts/test_menu_localization.sh
 
+printf 'CHECK_REPO_STEP=qr_menu_category_auto_sync_sql\n'
+bash test/qr_menu_category_auto_sync_sql_test.sh
+
 printf 'CHECK_REPO_STEP=inventory_purchase_orderer_catalog_sql\n'
 bash test/inventory_purchase_orderer_catalog_sql_test.sh
 
