@@ -24,7 +24,7 @@ const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
   'lib/features/cashier/cashier_screen.dart':
-      'ccc8309241d2ca29d38fe4b4c7e5f62b5c501b5508eb63cb765801ad5bdb34d1',
+      'bf5a1e1f781b2e6c8eb55d9516d5c8373fb9b0819dc0b5717b72a807e0b90993',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   // Intentional event-merge fix; behavioral regressions live in
@@ -52,13 +52,13 @@ const _frozenAlertFiles = <String, String>{
   // Menu/history/search labels now use ARB in KO/VI/EN.
   // Arrival copy behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      '3038822586374575b0297b9437b34546d4dd36fadd363bc558ec6f6bfcd04842',
+      '37c5902301d6f98166a954a9508594171cdc5a68976469799a9f756588183732',
   'lib/l10n/app_localizations_ko.dart':
-      'bfbf15c172c829515e3e11e2ac3a72c2790160aebc8246645a54e8476e71084a',
+      '8d6afbd22bc32ed031c5fcd9cf4155f19cd343c9b98d149e0fc6559b102bdb57',
   'lib/l10n/app_localizations_vi.dart':
-      '44783e4370514adc4c4b44dfcdb1c983664a55aa60e70e529d45ba17ddb58435',
+      '8e6970cc4dbd4efe7330ddc99ddaafddbb698ffaca2b18ab4f9d1896aebf7f39',
   'lib/l10n/app_localizations_en.dart':
-      '8b397c6bb6e2f57cc20aa8c700a3198e1107022d81a4468fec29f2d1d8603163',
+      '63aabb13c6770de7da9acbc4bfa42752e682bca1a2a4b99508257830f6c0a23a',
 };
 
 void main() {

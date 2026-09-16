@@ -216,6 +216,9 @@ class _PaymentNotifier extends PaymentNotifier {
   final bool completeOrdersOnPayment;
   int cancelledOrders = 0;
   int cancelledItems = 0;
+  int cancelledUnservedItems = 0;
+  int? cancelledUnservedQuantity;
+  String? cancelledUnservedReason;
   int restoredOrders = 0;
   int restoredItems = 0;
   int serviceItemMutations = 0;
@@ -369,6 +372,19 @@ class _PaymentNotifier extends PaymentNotifier {
   Future<bool> cancelOrderItem(String itemId, String storeId) async {
     cancelledItems += 1;
     return true;
+  }
+
+  @override
+  Future<Map<String, dynamic>?> cancelUnservedOrderItem({
+    required String itemId,
+    required String storeId,
+    required int quantity,
+    required String reason,
+  }) async {
+    cancelledUnservedItems += 1;
+    cancelledUnservedQuantity = quantity;
+    cancelledUnservedReason = reason;
+    return const {'cancellation_kind': 'fulfillment_only'};
   }
 
   @override
@@ -559,6 +575,48 @@ void main() {
     expect(find.text('Coca-Cola'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'cashier_cancel_unserved_dialog requires a reason and cancels only unserved food',
+    (tester) async {
+      final harness = await _pumpCashier(
+        tester,
+        initialOrder: _paperlessCashierOrder,
+      );
+      await _selectOrder(tester);
+
+      final cancelItem = find.byKey(
+        const Key('cashier_cancel_order_item_cashier-item-coffee'),
+      );
+      await tester.ensureVisible(cancelItem);
+      await tester.tap(cancelItem);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('cashier_cancel_unserved_dialog')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_cancel_unserved_confirm_button')),
+      );
+      await tester.pump();
+      expect(harness.notifier.cancelledUnservedItems, 0);
+
+      await tester.enterText(
+        find.byKey(const Key('cashier_cancel_unserved_reason')),
+        '고객 요청 취소',
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_cancel_unserved_confirm_button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(harness.notifier.cancelledUnservedItems, 1);
+      expect(harness.notifier.cancelledUnservedQuantity, 1);
+      expect(harness.notifier.cancelledUnservedReason, '고객 요청 취소');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'cashier can use manager-approved service item controls without extra permissions',
