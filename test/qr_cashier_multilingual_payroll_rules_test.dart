@@ -89,6 +89,13 @@ void main() {
     final payroll = StaffPayroll(
       userId: 'employee',
       userName: 'Employee',
+      scope: PayrollScope(
+        storeId: 'store-1',
+        employeeId: 'employee',
+        periodStart: DateTime(2026, 7, 1),
+        periodEndExclusive: DateTime(2026, 8, 1),
+        generatedAt: DateTime(2026, 7, 31),
+      ),
       lateMinutes: 60,
       lateReviewAmount: 200,
       dailyRecords: [
@@ -98,7 +105,9 @@ void main() {
           date: DateTime(2026, 7, 22),
           clockIn: DateTime(2026, 7, 22, 9),
           clockOut: DateTime(2026, 7, 22, 10),
-          hours: 1,
+          actualMinutes: 60,
+          regularPayableMinutes: 60,
+          overtimePayableMinutes: 0,
           amount: 100,
           isUnpaired: false,
         ),

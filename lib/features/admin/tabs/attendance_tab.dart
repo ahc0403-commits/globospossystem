@@ -69,16 +69,20 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   List<Map<String, dynamic>> _dailyLogs = const [];
   List<Map<String, dynamic>> _selectedEmployeeMonthLogs = const [];
   List<StaffPayroll> _payrolls = const [];
+  StaffPayroll? _selectedEmployeePayroll;
   bool _isLogsLoading = false;
   bool _isDailyLogsLoading = false;
   bool _isEmployeeMonthLoading = false;
+  bool _isEmployeePayrollLoading = false;
   bool _isPayrollLoading = false;
   int _payrollRequestId = 0;
+  int _employeePayrollRequestId = 0;
   bool _isManualAttendanceSaving = false;
   bool _payrollUnlocked = false;
   String? _logsError;
   String? _dailyLogsError;
   String? _employeeMonthError;
+  String? _employeePayrollError;
   String? _payrollError;
   bool? _hasPayrollPin;
   String? _selectedAttendanceUserId;
@@ -109,6 +113,30 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       first.month == second.month &&
       first.day == second.day;
 
+  ({DateTime start, DateTime endInclusive, DateTime endExclusive})
+  _selectedMonthPeriod() {
+    final start = _startOfMonth(_attendanceDate);
+    final nextMonth = DateTime(start.year, start.month + 1);
+    final today = _startOfDay(TimeUtils.nowVietnam());
+    final isCurrentMonth =
+        start.year == today.year && start.month == today.month;
+    final endExclusive = isCurrentMonth
+        ? today.add(const Duration(days: 1))
+        : nextMonth;
+    return (
+      start: start,
+      endInclusive: endExclusive.subtract(const Duration(days: 1)),
+      endExclusive: endExclusive,
+    );
+  }
+
+  void _clearSelectedEmployeePayroll() {
+    _employeePayrollRequestId++;
+    _selectedEmployeePayroll = null;
+    _employeePayrollError = null;
+    _isEmployeePayrollLoading = false;
+  }
+
   void _clearPayrollPreview() {
     _payrollRequestId++;
     _payrolls = const [];
@@ -124,6 +152,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       _dailyLogsError = null;
       _selectedAttendanceUserId = null;
       _selectedEmployeeMonthLogs = const [];
+      _clearSelectedEmployeePayroll();
       _clearPayrollPreview();
     });
 
@@ -212,6 +241,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         _selectedAttendanceUserId = null;
         _selectedEmployeeMonthLogs = const [];
         _employeeMonthError = null;
+        _clearSelectedEmployeePayroll();
       }
     });
 
@@ -247,30 +277,43 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     String storeId,
     String employeeId,
   ) async {
-    final monthStart = _startOfMonth(_attendanceDate);
-    final monthEnd = DateTime(monthStart.year, monthStart.month + 1);
+    final period = _selectedMonthPeriod();
+    final shouldLoadPayroll = _payrollUnlocked;
+    final requestId = ++_employeePayrollRequestId;
     setState(() {
       _selectedAttendanceUserId = employeeId;
       _selectedEmployeeMonthLogs = const [];
       _isEmployeeMonthLoading = true;
       _employeeMonthError = null;
+      _selectedEmployeePayroll = null;
+      _employeePayrollError = null;
+      _isEmployeePayrollLoading = shouldLoadPayroll;
     });
 
+    final logsFuture = _attendanceService.fetchEmployeeLogs(
+      storeId: storeId,
+      employeeId: employeeId,
+      from: TimeUtils.vietnamWallTimeToUtc(period.start),
+      to: TimeUtils.vietnamWallTimeToUtc(period.endExclusive),
+      limit: attendanceManagementRecordLimit,
+    );
+
     try {
-      final logs = await _attendanceService.fetchEmployeeLogs(
-        storeId: storeId,
-        employeeId: employeeId,
-        from: monthStart,
-        to: monthEnd,
-        limit: attendanceManagementRecordLimit,
-      );
-      if (!mounted || _selectedAttendanceUserId != employeeId) return;
+      final logs = await logsFuture;
+      if (logs.length >= attendanceManagementRecordLimit) {
+        throw StateError('PAYROLL_ATTENDANCE_LIMIT_REACHED:$employeeId');
+      }
+      if (!_matchesSelectedEmployeeRequest(employeeId, period, requestId)) {
+        return;
+      }
       setState(() {
         _selectedEmployeeMonthLogs = logs;
         _isEmployeeMonthLoading = false;
       });
     } catch (error) {
-      if (!mounted || _selectedAttendanceUserId != employeeId) return;
+      if (!_matchesSelectedEmployeeRequest(employeeId, period, requestId)) {
+        return;
+      }
       setState(() {
         _isEmployeeMonthLoading = false;
         _employeeMonthError = _mapAttendanceError(
@@ -279,44 +322,49 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         );
       });
     }
-  }
 
-  Future<void> _loadPayrollPreview(String storeId) async {
-    if (_isPayrollLoading) return;
-    final requestId = ++_payrollRequestId;
-    final periodStart = _logFrom;
-    final periodEnd = _logTo;
-
-    setState(() {
-      _payrolls = const [];
-      _isPayrollLoading = true;
-      _payrollError = null;
-    });
-
+    if (!shouldLoadPayroll) return;
     try {
       final payrolls = await _payrollService.calculatePayroll(
         storeId: storeId,
-        periodStart: periodStart,
-        periodEnd: periodEnd,
+        periodStart: period.start,
+        periodEnd: period.endInclusive,
+        employeeId: employeeId,
       );
-      if (!mounted || requestId != _payrollRequestId) return;
-      if (periodStart != _logFrom || periodEnd != _logTo) return;
+      if (!_matchesSelectedEmployeeRequest(employeeId, period, requestId)) {
+        return;
+      }
       setState(() {
-        _payrolls = payrolls;
-        _isPayrollLoading = false;
+        _selectedEmployeePayroll = payrollForEmployee(payrolls, employeeId);
+        _isEmployeePayrollLoading = false;
       });
-    } catch (e) {
-      if (!mounted || requestId != _payrollRequestId) return;
-      if (periodStart != _logFrom || periodEnd != _logTo) return;
+    } catch (error) {
+      if (!_matchesSelectedEmployeeRequest(employeeId, period, requestId)) {
+        return;
+      }
       setState(() {
-        _isPayrollLoading = false;
-        _payrollError = _mapPayrollError(
-          e,
+        _isEmployeePayrollLoading = false;
+        _employeePayrollError = _mapPayrollError(
+          error,
           context.l10n.attendancePayrollLoadFailed,
         );
       });
-      showErrorToast(context, context.l10n.attendancePayrollCalculateFailed);
     }
+  }
+
+  bool _matchesSelectedEmployeeRequest(
+    String employeeId,
+    ({DateTime start, DateTime endInclusive, DateTime endExclusive}) period,
+    int requestId,
+  ) {
+    if (!mounted ||
+        requestId != _employeePayrollRequestId ||
+        _selectedAttendanceUserId != employeeId) {
+      return false;
+    }
+    final current = _selectedMonthPeriod();
+    return current.start == period.start &&
+        current.endExclusive == period.endExclusive;
   }
 
   Future<void> _exportPayrollPreview(List<StaffPayroll> payrolls) async {
@@ -331,6 +379,33 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
 
     final fileName =
         'payroll_${DateFormat('yyyyMMdd').format(periodStart)}_${DateFormat('yyyyMMdd').format(periodEnd)}';
+    await FileSaver.instance.saveFile(
+      name: fileName,
+      bytes: Uint8List.fromList(bytes),
+      ext: 'xlsx',
+      mimeType: MimeType.microsoftExcel,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.l10n.attendancePayrollSaved)),
+    );
+  }
+
+  Future<void> _exportSelectedEmployeePayroll(StaffPayroll payroll) async {
+    final periodStart = payroll.scope.periodStart;
+    final periodEnd = payroll.scope.periodEndExclusive.subtract(
+      const Duration(days: 1),
+    );
+    final bytes = await _payrollService.exportToExcel(
+      payrolls: [payroll],
+      periodStart: periodStart,
+      periodEnd: periodEnd,
+    );
+    if (bytes.isEmpty) return;
+
+    final fileName =
+        'payroll_${payroll.userName}_${DateFormat('yyyyMM').format(periodStart)}';
     await FileSaver.instance.saveFile(
       name: fileName,
       bytes: Uint8List.fromList(bytes),
@@ -724,6 +799,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.attendancePayrollUnlocked)),
       );
+      final selectedEmployeeId = _selectedAttendanceUserId;
+      if (selectedEmployeeId != null) {
+        await _selectAttendanceEmployee(storeId, selectedEmployeeId);
+      }
     }
   }
 
@@ -741,6 +820,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     if (message.contains('ATTENDANCE_LOG_USER_NOT_FOUND')) {
       return context.l10n.attendanceReselectStaffFilter;
     }
+    if (message.contains('PAYROLL_ATTENDANCE_LIMIT_REACHED')) {
+      return context.l10n.attendancePayrollRecordLimitReached;
+    }
 
     return fallback;
   }
@@ -756,6 +838,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     }
     if (message.contains('ATTENDANCE_WAGE_CONFIG_NOT_FOUND')) {
       return context.l10n.attendanceWageConfigMissing;
+    }
+    if (message.contains('PAYROLL_ATTENDANCE_LIMIT_REACHED')) {
+      return context.l10n.attendancePayrollRecordLimitReached;
     }
 
     return fallback;
@@ -982,7 +1067,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     if (saved == true && mounted) {
       showSuccessToast(context, context.l10n.attendanceDailyAllowanceSaved);
       _clearPayrollPreview();
-      setState(() {});
+      final selectedEmployeeId = _selectedAttendanceUserId;
+      if (selectedEmployeeId != null) {
+        await _selectAttendanceEmployee(storeId, selectedEmployeeId);
+      } else {
+        setState(() {});
+      }
     }
   }
 
@@ -1096,7 +1186,17 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
 
   List<Map<String, dynamic>> _buildMonthlyAttendanceRows(
     List<Map<String, dynamic>> logs,
+    StaffPayroll? payroll,
   ) {
+    final payrollRecordsByDate = <DateTime, List<DailyRecord>>{};
+    for (final record in payroll?.dailyRecords ?? const <DailyRecord>[]) {
+      final date = DateTime(
+        record.date.year,
+        record.date.month,
+        record.date.day,
+      );
+      payrollRecordsByDate.putIfAbsent(date, () => []).add(record);
+    }
     final grouped = <DateTime, List<Map<String, dynamic>>>{};
     for (final log in logs) {
       final parsed = DateTime.tryParse(log['logged_at']?.toString() ?? '');
@@ -1150,6 +1250,23 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         }
       }
       if (openClockIn != null) needsReview = true;
+      final payrollRecords = payrollRecordsByDate[entry.key] ?? const [];
+      final actualMinutes = payrollRecords.isEmpty
+          ? workedMinutes
+          : payrollRecords.fold<int>(
+              0,
+              (sum, record) => sum + record.actualMinutes,
+            );
+      final payableMinutes = payrollRecords.fold<int>(
+        0,
+        (sum, record) => sum + record.payableMinutes,
+      );
+      final overtimeMinutes = payrollRecords.fold<int>(
+        0,
+        (sum, record) => sum + record.overtimePayableMinutes,
+      );
+      needsReview =
+          needsReview || payrollRecords.any((record) => record.isUnpaired);
 
       return <String, dynamic>{
         'date': entry.key,
@@ -1157,7 +1274,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         'clockOut': lastClockOut,
         'clockIns': clockIns,
         'clockOuts': clockOuts,
-        'hours': workedMinutes / 60,
+        'actualHours': actualMinutes / 60,
+        'payableHours': payableMinutes / 60,
+        'overtimeHours': overtimeMinutes / 60,
+        'hasPayroll': payroll != null,
         'needsReview': needsReview,
       };
     }).toList();
@@ -1171,7 +1291,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
 
   Widget _monthlyAttendanceRow(Map<String, dynamic> row) {
     final needsReview = row['needsReview'] == true;
+    final actualHours = row['actualHours'] as double;
+    final payableHours = row['payableHours'] as double;
+    final overtimeHours = row['overtimeHours'] as double;
+    final hasPayroll = row['hasPayroll'] == true;
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
           width: 82,
@@ -1183,19 +1308,45 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           ),
         ),
         Expanded(
-          child: Text(
-            '${_formatClockList(row['clockIns'])} – ${_formatClockList(row['clockOuts'])}',
-            style: Theme.of(context).textTheme.bodySmall,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_formatClockList(row['clockIns'])} – ${_formatClockList(row['clockOuts'])}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                context.l10n.attendanceActualHoursValue(
+                  actualHours.toStringAsFixed(1),
+                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              if (hasPayroll && !needsReview) ...[
+                const SizedBox(height: 2),
+                Text(
+                  context.l10n.attendancePayableAndOvertimeHours(
+                    payableHours.toStringAsFixed(1),
+                    overtimeHours.toStringAsFixed(1),
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                  ),
+                ),
+              ],
+              if (needsReview) ...[
+                const SizedBox(height: 2),
+                Text(
+                  context.l10n.attendanceExcludedFromPayroll,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: PosColors.warning),
+                ),
+              ],
+            ],
           ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          context.l10n.attendanceHoursValue(
-            (row['hours'] as double).toStringAsFixed(1),
-          ),
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(width: 8),
         ToastStatusBadge(
@@ -1284,10 +1435,20 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
               .where((staff) => staff['role']?.toString() == 'part_timer')
               .length;
     final selectedUserId = selectedAttendanceRow?['userId']?.toString();
-    final selectedPayroll = payrollForEmployee(
-      filteredPayrolls,
-      selectedUserId,
-    );
+    final selectedMonthPeriod = _selectedMonthPeriod();
+    final selectedPayrollCandidate = _selectedEmployeePayroll;
+    final selectedPayroll =
+        storeId != null &&
+            selectedUserId != null &&
+            selectedPayrollCandidate?.scope.matches(
+                  storeId: storeId,
+                  employeeId: selectedUserId,
+                  periodStart: selectedMonthPeriod.start,
+                  periodEndExclusive: selectedMonthPeriod.endExclusive,
+                ) ==
+                true
+        ? selectedPayrollCandidate
+        : null;
     final photoCaptureCount = filteredLogs
         .where((row) => (row['photo_url']?.toString() ?? '').isNotEmpty)
         .length;
@@ -1468,7 +1629,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           storeId: storeId,
           selectedAttendanceRow: selectedAttendanceRow,
           selectedPayroll: selectedPayroll,
-          filteredPayrolls: filteredPayrolls,
           payrollRequiresUnlock: payrollRequiresUnlock,
           currency: currency,
           employeeMonthLogs: _selectedEmployeeMonthLogs,
@@ -1685,7 +1845,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                   storeId: storeId,
                   selectedAttendanceRow: selectedAttendanceRow,
                   selectedPayroll: selectedPayroll,
-                  filteredPayrolls: filteredPayrolls,
                   payrollRequiresUnlock: payrollRequiresUnlock,
                   currency: currency,
                   employeeMonthLogs: _selectedEmployeeMonthLogs,
@@ -1889,7 +2048,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     required String? storeId,
     required Map<String, dynamic>? selectedAttendanceRow,
     required StaffPayroll? selectedPayroll,
-    required List<StaffPayroll> filteredPayrolls,
     required bool payrollRequiresUnlock,
     required NumberFormat currency,
     required List<Map<String, dynamic>> employeeMonthLogs,
@@ -1909,27 +2067,40 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             selectedAttendanceRow!['logs'] as List,
           )
         : const <Map<String, dynamic>>[];
-    final monthlyRows = _buildMonthlyAttendanceRows(employeeMonthLogs);
+    final monthlyRows = _buildMonthlyAttendanceRows(
+      employeeMonthLogs,
+      selectedPayroll,
+    );
+    final selectedMonthPeriod = _selectedMonthPeriod();
     final selectedMonth = DateFormat('yyyy-MM').format(attendanceDate);
-    final selectedTotalHours = selectedPayroll?.totalHours;
-    final selectedOvertimeHours = selectedPayroll == null
-        ? null
-        : overtimeHoursForPayroll(selectedPayroll);
+    final selectedMonthRange =
+        '${DateFormat('yyyy-MM-dd').format(selectedMonthPeriod.start)} ~ '
+        '${DateFormat('yyyy-MM-dd').format(selectedMonthPeriod.endInclusive)}';
+    final selectedActualHours = selectedPayroll?.totalActualHours;
+    final selectedPayableHours = selectedPayroll?.totalHours;
+    final selectedOvertimeHours = selectedPayroll?.totalOvertimePayableHours;
     final selectedGrossPayroll = selectedPayroll?.grossAmount;
+    final selectedAllowance = selectedPayroll == null
+        ? null
+        : selectedPayroll.totalMealAllowance +
+              selectedPayroll.totalParkingAllowance;
     final payrollActionLabel = payrollRequiresUnlock
         ? context.l10n.attendanceUnlockPayrollAction
-        : filteredPayrolls.isEmpty
+        : selectedPayroll == null
         ? context.l10n.attendanceRunPayrollPreview
-        : context.l10n.attendanceExportAllPayroll;
+        : context.l10n.attendanceExportEmployeeMonthlyPayroll;
     final VoidCallback? payrollAction = payrollRequiresUnlock
         ? storeId == null
               ? null
               : () => _unlockPayroll(storeId)
-        : filteredPayrolls.isEmpty
-        ? storeId == null
+        : selectedPayroll == null
+        ? storeId == null || selectedAttendanceRow == null
               ? null
-              : () => _loadPayrollPreview(storeId)
-        : () => _exportPayrollPreview(_payrolls);
+              : () => _selectAttendanceEmployee(
+                  storeId,
+                  selectedAttendanceRow['userId'] as String,
+                )
+        : () => _exportSelectedEmployeePayroll(selectedPayroll);
 
     return ToastWorkSurface(
       padding: const EdgeInsets.all(18),
@@ -2053,7 +2224,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              context.l10n.attendanceMonthlyRecordsSubtitle,
+                              context.l10n.attendanceMonthlyRecordsRange(
+                                selectedMonthRange,
+                              ),
                               style: AppFonts.system(
                                 color: AppColors.textSecondary,
                                 fontSize: 12,
@@ -2157,10 +2330,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                                 ? context
                                       .l10n
                                       .attendancePayrollSummaryUnlockSubtitle
-                                : context
-                                      .l10n
-                                      .attendancePayrollSummaryReadySubtitle,
-                            maxLines: 1,
+                                : context.l10n
+                                      .attendancePayrollSummaryPeriodSubtitle(
+                                        selectedMonthRange,
+                                      ),
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: AppFonts.system(
                               color: AppColors.textSecondary,
@@ -2168,7 +2342,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                             ),
                           ),
                           children: [
-                            if (_isPayrollLoading)
+                            if (_isEmployeePayrollLoading)
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 12),
                                 child: Center(
@@ -2177,18 +2351,48 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                                   ),
                                 ),
                               )
+                            else if (_employeePayrollError != null)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  PosExceptionAlert(
+                                    label: _employeePayrollError!,
+                                    color: PosColors.danger,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  FilledButton.icon(
+                                    onPressed: payrollAction,
+                                    icon: const Icon(
+                                      Icons.refresh_rounded,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      context.l10n.attendanceRunPayrollPreview,
+                                    ),
+                                  ),
+                                ],
+                              )
                             else ...[
                               _summaryMetricRow(
-                                context.l10n.attendanceTotalWorkedHours,
-                                selectedTotalHours == null
+                                context.l10n.attendanceActualWorkedHours,
+                                selectedActualHours == null
                                     ? context.l10n.attendancePreviewRequired
                                     : context.l10n.attendanceHoursValue(
-                                        selectedTotalHours.toStringAsFixed(1),
+                                        selectedActualHours.toStringAsFixed(1),
                                       ),
                               ),
                               const SizedBox(height: 10),
                               _summaryMetricRow(
-                                context.l10n.attendanceOvertimeHours,
+                                context.l10n.attendancePayableHours,
+                                selectedPayableHours == null
+                                    ? context.l10n.attendancePreviewRequired
+                                    : context.l10n.attendanceHoursValue(
+                                        selectedPayableHours.toStringAsFixed(1),
+                                      ),
+                              ),
+                              const SizedBox(height: 10),
+                              _summaryMetricRow(
+                                context.l10n.attendanceRecognizedOvertimeHours,
                                 selectedOvertimeHours == null
                                     ? context.l10n.attendancePreviewRequired
                                     : context.l10n.attendanceHoursValue(
@@ -2204,7 +2408,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                               ),
                               const SizedBox(height: 10),
                               _summaryMetricRow(
-                                context.l10n.attendanceEstimatedPayroll,
+                                context.l10n.attendanceWorkPay,
                                 selectedGrossPayroll == null
                                     ? context.l10n.attendancePreviewRequired
                                     : _formatVnd(
@@ -2217,7 +2421,17 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                               ),
                               const SizedBox(height: 10),
                               _summaryMetricRow(
-                                context.l10n.attendanceAccumulatedPayroll,
+                                context.l10n.attendanceAllowances,
+                                selectedAllowance == null
+                                    ? context.l10n.attendancePreviewRequired
+                                    : _formatVnd(currency, selectedAllowance),
+                                tone: selectedAllowance == null
+                                    ? PosColors.textSecondary
+                                    : PosColors.textPrimary,
+                              ),
+                              const SizedBox(height: 10),
+                              _summaryMetricRow(
+                                context.l10n.attendanceEstimatedPayable,
                                 selectedPayroll == null
                                     ? context.l10n.attendancePreviewRequired
                                     : _formatVnd(
@@ -2228,6 +2442,35 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                                     ? PosColors.textSecondary
                                     : PosColors.accent,
                               ),
+                              if ((selectedPayroll?.totalExcludedMinutes ?? 0) >
+                                  0) ...[
+                                const SizedBox(height: 12),
+                                PosExceptionAlert(
+                                  label: context.l10n
+                                      .attendanceExcludedHoursExplanation(
+                                        (selectedPayroll!.totalExcludedMinutes /
+                                                60)
+                                            .toStringAsFixed(1),
+                                      ),
+                                ),
+                              ],
+                              if ((selectedPayroll?.unpairedCount ?? 0) >
+                                  0) ...[
+                                const SizedBox(height: 12),
+                                PosExceptionAlert(
+                                  label: context.l10n
+                                      .attendanceUnpairedExcludedCount(
+                                        selectedPayroll!.unpairedCount,
+                                      ),
+                                  detail: selectedPayroll.unpairedDates
+                                      .map(
+                                        (date) => DateFormat(
+                                          'yyyy-MM-dd',
+                                        ).format(date),
+                                      )
+                                      .join(', '),
+                                ),
+                              ],
                               const SizedBox(height: 14),
                               SizedBox(
                                 width: double.infinity,
@@ -2239,7 +2482,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                                   icon: Icon(
                                     payrollRequiresUnlock
                                         ? Icons.lock_open_rounded
-                                        : filteredPayrolls.isEmpty
+                                        : selectedPayroll == null
                                         ? Icons.payments_outlined
                                         : Icons.download_rounded,
                                     size: 18,

@@ -34,6 +34,12 @@ void main() {
     expect(attendanceTab, contains('record.isUnpaired'));
     expect(attendanceTab, contains('payrollService.calculatePayroll('));
     expect(attendanceTab, contains('payrollService.exportToExcel('));
+    expect(attendanceTab, contains('employeeId: employeeId'));
+    expect(attendanceTab, contains('selectedPayrollCandidate?.scope.matches'));
+    expect(attendanceTab, contains('attendanceActualWorkedHours'));
+    expect(attendanceTab, contains('attendancePayableHours'));
+    expect(attendanceTab, contains('attendanceRecognizedOvertimeHours'));
+    expect(attendanceTab, contains('attendanceExportEmployeeMonthlyPayroll'));
 
     expect(
       payrollService,
@@ -43,6 +49,9 @@ void main() {
     expect(payrollService, contains("excel.rename('Sheet1', 'Summary')"));
     expect(payrollService, contains("final details = excel['Daily Details']"));
     expect(payrollService, contains("'Payable Amount (VND)'"));
+    expect(payrollService, contains('regularPayableMinutes'));
+    expect(payrollService, contains('overtimePayableMinutes'));
+    expect(payrollService, isNot(contains('(record.hours - 8)')));
     expect(
       pinService,
       contains('Future<bool> verifyPin(String storeId, String enteredPin)'),

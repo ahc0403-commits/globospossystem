@@ -13,6 +13,13 @@ void main() {
       final first = StaffPayroll(
         userId: 'employee-1',
         userName: 'First',
+        scope: PayrollScope(
+          storeId: 'store-1',
+          employeeId: 'employee-1',
+          periodStart: DateTime(2026, 9, 1),
+          periodEndExclusive: DateTime(2026, 10, 1),
+          generatedAt: DateTime(2026, 9, 17),
+        ),
         dailyRecords: [
           DailyRecord(
             userId: 'employee-1',
@@ -20,7 +27,9 @@ void main() {
             date: DateTime(2026, 9, 1),
             clockIn: null,
             clockOut: null,
-            hours: 9,
+            actualMinutes: 540,
+            regularPayableMinutes: 480,
+            overtimePayableMinutes: 60,
             amount: 900000,
             isUnpaired: false,
           ),
@@ -29,6 +38,13 @@ void main() {
       final second = StaffPayroll(
         userId: 'employee-2',
         userName: 'Second',
+        scope: PayrollScope(
+          storeId: 'store-1',
+          employeeId: 'employee-2',
+          periodStart: DateTime(2026, 9, 1),
+          periodEndExclusive: DateTime(2026, 10, 1),
+          generatedAt: DateTime(2026, 9, 17),
+        ),
         dailyRecords: [
           DailyRecord(
             userId: 'employee-2',
@@ -36,7 +52,9 @@ void main() {
             date: DateTime(2026, 9, 1),
             clockIn: null,
             clockOut: null,
-            hours: 4,
+            actualMinutes: 240,
+            regularPayableMinutes: 240,
+            overtimePayableMinutes: 0,
             amount: 400000,
             isUnpaired: false,
             mealAllowance: 25000,
@@ -214,6 +232,24 @@ void main() {
       expect(result.hours, closeTo(4.22, 0.000001));
       expect(result.nightHours, closeTo(0.22, 0.000001));
       expect(result.amount, 128450);
+    });
+
+    test('09:54 to 19:06 preserves actual time without inventing overtime', () {
+      final result = PayrollService().calcScheduledRuleBasedHourlyAmount(
+        clockIn: DateTime(2026, 9, 14, 9, 54),
+        clockOut: DateTime(2026, 9, 14, 19, 6),
+        configuredStartMinute: 9 * 60,
+        hourlyRate: 45000,
+        nightStartMinute: 22 * 60,
+        nightMultiplier: 1.3,
+        holidayMultiplier: 3,
+        excludeSunday: true,
+        holidays: const {},
+      );
+
+      expect(result.regularMinutes, 8 * 60 + 6);
+      expect(result.overtimeMinutes, 0);
+      expect(result.hours, 8.1);
     });
   });
 }
