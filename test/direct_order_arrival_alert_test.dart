@@ -50,16 +50,16 @@ const _frozenAlertFiles = <String, String>{
       '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
-  // 2026-09-17: menu cancellation replaces unserved-only copy in KO/VI/EN.
-  // Arrival copy behavior remains covered below for all customer/staff locales.
+  // 2026-09-17: menu cancellation and payroll summary copy are localized.
+  // Arrival behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      '443a06a2f11cfbc1ae21ae8eab2b9e58482cef9b6a5129d974fd4e1697c43533',
+      '7e1de21b3530ee1a5fa859d825ed0c4e005d7b2b2075f4542d41eaaf0e0c8ca1',
   'lib/l10n/app_localizations_ko.dart':
-      'bdad0e4cfc6a3afa8f35051a69a0194bcef80db88e05d839f076692f87aaf027',
+      '8ea7d4c3042ce7dcf4363003fb4f265edbf9310ee0729d5b6a9a0084ddabe50a',
   'lib/l10n/app_localizations_vi.dart':
-      '009c9e7621c340ca2d951f52e6c1a06899f4e29e54c31783c5abc5079020f789',
+      '7de68c1cdc3973345389b82dbea927b12e1d6661bd546422efb503628801947d',
   'lib/l10n/app_localizations_en.dart':
-      'f8413a0ed61934351de7fe8b5230323e0b8fdb9fc789aa7b2fabf72a114eb701',
+      'b2766c71988945999f2721e6f67bf99675f41de9f5ea25b0cdf4280c5e270405',
 };
 
 void main() {

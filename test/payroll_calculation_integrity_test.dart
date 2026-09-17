@@ -207,8 +207,8 @@ void main() {
             periodEnd: DateTime(2026, 7, 27),
           );
 
-      expect(attendance.requestedFrom, DateTime(2026, 7, 27));
-      expect(attendance.requestedTo, DateTime(2026, 7, 28));
+      expect(attendance.requestedFrom, DateTime.utc(2026, 7, 26, 17));
+      expect(attendance.requestedTo, DateTime.utc(2026, 7, 27, 17));
       expect(attendance.requestedRuleEmployeeIds, ['part-timer']);
       expect(payrolls, hasLength(1));
       expect(payrolls.single.userName, 'Nguyen Quynh Mai');
@@ -375,6 +375,79 @@ void main() {
       expect(payroll.totalMealAllowance, 0);
       expect(payroll.totalParkingAllowance, 10000);
       expect(payroll.totalAmount, 10000);
+    },
+  );
+
+  test(
+    'monthly snapshot separates actual, payable, overtime, and incomplete work',
+    () async {
+      final attendance =
+          _AttendanceServiceFake(
+              [
+                _log(
+                  employeeId: 'part-timer',
+                  name: 'Pham Tu Anh',
+                  role: 'part_timer',
+                  type: 'clock_in',
+                  loggedAt: '2026-09-14T02:54:00Z',
+                ),
+                _log(
+                  employeeId: 'part-timer',
+                  name: 'Pham Tu Anh',
+                  role: 'part_timer',
+                  type: 'clock_out',
+                  loggedAt: '2026-09-14T12:06:00Z',
+                ),
+                _log(
+                  employeeId: 'part-timer',
+                  name: 'Pham Tu Anh',
+                  role: 'part_timer',
+                  type: 'clock_in',
+                  loggedAt: '2026-09-17T03:06:00Z',
+                ),
+              ],
+              hourlyPayRule: {
+                'hourly_rate': 45000,
+                'scheduled_start': '09:00',
+                'night_start': '22:00',
+                'night_multiplier': 1.3,
+                'holiday_multiplier': 3,
+                'exclude_sunday': true,
+                'late_threshold_minutes': 60,
+                'late_review_hourly_multiplier': 2,
+              },
+            )
+            ..allowances = [
+              {
+                'employee_id': 'part-timer',
+                'work_date': '2026-09-17',
+                'meal_allowance_amount': 25000,
+                'parking_allowance_amount': 5000,
+              },
+            ];
+
+      final payroll =
+          (await PayrollService(attendanceSource: attendance).calculatePayroll(
+            storeId: 'store',
+            periodStart: DateTime(2026, 9, 1),
+            periodEnd: DateTime(2026, 9, 17),
+            employeeId: 'part-timer',
+          )).single;
+
+      expect(payroll.scope.storeId, 'store');
+      expect(payroll.scope.employeeId, 'part-timer');
+      expect(payroll.scope.periodStart, DateTime(2026, 9, 1));
+      expect(payroll.scope.periodEndExclusive, DateTime(2026, 9, 18));
+      expect(payroll.totalActualMinutes, 9 * 60 + 12);
+      expect(payroll.totalRegularPayableMinutes, 8 * 60 + 6);
+      expect(payroll.totalOvertimePayableMinutes, 0);
+      expect(payroll.totalExcludedMinutes, 66);
+      expect(payroll.unpairedCount, 1);
+      expect(payroll.unpairedDates, [DateTime(2026, 9, 17)]);
+      expect(payroll.grossAmount, 364500);
+      expect(payroll.totalMealAllowance, 0);
+      expect(payroll.totalParkingAllowance, 0);
+      expect(payroll.totalAmount, 364500);
     },
   );
 

@@ -200,6 +200,7 @@ void main() {
       expect(summary.rows[2][0]?.value.toString(), 'Employee Name');
       expect(summary.rows[3][0]?.value.toString(), 'No Log Employee');
       expect(summary.rows[3][3]?.value.toString(), '0');
+      expect(summary.rows[3][6]?.value.toString(), '0');
     },
   );
 
