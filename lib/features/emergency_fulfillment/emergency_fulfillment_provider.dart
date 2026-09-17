@@ -203,6 +203,7 @@ class EmergencyFulfillmentItem {
     this.excusedQuantity = 0,
     this.workflowVersion = 1,
     this.oldestReadySequence,
+    this.oldestTrayReadySequence,
     this.fulfillmentRoute = 'kitchen_tray_floor',
     this.lineKey = 'base',
     this.sourceKind = 'order_item',
@@ -232,6 +233,7 @@ class EmergencyFulfillmentItem {
   final bool needsReview;
   final int workflowVersion;
   final int? oldestReadySequence;
+  final int? oldestTrayReadySequence;
   final String fulfillmentRoute;
   final String lineKey;
   final String sourceKind;
@@ -246,7 +248,7 @@ class EmergencyFulfillmentItem {
   final DateTime? floorLastServedAt;
 
   bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
-  bool get usesStartReadyWorkflow => workflowVersion >= 2 && !isFloorDirect;
+  bool get usesKitchenHandoffWorkflow => workflowVersion >= 2 && !isFloorDirect;
   int get requiredQuantity =>
       (orderedQuantity - excusedQuantity).clamp(0, orderedQuantity);
   int get readyUnservedQuantity =>
@@ -268,17 +270,11 @@ class EmergencyFulfillmentItem {
   };
 
   bool isActionableAt(String stationType) => switch (stationType) {
-    'kitchen' =>
-      !isFloorDirect &&
-          (usesStartReadyWorkflow
-              ? kitchenStartedQuantity < requiredQuantity
-              : kitchenDoneQuantity < requiredQuantity),
+    'kitchen' => !isFloorDirect && kitchenDoneQuantity < requiredQuantity,
     'tray' =>
       !isFloorDirect &&
-          (usesStartReadyWorkflow
-              ? kitchenDoneQuantity < kitchenStartedQuantity
-              : trayReceivedQuantity < kitchenDoneQuantity ||
-                    trayDispatchedQuantity < kitchenDoneQuantity),
+          (trayReceivedQuantity < kitchenDoneQuantity ||
+              trayDispatchedQuantity < kitchenDoneQuantity),
     'floor' =>
       floorServedQuantity <
           (isFloorDirect ? requiredQuantity : trayDispatchedQuantity),
@@ -286,11 +282,7 @@ class EmergencyFulfillmentItem {
   };
 
   bool isRevertibleAt(String stationType) => switch (stationType) {
-    'kitchen' =>
-      !isFloorDirect &&
-          (usesStartReadyWorkflow
-              ? kitchenStartedQuantity > kitchenDoneQuantity
-              : kitchenDoneQuantity > trayReceivedQuantity),
+    'kitchen' => !isFloorDirect && kitchenDoneQuantity > trayReceivedQuantity,
     'tray' =>
       !isFloorDirect &&
           trayDispatchedQuantity > floorServedQuantity &&
@@ -310,19 +302,12 @@ class EmergencyFulfillmentItem {
   };
 
   bool isDisplayCompletedAt(String stationType) => switch (stationType) {
-    'kitchen' =>
-      !isFloorDirect &&
-          (usesStartReadyWorkflow
-              ? kitchenStartedQuantity >= requiredQuantity
-              : kitchenDoneQuantity >= requiredQuantity),
+    'kitchen' => !isFloorDirect && kitchenDoneQuantity >= requiredQuantity,
     'tray' =>
       !isFloorDirect &&
-          (usesStartReadyWorkflow
-              ? kitchenStartedQuantity > 0 &&
-                    trayDispatchedQuantity >= kitchenStartedQuantity
-              : kitchenDoneQuantity > 0 &&
-                    trayReceivedQuantity >= kitchenDoneQuantity &&
-                    trayDispatchedQuantity >= kitchenDoneQuantity),
+          kitchenDoneQuantity > 0 &&
+          trayReceivedQuantity >= kitchenDoneQuantity &&
+          trayDispatchedQuantity >= kitchenDoneQuantity,
     'floor' => switch (isFloorDirect
         ? requiredQuantity
         : trayDispatchedQuantity) {
@@ -333,11 +318,7 @@ class EmergencyFulfillmentItem {
   };
 
   bool isReadyFromPreviousStageAt(String stationType) => switch (stationType) {
-    'tray' =>
-      !isFloorDirect &&
-          (usesStartReadyWorkflow
-              ? kitchenStartedQuantity > kitchenDoneQuantity
-              : kitchenDoneQuantity > trayDispatchedQuantity),
+    'tray' => !isFloorDirect && kitchenDoneQuantity > trayDispatchedQuantity,
     'floor' =>
       (isFloorDirect ? requiredQuantity : trayDispatchedQuantity) >
           floorServedQuantity,
@@ -390,47 +371,62 @@ class EmergencyFulfillmentItem {
     );
   }
 
-  EmergencyFulfillmentItem withStage(String stage, int quantity) =>
-      EmergencyFulfillmentItem(
-        id: id,
-        orderItemId: orderItemId,
-        nameKo: nameKo,
-        nameVi: nameVi,
-        nameEn: nameEn,
-        orderedQuantity: orderedQuantity,
-        kitchenStartedQuantity: stage == 'kitchen_started'
-            ? quantity
-            : kitchenStartedQuantity,
-        kitchenDoneQuantity: stage == 'kitchen_done' || stage == 'tray_ready'
-            ? quantity
-            : kitchenDoneQuantity,
-        trayReceivedQuantity: stage == 'tray_received' || stage == 'tray_ready'
-            ? quantity
-            : trayReceivedQuantity,
-        trayDispatchedQuantity:
-            stage == 'tray_dispatched' || stage == 'tray_ready'
-            ? quantity
-            : trayDispatchedQuantity,
-        floorServedQuantity: stage == 'floor_served'
-            ? quantity
-            : floorServedQuantity,
-        excusedQuantity: excusedQuantity,
-        needsReview: needsReview,
-        workflowVersion: workflowVersion,
-        oldestReadySequence: oldestReadySequence,
-        fulfillmentRoute: fulfillmentRoute,
-        lineKey: lineKey,
-        sourceKind: sourceKind,
-        comboComponents: comboComponents,
-        isTakeout: isTakeout,
-        batchReceivedAt: batchReceivedAt,
-        kitchenFirstDoneAt: kitchenFirstDoneAt,
-        kitchenLastDoneAt: kitchenLastDoneAt,
-        trayFirstDispatchedAt: trayFirstDispatchedAt,
-        trayLastDispatchedAt: trayLastDispatchedAt,
-        floorFirstServedAt: floorFirstServedAt,
-        floorLastServedAt: floorLastServedAt,
-      );
+  EmergencyFulfillmentItem withStage(
+    String stage,
+    int quantity, {
+    bool updateOldestReadySequence = false,
+    int? oldestReadySequence,
+    bool updateOldestTrayReadySequence = false,
+    int? oldestTrayReadySequence,
+  }) => EmergencyFulfillmentItem(
+    id: id,
+    orderItemId: orderItemId,
+    nameKo: nameKo,
+    nameVi: nameVi,
+    nameEn: nameEn,
+    orderedQuantity: orderedQuantity,
+    kitchenStartedQuantity:
+        stage == 'kitchen_started' ||
+            (stage == 'kitchen_done' && usesKitchenHandoffWorkflow)
+        ? quantity
+        : kitchenStartedQuantity,
+    kitchenDoneQuantity: stage == 'kitchen_done' || stage == 'tray_ready'
+        ? quantity
+        : kitchenDoneQuantity,
+    trayReceivedQuantity:
+        stage == 'tray_received' ||
+            stage == 'tray_ready' ||
+            (stage == 'tray_dispatched' && usesKitchenHandoffWorkflow)
+        ? quantity
+        : trayReceivedQuantity,
+    trayDispatchedQuantity: stage == 'tray_dispatched' || stage == 'tray_ready'
+        ? quantity
+        : trayDispatchedQuantity,
+    floorServedQuantity: stage == 'floor_served'
+        ? quantity
+        : floorServedQuantity,
+    excusedQuantity: excusedQuantity,
+    needsReview: needsReview,
+    workflowVersion: workflowVersion,
+    oldestReadySequence: updateOldestReadySequence
+        ? oldestReadySequence
+        : this.oldestReadySequence,
+    oldestTrayReadySequence: updateOldestTrayReadySequence
+        ? oldestTrayReadySequence
+        : this.oldestTrayReadySequence,
+    fulfillmentRoute: fulfillmentRoute,
+    lineKey: lineKey,
+    sourceKind: sourceKind,
+    comboComponents: comboComponents,
+    isTakeout: isTakeout,
+    batchReceivedAt: batchReceivedAt,
+    kitchenFirstDoneAt: kitchenFirstDoneAt,
+    kitchenLastDoneAt: kitchenLastDoneAt,
+    trayFirstDispatchedAt: trayFirstDispatchedAt,
+    trayLastDispatchedAt: trayLastDispatchedAt,
+    floorFirstServedAt: floorFirstServedAt,
+    floorLastServedAt: floorLastServedAt,
+  );
 
   factory EmergencyFulfillmentItem.fromJson(Map<String, dynamic> json) {
     final rawComponents = json['combo_components'];
@@ -454,6 +450,9 @@ class EmergencyFulfillmentItem {
       oldestReadySequence: json['oldest_ready_sequence'] == null
           ? null
           : _asInt(json['oldest_ready_sequence']),
+      oldestTrayReadySequence: json['oldest_tray_ready_sequence'] == null
+          ? null
+          : _asInt(json['oldest_tray_ready_sequence']),
       fulfillmentRoute:
           json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
       lineKey: json['line_key']?.toString() ?? 'base',
@@ -540,6 +539,7 @@ class EmergencyFulfillmentOrder {
     this.stationCompletedAt,
     this.workflowVersion = 1,
     this.oldestReadySequence,
+    this.oldestTrayReadySequence,
   });
 
   final String queueId;
@@ -556,9 +556,10 @@ class EmergencyFulfillmentOrder {
   final DateTime? stationCompletedAt;
   final int workflowVersion;
   final int? oldestReadySequence;
+  final int? oldestTrayReadySequence;
 
   bool get isDelivery => salesChannel == 'delivery';
-  bool get usesStartReadyWorkflow => workflowVersion >= 2 && !isDelivery;
+  bool get usesKitchenHandoffWorkflow => workflowVersion >= 2 && !isDelivery;
   bool get hasReadyUnservedFood => _operationalItems().any(
     (item) => !item.isFloorDirect && item.readyUnservedQuantity > 0,
   );
@@ -580,6 +581,15 @@ class EmergencyFulfillmentOrder {
   bool hasActionableQuantity(String stationType) =>
       _operationalItems().any((item) => item.isActionableAt(stationType));
 
+  List<EmergencyFulfillmentItem> kitchenPendingItems() => _operationalItems()
+      .where(
+        (item) =>
+            !item.isFloorDirect &&
+            !item.needsReview &&
+            item.kitchenDoneQuantity < item.requiredQuantity,
+      )
+      .toList(growable: false);
+
   int incomingHandoffQuantityAt(String stationType) => _operationalItems()
       .where((item) => !item.isFloorDirect)
       .fold(
@@ -594,17 +604,9 @@ class EmergencyFulfillmentOrder {
         : operationalItems.where((item) => !item.isFloorDirect);
     final indexed = visible.indexed.toList(growable: false)
       ..sort((left, right) {
-        final priority = usesStartReadyWorkflow && stationType == 'kitchen'
-            ? (left.$2.kitchenStartedQuantity > 0 ? 1 : 0).compareTo(
-                right.$2.kitchenStartedQuantity > 0 ? 1 : 0,
-              )
-            : usesStartReadyWorkflow
-            ? (left.$2.isDisplayCompletedAt(stationType) ? 1 : 0).compareTo(
-                right.$2.isDisplayCompletedAt(stationType) ? 1 : 0,
-              )
-            : left.$2
-                  .displayPriorityAt(stationType)
-                  .compareTo(right.$2.displayPriorityAt(stationType));
+        final priority = left.$2
+            .displayPriorityAt(stationType)
+            .compareTo(right.$2.displayPriorityAt(stationType));
         return priority != 0 ? priority : left.$1.compareTo(right.$1);
       });
     return indexed.map((entry) => entry.$2).toList(growable: false);
@@ -623,7 +625,7 @@ class EmergencyFulfillmentOrder {
 
   bool isRecentlyCompleteAt(String stationType) =>
       isCompleteAt(stationType) ||
-      (!usesStartReadyWorkflow &&
+      (!usesKitchenHandoffWorkflow &&
           lastActionId != null &&
           !hasActionableQuantity(stationType));
 
@@ -643,18 +645,8 @@ class EmergencyFulfillmentOrder {
 
     (int, int) progressAt(EmergencyFulfillmentItem item) =>
         switch (stationType) {
-          'kitchen' => (
-            item.usesStartReadyWorkflow
-                ? item.kitchenStartedQuantity
-                : item.kitchenDoneQuantity,
-            item.requiredQuantity,
-          ),
-          'tray' => (
-            item.trayDispatchedQuantity,
-            item.usesStartReadyWorkflow
-                ? item.kitchenStartedQuantity
-                : item.kitchenDoneQuantity,
-          ),
+          'kitchen' => (item.kitchenDoneQuantity, item.requiredQuantity),
+          'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
           'floor' => (
             item.floorServedQuantity,
             item.isFloorDirect
@@ -749,10 +741,6 @@ class EmergencyFulfillmentOrder {
     final indexed = result.indexed.toList(growable: false)
       ..sort((left, right) {
         int priority(EmergencyFulfillmentDisplayItem item) {
-          if (usesStartReadyWorkflow && stationType == 'kitchen') {
-            return (item.completedQuantity ?? 0) > 0 ? 1 : 0;
-          }
-          if (usesStartReadyWorkflow) return item.completed ? 1 : 0;
           if (item.readyFromPreviousStage) return 0;
           if (item.completed) return 2;
           return 1;
@@ -803,6 +791,8 @@ class EmergencyFulfillmentOrder {
     int? workflowVersion,
     int? oldestReadySequence,
     bool clearOldestReadySequence = false,
+    int? oldestTrayReadySequence,
+    bool clearOldestTrayReadySequence = false,
   }) => EmergencyFulfillmentOrder(
     queueId: queueId,
     orderId: orderId,
@@ -822,6 +812,9 @@ class EmergencyFulfillmentOrder {
     oldestReadySequence: clearOldestReadySequence
         ? null
         : (oldestReadySequence ?? this.oldestReadySequence),
+    oldestTrayReadySequence: clearOldestTrayReadySequence
+        ? null
+        : (oldestTrayReadySequence ?? this.oldestTrayReadySequence),
   );
 
   bool isCompleteForStage(String stage) {
@@ -865,6 +858,9 @@ class EmergencyFulfillmentOrder {
       oldestReadySequence: json['oldest_ready_sequence'] == null
           ? null
           : _asInt(json['oldest_ready_sequence']),
+      oldestTrayReadySequence: json['oldest_tray_ready_sequence'] == null
+          ? null
+          : _asInt(json['oldest_tray_ready_sequence']),
       items: rawItems is List
           ? rawItems
                 .whereType<Map>()
@@ -884,9 +880,13 @@ int compareEmergencyOrdersForStation(
   EmergencyFulfillmentOrder right,
   String stationType,
 ) {
-  if (stationType == 'floor') {
-    final leftReady = left.oldestReadySequence;
-    final rightReady = right.oldestReadySequence;
+  if (stationType == 'tray' || stationType == 'floor') {
+    final leftReady = stationType == 'tray'
+        ? left.oldestTrayReadySequence
+        : left.oldestReadySequence;
+    final rightReady = stationType == 'tray'
+        ? right.oldestTrayReadySequence
+        : right.oldestReadySequence;
     if (leftReady != null || rightReady != null) {
       if (leftReady == null) return 1;
       if (rightReady == null) return -1;
@@ -908,6 +908,114 @@ List<EmergencyFulfillmentOrder> sortEmergencyOrdersForStation(
   ..sort(
     (left, right) => compareEmergencyOrdersForStation(left, right, stationType),
   ));
+
+class KitchenChecketMenuGroup {
+  const KitchenChecketMenuGroup({
+    required this.key,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.pendingQuantity,
+  });
+
+  final String key;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int pendingQuantity;
+
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
+}
+
+class KitchenChecketAllocation {
+  const KitchenChecketAllocation({
+    required this.itemId,
+    required this.queueId,
+    required this.sourceKind,
+    required this.quantity,
+  });
+
+  final String itemId;
+  final String queueId;
+  final String sourceKind;
+  final int quantity;
+
+  Map<String, dynamic> toJson() => {
+    'item_id': itemId,
+    'queue_id': queueId,
+    'source_kind': sourceKind,
+    'quantity': quantity,
+  };
+}
+
+String kitchenChecketGroupKey(EmergencyFulfillmentItem item) => [
+  item.nameKo.trim().toLowerCase(),
+  item.nameVi.trim().toLowerCase(),
+  item.nameEn.trim().toLowerCase(),
+].join('\u0000');
+
+List<KitchenChecketMenuGroup> buildKitchenChecketMenuGroups(
+  Iterable<EmergencyFulfillmentOrder> orders,
+) {
+  final groups = <String, KitchenChecketMenuGroup>{};
+  for (final order in sortEmergencyOrdersForStation(orders, 'kitchen')) {
+    for (final item in order.kitchenPendingItems()) {
+      final pending = item.requiredQuantity - item.kitchenDoneQuantity;
+      if (pending <= 0) continue;
+      final key = kitchenChecketGroupKey(item);
+      final current = groups[key];
+      groups[key] = KitchenChecketMenuGroup(
+        key: key,
+        nameKo: item.nameKo,
+        nameVi: item.nameVi,
+        nameEn: item.nameEn,
+        pendingQuantity: (current?.pendingQuantity ?? 0) + pending,
+      );
+    }
+  }
+  return List.unmodifiable(groups.values);
+}
+
+List<KitchenChecketAllocation> allocateKitchenChecketSelections(
+  Iterable<EmergencyFulfillmentOrder> orders,
+  Map<String, int> selections,
+) {
+  final remaining = <String, int>{
+    for (final entry in selections.entries)
+      if (entry.value > 0) entry.key: entry.value,
+  };
+  final allocations = <KitchenChecketAllocation>[];
+  for (final order in sortEmergencyOrdersForStation(orders, 'kitchen')) {
+    for (final item in order.kitchenPendingItems()) {
+      final key = kitchenChecketGroupKey(item);
+      final requested = remaining[key] ?? 0;
+      if (requested <= 0) continue;
+      final pending = item.requiredQuantity - item.kitchenDoneQuantity;
+      final allocated = requested < pending ? requested : pending;
+      if (allocated <= 0) continue;
+      allocations.add(
+        KitchenChecketAllocation(
+          itemId: item.id,
+          queueId: order.queueId,
+          sourceKind: item.sourceKind == 'combo_component'
+              ? 'combo_component'
+              : 'base',
+          quantity: allocated,
+        ),
+      );
+      remaining[key] = requested - allocated;
+    }
+  }
+  if (remaining.values.any((quantity) => quantity > 0)) {
+    throw StateError('KDS_CHECKET_SELECTION_STALE');
+  }
+  return List.unmodifiable(allocations);
+}
 
 class LeftoverPackagingTask {
   const LeftoverPackagingTask({
@@ -1804,6 +1912,10 @@ class EmergencyFulfillmentNotifier
     if (itemId == null || itemId.isEmpty) return false;
 
     var found = false;
+    final updatesReadySequence = row.containsKey('oldest_ready_sequence');
+    final updatesTrayReadySequence = row.containsKey(
+      'oldest_tray_ready_sequence',
+    );
     final nextOrders = state.orders
         .map((order) {
           var orderChanged = false;
@@ -1834,15 +1946,61 @@ class EmergencyFulfillmentNotifier
                     .withStage(
                       'floor_served',
                       _asInt(row['floor_served_quantity']),
+                      updateOldestReadySequence: updatesReadySequence,
+                      oldestReadySequence: row['oldest_ready_sequence'] == null
+                          ? null
+                          : _asInt(row['oldest_ready_sequence']),
+                      updateOldestTrayReadySequence: updatesTrayReadySequence,
+                      oldestTrayReadySequence:
+                          row['oldest_tray_ready_sequence'] == null
+                          ? null
+                          : _asInt(row['oldest_tray_ready_sequence']),
                     );
               })
               .toList(growable: false);
-          return orderChanged ? order.copyWith(items: nextItems) : order;
+          if (!orderChanged) return order;
+          var nextOrder = order.copyWith(items: nextItems);
+          if (updatesReadySequence) {
+            final sequences = nextItems
+                .map((item) => item.oldestReadySequence)
+                .whereType<int>()
+                .toList(growable: false);
+            nextOrder = nextOrder.copyWith(
+              oldestReadySequence: sequences.isEmpty
+                  ? null
+                  : sequences.reduce(
+                      (left, right) => left < right ? left : right,
+                    ),
+              clearOldestReadySequence: sequences.isEmpty,
+            );
+          }
+          if (updatesTrayReadySequence) {
+            final sequences = nextItems
+                .map((item) => item.oldestTrayReadySequence)
+                .whereType<int>()
+                .toList(growable: false);
+            nextOrder = nextOrder.copyWith(
+              oldestTrayReadySequence: sequences.isEmpty
+                  ? null
+                  : sequences.reduce(
+                      (left, right) => left < right ? left : right,
+                    ),
+              clearOldestTrayReadySequence: sequences.isEmpty,
+            );
+          }
+          return nextOrder;
         })
         .toList(growable: false);
     if (!found) return false;
 
     _realtimeRevision += 1;
+    nextOrders.sort(
+      (left, right) => compareEmergencyOrdersForStation(
+        left,
+        right,
+        state.stationType ?? 'kitchen',
+      ),
+    );
     state = state.copyWith(orders: nextOrders, clearError: true);
     return true;
   }
@@ -1875,7 +2033,7 @@ class EmergencyFulfillmentNotifier
       'delta': delta,
       'floor_direct': floorDirect,
       'combo_component': comboComponent,
-      'workflow_v2': matchingItem?.usesStartReadyWorkflow == true,
+      'workflow_v2': matchingItem?.usesKitchenHandoffWorkflow == true,
     };
     final previous = state;
     _applyOptimistic(itemId: itemId, stage: stage, delta: delta);
@@ -1915,7 +2073,8 @@ class EmergencyFulfillmentNotifier
     final actionId = _uuid.v4();
     final payload = <String, dynamic>{
       'kind':
-          order?.usesStartReadyWorkflow == true && state.stationType == 'floor'
+          order?.usesKitchenHandoffWorkflow == true &&
+              state.stationType == 'floor'
           ? 'serve_ready_order'
           : 'complete_order',
       'queue_id': queueId,
@@ -1944,6 +2103,50 @@ class EmergencyFulfillmentNotifier
         return true;
       } catch (_) {
         state = previous.copyWith(error: 'EMERGENCY_ORDER_ACTION_FAILED');
+        return false;
+      }
+    }
+  }
+
+  Future<bool> completeKitchenChecketBatch(Map<String, int> selections) async {
+    List<KitchenChecketAllocation> allocations;
+    try {
+      allocations = allocateKitchenChecketSelections(state.orders, selections);
+    } catch (_) {
+      state = state.copyWith(error: 'KDS_CHECKET_SELECTION_STALE');
+      return false;
+    }
+    if (allocations.isEmpty) return false;
+    final requestId = _uuid.v4();
+    final payload = <String, dynamic>{
+      'kind': 'kitchen_checket_batch',
+      'request_id': requestId,
+      'allocations': allocations
+          .map((allocation) => allocation.toJson())
+          .toList(growable: false),
+    };
+    try {
+      await _sendOutboxPayload(payload);
+      await load(showLoading: false);
+      return true;
+    } catch (error) {
+      if (error is PostgrestException) {
+        state = state.copyWith(error: error.message);
+        return false;
+      }
+      try {
+        await EmergencyWebBridge.putOutbox(requestId, jsonEncode(payload));
+        state = state.copyWith(
+          pendingOutboxCount: state.pendingOutboxCount + 1,
+          pendingQueueIds: {
+            ...state.pendingQueueIds,
+            ...allocations.map((allocation) => allocation.queueId),
+          },
+          error: 'KDS_CHECKET_BATCH_QUEUED',
+        );
+        return true;
+      } catch (_) {
+        state = state.copyWith(error: 'KDS_CHECKET_BATCH_FAILED');
         return false;
       }
     }
@@ -2093,6 +2296,10 @@ class EmergencyFulfillmentNotifier
       'floor_served_quantity': result.containsKey('floor_served_quantity')
           ? result['floor_served_quantity']
           : matchingItem.floorServedQuantity,
+      if (result.containsKey('oldest_ready_sequence'))
+        'oldest_ready_sequence': result['oldest_ready_sequence'],
+      if (result.containsKey('oldest_tray_ready_sequence'))
+        'oldest_tray_ready_sequence': result['oldest_tray_ready_sequence'],
     });
   }
 
@@ -2112,7 +2319,7 @@ class EmergencyFulfillmentNotifier
           : payload['combo_component'] == true
           ? 'combo_component'
           : 'base';
-      final raw = await supabase.rpc(
+      final raw = await _client.rpc(
         'kds_record_station_progress_v3',
         params: {
           'p_item_id': payload['item_id'],
@@ -2184,8 +2391,19 @@ class EmergencyFulfillmentNotifier
     // 'emergency_complete_order_stage' / 'emergency_revert_order_action'
     // contracts, then atomically include floor-direct beverage lines.
     switch (payload['kind']) {
+      case 'kitchen_checket_batch':
+        final raw = await _client.rpc(
+          'kds_complete_kitchen_batch_v1',
+          params: {
+            'p_request_id': payload['request_id'],
+            'p_allocations': payload['allocations'],
+          },
+        );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
       case 'serve_ready_order':
-        final raw = await supabase.rpc(
+        final raw = await _client.rpc(
           'kds_serve_ready_order_v3',
           params: {
             'p_queue_id': payload['queue_id'],

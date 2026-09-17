@@ -15,6 +15,7 @@ import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
 import 'emergency_fulfillment_provider.dart';
+import 'kitchen_checket_handoff_sheet.dart';
 
 class EmergencyFulfillmentScreen extends ConsumerStatefulWidget {
   const EmergencyFulfillmentScreen({
@@ -39,6 +40,7 @@ class _EmergencyFulfillmentScreenState
   bool _showRecent = false;
   bool _actionBusy = false;
   bool _readyPulseOn = false;
+  DateTime _now = DateTime.now();
   String? _selectedOrderId;
   int _page = 0;
   Timer? _flashTimer;
@@ -46,6 +48,7 @@ class _EmergencyFulfillmentScreenState
   Timer? _handoffAlarmTimer;
   Timer? _floorDirectBeverageAlarmTimer;
   Timer? _readyPulseTimer;
+  Timer? _clockTimer;
   int _pendingFloorDirectBeverageCount = 0;
   final Map<String, EmergencyKitchenAdditionalOrderNotice>
   _pendingAdditionalOrderNotices = {};
@@ -78,6 +81,7 @@ class _EmergencyFulfillmentScreenState
     EmergencyFulfillmentState next,
   ) {
     if (next.isLoading) return;
+    _syncClockTimer(next);
     _syncReadyPulseTimer(next);
     if (!_initialSnapshotObserved) {
       _initialSnapshotObserved = true;
@@ -174,6 +178,19 @@ class _EmergencyFulfillmentScreenState
         setState(() => _selectedOrderId = null);
       }
     }
+  }
+
+  void _syncClockTimer(EmergencyFulfillmentState state) {
+    final needsClock =
+        state.active && state.assigned && state.orders.isNotEmpty;
+    if (!needsClock) {
+      _clockTimer?.cancel();
+      _clockTimer = null;
+      return;
+    }
+    _clockTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
   }
 
   void _syncReadyPulseTimer(EmergencyFulfillmentState state) {
@@ -361,6 +378,7 @@ class _EmergencyFulfillmentScreenState
     _handoffAlarmTimer?.cancel();
     _floorDirectBeverageAlarmTimer?.cancel();
     _readyPulseTimer?.cancel();
+    _clockTimer?.cancel();
     unawaited(_foregroundPushSub.cancel());
     _stateSub.close();
     super.dispose();
@@ -409,6 +427,13 @@ class _EmergencyFulfillmentScreenState
                 onRefresh: () => ref
                     .read(emergencyFulfillmentProvider.notifier)
                     .load(showLoading: false),
+                onKitchenChecket:
+                    headerStation == 'kitchen' &&
+                        state.active &&
+                        state.assigned &&
+                        !stationMismatch
+                    ? () => _openKitchenChecket(state)
+                    : null,
                 showHomeButton: _selectedOrderId != null,
                 onHome: () => setState(() => _selectedOrderId = null),
               ),
@@ -459,7 +484,7 @@ class _EmergencyFulfillmentScreenState
     EmergencyFulfillmentState state,
     _EmergencyCopy copy,
   ) {
-    final now = DateTime.now();
+    final now = _now;
     final stationType = state.stationType ?? 'kitchen';
     final activeOrders = sortEmergencyOrdersForStation(
       state.orders
@@ -573,6 +598,22 @@ class _EmergencyFulfillmentScreenState
     );
   }
 
+  Future<void> _openKitchenChecket(EmergencyFulfillmentState state) async {
+    final groups = buildKitchenChecketMenuGroups(state.orders);
+    await showDialog<void>(
+      context: context,
+      useSafeArea: false,
+      builder: (dialogContext) => Dialog.fullscreen(
+        child: KitchenChecketHandoffSheet(
+          groups: groups,
+          onSubmit: (selections) => ref
+              .read(emergencyFulfillmentProvider.notifier)
+              .completeKitchenChecketBatch(selections),
+        ),
+      ),
+    );
+  }
+
   Future<void> _completeItem(
     EmergencyFulfillmentItem item,
     String stationType,
@@ -583,15 +624,13 @@ class _EmergencyFulfillmentScreenState
     try {
       switch (stationType) {
         case 'kitchen':
-          await notifier.recordProgress(
-            itemId: item.id,
-            stage: item.usesStartReadyWorkflow
-                ? 'kitchen_started'
-                : 'kitchen_done',
-          );
+          await notifier.recordProgress(itemId: item.id, stage: 'kitchen_done');
         case 'tray':
-          if (item.usesStartReadyWorkflow) {
-            await notifier.recordProgress(itemId: item.id, stage: 'tray_ready');
+          if (item.usesKitchenHandoffWorkflow) {
+            await notifier.recordProgress(
+              itemId: item.id,
+              stage: 'tray_dispatched',
+            );
           } else {
             await notifier.recordProgress(
               itemId: item.id,
@@ -664,16 +703,14 @@ class _EmergencyFulfillmentScreenState
         case 'kitchen':
           await notifier.recordProgress(
             itemId: item.id,
-            stage: item.usesStartReadyWorkflow
-                ? 'kitchen_started'
-                : 'kitchen_done',
+            stage: 'kitchen_done',
             delta: -1,
           );
         case 'tray':
-          if (item.usesStartReadyWorkflow) {
+          if (item.usesKitchenHandoffWorkflow) {
             await notifier.recordProgress(
               itemId: item.id,
-              stage: 'tray_ready',
+              stage: 'tray_dispatched',
               delta: -1,
             );
           } else {
@@ -710,6 +747,7 @@ class _EmergencyHeader extends StatelessWidget {
     required this.pendingOutboxCount,
     required this.onEnableAlarm,
     required this.onRefresh,
+    required this.onKitchenChecket,
     required this.showHomeButton,
     required this.onHome,
   });
@@ -721,6 +759,7 @@ class _EmergencyHeader extends StatelessWidget {
   final int pendingOutboxCount;
   final VoidCallback? onEnableAlarm;
   final VoidCallback onRefresh;
+  final VoidCallback? onKitchenChecket;
   final bool showHomeButton;
   final VoidCallback onHome;
 
@@ -732,7 +771,7 @@ class _EmergencyHeader extends StatelessWidget {
       color: PosColors.surface,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 680;
+          final compact = constraints.maxWidth < 1100;
           final identity = Row(
             children: [
               Icon(
@@ -783,6 +822,14 @@ class _EmergencyHeader extends StatelessWidget {
                   ),
                   label: Text(alarmEnabled ? copy.alarmOn : copy.enableAlarm),
                 );
+          final checketButton = onKitchenChecket == null
+              ? const SizedBox.shrink()
+              : FilledButton.tonalIcon(
+                  key: const Key('kitchen_checket_handoff'),
+                  onPressed: onKitchenChecket,
+                  icon: const Icon(Icons.playlist_add_check_circle_rounded),
+                  label: Text(copy.checketHandoff),
+                );
           if (compact) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -814,6 +861,10 @@ class _EmergencyHeader extends StatelessWidget {
                   const SizedBox(height: 8),
                   alarmButton,
                 ],
+                if (onKitchenChecket != null) ...[
+                  const SizedBox(height: 8),
+                  checketButton,
+                ],
               ],
             );
           }
@@ -833,6 +884,8 @@ class _EmergencyHeader extends StatelessWidget {
                 onPressed: onRefresh,
                 icon: const Icon(Icons.refresh_rounded),
               ),
+              checketButton,
+              if (onKitchenChecket != null) const SizedBox(width: 6),
               alarmButton,
               const SizedBox(width: 6),
               AppNavBar(
@@ -1753,6 +1806,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                   : _EmergencyMenuCollection(
                       items: visibleItems,
                       stationType: stationType,
+                      isDelivery: order.isDelivery,
                       copy: copy,
                       busy: busy || pending,
                       readyPulseOn: readyPulseOn,
@@ -1930,6 +1984,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
   const _EmergencyMenuCollection({
     required this.items,
     required this.stationType,
+    this.isDelivery = false,
     required this.copy,
     required this.busy,
     required this.readyPulseOn,
@@ -1941,6 +1996,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
 
   final List<_EmergencyMenuEntry> items;
   final String stationType;
+  final bool isDelivery;
   final _EmergencyCopy copy;
   final bool busy;
   final bool readyPulseOn;
@@ -1972,6 +2028,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
             itemBuilder: (context, index) => _EmergencyMenuRow(
               entry: items[index],
               stationType: stationType,
+              isDelivery: isDelivery,
               copy: copy,
               busy: busy,
               readyPulseOn: readyPulseOn,
@@ -1995,6 +2052,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
           itemBuilder: (context, index) => _EmergencyMenuRow(
             entry: items[index],
             stationType: stationType,
+            isDelivery: isDelivery,
             copy: copy,
             busy: busy,
             readyPulseOn: readyPulseOn,
@@ -2025,6 +2083,7 @@ class _EmergencyMenuRow extends StatelessWidget {
   const _EmergencyMenuRow({
     required this.entry,
     required this.stationType,
+    required this.isDelivery,
     required this.copy,
     required this.busy,
     required this.readyPulseOn,
@@ -2034,6 +2093,7 @@ class _EmergencyMenuRow extends StatelessWidget {
 
   final _EmergencyMenuEntry entry;
   final String stationType;
+  final bool isDelivery;
   final _EmergencyCopy copy;
   final bool busy;
   final bool readyPulseOn;
@@ -2046,18 +2106,8 @@ class _EmergencyMenuRow extends StatelessWidget {
     final displayItem = entry.displayItem;
     final batch = entry.batch;
     final (value, limit) = switch (stationType) {
-      'kitchen' => (
-        item.usesStartReadyWorkflow
-            ? item.kitchenStartedQuantity
-            : item.kitchenDoneQuantity,
-        item.orderedQuantity,
-      ),
-      'tray' => (
-        item.trayDispatchedQuantity,
-        item.usesStartReadyWorkflow
-            ? item.kitchenStartedQuantity
-            : item.kitchenDoneQuantity,
-      ),
+      'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
+      'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
       'floor' => (
         item.floorServedQuantity,
         item.isFloorDirect ? item.orderedQuantity : item.trayDispatchedQuantity,
@@ -2212,7 +2262,7 @@ class _EmergencyMenuRow extends StatelessWidget {
                   key: ValueKey(
                     'emergency_menu_item_complete_${displayItem.id}',
                   ),
-                  tooltip: copy.actionOne(stationType),
+                  tooltip: copy.actionOne(stationType, isDelivery: isDelivery),
                   onPressed: canAdvance ? onTap : null,
                   icon: const Icon(Icons.check_rounded, size: 20),
                 ),
@@ -2658,12 +2708,18 @@ class _EmergencyCopy {
       _pick('취소 (원복)', 'Hủy (hoàn tác)', 'Cancel (undo)');
   String get cancelOne => _pick('1개 취소', 'Hủy 1 món', 'Undo one');
   String get completeOne => _pick('1개 완료', 'Hoàn tất 1 món', 'Complete one');
-  String actionOne(String stationType) => switch (stationType) {
-    'kitchen' => _pick('조리 시작', 'Bắt đầu nấu', 'Start cooking'),
-    'tray' => _pick('조리 완료', 'Nấu xong', 'Cooking complete'),
-    'floor' => _pick('고객 전달', 'Đã phục vụ', 'Serve to customer'),
-    _ => completeOne,
-  };
+  String get checketHandoff =>
+      _pick('checker 전달', 'Chuyển checker', 'Checker handoff');
+  String actionOne(String stationType, {bool isDelivery = false}) =>
+      switch (stationType) {
+        'kitchen' => _pick('조리 완료', 'Nấu xong', 'Cooking complete'),
+        'tray' =>
+          isDelivery
+              ? _pick('기사 인계', 'Bàn giao tài xế', 'Handoff to driver')
+              : _pick('층 전달', 'Chuyển lên tầng', 'Send to floor'),
+        'floor' => _pick('고객 전달', 'Đã phục vụ', 'Serve to customer'),
+        _ => completeOne,
+      };
   String get serveAllReady => _pick(
     '준비된 음식 모두 전달',
     'Phục vụ tất cả món đã sẵn sàng',
@@ -2673,6 +2729,20 @@ class _EmergencyCopy {
       _pick('$minutes분 경과', 'Đã chờ $minutes phút', '$minutes min elapsed');
 
   String errorMessage(String error) {
+    if (error.contains('KDS_CHECKET_SELECTION_STALE')) {
+      return _pick(
+        '메뉴 수량이 변경되었습니다. checker 전달을 다시 열어 주세요.',
+        'Số lượng món đã thay đổi. Hãy mở lại Chuyển checker.',
+        'Menu quantities changed. Reopen Checker handoff.',
+      );
+    }
+    if (error.contains('KDS_CHECKET_BATCH_QUEUED')) {
+      return _pick(
+        '연결이 복구되면 checker 전달을 자동 전송합니다.',
+        'Checker sẽ tự gửi khi kết nối trở lại.',
+        'The Checker handoff will send when the connection returns.',
+      );
+    }
     if (error.contains('EMERGENCY_REVERT_DOWNSTREAM_PROGRESS')) {
       return _pick(
         '다음 단계에서 이미 처리하여 원복할 수 없습니다.',
