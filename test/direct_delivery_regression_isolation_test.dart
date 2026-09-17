@@ -10,10 +10,11 @@ const _migrationPath =
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
       'cc34d252a0cef434c5535b89a9749e8c91f8cf6cd102d6c9806237c420dd5cd3',
-  // 2026-09-15: locale-aware menu/search rendering and compact translated layout.
+  // 2026-09-17: cashier menu cancellation replaces the unserved-only action.
+  // Timed KDS and cashier cancel/undo tests cover the requested workflow.
   // menu_language_switch_test + routed/overlay operational suites cover behavior.
   'lib/features/cashier/cashier_screen.dart':
-      'bf5a1e1f781b2e6c8eb55d9516d5c8373fb9b0819dc0b5717b72a807e0b90993',
+      'c07d5145cb2dab6e149741b5c771413ed3575dbb4b377f7efbf0e89f85d3e6c6',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.

@@ -488,66 +488,6 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     return result ?? false;
   }
 
-  Future<String?> _showCancelUnservedDialog({required int quantity}) async {
-    final l10n = context.l10n;
-    var cancellationReason = '';
-    var showValidation = false;
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          key: const Key('cashier_cancel_unserved_dialog'),
-          backgroundColor: PosColors.surface,
-          title: Text(l10n.cashierCancelUnservedTitle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(l10n.cashierCancelUnservedMessage(quantity)),
-              const SizedBox(height: 16),
-              TextField(
-                key: const Key('cashier_cancel_unserved_reason'),
-                autofocus: true,
-                maxLength: 200,
-                onChanged: (value) => cancellationReason = value,
-                decoration: InputDecoration(
-                  labelText: l10n.cashierCancelUnservedReason,
-                  errorText: showValidation
-                      ? l10n.cashierCancelUnservedReasonRequired
-                      : null,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.waiterBack),
-            ),
-            FilledButton.icon(
-              key: const Key('cashier_cancel_unserved_confirm_button'),
-              onPressed: () {
-                final reason = cancellationReason.trim();
-                if (reason.length < 3) {
-                  setDialogState(() => showValidation = true);
-                  return;
-                }
-                Navigator.of(context).pop(reason);
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: PosColors.danger,
-                foregroundColor: Colors.white,
-              ),
-              icon: const Icon(Icons.cancel_outlined),
-              label: Text(l10n.cashierCancelUnservedAction),
-            ),
-          ],
-        ),
-      ),
-    );
-    return result;
-  }
-
   void _showCancellationUndoSnackBar({
     required String message,
     required String restoredMessage,
@@ -1954,47 +1894,6 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   },
                   onCancelOrderItem: (item) async {
                     if (storeId == null || !canCancelOrders || !isOnline) {
-                      return;
-                    }
-                    final selectedOrder = paymentState.selectedOrder;
-                    if (selectedOrder?.emergencyModeActive == true) {
-                      final lines =
-                          selectedOrder!.fulfillmentProgressByItemId[item.id] ??
-                          const <CashierFulfillmentProgress>[];
-                      final unservedQuantity = lines.isEmpty
-                          ? item.quantity
-                          : lines.fold<int>(
-                              0,
-                              (total, line) => total + line.unservedQuantity,
-                            );
-                      if (unservedQuantity <= 0) return;
-                      final reason = await _showCancelUnservedDialog(
-                        quantity: unservedQuantity,
-                      );
-                      if (reason == null) return;
-                      final result = await notifier.cancelUnservedOrderItem(
-                        itemId: item.id,
-                        storeId: storeId,
-                        quantity: unservedQuantity,
-                        reason: reason,
-                      );
-                      if (result != null && context.mounted) {
-                        if (result['cancellation_kind'] == 'financial_full') {
-                          _showCancellationUndoSnackBar(
-                            message: l10n.cashierCancelUnservedSuccess,
-                            restoredMessage: l10n.cancelledItemRestored,
-                            onUndo: () => notifier.restoreCancelledOrderItem(
-                              item.id,
-                              storeId,
-                            ),
-                          );
-                        } else {
-                          showSuccessToast(
-                            context,
-                            l10n.cashierCancelUnservedSuccess,
-                          );
-                        }
-                      }
                       return;
                     }
                     final cancelled = await notifier.cancelOrderItem(
@@ -4150,27 +4049,18 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                 final showFulfillmentParts = fulfillmentParts.any(
                   (part) => part.sourceKind == 'combo_component',
                 );
-                final unservedQuantity = fulfillmentParts.isEmpty
-                    ? (item.quantity - (servedQuantity ?? 0)).clamp(
-                        0,
-                        item.quantity,
-                      )
-                    : fulfillmentParts.fold<int>(
-                        0,
-                        (total, part) => total + part.unservedQuantity,
-                      );
                 final canCancelItem =
                     canCancelItems &&
                     !isProcessing &&
                     isOnline &&
-                    (!order.emergencyModeActive || unservedQuantity > 0) &&
-                    (order.emergencyModeActive || order.paymentCount == 0) &&
+                    order.paymentCount == 0 &&
                     isMenuItem &&
                     !isCancelled &&
                     const {
                       'pending',
                       'preparing',
                       'ready',
+                      'served',
                     }.contains(item.status.toLowerCase()) &&
                     onCancelOrderItem != null;
                 final canToggleServiceItem =
@@ -4385,11 +4275,7 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                                   ? () => onCancelOrderItem!(item)
                                   : null,
                               icon: const Icon(Icons.cancel_outlined, size: 18),
-                              label: Text(
-                                order.emergencyModeActive
-                                    ? l10n.cashierCancelUnservedAction
-                                    : l10n.orderWorkspaceCancelItemAction,
-                              ),
+                              label: Text(l10n.cashierCancelMenuAction),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: PosColors.danger,
                                 visualDensity: VisualDensity.compact,

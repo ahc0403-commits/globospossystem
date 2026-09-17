@@ -902,6 +902,119 @@ void main() {
     });
   }
 
+  for (final station in ['kitchen', 'tray', 'floor']) {
+    testWidgets(
+      '$station v2 moves completed menu down and pulses actionable handoffs',
+      (tester) async {
+        EmergencyFulfillmentItem item(String id, {bool direct = false}) =>
+            EmergencyFulfillmentItem(
+              id: id,
+              orderItemId: 'order-$id',
+              nameKo: id,
+              nameVi: id,
+              nameEn: id,
+              orderedQuantity: 1,
+              kitchenStartedQuantity: station == 'kitchen' ? 0 : 1,
+              kitchenDoneQuantity: station == 'floor' && !direct ? 1 : 0,
+              trayReceivedQuantity: station == 'floor' && !direct ? 1 : 0,
+              trayDispatchedQuantity: station == 'floor' && !direct ? 1 : 0,
+              floorServedQuantity: 0,
+              needsReview: false,
+              workflowVersion: 2,
+              fulfillmentRoute: direct ? 'floor_direct' : 'kitchen_tray_floor',
+            );
+        final fixture = _FixtureEmergencyNotifier(
+          EmergencyFulfillmentState(
+            assigned: true,
+            active: true,
+            restaurantId: 'store-bt',
+            sessionId: 'session-1',
+            stationType: station,
+            orders: [
+              EmergencyFulfillmentOrder(
+                queueId: 'queue-pulse',
+                orderId: 'order-pulse',
+                queueNo: 1,
+                tableNumber: '101',
+                floorLabel: '1F',
+                createdAt: DateTime.utc(2026),
+                workflowVersion: 2,
+                items: [
+                  item('first', direct: station == 'floor'),
+                  item('second'),
+                ],
+              ),
+            ],
+          ),
+        );
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+          expectedStationType: station,
+        );
+        Color? pulseColor() =>
+            (tester
+                        .widget<Container>(
+                          find.byKey(
+                            const Key('emergency_card_menu_pulse_first'),
+                          ),
+                        )
+                        .decoration!
+                    as BoxDecoration)
+                .color;
+        final initial = pulseColor();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(pulseColor(), station == 'kitchen' ? initial : isNot(initial));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(pulseColor(), initial);
+        // A newly arrived drink must not stop the existing pulse timer.
+        fixture.seed(
+          fixture.state.copyWith(
+            orders: [
+              fixture.state.orders.single.copyWith(
+                items: [
+                  ...fixture.state.orders.single.items,
+                  if (station == 'floor') item('new-drink', direct: true),
+                ],
+              ),
+            ],
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(pulseColor(), station == 'kitchen' ? initial : isNot(initial));
+        await tester.tap(find.byKey(const Key('emergency_order_order-pulse')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('emergency_menu_item_first')));
+        await tester.pump();
+        expect(fixture.recordedProgress.single.$2, switch (station) {
+          'kitchen' => 'kitchen_started',
+          'tray' => 'tray_ready',
+          _ => 'floor_served',
+        });
+        await tester.tap(find.byKey(const Key('emergency_detail_home')));
+        await tester.pump();
+        expect(
+          tester
+              .getTopLeft(find.byKey(const Key('emergency_card_menu_first')))
+              .dy,
+          greaterThan(
+            tester
+                .getTopLeft(find.byKey(const Key('emergency_card_menu_second')))
+                .dy,
+          ),
+        );
+        expect(pulseColor(), Colors.transparent);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(pulseColor(), Colors.transparent);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('floor separates direct drinks above kitchen and tray food', (
     tester,
   ) async {

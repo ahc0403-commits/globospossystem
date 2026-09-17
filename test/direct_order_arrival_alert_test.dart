@@ -24,7 +24,7 @@ const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
   'lib/features/cashier/cashier_screen.dart':
-      'bf5a1e1f781b2e6c8eb55d9516d5c8373fb9b0819dc0b5717b72a807e0b90993',
+      'c07d5145cb2dab6e149741b5c771413ed3575dbb4b377f7efbf0e89f85d3e6c6',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   // Intentional event-merge fix; behavioral regressions live in
@@ -49,16 +49,16 @@ const _frozenAlertFiles = <String, String>{
       '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
-  // Menu/history/search labels now use ARB in KO/VI/EN.
+  // 2026-09-17: menu cancellation replaces unserved-only copy in KO/VI/EN.
   // Arrival copy behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      '37c5902301d6f98166a954a9508594171cdc5a68976469799a9f756588183732',
+      '443a06a2f11cfbc1ae21ae8eab2b9e58482cef9b6a5129d974fd4e1697c43533',
   'lib/l10n/app_localizations_ko.dart':
-      '8d6afbd22bc32ed031c5fcd9cf4155f19cd343c9b98d149e0fc6559b102bdb57',
+      'bdad0e4cfc6a3afa8f35051a69a0194bcef80db88e05d839f076692f87aaf027',
   'lib/l10n/app_localizations_vi.dart':
-      '8e6970cc4dbd4efe7330ddc99ddaafddbb698ffaca2b18ab4f9d1896aebf7f39',
+      '009c9e7621c340ca2d951f52e6c1a06899f4e29e54c31783c5abc5079020f789',
   'lib/l10n/app_localizations_en.dart':
-      '63aabb13c6770de7da9acbc4bfa42752e682bca1a2a4b99508257830f6c0a23a',
+      'f8413a0ed61934351de7fe8b5230323e0b8fdb9fc789aa7b2fabf72a114eb701',
 };
 
 void main() {

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/i18n/menu_localization.dart';
 import '../../core/models/fulfillment_mode.dart';
@@ -1414,33 +1413,6 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         error: _mapPaymentError(error, 'Failed to cancel order item'),
       );
       return false;
-    }
-  }
-
-  Future<Map<String, dynamic>?> cancelUnservedOrderItem({
-    required String itemId,
-    required String storeId,
-    required int quantity,
-    required String reason,
-  }) async {
-    state = state.copyWith(isProcessing: true, clearError: true);
-    try {
-      final result = await orderService.cancelUnservedOrderItem(
-        itemId: itemId,
-        storeId: storeId,
-        quantity: quantity,
-        reason: reason,
-        requestId: const Uuid().v4(),
-      );
-      await loadOrders(storeId);
-      state = state.copyWith(isProcessing: false, clearError: true);
-      return result;
-    } catch (error) {
-      state = state.copyWith(
-        isProcessing: false,
-        error: _mapPaymentError(error, 'Failed to cancel unserved item'),
-      );
-      return null;
     }
   }
 

@@ -59,6 +59,7 @@ class _EmergencyFulfillmentScreenState
     _stateSub = ref.listenManual<EmergencyFulfillmentState>(
       emergencyFulfillmentProvider,
       _onStateChanged,
+      fireImmediately: true,
     );
     _foregroundPushSub = EmergencyWebPushService.instance.foregroundEventIds
         .listen((_) {
@@ -177,9 +178,11 @@ class _EmergencyFulfillmentScreenState
 
   void _syncReadyPulseTimer(EmergencyFulfillmentState state) {
     final needsPulse =
-        state.stationType == 'floor' &&
+        (state.stationType == 'tray' || state.stationType == 'floor') &&
         state.orders.any(
-          (order) => order.usesStartReadyWorkflow && order.hasReadyUnservedFood,
+          (order) => order
+              .displayItemsAt(state.stationType!)
+              .any((item) => item.readyFromPreviousStage && !item.completed),
         );
     if (!needsPulse) {
       _readyPulseTimer?.cancel();
@@ -245,7 +248,6 @@ class _EmergencyFulfillmentScreenState
       (total, notice) => total + notice.itemCount,
     );
     _floorDirectBeverageAlarmTimer?.cancel();
-    _readyPulseTimer?.cancel();
     _floorDirectBeverageAlarmTimer = Timer(
       emergencyFloorDirectBeverageAlarmCoalesceDelay,
       () {
@@ -358,6 +360,7 @@ class _EmergencyFulfillmentScreenState
     _additionalOrderAlarmTimer?.cancel();
     _handoffAlarmTimer?.cancel();
     _floorDirectBeverageAlarmTimer?.cancel();
+    _readyPulseTimer?.cancel();
     unawaited(_foregroundPushSub.cancel());
     _stateSub.close();
     super.dispose();
@@ -1541,11 +1544,14 @@ class _EmergencyCardMenuList extends StatelessWidget {
                   children: [
                     for (final item in columns[columnIndex])
                       Container(
+                        key: Key('emergency_card_menu_pulse_${item.id}'),
                         height: rowHeight,
                         decoration: BoxDecoration(
                           color:
-                              stationType == 'floor' &&
+                              (stationType == 'tray' ||
+                                      stationType == 'floor') &&
                                   item.readyFromPreviousStage &&
+                                  !item.completed &&
                                   readyPulseOn
                               ? PosColors.info.withValues(alpha: 0.22)
                               : Colors.transparent,
@@ -2058,7 +2064,7 @@ class _EmergencyMenuRow extends StatelessWidget {
       ),
       _ => (0, item.orderedQuantity),
     };
-    final done = limit > 0 && value >= limit;
+    final done = item.isDisplayCompletedAt(stationType);
     final readyFromPreviousStage = item.isReadyFromPreviousStageAt(stationType);
     final menuColor = done
         ? PosColors.success
@@ -2077,9 +2083,9 @@ class _EmergencyMenuRow extends StatelessWidget {
         value < limit;
     final canRevert = !busy && item.isRevertibleAt(stationType);
     final blinkReady =
-        stationType == 'floor' &&
-        !item.isFloorDirect &&
-        item.readyUnservedQuantity > 0;
+        (stationType == 'tray' || stationType == 'floor') &&
+        readyFromPreviousStage &&
+        !done;
     return Semantics(
       button: true,
       enabled: canAdvance || canRevert,
