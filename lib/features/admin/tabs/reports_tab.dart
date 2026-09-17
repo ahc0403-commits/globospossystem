@@ -147,10 +147,17 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       Future.microtask(() => reportNotifier.loadReport(storeId));
     }
 
+    void applyReportRange(DateTime start, DateTime end) {
+      if (storeId == null) return;
+      ref.invalidate(dailyClosingHistoryProvider(storeId));
+      reportNotifier.setDateRange(start, end, storeId);
+    }
+
     final compactHeader = _buildReportsCommandHeader(
       storeId: storeId,
       reportState: reportState,
       reportNotifier: reportNotifier,
+      onApplyDateRange: applyReportRange,
       summary: summary,
       currency: currency,
       dateFormat: dateFormat,
@@ -160,6 +167,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
 
     void refreshReports() {
       if (storeId == null) return;
+      ref.invalidate(dailyClosingHistoryProvider(storeId));
       reportNotifier.loadReport(storeId);
       if (menuSalesParams != null) {
         ref.invalidate(menuSalesAnalyticsProvider(menuSalesParams));
@@ -172,7 +180,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         _pendingStart = start;
         _pendingEnd = end;
       });
-      reportNotifier.setDateRange(start, end, storeId);
+      applyReportRange(start, end);
     }
 
     Widget quickRangesCard() {
@@ -420,6 +428,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               storeId: storeId,
               reportState: reportState,
               reportNotifier: reportNotifier,
+              onApplyDateRange: applyReportRange,
               summary: summary,
               currency: currency,
               dateFormat: dateFormat,
@@ -577,12 +586,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                                                 start;
                                                             _pendingEnd = now;
                                                           });
-                                                          reportNotifier
-                                                              .setDateRange(
-                                                                start,
-                                                                now,
-                                                                storeId,
-                                                              );
+                                                          applyReportRange(
+                                                            start,
+                                                            now,
+                                                          );
                                                         },
                                                 ),
                                                 _quickRangeChip(
@@ -610,12 +617,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                                                 start;
                                                             _pendingEnd = now;
                                                           });
-                                                          reportNotifier
-                                                              .setDateRange(
-                                                                start,
-                                                                now,
-                                                                storeId,
-                                                              );
+                                                          applyReportRange(
+                                                            start,
+                                                            now,
+                                                          );
                                                         },
                                                 ),
                                                 _quickRangeChip(
@@ -636,12 +641,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                                                 start;
                                                             _pendingEnd = now;
                                                           });
-                                                          reportNotifier
-                                                              .setDateRange(
-                                                                start,
-                                                                now,
-                                                                storeId,
-                                                              );
+                                                          applyReportRange(
+                                                            start,
+                                                            now,
+                                                          );
                                                         },
                                                 ),
                                               ],
@@ -728,11 +731,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                             _pendingStart = start;
                                             _pendingEnd = now;
                                           });
-                                          reportNotifier.setDateRange(
-                                            start,
-                                            now,
-                                            storeId,
-                                          );
+                                          applyReportRange(start, now);
                                         },
                                 ),
                               ),
@@ -749,6 +748,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     required String? storeId,
     required ReportState reportState,
     required ReportNotifier reportNotifier,
+    required void Function(DateTime start, DateTime end) onApplyDateRange,
     required ReportSummary? summary,
     required NumberFormat currency,
     required DateFormat dateFormat,
@@ -903,12 +903,13 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 ),
               ),
               FilledButton.icon(
+                key: const Key('reports_date_lookup'),
                 onPressed: storeId == null
                     ? null
                     : () {
                         final start = _pendingStart ?? reportState.startDate;
                         final end = _pendingEnd ?? reportState.endDate;
-                        reportNotifier.setDateRange(start, end, storeId);
+                        onApplyDateRange(start, end);
                       },
                 icon: const Icon(Icons.search, size: 16),
                 label: Text(l10n.lookup),
