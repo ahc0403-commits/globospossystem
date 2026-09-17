@@ -867,7 +867,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
 
     CashTender? cashTender;
-    if (method == paymentMethodOther) {
+    if (method == paymentMethodOther || method == paymentMethodBankTransfer) {
       final qrConfirmed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -1742,8 +1742,24 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     }
                     return success;
                   },
-                  onSelectMethod: (method) {
+                  onSelectMethod: (method) async {
                     setState(() => _selectedMethod = method);
+                    final order = paymentState.selectedOrder;
+                    if (method != paymentMethodBankTransfer ||
+                        order == null ||
+                        storeId == null) {
+                      return;
+                    }
+                    unawaited(
+                      notifier.showOnCustomerDisplay(
+                        storeId: storeId,
+                        order: order,
+                      ),
+                    );
+                    await showDialog<void>(
+                      context: context,
+                      builder: (_) => _BankTransferQrDialog(order: order),
+                    );
                   },
                   onApplyDiscount: () async {
                     final selectedOrder = paymentState.selectedOrder;
@@ -6334,6 +6350,65 @@ class _CombinedTablePaymentDialogState
           ),
           icon: const Icon(Icons.check_rounded, size: 18),
           label: Text(l10n.cashierCombinedConfirmWetTissue),
+        ),
+      ],
+    );
+  }
+}
+
+class _BankTransferQrDialog extends StatelessWidget {
+  const _BankTransferQrDialog({required this.order});
+
+  final CashierOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    return AlertDialog(
+      key: const Key('cashier_bank_transfer_qr_dialog'),
+      title: Text(l10n.cashierBankTransferMethod),
+      content: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(l10n.customerDisplayScanQr, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              AspectRatio(
+                aspectRatio: 1,
+                child: QrImageView(
+                  key: const Key('cashier_bank_transfer_qr_image'),
+                  data: VietQrPayload.bankTransfer(
+                    bankBin: '970457',
+                    accountNumber: '100202042976',
+                    amount: order.remainingDue.round(),
+                    purpose: VietQrPayload.paymentPurpose(order.orderId),
+                  ),
+                  version: QrVersions.auto,
+                  backgroundColor: Colors.white,
+                  semanticsLabel: l10n.customerDisplayQrSemanticLabel,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '₫${currency.format(order.remainingDue)}',
+                style: PosNumericText.amountHero,
+              ),
+              const Text(
+                'WOORI BANK · 100202042976 · AHN HYOCHANG',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const Key('cashier_bank_transfer_qr_close'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.close),
         ),
       ],
     );
