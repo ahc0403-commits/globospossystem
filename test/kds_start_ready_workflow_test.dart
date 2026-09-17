@@ -6,29 +6,32 @@ import 'package:globos_pos_system/features/emergency_fulfillment/emergency_fulfi
 EmergencyFulfillmentItem _item({
   String id = 'item-1',
   int ordered = 2,
-  int started = 0,
-  int ready = 0,
+  int done = 0,
+  int handed = 0,
   int served = 0,
   int excused = 0,
   int? readySequence,
+  int? trayReadySequence,
   String route = 'kitchen_tray_floor',
+  String nameKo = '메뉴',
 }) => EmergencyFulfillmentItem(
   id: id,
   orderItemId: 'order-$id',
-  nameKo: '메뉴',
+  nameKo: nameKo,
   nameVi: 'Món',
   nameEn: 'Item',
   orderedQuantity: ordered,
-  kitchenStartedQuantity: started,
-  kitchenDoneQuantity: ready,
-  trayReceivedQuantity: ready,
-  trayDispatchedQuantity: ready,
+  kitchenStartedQuantity: done,
+  kitchenDoneQuantity: done,
+  trayReceivedQuantity: handed,
+  trayDispatchedQuantity: handed,
   floorServedQuantity: served,
   excusedQuantity: excused,
   needsReview: false,
   workflowVersion: 2,
   fulfillmentRoute: route,
   oldestReadySequence: readySequence,
+  oldestTrayReadySequence: trayReadySequence,
 );
 
 EmergencyFulfillmentOrder _order({
@@ -36,6 +39,7 @@ EmergencyFulfillmentOrder _order({
   required int queueNo,
   required DateTime createdAt,
   int? readySequence,
+  int? trayReadySequence,
   EmergencyFulfillmentItem? item,
 }) => EmergencyFulfillmentOrder(
   queueId: 'queue-$id',
@@ -47,50 +51,51 @@ EmergencyFulfillmentOrder _order({
   items: [item ?? _item(id: 'item-$id')],
   workflowVersion: 2,
   oldestReadySequence: readySequence,
+  oldestTrayReadySequence: trayReadySequence,
 );
 
 void main() {
-  test('v2 preserves start, ready and served as separate quantities', () {
-    final waiting = _item();
-    expect(waiting.isActionableAt('kitchen'), isTrue);
-    expect(waiting.isActionableAt('tray'), isFalse);
+  test(
+    'v2 preserves kitchen complete, floor handoff and served quantities',
+    () {
+      final waiting = _item();
+      expect(waiting.isActionableAt('kitchen'), isTrue);
+      expect(waiting.isActionableAt('tray'), isFalse);
 
-    final started = waiting.withStage('kitchen_started', 1);
-    expect(started.kitchenStartedQuantity, 1);
-    expect(started.kitchenDoneQuantity, 0);
-    expect(started.isActionableAt('tray'), isTrue);
+      final completed = waiting.withStage('kitchen_done', 1);
+      expect(completed.kitchenStartedQuantity, 1);
+      expect(completed.kitchenDoneQuantity, 1);
+      expect(completed.isActionableAt('tray'), isTrue);
 
-    final ready = started.withStage('tray_ready', 1);
-    expect(ready.kitchenDoneQuantity, 1);
-    expect(ready.trayReceivedQuantity, 1);
-    expect(ready.trayDispatchedQuantity, 1);
-    expect(ready.readyUnservedQuantity, 1);
+      final handed = completed.withStage('tray_dispatched', 1);
+      expect(handed.trayReceivedQuantity, 1);
+      expect(handed.trayDispatchedQuantity, 1);
+      expect(handed.readyUnservedQuantity, 1);
 
-    final served = ready.withStage('floor_served', 1);
-    expect(served.readyUnservedQuantity, 0);
-    expect(served.isActionableAt('floor'), isFalse);
-  });
+      final served = handed.withStage('floor_served', 1);
+      expect(served.readyUnservedQuantity, 0);
+      expect(served.isActionableAt('floor'), isFalse);
+    },
+  );
 
-  test('kitchen card completes only after tray marks every item ready', () {
+  test('kitchen card completes when the kitchen marks every item done', () {
     final receivedAt = DateTime.utc(2026, 9, 16, 10);
-    final startedOrder = _order(
+    final partialOrder = _order(
       id: 'A',
       queueNo: 1,
       createdAt: receivedAt,
-      item: _item(started: 2),
+      item: _item(done: 1),
     );
-    expect(startedOrder.hasActionableQuantity('kitchen'), isFalse);
-    expect(startedOrder.isRecentlyCompleteAt('kitchen'), isFalse);
+    expect(partialOrder.hasActionableQuantity('kitchen'), isTrue);
+    expect(partialOrder.isRecentlyCompleteAt('kitchen'), isFalse);
 
-    final readyOrder = startedOrder.copyWith(
-      items: [_item(started: 2, ready: 2)],
-    );
-    expect(readyOrder.isRecentlyCompleteAt('kitchen'), isTrue);
-    expect(readyOrder.isRecentlyCompleteAt('tray'), isTrue);
+    final completedOrder = partialOrder.copyWith(items: [_item(done: 2)]);
+    expect(completedOrder.isRecentlyCompleteAt('kitchen'), isTrue);
+    expect(completedOrder.isRecentlyCompleteAt('tray'), isFalse);
   });
 
   test('cashier-excused remainder closes work without erasing service', () {
-    final item = _item(ordered: 3, started: 1, ready: 1, served: 1, excused: 2);
+    final item = _item(ordered: 3, done: 1, handed: 1, served: 1, excused: 2);
     expect(item.requiredQuantity, 1);
     expect(item.floorServedQuantity, 1);
     expect(item.isCompletedAt('floor'), isTrue);
@@ -99,10 +104,16 @@ void main() {
   });
 
   test(
-    'kitchen and tray remain arrival FIFO while floor uses ready sequence',
+    'kitchen is arrival FIFO while tray and floor use their handoff sequences',
     () {
       final base = DateTime.utc(2026, 9, 16, 10);
-      final a = _order(id: 'A', queueNo: 1, createdAt: base, readySequence: 20);
+      final a = _order(
+        id: 'A',
+        queueNo: 1,
+        createdAt: base,
+        trayReadySequence: 20,
+        readySequence: 20,
+      );
       final b = _order(
         id: 'B',
         queueNo: 2,
@@ -112,6 +123,7 @@ void main() {
         id: 'C',
         queueNo: 3,
         createdAt: base.add(const Duration(minutes: 2)),
+        trayReadySequence: 10,
         readySequence: 10,
       );
 
@@ -129,7 +141,7 @@ void main() {
           c,
           a,
         ], 'tray').map((order) => order.orderId),
-        ['A', 'B', 'C'],
+        ['C', 'A', 'B'],
       );
       expect(
         sortEmergencyOrdersForStation([
@@ -155,8 +167,8 @@ void main() {
           createdAt: DateTime.utc(2026),
         ).copyWith(items: [first, second, third]);
         final completed = first
-            .withStage('kitchen_started', 1)
-            .withStage('tray_ready', 1)
+            .withStage('kitchen_done', 1)
+            .withStage('tray_dispatched', 1)
             .withStage('floor_served', 1);
         final updated = order.copyWith(items: [completed, second, third]);
         expect(updated.displayItemsAt(station).map((item) => item.id), [
@@ -174,51 +186,13 @@ void main() {
   );
 
   test(
-    'kitchen puts untouched menus before any started menu and restores on undo',
+    'partially handed tray line remains pending until all cooked units leave',
     () {
-      final order = _order(id: 'A', queueNo: 1, createdAt: DateTime.utc(2026))
-          .copyWith(
-            items: [
-              _item(id: 'partial', ordered: 3, started: 1),
-              _item(id: 'waiting-first', ordered: 1),
-              _item(id: 'started', ordered: 1, started: 1),
-              _item(id: 'waiting-second', ordered: 1),
-            ],
-          );
-      const expected = [
-        'waiting-first',
-        'waiting-second',
-        'partial',
-        'started',
-      ];
-      expect(order.displayItemsAt('kitchen').map((item) => item.id), expected);
-      expect(order.visibleItemsAt('kitchen').map((item) => item.id), expected);
-      expect(order.items.first.isActionableAt('kitchen'), isTrue);
-      expect(order.items.first.isDisplayCompletedAt('kitchen'), isFalse);
-      expect(order.isCompleteAt('kitchen'), isFalse);
-      final undone = order.copyWith(
-        items: [
-          order.items.first.withStage('kitchen_started', 0),
-          ...order.items.skip(1),
-        ],
-      );
-      expect(undone.displayItemsAt('kitchen').map((item) => item.id), [
-        'partial',
-        'waiting-first',
-        'waiting-second',
-        'started',
-      ]);
-    },
-  );
-
-  test(
-    'partially ready tray line remains pending until every started unit is ready',
-    () {
-      final partial = _item(started: 2, ready: 1);
+      final partial = _item(done: 2, handed: 1);
       expect(partial.isDisplayCompletedAt('tray'), isFalse);
       expect(partial.isReadyFromPreviousStageAt('tray'), isTrue);
       expect(
-        partial.withStage('tray_ready', 2).isDisplayCompletedAt('tray'),
+        partial.withStage('tray_dispatched', 2).isDisplayCompletedAt('tray'),
         isTrue,
       );
       final drink = _item(route: 'floor_direct', served: 1);
@@ -253,6 +227,50 @@ void main() {
     ]) {
       expect(File(path).existsSync(), isTrue, reason: path);
     }
+  });
+
+  test(
+    'migration keeps kitchen and tray handoffs atomic and batch-idempotent',
+    () {
+      final migration = File(
+        'supabase/migrations/20260917150000_kds_kitchen_complete_tray_handoff_batch.sql',
+      ).readAsStringSync();
+      expect(migration, contains("v_action = 'kitchen_done'"));
+      expect(migration, contains("v_action = 'tray_dispatched'"));
+      expect(migration, contains('tray_received_quantity = v_received'));
+      expect(migration, contains('tray_dispatched_quantity = v_dispatched'));
+      expect(migration, contains('emergency_tray_ready_lots'));
+      expect(migration, contains('emergency_floor_ready_lots'));
+      expect(migration, contains('kds_complete_kitchen_batch_v1'));
+      expect(migration, contains('allocation_hash'));
+      expect(migration, contains('oldest_tray_ready_sequence'));
+    },
+  );
+
+  test('checket groups quantities and allocates the earliest orders first', () {
+    final base = DateTime.utc(2026, 9, 17, 10);
+    final later = _order(
+      id: 'later',
+      queueNo: 2,
+      createdAt: base.add(const Duration(minutes: 1)),
+      item: _item(id: 'later-item', ordered: 3, nameKo: '김밥'),
+    );
+    final earlier = _order(
+      id: 'earlier',
+      queueNo: 1,
+      createdAt: base,
+      item: _item(id: 'earlier-item', ordered: 2, nameKo: '김밥'),
+    );
+    final groups = buildKitchenChecketMenuGroups([later, earlier]);
+    expect(groups.single.pendingQuantity, 5);
+    final allocations = allocateKitchenChecketSelections(
+      [later, earlier],
+      {groups.single.key: 3},
+    );
+    expect(
+      allocations.map((allocation) => (allocation.itemId, allocation.quantity)),
+      [('earlier-item', 2), ('later-item', 1)],
+    );
   });
 
   test(

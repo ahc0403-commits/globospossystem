@@ -23,6 +23,7 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
   final List<(String, String, int)> recordedProgress = [];
   final List<String> completedQueues = [];
   final List<(String, String)> revertedActions = [];
+  final List<Map<String, int>> kitchenChecketBatches = [];
 
   void seed(EmergencyFulfillmentState value) => state = value;
 
@@ -97,6 +98,40 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
                   .toList(growable: false),
             );
           })
+          .toList(growable: false),
+    );
+    return true;
+  }
+
+  @override
+  Future<bool> completeKitchenChecketBatch(Map<String, int> selections) async {
+    kitchenChecketBatches.add(Map<String, int>.from(selections));
+    final allocations = allocateKitchenChecketSelections(
+      state.orders,
+      selections,
+    );
+    state = state.copyWith(
+      orders: state.orders
+          .map(
+            (order) => order.copyWith(
+              items: order.items
+                  .map((item) {
+                    final quantity = allocations
+                        .where((allocation) => allocation.itemId == item.id)
+                        .fold(
+                          0,
+                          (total, allocation) => total + allocation.quantity,
+                        );
+                    return quantity == 0
+                        ? item
+                        : item.withStage(
+                            'kitchen_done',
+                            item.kitchenDoneQuantity + quantity,
+                          );
+                  })
+                  .toList(growable: false),
+            ),
+          )
           .toList(growable: false),
     );
     return true;
@@ -902,6 +937,132 @@ void main() {
     });
   }
 
+  testWidgets(
+    'kitchen checket uses three horizontal columns with ten menus each',
+    (tester) async {
+      final orders = List.generate(31, (index) {
+        final number = index + 1;
+        return EmergencyFulfillmentOrder(
+          queueId: 'queue-checket-$number',
+          orderId: 'order-checket-$number',
+          queueNo: number,
+          tableNumber: '$number',
+          floorLabel: '1F',
+          createdAt: DateTime.utc(
+            2026,
+            9,
+            17,
+            10,
+          ).add(Duration(seconds: index)),
+          workflowVersion: 2,
+          items: [
+            EmergencyFulfillmentItem(
+              id: 'checket-item-$number',
+              orderItemId: 'checket-order-item-$number',
+              nameKo: '메뉴 $number',
+              nameVi: 'Món $number',
+              nameEn: 'Item $number',
+              orderedQuantity: 1,
+              kitchenDoneQuantity: 0,
+              trayReceivedQuantity: 0,
+              trayDispatchedQuantity: 0,
+              floorServedQuantity: 0,
+              needsReview: false,
+              workflowVersion: 2,
+            ),
+          ],
+        );
+      });
+      final fixture = _FixtureEmergencyNotifier(
+        EmergencyFulfillmentState(
+          assigned: true,
+          active: true,
+          restaurantId: 'store-bt',
+          sessionId: 'session-1',
+          stationType: 'kitchen',
+          orders: orders,
+        ),
+      );
+      final groups = buildKitchenChecketMenuGroups(orders);
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: 'kitchen',
+      );
+
+      expect(find.text('checket 전달'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('kitchen_checket_handoff')));
+      await tester.pumpAndSettle();
+
+      final firstColumn = find.byKey(
+        const ValueKey('kitchen_checket_column_0'),
+      );
+      final secondColumn = find.byKey(
+        const ValueKey('kitchen_checket_column_1'),
+      );
+      final thirdColumn = find.byKey(
+        const ValueKey('kitchen_checket_column_2'),
+      );
+      expect(firstColumn, findsOneWidget);
+      expect(secondColumn, findsOneWidget);
+      expect(thirdColumn, findsOneWidget);
+      expect(
+        tester.getTopLeft(firstColumn).dy,
+        tester.getTopLeft(secondColumn).dy,
+      );
+      expect(
+        tester.getTopLeft(secondColumn).dy,
+        tester.getTopLeft(thirdColumn).dy,
+      );
+      expect(
+        tester.getTopLeft(firstColumn).dx,
+        lessThan(tester.getTopLeft(secondColumn).dx),
+      );
+      expect(
+        tester.getTopLeft(secondColumn).dx,
+        lessThan(tester.getTopLeft(thirdColumn).dx),
+      );
+      Finder visibleRows() => find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith(
+              'kitchen_checket_row_',
+            ),
+      );
+      expect(visibleRows(), findsNWidgets(30));
+      expect(find.text('1 / 2'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('kitchen_checket_next_page')));
+      await tester.pump();
+      expect(visibleRows(), findsOneWidget);
+      expect(find.text('2 / 2'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('kitchen_checket_previous_page')));
+      await tester.pump();
+
+      final firstKey = groups.first.key;
+      await tester.tap(find.byKey(ValueKey('kitchen_checket_plus_$firstKey')));
+      await tester.pump();
+      expect(
+        find.byKey(ValueKey('kitchen_checket_progress_$firstKey')),
+        findsOneWidget,
+      );
+      expect(find.text('1/1'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('kitchen_checket_complete')));
+      await tester.pumpAndSettle();
+
+      expect(fixture.kitchenChecketBatches, [
+        {firstKey: 1},
+      ]);
+      expect(
+        find.byKey(const Key('kitchen_checket_handoff_sheet')),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   for (final station in ['kitchen', 'tray', 'floor']) {
     testWidgets(
       '$station v2 moves completed menu down and pulses actionable handoffs',
@@ -913,9 +1074,9 @@ void main() {
               nameKo: id,
               nameVi: id,
               nameEn: id,
-              orderedQuantity: station == 'kitchen' ? 2 : 1,
-              kitchenStartedQuantity: station == 'kitchen' ? 0 : 1,
-              kitchenDoneQuantity: station == 'floor' && !direct ? 1 : 0,
+              orderedQuantity: 1,
+              kitchenStartedQuantity: station == 'kitchen' || direct ? 0 : 1,
+              kitchenDoneQuantity: station == 'kitchen' || direct ? 0 : 1,
               trayReceivedQuantity: station == 'floor' && !direct ? 1 : 0,
               trayDispatchedQuantity: station == 'floor' && !direct ? 1 : 0,
               floorServedQuantity: 0,
@@ -989,30 +1150,10 @@ void main() {
         await tester.tap(find.byKey(const Key('emergency_menu_item_first')));
         await tester.pump();
         expect(fixture.recordedProgress.single.$2, switch (station) {
-          'kitchen' => 'kitchen_started',
-          'tray' => 'tray_ready',
+          'kitchen' => 'kitchen_done',
+          'tray' => 'tray_dispatched',
           _ => 'floor_served',
         });
-        // Kitchen moves a menu immediately on the first start tap, even
-        // when further units remain. Both detail and card use that ordering.
-        if (station == 'kitchen') {
-          expect(
-            fixture.state.orders.single.items.first.kitchenStartedQuantity,
-            1,
-          );
-          expect(
-            tester
-                .getTopLeft(find.byKey(const Key('emergency_menu_item_first')))
-                .dy,
-            greaterThan(
-              tester
-                  .getTopLeft(
-                    find.byKey(const Key('emergency_menu_item_second')),
-                  )
-                  .dy,
-            ),
-          );
-        }
         await tester.tap(find.byKey(const Key('emergency_detail_home')));
         await tester.pump();
         expect(
