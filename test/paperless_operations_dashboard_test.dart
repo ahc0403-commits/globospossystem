@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/admin/widgets/paperless_operations_dashboard.dart';
+import 'package:globos_pos_system/features/admin/widgets/paperless_menu_timing_detail_sheet.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 
 const _storeId = '00000000-0000-0000-0000-000000000001';
@@ -105,11 +106,80 @@ Future<Map<String, dynamic>> _fixture() async => {
   ],
 };
 
+Map<String, dynamic> _detailFixture() => {
+  'overall_summary': {
+    'operation_sample_count': 6,
+    'floor_sample_count': 6,
+    'kitchen_average_seconds': 780,
+    'tray_average_seconds': 41,
+    'floor_average_seconds': 161,
+    'operation_average_seconds': 982,
+  },
+  'floor_summaries': [
+    {
+      'physical_floor_label': '3F',
+      'sample_count': 4,
+      'inferred_sample_count': 1,
+      'average_floor_seconds': 220,
+      'p90_floor_seconds': 290,
+      'max_floor_seconds': 310,
+    },
+    {
+      'physical_floor_label': '2F',
+      'sample_count': 2,
+      'inferred_sample_count': 0,
+      'average_floor_seconds': 43,
+      'p90_floor_seconds': 50,
+      'max_floor_seconds': 51,
+    },
+  ],
+  'samples': [
+    {
+      'sample_key': 'standard:sample-1',
+      'order_id': 'order-detail-12345678',
+      'order_item_id': 'item-detail-1',
+      'queue_no': 17,
+      'table_number': '301',
+      'physical_floor_label': '3F',
+      'routing_floor_label': '2F',
+      'physical_floor_inferred': true,
+      'route_type': 'kitchen_tray_floor',
+      'ordered_quantity': 2,
+      'received_at': '2026-08-13T05:00:00Z',
+      'kitchen_done_at': '2026-08-13T05:13:00Z',
+      'tray_dispatched_at': '2026-08-13T05:13:41Z',
+      'floor_served_at': '2026-08-13T05:18:51Z',
+      'kitchen_seconds': 780,
+      'tray_seconds': 41,
+      'floor_seconds': 310,
+      'operation_seconds': 1131,
+    },
+  ],
+  'total_count': 1,
+  'has_more': false,
+  'next_cursor': null,
+};
+
+class _DetailLoader {
+  final floorRequests = <String?>[];
+
+  Future<Map<String, dynamic>> load({
+    required String menuKey,
+    String? floorLabel,
+    num? afterFloorSeconds,
+    String? afterSampleKey,
+  }) async {
+    floorRequests.add(floorLabel);
+    return _detailFixture();
+  }
+}
+
 Widget _app({
   TextScaler? textScaler,
   DateTime? startDate,
   DateTime? endDate,
   PaperlessOperationsLoader? loader,
+  PaperlessMenuTimingDetailLoader? detailLoader,
 }) => MaterialApp(
   locale: const Locale('ko'),
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -130,6 +200,7 @@ Widget _app({
         startDate: startDate ?? DateTime(2026, 8, 13),
         endDate: endDate ?? DateTime(2026, 8, 13),
         loader: loader ?? _fixture,
+        detailLoader: detailLoader,
       ),
     ),
   ),
@@ -230,6 +301,45 @@ void main() {
       find.byKey(const Key('paperless_menu_bar_fill_menu-1')),
     );
     expect(slowestBar.width, greaterThan(fasterBar.width));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('menu card opens physical-floor timing details', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final detailLoader = _DetailLoader();
+    await tester.pumpWidget(_app(detailLoader: detailLoader.load));
+    await tester.pumpAndSettle();
+
+    final menuCard = find.byKey(const Key('paperless_menu_timing_menu-2'));
+    await tester.ensureVisible(menuCard);
+    await tester.tap(menuCard);
+    await tester.pumpAndSettle();
+
+    expect(detailLoader.floorRequests, [null]);
+    expect(
+      find.byKey(const Key('paperless_menu_timing_detail_sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('메뉴 제공시간 상세'), findsOneWidget);
+    expect(find.text('돌솥 제육 비빔밥'), findsWidgets);
+    expect(find.text('3F'), findsWidgets);
+    expect(find.text('평균 3분 40초'), findsOneWidget);
+    expect(find.text('과거 데이터 추정 1건'), findsOneWidget);
+    expect(find.textContaining('담당 스테이션 2F'), findsOneWidget);
+
+    final sample = find.byKey(
+      const Key('paperless_menu_detail_sample_standard:sample-1'),
+    );
+    await tester.ensureVisible(sample);
+    await tester.tap(sample);
+    await tester.pumpAndSettle();
+    expect(find.text('13/08 12:13:41'), findsOneWidget);
+    expect(find.text('13/08 12:18:51'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('paperless_menu_detail_floor_3F')));
+    await tester.pumpAndSettle();
+    expect(detailLoader.floorRequests, [null, '3F']);
     expect(tester.takeException(), isNull);
   });
 

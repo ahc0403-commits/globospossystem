@@ -10,6 +10,7 @@ import '../../../core/ui/pos_design_tokens.dart';
 import '../../../main.dart';
 import '../../report/report_provider.dart';
 import '../../report/report_excel_file.dart';
+import 'paperless_menu_timing_detail_sheet.dart';
 
 String paperlessOperationsTitle(BuildContext context) =>
     _PaperlessCopy.of(context).title;
@@ -171,6 +172,7 @@ class PaperlessOperationsDashboard extends StatefulWidget {
     required this.startDate,
     required this.endDate,
     this.loader,
+    this.detailLoader,
     this.saveExcelFile,
   });
 
@@ -178,6 +180,7 @@ class PaperlessOperationsDashboard extends StatefulWidget {
   final DateTime startDate;
   final DateTime endDate;
   final PaperlessOperationsLoader? loader;
+  final PaperlessMenuTimingDetailLoader? detailLoader;
   final ReportExcelFileSaver? saveExcelFile;
 
   @override
@@ -325,6 +328,26 @@ class _PaperlessOperationsDashboardState
     }
   }
 
+  Future<void> _showMenuDetail(_MenuOperationMetric menu) {
+    final locale = Localizations.localeOf(context).languageCode;
+    return showPaperlessMenuTimingDetailSheet(
+      context: context,
+      storeId: widget.storeId,
+      startDate: _startDate,
+      endDate: _endDate,
+      overview: PaperlessMenuTimingOverview(
+        menuKey: menu.menuKey,
+        menuName: menu.name(locale),
+        sampleCount: menu.sampleCount,
+        kitchenAverageSeconds: menu.kitchenAverageSeconds,
+        trayAverageSeconds: menu.trayAverageSeconds,
+        floorAverageSeconds: menu.floorAverageSeconds,
+        operationAverageSeconds: menu.operationAverageSeconds,
+      ),
+      loader: widget.detailLoader,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final copy = _PaperlessCopy.of(context);
@@ -369,7 +392,11 @@ class _PaperlessOperationsDashboardState
             ),
           )
         else
-          _PaperlessDashboardBody(report: _report!, copy: copy),
+          _PaperlessDashboardBody(
+            report: _report!,
+            copy: copy,
+            onMenuTap: _showMenuDetail,
+          ),
       ],
     );
   }
@@ -505,10 +532,15 @@ class _PeriodBar extends StatelessWidget {
 }
 
 class _PaperlessDashboardBody extends StatelessWidget {
-  const _PaperlessDashboardBody({required this.report, required this.copy});
+  const _PaperlessDashboardBody({
+    required this.report,
+    required this.copy,
+    required this.onMenuTap,
+  });
 
   final _PaperlessReport report;
   final _PaperlessCopy copy;
+  final ValueChanged<_MenuOperationMetric> onMenuTap;
 
   @override
   Widget build(BuildContext context) {
@@ -523,7 +555,7 @@ class _PaperlessDashboardBody extends StatelessWidget {
         const SizedBox(height: 10),
         _CategoryTimingSection(report: report, copy: copy),
         const SizedBox(height: 10),
-        _MenuTimingSection(report: report, copy: copy),
+        _MenuTimingSection(report: report, copy: copy, onMenuTap: onMenuTap),
         const SizedBox(height: 10),
         _OperationalFlow(report: report, copy: copy),
       ],
@@ -1480,10 +1512,15 @@ class _StationStep extends StatelessWidget {
 }
 
 class _MenuTimingSection extends StatelessWidget {
-  const _MenuTimingSection({required this.report, required this.copy});
+  const _MenuTimingSection({
+    required this.report,
+    required this.copy,
+    required this.onMenuTap,
+  });
 
   final _PaperlessReport report;
   final _PaperlessCopy copy;
+  final ValueChanged<_MenuOperationMetric> onMenuTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1556,6 +1593,7 @@ class _MenuTimingSection extends StatelessWidget {
                           menu: metrics[index],
                           maxSeconds: maxSeconds,
                           copy: copy,
+                          onTap: () => onMenuTap(metrics[index]),
                         ),
                       ),
                   ],
@@ -1627,138 +1665,156 @@ class _MenuTimingRow extends StatelessWidget {
     required this.menu,
     required this.maxSeconds,
     required this.copy,
+    required this.onTap,
   });
 
   final int rank;
   final _MenuOperationMetric menu;
   final int maxSeconds;
   final _PaperlessCopy copy;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final locale = Localizations.localeOf(context).languageCode;
-    return Container(
+    return Semantics(
+      button: true,
+      label: copy.openMenuDetail(menu.name(locale)),
       key: Key('paperless_menu_timing_${menu.menuKey}'),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
+      child: Material(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact =
-                  constraints.maxWidth < 480 ||
-                  MediaQuery.textScalerOf(context).scale(1) > 1.4;
-              final name = Row(
-                children: [
-                  Container(
-                    constraints: const BoxConstraints(minWidth: 30),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: PosColors.border),
-                    ),
-                    child: Text(
-                      '#$rank',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: PosColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact =
+                        constraints.maxWidth < 480 ||
+                        MediaQuery.textScalerOf(context).scale(1) > 1.4;
+                    final name = Row(
+                      children: [
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 30),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: PosColors.surface,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: PosColors.border),
+                          ),
+                          child: Text(
+                            '#$rank',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: PosColors.textSecondary,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                menu.name(locale),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w900),
+                              ),
+                              Text(
+                                menu.categoryName(locale),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: PosColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                    final total = Wrap(
+                      spacing: 10,
+                      runSpacing: 3,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          menu.name(locale),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w900),
+                          copy.duration(menu.operationAverageSeconds),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: PosColors.warning,
+                                fontWeight: FontWeight.w900,
+                              ),
                         ),
                         Text(
-                          menu.categoryName(locale),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          copy.samples(menu.sampleCount),
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: PosColors.textSecondary),
                         ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 20,
+                          color: PosColors.textSecondary,
+                        ),
                       ],
-                    ),
-                  ),
-                ],
-              );
-              final total = Wrap(
-                spacing: 10,
-                runSpacing: 3,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    copy.duration(menu.operationAverageSeconds),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    );
+                    if (compact) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [name, const SizedBox(height: 5), total],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: name),
+                        const SizedBox(width: 12),
+                        total,
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 9),
+                _StageDistributionBar(menu: menu, maxSeconds: maxSeconds),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 6,
+                  children: [
+                    _MenuStageValue(
+                      label: copy.station('kitchen'),
+                      seconds: menu.kitchenAverageSeconds,
                       color: PosColors.warning,
-                      fontWeight: FontWeight.w900,
                     ),
-                  ),
-                  Text(
-                    copy.samples(menu.sampleCount),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: PosColors.textSecondary,
+                    _MenuStageValue(
+                      label: copy.station('tray'),
+                      seconds: menu.trayAverageSeconds,
+                      color: PosColors.info,
                     ),
-                  ),
-                ],
-              );
-              if (compact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [name, const SizedBox(height: 5), total],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: name),
-                  const SizedBox(width: 12),
-                  total,
-                ],
-              );
-            },
+                    _MenuStageValue(
+                      label: copy.station('floor'),
+                      seconds: menu.floorAverageSeconds,
+                      color: PosColors.success,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 9),
-          _StageDistributionBar(menu: menu, maxSeconds: maxSeconds),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 14,
-            runSpacing: 6,
-            children: [
-              _MenuStageValue(
-                label: copy.station('kitchen'),
-                seconds: menu.kitchenAverageSeconds,
-                color: PosColors.warning,
-              ),
-              _MenuStageValue(
-                label: copy.station('tray'),
-                seconds: menu.trayAverageSeconds,
-                color: PosColors.info,
-              ),
-              _MenuStageValue(
-                label: copy.station('floor'),
-                seconds: menu.floorAverageSeconds,
-                color: PosColors.success,
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2354,6 +2410,11 @@ class _PaperlessCopy {
     '느린 순 · 막대 길이는 전체 제공시간, 색상은 구간별 평균',
     'Chậm trước · độ dài là tổng thời gian, màu là TB từng chặng',
     'Slowest first · bar length is total time, colors are stage averages',
+  );
+  String openMenuDetail(String menuName) => pick(
+    '$menuName 제공시간 상세 열기',
+    'Mở chi tiết thời gian phục vụ $menuName',
+    'Open service-time details for $menuName',
   );
   String get noCompletedMenus => pick(
     '제공 완료된 메뉴 표본이 없습니다.',

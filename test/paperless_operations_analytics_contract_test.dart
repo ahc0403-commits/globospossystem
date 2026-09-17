@@ -6,6 +6,9 @@ void main() {
   const additionalOrderTimingMigration =
       'supabase/migrations/'
       '20260824050000_paperless_additional_order_timing.sql';
+  const menuFloorDetailMigration =
+      'supabase/migrations/'
+      '20260917130000_paperless_menu_floor_timing_detail.sql';
 
   test('paperless analytics separates menu stages and dining time', () {
     final migration = File(
@@ -97,4 +100,53 @@ void main() {
     expect(migration, contains("TO authenticated"));
     expect(migration, contains("FROM PUBLIC, anon"));
   });
+
+  test(
+    'menu detail preserves physical floors and established stage timing',
+    () {
+      final migration = File(menuFloorDetailMigration).readAsStringSync();
+      final runtime = File(
+        'supabase/tests/paperless_menu_timing_detail_test.sql',
+      ).readAsStringSync();
+      final dashboard = File(
+        'lib/features/admin/widgets/paperless_operations_dashboard.dart',
+      ).readAsStringSync();
+      final detailSheet = File(
+        'lib/features/admin/widgets/paperless_menu_timing_detail_sheet.dart',
+      ).readAsStringSync();
+
+      expect(migration, contains('-- production-gate: self-verifying'));
+      expect(migration, contains('physical_floor_label'));
+      expect(
+        migration,
+        contains('capture_emergency_queue_physical_floor_trigger'),
+      );
+      expect(migration, contains('get_paperless_menu_timing_detail'));
+      expect(migration, contains('require_admin_actor_for_restaurant'));
+      expect(migration, contains('percentile_cont(0.9)'));
+      expect(migration, contains('p_after_floor_seconds'));
+      expect(
+        migration,
+        contains('events.floor_served_at - events.tray_dispatched_at'),
+      );
+      expect(
+        migration,
+        contains('events.floor_served_at - order_item.created_at'),
+      );
+      expect(migration, contains('FROM PUBLIC, anon'));
+      expect(migration, contains('emergency_queue_store_created_order'));
+
+      expect(dashboard, contains('showPaperlessMenuTimingDetailSheet'));
+      expect(dashboard, contains('button: true'));
+      expect(dashboard, contains('Icons.chevron_right_rounded'));
+      expect(detailSheet, contains("'get_paperless_menu_timing_detail'"));
+      expect(detailSheet, contains("Key('paperless_menu_detail_load_more')"));
+      expect(detailSheet, contains('physicalFloorLabel'));
+      expect(detailSheet, contains('routingFloorLabel'));
+      expect(runtime, contains('Physical floor snapshot mismatch'));
+      expect(runtime, contains('Menu floor detail aggregation mismatch'));
+      expect(runtime, contains('Menu floor detail cursor mismatch'));
+      expect(runtime, contains('Menu floor detail filter mismatch'));
+    },
+  );
 }
