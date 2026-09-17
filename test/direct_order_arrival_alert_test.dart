@@ -23,8 +23,9 @@ final _time0 = DateTime.utc(2026, 8, 21, 12);
 const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
+  // Intentional bank QR selection fix; cashier overlay tests cover QR and alerts.
   'lib/features/cashier/cashier_screen.dart':
-      'c07d5145cb2dab6e149741b5c771413ed3575dbb4b377f7efbf0e89f85d3e6c6',
+      '297c34308ee695e28e91ebc5d26616ece5fef8a66ef08d6cb791f6dc4c305dba',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   // Intentional event-merge fix; behavioral regressions live in

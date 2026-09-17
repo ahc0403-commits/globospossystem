@@ -913,7 +913,7 @@ void main() {
               nameKo: id,
               nameVi: id,
               nameEn: id,
-              orderedQuantity: 1,
+              orderedQuantity: station == 'kitchen' ? 2 : 1,
               kitchenStartedQuantity: station == 'kitchen' ? 0 : 1,
               kitchenDoneQuantity: station == 'floor' && !direct ? 1 : 0,
               trayReceivedQuantity: station == 'floor' && !direct ? 1 : 0,
@@ -993,6 +993,26 @@ void main() {
           'tray' => 'tray_ready',
           _ => 'floor_served',
         });
+        // Kitchen moves a menu immediately on the first start tap, even
+        // when further units remain. Both detail and card use that ordering.
+        if (station == 'kitchen') {
+          expect(
+            fixture.state.orders.single.items.first.kitchenStartedQuantity,
+            1,
+          );
+          expect(
+            tester
+                .getTopLeft(find.byKey(const Key('emergency_menu_item_first')))
+                .dy,
+            greaterThan(
+              tester
+                  .getTopLeft(
+                    find.byKey(const Key('emergency_menu_item_second')),
+                  )
+                  .dy,
+            ),
+          );
+        }
         await tester.tap(find.byKey(const Key('emergency_detail_home')));
         await tester.pump();
         expect(

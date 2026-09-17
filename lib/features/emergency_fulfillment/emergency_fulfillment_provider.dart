@@ -594,7 +594,11 @@ class EmergencyFulfillmentOrder {
         : operationalItems.where((item) => !item.isFloorDirect);
     final indexed = visible.indexed.toList(growable: false)
       ..sort((left, right) {
-        final priority = usesStartReadyWorkflow
+        final priority = usesStartReadyWorkflow && stationType == 'kitchen'
+            ? (left.$2.kitchenStartedQuantity > 0 ? 1 : 0).compareTo(
+                right.$2.kitchenStartedQuantity > 0 ? 1 : 0,
+              )
+            : usesStartReadyWorkflow
             ? (left.$2.isDisplayCompletedAt(stationType) ? 1 : 0).compareTo(
                 right.$2.isDisplayCompletedAt(stationType) ? 1 : 0,
               )
@@ -745,6 +749,9 @@ class EmergencyFulfillmentOrder {
     final indexed = result.indexed.toList(growable: false)
       ..sort((left, right) {
         int priority(EmergencyFulfillmentDisplayItem item) {
+          if (usesStartReadyWorkflow && stationType == 'kitchen') {
+            return (item.completedQuantity ?? 0) > 0 ? 1 : 0;
+          }
           if (usesStartReadyWorkflow) return item.completed ? 1 : 0;
           if (item.readyFromPreviousStage) return 0;
           if (item.completed) return 2;

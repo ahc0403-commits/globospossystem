@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:qr_flutter/qr_flutter.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -225,6 +227,16 @@ class _PaymentNotifier extends PaymentNotifier {
   int combinedPaymentDisplayCalls = 0;
   double? combinedPaymentDisplayTotal;
   int combinedReceiptDisplayCalls = 0;
+  int customerPaymentDisplayCalls = 0;
+
+  @override
+  Future<bool> showOnCustomerDisplay({
+    required String storeId,
+    required CashierOrder order,
+  }) async {
+    customerPaymentDisplayCalls++;
+    return true;
+  }
 
   @override
   Future<void> loadOrders(String storeId) async {}
@@ -1002,7 +1014,31 @@ void main() {
     await tester.tap(
       find.byKey(const Key('cashier_method_tile_$paymentMethodBankTransfer')),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('cashier_bank_transfer_qr_dialog')),
+      findsOneWidget,
+    );
+    final qr = tester.widget<QrImageView>(
+      find.byKey(const Key('cashier_bank_transfer_qr_image')),
+    );
+    expect(qr.version, QrVersions.auto);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('cashier_bank_transfer_qr_dialog')),
+        matching: find.text('₫140.000'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('WOORI BANK · 100202042976 · AHN HYOCHANG'),
+      findsOneWidget,
+    );
+    expect(harness.notifier.processedMethod, isNull);
+    expect(harness.notifier.customerPaymentDisplayCalls, 1);
+    await tester.tap(find.byKey(const Key('cashier_bank_transfer_qr_close')));
+    await tester.pumpAndSettle();
+    expect(harness.notifier.processedMethod, isNull);
     await tester.ensureVisible(find.byKey(const Key('payment_submit_button')));
     await tester.tap(find.byKey(const Key('payment_submit_button')));
     await _pumpUntilFound(
@@ -1284,51 +1320,55 @@ void main() {
     },
   );
 
-  testWidgets(
-    'combined QR shows one QR for the combined total before payment',
-    (tester) async {
-      await _pumpCashier(
-        tester,
-        includeSecondOrder: true,
-        physicalSize: const Size(1440, 1600),
-      );
-      await tester.tap(find.byKey(const Key('cashier_combined_payment_mode')));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const Key('cashier_combined_order_$_orderId')),
-      );
-      await tester.tap(
-        find.byKey(const Key('cashier_combined_order_cashier-order-b2')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('cashier_combined_payment_start')));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const Key('cashier_combined_payment_confirm')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const Key('cashier_method_dialog_$paymentMethodOther')),
-      );
-      await tester.pumpAndSettle();
+  for (final qrMethod in [paymentMethodOther, paymentMethodBankTransfer]) {
+    testWidgets(
+      'combined $qrMethod shows one QR for the combined total before payment',
+      (tester) async {
+        await _pumpCashier(
+          tester,
+          includeSecondOrder: true,
+          physicalSize: const Size(1440, 1600),
+        );
+        await tester.tap(
+          find.byKey(const Key('cashier_combined_payment_mode')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('cashier_combined_order_$_orderId')),
+        );
+        await tester.tap(
+          find.byKey(const Key('cashier_combined_order_cashier-order-b2')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('cashier_combined_payment_start')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('cashier_combined_payment_confirm')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(Key('cashier_method_dialog_$qrMethod')));
+        await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const Key('cashier_combined_qr_payment_dialog')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('cashier_combined_qr_image')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('cashier_combined_qr_total')),
-        findsOneWidget,
-      );
-      _dismiss(tester, const Key('cashier_combined_qr_payment_dialog'));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-    },
-  );
+        expect(
+          find.byKey(const Key('cashier_combined_qr_payment_dialog')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('cashier_combined_qr_image')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('cashier_combined_qr_total')),
+          findsOneWidget,
+        );
+        _dismiss(tester, const Key('cashier_combined_qr_payment_dialog'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('polling fallback shows one bank transfer toast and sound', (
     tester,

@@ -174,6 +174,44 @@ void main() {
   );
 
   test(
+    'kitchen puts untouched menus before any started menu and restores on undo',
+    () {
+      final order = _order(id: 'A', queueNo: 1, createdAt: DateTime.utc(2026))
+          .copyWith(
+            items: [
+              _item(id: 'partial', ordered: 3, started: 1),
+              _item(id: 'waiting-first', ordered: 1),
+              _item(id: 'started', ordered: 1, started: 1),
+              _item(id: 'waiting-second', ordered: 1),
+            ],
+          );
+      const expected = [
+        'waiting-first',
+        'waiting-second',
+        'partial',
+        'started',
+      ];
+      expect(order.displayItemsAt('kitchen').map((item) => item.id), expected);
+      expect(order.visibleItemsAt('kitchen').map((item) => item.id), expected);
+      expect(order.items.first.isActionableAt('kitchen'), isTrue);
+      expect(order.items.first.isDisplayCompletedAt('kitchen'), isFalse);
+      expect(order.isCompleteAt('kitchen'), isFalse);
+      final undone = order.copyWith(
+        items: [
+          order.items.first.withStage('kitchen_started', 0),
+          ...order.items.skip(1),
+        ],
+      );
+      expect(undone.displayItemsAt('kitchen').map((item) => item.id), [
+        'partial',
+        'waiting-first',
+        'waiting-second',
+        'started',
+      ]);
+    },
+  );
+
+  test(
     'partially ready tray line remains pending until every started unit is ready',
     () {
       final partial = _item(started: 2, ready: 1);
