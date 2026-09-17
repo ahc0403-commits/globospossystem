@@ -2709,7 +2709,7 @@ class _EmergencyCopy {
   String get cancelOne => _pick('1개 취소', 'Hủy 1 món', 'Undo one');
   String get completeOne => _pick('1개 완료', 'Hoàn tất 1 món', 'Complete one');
   String get checketHandoff =>
-      _pick('checket 전달', 'Chuyển checket', 'Checket handoff');
+      _pick('checker 전달', 'Chuyển checker', 'Checker handoff');
   String actionOne(String stationType, {bool isDelivery = false}) =>
       switch (stationType) {
         'kitchen' => _pick('조리 완료', 'Nấu xong', 'Cooking complete'),
@@ -2731,16 +2731,16 @@ class _EmergencyCopy {
   String errorMessage(String error) {
     if (error.contains('KDS_CHECKET_SELECTION_STALE')) {
       return _pick(
-        '메뉴 수량이 변경되었습니다. checket 전달을 다시 열어 주세요.',
-        'Số lượng món đã thay đổi. Hãy mở lại Chuyển checket.',
-        'Menu quantities changed. Reopen Checket handoff.',
+        '메뉴 수량이 변경되었습니다. checker 전달을 다시 열어 주세요.',
+        'Số lượng món đã thay đổi. Hãy mở lại Chuyển checker.',
+        'Menu quantities changed. Reopen Checker handoff.',
       );
     }
     if (error.contains('KDS_CHECKET_BATCH_QUEUED')) {
       return _pick(
-        '연결이 복구되면 checket 전달을 자동 전송합니다.',
-        'Checket sẽ tự gửi khi kết nối trở lại.',
-        'The Checket handoff will send when the connection returns.',
+        '연결이 복구되면 checker 전달을 자동 전송합니다.',
+        'Checker sẽ tự gửi khi kết nối trở lại.',
+        'The Checker handoff will send when the connection returns.',
       );
     }
     if (error.contains('EMERGENCY_REVERT_DOWNSTREAM_PROGRESS')) {

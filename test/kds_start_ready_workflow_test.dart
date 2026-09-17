@@ -247,7 +247,7 @@ void main() {
     },
   );
 
-  test('checket groups quantities and allocates the earliest orders first', () {
+  test('checker groups quantities and allocates the earliest orders first', () {
     final base = DateTime.utc(2026, 9, 17, 10);
     final later = _order(
       id: 'later',

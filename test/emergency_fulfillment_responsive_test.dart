@@ -938,7 +938,7 @@ void main() {
   }
 
   testWidgets(
-    'kitchen checket uses three horizontal columns with ten menus each',
+    'kitchen checker uses three horizontal columns with ten menus each',
     (tester) async {
       final orders = List.generate(31, (index) {
         final number = index + 1;
@@ -992,7 +992,7 @@ void main() {
         expectedStationType: 'kitchen',
       );
 
-      expect(find.text('checket 전달'), findsOneWidget);
+      expect(find.text('checker 전달'), findsOneWidget);
       await tester.tap(find.byKey(const Key('kitchen_checket_handoff')));
       await tester.pumpAndSettle();
 

@@ -357,7 +357,7 @@ class _KitchenChecketRow extends StatelessWidget {
 _copy(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
       'vi' => (
-        title: 'Chuyển checket',
+        title: 'Chuyển checker',
         selected: 'Đã chọn',
         complete: 'Hoàn tất',
         cancel: 'Hủy',
@@ -367,7 +367,7 @@ _copy(BuildContext context) =>
         stale: 'Số lượng đã thay đổi. Vui lòng mở lại danh sách.',
       ),
       'en' => (
-        title: 'Checket handoff',
+        title: 'Checker handoff',
         selected: 'Selected',
         complete: 'Complete',
         cancel: 'Cancel',
@@ -377,7 +377,7 @@ _copy(BuildContext context) =>
         stale: 'Quantities changed. Reopen the list and try again.',
       ),
       _ => (
-        title: 'checket 전달',
+        title: 'checker 전달',
         selected: '선택',
         complete: '완료',
         cancel: '취소',
