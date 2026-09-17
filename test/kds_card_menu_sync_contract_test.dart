@@ -269,10 +269,10 @@ void main() {
     expect(order.incomingHandoffQuantityAt('tray'), 1);
 
     final floorLines = order.displayItemsAt('floor');
-    expect(floorLines.map((item) => item.nameVi), ['Cơm cuộn', 'Coca-Cola']);
+    expect(floorLines.map((item) => item.nameVi), ['Coca-Cola', 'Cơm cuộn']);
     expect(floorLines.map((item) => item.fulfillmentItemId), [
-      'food-1-progress',
       'direct-1',
+      'food-1-progress',
     ]);
   });
 

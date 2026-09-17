@@ -317,9 +317,12 @@ class EmergencyFulfillmentItem {
               : kitchenDoneQuantity >= requiredQuantity),
     'tray' =>
       !isFloorDirect &&
-          kitchenDoneQuantity > 0 &&
-          trayReceivedQuantity >= kitchenDoneQuantity &&
-          trayDispatchedQuantity >= kitchenDoneQuantity,
+          (usesStartReadyWorkflow
+              ? kitchenStartedQuantity > 0 &&
+                    trayDispatchedQuantity >= kitchenStartedQuantity
+              : kitchenDoneQuantity > 0 &&
+                    trayReceivedQuantity >= kitchenDoneQuantity &&
+                    trayDispatchedQuantity >= kitchenDoneQuantity),
     'floor' => switch (isFloorDirect
         ? requiredQuantity
         : trayDispatchedQuantity) {
@@ -335,7 +338,9 @@ class EmergencyFulfillmentItem {
           (usesStartReadyWorkflow
               ? kitchenStartedQuantity > kitchenDoneQuantity
               : kitchenDoneQuantity > trayDispatchedQuantity),
-    'floor' => !isFloorDirect && trayDispatchedQuantity > floorServedQuantity,
+    'floor' =>
+      (isFloorDirect ? requiredQuantity : trayDispatchedQuantity) >
+          floorServedQuantity,
     _ => false,
   };
 
@@ -587,12 +592,15 @@ class EmergencyFulfillmentOrder {
     final visible = stationType == 'floor'
         ? operationalItems
         : operationalItems.where((item) => !item.isFloorDirect);
-    if (usesStartReadyWorkflow) return visible.toList(growable: false);
     final indexed = visible.indexed.toList(growable: false)
       ..sort((left, right) {
-        final priority = left.$2
-            .displayPriorityAt(stationType)
-            .compareTo(right.$2.displayPriorityAt(stationType));
+        final priority = usesStartReadyWorkflow
+            ? (left.$2.isDisplayCompletedAt(stationType) ? 1 : 0).compareTo(
+                right.$2.isDisplayCompletedAt(stationType) ? 1 : 0,
+              )
+            : left.$2
+                  .displayPriorityAt(stationType)
+                  .compareTo(right.$2.displayPriorityAt(stationType));
         return priority != 0 ? priority : left.$1.compareTo(right.$1);
       });
     return indexed.map((entry) => entry.$2).toList(growable: false);
@@ -734,10 +742,10 @@ class EmergencyFulfillmentOrder {
         );
       }
     }
-    if (usesStartReadyWorkflow) return result;
     final indexed = result.indexed.toList(growable: false)
       ..sort((left, right) {
         int priority(EmergencyFulfillmentDisplayItem item) {
+          if (usesStartReadyWorkflow) return item.completed ? 1 : 0;
           if (item.readyFromPreviousStage) return 0;
           if (item.completed) return 2;
           return 1;

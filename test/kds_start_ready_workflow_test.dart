@@ -11,6 +11,7 @@ EmergencyFulfillmentItem _item({
   int served = 0,
   int excused = 0,
   int? readySequence,
+  String route = 'kitchen_tray_floor',
 }) => EmergencyFulfillmentItem(
   id: id,
   orderItemId: 'order-$id',
@@ -26,6 +27,7 @@ EmergencyFulfillmentItem _item({
   excusedQuantity: excused,
   needsReview: false,
   workflowVersion: 2,
+  fulfillmentRoute: route,
   oldestReadySequence: readySequence,
 );
 
@@ -140,6 +142,57 @@ void main() {
     },
   );
 
+  test(
+    'v2 stage completion sorts to the bottom without reordering pending items',
+    () {
+      final first = _item(id: 'first', ordered: 1);
+      final second = _item(id: 'second', ordered: 1);
+      final third = _item(id: 'third', ordered: 1);
+      for (final station in ['kitchen', 'tray', 'floor']) {
+        final order = _order(
+          id: 'A',
+          queueNo: 1,
+          createdAt: DateTime.utc(2026),
+        ).copyWith(items: [first, second, third]);
+        final completed = first
+            .withStage('kitchen_started', 1)
+            .withStage('tray_ready', 1)
+            .withStage('floor_served', 1);
+        final updated = order.copyWith(items: [completed, second, third]);
+        expect(updated.displayItemsAt(station).map((item) => item.id), [
+          'second',
+          'third',
+          'first',
+        ]);
+        expect(updated.visibleItemsAt(station).map((item) => item.id), [
+          'second',
+          'third',
+          'first',
+        ]);
+      }
+    },
+  );
+
+  test(
+    'partially ready tray line remains pending until every started unit is ready',
+    () {
+      final partial = _item(started: 2, ready: 1);
+      expect(partial.isDisplayCompletedAt('tray'), isFalse);
+      expect(partial.isReadyFromPreviousStageAt('tray'), isTrue);
+      expect(
+        partial.withStage('tray_ready', 2).isDisplayCompletedAt('tray'),
+        isTrue,
+      );
+      final drink = _item(route: 'floor_direct', served: 1);
+      expect(drink.isReadyFromPreviousStageAt('floor'), isTrue);
+      expect(
+        drink.withStage('floor_served', 2).isReadyFromPreviousStageAt('floor'),
+        isFalse,
+      );
+      expect(drink.isReadyFromPreviousStageAt('tray'), isFalse);
+    },
+  );
+
   test('migration keeps tray ready atomic and floor completion separate', () {
     final migration = File(
       'supabase/migrations/20260916190000_kds_start_ready_serve_workflow.sql',
@@ -173,7 +226,7 @@ void main() {
       expect(screen, contains("'1F' => const Color(0xFF1976D2)"));
       expect(screen, contains("'2F' => const Color(0xFFD32F2F)"));
       expect(screen, contains("Key('emergency_serve_ready_order')"));
-      expect(screen, contains('item.readyUnservedQuantity > 0'));
+      expect(screen, contains('readyFromPreviousStage &&'));
     },
   );
 }
