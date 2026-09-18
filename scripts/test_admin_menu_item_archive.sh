@@ -17,7 +17,8 @@ docker run --detach --rm --name "$fixture_name" \
 
 for attempt in $(seq 1 60); do
   if docker exec "$fixture_name" \
-    pg_isready -U postgres -d menu_archive_fixture >/dev/null 2>&1; then
+    psql -X -v ON_ERROR_STOP=1 -U postgres -d menu_archive_fixture \
+      -c 'SELECT 1' >/dev/null 2>&1; then
     break
   fi
   if [[ "$attempt" == 60 ]]; then
