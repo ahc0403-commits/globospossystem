@@ -39,9 +39,12 @@ void main() {
     expect(service, contains('img.encodeJpg'));
     expect(provider, contains('updateCategory'));
     expect(provider, contains('deleteCategory'));
+    expect(provider, contains('archiveMenuItem'));
     expect(provider, contains('replaceMenuItemImage'));
     expect(menuTab, contains('admin_menu_edit_category_'));
     expect(menuTab, contains('admin_menu_delete_category_'));
+    expect(menuTab, contains('admin_menu_delete_item_'));
+    expect(menuTab, contains('admin_menu_delete_item_dialog'));
     expect(menuTab, contains('admin_menu_photo_picker'));
     expect(menuTab, contains('admin_menu_choose_photo'));
     expect(qrModel, contains("json['image_url']"));

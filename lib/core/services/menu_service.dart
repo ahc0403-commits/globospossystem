@@ -261,6 +261,13 @@ class MenuService {
     await supabase.rpc('admin_delete_menu_item', params: {'p_item_id': itemId});
   }
 
+  Future<void> archiveMenuItem(String itemId) async {
+    await supabase.rpc(
+      'admin_archive_menu_item',
+      params: {'p_item_id': itemId},
+    );
+  }
+
   Future<MenuImageUploadResult> uploadMenuImage({
     required String storeId,
     required String itemId,

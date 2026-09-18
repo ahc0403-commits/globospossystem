@@ -50,16 +50,16 @@ const _frozenAlertFiles = <String, String>{
       '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
-  // 2026-09-17: menu cancellation and payroll summary copy are localized.
-  // Arrival behavior remains covered below for all customer/staff locales.
+  // 2026-09-18: menu deletion copy is localized. Arrival behavior remains
+  // covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      '7e1de21b3530ee1a5fa859d825ed0c4e005d7b2b2075f4542d41eaaf0e0c8ca1',
+      'bd1e3fe8b610d4c3a50df60c42b94cfb1f3017d3a4fe4a9c76a75a590615c28d',
   'lib/l10n/app_localizations_ko.dart':
-      '8ea7d4c3042ce7dcf4363003fb4f265edbf9310ee0729d5b6a9a0084ddabe50a',
+      'c0ee51b2bacc829fa3484ba426f6963ae2cc1b69f25a0ae072bd4f62951fea70',
   'lib/l10n/app_localizations_vi.dart':
-      '7de68c1cdc3973345389b82dbea927b12e1d6661bd546422efb503628801947d',
+      '90d91be6bfb998896e009099dac35669b6297a6e11939114674cadf675b8e766',
   'lib/l10n/app_localizations_en.dart':
-      'b2766c71988945999f2721e6f67bf99675f41de9f5ea25b0cdf4280c5e270405',
+      'bca15b1989f8dd471c3a4a01231b4bdabcd3b20add2a6fcb3207c4bcb1ee00e4',
 };
 
 void main() {

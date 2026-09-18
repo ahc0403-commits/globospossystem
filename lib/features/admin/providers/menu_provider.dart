@@ -241,10 +241,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
   }) async {
     Map<String, dynamic>? created;
     try {
-      final currentItems = state.items.valueOrNull ?? [];
-      final sortOrder = currentItems
-          .where((item) => item['category_id'].toString() == categoryId)
-          .length;
+      final sortOrder = _nextSortOrder(categoryId);
 
       created = await menuService.addMenuItem(
         storeId: storeId,
@@ -300,10 +297,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     Map<String, dynamic>? created;
     MenuImageUploadResult? uploaded;
     try {
-      final currentItems = state.items.valueOrNull ?? [];
-      final sortOrder = currentItems
-          .where((item) => item['category_id'].toString() == categoryId)
-          .length;
+      final sortOrder = _nextSortOrder(categoryId);
       created = await menuService.addMenuItem(
         storeId: storeId,
         categoryId: categoryId,
@@ -373,6 +367,20 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
   }
 
+  Future<bool> archiveMenuItem(String itemId) async {
+    try {
+      await menuService.archiveMenuItem(itemId);
+      await fetchItems();
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to delete menu.'),
+      );
+      return false;
+    }
+  }
+
   Future<bool> togglePublicVisibility(
     String itemId,
     bool isVisiblePublic,
@@ -388,6 +396,23 @@ class MenuNotifier extends StateNotifier<MenuState> {
       );
       return false;
     }
+  }
+
+  int _nextSortOrder(String categoryId) {
+    var maxSortOrder = -1;
+    for (final item in state.items.valueOrNull ?? const []) {
+      if (item['category_id']?.toString() != categoryId) continue;
+      final sortOrder = switch (item['sort_order']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value),
+        _ => null,
+      };
+      if (sortOrder != null && sortOrder > maxSortOrder) {
+        maxSortOrder = sortOrder;
+      }
+    }
+    return maxSortOrder + 1;
   }
 
   Future<bool> updateMenuItem({
