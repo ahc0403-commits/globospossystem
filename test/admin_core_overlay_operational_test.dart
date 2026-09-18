@@ -188,6 +188,7 @@ class _MenuNotifier extends MenuNotifier {
   int addCategoryCalls = 0;
   int editCategoryCalls = 0;
   int deleteCategoryCalls = 0;
+  int archiveItemCalls = 0;
   int addItemCalls = 0;
   int editItemCalls = 0;
   int reorderCategoryCalls = 0;
@@ -231,6 +232,18 @@ class _MenuNotifier extends MenuNotifier {
   @override
   Future<bool> deleteCategory(String categoryId) async {
     deleteCategoryCalls += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> archiveMenuItem(String itemId) async {
+    archiveItemCalls += 1;
+    final items = state.items.valueOrNull ?? const [];
+    state = state.copyWith(
+      items: AsyncValue.data(
+        items.where((item) => item['id']?.toString() != itemId).toList(),
+      ),
+    );
     return true;
   }
 
@@ -1067,7 +1080,7 @@ void main() {
   });
 
   testWidgets(
-    'all seven menu dialog entrypoints and menu Excel export execute',
+    'all eight menu dialog entrypoints and menu Excel export execute',
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -1212,6 +1225,23 @@ void main() {
       await tester.tap(_dialogAction(editItemDialog, FilledButton));
       await tester.pumpAndSettle();
       expect(notifier.editItemCalls, 1);
+
+      await tester.tap(
+        find.byKey(const Key('admin_menu_delete_item_$_menuItemId')),
+      );
+      await tester.pumpAndSettle();
+      const deleteItemDialog = Key('admin_menu_delete_item_dialog');
+      expect(find.byKey(deleteItemDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, deleteItemDialog);
+      expect(find.textContaining('Lịch sử đơn hàng'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('admin_menu_delete_item_confirm')));
+      await tester.pumpAndSettle();
+      expect(notifier.archiveItemCalls, 1);
+      expect(
+        find.byKey(const Key('admin_menu_delete_item_$_menuItemId')),
+        findsNothing,
+      );
+      expect(find.text('Danh mục này chưa có món'), findsOneWidget);
 
       await tester.tap(
         find.byKey(const Key('admin_menu_edit_category_$_categoryId')),

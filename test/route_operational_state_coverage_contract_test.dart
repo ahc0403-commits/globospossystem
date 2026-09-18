@@ -154,7 +154,7 @@ const _routeStateCoverage = <_RouteStateCoverage>[
     operationalTest: 'test/admin_core_overlay_operational_test.dart',
     stateMarkers: [
       'all six table dialog entrypoints',
-      'all seven menu dialog entrypoints',
+      'all eight menu dialog entrypoints',
       'all five staff sheet and dialog entrypoints',
       'all four Settings dialog entrypoints',
     ],

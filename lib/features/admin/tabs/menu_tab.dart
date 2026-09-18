@@ -193,6 +193,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       onTogglePublicVisibility: menuNotifier.togglePublicVisibility,
       onEditItem: (item) =>
           _showEditItemDialog(context, item, allItems, menuNotifier),
+      onDeleteItem: (item) =>
+          _showDeleteItemDialog(context, item, menuNotifier),
     );
 
     return Scaffold(
@@ -926,6 +928,75 @@ class _MenuTabState extends ConsumerState<MenuTab> {
               child: Text(l10n.menuDelete),
             ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showDeleteItemDialog(
+    BuildContext context,
+    Map<String, dynamic> item,
+    MenuNotifier menuNotifier,
+  ) async {
+    final l10n = context.l10n;
+    final itemId = item['id']?.toString() ?? '';
+    final name = context.menuName(item);
+    if (itemId.isEmpty) return;
+
+    var isDeleting = false;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => PopScope(
+          canPop: !isDeleting,
+          child: AlertDialog(
+            key: const Key('admin_menu_delete_item_dialog'),
+            backgroundColor: AppColors.surface1,
+            title: Text(l10n.menuDeleteItemTitle),
+            content: Text(l10n.menuDeleteItemConfirm(name)),
+            actions: [
+              TextButton(
+                onPressed: isDeleting
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                key: const Key('admin_menu_delete_item_confirm'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.statusCancelled,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: isDeleting
+                    ? null
+                    : () async {
+                        setDialogState(() => isDeleting = true);
+                        final success = await menuNotifier.archiveMenuItem(
+                          itemId,
+                        );
+                        if (!dialogContext.mounted) return;
+                        if (!success) {
+                          setDialogState(() => isDeleting = false);
+                          return;
+                        }
+                        Navigator.of(dialogContext).pop();
+                        if (mounted) {
+                          showSuccessToast(context, l10n.menuItemDeleted(name));
+                        }
+                      },
+                child: isDeleting
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(l10n.menuDelete),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2054,6 +2125,7 @@ class _ItemsPanel extends StatelessWidget {
     required this.onToggleAvailability,
     required this.onTogglePublicVisibility,
     required this.onEditItem,
+    required this.onDeleteItem,
     this.scrollable = true,
   });
 
@@ -2065,6 +2137,7 @@ class _ItemsPanel extends StatelessWidget {
   final Future<bool> Function(String itemId, bool isVisiblePublic)
   onTogglePublicVisibility;
   final ValueChanged<Map<String, dynamic>> onEditItem;
+  final ValueChanged<Map<String, dynamic>> onDeleteItem;
   final bool scrollable;
 
   @override
@@ -2305,6 +2378,17 @@ class _ItemsPanel extends StatelessWidget {
                                 color: AppColors.textSecondary,
                               ),
                               tooltip: l10n.menuEditMenu,
+                            ),
+                            IconButton(
+                              key: Key('admin_menu_delete_item_$itemId'),
+                              onPressed: itemId.isEmpty
+                                  ? null
+                                  : () => onDeleteItem(item),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: AppColors.statusCancelled,
+                              ),
+                              tooltip: l10n.menuDeleteItem,
                             ),
                           ],
                         );
