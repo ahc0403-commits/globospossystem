@@ -3,9 +3,20 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final migration = File(
-    'supabase/migrations/20260919010000_kds_set_based_enrichment.sql',
-  ).readAsStringSync();
+  const migrationPath =
+      'supabase/migrations/20260919160000_kds_set_based_enrichment.sql';
+  final migration = File(migrationPath).readAsStringSync();
+
+  test('KDS enrichment migration version is unique', () {
+    final version = File(migrationPath).uri.pathSegments.last.split('_').first;
+    final matchingMigrations = Directory('supabase/migrations')
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.uri.pathSegments.last.startsWith('${version}_'))
+        .toList();
+
+    expect(matchingMigrations, hasLength(1));
+  });
 
   test('KDS enrichment is set-based, scoped, and reversible', () {
     final functionBody = migration

@@ -1,4 +1,4 @@
--- KDS snapshot enrichment must scale with a set of tickets, not issue queries
+-- KDS snapshot enrichment migration 20260919160000 must scale with a set of tickets, not issue queries
 -- once per order and once or twice per item.
 -- production-gate: self-verifying
 
