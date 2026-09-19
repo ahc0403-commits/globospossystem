@@ -208,7 +208,7 @@ void main() {
       expect(provider, contains('PostgresChangeEvent.delete'));
       expect(provider, contains('static const _autoRefreshInterval'));
       expect(provider, contains('_ensureAutoRefresh(storeId)'));
-      expect(provider, contains('Timer.periodic(_fallbackPollInterval'));
+      expect(provider, contains('jitteredPollDelay(_fallbackPollInterval)'));
       expect(provider, contains('_refreshPaymentOrdersFromRealtime(storeId)'));
       expect(
         provider,

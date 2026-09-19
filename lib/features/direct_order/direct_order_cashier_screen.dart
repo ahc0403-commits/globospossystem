@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/language_switcher.dart';
 import '../auth/auth_provider.dart';
@@ -61,10 +62,16 @@ class _DirectOrderCashierScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
-    _timer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _refresh(silent: true),
-    );
+    _scheduleSafetyRefresh();
+  }
+
+  void _scheduleSafetyRefresh() {
+    _timer?.cancel();
+    _timer = Timer(jitteredPollDelay(const Duration(seconds: 30)), () async {
+      _timer = null;
+      await _refresh(silent: true);
+      if (mounted) _scheduleSafetyRefresh();
+    });
   }
 
   @override

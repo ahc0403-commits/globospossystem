@@ -17,6 +17,7 @@ import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -59,7 +60,7 @@ class PaymentDetailScreen extends ConsumerStatefulWidget {
 class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
   late Future<Map<String, dynamic>?> _detailFuture;
   final _currency = NumberFormat('#,###', 'vi_VN');
-  static const _autoRefreshInterval = Duration(seconds: 2);
+  static const _autoRefreshInterval = Duration(seconds: 30);
   RealtimeChannel? _detailChannel;
   Timer? _pollTimer;
   Map<String, dynamic>? _lastDetail;
@@ -252,9 +253,12 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
       return;
     }
 
-    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
-      if (mounted) {
-        _refreshDetailFromRealtime();
+    _pollTimer = Timer(jitteredPollDelay(_autoRefreshInterval), () async {
+      _pollTimer = null;
+      if (!mounted) return;
+      await _refreshDetailSilently();
+      if (mounted && !_realtimeConnected) {
+        _ensureAutoRefresh(storeId);
       }
     });
   }

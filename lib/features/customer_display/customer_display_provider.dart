@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -126,20 +127,23 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
   CustomerDisplayNotifier({
     Duration receiptDuration = receiptDisplayDuration,
     SupabaseClient? client,
+    math.Random? pollRandom,
   }) : _providedClient = client,
        _receiptDuration = receiptDuration,
+       _pollRandom = pollRandom ?? math.Random(),
        super(const CustomerDisplayState());
 
-  // A subscribed socket does not guarantee that Postgres change events are
-  // actually reaching this device. Reconcile every five seconds when connected,
-  // and every second when disconnected. Failed reads back off independently.
-  static const _connectedHealthRefreshInterval = Duration(seconds: 5);
-  static const _disconnectedRefreshInterval = Duration(seconds: 1);
+  // Realtime is the fast path. A slow, jittered safety read detects silently
+  // dropped events without synchronizing every display across all stores.
+  static const _connectedHealthRefreshInterval = Duration(seconds: 30);
+  static const _disconnectedRefreshInterval = Duration(seconds: 30);
+  static const _pollJitter = Duration(seconds: 5);
   static const receiptDisplayDuration = Duration(seconds: 10);
 
   final SupabaseClient? _providedClient;
   SupabaseClient get _client => _providedClient ?? supabase;
   final Duration _receiptDuration;
+  final math.Random _pollRandom;
 
   RealtimeChannel? _channel;
   Timer? _pollTimer;
@@ -383,9 +387,9 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
     );
     final retryInterval = switch (_loadFailureCount) {
       0 => Duration.zero,
-      1 => const Duration(seconds: 2),
-      2 => const Duration(seconds: 5),
-      _ => const Duration(seconds: 15),
+      1 => const Duration(seconds: 30),
+      2 => const Duration(minutes: 1),
+      _ => const Duration(minutes: 2),
     };
     final interval = retryInterval > baseInterval
         ? retryInterval
@@ -395,7 +399,15 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
     _pollTimer?.cancel();
     _pollInterval = interval;
     final generation = _generation;
-    _pollTimer = Timer.periodic(interval, (_) {
+    final baseMs = interval.inMilliseconds;
+    final jitterMs = _pollJitter.inMilliseconds;
+    final minimumMs = math.max(1, baseMs - jitterMs);
+    final maximumMs = baseMs + jitterMs;
+    final delay = Duration(
+      milliseconds: minimumMs + _pollRandom.nextInt(maximumMs - minimumMs + 1),
+    );
+    _pollTimer = Timer(delay, () {
+      _pollTimer = null;
       if (_isCurrent(storeId, generation)) {
         unawaited(_load(storeId, queueIfBusy: false));
       }

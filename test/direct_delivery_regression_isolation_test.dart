@@ -9,19 +9,19 @@ const _migrationPath =
 
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      'cc34d252a0cef434c5535b89a9749e8c91f8cf6cd102d6c9806237c420dd5cd3',
+      '14eaeb6d1629981b0c615a8b887f9d3e1d7806403e5668f60b06d86f56abd6c1',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.
   // Timed KDS and cashier cancel/undo tests cover the requested workflow.
   // menu_language_switch_test + routed/overlay operational suites cover behavior.
   'lib/features/cashier/cashier_screen.dart':
-      '297c34308ee695e28e91ebc5d26616ece5fef8a66ef08d6cb791f6dc4c305dba',
+      '5559b9a302a110340912a5524f074e59bb1efb4125a5445e408032079c51c717',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
   'lib/features/kitchen/kitchen_provider.dart':
-      'ed1bc663f89f23b51d705cb1b26610a848092758446372ffb519636441da271b',
+      'd49f47b8ffc105efff63f86698274b9aea28b5a195b8b79ce85237fd50cd921c',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   'lib/core/services/payment_service.dart':

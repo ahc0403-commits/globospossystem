@@ -321,7 +321,13 @@ void main() {
         tester,
         child: const PrintStationScreen(isSupportedOverride: false),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(true)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.online,
+              ),
+            ),
+          ),
         ],
       );
       expect(find.byKey(const Key('print_station_start')), findsNothing);
@@ -335,7 +341,13 @@ void main() {
         tester,
         child: const PrintStationScreen(isSupportedOverride: true),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(false)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.networkUnavailable,
+              ),
+            ),
+          ),
           printerDestinationsProvider.overrideWith(
             (ref, storeId) => _PrinterDestinationsNotifier(
               const PrinterDestinationsState(
@@ -370,7 +382,13 @@ void main() {
         child: const PrintStationScreen(isSupportedOverride: true),
         physicalSize: const Size(390, 844),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(true)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.online,
+              ),
+            ),
+          ),
           printerDestinationsProvider.overrideWith(
             (ref, storeId) => _PrinterDestinationsNotifier(
               const PrinterDestinationsState(
@@ -456,7 +474,13 @@ void main() {
           ),
         ),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(true)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.online,
+              ),
+            ),
+          ),
           attendanceKioskProvider.overrideWith(
             (ref) => _AttendanceNotifier(completion: attendanceResult),
           ),
@@ -479,7 +503,13 @@ void main() {
         tester,
         child: const AttendanceKioskScreen(),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(false)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.networkUnavailable,
+              ),
+            ),
+          ),
           attendanceKioskProvider.overrideWith((ref) => _AttendanceNotifier()),
         ],
       );

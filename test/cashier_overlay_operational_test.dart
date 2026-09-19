@@ -1804,7 +1804,15 @@ Future<_CashierHarness> _pumpCashier(
     ProviderScope(
       overrides: [
         authProvider.overrideWith((ref) => _AuthNotifier(authState)),
-        connectivityProvider.overrideWith((ref) => Stream.value(isOnline)),
+        serviceConnectivityProvider.overrideWith(
+          (ref) => Stream.value(
+            ServiceConnectivityState(
+              kind: isOnline
+                  ? ServiceConnectivityKind.online
+                  : ServiceConnectivityKind.networkUnavailable,
+            ),
+          ),
+        ),
         paymentProvider.overrideWith((ref) => notifier),
         waiterTableProvider.overrideWith(
           (ref) => _TableNotifier(

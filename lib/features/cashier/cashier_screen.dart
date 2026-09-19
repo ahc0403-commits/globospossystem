@@ -27,6 +27,7 @@ import '../../core/layout/platform_info.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/permission_utils.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
@@ -111,8 +112,8 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.menuServiceOverride,
     this.digitalReceiptServiceOverride,
     this.directOrderStaffServiceOverride,
-    this.bankTransferAlertPollInterval = const Duration(seconds: 2),
-    this.deliveryStatusPollInterval = const Duration(seconds: 7),
+    this.bankTransferAlertPollInterval = const Duration(seconds: 30),
+    this.deliveryStatusPollInterval = const Duration(seconds: 30),
   });
 
   final PaymentProofService? paymentProofServiceOverride;
@@ -193,15 +194,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   void initState() {
     super.initState();
     _printJobAgent = widget.printJobAgentOverride ?? PrintJobAgentService();
-    _deliveryStatusTimer = Timer.periodic(widget.deliveryStatusPollInterval, (
-      _,
-    ) {
-      final storeId = _initializedRestaurantId;
-      if (storeId != null) {
-        unawaited(_loadDeliveryTickets(storeId));
-        unawaited(_loadDeliveryAvailability(storeId));
-      }
-    });
+    _scheduleDeliveryStatusPoll();
     _orderSearchController.addListener(() {
       if (!mounted) {
         return;
@@ -232,6 +225,24 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         }
       }
     });
+  }
+
+  void _scheduleDeliveryStatusPoll() {
+    _deliveryStatusTimer?.cancel();
+    _deliveryStatusTimer = Timer(
+      jitteredPollDelay(widget.deliveryStatusPollInterval),
+      () async {
+        _deliveryStatusTimer = null;
+        final storeId = _initializedRestaurantId;
+        if (storeId != null) {
+          await Future.wait([
+            _loadDeliveryTickets(storeId),
+            _loadDeliveryAvailability(storeId),
+          ]);
+        }
+        if (mounted) _scheduleDeliveryStatusPoll();
+      },
+    );
   }
 
   Future<void> _flushProofQueueIfNeeded(bool isOnline) async {
@@ -1330,7 +1341,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final notifier = ref.read(paymentProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');
     // 오프라인 상태 감지 - RULES.md: 결제는 온라인 필수
-    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
+    final isOnline =
+        ref
+            .watch(serviceConnectivityProvider)
+            .asData
+            ?.value
+            .canAttemptOnlineWork ??
+        true;
     if (!isOnline) {
       _hasAttemptedProofFlush = false;
     } else if (storeId != null && !_hasAttemptedProofFlush) {

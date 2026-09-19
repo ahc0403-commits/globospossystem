@@ -71,7 +71,13 @@ void main() {
           overrides: [
             authProvider.overrideWith((ref) => _AuthNotifier()),
             kitchenProvider.overrideWith((ref) => _KitchenNotifier()),
-            connectivityProvider.overrideWith((ref) => Stream.value(true)),
+            serviceConnectivityProvider.overrideWith(
+              (ref) => Stream.value(
+                const ServiceConnectivityState(
+                  kind: ServiceConnectivityKind.online,
+                ),
+              ),
+            ),
             kitchenRestaurantNameProvider.overrideWith(
               (ref, storeId) async => 'GLOBOS Nguyễn Huệ',
             ),

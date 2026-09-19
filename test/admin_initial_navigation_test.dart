@@ -78,7 +78,13 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => auth),
-            connectivityProvider.overrideWith((ref) => Stream.value(true)),
+            serviceConnectivityProvider.overrideWith(
+              (ref) => Stream.value(
+                const ServiceConnectivityState(
+                  kind: ServiceConnectivityKind.online,
+                ),
+              ),
+            ),
             posLiveEventsProvider.overrideWith(
               (ref, store) => const Stream.empty(),
             ),

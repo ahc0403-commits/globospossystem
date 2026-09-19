@@ -123,7 +123,11 @@ class _MenuService extends MenuService {
 Widget _app(ValueNotifier<Locale> locale, Widget home) => ProviderScope(
   overrides: [
     bmMenuHistoryRoleProvider.overrideWith((ref) => 'brand_admin'),
-    connectivityProvider.overrideWith((ref) => Stream.value(true)),
+    serviceConnectivityProvider.overrideWith(
+      (ref) => Stream.value(
+        const ServiceConnectivityState(kind: ServiceConnectivityKind.online),
+      ),
+    ),
   ],
   child: ValueListenableBuilder<Locale>(
     valueListenable: locale,
