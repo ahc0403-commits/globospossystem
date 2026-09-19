@@ -175,7 +175,13 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
+    final isOnline =
+        ref
+            .watch(serviceConnectivityProvider)
+            .asData
+            ?.value
+            .canAttemptOnlineWork ??
+        true;
     final kioskState = ref.watch(attendanceKioskProvider);
 
     return Scaffold(

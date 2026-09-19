@@ -63,7 +63,7 @@ void main() {
     expect(tableProvider, contains('orderPreviewByTableId'));
     expect(tableProvider, contains('static const _autoRefreshInterval'));
     expect(tableProvider, contains('_ensureAutoRefresh(storeId)'));
-    expect(tableProvider, contains('Timer.periodic(_fallbackPollInterval'));
+    expect(tableProvider, contains('jitteredPollDelay(_fallbackPollInterval)'));
     expect(tableProvider, contains('loadTables(storeId, showLoading: false)'));
     expect(tableProvider, contains('_refreshTablesFromRealtime(storeId)'));
     expect(

@@ -9,8 +9,9 @@ import '../../core/models/fulfillment_mode.dart';
 import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
-import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/coalesced_refresh.dart';
+import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../core/utils/time_utils.dart';
 import '../../l10n/app_localizations.dart';
 import '../../main.dart';
@@ -409,7 +410,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   PaymentService get _payments => _paymentSource ?? paymentService;
 
   static const _autoRefreshInterval = Duration(seconds: 2);
-  static const _fallbackPollInterval = Duration(seconds: 15);
+  static const _fallbackPollInterval = Duration(seconds: 30);
 
   final _refreshQueue = CoalescedRefresh();
   int _scopeGeneration = 0;
@@ -1629,9 +1630,13 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+    _pollTimer = Timer(jitteredPollDelay(_fallbackPollInterval), () async {
+      _pollTimer = null;
       if (mounted && _restaurantId == storeId) {
-        unawaited(loadOrders(storeId));
+        await loadOrders(storeId);
+      }
+      if (mounted && !_realtimeConnected && _restaurantId == storeId) {
+        _ensureAutoRefresh(storeId);
       }
     });
   }

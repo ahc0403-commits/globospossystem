@@ -10,7 +10,12 @@ void main() {
         'lib/features/direct_order/direct_order_storefront_screen.dart',
       ).readAsStringSync();
 
-      expect(source, contains('Timer.periodic(const Duration(seconds: 2)'));
+      expect(
+        source,
+        contains('statusSafetyRefreshInterval = const Duration(seconds: 15)'),
+      );
+      expect(source, contains('jitteredPollDelay('));
+      expect(source, isNot(contains('Timer.periodic(')));
       expect(source, contains('_refreshingStatus'));
       expect(source, contains('_statusMutationRevision'));
       expect(

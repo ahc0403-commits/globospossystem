@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/polling_utils.dart';
+
 typedef _LiveChange = ({String domain, String sourceTable, String eventType});
 
 /// A payload-free signal telling a screen to refetch data through its normal,
@@ -149,15 +151,26 @@ final posLiveEventsProvider = StreamProvider.autoDispose
 
       // Realtime reconnects automatically. The low-frequency safety tick
       // covers periods where the SDK reports a disconnected channel.
-      final fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-        if (!realtimeConnected && !controller.isClosed) {
-          controller.add(const PosLiveEvent.fallback());
-        }
-      });
+      Timer? fallbackTimer;
+      void scheduleFallback() {
+        fallbackTimer?.cancel();
+        fallbackTimer = Timer(
+          jitteredPollDelay(const Duration(seconds: 30)),
+          () {
+            fallbackTimer = null;
+            if (!realtimeConnected && !controller.isClosed) {
+              controller.add(const PosLiveEvent.fallback());
+            }
+            if (!controller.isClosed) scheduleFallback();
+          },
+        );
+      }
+
+      scheduleFallback();
 
       ref.onDispose(() {
         debounceTimer?.cancel();
-        fallbackTimer.cancel();
+        fallbackTimer?.cancel();
         unawaited(channel.unsubscribe());
         unawaited(controller.close());
       });

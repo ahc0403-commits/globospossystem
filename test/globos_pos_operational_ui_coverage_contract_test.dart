@@ -188,7 +188,13 @@ Future<GoRouter> _pumpAdmin(
     ProviderScope(
       overrides: [
         authProvider.overrideWith((ref) => _FixtureAuthNotifier(authState)),
-        connectivityProvider.overrideWith((ref) => Stream.value(true)),
+        serviceConnectivityProvider.overrideWith(
+          (ref) => Stream.value(
+            const ServiceConnectivityState(
+              kind: ServiceConnectivityKind.online,
+            ),
+          ),
+        ),
       ],
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,

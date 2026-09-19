@@ -2070,7 +2070,13 @@ Future<void> _pumpEmergency(
     ProviderScope(
       overrides: [
         authProvider.overrideWith((ref) => _FixtureAuthNotifier()),
-        connectivityProvider.overrideWith((ref) => Stream.value(true)),
+        serviceConnectivityProvider.overrideWith(
+          (ref) => Stream.value(
+            const ServiceConnectivityState(
+              kind: ServiceConnectivityKind.online,
+            ),
+          ),
+        ),
         emergencyFulfillmentProvider.overrideWith((ref) => fixture),
       ],
       child: MaterialApp.router(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -13,7 +14,14 @@ import '../../core/ui/toast/toast.dart';
 import '../../core/utils/floor_label.dart';
 
 class QrOrderScreen extends StatefulWidget {
-  const QrOrderScreen({super.key, required this.token, this.service});
+  const QrOrderScreen({
+    super.key,
+    required this.token,
+    this.service,
+    this.menuSafetyRefreshInterval = const Duration(minutes: 5),
+    this.menuSafetyRefreshJitter = const Duration(seconds: 30),
+    this.pollRandom,
+  });
 
   final String token;
 
@@ -21,6 +29,9 @@ class QrOrderScreen extends StatefulWidget {
   /// live Supabase project. Routed production callers keep the existing
   /// [qrOrderService] boundary.
   final QrOrderService? service;
+  final Duration menuSafetyRefreshInterval;
+  final Duration menuSafetyRefreshJitter;
+  final math.Random? pollRandom;
 
   @override
   State<QrOrderScreen> createState() => _QrOrderScreenState();
@@ -50,6 +61,9 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   Timer? _liveMenuDebounceTimer;
   RealtimeChannel? _menuChannel;
   String? _subscribedStoreId;
+  Future<void>? _pendingMenuLoad;
+  bool _menuReloadRequested = false;
+  late final math.Random _pollRandom;
 
   QrOrderService get _service => widget.service ?? qrOrderService;
 
@@ -61,18 +75,45 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   @override
   void initState() {
     super.initState();
+    _pollRandom = widget.pollRandom ?? math.Random();
     WidgetsBinding.instance.addObserver(this);
-    _loadMenu();
-    _menuRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      unawaited(_loadMenu(showLoading: false));
-    });
+    unawaited(_loadMenu());
+    _scheduleMenuSafetyRefresh();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_loadMenu(showLoading: false));
+      _scheduleMenuSafetyRefresh();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _menuRefreshTimer?.cancel();
+      _menuRefreshTimer = null;
     }
+  }
+
+  void _scheduleMenuSafetyRefresh() {
+    _menuRefreshTimer?.cancel();
+    final baseMs = widget.menuSafetyRefreshInterval.inMilliseconds;
+    final jitterMs = math.min(
+      widget.menuSafetyRefreshJitter.inMilliseconds,
+      math.max(0, baseMs - 1),
+    );
+    final offset = jitterMs == 0
+        ? 0
+        : _pollRandom.nextInt((jitterMs * 2) + 1) - jitterMs;
+    _menuRefreshTimer = Timer(
+      Duration(milliseconds: math.max(1, baseMs + offset)),
+      () async {
+        _menuRefreshTimer = null;
+        if (!mounted) return;
+        await _loadMenu(showLoading: false);
+        if (mounted) _scheduleMenuSafetyRefresh();
+      },
+    );
   }
 
   @override
@@ -124,7 +165,32 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         .subscribe();
   }
 
-  Future<void> _loadMenu({bool showLoading = true}) async {
+  Future<void> _loadMenu({bool showLoading = true}) {
+    final pending = _pendingMenuLoad;
+    if (pending != null) {
+      _menuReloadRequested = true;
+      return pending;
+    }
+    final operation = _drainMenuLoads(showLoading: showLoading);
+    _pendingMenuLoad = operation;
+    return operation.whenComplete(() {
+      if (identical(_pendingMenuLoad, operation)) {
+        _pendingMenuLoad = null;
+        _menuReloadRequested = false;
+      }
+    });
+  }
+
+  Future<void> _drainMenuLoads({required bool showLoading}) async {
+    var shouldShowLoading = showLoading;
+    do {
+      _menuReloadRequested = false;
+      await _loadMenuOnce(showLoading: shouldShowLoading);
+      shouldShowLoading = false;
+    } while (mounted && _menuReloadRequested);
+  }
+
+  Future<void> _loadMenuOnce({required bool showLoading}) async {
     final requestSerial = ++_loadRequestSerial;
     if (showLoading) {
       setState(() {

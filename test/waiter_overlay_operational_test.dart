@@ -219,7 +219,13 @@ void main() {
       ProviderScope(
         overrides: [
           authProvider.overrideWith((ref) => _AuthNotifier()),
-          connectivityProvider.overrideWith((ref) => Stream.value(true)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.online,
+              ),
+            ),
+          ),
           waiterTableProvider.overrideWith((ref) => _TableNotifier()),
           menuProvider.overrideWith((ref, storeId) => _MenuNotifier()),
           orderProvider.overrideWith((ref) => orderNotifier),

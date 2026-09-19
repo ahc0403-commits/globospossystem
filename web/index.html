@@ -127,6 +127,43 @@
         });
       }
 
+      async function emergencyOutboxChecksum(id, payload, createdAt) {
+        if (!window.crypto || !window.crypto.subtle) {
+          throw new Error('KDS_OUTBOX_CRYPTO_UNAVAILABLE');
+        }
+        const input = new TextEncoder().encode(`${id}\n${createdAt}\n${payload}`);
+        const digest = await window.crypto.subtle.digest('SHA-256', input);
+        return Array.from(new Uint8Array(digest))
+          .map((byte) => byte.toString(16).padStart(2, '0'))
+          .join('');
+      }
+
+      async function validateEmergencyOutboxRecord(record) {
+        if (!record || typeof record.id !== 'string' || !record.id ||
+            typeof record.payload !== 'string' ||
+            !Number.isSafeInteger(record.createdAt)) {
+          throw new Error('KDS_OUTBOX_RECORD_INVALID');
+        }
+        const decoded = JSON.parse(record.payload);
+        if (!decoded || Array.isArray(decoded) || typeof decoded !== 'object') {
+          throw new Error('KDS_OUTBOX_PAYLOAD_INVALID');
+        }
+        // Records written before the checksum rollout remain readable and are
+        // replaced by v2 records when the same command is saved again.
+        if (record.schemaVersion == null && record.checksum == null) return;
+        if (record.schemaVersion !== 2 || typeof record.checksum !== 'string') {
+          throw new Error('KDS_OUTBOX_SCHEMA_INVALID');
+        }
+        const checksum = await emergencyOutboxChecksum(
+          record.id,
+          record.payload,
+          record.createdAt,
+        );
+        if (checksum !== record.checksum) {
+          throw new Error('KDS_OUTBOX_CHECKSUM_MISMATCH');
+        }
+      }
+
       const emergencyVoiceSupported = () =>
         'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
       let emergencyVoiceLastQueuedAt = 0;
@@ -245,38 +282,65 @@
       });
 
       window.globosEmergencyOutboxPut = async (id, payload) => {
+        const createdAt = Date.now();
+        const checksum = await emergencyOutboxChecksum(id, payload, createdAt);
         const db = await openOutbox();
-        await new Promise((resolve, reject) => {
-          const request = db.transaction(outboxStoreName, 'readwrite')
-            .objectStore(outboxStoreName).put({ id, payload, createdAt: Date.now() });
-          request.onsuccess = () => resolve();
-          request.onerror = () => reject(request.error);
-        });
-        db.close();
+        try {
+          await new Promise((resolve, reject) => {
+            const transaction = db.transaction(outboxStoreName, 'readwrite');
+            transaction.objectStore(outboxStoreName).put({
+              id,
+              payload,
+              createdAt,
+              schemaVersion: 2,
+              checksum,
+            });
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(
+              transaction.error || new Error('KDS_OUTBOX_WRITE_ABORTED'),
+            );
+          });
+        } finally {
+          db.close();
+        }
       };
 
       window.globosEmergencyOutboxReadAll = async () => {
         const db = await openOutbox();
-        const records = await new Promise((resolve, reject) => {
-          const request = db.transaction(outboxStoreName, 'readonly')
-            .objectStore(outboxStoreName).getAll();
-          request.onsuccess = () => resolve(request.result || []);
-          request.onerror = () => reject(request.error);
-        });
-        db.close();
+        let records;
+        try {
+          records = await new Promise((resolve, reject) => {
+            const request = db.transaction(outboxStoreName, 'readonly')
+              .objectStore(outboxStoreName).getAll();
+            request.onsuccess = () => resolve(request.result || []);
+            request.onerror = () => reject(request.error);
+          });
+        } finally {
+          db.close();
+        }
+        for (const record of records) {
+          await validateEmergencyOutboxRecord(record);
+        }
         records.sort((left, right) => (left.createdAt || 0) - (right.createdAt || 0));
         return JSON.stringify(records);
       };
 
       window.globosEmergencyOutboxDelete = async (id) => {
         const db = await openOutbox();
-        await new Promise((resolve, reject) => {
-          const request = db.transaction(outboxStoreName, 'readwrite')
-            .objectStore(outboxStoreName).delete(id);
-          request.onsuccess = () => resolve();
-          request.onerror = () => reject(request.error);
-        });
-        db.close();
+        try {
+          await new Promise((resolve, reject) => {
+            const transaction = db.transaction(outboxStoreName, 'readwrite');
+            transaction.objectStore(outboxStoreName).delete(id);
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(
+              transaction.error || new Error('KDS_OUTBOX_DELETE_ABORTED'),
+            );
+          });
+        } finally {
+          db.close();
+        }
       };
 
       window.globosEmergencyConfigurePushWorker = async (configJson) => {

@@ -2,10 +2,15 @@ import 'dart:convert';
 import 'dart:js_interop';
 
 class EmergencyOutboxRecord {
-  const EmergencyOutboxRecord({required this.id, required this.payload});
+  const EmergencyOutboxRecord({
+    required this.id,
+    required this.payload,
+    this.createdAtEpochMs = 0,
+  });
 
   final String id;
   final String payload;
+  final int createdAtEpochMs;
 }
 
 @JS('globosEmergencyVoiceEnable')
@@ -39,17 +44,31 @@ abstract final class EmergencyWebBridge {
   static Future<List<EmergencyOutboxRecord>> readOutbox() async {
     final raw = await _readOutbox().toDart;
     final decoded = jsonDecode(raw.toDart);
-    if (decoded is! List) return const [];
+    if (decoded is! List) {
+      throw const FormatException('KDS_OUTBOX_RESPONSE_INVALID');
+    }
     return decoded
-        .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
-        .map(
-          (row) => EmergencyOutboxRecord(
-            id: row['id']?.toString() ?? '',
-            payload: row['payload']?.toString() ?? '{}',
-          ),
-        )
-        .where((record) => record.id.isNotEmpty)
+        .map((rawRow) {
+          if (rawRow is! Map) {
+            throw const FormatException('KDS_OUTBOX_RECORD_INVALID');
+          }
+          final row = Map<String, dynamic>.from(rawRow);
+          final id = row['id'];
+          final payload = row['payload'];
+          final createdAt = row['createdAt'];
+          if (id is! String ||
+              id.trim().isEmpty ||
+              payload is! String ||
+              createdAt is! num ||
+              jsonDecode(payload) is! Map) {
+            throw const FormatException('KDS_OUTBOX_RECORD_INVALID');
+          }
+          return EmergencyOutboxRecord(
+            id: id,
+            payload: payload,
+            createdAtEpochMs: createdAt.toInt(),
+          );
+        })
         .toList(growable: false);
   }
 

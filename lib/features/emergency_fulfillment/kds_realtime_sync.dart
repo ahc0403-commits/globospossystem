@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -302,6 +303,17 @@ typedef KdsChangeHandler = Future<void> Function(KdsChangeEnvelope change);
 typedef KdsAsyncCallback = Future<void> Function();
 typedef KdsSyncErrorHandler = void Function(Object error, StackTrace stack);
 
+@visibleForTesting
+int resolveKdsBootstrapCursor({
+  required int bootstrapRevision,
+  int? storedRevision,
+}) {
+  // There is no matching durable screen-state cache. The authoritative
+  // bootstrap is therefore the only safe cursor boundary, including after a
+  // server restore whose revision is lower than a value saved on this device.
+  return bootstrapRevision;
+}
+
 class KdsRealtimeSync {
   KdsRealtimeSync({
     required this.client,
@@ -313,7 +325,8 @@ class KdsRealtimeSync {
     required this.onError,
     this.revisionStore = const SharedPreferencesKdsRevisionStore(),
     this.watchdogInterval = const Duration(seconds: 30),
-  });
+    Random? random,
+  }) : _random = random ?? Random();
 
   final SupabaseClient client;
   final KdsSyncGateway gateway;
@@ -324,6 +337,7 @@ class KdsRealtimeSync {
   final KdsSyncErrorHandler onError;
   final KdsRevisionStore revisionStore;
   final Duration watchdogInterval;
+  final Random _random;
 
   final List<RealtimeChannel> _channels = [];
   Timer? _watchdog;
@@ -351,11 +365,13 @@ class KdsRealtimeSync {
     if (_disposed || config.mode == KdsSyncMode.legacy) return;
     final stored = await revisionStore.read(_cursorKey);
     if (_disposed) return;
-    // The bootstrap already represents every change through config.revision.
-    // Never replay older events into alarm-producing state on app restart.
-    _cursor = config.revision > (stored ?? 0)
-        ? config.revision
-        : (stored ?? config.revision);
+    // The bootstrap state and its revision form one authoritative boundary.
+    // A stored cursor has no matching durable UI state and can also be ahead
+    // after a server restore, so it must never skip the bootstrap boundary.
+    _cursor = resolveKdsBootstrapCursor(
+      bootstrapRevision: config.revision,
+      storedRevision: stored,
+    );
     await revisionStore.write(_cursorKey, _cursor);
     if (_disposed) return;
 
@@ -392,10 +408,20 @@ class KdsRealtimeSync {
           });
       _channels.add(channel);
     }
-    _watchdog = Timer.periodic(
-      watchdogInterval,
-      (_) => unawaited(_watchdogTick()),
-    );
+    _scheduleWatchdog();
+  }
+
+  void _scheduleWatchdog() {
+    if (_disposed) return;
+    final baseMs = watchdogInterval.inMilliseconds;
+    final jitterMs = min(5000, max(0, baseMs ~/ 6));
+    final offset = jitterMs == 0 ? 0 : _random.nextInt((jitterMs * 2) + 1);
+    final delayMs = max(1000, baseMs - jitterMs + offset);
+    _watchdog = Timer(Duration(milliseconds: delayMs), () async {
+      _watchdog = null;
+      await _watchdogTick();
+      if (!_disposed) _scheduleWatchdog();
+    });
   }
 
   Future<void> _watchdogTick() async {
@@ -431,12 +457,14 @@ class KdsRealtimeSync {
             await onBootstrapRequired();
             return;
           }
+          if (batch.currentRevision < _cursor) {
+            await onBootstrapRequired();
+            return;
+          }
+          _validateBatch(batch);
           for (final change in batch.changes) {
             if (change.revision <= _cursor) continue;
             await onChange(change);
-          }
-          if (batch.scannedThroughRevision < _cursor) {
-            throw StateError('KDS_DELTA_CURSOR_REGRESSION');
           }
           _cursor = batch.scannedThroughRevision;
           await revisionStore.write(_cursorKey, _cursor);
@@ -449,6 +477,26 @@ class KdsRealtimeSync {
     } finally {
       _catchingUp = false;
       if (_catchUpRequested && !_disposed) unawaited(catchUp());
+    }
+  }
+
+  void _validateBatch(KdsDeltaBatch batch) {
+    if (batch.scannedThroughRevision < _cursor) {
+      throw StateError('KDS_DELTA_CURSOR_REGRESSION');
+    }
+    if (batch.scannedThroughRevision > batch.currentRevision) {
+      throw StateError('KDS_DELTA_SCAN_AHEAD_OF_CURRENT');
+    }
+    var previousRevision = _cursor;
+    for (final change in batch.changes) {
+      if (change.restaurantId != config.restaurantId) {
+        throw StateError('KDS_DELTA_STORE_SCOPE_MISMATCH');
+      }
+      if (change.revision <= previousRevision ||
+          change.revision > batch.scannedThroughRevision) {
+        throw StateError('KDS_DELTA_REVISION_ORDER_INVALID');
+      }
+      previousRevision = change.revision;
     }
   }
 

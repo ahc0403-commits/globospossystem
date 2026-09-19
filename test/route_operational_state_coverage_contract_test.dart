@@ -84,7 +84,7 @@ const _routeStateCoverage = <_RouteStateCoverage>[
     operationalTest: 'test/remaining_route_operational_state_test.dart',
     stateMarkers: [
       'Completer<bool>()',
-      'Stream.value(false)',
+      'ServiceConnectivityKind.networkUnavailable',
       'attendance_employee_clock_in',
     ],
   ),

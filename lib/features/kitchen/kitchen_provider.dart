@@ -5,8 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/order_service.dart';
-import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/coalesced_refresh.dart';
+import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 
@@ -284,7 +285,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   SupabaseClient get _db => _client ?? supabase;
 
   static const _autoRefreshInterval = Duration(seconds: 2);
-  static const _fallbackPollInterval = Duration(seconds: 15);
+  static const _fallbackPollInterval = Duration(seconds: 30);
 
   final _refreshQueue = CoalescedRefresh();
   final _dirtyOrderIds = <String>{};
@@ -693,9 +694,13 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+    _pollTimer = Timer(jitteredPollDelay(_fallbackPollInterval), () async {
+      _pollTimer = null;
       if (mounted && _restaurantId == storeId) {
-        unawaited(loadOrders(storeId, showLoading: false));
+        await loadOrders(storeId, showLoading: false);
+      }
+      if (mounted && !_realtimeConnected && _restaurantId == storeId) {
+        _ensureAutoRefresh(storeId);
       }
     });
   }

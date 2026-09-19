@@ -296,7 +296,7 @@ void main() {
       waiter,
       contains("import '../../core/services/connectivity_service.dart';"),
     );
-    expect(waiter, contains('ref.watch(connectivityProvider)'));
+    expect(waiter, contains('watch(serviceConnectivityProvider)'));
     expect(waiter, contains('storeId == null || !isOnline'));
     expect(waiter, contains("key: const Key('waiter_staff_meal_action')"));
     expect(waiter, contains("key: const Key('waiter_staff_meal_submit')"));

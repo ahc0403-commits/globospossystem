@@ -127,6 +127,7 @@ Future<void> _pumpQr(
   Locale locale = const Locale('en'),
   double textScale = 1,
   bool settle = true,
+  Duration menuSafetyRefreshInterval = const Duration(minutes: 5),
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -148,7 +149,13 @@ Future<void> _pumpQr(
         ).copyWith(textScaler: TextScaler.linear(textScale)),
         child: child!,
       ),
-      home: QrOrderScreen(key: UniqueKey(), token: 'token', service: service),
+      home: QrOrderScreen(
+        key: UniqueKey(),
+        token: 'token',
+        service: service,
+        menuSafetyRefreshInterval: menuSafetyRefreshInterval,
+        menuSafetyRefreshJitter: Duration.zero,
+      ),
     ),
   );
   if (settle) await tester.pumpAndSettle();
@@ -594,6 +601,7 @@ void main() {
     );
     await _pumpQr(
       tester,
+      menuSafetyRefreshInterval: const Duration(seconds: 15),
       service: _service(
         fetchActive: (_) async {
           activeOrderReads += 1;
@@ -704,6 +712,7 @@ void main() {
     );
     await _pumpQr(
       tester,
+      menuSafetyRefreshInterval: const Duration(seconds: 15),
       service: _service(
         fetchActive: (_) async =>
             activeOrderReads++ == 0 ? firstOrder : nextOrder,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,7 +20,8 @@ class BankTransferAlertCoordinator extends ConsumerStatefulWidget {
     required this.child,
     this.alertService,
     this.soundService,
-    this.pollInterval = const Duration(seconds: 2),
+    this.pollInterval = const Duration(seconds: 30),
+    this.pollRandom,
   });
 
   final String? storeId;
@@ -27,6 +29,7 @@ class BankTransferAlertCoordinator extends ConsumerStatefulWidget {
   final BankTransferAlertService? alertService;
   final BankTransferAlertSoundService? soundService;
   final Duration pollInterval;
+  final math.Random? pollRandom;
 
   @override
   ConsumerState<BankTransferAlertCoordinator> createState() =>
@@ -41,6 +44,7 @@ class _BankTransferAlertCoordinatorState
   bool _inFlight = false;
   bool _retryRequested = false;
   int _generation = 0;
+  late math.Random _pollRandom;
 
   BankTransferAlertService get _alertService =>
       widget.alertService ?? bankTransferAlertService;
@@ -50,6 +54,7 @@ class _BankTransferAlertCoordinatorState
   @override
   void initState() {
     super.initState();
+    _pollRandom = widget.pollRandom ?? math.Random();
     _switchStore(widget.storeId);
   }
 
@@ -58,7 +63,9 @@ class _BankTransferAlertCoordinatorState
     super.didUpdateWidget(oldWidget);
     if (oldWidget.storeId != widget.storeId ||
         oldWidget.alertService != widget.alertService ||
-        oldWidget.pollInterval != widget.pollInterval) {
+        oldWidget.pollInterval != widget.pollInterval ||
+        oldWidget.pollRandom != widget.pollRandom) {
+      _pollRandom = widget.pollRandom ?? math.Random();
       _switchStore(widget.storeId);
     }
   }
@@ -86,11 +93,30 @@ class _BankTransferAlertCoordinatorState
       return;
     }
     _cursor = cursor;
-    _pollTimer = Timer.periodic(
-      widget.pollInterval,
-      (_) => unawaited(_drain(storeId)),
-    );
+    _schedulePoll(storeId, generation);
     await _drain(storeId);
+  }
+
+  void _schedulePoll(String storeId, int generation) {
+    _pollTimer?.cancel();
+    final baseMs = widget.pollInterval.inMilliseconds;
+    final jitterMs = baseMs >= const Duration(seconds: 10).inMilliseconds
+        ? math.min(5000, baseMs ~/ 6)
+        : 0;
+    final offset = jitterMs == 0
+        ? 0
+        : _pollRandom.nextInt((jitterMs * 2) + 1) - jitterMs;
+    final delay = Duration(milliseconds: math.max(1, baseMs + offset));
+    _pollTimer = Timer(delay, () async {
+      _pollTimer = null;
+      if (!mounted || generation != _generation || _activeStoreId != storeId) {
+        return;
+      }
+      await _drain(storeId);
+      if (mounted && generation == _generation && _activeStoreId == storeId) {
+        _schedulePoll(storeId, generation);
+      }
+    });
   }
 
   Future<void> _drain(String storeId) async {

@@ -25,13 +25,13 @@ const _frozenAlertFiles = <String, String>{
       '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
   // Intentional bank QR selection fix; cashier overlay tests cover QR and alerts.
   'lib/features/cashier/cashier_screen.dart':
-      '297c34308ee695e28e91ebc5d26616ece5fef8a66ef08d6cb791f6dc4c305dba',
+      '5559b9a302a110340912a5524f074e59bb1efb4125a5445e408032079c51c717',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   // Intentional event-merge fix; behavioral regressions live in
   // scalability_live_consumer_regression_test.dart.
   'lib/core/services/bank_transfer_alert_coordinator.dart':
-      'ecd5271073ee71e84590341c081c492599eee3bc9b283671fe30d5e1305eee25',
+      'a9433b177761c4e2fb6ba319b103491d7c5c95ad9da3a24fdfc747b521151265',
   'lib/core/services/bank_transfer_alert_service.dart':
       '05a1dbf45971c9c28437f52e970ce1ab6dfbec29f291188648cf50e708028dff',
   'lib/core/services/bank_transfer_alert_sound.dart':
@@ -47,19 +47,19 @@ const _frozenAlertFiles = <String, String>{
   'test/bank_transfer_alert_coordinator_test.dart':
       'a6860655bdde88ce6ec26603b1cf3ec7d8eb5e8b5ec9310130bb5332f5a250b6',
   'test/sepay_bank_transfer_contract_test.dart':
-      '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
+      'c58c3e55574c01dbbe2d329d78def8b2d085e3808d3b7e79d3cb1caceee08c93',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
   // 2026-09-18: menu deletion copy is localized. Arrival behavior remains
   // covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      'bd1e3fe8b610d4c3a50df60c42b94cfb1f3017d3a4fe4a9c76a75a590615c28d',
+      'b812da931824017b53d005dbadb13dad16c559c840395ea0f59d6de4f4ff88a1',
   'lib/l10n/app_localizations_ko.dart':
-      'c0ee51b2bacc829fa3484ba426f6963ae2cc1b69f25a0ae072bd4f62951fea70',
+      'd2d840625568bce53211bb6b9d93e1b763c99e8e5dbdab92bc1fc805b5ecedeb',
   'lib/l10n/app_localizations_vi.dart':
-      '90d91be6bfb998896e009099dac35669b6297a6e11939114674cadf675b8e766',
+      'c8e2816641f923870cfbe7f24154529513d65f5073662392552eee19045febbe',
   'lib/l10n/app_localizations_en.dart':
-      'bca15b1989f8dd471c3a4a01231b4bdabcd3b20add2a6fcb3207c4bcb1ee00e4',
+      '8d56ad1d299d44c5a5383cab80b6dfc89bec0d0e647882fc69dd8e696a78e6d5',
 };
 
 void main() {
@@ -261,7 +261,7 @@ void main() {
       service.add(3);
       await tester.pump(const Duration(milliseconds: 55));
       await tester.pump();
-      expect(presented, [2, 1], reason: '10-second safety poll is injectable');
+      expect(presented, [2, 1], reason: 'safety poll is injectable');
       expect(sound.plays, 2);
       await events.close();
     },

@@ -78,15 +78,15 @@ void main() {
   });
 
   test(
-    'customer display keeps fast disconnected and slower healthy recovery',
+    'customer display uses bounded safety polling for every socket state',
     () {
       expect(
         CustomerDisplayNotifier.fallbackIntervalForConnection(connected: false),
-        const Duration(seconds: 1),
+        const Duration(seconds: 30),
       );
       expect(
         CustomerDisplayNotifier.fallbackIntervalForConnection(connected: true),
-        const Duration(seconds: 5),
+        const Duration(seconds: 30),
       );
     },
   );

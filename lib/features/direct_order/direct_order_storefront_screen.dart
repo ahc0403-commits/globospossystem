@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/payments/vietqr_payload.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../widgets/language_switcher.dart';
 import 'direct_order_arrival_alert_sound.dart';
 import 'direct_order_copy.dart';
@@ -26,10 +28,16 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
     super.key,
     required this.slug,
     this.service = directOrderService,
+    this.statusSafetyRefreshInterval = const Duration(seconds: 15),
+    this.statusSafetyRefreshJitter = const Duration(seconds: 3),
+    this.pollRandom,
   });
 
   final String slug;
   final DirectOrderService service;
+  final Duration statusSafetyRefreshInterval;
+  final Duration statusSafetyRefreshJitter;
+  final math.Random? pollRandom;
 
   @override
   State<DirectOrderStorefrontScreen> createState() =>
@@ -72,6 +80,8 @@ class _DirectOrderStorefrontScreenState
   String? _errorCode;
   int _loadGeneration = 0;
   int _statusMutationRevision = 0;
+  bool _isForeground = true;
+  late final math.Random _pollRandom;
 
   String get _languageCode =>
       Localizations.maybeLocaleOf(context)?.languageCode ?? 'vi';
@@ -80,6 +90,7 @@ class _DirectOrderStorefrontScreenState
   @override
   void initState() {
     super.initState();
+    _pollRandom = widget.pollRandom ?? math.Random();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
@@ -99,8 +110,19 @@ class _DirectOrderStorefrontScreenState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _session != null) {
-      unawaited(_refreshStatus(silent: true));
+    _isForeground = state == AppLifecycleState.resumed;
+    if (_isForeground && _session != null) {
+      unawaited(_refreshStatusAfterResume());
+    } else {
+      _statusTimer?.cancel();
+      _statusTimer = null;
+    }
+  }
+
+  Future<void> _refreshStatusAfterResume() async {
+    await _refreshStatus(silent: true);
+    if (mounted && _orders.any((order) => !order.isTerminal)) {
+      _startStatusPolling();
     }
   }
 
@@ -280,9 +302,22 @@ class _DirectOrderStorefrontScreenState
 
   void _startStatusPolling() {
     _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      _refreshStatus(silent: true);
-    });
+    _statusTimer = null;
+    if (!_isForeground || !_orders.any((order) => !order.isTerminal)) return;
+    _statusTimer = Timer(
+      jitteredPollDelay(
+        widget.statusSafetyRefreshInterval,
+        maximumJitter: widget.statusSafetyRefreshJitter,
+        random: _pollRandom,
+      ),
+      () async {
+        _statusTimer = null;
+        await _refreshStatus(silent: true);
+        if (mounted && _orders.any((order) => !order.isTerminal)) {
+          _startStatusPolling();
+        }
+      },
+    );
   }
 
   Future<void> _refreshStatus({bool silent = false}) async {
@@ -330,6 +365,7 @@ class _DirectOrderStorefrontScreenState
       });
       if (!orders.any((order) => !order.isTerminal)) {
         _statusTimer?.cancel();
+        _statusTimer = null;
       }
     } catch (error) {
       if (!silent) _showError(error);

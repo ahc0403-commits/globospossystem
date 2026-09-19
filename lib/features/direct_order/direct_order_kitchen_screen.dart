@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/language_switcher.dart';
 import '../auth/auth_provider.dart';
@@ -27,6 +29,7 @@ class _DirectOrderKitchenScreenState
   String? _error;
   bool _loading = true;
   final Set<String> _busyTickets = {};
+  Timer? _liveRefreshTimer;
 
   DirectOrderCopy get _copy =>
       DirectOrderCopy(Localizations.localeOf(context).languageCode);
@@ -35,16 +38,31 @@ class _DirectOrderKitchenScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-    _timer = Timer.periodic(
-      const Duration(seconds: 7),
-      (_) => _load(silent: true),
-    );
+    _scheduleSafetyRefresh();
+  }
+
+  void _scheduleSafetyRefresh() {
+    _timer?.cancel();
+    _timer = Timer(jitteredPollDelay(const Duration(seconds: 30)), () async {
+      _timer = null;
+      await _load(silent: true);
+      if (mounted) _scheduleSafetyRefresh();
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _liveRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _handleLiveEvent(PosLiveEvent event) {
+    if (!event.affects({'direct_delivery_status'})) return;
+    _liveRefreshTimer?.cancel();
+    _liveRefreshTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) unawaited(_load(silent: true));
+    });
   }
 
   Future<void> _load({bool silent = false}) async {
@@ -98,6 +116,15 @@ class _DirectOrderKitchenScreenState
 
   @override
   Widget build(BuildContext context) {
+    final storeId = ref.watch(authProvider).storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData(_handleLiveEvent);
+      });
+    }
     const filters = <String?>[
       null,
       'pending',

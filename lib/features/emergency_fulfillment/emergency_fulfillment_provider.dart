@@ -21,9 +21,9 @@ const emergencyAdditionalOrderAlarmCoalesceDelay = Duration(seconds: 2);
 
 Duration emergencySnapshotRetryDelay(int consecutiveFailures) =>
     switch (consecutiveFailures) {
-      <= 1 => const Duration(seconds: 2),
-      2 => const Duration(seconds: 5),
-      _ => const Duration(seconds: 15),
+      <= 1 => const Duration(seconds: 5),
+      2 => const Duration(seconds: 15),
+      _ => const Duration(seconds: 30),
     };
 
 String formatEmergencyElapsed(Duration elapsed) {
@@ -1762,8 +1762,11 @@ class EmergencyFulfillmentNotifier
   SupabaseClient get _client => _providedClient ?? supabase;
 
   static const _uuid = Uuid();
-  static const _handoffRefreshInterval = Duration(seconds: 1);
-  static const _connectedHealthRefreshInterval = Duration(seconds: 5);
+  // Realtime events are the fast path. Legacy reconciliation is only a bounded
+  // safety net and must not become faster when the realtime channel is down.
+  static const _handoffRefreshInterval = Duration(seconds: 30);
+  static const _connectedHealthRefreshInterval = Duration(seconds: 30);
+  static const _pollJitter = Duration(seconds: 5);
   static const _realtimeRefreshDelay = Duration(milliseconds: 100);
   RealtimeChannel? _channel;
   KdsRealtimeSync? _kdsSync;
@@ -1782,6 +1785,7 @@ class EmergencyFulfillmentNotifier
   int _snapshotFailureCount = 0;
   int _realtimeRevision = 0;
   final Map<String, int> _ticketRevisions = {};
+  final math.Random _pollRandom = math.Random();
 
   Future<void> load({bool showLoading = true}) async {
     if (!mounted) return;
@@ -1881,6 +1885,10 @@ class EmergencyFulfillmentNotifier
       if (!mounted) return;
       final next = EmergencyFulfillmentState.fromJson(json);
       final pendingRecords = await EmergencyWebBridge.readOutbox();
+      final currentPendingRecords = emergencyOutboxRecordsForStore(
+        pendingRecords,
+        storeId,
+      );
       if (!mounted) return;
       if (refreshRevision != _realtimeRevision) {
         _refreshRequested = true;
@@ -1888,8 +1896,8 @@ class EmergencyFulfillmentNotifier
       }
       state = next.copyWith(
         isLoading: false,
-        pendingOutboxCount: pendingRecords.length,
-        pendingQueueIds: emergencyPendingQueueIds(pendingRecords),
+        pendingOutboxCount: currentPendingRecords.length,
+        pendingQueueIds: emergencyPendingQueueIds(currentPendingRecords),
         error: outboxError,
         clearError: outboxError == null,
       );
@@ -1916,13 +1924,12 @@ class EmergencyFulfillmentNotifier
 
   void _scheduleSnapshotRetry() {
     _snapshotRetryTimer?.cancel();
-    _snapshotRetryTimer = Timer(
-      emergencySnapshotRetryDelay(_snapshotFailureCount),
-      () {
-        _snapshotRetryTimer = null;
-        if (mounted) unawaited(load(showLoading: false));
-      },
-    );
+    final baseDelay = emergencySnapshotRetryDelay(_snapshotFailureCount);
+    final jitter = _pollRandom.nextInt(2001);
+    _snapshotRetryTimer = Timer(baseDelay + Duration(milliseconds: jitter), () {
+      _snapshotRetryTimer = null;
+      if (mounted) unawaited(load(showLoading: false));
+    });
   }
 
   void _scheduleBusinessDayRefresh(VietnamBusinessDayWindow businessDay) {
@@ -2125,10 +2132,21 @@ class EmergencyFulfillmentNotifier
     if (_pollTimer != null && _pollInterval == interval) return;
     _pollTimer?.cancel();
     _pollInterval = interval;
-    _pollTimer = Timer.periodic(interval, (_) {
+    _scheduleLegacyPollTick(interval);
+  }
+
+  void _scheduleLegacyPollTick(Duration interval) {
+    final jitterWindowMs = _pollJitter.inMilliseconds * 2;
+    final jitterMs = _pollRandom.nextInt(jitterWindowMs + 1);
+    final delay = interval - _pollJitter + Duration(milliseconds: jitterMs);
+    _pollTimer = Timer(delay, () {
+      _pollTimer = null;
       // The retry timer owns recovery after failure; polling must not bypass it.
       if (mounted && !_refreshing && _snapshotRetryTimer == null) {
         unawaited(load(showLoading: false));
+      }
+      if (mounted && _syncMode != KdsSyncMode.active) {
+        _scheduleLegacyPollTick(interval);
       }
     });
   }
@@ -2285,10 +2303,14 @@ class EmergencyFulfillmentNotifier
     if (!mounted || _syncMode == KdsSyncMode.legacy) return;
     final error = await _flushOutbox();
     final pendingRecords = await EmergencyWebBridge.readOutbox();
+    final currentPendingRecords = emergencyOutboxRecordsForStore(
+      pendingRecords,
+      state.restaurantId,
+    );
     if (!mounted) return;
     state = state.copyWith(
-      pendingOutboxCount: pendingRecords.length,
-      pendingQueueIds: emergencyPendingQueueIds(pendingRecords),
+      pendingOutboxCount: currentPendingRecords.length,
+      pendingQueueIds: emergencyPendingQueueIds(currentPendingRecords),
       error: error,
       clearError: error == null,
     );
@@ -2449,7 +2471,7 @@ class EmergencyFulfillmentNotifier
         return;
       }
       try {
-        await EmergencyWebBridge.putOutbox(eventId, jsonEncode(payload));
+        await _putOutbox(eventId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           error: 'EMERGENCY_PROGRESS_QUEUED',
@@ -2489,7 +2511,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(actionId, jsonEncode(payload));
+        await _putOutbox(actionId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {...state.pendingQueueIds, queueId},
@@ -2530,7 +2552,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(requestId, jsonEncode(payload));
+        await _putOutbox(requestId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {
@@ -2570,7 +2592,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(requestId, jsonEncode(payload));
+        await _putOutbox(requestId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {
@@ -2609,7 +2631,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(requestId, jsonEncode(payload));
+        await _putOutbox(requestId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {
@@ -2654,7 +2676,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(eventId, jsonEncode(payload));
+        await _putOutbox(eventId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {...state.pendingQueueIds, task.queueId},
@@ -2697,7 +2719,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(revertId, jsonEncode(payload));
+        await _putOutbox(revertId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {...state.pendingQueueIds, queueId},
@@ -3006,6 +3028,17 @@ class EmergencyFulfillmentNotifier
     );
   }
 
+  Future<void> _putOutbox(String id, Map<String, dynamic> payload) async {
+    final storeId = state.restaurantId;
+    if (storeId == null || storeId.isEmpty) {
+      throw StateError('KDS_OUTBOX_STORE_SCOPE_MISSING');
+    }
+    await EmergencyWebBridge.putOutbox(
+      id,
+      jsonEncode({...payload, '_outbox_store_id': storeId}),
+    );
+  }
+
   Future<String?> _flushOutbox() async {
     if (_flushing) return null;
     _flushing = true;
@@ -3016,10 +3049,19 @@ class EmergencyFulfillmentNotifier
         try {
           final decoded = jsonDecode(record.payload);
           if (decoded is! Map) {
-            await EmergencyWebBridge.deleteOutbox(record.id);
+            throw const FormatException('KDS_OUTBOX_PAYLOAD_INVALID');
+          }
+          final payload = Map<String, dynamic>.from(decoded);
+          final recordStoreId = payload['_outbox_store_id']?.toString();
+          final currentStoreId = state.restaurantId;
+          if (recordStoreId != null &&
+              recordStoreId.isNotEmpty &&
+              recordStoreId != currentStoreId) {
+            // A different store/user session must never replay or delete this
+            // record. It remains durable until its owning scope is active.
             continue;
           }
-          await _sendOutboxPayload(Map<String, dynamic>.from(decoded));
+          await _sendOutboxPayload(payload);
           await EmergencyWebBridge.deleteOutbox(record.id);
         } on PostgrestException catch (error) {
           // A server-side contract rejection will not succeed on retry. Remove
@@ -3068,10 +3110,35 @@ Set<String> emergencyPendingQueueIds(Iterable<EmergencyOutboxRecord> records) {
         if (queueId != null && queueId.isNotEmpty) queueIds.add(queueId);
       }
     } catch (_) {
-      // Invalid records are discarded by the outbox flusher.
+      // Storage adapters surface corrupt records; direct fixture inputs are
+      // ignored here because they cannot identify a pending queue safely.
     }
   }
   return queueIds;
+}
+
+@visibleForTesting
+List<EmergencyOutboxRecord> emergencyOutboxRecordsForStore(
+  Iterable<EmergencyOutboxRecord> records,
+  String? storeId,
+) {
+  if (storeId == null || storeId.isEmpty) return const [];
+  return records
+      .where((record) {
+        try {
+          final decoded = jsonDecode(record.payload);
+          if (decoded is! Map) return false;
+          final recordStoreId = decoded['_outbox_store_id']?.toString();
+          // Pre-scope records remain replayable under server-side RLS for a
+          // backwards-compatible migration. Every new record carries a scope.
+          return recordStoreId == null ||
+              recordStoreId.isEmpty ||
+              recordStoreId == storeId;
+        } catch (_) {
+          return false;
+        }
+      })
+      .toList(growable: false);
 }
 
 final emergencyFulfillmentProvider =

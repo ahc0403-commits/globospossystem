@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/tables_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../main.dart';
 import 'table_model.dart';
 import 'table_order_preview.dart';
@@ -43,7 +44,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   WaiterTableNotifier() : super(const WaiterTableState());
 
   static const _autoRefreshInterval = Duration(seconds: 2);
-  static const _fallbackPollInterval = Duration(seconds: 15);
+  static const _fallbackPollInterval = Duration(seconds: 30);
 
   RealtimeChannel? _channel;
   String? _subscribedRestaurantId;
@@ -208,9 +209,15 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+    _pollTimer = Timer(jitteredPollDelay(_fallbackPollInterval), () async {
+      _pollTimer = null;
       if (mounted && _subscribedRestaurantId == storeId) {
-        unawaited(loadTables(storeId, showLoading: false));
+        await loadTables(storeId, showLoading: false);
+      }
+      if (mounted &&
+          !_realtimeConnected &&
+          _subscribedRestaurantId == storeId) {
+        _ensureAutoRefresh(storeId);
       }
     });
   }

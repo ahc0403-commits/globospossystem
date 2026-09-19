@@ -56,7 +56,8 @@ void main() {
       contains("LiveSyncScope.entityFilter('id', widget.paymentId)"),
     );
     expect(screen, contains("LiveSyncScope.entityFilter('order_id', orderId)"));
-    expect(screen, contains('Timer.periodic(_autoRefreshInterval'));
+    expect(screen, contains('Timer(jitteredPollDelay(_autoRefreshInterval)'));
+    expect(screen, isNot(contains('Timer.periodic(_autoRefreshInterval')));
     expect(screen, contains("table: 'payment_adjustments'"));
     expect(screen, contains("table: 'meinvoice_jobs'"));
     expect(

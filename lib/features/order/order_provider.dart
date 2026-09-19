@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/services/offline_mutation_queue_service.dart';
 import '../../core/services/order_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../main.dart';
 import 'order_model.dart';
 
@@ -54,7 +55,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
     _refreshOfflineQueueCount();
   }
 
-  static const _fallbackPollInterval = Duration(seconds: 15);
+  static const _fallbackPollInterval = Duration(seconds: 30);
 
   RealtimeChannel? _orderItemsChannel;
   String? _subscribedOrderId;
@@ -346,11 +347,18 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
 
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+    _pollTimer = Timer(jitteredPollDelay(_fallbackPollInterval), () async {
+      _pollTimer = null;
       if (mounted &&
           _subscribedTableId == tableId &&
           _subscribedStoreId == storeId) {
-        unawaited(loadActiveOrder(tableId, storeId, syncOffline: false));
+        await loadActiveOrder(tableId, storeId, syncOffline: false);
+      }
+      if (mounted &&
+          !_realtimeConnected &&
+          _subscribedTableId == tableId &&
+          _subscribedStoreId == storeId) {
+        _ensureAutoRefresh(tableId, storeId);
       }
     });
   }

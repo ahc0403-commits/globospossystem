@@ -33,7 +33,7 @@ void main() {
   }
 
   test(
-    'healthy displays use two safety reads per ten seconds, not ten',
+    'healthy displays avoid full snapshots inside the safety window',
     () async {
       await startBoth();
       final displayBefore = server.count('customer_payment_displays');
@@ -44,10 +44,10 @@ void main() {
       );
       server.snapshot = {...server.snapshot, 'active': false};
       await Future<void>.delayed(const Duration(milliseconds: 10100));
-      expect(server.count('customer_payment_displays') - displayBefore, 2);
-      expect(server.count('get_emergency_station_snapshot') - kdsBefore, 2);
-      expect(display.state.snapshot?.orderId, 'silent-update');
-      expect(kds.state.active, isFalse);
+      expect(server.count('customer_payment_displays') - displayBefore, 0);
+      expect(server.count('get_emergency_station_snapshot') - kdsBefore, 0);
+      expect(display.state.snapshot?.orderId, 'order-1');
+      expect(kds.state.active, isTrue);
     },
   );
 
@@ -112,15 +112,15 @@ void main() {
   );
 
   test(
-    'initial disconnected clients keep one-second recovery polling',
+    'initial disconnected clients do not start one-second recovery polling',
     () async {
       server.acknowledgeJoins = false;
       await Future.wait([display.start('store-1'), kds.load()]);
       final displayBefore = server.count('customer_payment_displays');
       final kdsBefore = server.count('get_emergency_station_snapshot');
       await Future<void>.delayed(const Duration(milliseconds: 2200));
-      expect(server.count('customer_payment_displays') - displayBefore, 2);
-      expect(server.count('get_emergency_station_snapshot') - kdsBefore, 2);
+      expect(server.count('customer_payment_displays') - displayBefore, 0);
+      expect(server.count('get_emergency_station_snapshot') - kdsBefore, 0);
     },
   );
 
@@ -136,6 +136,7 @@ void main() {
         'offline-update',
       );
       server.snapshot = {...server.snapshot, 'active': false};
+      await Future.wait([display.retry(), kds.refreshFromSignal()]);
       await waitUntil(
         () =>
             server.count('customer_payment_displays') > displayBefore &&
@@ -153,6 +154,7 @@ void main() {
       );
       server.snapshot = {...server.snapshot, 'active': true};
       server.channelError();
+      await Future.wait([display.retry(), kds.refreshFromSignal()]);
       await waitUntil(
         () =>
             display.state.snapshot?.orderId == 'reconnected' &&
@@ -267,7 +269,7 @@ void main() {
     final before = server.count('get_emergency_station_snapshot');
     await kds.load();
     await Future<void>.delayed(const Duration(milliseconds: 3200));
-    expect(server.count('get_emergency_station_snapshot') - before, 2);
+    expect(server.count('get_emergency_station_snapshot') - before, 1);
     expect(kds.state.error, contains('EMERGENCY_SNAPSHOT_FAILED'));
     expect(kds.state.orders, isNotEmpty);
     server.snapshotFailure = false;
@@ -284,7 +286,7 @@ void main() {
       final before = server.count('customer_payment_displays');
       await display.retry();
       await Future<void>.delayed(const Duration(milliseconds: 3200));
-      expect(server.count('customer_payment_displays') - before, 2);
+      expect(server.count('customer_payment_displays') - before, 1);
       expect(display.state.snapshot, isNotNull);
       server.displayFailure = false;
       await display.retry();

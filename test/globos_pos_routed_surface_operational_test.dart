@@ -372,7 +372,15 @@ Future<GoRouter> _pumpRoute(
         authProvider.overrideWith(
           (ref) => _FixtureAuthNotifier(surface.authState),
         ),
-        connectivityProvider.overrideWith((ref) => Stream.value(isOnline)),
+        serviceConnectivityProvider.overrideWith(
+          (ref) => Stream.value(
+            ServiceConnectivityState(
+              kind: isOnline
+                  ? ServiceConnectivityKind.online
+                  : ServiceConnectivityKind.networkUnavailable,
+            ),
+          ),
+        ),
         restaurantCutoffStateProvider.overrideWith(
           (ref, storeId) => Stream.value(
             const RestaurantCutoffState(

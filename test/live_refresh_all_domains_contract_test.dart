@@ -121,7 +121,16 @@ void main() {
       'lib/features/qr_order/qr_order_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains('Timer.periodic(const Duration(seconds: 15)'));
+    expect(
+      source,
+      contains('menuSafetyRefreshInterval = const Duration(minutes: 5)'),
+    );
+    expect(source, contains('_scheduleMenuSafetyRefresh()'));
+    expect(source, contains('_pendingMenuLoad'));
+    expect(
+      source,
+      isNot(contains('Timer.periodic(const Duration(seconds: 15)')),
+    );
     expect(source, contains('AppLifecycleState.resumed'));
     expect(source, contains("table: 'pos_live_events'"));
     expect(source, contains("column: 'restaurant_id'"));

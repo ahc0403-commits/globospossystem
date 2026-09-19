@@ -244,7 +244,13 @@ Future<void> _pumpKds(
     ProviderScope(
       overrides: [
         authProvider.overrideWith((_) => _VisualAuthNotifier()),
-        connectivityProvider.overrideWith((_) => Stream.value(true)),
+        serviceConnectivityProvider.overrideWith(
+          (_) => Stream.value(
+            const ServiceConnectivityState(
+              kind: ServiceConnectivityKind.online,
+            ),
+          ),
+        ),
         emergencyFulfillmentProvider.overrideWith(
           (_) => _VisualEmergencyNotifier(_kdsState(station)),
         ),
