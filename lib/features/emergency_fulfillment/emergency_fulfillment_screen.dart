@@ -938,9 +938,7 @@ class _EmergencyHeader extends StatelessWidget {
               ? const SizedBox.shrink()
               : FilledButton.tonalIcon(
                   key: const Key('tray_floor_transition'),
-                  onPressed: (trayFloorPendingQuantity ?? 0) > 0
-                      ? onTrayFloorTransition
-                      : null,
+                  onPressed: onTrayFloorTransition,
                   icon: const Icon(Icons.swap_horiz_rounded),
                   label: Text(
                     '${copy.floorTransition} · ${trayFloorPendingQuantity ?? 0}',
@@ -950,9 +948,7 @@ class _EmergencyHeader extends StatelessWidget {
               ? const SizedBox.shrink()
               : FilledButton.tonalIcon(
                   key: const Key('customer_delivery'),
-                  onPressed: (customerDeliveryQuantity ?? 0) > 0
-                      ? onCustomerDelivery
-                      : null,
+                  onPressed: onCustomerDelivery,
                   icon: const Icon(Icons.room_service_rounded),
                   label: Text(
                     '${copy.customerDelivery} · ${customerDeliveryQuantity ?? 0}',

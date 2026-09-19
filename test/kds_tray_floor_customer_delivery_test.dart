@@ -66,6 +66,14 @@ void main() {
         'old-gimbap',
         'new-gimbap',
       ]);
+      final selected = allocateTrayFloorTransitionSelections(first, {
+        first.groups.single.key: 3,
+      });
+      expect(selected.totalQuantity, 3);
+      expect(selected.allocations.map((allocation) => allocation.quantity), [
+        2,
+        1,
+      ]);
       expect(second.totalQuantity, 3);
       expect(second.allocations.single.itemId, 'second');
     });
