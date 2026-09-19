@@ -16,6 +16,7 @@ DECLARE
   v_queue uuid;
   v_floor text;
   v_tray_request uuid := gen_random_uuid();
+  v_tray_request_two uuid := gen_random_uuid();
   v_customer_request uuid := gen_random_uuid();
   v_allocations jsonb;
   v_result jsonb;
@@ -82,42 +83,56 @@ BEGIN
 
   UPDATE public.emergency_station_assignments
   SET station_type = 'tray', floor_label = NULL WHERE id = v_assignment;
-  BEGIN
-    PERFORM public.kds_dispatch_tray_floor_batch_v1(
-      gen_random_uuid(), v_floor,
-      jsonb_build_array(jsonb_build_object(
-        'item_id', v_item, 'queue_id', v_queue,
-        'source_kind', 'base', 'quantity', 1
-      ))
-    );
-    RAISE EXCEPTION 'KDS_TRAY_EXACT_SNAPSHOT_UNEXPECTEDLY_SUCCEEDED';
-  EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM <> 'KDS_TRAY_FLOOR_BATCH_STALE' THEN RAISE; END IF;
-  END;
-
   v_allocations := jsonb_build_array(jsonb_build_object(
     'item_id', v_item, 'queue_id', v_queue,
-    'source_kind', 'base', 'quantity', 2
+    'source_kind', 'base', 'quantity', 1
   ));
   v_result := public.kds_dispatch_tray_floor_batch_v1(
     v_tray_request, v_floor, v_allocations
   );
-  IF (v_result->>'changed_quantity')::integer <> 2
+  IF (v_result->>'changed_quantity')::integer <> 1
      OR v_result->>'deduplicated' <> 'false'
      OR NOT EXISTS (
        SELECT 1 FROM public.emergency_fulfillment_items
-       WHERE id = v_item AND tray_received_quantity = 2
-         AND tray_dispatched_quantity = 2
+       WHERE id = v_item AND tray_received_quantity = 1
+         AND tray_dispatched_quantity = 1
      ) THEN
-    RAISE EXCEPTION 'KDS_TRAY_FLOOR_BATCH_RESULT_INVALID';
+    RAISE EXCEPTION 'KDS_TRAY_FLOOR_PARTIAL_BATCH_RESULT_INVALID';
   END IF;
   v_result := public.kds_dispatch_tray_floor_batch_v1(
     v_tray_request, v_floor, v_allocations
   );
   IF v_result->>'deduplicated' <> 'true'
      OR (SELECT count(*) FROM public.emergency_floor_ready_lots
-         WHERE source_kind = 'base' AND source_id = v_item) <> 2 THEN
+         WHERE source_kind = 'base' AND source_id = v_item) <> 1 THEN
     RAISE EXCEPTION 'KDS_TRAY_FLOOR_BATCH_IDEMPOTENCY_INVALID';
+  END IF;
+
+  BEGIN
+    PERFORM public.kds_dispatch_tray_floor_batch_v1(
+      gen_random_uuid(), v_floor,
+      jsonb_build_array(jsonb_build_object(
+        'item_id', v_item, 'queue_id', v_queue,
+        'source_kind', 'base', 'quantity', 2
+      ))
+    );
+    RAISE EXCEPTION 'KDS_TRAY_OVER_SELECTION_UNEXPECTEDLY_SUCCEEDED';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'KDS_TRAY_FLOOR_BATCH_STALE' THEN RAISE; END IF;
+  END;
+
+  v_result := public.kds_dispatch_tray_floor_batch_v1(
+    v_tray_request_two, v_floor, v_allocations
+  );
+  IF (v_result->>'changed_quantity')::integer <> 1
+     OR NOT EXISTS (
+       SELECT 1 FROM public.emergency_fulfillment_items
+       WHERE id = v_item AND tray_received_quantity = 2
+         AND tray_dispatched_quantity = 2
+     )
+     OR (SELECT count(*) FROM public.emergency_floor_ready_lots
+         WHERE source_kind = 'base' AND source_id = v_item) <> 2 THEN
+    RAISE EXCEPTION 'KDS_TRAY_FLOOR_REMAINING_BATCH_RESULT_INVALID';
   END IF;
 
   UPDATE public.emergency_station_assignments
@@ -172,7 +187,7 @@ BEGIN
     RAISE EXCEPTION 'KDS_TRAY_FLOOR_CUSTOMER_QUANTITY_CHAIN_INVALID';
   END IF;
 
-  RAISE NOTICE 'PASS: tray exact-floor and customer selection batches';
+  RAISE NOTICE 'PASS: tray and customer partial selection batches';
 END;
 $test$;
 
