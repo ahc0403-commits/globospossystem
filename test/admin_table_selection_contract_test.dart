@@ -40,7 +40,11 @@ void main() {
       expect(adminTables, isNot(contains('onProcessPayment:')));
       expect(
         adminTables,
-        isNot(contains("import '../../payment/payment_provider.dart';")),
+        contains('final paymentState = ref.watch(paymentProvider);'),
+      );
+      expect(
+        adminTables,
+        contains('ref.read(paymentProvider.notifier).loadOrders(storeId);'),
       );
     },
   );

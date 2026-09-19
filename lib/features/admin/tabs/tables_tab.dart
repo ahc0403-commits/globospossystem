@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
@@ -16,6 +17,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../widgets/error_toast.dart';
 import '../providers/admin_scope_provider.dart';
 import '../../order/order_provider.dart';
+import '../../payment/payment_provider.dart';
 import '../../table/floor_layout.dart';
 import '../../table/table_model.dart';
 import '../providers/admin_audit_provider.dart';
@@ -68,6 +70,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       if (!ref.read(tablesProvider(storeId)).isLoading) {
         ref.read(tablesProvider(storeId).notifier).fetchTables();
       }
+      ref.read(paymentProvider.notifier).loadOrders(storeId);
       ref.read(orderProvider.notifier).clearSession();
     });
   }
@@ -305,6 +308,13 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final tablesNotifier = ref.read(tablesProvider(storeId).notifier);
     final auditTraceAsync = ref.watch(adminAuditTraceProvider(storeId));
     final orderState = ref.watch(orderProvider);
+    final paymentState = ref.watch(paymentProvider);
+    final queueTotalAmount = paymentState.orders.fold<double>(
+      0,
+      (sum, order) => sum + order.remainingDue,
+    );
+    final formattedQueueTotal =
+        '₫${NumberFormat('#,###', 'vi_VN').format(queueTotalAmount)}';
 
     if (tablesState.error != null &&
         tablesState.error!.isNotEmpty &&
@@ -346,6 +356,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                       tablesNotifier: tablesNotifier,
                       storeId: storeId,
                       auditTraceAsync: auditTraceAsync,
+                      formattedQueueTotal: formattedQueueTotal,
                     );
                     final operations = _AdminTableOperationsPanel(
                       table: selectedTable,
@@ -376,6 +387,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                   tablesNotifier: tablesNotifier,
                   storeId: storeId,
                   auditTraceAsync: auditTraceAsync,
+                  formattedQueueTotal: formattedQueueTotal,
                 ),
         ),
       ),
@@ -434,6 +446,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     required TablesNotifier tablesNotifier,
     required String storeId,
     required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
+    required String formattedQueueTotal,
   }) {
     if (tablesState.isLoading && tablesState.tables.isEmpty) {
       return ToastOperationalLoadingState(label: context.l10n.waiterLoading);
@@ -496,6 +509,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
             tablesState: tablesState,
             tablesNotifier: tablesNotifier,
             auditTraceAsync: auditTraceAsync,
+            formattedQueueTotal: formattedQueueTotal,
           ),
         ),
         Expanded(
@@ -665,6 +679,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     required TablesState tablesState,
     required TablesNotifier tablesNotifier,
     required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
+    required String formattedQueueTotal,
   }) {
     final l10n = context.l10n;
     final hasDraft =
@@ -672,7 +687,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final selectedTable = _selectedTable;
 
     return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      key: const Key('admin_tables_command_header'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       backgroundColor: AppColors.surface1,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -691,6 +707,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                     _layoutEditMode
                         ? l10n.tablesManagementEditSubtitle
                         : l10n.tablesManagementMonitorSubtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: PosColors.textSecondary,
                       fontSize: 13,
@@ -705,47 +723,64 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 color: _layoutEditMode ? PosColors.warning : PosColors.info,
                 compact: true,
               );
+              final metrics = ToastMetricStrip(
+                key: const Key('admin_tables_command_metrics'),
+                dense: true,
+                maxColumns: 5,
+                metrics: [
+                  ToastMetric(
+                    label: l10n.tablesTotalTables,
+                    value: '$totalCount',
+                  ),
+                  ToastMetric(
+                    label: l10n.tablesFilterOccupied,
+                    value: '$occupiedCount',
+                    tone: PosColors.success,
+                  ),
+                  ToastMetric(
+                    label: l10n.tablesFilterReserved,
+                    value: '$reservedCount',
+                    tone: reservedCount > 0
+                        ? PosColors.warning
+                        : PosColors.textSecondary,
+                  ),
+                  ToastMetric(
+                    label: l10n.tablesFilterEmpty,
+                    value: '$emptyCount',
+                    tone: PosColors.accent,
+                  ),
+                  ToastMetric(
+                    label: l10n.cashierQueuedAmount,
+                    value: formattedQueueTotal,
+                  ),
+                ],
+              );
               if (constraints.maxWidth < 560 ||
                   MediaQuery.textScalerOf(context).scale(1) > 1.5) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [titleBlock, const SizedBox(height: 10), badge],
+                  children: [
+                    titleBlock,
+                    const SizedBox(height: 6),
+                    badge,
+                    const SizedBox(height: 6),
+                    metrics,
+                  ],
                 );
               }
               return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(child: titleBlock),
+                  SizedBox(width: 160, child: titleBlock),
                   const SizedBox(width: 12),
                   badge,
+                  const SizedBox(width: 12),
+                  Expanded(child: metrics),
                 ],
               );
             },
           ),
-          const SizedBox(height: 14),
-          ToastMetricStrip(
-            metrics: [
-              ToastMetric(label: l10n.tablesTotalTables, value: '$totalCount'),
-              ToastMetric(
-                label: l10n.tablesFilterOccupied,
-                value: '$occupiedCount',
-                tone: PosColors.success,
-              ),
-              ToastMetric(
-                label: l10n.tablesFilterReserved,
-                value: '$reservedCount',
-                tone: reservedCount > 0
-                    ? PosColors.warning
-                    : PosColors.textSecondary,
-              ),
-              ToastMetric(
-                label: l10n.tablesFilterEmpty,
-                value: '$emptyCount',
-                tone: PosColors.accent,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 10,
             runSpacing: 10,

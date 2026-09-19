@@ -32,6 +32,7 @@ import 'package:globos_pos_system/features/admin/tabs/tables_tab.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/order/order_provider.dart';
+import 'package:globos_pos_system/features/payment/payment_provider.dart';
 import 'package:globos_pos_system/features/qc/qc_provider.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,6 +66,38 @@ class _AuthNotifier extends AuthNotifier {
 class _OrderNotifier extends OrderNotifier {
   @override
   void clearSession() {}
+}
+
+class _PaymentNotifier extends PaymentNotifier {
+  _PaymentNotifier() {
+    state = PaymentState(
+      orders: [
+        CashierOrder(
+          orderId: 'payment-order-id',
+          tableNumber: 'A1',
+          tableId: _tableId,
+          status: 'serving',
+          orderPurpose: 'customer',
+          orderSource: 'staff',
+          items: const [],
+          menuSubtotal: 125000,
+          serviceChargeTotal: 0,
+          serviceItemTotal: 0,
+          fixedChargeTotal: 0,
+          discountTotal: 0,
+          vatTotal: 0,
+          totalAmount: 125000,
+          paidTotal: 0,
+          paymentCount: 0,
+          remainingDue: 125000,
+          createdAt: DateTime(2026, 9, 19),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadOrders(String storeId) async {}
 }
 
 class _TablesNotifier extends TablesNotifier {
@@ -790,6 +823,7 @@ Future<void> _pump(
   PosAuthState authState = _authState,
   Size physicalSize = const Size(1440, 900),
   double textScale = 1,
+  Locale locale = const Locale('vi'),
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = physicalSize;
@@ -799,6 +833,7 @@ Future<void> _pump(
       overrides: [
         authProvider.overrideWith((ref) => _AuthNotifier(authState)),
         orderProvider.overrideWith((ref) => _OrderNotifier()),
+        paymentProvider.overrideWith((ref) => _PaymentNotifier()),
         adminAuditTraceProvider.overrideWith(
           (ref, storeId) => Future.value(const []),
         ),
@@ -807,7 +842,7 @@ Future<void> _pump(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.build(),
-        locale: const Locale('vi'),
+        locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -974,6 +1009,33 @@ void main() {
 
     expect(requestedStoreId, routeStoreId);
     expect(requestedStoreId, isNot(_authState.storeId));
+  });
+
+  testWidgets('table header shows cashier queue total in a compact surface', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pump(
+      tester,
+      child: const TablesTab(),
+      locale: const Locale('ko'),
+      overrides: [
+        tablesProvider.overrideWith((ref, storeId) => _TablesNotifier()),
+      ],
+    );
+    await tester.pump();
+
+    expect(find.text('대기 총액'), findsOneWidget);
+    expect(find.text('₫125.000'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('admin_tables_command_header')))
+          .height,
+      lessThan(140),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('all six table dialog entrypoints execute real workflows', (
