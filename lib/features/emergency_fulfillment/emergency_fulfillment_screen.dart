@@ -14,8 +14,10 @@ import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
+import 'customer_delivery_screen.dart';
 import 'emergency_fulfillment_provider.dart';
 import 'kitchen_checket_handoff_sheet.dart';
+import 'tray_floor_transition_sheet.dart';
 
 class EmergencyFulfillmentScreen extends ConsumerStatefulWidget {
   const EmergencyFulfillmentScreen({
@@ -188,8 +190,16 @@ class _EmergencyFulfillmentScreenState
       _clockTimer = null;
       return;
     }
+    _now = DateTime.now();
     _clockTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
+      if (!mounted) return;
+      setState(() {
+        final wallClockNow = DateTime.now();
+        final nextTick = _now.add(const Duration(seconds: 1));
+        // Advance visibly on every tick, while still catching up after a
+        // browser tab has been throttled or suspended.
+        _now = wallClockNow.isAfter(nextTick) ? wallClockNow : nextTick;
+      });
     });
   }
 
@@ -396,6 +406,17 @@ class _EmergencyFulfillmentScreenState
         expected != null &&
         state.stationType != null &&
         state.stationType != expected;
+    final firstFloorSummary = buildTrayFloorTransitionSummary(
+      state.orders,
+      '1F',
+    );
+    final secondFloorSummary = buildTrayFloorTransitionSummary(
+      state.orders,
+      '2F',
+    );
+    final customerDeliveryBoxes = state.floorLabel == null
+        ? const <CustomerDeliveryBox>[]
+        : buildCustomerDeliveryBoxes(state.orders, state.floorLabel!);
 
     return PopScope(
       canPop: _selectedOrderId == null,
@@ -433,6 +454,41 @@ class _EmergencyFulfillmentScreenState
                         state.assigned &&
                         !stationMismatch
                     ? () => _openKitchenChecket(state)
+                    : null,
+                trayFloorPendingQuantity: headerStation == 'tray'
+                    ? firstFloorSummary.totalQuantity +
+                          secondFloorSummary.totalQuantity
+                    : null,
+                onTrayFloorTransition:
+                    headerStation == 'tray' &&
+                        state.active &&
+                        state.assigned &&
+                        !stationMismatch &&
+                        _selectedOrderId == null &&
+                        !_showRecent
+                    ? () => _openTrayFloorTransition(
+                        state,
+                        firstFloorSummary,
+                        secondFloorSummary,
+                      )
+                    : null,
+                customerDeliveryQuantity: headerStation == 'floor'
+                    ? customerDeliveryBoxes.fold<int>(
+                        0,
+                        (total, box) => total + box.totalQuantity,
+                      )
+                    : null,
+                onCustomerDelivery:
+                    headerStation == 'floor' &&
+                        state.active &&
+                        state.assigned &&
+                        !stationMismatch &&
+                        _selectedOrderId == null &&
+                        !_showRecent
+                    ? () => _openCustomerDelivery(
+                        state.floorLabel ?? '1F',
+                        customerDeliveryBoxes,
+                      )
                     : null,
                 showHomeButton: _selectedOrderId != null,
                 onHome: () => setState(() => _selectedOrderId = null),
@@ -614,6 +670,46 @@ class _EmergencyFulfillmentScreenState
     );
   }
 
+  Future<void> _openTrayFloorTransition(
+    EmergencyFulfillmentState state,
+    TrayFloorTransitionSummary firstFloor,
+    TrayFloorTransitionSummary secondFloor,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      useSafeArea: false,
+      builder: (dialogContext) => Dialog.fullscreen(
+        child: TrayFloorTransitionSheet(
+          firstFloor: firstFloor,
+          secondFloor: secondFloor,
+          unsupportedFloorQuantity: trayUnsupportedFloorQuantity(state.orders),
+          onSubmit: (summary) => ref
+              .read(emergencyFulfillmentProvider.notifier)
+              .completeTrayFloorTransition(summary),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCustomerDelivery(
+    String floorLabel,
+    List<CustomerDeliveryBox> boxes,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      useSafeArea: false,
+      builder: (dialogContext) => Dialog.fullscreen(
+        child: CustomerDeliveryScreen(
+          floorLabel: floorLabel,
+          boxes: boxes,
+          onSubmit: (allocations) => ref
+              .read(emergencyFulfillmentProvider.notifier)
+              .completeCustomerDeliveryBatch(allocations),
+        ),
+      ),
+    );
+  }
+
   Future<void> _completeItem(
     EmergencyFulfillmentItem item,
     String stationType,
@@ -748,6 +844,10 @@ class _EmergencyHeader extends StatelessWidget {
     required this.onEnableAlarm,
     required this.onRefresh,
     required this.onKitchenChecket,
+    required this.trayFloorPendingQuantity,
+    required this.onTrayFloorTransition,
+    required this.customerDeliveryQuantity,
+    required this.onCustomerDelivery,
     required this.showHomeButton,
     required this.onHome,
   });
@@ -760,6 +860,10 @@ class _EmergencyHeader extends StatelessWidget {
   final VoidCallback? onEnableAlarm;
   final VoidCallback onRefresh;
   final VoidCallback? onKitchenChecket;
+  final int? trayFloorPendingQuantity;
+  final VoidCallback? onTrayFloorTransition;
+  final int? customerDeliveryQuantity;
+  final VoidCallback? onCustomerDelivery;
   final bool showHomeButton;
   final VoidCallback onHome;
 
@@ -830,6 +934,30 @@ class _EmergencyHeader extends StatelessWidget {
                   icon: const Icon(Icons.playlist_add_check_circle_rounded),
                   label: Text(copy.checketHandoff),
                 );
+          final trayFloorButton = trayFloorPendingQuantity == null
+              ? const SizedBox.shrink()
+              : FilledButton.tonalIcon(
+                  key: const Key('tray_floor_transition'),
+                  onPressed: (trayFloorPendingQuantity ?? 0) > 0
+                      ? onTrayFloorTransition
+                      : null,
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                  label: Text(
+                    '${copy.floorTransition} · ${trayFloorPendingQuantity ?? 0}',
+                  ),
+                );
+          final customerDeliveryButton = customerDeliveryQuantity == null
+              ? const SizedBox.shrink()
+              : FilledButton.tonalIcon(
+                  key: const Key('customer_delivery'),
+                  onPressed: (customerDeliveryQuantity ?? 0) > 0
+                      ? onCustomerDelivery
+                      : null,
+                  icon: const Icon(Icons.room_service_rounded),
+                  label: Text(
+                    '${copy.customerDelivery} · ${customerDeliveryQuantity ?? 0}',
+                  ),
+                );
           if (compact) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -865,6 +993,14 @@ class _EmergencyHeader extends StatelessWidget {
                   const SizedBox(height: 8),
                   checketButton,
                 ],
+                if (trayFloorPendingQuantity != null) ...[
+                  const SizedBox(height: 8),
+                  trayFloorButton,
+                ],
+                if (customerDeliveryQuantity != null) ...[
+                  const SizedBox(height: 8),
+                  customerDeliveryButton,
+                ],
               ],
             );
           }
@@ -886,6 +1022,10 @@ class _EmergencyHeader extends StatelessWidget {
               ),
               checketButton,
               if (onKitchenChecket != null) const SizedBox(width: 6),
+              trayFloorButton,
+              if (trayFloorPendingQuantity != null) const SizedBox(width: 6),
+              customerDeliveryButton,
+              if (customerDeliveryQuantity != null) const SizedBox(width: 6),
               alarmButton,
               const SizedBox(width: 6),
               AppNavBar(
@@ -1334,10 +1474,20 @@ class _EmergencyOrderCard extends StatelessWidget {
     final borderTone = stationType == 'kitchen' || stationType == 'tray'
         ? _orderFloorColor(order.floorLabel)
         : tone;
-    final elapsed =
-        stationBatches.isEmpty || stationBatches.first.startedAt == null
-        ? order.stationElapsedAt(now, stationType)
-        : stationBatches.first.elapsedAt(now);
+    final trayReady =
+        stationType == 'tray' &&
+        order.oldestTrayReadySequence != null &&
+        order.trayFloorPendingItems().isNotEmpty;
+    final cardColor = trayReady && readyPulseOn
+        ? PosColors.info.withValues(alpha: 0.18)
+        : PosColors.surface;
+    final effectiveBorderTone = trayReady && readyPulseOn
+        ? PosColors.info
+        : borderTone;
+    // The header is the station-level clock. Supplemental batches retain
+    // their independent timers below, but must never replace this primary
+    // kitchen/tray/floor clock with an optional item timestamp.
+    final elapsed = order.stationElapsedAt(now, stationType);
     final orderHeaderStyle =
         (Theme.of(context).textTheme.titleMedium ??
                 const TextStyle(fontSize: 16))
@@ -1348,21 +1498,28 @@ class _EmergencyOrderCard extends StatelessWidget {
     final orderIdentifier = order.isDelivery
         ? copy.delivery
         : order.tableNumber;
-    final semantics = order.isDelivery
+    final baseSemantics = order.isDelivery
         ? '${copy.order} ${order.queueNo}, ${copy.delivery}, '
               '${visibleItems.length} ${copy.items}, $totalProgress'
         : '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
               '${order.floorLabel}, ${visibleItems.length} ${copy.items}, '
               '$totalProgress';
+    final semantics = trayReady
+        ? '$baseSemantics, ${copy.trayReadyWaiting}'
+        : baseSemantics;
 
     return Semantics(
       button: true,
       label: semantics,
       child: Material(
-        color: PosColors.surface,
+        key: ValueKey('emergency_order_card_surface_${order.orderId}'),
+        color: cardColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: borderTone, width: 2),
+          side: BorderSide(
+            color: effectiveBorderTone,
+            width: trayReady ? 4 : 2,
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -2710,6 +2867,15 @@ class _EmergencyCopy {
   String get completeOne => _pick('1개 완료', 'Hoàn tất 1 món', 'Complete one');
   String get checketHandoff =>
       _pick('checker 전달', 'Chuyển checker', 'Checker handoff');
+  String get floorTransition =>
+      _pick('층별 전달', 'Chuyển theo tầng', 'Floor handoff');
+  String get customerDelivery =>
+      _pick('고객전달', 'Giao khách', 'Customer delivery');
+  String get trayReadyWaiting => _pick(
+    '주방 완료·층 전달 대기',
+    'Bếp đã xong·chờ chuyển tầng',
+    'Kitchen complete·waiting for floor transfer',
+  );
   String actionOne(String stationType, {bool isDelivery = false}) =>
       switch (stationType) {
         'kitchen' => _pick('조리 완료', 'Nấu xong', 'Cooking complete'),
@@ -2729,6 +2895,35 @@ class _EmergencyCopy {
       _pick('$minutes분 경과', 'Đã chờ $minutes phút', '$minutes min elapsed');
 
   String errorMessage(String error) {
+    if (error.contains('KDS_TRAY_FLOOR_BATCH_STALE')) {
+      return _pick(
+        '층별 전달 수량이 변경되었습니다. 화면을 다시 열어 주세요.',
+        'Số lượng chuyển tầng đã thay đổi. Hãy mở lại màn hình.',
+        'Floor transfer quantities changed. Reopen the screen.',
+      );
+    }
+    if (error.contains('KDS_TRAY_FLOOR_BATCH_QUEUED')) {
+      return _pick(
+        '연결이 복구되면 층별 전달을 자동 전송합니다.',
+        'Việc chuyển tầng sẽ tự gửi khi kết nối trở lại.',
+        'The floor transfer will send when the connection returns.',
+      );
+    }
+    if (error.contains('KDS_CUSTOMER_DELIVERY_BATCH_STALE') ||
+        error.contains('KDS_CUSTOMER_DELIVERY_SELECTION_STALE')) {
+      return _pick(
+        '고객전달 수량이 변경되었습니다. 화면을 다시 열어 주세요.',
+        'Số lượng giao khách đã thay đổi. Hãy mở lại màn hình.',
+        'Customer delivery quantities changed. Reopen the screen.',
+      );
+    }
+    if (error.contains('KDS_CUSTOMER_DELIVERY_BATCH_QUEUED')) {
+      return _pick(
+        '연결이 복구되면 고객전달을 자동 전송합니다.',
+        'Việc giao khách sẽ tự gửi khi kết nối trở lại.',
+        'Customer delivery will send when the connection returns.',
+      );
+    }
     if (error.contains('KDS_CHECKET_SELECTION_STALE')) {
       return _pick(
         '메뉴 수량이 변경되었습니다. checker 전달을 다시 열어 주세요.',

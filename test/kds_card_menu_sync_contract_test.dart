@@ -463,6 +463,75 @@ void main() {
     );
   });
 
+  test(
+    'station timers derive all three stage boundaries without timing RPC',
+    () {
+      final createdAt = DateTime.utc(2026, 8, 15, 9);
+      final kitchenDoneAt = DateTime.utc(2026, 8, 15, 9, 4);
+      final trayDispatchedAt = DateTime.utc(2026, 8, 15, 9, 7);
+      final now = DateTime.utc(2026, 8, 15, 9, 9);
+      final order = EmergencyFulfillmentOrder(
+        queueId: 'queue-1',
+        orderId: 'order-1',
+        queueNo: 1,
+        tableNumber: '102',
+        floorLabel: '1F',
+        createdAt: createdAt,
+        items: [
+          EmergencyFulfillmentItem.fromJson({
+            'id': 'food-1',
+            'order_item_id': 'order-item-1',
+            'name_ko': '김밥',
+            'name_vi': 'Cơm cuộn',
+            'name_en': 'Gimbap',
+            'ordered_quantity': 1,
+            'kitchen_done_quantity': 1,
+            'tray_received_quantity': 1,
+            'tray_dispatched_quantity': 1,
+            'floor_served_quantity': 0,
+            'needs_review': false,
+            'batch_received_at': createdAt.toIso8601String(),
+            'kitchen_first_done_at': kitchenDoneAt.toIso8601String(),
+            'kitchen_last_done_at': kitchenDoneAt.toIso8601String(),
+            'tray_first_dispatched_at': trayDispatchedAt.toIso8601String(),
+            'tray_last_dispatched_at': trayDispatchedAt.toIso8601String(),
+          }),
+        ],
+      );
+
+      expect(order.stationClockStartedAt('kitchen'), createdAt);
+      expect(order.stationClockStartedAt('tray'), kitchenDoneAt);
+      expect(order.stationClockStartedAt('floor'), trayDispatchedAt);
+      expect(
+        order.stationElapsedAt(now, 'kitchen'),
+        const Duration(minutes: 4),
+      );
+      expect(order.stationElapsedAt(now, 'tray'), const Duration(minutes: 3));
+      expect(order.stationElapsedAt(now, 'floor'), const Duration(minutes: 2));
+    },
+  );
+
+  test('station elapsed time never exposes a negative clock', () {
+    final createdAt = DateTime.utc(2026, 8, 15, 9);
+    final order = EmergencyFulfillmentOrder(
+      queueId: 'queue-1',
+      orderId: 'order-1',
+      queueNo: 1,
+      tableNumber: '102',
+      floorLabel: '1F',
+      createdAt: createdAt,
+      items: const [],
+    );
+
+    expect(
+      order.stationElapsedAt(
+        createdAt.subtract(const Duration(seconds: 1)),
+        'kitchen',
+      ),
+      Duration.zero,
+    );
+  });
+
   test('tray and floor identify food received from the previous stage', () {
     const item = EmergencyFulfillmentItem(
       id: 'food-1',

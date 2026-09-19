@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -253,6 +254,8 @@ class EmergencyFulfillmentItem {
       (orderedQuantity - excusedQuantity).clamp(0, orderedQuantity);
   int get readyUnservedQuantity =>
       (trayDispatchedQuantity - floorServedQuantity).clamp(0, requiredQuantity);
+  int get trayPendingQuantity =>
+      (kitchenDoneQuantity - trayDispatchedQuantity).clamp(0, requiredQuantity);
   String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
 
   DateTime? stationStartedAt(String stationType) => switch (stationType) {
@@ -590,6 +593,30 @@ class EmergencyFulfillmentOrder {
       )
       .toList(growable: false);
 
+  List<EmergencyFulfillmentItem> trayFloorPendingItems() {
+    if (!usesKitchenHandoffWorkflow || isDelivery) return const [];
+    return _operationalItems()
+        .where(
+          (item) =>
+              !item.isFloorDirect &&
+              !item.needsReview &&
+              item.trayPendingQuantity > 0,
+        )
+        .toList(growable: false);
+  }
+
+  List<EmergencyFulfillmentItem> customerDeliveryPendingItems() {
+    if (!usesKitchenHandoffWorkflow || isDelivery) return const [];
+    return _operationalItems()
+        .where(
+          (item) =>
+              !item.isFloorDirect &&
+              !item.needsReview &&
+              item.readyUnservedQuantity > 0,
+        )
+        .toList(growable: false);
+  }
+
   int incomingHandoffQuantityAt(String stationType) => _operationalItems()
       .where((item) => !item.isFloorDirect)
       .fold(
@@ -629,14 +656,44 @@ class EmergencyFulfillmentOrder {
           lastActionId != null &&
           !hasActionableQuantity(stationType));
 
+  DateTime? stationClockStartedAt(String stationType) {
+    // Kitchen work starts as soon as the customer's order reaches the queue.
+    // Tray and floor work start only after the preceding handoff. Item-level
+    // event times keep the clock usable while the auxiliary timing RPC is
+    // still loading (or unavailable during a staged rollout).
+    if (stationType == 'kitchen') return createdAt;
+    if (stationStartedAt != null) return stationStartedAt;
+
+    final values = _operationalItems()
+        .map((item) => item.stationStartedAt(stationType))
+        .whereType<DateTime>()
+        .toList(growable: false);
+    if (values.isEmpty) return null;
+    return values.reduce((left, right) => left.isBefore(right) ? left : right);
+  }
+
+  DateTime? stationClockCompletedAt(String stationType) {
+    if (!isRecentlyCompleteAt(stationType)) return null;
+    if (stationCompletedAt != null) return stationCompletedAt;
+
+    final relevant = displayItemsAt(stationType);
+    final values = relevant
+        .map((item) => item.stationCompletedAt)
+        .whereType<DateTime>()
+        .toList(growable: false);
+    if (relevant.isNotEmpty && values.length == relevant.length) {
+      return values.reduce((left, right) => left.isAfter(right) ? left : right);
+    }
+    return lastActionAt;
+  }
+
   Duration stationElapsedAt(DateTime now, String stationType) {
-    final startedAt =
-        stationStartedAt ?? (stationType == 'kitchen' ? createdAt : null);
+    final startedAt = stationClockStartedAt(stationType);
     if (startedAt == null) return Duration.zero;
-    final completedAt = isRecentlyCompleteAt(stationType)
-        ? stationCompletedAt ?? lastActionAt
-        : null;
-    return (completedAt ?? now).difference(startedAt);
+    final elapsed = (stationClockCompletedAt(stationType) ?? now).difference(
+      startedAt,
+    );
+    return elapsed.isNegative ? Duration.zero : elapsed;
   }
 
   List<EmergencyFulfillmentDisplayItem> displayItemsAt(String stationType) {
@@ -1013,6 +1070,290 @@ List<KitchenChecketAllocation> allocateKitchenChecketSelections(
   }
   if (remaining.values.any((quantity) => quantity > 0)) {
     throw StateError('KDS_CHECKET_SELECTION_STALE');
+  }
+  return List.unmodifiable(allocations);
+}
+
+String _kdsSourceKind(EmergencyFulfillmentItem item) =>
+    item.sourceKind == 'combo_component' ? 'combo_component' : 'base';
+
+String _handoffMenuKey(EmergencyFulfillmentItem item) => [
+  item.nameKo.trim().toLowerCase(),
+  item.nameVi.trim().toLowerCase(),
+  item.nameEn.trim().toLowerCase(),
+].join('\u0000');
+
+class TrayFloorTransitionAllocation {
+  const TrayFloorTransitionAllocation({
+    required this.itemId,
+    required this.queueId,
+    required this.sourceKind,
+    required this.quantity,
+  });
+
+  final String itemId;
+  final String queueId;
+  final String sourceKind;
+  final int quantity;
+
+  Map<String, dynamic> toJson() => {
+    'item_id': itemId,
+    'queue_id': queueId,
+    'source_kind': sourceKind,
+    'quantity': quantity,
+  };
+}
+
+class TrayFloorTransitionMenuGroup {
+  const TrayFloorTransitionMenuGroup({
+    required this.key,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.quantity,
+  });
+
+  final String key;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int quantity;
+
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
+}
+
+class TrayFloorTransitionSummary {
+  const TrayFloorTransitionSummary({
+    required this.floorLabel,
+    required this.groups,
+    required this.allocations,
+  });
+
+  final String floorLabel;
+  final List<TrayFloorTransitionMenuGroup> groups;
+  final List<TrayFloorTransitionAllocation> allocations;
+
+  int get totalQuantity =>
+      allocations.fold(0, (total, allocation) => total + allocation.quantity);
+}
+
+TrayFloorTransitionSummary buildTrayFloorTransitionSummary(
+  Iterable<EmergencyFulfillmentOrder> orders,
+  String floorLabel,
+) {
+  final normalizedFloor = floorLabel.trim().toUpperCase();
+  final groups = <String, TrayFloorTransitionMenuGroup>{};
+  final allocations = <TrayFloorTransitionAllocation>[];
+  for (final order in sortEmergencyOrdersForStation(orders, 'tray')) {
+    if (order.floorLabel.trim().toUpperCase() != normalizedFloor) continue;
+    for (final item in order.trayFloorPendingItems()) {
+      final quantity = item.trayPendingQuantity;
+      if (quantity <= 0) continue;
+      allocations.add(
+        TrayFloorTransitionAllocation(
+          itemId: item.id,
+          queueId: order.queueId,
+          sourceKind: _kdsSourceKind(item),
+          quantity: quantity,
+        ),
+      );
+      final key = _handoffMenuKey(item);
+      final current = groups[key];
+      groups[key] = TrayFloorTransitionMenuGroup(
+        key: key,
+        nameKo: item.nameKo,
+        nameVi: item.nameVi,
+        nameEn: item.nameEn,
+        quantity: (current?.quantity ?? 0) + quantity,
+      );
+    }
+  }
+  return TrayFloorTransitionSummary(
+    floorLabel: normalizedFloor,
+    groups: List.unmodifiable(groups.values),
+    allocations: List.unmodifiable(allocations),
+  );
+}
+
+int trayUnsupportedFloorQuantity(Iterable<EmergencyFulfillmentOrder> orders) =>
+    orders
+        .where(
+          (order) => !const {
+            '1F',
+            '2F',
+          }.contains(order.floorLabel.trim().toUpperCase()),
+        )
+        .expand((order) => order.trayFloorPendingItems())
+        .fold(0, (total, item) => total + item.trayPendingQuantity);
+
+class CustomerDeliveryAllocation {
+  const CustomerDeliveryAllocation({
+    required this.itemId,
+    required this.queueId,
+    required this.sourceKind,
+    required this.quantity,
+  });
+
+  final String itemId;
+  final String queueId;
+  final String sourceKind;
+  final int quantity;
+
+  CustomerDeliveryAllocation withQuantity(int value) =>
+      CustomerDeliveryAllocation(
+        itemId: itemId,
+        queueId: queueId,
+        sourceKind: sourceKind,
+        quantity: value,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'item_id': itemId,
+    'queue_id': queueId,
+    'source_kind': sourceKind,
+    'quantity': quantity,
+  };
+}
+
+class CustomerDeliveryMenu {
+  const CustomerDeliveryMenu({
+    required this.key,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.availableQuantity,
+    required this.allocations,
+  });
+
+  final String key;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int availableQuantity;
+  final List<CustomerDeliveryAllocation> allocations;
+
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
+}
+
+class CustomerDeliveryBox {
+  const CustomerDeliveryBox({
+    required this.queueId,
+    required this.orderId,
+    required this.queueNo,
+    required this.tableNumber,
+    required this.floorLabel,
+    required this.createdAt,
+    required this.menus,
+  });
+
+  final String queueId;
+  final String orderId;
+  final int queueNo;
+  final String tableNumber;
+  final String floorLabel;
+  final DateTime createdAt;
+  final List<CustomerDeliveryMenu> menus;
+
+  int get totalQuantity =>
+      menus.fold(0, (total, menu) => total + menu.availableQuantity);
+}
+
+List<CustomerDeliveryBox> buildCustomerDeliveryBoxes(
+  Iterable<EmergencyFulfillmentOrder> orders,
+  String floorLabel,
+) {
+  final normalizedFloor = floorLabel.trim().toUpperCase();
+  final result = <CustomerDeliveryBox>[];
+  for (final order in sortEmergencyOrdersForStation(orders, 'floor')) {
+    if (order.floorLabel.trim().toUpperCase() != normalizedFloor) continue;
+    final grouped = <String, List<CustomerDeliveryAllocation>>{};
+    final sourceItems = <String, EmergencyFulfillmentItem>{};
+    for (final item in order.customerDeliveryPendingItems()) {
+      final quantity = item.readyUnservedQuantity;
+      if (quantity <= 0) continue;
+      final menuKey = _handoffMenuKey(item);
+      sourceItems.putIfAbsent(menuKey, () => item);
+      grouped
+          .putIfAbsent(menuKey, () => [])
+          .add(
+            CustomerDeliveryAllocation(
+              itemId: item.id,
+              queueId: order.queueId,
+              sourceKind: _kdsSourceKind(item),
+              quantity: quantity,
+            ),
+          );
+    }
+    if (grouped.isEmpty) continue;
+    final menus = grouped.entries
+        .map((entry) {
+          final item = sourceItems[entry.key]!;
+          return CustomerDeliveryMenu(
+            key: '${order.queueId}\u0000${entry.key}',
+            nameKo: item.nameKo,
+            nameVi: item.nameVi,
+            nameEn: item.nameEn,
+            availableQuantity: entry.value.fold(
+              0,
+              (total, allocation) => total + allocation.quantity,
+            ),
+            allocations: List.unmodifiable(entry.value),
+          );
+        })
+        .toList(growable: false);
+    result.add(
+      CustomerDeliveryBox(
+        queueId: order.queueId,
+        orderId: order.orderId,
+        queueNo: order.queueNo,
+        tableNumber: order.tableNumber,
+        floorLabel: order.floorLabel,
+        createdAt: order.createdAt,
+        menus: List.unmodifiable(menus),
+      ),
+    );
+  }
+  return List.unmodifiable(result);
+}
+
+List<CustomerDeliveryAllocation> allocateCustomerDeliverySelections(
+  Iterable<CustomerDeliveryBox> boxes,
+  Map<String, int> selections,
+) {
+  final allocations = <CustomerDeliveryAllocation>[];
+  final knownKeys = <String>{};
+  for (final box in boxes) {
+    for (final menu in box.menus) {
+      knownKeys.add(menu.key);
+      var remaining = selections[menu.key] ?? 0;
+      if (remaining < 0 || remaining > menu.availableQuantity) {
+        throw StateError('KDS_CUSTOMER_DELIVERY_SELECTION_STALE');
+      }
+      for (final available in menu.allocations) {
+        if (remaining <= 0) break;
+        final quantity = math.min(remaining, available.quantity);
+        allocations.add(available.withQuantity(quantity));
+        remaining -= quantity;
+      }
+      if (remaining > 0) {
+        throw StateError('KDS_CUSTOMER_DELIVERY_SELECTION_STALE');
+      }
+    }
+  }
+  if (selections.entries.any(
+    (entry) => entry.value != 0 && !knownKeys.contains(entry.key),
+  )) {
+    throw StateError('KDS_CUSTOMER_DELIVERY_SELECTION_STALE');
   }
   return List.unmodifiable(allocations);
 }
@@ -1494,7 +1835,7 @@ class EmergencyFulfillmentNotifier
       state = next.copyWith(
         isLoading: false,
         pendingOutboxCount: pendingRecords.length,
-        pendingQueueIds: _pendingQueueIds(pendingRecords),
+        pendingQueueIds: emergencyPendingQueueIds(pendingRecords),
         error: outboxError,
         clearError: outboxError == null,
       );
@@ -1893,7 +2234,7 @@ class EmergencyFulfillmentNotifier
     if (!mounted) return;
     state = state.copyWith(
       pendingOutboxCount: pendingRecords.length,
-      pendingQueueIds: _pendingQueueIds(pendingRecords),
+      pendingQueueIds: emergencyPendingQueueIds(pendingRecords),
       error: error,
       clearError: error == null,
     );
@@ -2152,6 +2493,85 @@ class EmergencyFulfillmentNotifier
     }
   }
 
+  Future<bool> completeTrayFloorTransition(
+    TrayFloorTransitionSummary summary,
+  ) async {
+    if (summary.allocations.isEmpty) return false;
+    final requestId = _uuid.v4();
+    final payload = <String, dynamic>{
+      'kind': 'tray_floor_batch',
+      'request_id': requestId,
+      'floor_label': summary.floorLabel,
+      'allocations': summary.allocations
+          .map((allocation) => allocation.toJson())
+          .toList(growable: false),
+    };
+    try {
+      await _sendOutboxPayload(payload);
+      await load(showLoading: false);
+      return true;
+    } catch (error) {
+      if (error is PostgrestException) {
+        state = state.copyWith(error: error.message);
+        return false;
+      }
+      try {
+        await EmergencyWebBridge.putOutbox(requestId, jsonEncode(payload));
+        state = state.copyWith(
+          pendingOutboxCount: state.pendingOutboxCount + 1,
+          pendingQueueIds: {
+            ...state.pendingQueueIds,
+            ...summary.allocations.map((allocation) => allocation.queueId),
+          },
+          error: 'KDS_TRAY_FLOOR_BATCH_QUEUED',
+        );
+        return true;
+      } catch (_) {
+        state = state.copyWith(error: 'KDS_TRAY_FLOOR_BATCH_FAILED');
+        return false;
+      }
+    }
+  }
+
+  Future<bool> completeCustomerDeliveryBatch(
+    List<CustomerDeliveryAllocation> allocations,
+  ) async {
+    if (allocations.isEmpty) return false;
+    final requestId = _uuid.v4();
+    final payload = <String, dynamic>{
+      'kind': 'customer_delivery_batch',
+      'request_id': requestId,
+      'allocations': allocations
+          .map((allocation) => allocation.toJson())
+          .toList(growable: false),
+    };
+    try {
+      await _sendOutboxPayload(payload);
+      await load(showLoading: false);
+      return true;
+    } catch (error) {
+      if (error is PostgrestException) {
+        state = state.copyWith(error: error.message);
+        return false;
+      }
+      try {
+        await EmergencyWebBridge.putOutbox(requestId, jsonEncode(payload));
+        state = state.copyWith(
+          pendingOutboxCount: state.pendingOutboxCount + 1,
+          pendingQueueIds: {
+            ...state.pendingQueueIds,
+            ...allocations.map((allocation) => allocation.queueId),
+          },
+          error: 'KDS_CUSTOMER_DELIVERY_BATCH_QUEUED',
+        );
+        return true;
+      } catch (_) {
+        state = state.copyWith(error: 'KDS_CUSTOMER_DELIVERY_BATCH_FAILED');
+        return false;
+      }
+    }
+  }
+
   Future<bool> advanceLeftoverPackaging(LeftoverPackagingTask task) async {
     final eventId = _uuid.v4();
     final payload = <String, dynamic>{
@@ -2402,6 +2822,29 @@ class EmergencyFulfillmentNotifier
         return raw is Map
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
+      case 'tray_floor_batch':
+        final raw = await _client.rpc(
+          'kds_dispatch_tray_floor_batch_v1',
+          params: {
+            'p_request_id': payload['request_id'],
+            'p_floor_label': payload['floor_label'],
+            'p_allocations': payload['allocations'],
+          },
+        );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
+      case 'customer_delivery_batch':
+        final raw = await _client.rpc(
+          'kds_complete_customer_delivery_batch_v1',
+          params: {
+            'p_request_id': payload['request_id'],
+            'p_allocations': payload['allocations'],
+          },
+        );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
       case 'serve_ready_order':
         final raw = await _client.rpc(
           'kds_serve_ready_order_v3',
@@ -2553,18 +2996,29 @@ class EmergencyFulfillmentNotifier
   }
 }
 
-Set<String> _pendingQueueIds(List<EmergencyOutboxRecord> records) => records
-    .map((record) {
-      try {
-        final decoded = jsonDecode(record.payload);
-        return decoded is Map ? decoded['queue_id']?.toString() : null;
-      } catch (_) {
-        return null;
+@visibleForTesting
+Set<String> emergencyPendingQueueIds(Iterable<EmergencyOutboxRecord> records) {
+  final queueIds = <String>{};
+  for (final record in records) {
+    try {
+      final decoded = jsonDecode(record.payload);
+      if (decoded is! Map) continue;
+      final directQueueId = decoded['queue_id']?.toString();
+      if (directQueueId != null && directQueueId.isNotEmpty) {
+        queueIds.add(directQueueId);
       }
-    })
-    .whereType<String>()
-    .where((id) => id.isNotEmpty)
-    .toSet();
+      final allocations = decoded['allocations'];
+      if (allocations is! List) continue;
+      for (final allocation in allocations.whereType<Map>()) {
+        final queueId = allocation['queue_id']?.toString();
+        if (queueId != null && queueId.isNotEmpty) queueIds.add(queueId);
+      }
+    } catch (_) {
+      // Invalid records are discarded by the outbox flusher.
+    }
+  }
+  return queueIds;
+}
 
 final emergencyFulfillmentProvider =
     StateNotifierProvider<

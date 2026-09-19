@@ -1063,6 +1063,160 @@ void main() {
     },
   );
 
+  testWidgets(
+    'tray ready order pulses as a whole card and opens floor transition',
+    (tester) async {
+      final order = EmergencyFulfillmentOrder(
+        queueId: 'queue-tray-ready',
+        orderId: 'order-tray-ready',
+        queueNo: 501,
+        tableNumber: 'T1',
+        floorLabel: '1F',
+        createdAt: DateTime.utc(2026, 9, 18, 10),
+        workflowVersion: 2,
+        oldestTrayReadySequence: 1,
+        items: const [
+          EmergencyFulfillmentItem(
+            id: 'tray-ready-item',
+            orderItemId: 'tray-ready-order-item',
+            nameKo: '김밥',
+            nameVi: 'Cơm cuộn',
+            nameEn: 'Gimbap',
+            orderedQuantity: 2,
+            kitchenStartedQuantity: 2,
+            kitchenDoneQuantity: 2,
+            trayReceivedQuantity: 0,
+            trayDispatchedQuantity: 0,
+            floorServedQuantity: 0,
+            needsReview: false,
+            workflowVersion: 2,
+            oldestTrayReadySequence: 1,
+          ),
+        ],
+      );
+      final fixture = _FixtureEmergencyNotifier(
+        EmergencyFulfillmentState(
+          assigned: true,
+          active: true,
+          restaurantId: 'store-bt',
+          sessionId: 'session-1',
+          stationType: 'tray',
+          orders: [order],
+        ),
+      );
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: 'tray',
+      );
+
+      final surface = find.byKey(
+        const ValueKey('emergency_order_card_surface_order-tray-ready'),
+      );
+      final before = tester.widget<Material>(surface).color;
+      await tester.pump(const Duration(milliseconds: 500));
+      final after = tester.widget<Material>(surface).color;
+      expect(after, isNot(before));
+      expect(find.text('층별 전달 · 2'), findsOneWidget);
+      final alarmRect = tester.getRect(
+        find.byKey(const Key('emergency_enable_alarm')),
+      );
+      final handoffRect = tester.getRect(
+        find.byKey(const Key('tray_floor_transition')),
+      );
+      expect(handoffRect.left, closeTo(alarmRect.left, 0.1));
+      expect(handoffRect.width, closeTo(alarmRect.width, 0.1));
+      expect(handoffRect.top, greaterThan(alarmRect.bottom));
+
+      await tester.tap(find.byKey(const Key('tray_floor_transition')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('tray_floor_transition_columns')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('tray_floor_transition_column_1F')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('tray_floor_transition_column_2F')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('floor header opens customer delivery with eight fixed slots', (
+    tester,
+  ) async {
+    final order = EmergencyFulfillmentOrder(
+      queueId: 'queue-floor-ready',
+      orderId: 'order-floor-ready',
+      queueNo: 601,
+      tableNumber: 'T12',
+      floorLabel: '2F',
+      createdAt: DateTime.utc(2026, 9, 18, 10),
+      workflowVersion: 2,
+      oldestReadySequence: 1,
+      items: const [
+        EmergencyFulfillmentItem(
+          id: 'floor-ready-item',
+          orderItemId: 'floor-ready-order-item',
+          nameKo: '김치찌개',
+          nameVi: 'Canh kimchi',
+          nameEn: 'Kimchi stew',
+          orderedQuantity: 3,
+          kitchenStartedQuantity: 3,
+          kitchenDoneQuantity: 3,
+          trayReceivedQuantity: 3,
+          trayDispatchedQuantity: 3,
+          floorServedQuantity: 1,
+          needsReview: false,
+          workflowVersion: 2,
+          oldestReadySequence: 1,
+        ),
+      ],
+    );
+    final fixture = _FixtureEmergencyNotifier(
+      EmergencyFulfillmentState(
+        assigned: true,
+        active: true,
+        restaurantId: 'store-bt',
+        sessionId: 'session-1',
+        stationType: 'floor',
+        floorLabel: '2F',
+        orders: [order],
+      ),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'floor',
+    );
+
+    expect(find.text('고객전달 · 2'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('customer_delivery')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('customer_delivery_grid_8_slots')), findsOne);
+    expect(find.text('테이블 T12'), findsOne);
+    expect(find.text('김치찌개'), findsOne);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith(
+              'customer_delivery_empty_slot_',
+            ),
+      ),
+      findsNWidgets(7),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final station in ['kitchen', 'tray', 'floor']) {
     testWidgets(
       '$station v2 moves completed menu down and pulses actionable handoffs',
@@ -1300,6 +1454,39 @@ void main() {
     );
     expect(find.text('Bàn T12'), findsNothing);
     expect(find.text('2F · 2 món'), findsNothing);
+  });
+
+  testWidgets('kitchen tray and floor clocks advance every second', (
+    tester,
+  ) async {
+    int elapsedSeconds() {
+      final value = tester
+          .widget<Text>(
+            find.byKey(const Key('emergency_order_elapsed_order-clock')),
+          )
+          .data!;
+      final parts = value.split(':').map(int.parse).toList(growable: false);
+      return parts[0] * 60 + parts[1];
+    }
+
+    for (final stationType in ['kitchen', 'tray', 'floor']) {
+      final fixture = _FixtureEmergencyNotifier(_clockState(stationType));
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: stationType,
+      );
+
+      final before = elapsedSeconds();
+      await tester.pump(const Duration(seconds: 1));
+      final after = elapsedSeconds();
+      expect(after, greaterThan(before), reason: '$stationType clock stalled');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    }
   });
 
   testWidgets('delivery card is labeled delivery and omits the floor detail', (
@@ -1697,6 +1884,46 @@ EmergencyFulfillmentState _activeState(
     ),
   ),
 );
+
+EmergencyFulfillmentState _clockState(String stationType) {
+  final startedAt = DateTime.now().subtract(const Duration(seconds: 5));
+  return EmergencyFulfillmentState(
+    assigned: true,
+    active: true,
+    restaurantId: 'store-bt',
+    sessionId: 'session-clock',
+    stationType: stationType,
+    floorLabel: stationType == 'floor' ? '1F' : null,
+    orders: [
+      EmergencyFulfillmentOrder(
+        queueId: 'queue-clock',
+        orderId: 'order-clock',
+        queueNo: 1,
+        tableNumber: '101',
+        floorLabel: '1F',
+        createdAt: startedAt,
+        items: [
+          EmergencyFulfillmentItem(
+            id: 'item-clock',
+            orderItemId: 'order-item-clock',
+            nameKo: '김밥',
+            nameVi: 'Cơm cuộn',
+            nameEn: 'Gimbap',
+            orderedQuantity: 1,
+            kitchenDoneQuantity: stationType == 'kitchen' ? 0 : 1,
+            trayReceivedQuantity: 0,
+            trayDispatchedQuantity: stationType == 'floor' ? 1 : 0,
+            floorServedQuantity: 0,
+            needsReview: false,
+            batchReceivedAt: startedAt,
+            kitchenFirstDoneAt: stationType == 'tray' ? startedAt : null,
+            trayFirstDispatchedAt: stationType == 'floor' ? startedAt : null,
+          ),
+        ],
+      ),
+    ],
+  );
+}
 
 EmergencyFulfillmentState _completedState(String stationType) {
   final active = _activeState(stationType);
