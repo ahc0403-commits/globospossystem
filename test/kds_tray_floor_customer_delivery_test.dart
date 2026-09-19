@@ -235,6 +235,31 @@ void main() {
     ]) {
       expect(File(path).existsSync(), isTrue, reason: path);
     }
+
+    const partialMigrationPath =
+        'supabase/migrations/20260919010000_kds_tray_floor_partial_batch.sql';
+    final partialMigration = File(partialMigrationPath).readAsStringSync();
+    expect(
+      partialMigration,
+      contains('current_line.quantity >= allocation.quantity'),
+    );
+    expect(partialMigration, contains('KDS_TRAY_FLOOR_BATCH_STALE'));
+    expect(partialMigration, contains('pg_advisory_xact_lock'));
+    expect(
+      partialMigration.toLowerCase(),
+      isNot(contains('insert into public.payments')),
+    );
+    for (final path in [
+      'scripts/preflight_kds_tray_floor_partial_batch.sql',
+      'scripts/verify_kds_tray_floor_partial_batch.sql',
+      'scripts/rollback_kds_tray_floor_partial_batch.sql',
+      'scripts/test_kds_tray_floor_partial_batch.sh',
+      'test/fixtures/kds_tray_floor_partial_batch_setup.sql',
+      'supabase/tests/kds_tray_floor_partial_batch_test.sql',
+      'supabase/tests/kds_tray_floor_customer_delivery_batches_test.sql',
+    ]) {
+      expect(File(path).existsSync(), isTrue, reason: path);
+    }
   });
 }
 
