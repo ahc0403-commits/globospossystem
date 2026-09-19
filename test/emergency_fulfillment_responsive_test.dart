@@ -764,9 +764,9 @@ void main() {
 
     await tester.tap(find.text('최근 완료 1'));
     await tester.pump();
-    expect(find.text('05:00'), findsOne);
+    expect(find.text('1440:00'), findsOne);
     await tester.pump(const Duration(seconds: 3));
-    expect(find.text('05:00'), findsOne);
+    expect(find.text('1440:00'), findsOne);
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
     expect(find.byKey(const Key('emergency_revert_order')), findsOne);
@@ -1216,6 +1216,52 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  for (final station in ['tray', 'floor']) {
+    testWidgets('$station transfer button opens even with zero waiting food', (
+      tester,
+    ) async {
+      final fixture = _FixtureEmergencyNotifier(
+        EmergencyFulfillmentState(
+          assigned: true,
+          active: true,
+          restaurantId: 'store-bt',
+          sessionId: 'session-empty-$station',
+          stationType: station,
+          floorLabel: station == 'floor' ? '1F' : null,
+          orders: const [],
+        ),
+      );
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: station,
+      );
+
+      final buttonKey = station == 'tray'
+          ? const Key('tray_floor_transition')
+          : const Key('customer_delivery');
+      final expectedLabel = station == 'tray' ? '층별 전달 · 0' : '고객전달 · 0';
+      expect(find.text(expectedLabel), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(find.byKey(buttonKey)).onPressed,
+        isNotNull,
+      );
+
+      await tester.tap(find.byKey(buttonKey));
+      await tester.pumpAndSettle();
+      expect(
+        station == 'tray'
+            ? find.byKey(const Key('tray_floor_transition_screen'))
+            : find.byKey(const Key('customer_delivery_screen')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   for (final station in ['kitchen', 'tray', 'floor']) {
     testWidgets(

@@ -391,44 +391,47 @@ void main() {
     },
   );
 
-  test('completed station timer stops at that station completion', () {
-    final order = EmergencyFulfillmentOrder(
-      queueId: 'queue-1',
-      orderId: 'order-1',
-      queueNo: 1,
-      tableNumber: '102',
-      floorLabel: '1F',
-      createdAt: DateTime.utc(2026, 8, 15, 9),
-      stationStartedAt: DateTime.utc(2026, 8, 15, 10),
-      stationCompletedAt: DateTime.utc(2026, 8, 15, 10, 4, 32),
-      items: const [
-        EmergencyFulfillmentItem(
-          id: 'food-1',
-          orderItemId: 'order-item-1',
-          nameKo: '김밥',
-          nameVi: 'Cơm cuộn',
-          nameEn: 'Gimbap',
-          orderedQuantity: 1,
-          kitchenDoneQuantity: 1,
-          trayReceivedQuantity: 1,
-          trayDispatchedQuantity: 1,
-          floorServedQuantity: 0,
-          needsReview: false,
-        ),
-      ],
-    );
+  test(
+    'completed station timer uses order receipt and stops at completion',
+    () {
+      final order = EmergencyFulfillmentOrder(
+        queueId: 'queue-1',
+        orderId: 'order-1',
+        queueNo: 1,
+        tableNumber: '102',
+        floorLabel: '1F',
+        createdAt: DateTime.utc(2026, 8, 15, 9),
+        stationStartedAt: DateTime.utc(2026, 8, 15, 10),
+        stationCompletedAt: DateTime.utc(2026, 8, 15, 10, 4, 32),
+        items: const [
+          EmergencyFulfillmentItem(
+            id: 'food-1',
+            orderItemId: 'order-item-1',
+            nameKo: '김밥',
+            nameVi: 'Cơm cuộn',
+            nameEn: 'Gimbap',
+            orderedQuantity: 1,
+            kitchenDoneQuantity: 1,
+            trayReceivedQuantity: 1,
+            trayDispatchedQuantity: 1,
+            floorServedQuantity: 0,
+            needsReview: false,
+          ),
+        ],
+      );
 
-    expect(
-      order.stationElapsedAt(DateTime.utc(2026, 8, 15, 11), 'tray'),
-      const Duration(minutes: 4, seconds: 32),
-    );
-    expect(
-      order.stationElapsedAt(DateTime.utc(2026, 8, 15, 12), 'tray'),
-      const Duration(minutes: 4, seconds: 32),
-    );
-  });
+      expect(
+        order.stationElapsedAt(DateTime.utc(2026, 8, 15, 11), 'tray'),
+        const Duration(hours: 1, minutes: 4, seconds: 32),
+      );
+      expect(
+        order.stationElapsedAt(DateTime.utc(2026, 8, 15, 12), 'tray'),
+        const Duration(hours: 1, minutes: 4, seconds: 32),
+      );
+    },
+  );
 
-  test('station timer waits at zero until work reaches tray or floor', () {
+  test('tray and floor timers count from order receipt before handoff', () {
     final order = EmergencyFulfillmentOrder(
       queueId: 'queue-1',
       orderId: 'order-1',
@@ -455,11 +458,11 @@ void main() {
 
     expect(
       order.stationElapsedAt(DateTime.utc(2026, 8, 15, 12), 'tray'),
-      Duration.zero,
+      const Duration(hours: 3),
     );
     expect(
       order.stationElapsedAt(DateTime.utc(2026, 8, 15, 12), 'floor'),
-      Duration.zero,
+      const Duration(hours: 3),
     );
   });
 
@@ -500,14 +503,14 @@ void main() {
       );
 
       expect(order.stationClockStartedAt('kitchen'), createdAt);
-      expect(order.stationClockStartedAt('tray'), kitchenDoneAt);
-      expect(order.stationClockStartedAt('floor'), trayDispatchedAt);
+      expect(order.stationClockStartedAt('tray'), createdAt);
+      expect(order.stationClockStartedAt('floor'), createdAt);
       expect(
         order.stationElapsedAt(now, 'kitchen'),
         const Duration(minutes: 4),
       );
-      expect(order.stationElapsedAt(now, 'tray'), const Duration(minutes: 3));
-      expect(order.stationElapsedAt(now, 'floor'), const Duration(minutes: 2));
+      expect(order.stationElapsedAt(now, 'tray'), const Duration(minutes: 7));
+      expect(order.stationElapsedAt(now, 'floor'), const Duration(minutes: 9));
     },
   );
 

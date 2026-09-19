@@ -26,35 +26,61 @@ class TrayFloorTransitionSheet extends StatefulWidget {
 }
 
 class _TrayFloorTransitionSheetState extends State<TrayFloorTransitionSheet> {
-  late TrayFloorTransitionSummary _firstFloor = widget.firstFloor;
-  late TrayFloorTransitionSummary _secondFloor = widget.secondFloor;
+  final Map<String, Map<String, int>> _selectedByFloor = {};
   String? _busyFloor;
   String? _error;
 
+  Map<String, int> _selectedFor(String floorLabel) =>
+      _selectedByFloor.putIfAbsent(floorLabel, () => <String, int>{});
+
+  int _selectedTotal(String floorLabel) => _selectedFor(
+    floorLabel,
+  ).values.fold(0, (total, quantity) => total + quantity);
+
+  void _change(
+    TrayFloorTransitionSummary summary,
+    TrayFloorTransitionMenuGroup group,
+    int delta,
+  ) {
+    if (_busyFloor != null) return;
+    final selected = _selectedFor(summary.floorLabel);
+    final current = selected[group.key] ?? 0;
+    final next = (current + delta).clamp(0, group.quantity);
+    setState(() {
+      if (next == 0) {
+        selected.remove(group.key);
+      } else {
+        selected[group.key] = next;
+      }
+      _error = null;
+    });
+  }
+
   Future<void> _submit(TrayFloorTransitionSummary summary) async {
-    if (_busyFloor != null || summary.allocations.isEmpty) return;
+    if (_busyFloor != null || _selectedTotal(summary.floorLabel) == 0) return;
+    late final TrayFloorTransitionSummary selectedSummary;
+    try {
+      selectedSummary = allocateTrayFloorTransitionSelections(
+        summary,
+        _selectedFor(summary.floorLabel),
+      );
+    } catch (_) {
+      setState(() => _error = _copy(context).stale);
+      return;
+    }
     setState(() {
       _busyFloor = summary.floorLabel;
       _error = null;
     });
-    final success = await widget.onSubmit(summary);
+    final success = await widget.onSubmit(selectedSummary);
     if (!mounted) return;
+    if (success) {
+      Navigator.of(context).pop();
+      return;
+    }
     setState(() {
       _busyFloor = null;
-      if (success) {
-        final empty = TrayFloorTransitionSummary(
-          floorLabel: summary.floorLabel,
-          groups: const [],
-          allocations: const [],
-        );
-        if (summary.floorLabel == '1F') {
-          _firstFloor = empty;
-        } else {
-          _secondFloor = empty;
-        }
-      } else {
-        _error = _copy(context).stale;
-      }
+      _error = _copy(context).stale;
     });
   }
 
@@ -114,21 +140,27 @@ class _TrayFloorTransitionSheetState extends State<TrayFloorTransitionSheet> {
                 children: [
                   Expanded(
                     child: _FloorTransitionColumn(
-                      summary: _firstFloor,
+                      summary: widget.firstFloor,
+                      selected: _selectedFor(widget.firstFloor.floorLabel),
                       languageCode: languageCode,
                       copy: copy,
                       busy: _busyFloor != null,
-                      onSubmit: () => _submit(_firstFloor),
+                      onChange: (group, delta) =>
+                          _change(widget.firstFloor, group, delta),
+                      onSubmit: () => _submit(widget.firstFloor),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _FloorTransitionColumn(
-                      summary: _secondFloor,
+                      summary: widget.secondFloor,
+                      selected: _selectedFor(widget.secondFloor.floorLabel),
                       languageCode: languageCode,
                       copy: copy,
                       busy: _busyFloor != null,
-                      onSubmit: () => _submit(_secondFloor),
+                      onChange: (group, delta) =>
+                          _change(widget.secondFloor, group, delta),
+                      onSubmit: () => _submit(widget.secondFloor),
                     ),
                   ),
                 ],
@@ -144,20 +176,28 @@ class _TrayFloorTransitionSheetState extends State<TrayFloorTransitionSheet> {
 class _FloorTransitionColumn extends StatelessWidget {
   const _FloorTransitionColumn({
     required this.summary,
+    required this.selected,
     required this.languageCode,
     required this.copy,
     required this.busy,
+    required this.onChange,
     required this.onSubmit,
   });
 
   final TrayFloorTransitionSummary summary;
+  final Map<String, int> selected;
   final String languageCode;
   final _TrayFloorTransitionCopy copy;
   final bool busy;
+  final void Function(TrayFloorTransitionMenuGroup group, int delta) onChange;
   final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) {
+    final selectedTotal = selected.values.fold(
+      0,
+      (total, quantity) => total + quantity,
+    );
     return Container(
       key: ValueKey('tray_floor_transition_column_${summary.floorLabel}'),
       decoration: BoxDecoration(
@@ -215,6 +255,7 @@ class _FloorTransitionColumn extends StatelessWidget {
                     separatorBuilder: (_, _) => const Divider(height: 18),
                     itemBuilder: (context, index) {
                       final group = summary.groups[index];
+                      final selectedQuantity = selected[group.key] ?? 0;
                       final name = Text(
                         group.localizedName(languageCode),
                         maxLines: 3,
@@ -222,18 +263,58 @@ class _FloorTransitionColumn extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w800),
                       );
-                      final quantity = Text(
-                        '× ${group.quantity}',
-                        key: ValueKey(
-                          'tray_floor_transition_quantity_${summary.floorLabel}_${group.key}',
-                        ),
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
+                      final controls = Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            key: ValueKey(
+                              'tray_floor_transition_minus_${summary.floorLabel}_${group.key}',
+                            ),
+                            tooltip: '-',
+                            constraints: const BoxConstraints.tightFor(
+                              width: 44,
+                              height: 44,
+                            ),
+                            onPressed: !busy && selectedQuantity > 0
+                                ? () => onChange(group, -1)
+                                : null,
+                            icon: const Icon(
+                              Icons.remove_circle_outline_rounded,
+                            ),
+                          ),
+                          SizedBox(
+                            width: 54,
+                            child: Text(
+                              '$selectedQuantity/${group.quantity}',
+                              key: ValueKey(
+                                'tray_floor_transition_progress_${summary.floorLabel}_${group.key}',
+                              ),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            key: ValueKey(
+                              'tray_floor_transition_plus_${summary.floorLabel}_${group.key}',
+                            ),
+                            tooltip: '+',
+                            constraints: const BoxConstraints.tightFor(
+                              width: 44,
+                              height: 44,
+                            ),
+                            onPressed:
+                                !busy && selectedQuantity < group.quantity
+                                ? () => onChange(group, 1)
+                                : null,
+                            icon: const Icon(Icons.add_circle_rounded),
+                          ),
+                        ],
                       );
                       return LayoutBuilder(
                         builder: (context, constraints) {
-                          if (constraints.maxWidth < 220) {
+                          if (constraints.maxWidth < 260) {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -241,7 +322,10 @@ class _FloorTransitionColumn extends StatelessWidget {
                                 const SizedBox(height: 4),
                                 Align(
                                   alignment: Alignment.centerRight,
-                                  child: quantity,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: controls,
+                                  ),
                                 ),
                               ],
                             );
@@ -250,7 +334,7 @@ class _FloorTransitionColumn extends StatelessWidget {
                             children: [
                               Expanded(child: name),
                               const SizedBox(width: 8),
-                              quantity,
+                              controls,
                             ],
                           );
                         },
@@ -263,13 +347,11 @@ class _FloorTransitionColumn extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final label = Text(
-                  copy.confirm(summary.floorLabel),
+                  copy.complete(selectedTotal),
                   maxLines: 2,
                   textAlign: TextAlign.center,
                 );
-                final onPressed = !busy && summary.totalQuantity > 0
-                    ? onSubmit
-                    : null;
+                final onPressed = !busy && selectedTotal > 0 ? onSubmit : null;
                 final style = FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(56),
                   padding: const EdgeInsets.symmetric(
@@ -321,8 +403,8 @@ class _TrayFloorTransitionCopy {
       _pick('대기 $quantity개', 'Chờ $quantity món', '$quantity waiting');
   String get empty =>
       _pick('전달할 음식이 없습니다.', 'Không có món cần chuyển.', 'No food to send.');
-  String confirm(String floor) =>
-      _pick('$floor 확인·전송', 'Xác nhận·gửi $floor', 'Confirm and send $floor');
+  String complete(int quantity) =>
+      _pick('완료 · $quantity', 'Hoàn tất · $quantity', 'Complete · $quantity');
   String unsupported(int quantity) => _pick(
     '층 확인이 필요한 음식 $quantity개는 자동 전송하지 않습니다.',
     '$quantity món cần kiểm tra tầng và sẽ không được tự động gửi.',

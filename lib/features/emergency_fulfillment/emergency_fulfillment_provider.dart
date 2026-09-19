@@ -657,19 +657,14 @@ class EmergencyFulfillmentOrder {
           !hasActionableQuantity(stationType));
 
   DateTime? stationClockStartedAt(String stationType) {
-    // Kitchen work starts as soon as the customer's order reaches the queue.
-    // Tray and floor work start only after the preceding handoff. Item-level
-    // event times keep the clock usable while the auxiliary timing RPC is
-    // still loading (or unavailable during a staged rollout).
-    if (stationType == 'kitchen') return createdAt;
-    if (stationStartedAt != null) return stationStartedAt;
-
-    final values = _operationalItems()
-        .map((item) => item.stationStartedAt(stationType))
-        .whereType<DateTime>()
-        .toList(growable: false);
-    if (values.isEmpty) return null;
-    return values.reduce((left, right) => left.isBefore(right) ? left : right);
+    // Every station shows the customer's total wait from the original order
+    // receipt. Handoffs must not reset the visible tray or floor clock.
+    if (stationType == 'kitchen' ||
+        stationType == 'tray' ||
+        stationType == 'floor') {
+      return createdAt;
+    }
+    return null;
   }
 
   DateTime? stationClockCompletedAt(String stationType) {
@@ -1085,16 +1080,27 @@ String _handoffMenuKey(EmergencyFulfillmentItem item) => [
 
 class TrayFloorTransitionAllocation {
   const TrayFloorTransitionAllocation({
+    required this.menuKey,
     required this.itemId,
     required this.queueId,
     required this.sourceKind,
     required this.quantity,
   });
 
+  final String menuKey;
   final String itemId;
   final String queueId;
   final String sourceKind;
   final int quantity;
+
+  TrayFloorTransitionAllocation withQuantity(int value) =>
+      TrayFloorTransitionAllocation(
+        menuKey: menuKey,
+        itemId: itemId,
+        queueId: queueId,
+        sourceKind: sourceKind,
+        quantity: value,
+      );
 
   Map<String, dynamic> toJson() => {
     'item_id': itemId,
@@ -1156,6 +1162,7 @@ TrayFloorTransitionSummary buildTrayFloorTransitionSummary(
       if (quantity <= 0) continue;
       allocations.add(
         TrayFloorTransitionAllocation(
+          menuKey: _handoffMenuKey(item),
           itemId: item.id,
           queueId: order.queueId,
           sourceKind: _kdsSourceKind(item),
@@ -1176,6 +1183,53 @@ TrayFloorTransitionSummary buildTrayFloorTransitionSummary(
   return TrayFloorTransitionSummary(
     floorLabel: normalizedFloor,
     groups: List.unmodifiable(groups.values),
+    allocations: List.unmodifiable(allocations),
+  );
+}
+
+TrayFloorTransitionSummary allocateTrayFloorTransitionSelections(
+  TrayFloorTransitionSummary summary,
+  Map<String, int> selections,
+) {
+  final availableByKey = {
+    for (final group in summary.groups) group.key: group.quantity,
+  };
+  final remaining = <String, int>{};
+  for (final entry in selections.entries) {
+    final available = availableByKey[entry.key];
+    if (available == null || entry.value < 0 || entry.value > available) {
+      throw StateError('KDS_TRAY_FLOOR_SELECTION_STALE');
+    }
+    if (entry.value > 0) remaining[entry.key] = entry.value;
+  }
+
+  final allocations = <TrayFloorTransitionAllocation>[];
+  for (final available in summary.allocations) {
+    final requested = remaining[available.menuKey] ?? 0;
+    if (requested <= 0) continue;
+    final quantity = math.min(requested, available.quantity);
+    allocations.add(available.withQuantity(quantity));
+    remaining[available.menuKey] = requested - quantity;
+  }
+  if (remaining.values.any((quantity) => quantity > 0)) {
+    throw StateError('KDS_TRAY_FLOOR_SELECTION_STALE');
+  }
+
+  final groups = summary.groups
+      .where((group) => (selections[group.key] ?? 0) > 0)
+      .map(
+        (group) => TrayFloorTransitionMenuGroup(
+          key: group.key,
+          nameKo: group.nameKo,
+          nameVi: group.nameVi,
+          nameEn: group.nameEn,
+          quantity: selections[group.key]!,
+        ),
+      )
+      .toList(growable: false);
+  return TrayFloorTransitionSummary(
+    floorLabel: summary.floorLabel,
+    groups: List.unmodifiable(groups),
     allocations: List.unmodifiable(allocations),
   );
 }

@@ -9,7 +9,7 @@ void main() {
   testWidgets(
     'floor transition stays horizontally split and submits one floor',
     (tester) async {
-      final submitted = <String>[];
+      final submitted = <TrayFloorTransitionSummary>[];
       await tester.binding.setSurfaceSize(const Size(900, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
@@ -21,7 +21,7 @@ void main() {
             secondFloor: _traySummary('2F', '김치찌개', 2),
             unsupportedFloorQuantity: 0,
             onSubmit: (summary) async {
-              submitted.add(summary.floorLabel);
+              submitted.add(summary);
               return true;
             },
           ),
@@ -36,17 +36,42 @@ void main() {
       );
       expect(first.dy, second.dy);
       expect(first.dx, lessThan(second.dx));
-      expect(find.byIcon(Icons.add_circle_rounded), findsNothing);
-      expect(find.byIcon(Icons.remove_circle_outline_rounded), findsNothing);
+      expect(find.byIcon(Icons.add_circle_rounded), findsNWidgets(2));
+      expect(
+        find.byIcon(Icons.remove_circle_outline_rounded),
+        findsNWidgets(2),
+      );
+
+      final firstGroup = _traySummary('1F', '김밥', 3).groups.single;
+      await tester.tap(
+        find.byKey(ValueKey('tray_floor_transition_plus_1F_${firstGroup.key}')),
+      );
+      await tester.tap(
+        find.byKey(ValueKey('tray_floor_transition_plus_1F_${firstGroup.key}')),
+      );
+      await tester.pump();
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                ValueKey('tray_floor_transition_progress_1F_${firstGroup.key}'),
+              ),
+            )
+            .data,
+        '2/3',
+      );
 
       await tester.tap(
         find.byKey(const ValueKey('tray_floor_transition_confirm_1F')),
       );
-      await tester.pump();
-      expect(submitted, ['1F']);
+      await tester.pumpAndSettle();
+      expect(submitted, hasLength(1));
+      expect(submitted.single.floorLabel, '1F');
+      expect(submitted.single.totalQuantity, 2);
+      expect(submitted.single.allocations.single.quantity, 2);
       expect(
-        find.byKey(const ValueKey('tray_floor_transition_confirm_2F')),
-        findsOne,
+        find.byKey(const Key('tray_floor_transition_screen')),
+        findsNothing,
       );
       expect(tester.takeException(), isNull);
     },
@@ -237,6 +262,7 @@ TrayFloorTransitionSummary _traySummary(
   ],
   allocations: [
     TrayFloorTransitionAllocation(
+      menuKey: '$floor-$name',
       itemId: 'item-$floor',
       queueId: 'queue-$floor',
       sourceKind: 'base',
