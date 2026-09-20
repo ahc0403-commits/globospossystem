@@ -80,6 +80,22 @@ BEGIN
       'item_id', v_item, 'source_kind', 'base', 'quantity', 2
     ))
   );
+  IF (SELECT count(*) FROM public.emergency_fulfillment_events
+      WHERE order_item_id = v_order_item AND stage = 'kitchen_done') <> 1
+     OR NOT EXISTS (
+       SELECT 1 FROM public.emergency_fulfillment_events
+       WHERE order_item_id = v_order_item AND stage = 'kitchen_done'
+         AND delta = 2
+     )
+     OR (SELECT count(*) FROM public.emergency_tray_ready_lots
+         WHERE source_kind = 'base' AND source_id = v_item) <> 1
+     OR NOT EXISTS (
+       SELECT 1 FROM public.emergency_tray_ready_lots
+       WHERE source_kind = 'base' AND source_id = v_item
+         AND ready_quantity = 2
+     ) THEN
+    RAISE EXCEPTION 'KDS_SET_BASED_KITCHEN_AGGREGATION_INVALID';
+  END IF;
 
   UPDATE public.emergency_station_assignments
   SET station_type = 'tray', floor_label = NULL WHERE id = v_assignment;
