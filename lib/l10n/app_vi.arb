@@ -2820,7 +2820,7 @@
   "settingsPromotionMenuCount": "Đã chọn {count} món",
   "@settingsPromotionMenuCount": {"placeholders": {"count": {"type": "int"}}},
   "settingsQrTakeoutTitle": "Đơn mang đi qua QR",
-  "settingsQrTakeoutSummary": "Hiện hoặc ẩn lựa chọn mang đi trên menu QR của khách trong thời gian khuyến mãi.",
+  "settingsQrTakeoutSummary": "Hiện hoặc ẩn lựa chọn mang đi trên menu QR của khách.",
   "settingsQrTakeoutEnabled": "Đang mở",
   "settingsQrTakeoutDisabled": "Tạm dừng",
   "settingsQrTakeoutResumeAt": "Tự động mở lại lúc {date}",

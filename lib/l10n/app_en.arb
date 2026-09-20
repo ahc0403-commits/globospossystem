@@ -2821,7 +2821,7 @@
   "settingsPromotionMenuCount": "{count} menu(s) selected",
   "@settingsPromotionMenuCount": {"placeholders": {"count": {"type": "int"}}},
   "settingsQrTakeoutTitle": "QR takeout ordering",
-  "settingsQrTakeoutSummary": "Show or hide the takeout choice on the customer QR menu during promotions.",
+  "settingsQrTakeoutSummary": "Show or hide the takeout choice on the customer QR menu.",
   "settingsQrTakeoutEnabled": "Available",
   "settingsQrTakeoutDisabled": "Paused",
   "settingsQrTakeoutResumeAt": "Automatically resumes {date}",

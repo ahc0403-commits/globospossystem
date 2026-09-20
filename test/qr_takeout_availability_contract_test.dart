@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/qr_order_service.dart';
-import 'package:globos_pos_system/features/settings/promotion_settings_card.dart';
-import 'package:globos_pos_system/features/settings/promotion_service.dart';
+import 'package:globos_pos_system/features/settings/qr_takeout_service.dart';
+import 'package:globos_pos_system/features/settings/qr_takeout_settings_card.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 
-class _FakePromotionService extends PromotionService {
+class _FakeQrTakeoutService extends QrTakeoutService {
   QrTakeoutAvailability setting = const QrTakeoutAvailability(
     configuredEnabled: false,
     effectiveEnabled: false,
@@ -15,15 +15,11 @@ class _FakePromotionService extends PromotionService {
   bool? savedEnabled;
 
   @override
-  Future<List<StorePromotion>> list(String storeId) async => const [];
+  Future<QrTakeoutAvailability> getAvailability(String storeId) async =>
+      setting;
 
   @override
-  Future<QrTakeoutAvailability> getQrTakeoutAvailability(
-    String storeId,
-  ) async => setting;
-
-  @override
-  Future<QrTakeoutAvailability> setQrTakeoutAvailability({
+  Future<QrTakeoutAvailability> setAvailability({
     required String storeId,
     required bool enabled,
     DateTime? resumeAt,
@@ -86,22 +82,27 @@ void main() {
     expect(sql, contains('FROM PUBLIC, anon, authenticated'));
   });
 
-  testWidgets('BM can enable QR takeout from promotion settings', (
+  testWidgets('BM can enable QR takeout from its independent settings card', (
     tester,
   ) async {
-    final service = _FakePromotionService();
+    final service = _FakeQrTakeoutService();
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('ko'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
-          body: PromotionSettingsCard(storeId: 'store-id', service: service),
+          body: QrTakeoutSettingsCard(storeId: 'store-id', service: service),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const Key('settings_qr_takeout_section')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('settings_promotions_section')), findsNothing);
     expect(
       find.byKey(const Key('settings_qr_takeout_control')),
       findsOneWidget,
@@ -111,6 +112,16 @@ void main() {
       find.byKey(const Key('settings_qr_takeout_schedule_resume')),
       findsOneWidget,
     );
+    await tester.tap(
+      find.byKey(const Key('settings_qr_takeout_schedule_resume')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('settings_qr_takeout_resume_dialog')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('취소'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('settings_qr_takeout_toggle')));
     await tester.pumpAndSettle();

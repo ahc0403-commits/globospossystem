@@ -50,16 +50,16 @@ const _frozenAlertFiles = <String, String>{
       'c58c3e55574c01dbbe2d329d78def8b2d085e3808d3b7e79d3cb1caceee08c93',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
-  // 2026-09-18: menu deletion copy is localized. Arrival behavior remains
-  // covered below for all customer/staff locales.
+  // 2026-09-20: promotion and QR takeout copy are independent. Arrival
+  // behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      'b812da931824017b53d005dbadb13dad16c559c840395ea0f59d6de4f4ff88a1',
+      '4ced25f637e1d4b9b5c3d9924063777da44fbbde691372dfedc6c4b916f98e18',
   'lib/l10n/app_localizations_ko.dart':
-      'd2d840625568bce53211bb6b9d93e1b763c99e8e5dbdab92bc1fc805b5ecedeb',
+      '61ee8572d02437e5a946a655278716df85f55c9009034e5326b22a371b94dba2',
   'lib/l10n/app_localizations_vi.dart':
-      'c8e2816641f923870cfbe7f24154529513d65f5073662392552eee19045febbe',
+      '82b271b4fcc26f829c52cce57f9667290749dd8449b7703c57d10f194331709d',
   'lib/l10n/app_localizations_en.dart':
-      '8d56ad1d299d44c5a5383cab80b6dfc89bec0d0e647882fc69dd8e696a78e6d5',
+      'ac460c479dac8cfe4275288a8fb41c423987e334bce7e18e6e7ef489f7358d7e',
 };
 
 void main() {

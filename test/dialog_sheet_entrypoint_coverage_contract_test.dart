@@ -317,9 +317,15 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/settings/promotion_settings_card.dart',
-    directCalls: 2,
+    directCalls: 1,
     test: 'test/settings_admin_ui_contract_test.dart',
-    markers: ['promotion_settings_dialog', 'settings_qr_takeout_resume_dialog'],
+    markers: ['promotion_settings_dialog'],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/settings/qr_takeout_settings_card.dart',
+    directCalls: 1,
+    test: 'test/qr_takeout_availability_contract_test.dart',
+    markers: ['settings_qr_takeout_resume_dialog'],
   ),
   _OperationalCoverage(
     source: 'lib/features/emergency_fulfillment/emergency_control_panel.dart',
