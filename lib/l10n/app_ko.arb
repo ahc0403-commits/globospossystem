@@ -2820,7 +2820,7 @@
   "settingsPromotionMenuCount": "메뉴 {count}개 선택",
   "@settingsPromotionMenuCount": {"placeholders": {"count": {"type": "int"}}},
   "settingsQrTakeoutTitle": "QR 포장 주문",
-  "settingsQrTakeoutSummary": "프로모션 운영 중 고객 QR 메뉴의 포장 주문 선택을 표시하거나 숨깁니다.",
+  "settingsQrTakeoutSummary": "고객 QR 메뉴에서 포장 주문 선택을 표시하거나 숨깁니다.",
   "settingsQrTakeoutEnabled": "사용 가능",
   "settingsQrTakeoutDisabled": "일시 중지",
   "settingsQrTakeoutResumeAt": "{date}에 자동으로 다시 켜집니다.",
