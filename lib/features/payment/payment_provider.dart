@@ -17,6 +17,8 @@ import '../../l10n/app_localizations.dart';
 import '../../main.dart';
 import '../order/order_model.dart';
 
+const nonRevenueAmountChangedError = 'NON_REVENUE_AMOUNT_CHANGED';
+
 class CashierOrder {
   const CashierOrder({
     required this.orderId,
@@ -770,6 +772,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
   }
 
+  void clearError() {
+    state = state.copyWith(clearError: true);
+  }
+
   Future<CashierOrderSearchResult?> searchActiveOrderForCashier({
     required String storeId,
     required String query,
@@ -1274,9 +1280,19 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       );
       return payment;
     } catch (error) {
+      final amountChanged =
+          error is PostgrestException &&
+          ((error.message == 'PAYMENT_AMOUNT_MISMATCH' &&
+                  error.details == 'SERVICE_TOTAL_CHANGED') ||
+              error.message == 'PAYMENT_AMOUNT_EXCEEDS_REMAINING');
+      if (amountChanged) {
+        await loadOrders(storeId);
+      }
       state = state.copyWith(
         isProcessing: false,
-        error: _mapPaymentError(error, 'Failed to close non-revenue order'),
+        error: amountChanged
+            ? nonRevenueAmountChangedError
+            : _mapPaymentError(error, 'Failed to close non-revenue order'),
       );
       return null;
     }

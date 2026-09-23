@@ -116,6 +116,38 @@ final _cashierOrderB = CashierOrder(
   createdAt: DateTime(2026, 7, 18, 12, 5),
 );
 
+final _cashierOrderAfterAdditionalItem = CashierOrder(
+  orderId: _orderId,
+  tableNumber: 'A1',
+  tableId: 'table-a1',
+  status: 'serving',
+  orderPurpose: 'customer',
+  orderSource: 'staff',
+  items: [
+    ..._cashierOrder.items,
+    const OrderItem(
+      id: 'cashier-item-added-tea',
+      menuItemId: 'menu-added-tea',
+      label: 'Trà đào',
+      unitPrice: 40000,
+      quantity: 1,
+      status: 'ready',
+      itemType: 'menu_item',
+    ),
+  ],
+  menuSubtotal: 180000,
+  serviceChargeTotal: 0,
+  serviceItemTotal: 0,
+  fixedChargeTotal: 0,
+  discountTotal: 0,
+  vatTotal: 13333.33,
+  totalAmount: 180000,
+  paidTotal: 0,
+  paymentCount: 0,
+  remainingDue: 180000,
+  createdAt: DateTime(2026, 7, 18, 12),
+);
+
 final _paperlessCashierOrder = CashierOrder(
   orderId: _orderId,
   tableNumber: 'A1',
@@ -205,6 +237,7 @@ class _PaymentNotifier extends PaymentNotifier {
   _PaymentNotifier({
     bool includeSecondOrder = false,
     this.completeOrdersOnPayment = false,
+    this.changeNonRevenueAmountOnce = false,
     CashierOrder? initialOrder,
   }) {
     state = PaymentState(
@@ -216,6 +249,7 @@ class _PaymentNotifier extends PaymentNotifier {
   }
 
   final bool completeOrdersOnPayment;
+  final bool changeNonRevenueAmountOnce;
   int cancelledOrders = 0;
   int cancelledItems = 0;
   int restoredOrders = 0;
@@ -228,6 +262,12 @@ class _PaymentNotifier extends PaymentNotifier {
   double? combinedPaymentDisplayTotal;
   int combinedReceiptDisplayCalls = 0;
   int customerPaymentDisplayCalls = 0;
+  int nonRevenuePaymentCalls = 0;
+  final List<double> nonRevenuePaymentAmounts = [];
+  String? nonRevenueType;
+  String? nonRevenueReason;
+  String? nonRevenueStaffName;
+  String? nonRevenueManagerPin;
 
   @override
   Future<bool> showOnCustomerDisplay({
@@ -306,6 +346,42 @@ class _PaymentNotifier extends PaymentNotifier {
       state = state.copyWith(paymentSuccess: true, isProcessing: false);
     }
     return {'id': 'payment-single'};
+  }
+
+  @override
+  Future<Map<String, dynamic>?> processNonRevenuePayment({
+    required String storeId,
+    required String orderId,
+    required double amount,
+    required String type,
+    required String reason,
+    String? staffName,
+    required String managerPin,
+  }) async {
+    nonRevenuePaymentCalls += 1;
+    nonRevenuePaymentAmounts.add(amount);
+    nonRevenueType = type;
+    nonRevenueReason = reason;
+    nonRevenueStaffName = staffName;
+    nonRevenueManagerPin = managerPin;
+
+    if (changeNonRevenueAmountOnce && nonRevenuePaymentCalls == 1) {
+      state = state.copyWith(
+        orders: [_cashierOrderAfterAdditionalItem],
+        selectedOrder: _cashierOrderAfterAdditionalItem,
+        isProcessing: false,
+        paymentSuccess: false,
+        error: nonRevenueAmountChangedError,
+      );
+      return null;
+    }
+
+    state = state.copyWith(
+      isProcessing: false,
+      paymentSuccess: true,
+      clearError: true,
+    );
+    return {'id': 'payment-non-revenue'};
   }
 
   @override
@@ -1001,6 +1077,85 @@ void main() {
     expect(harness.notifier.cancelledOrders, 0);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'service checkout reconfirms a changed amount and keeps entered details',
+    (tester) async {
+      final harness = await _pumpCashier(
+        tester,
+        changeNonRevenueAmountOnce: true,
+      );
+      await _selectOrder(tester);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('cashier_method_tile_$paymentMethodService')),
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_method_tile_$paymentMethodService')),
+      );
+      await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const Key('payment_submit_button')),
+      );
+      await tester.tap(find.byKey(const Key('payment_submit_button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('cashier_non_revenue_staff_input')),
+        'Kim Staff',
+      );
+      await tester.enterText(
+        find.byKey(const Key('cashier_non_revenue_reason_input')),
+        'Office lunch',
+      );
+      await tester.enterText(
+        find.byKey(const Key('cashier_non_revenue_pin_input')),
+        '2468',
+      );
+      await tester.tap(find.byKey(const Key('cashier_non_revenue_submit')));
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('cashier_non_revenue_amount_changed_dialog')),
+      );
+
+      final amountChangedDialog = find.byKey(
+        const Key('cashier_non_revenue_amount_changed_dialog'),
+      );
+      expect(
+        find.descendant(
+          of: amountChangedDialog,
+          matching: find.text('₫140.000'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: amountChangedDialog,
+          matching: find.text('₫180.000'),
+        ),
+        findsOneWidget,
+      );
+      expect(harness.notifier.nonRevenuePaymentCalls, 1);
+      await tester.tap(
+        find.byKey(const Key('cashier_non_revenue_amount_changed_confirm')),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('cashier_payment_completion_dialog')),
+      );
+
+      expect(harness.notifier.nonRevenuePaymentCalls, 2);
+      expect(harness.notifier.nonRevenuePaymentAmounts, [140000, 180000]);
+      expect(harness.notifier.nonRevenueType, 'staff_meal');
+      expect(harness.notifier.nonRevenueReason, 'Office lunch');
+      expect(harness.notifier.nonRevenueStaffName, 'Kim Staff');
+      expect(harness.notifier.nonRevenueManagerPin, '2468');
+      expect(find.text('₫180.000'), findsWidgets);
+      _dismiss(tester, const Key('cashier_payment_completion_dialog'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('single payment executes proof and red-invoice call sites', (
     tester,
@@ -1724,6 +1879,7 @@ Future<_CashierHarness> _pumpCashier(
   PosAuthState authState = _authState,
   bool includeSecondOrder = false,
   bool completeOrdersOnPayment = false,
+  bool changeNonRevenueAmountOnce = false,
   CashierOrder? initialOrder,
   int? tableCount,
   Size physicalSize = const Size(1440, 1000),
@@ -1750,6 +1906,7 @@ Future<_CashierHarness> _pumpCashier(
   final notifier = _PaymentNotifier(
     includeSecondOrder: includeSecondOrder,
     completeOrdersOnPayment: completeOrdersOnPayment,
+    changeNonRevenueAmountOnce: changeNonRevenueAmountOnce,
     initialOrder: initialOrder,
   );
   final proofService = _PaymentProofService();

@@ -217,7 +217,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       final error = next.error;
       if (error != null && error.isNotEmpty && error != _lastError) {
         _lastError = error;
-        if (mounted) {
+        if (mounted && error != nonRevenueAmountChangedError) {
           showErrorToast(
             context,
             localizeRestaurantCutoffError(context.l10n, error),
@@ -675,6 +675,103 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       staffNameController.dispose();
       pinController.dispose();
     }
+  }
+
+  Future<bool> _showNonRevenueAmountChangedDialog({
+    required double previousAmount,
+    required double currentAmount,
+  }) async {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            key: const Key('cashier_non_revenue_amount_changed_dialog'),
+            title: Text(l10n.cashierNonRevenueAmountChangedTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(l10n.cashierNonRevenueAmountChangedMessage),
+                const SizedBox(height: 16),
+                _AmountLine(
+                  label: l10n.cashierNonRevenuePreviousAmount,
+                  value: '₫${currency.format(previousAmount)}',
+                ),
+                const SizedBox(height: 8),
+                _AmountLine(
+                  label: l10n.cashierPaymentDue,
+                  value: '₫${currency.format(currentAmount)}',
+                  prominent: true,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                key: const Key('cashier_non_revenue_amount_changed_confirm'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(l10n.cashierNonRevenueConfirmUpdatedAmount),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<({Map<String, dynamic> payment, CashierOrder order})?>
+  _processNonRevenueWithReconfirmation({
+    required PaymentNotifier notifier,
+    required String storeId,
+    required CashierOrder order,
+    required Map<String, String> input,
+  }) async {
+    var amount = order.remainingDue;
+    var currentOrder = order;
+
+    while (mounted) {
+      final payment = await notifier.processNonRevenuePayment(
+        storeId: storeId,
+        orderId: order.orderId,
+        amount: amount,
+        type: input['type'] ?? '',
+        reason: input['reason'] ?? '',
+        staffName: input['staffName'],
+        managerPin: input['managerPin'] ?? '',
+      );
+      if (payment != null) {
+        return (payment: payment, order: currentOrder);
+      }
+
+      final refreshedState = ref.read(paymentProvider);
+      if (refreshedState.error != nonRevenueAmountChangedError) {
+        return null;
+      }
+      final refreshedOrder = refreshedState.selectedOrder;
+      if (refreshedOrder == null ||
+          refreshedOrder.orderId != order.orderId ||
+          refreshedOrder.remainingDue <= 0) {
+        notifier.clearError();
+        return null;
+      }
+
+      final confirmed = await _showNonRevenueAmountChangedDialog(
+        previousAmount: amount,
+        currentAmount: refreshedOrder.remainingDue,
+      );
+      if (!confirmed) {
+        notifier.clearError();
+        return null;
+      }
+      currentOrder = refreshedOrder;
+      amount = refreshedOrder.remainingDue;
+    }
+
+    return null;
   }
 
   Future<Map<String, String>?> _showServiceItemDialog({
@@ -1967,33 +2064,36 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       }
                     }
 
-                    final payment = nonRevenueInput == null
-                        ? await notifier.processPayment(
-                            storeId,
-                            selectedOrder.orderId,
-                            selectedOrder.remainingDue,
-                            method,
-                          )
-                        : await notifier.processNonRevenuePayment(
-                            storeId: storeId,
-                            orderId: selectedOrder.orderId,
-                            amount: selectedOrder.remainingDue,
-                            type: nonRevenueInput['type'] ?? '',
-                            reason: nonRevenueInput['reason'] ?? '',
-                            staffName: nonRevenueInput['staffName'],
-                            managerPin: nonRevenueInput['managerPin'] ?? '',
-                          );
+                    Map<String, dynamic>? payment;
+                    var paymentOrder = selectedOrder;
+                    if (nonRevenueInput == null) {
+                      payment = await notifier.processPayment(
+                        storeId,
+                        selectedOrder.orderId,
+                        selectedOrder.remainingDue,
+                        method,
+                      );
+                    } else {
+                      final result = await _processNonRevenueWithReconfirmation(
+                        notifier: notifier,
+                        storeId: storeId,
+                        order: selectedOrder,
+                        input: nonRevenueInput,
+                      );
+                      payment = result?.payment;
+                      paymentOrder = result?.order ?? selectedOrder;
+                    }
                     if (mounted && ref.read(paymentProvider).paymentSuccess) {
-                      if (!selectedOrder.fulfillmentMode.isPaperless) {
+                      if (!paymentOrder.fulfillmentMode.isPaperless) {
                         await _printReceipt(
-                          order: selectedOrder,
+                          order: paymentOrder,
                           method: method,
                           cashTender: cashTender,
                         );
                       }
                       setState(() {
                         _selectedMethod = null;
-                        _lastCompletedOrderId = selectedOrder.orderId;
+                        _lastCompletedOrderId = paymentOrder.orderId;
                         _showPaymentQueueOnCompact = true;
                       });
                       final proofRequired = requiresPaymentProof(method);
@@ -2059,7 +2159,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           barrierDismissible: false,
                           builder: (_) => RedInvoiceModal(
                             key: const Key('cashier_single_red_invoice_dialog'),
-                            orderId: selectedOrder.orderId,
+                            orderId: paymentOrder.orderId,
                             storeId: storeId,
                           ),
                         );
@@ -2068,7 +2168,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       final receiptAccess = context.mounted
                           ? await _prepareDigitalReceipt(
                               storeId: storeId,
-                              order: selectedOrder,
+                              order: paymentOrder,
                               cashTender: cashTender,
                             )
                           : null;
@@ -2076,7 +2176,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       if (context.mounted) {
                         await _showPaymentCompletion(
                           storeId: storeId,
-                          order: selectedOrder,
+                          order: paymentOrder,
                           paymentMethod: method,
                           cashTender: cashTender,
                           receiptAccess: receiptAccess,

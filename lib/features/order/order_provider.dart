@@ -818,6 +818,8 @@ String _mapOrderError(Object error, String fallbackPrefix) {
         'You do not have permission to change this order.',
       'ORDER_NOT_FOUND' => 'The selected order could not be found.',
       'ORDER_NOT_MUTABLE' => 'This order can no longer be changed.',
+      'ORDER_NON_REVENUE_PAYMENT_STARTED' =>
+        'Service checkout has started. Additional items cannot be added.',
       'ORDER_NOT_CANCELLABLE' =>
         'Only pending or confirmed orders can be cancelled.',
       'BUFFET_GUEST_COUNT_REQUIRED' =>

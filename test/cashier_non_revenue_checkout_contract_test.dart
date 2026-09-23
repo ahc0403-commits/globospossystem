@@ -7,6 +7,8 @@ import 'helpers/production_gate_test_support.dart';
 void main() {
   const migrationPath =
       'supabase/migrations/20260723030000_cashier_non_revenue_checkout.sql';
+  const concurrencyMigrationPath =
+      'supabase/migrations/20260923010000_non_revenue_checkout_concurrency.sql';
 
   test('non-revenue checkout is atomic, classified, and audited', () {
     final sql = File(migrationPath).readAsStringSync();
@@ -91,6 +93,61 @@ void main() {
       contains('Future<Map<String, dynamic>?> processNonRevenuePayment'),
     );
     expect(service, contains("'process_non_revenue_payment'"));
+  });
+
+  test('service checkout rejects stale totals and supports safe recovery', () {
+    final sql = File(concurrencyMigrationPath).readAsStringSync();
+    final provider = File(
+      'lib/features/payment/payment_provider.dart',
+    ).readAsStringSync();
+    final cashier = File(
+      'lib/features/cashier/cashier_screen.dart',
+    ).readAsStringSync();
+
+    expect(sql, contains("p_method = 'SERVICE'"));
+    expect(sql, contains("DETAIL = 'SERVICE_TOTAL_CHANGED'"));
+    expect(sql, contains('v_order_status IS DISTINCT FROM \'completed\''));
+    expect(sql, contains('v_resuming := EXISTS'));
+    expect(sql, contains('is_revenue IS DISTINCT FROM false'));
+    expect(sql, contains('ORDER_NON_REVENUE_PAYMENT_STARTED'));
+    expect(sql, contains('QR_ORDER_PAYMENT_IN_PROGRESS'));
+    expect(provider, contains("error.details == 'SERVICE_TOTAL_CHANGED'"));
+    expect(provider, contains('await loadOrders(storeId)'));
+    expect(cashier, contains('_processNonRevenueWithReconfirmation'));
+    expect(
+      cashier,
+      contains("Key('cashier_non_revenue_amount_changed_dialog')"),
+    );
+  });
+
+  test('concurrency migration has production preflight and verification', () {
+    final preflight = File(
+      'scripts/preflight_non_revenue_checkout_concurrency.sql',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_non_revenue_checkout_concurrency.sql',
+    ).readAsStringSync();
+    final rollback = File(
+      'scripts/rollback_non_revenue_checkout_concurrency.sql',
+    ).readAsStringSync();
+
+    expect(
+      preflight,
+      contains('NON_REVENUE_CONCURRENCY_PREFLIGHT_PAYMENT_MISSING'),
+    );
+    expect(
+      verification,
+      contains('NON_REVENUE_CONCURRENCY_VERIFY_SERVICE_EXACTNESS_MISSING'),
+    );
+    expect(
+      verification,
+      contains('NON_REVENUE_CONCURRENCY_VERIFY_PRIVATE_CORE_EXPOSED'),
+    );
+    expect(
+      rollback,
+      contains('NON_REVENUE_CONCURRENCY_ROLLBACK_BACKUP_MISSING'),
+    );
+    expect(rollback, contains('RENAME TO add_items_to_order'));
   });
 
   test('discount modal blocks an empty reason', () {
