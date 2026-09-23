@@ -23,9 +23,9 @@ final _time0 = DateTime.utc(2026, 8, 21, 12);
 const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
-  // Intentional bank QR selection fix; cashier overlay tests cover QR and alerts.
+  // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   'lib/features/cashier/cashier_screen.dart':
-      '5559b9a302a110340912a5524f074e59bb1efb4125a5445e408032079c51c717',
+      '293cffae0d0de2c027b69e74f0d2ebc0b2a4afb083e5fb95a7af68c322bd7db1',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   // Intentional event-merge fix; behavioral regressions live in
@@ -50,16 +50,16 @@ const _frozenAlertFiles = <String, String>{
       'c58c3e55574c01dbbe2d329d78def8b2d085e3808d3b7e79d3cb1caceee08c93',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
-  // 2026-09-20: promotion and QR takeout copy are independent. Arrival
-  // behavior remains covered below for all customer/staff locales.
+  // Promotion, QR takeout, and non-revenue amount review copy are independent.
+  // Arrival behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      '4ced25f637e1d4b9b5c3d9924063777da44fbbde691372dfedc6c4b916f98e18',
+      '323bb3b02644e9db750264df23c15b995dfe3d7156d5c5f5685aba153af50854',
   'lib/l10n/app_localizations_ko.dart':
-      '61ee8572d02437e5a946a655278716df85f55c9009034e5326b22a371b94dba2',
+      '83624981e95c9fc4737db8287abf7e675f9a19ba5399c98a04c09290ee139add',
   'lib/l10n/app_localizations_vi.dart':
-      '82b271b4fcc26f829c52cce57f9667290749dd8449b7703c57d10f194331709d',
+      '31837972b4b6c1e2ca55872d91c229030c4aba400be040b38c72c4736fc65b86',
   'lib/l10n/app_localizations_en.dart':
-      'ac460c479dac8cfe4275288a8fb41c423987e334bce7e18e6e7ef489f7358d7e',
+      '45fa0e1638b2db71c1de2db3ebb642ca96c7d4d7b148345be21c6a67a489878a',
 };
 
 void main() {

@@ -15,8 +15,9 @@ const _frozenFiles = <String, String>{
   // Cashier menu cancellation replaces the unserved-only action.
   // Timed KDS and cashier cancel/undo tests cover the requested workflow.
   // menu_language_switch_test + routed/overlay operational suites cover behavior.
+  // Non-revenue checkout now reconfirms totals after concurrent additions.
   'lib/features/cashier/cashier_screen.dart':
-      '5559b9a302a110340912a5524f074e59bb1efb4125a5445e408032079c51c717',
+      '293cffae0d0de2c027b69e74f0d2ebc0b2a4afb083e5fb95a7af68c322bd7db1',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
