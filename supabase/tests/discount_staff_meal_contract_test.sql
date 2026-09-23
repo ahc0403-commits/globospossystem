@@ -13,7 +13,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
-SELECT plan(14);
+SELECT plan(16);
 
 CREATE TEMP TABLE _discount_staff_meal_results (
   scenario text,
@@ -104,7 +104,8 @@ VALUES
   (:store_id, 'DSM3', 4, 'available'),
   (:store_id, 'DSM4', 4, 'available'),
   (:store_id, 'DSM5', 4, 'available'),
-  (:store_id, 'DSM6', 4, 'available');
+  (:store_id, 'DSM6', 4, 'available'),
+  (:store_id, 'DSM7', 4, 'available');
 
 DO $setup_pin$
 BEGIN
@@ -192,18 +193,29 @@ $$;
 DO $process_payment_contract$
 DECLARE
   v_wrapper_def text;
+  v_promotion_wrapper_def text;
   v_def text;
 BEGIN
   SELECT pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure)
   INTO v_wrapper_def;
 
   SELECT pg_get_functiondef(
+    'public.process_payment_before_promotion_read_split(uuid,uuid,numeric,text)'::regprocedure
+  )
+  INTO v_promotion_wrapper_def;
+
+  SELECT pg_get_functiondef(
     'public.process_payment_without_scoped_promotions(uuid,uuid,numeric,text)'::regprocedure
   )
   INTO v_def;
 
-  IF v_wrapper_def !~ 'process_payment_without_scoped_promotions' THEN
+  IF v_wrapper_def !~ 'process_payment_before_promotion_read_split'
+     OR v_promotion_wrapper_def !~ 'process_payment_without_scoped_promotions' THEN
     RAISE EXCEPTION 'process_payment must delegate to the verified payment core';
+  END IF;
+
+  IF v_wrapper_def !~ 'SERVICE_TOTAL_CHANGED' THEN
+    RAISE EXCEPTION 'process_payment lost exact-total SERVICE settlement guard';
   END IF;
 
   IF v_def ~* 'INSERT\s+INTO\s+(public\.)?einvoice_jobs' THEN
@@ -761,6 +773,177 @@ EXCEPTION WHEN OTHERS THEN
   VALUES ('runtime staff meal non-service rejected', false, SQLERRM);
 END;
 $runtime_staff_meal_non_service_rejected$;
+
+DO $runtime_stale_service_total_rejected$
+DECLARE
+  v_staff_order public.orders%ROWTYPE;
+  v_payment_count integer;
+  v_order_status text;
+  v_detail text;
+BEGIN
+  PERFORM pg_temp.act_as('d5c00000-0000-4000-8000-0000000000a1');
+  v_staff_order := public.create_staff_meal_order(
+    'd5c00000-0000-4000-8000-000000000001',
+    jsonb_build_array(
+      jsonb_build_object(
+        'menu_item_id',
+        'd5c00000-0000-4000-8000-0000000000f1',
+        'quantity',
+        1
+      )
+    ),
+    NULL,
+    'stale service total rejection',
+    '2468'
+  );
+
+  PERFORM pg_temp.ready_order(v_staff_order.id);
+  PERFORM pg_temp.act_as('d5c00000-0000-4000-8000-0000000000a3');
+
+  BEGIN
+    PERFORM public.process_payment(
+      v_staff_order.id,
+      'd5c00000-0000-4000-8000-000000000001',
+      100000,
+      'SERVICE'
+    );
+    RAISE EXCEPTION 'stale SERVICE amount unexpectedly succeeded';
+  EXCEPTION
+    WHEN raise_exception THEN
+      GET STACKED DIAGNOSTICS v_detail = PG_EXCEPTION_DETAIL;
+      IF SQLERRM <> 'PAYMENT_AMOUNT_MISMATCH'
+         OR v_detail <> 'SERVICE_TOTAL_CHANGED' THEN
+        RAISE;
+      END IF;
+  END;
+
+  SELECT count(payment.id), order_row.status
+  INTO v_payment_count, v_order_status
+  FROM public.orders order_row
+  LEFT JOIN public.payments payment ON payment.order_id = order_row.id
+  WHERE order_row.id = v_staff_order.id
+  GROUP BY order_row.status;
+
+  IF v_payment_count <> 0 OR v_order_status <> 'serving' THEN
+    RAISE EXCEPTION 'stale SERVICE attempt was not atomic: payments %, status %',
+      v_payment_count, v_order_status;
+  END IF;
+
+  PERFORM public.process_payment(
+    v_staff_order.id,
+    'd5c00000-0000-4000-8000-000000000001',
+    108000,
+    'SERVICE'
+  );
+
+  INSERT INTO _discount_staff_meal_results
+  VALUES (
+    'runtime stale service total rejected',
+    true,
+    'stale SERVICE rolls back fully and the confirmed current total completes'
+  );
+EXCEPTION WHEN OTHERS THEN
+  INSERT INTO _discount_staff_meal_results
+  VALUES ('runtime stale service total rejected', false, SQLERRM);
+END;
+$runtime_stale_service_total_rejected$;
+
+DO $runtime_partial_non_revenue_recovery$
+DECLARE
+  v_order_id uuid;
+  v_order_status text;
+  v_payment_count integer;
+  v_payment_total numeric;
+BEGIN
+  v_order_id := pg_temp.new_customer_order('DSM7');
+  PERFORM pg_temp.ready_order(v_order_id);
+  PERFORM pg_temp.act_as('d5c00000-0000-4000-8000-0000000000a3');
+
+  UPDATE public.orders
+  SET order_purpose = 'staff_meal',
+      non_revenue_type = 'staff_meal',
+      non_revenue_reason = 'historical partial service payment',
+      non_revenue_staff_name = 'DSM Staff',
+      non_revenue_classified_by = auth.uid(),
+      non_revenue_classified_at = now()
+  WHERE id = v_order_id;
+
+  INSERT INTO public.payments (
+    order_id,
+    restaurant_id,
+    amount,
+    method,
+    processed_by,
+    is_revenue,
+    amount_portion
+  ) VALUES (
+    v_order_id,
+    'd5c00000-0000-4000-8000-000000000001',
+    50000,
+    'OTHER',
+    auth.uid(),
+    false,
+    50000
+  );
+
+  PERFORM pg_temp.act_as('d5c00000-0000-4000-8000-0000000000a1');
+  BEGIN
+    PERFORM public.add_items_to_order(
+      v_order_id,
+      'd5c00000-0000-4000-8000-000000000001',
+      jsonb_build_array(
+        jsonb_build_object(
+          'menu_item_id',
+          'd5c00000-0000-4000-8000-0000000000f3',
+          'quantity',
+          1
+        )
+      )
+    );
+    RAISE EXCEPTION 'additional item accepted after non-revenue payment';
+  EXCEPTION
+    WHEN raise_exception THEN
+      IF SQLERRM <> 'ORDER_NON_REVENUE_PAYMENT_STARTED' THEN
+        RAISE;
+      END IF;
+  END;
+
+  PERFORM pg_temp.act_as('d5c00000-0000-4000-8000-0000000000a3');
+  PERFORM public.process_non_revenue_payment(
+    v_order_id,
+    'd5c00000-0000-4000-8000-000000000001',
+    58000,
+    'staff_meal',
+    'historical partial service payment',
+    'DSM Staff',
+    '2468'
+  );
+
+  SELECT order_row.status, count(payment.id), sum(payment.amount_portion)
+  INTO v_order_status, v_payment_count, v_payment_total
+  FROM public.orders order_row
+  LEFT JOIN public.payments payment ON payment.order_id = order_row.id
+  WHERE order_row.id = v_order_id
+  GROUP BY order_row.status;
+
+  IF v_order_status <> 'completed'
+     OR v_payment_count <> 2
+     OR v_payment_total <> 108000 THEN
+    RAISE EXCEPTION 'partial non-revenue recovery mismatch: status %, count %, total %',
+      v_order_status, v_payment_count, v_payment_total;
+  END IF;
+
+  INSERT INTO _discount_staff_meal_results
+  VALUES (
+    'runtime partial non-revenue recovery',
+    true,
+    'historical partial SERVICE can finish while new additions stay blocked'
+  );
+EXCEPTION WHEN OTHERS THEN
+  INSERT INTO _discount_staff_meal_results
+  VALUES ('runtime partial non-revenue recovery', false, SQLERRM);
+END;
+$runtime_partial_non_revenue_recovery$;
 
 DO $runtime_selected_menu_promotion$
 DECLARE
