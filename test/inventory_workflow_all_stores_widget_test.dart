@@ -91,11 +91,28 @@ class _Inventory extends InventoryService {
     bool mineOnly = false,
     int offset = 0,
     int limit = 80,
+    String search = '',
   }) async {
     listLoads++;
+    final normalized = search.toLowerCase();
+    final matchesSearch =
+        normalized.isEmpty ||
+        order['purchase_order_no'].toString().toLowerCase().contains(
+          normalized,
+        ) ||
+        'supplier'.contains(normalized) ||
+        lines.any(
+          (line) => line['product']['name'].toString().toLowerCase().contains(
+            normalized,
+          ),
+        );
     return {
-      'orders': statuses?.contains(order['status']) == true ? [order] : [],
-      'total': statuses?.contains(order['status']) == true ? 1 : 0,
+      'orders': statuses?.contains(order['status']) == true && matchesSearch
+          ? [order]
+          : [],
+      'total': statuses?.contains(order['status']) == true && matchesSearch
+          ? 1
+          : 0,
       'counts': {'ordered': 301, 'submitted': 7},
       'stores': [
         {'id': 'operating-store', 'name': 'Operating store'},
@@ -443,6 +460,53 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(field).controller!.text, '7');
     expect(service.submissions, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    router.dispose();
+    await events.close();
+  });
+
+  testWidgets('submitted receipt is read-only for its maker', (tester) async {
+    final service = _Inventory();
+    service.receipt['submitted_at'] = '2026-09-27T08:00:00Z';
+    final events = StreamController<PosLiveEvent>.broadcast();
+    final router = await _mount(tester, service, events);
+    await tester.tap(find.text('Receiving'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('inventory_receipt_submit')), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('inventory_receipt_quantity_line-0')),
+          )
+          .enabled,
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    router.dispose();
+    await events.close();
+  });
+
+  testWidgets('order search submits all three query types to the service', (
+    tester,
+  ) async {
+    final service = _Inventory();
+    final events = StreamController<PosLiveEvent>.broadcast();
+    final router = await _mount(tester, service, events);
+    await tester.tap(find.text('Placed (301)'));
+    await tester.pumpAndSettle();
+    final search = find.byKey(const Key('inventory_workflow_order_search'));
+    await tester.enterText(search, 'Ingredient 19');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('PO-OPERATING'), findsWidgets);
+    await tester.enterText(search, 'no-such-ingredient');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('PO-OPERATING'), findsNothing);
+    await tester.enterText(search, 'Supplier');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('PO-OPERATING'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
     router.dispose();
     await events.close();

@@ -46,6 +46,7 @@ class InventoryPurchaseScreen extends ConsumerStatefulWidget {
 
 class _InventoryPurchaseScreenState
     extends ConsumerState<InventoryPurchaseScreen> {
+  final _purchaseHistoryDetailKey = GlobalKey();
   late int _selectedIndex;
   String? _loadedStoreId;
   String? _printingOrderId;
@@ -1113,6 +1114,7 @@ class _InventoryPurchaseScreenState
         if (detail.order != null) ...[
           const SizedBox(height: ToastSpacingTokens.md),
           _DataCard(
+            key: _purchaseHistoryDetailKey,
             title: l10n.inventoryPurchaseSelectedPreview,
             trailing: Wrap(
               spacing: ToastSpacingTokens.sm,
@@ -1160,10 +1162,9 @@ class _InventoryPurchaseScreenState
                   disabledReason: canConfirmReceipt
                       ? PosActionDisabledReason.noSelection
                       : PosActionDisabledReason.upstreamPending,
-                  onPressed: canConfirmReceipt
-                      ? () => _showReceiptConfirmationDialog(
-                          storeId: storeId,
-                          detail: detail,
+                  onPressed: canConfirmReceipt && detail.selectedOrderId != null
+                      ? () => context.go(
+                          '/inventory-orders/${detail.selectedOrderId}',
                         )
                       : null,
                   compact: true,
@@ -1300,93 +1301,15 @@ class _InventoryPurchaseScreenState
 
   Future<void> _selectPurchaseOrder(String orderId) async {
     await ref.read(inventoryPurchaseOrderDetailProvider.notifier).load(orderId);
-  }
-
-  Future<void> _showReceiptConfirmationDialog({
-    required String storeId,
-    required InventoryPurchaseOrderDetailState detail,
-  }) async {
-    final order = detail.order;
-    if (order == null) return;
-
-    final memoController = TextEditingController();
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        key: const Key('inventory_receipt_confirmation_dialog'),
-        title: Text(l10n.inventoryPurchaseReceiveTitle),
-        content: SizedBox(
-          width: 520,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                l10n.inventoryPurchaseRemainingForOrder(
-                  _string(order['purchase_order_no'], fallback: '-'),
-                  _quantity(order['total_remaining_quantity_base']),
-                ),
-              ),
-              const SizedBox(height: ToastSpacingTokens.md),
-              ToastStatusBadge(
-                label: l10n.inventoryPurchaseConfirmAllRemaining,
-                color: ToastColorTokens.warning,
-                icon: Icons.info_outline,
-              ),
-              const SizedBox(height: ToastSpacingTokens.md),
-              TextField(
-                controller: memoController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: l10n.inventoryPurchaseReceiptMemo,
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              ref
-                  .read(inventoryPurchaseReceivingRuntimeProvider.notifier)
-                  .markCancelled();
-              Navigator.of(dialogContext).pop(false);
-            },
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.confirm),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    final ok = await ref
-        .read(inventoryPurchaseReceivingRuntimeProvider.notifier)
-        .confirmRemainingReceipt(
-          order: order,
-          memo: _nullableText(memoController.text),
-        );
     if (!mounted) return;
-    if (ok) {
-      final orderId = detail.selectedOrderId;
-      if (orderId != null) {
-        await ref
-            .read(inventoryPurchaseOrderDetailProvider.notifier)
-            .load(orderId);
-      }
-      await Future.wait([
-        ref.read(inventoryPurchaseOrderSummaryProvider.notifier).load(storeId),
-        ref.read(inventoryPurchaseOverviewProvider.notifier).load(storeId),
-        ref.read(inventoryPurchaseStockStatusProvider.notifier).load(storeId),
-        ref
-            .read(inventoryPurchaseProductCatalogProvider.notifier)
-            .load(storeId),
-      ]);
+    await WidgetsBinding.instance.endOfFrame;
+    final detailContext = _purchaseHistoryDetailKey.currentContext;
+    if (mounted && detailContext != null && detailContext.mounted) {
+      await Scrollable.ensureVisible(
+        detailContext,
+        duration: const Duration(milliseconds: 250),
+        alignment: 0.05,
+      );
     }
   }
 
@@ -4819,7 +4742,12 @@ class _PageShell extends StatelessWidget {
 }
 
 class _DataCard extends StatelessWidget {
-  const _DataCard({required this.title, required this.child, this.trailing});
+  const _DataCard({
+    super.key,
+    required this.title,
+    required this.child,
+    this.trailing,
+  });
 
   final String title;
   final Widget child;

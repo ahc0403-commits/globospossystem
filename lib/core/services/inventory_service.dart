@@ -893,14 +893,18 @@ class InventoryService {
     bool mineOnly = false,
     int offset = 0,
     int limit = 80,
+    String search = '',
   }) => _rpcMap(
-    'get_inventory_workflow_orders',
+    search.trim().isEmpty
+        ? 'get_inventory_workflow_orders'
+        : 'search_inventory_workflow_orders',
     params: {
       'p_store_id': storeId,
       'p_statuses': statuses,
       'p_mine_only': mineOnly,
       'p_offset': offset,
       'p_limit': limit,
+      if (search.trim().isNotEmpty) 'p_search': search.trim(),
     },
   );
 

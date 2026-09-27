@@ -45,6 +45,8 @@ class _InventoryOrderWorkflowScreenState
   InventoryService get _service => widget.service ?? inventoryService;
   final _receiptControllers = <String, TextEditingController>{};
   final _receiptPriceControllers = <String, TextEditingController>{};
+  final _orderSearchController = TextEditingController();
+  String _orderSearch = '';
   bool _receiptDirty = false;
   String? _formOrderId;
   String? _receiptId;
@@ -96,6 +98,7 @@ class _InventoryOrderWorkflowScreenState
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _syncWatchdog?.cancel();
+    _orderSearchController.dispose();
     for (final controller in _receiptControllers.values) {
       controller.dispose();
     }
@@ -121,7 +124,18 @@ class _InventoryOrderWorkflowScreenState
       PermissionUtils.canManageInventorySupplierPrices(_role);
   String get _scopeKey => '${ref.read(authProvider).user?.id}:$_role:$_storeId';
   String get _queryKey =>
-      '$_scopeKey:$_section:$_orderGroup:$_mineOnly:$_selectedAccountingStoreId';
+      '$_scopeKey:$_section:$_orderGroup:$_mineOnly:$_selectedAccountingStoreId:$_orderSearch';
+
+  void _applyOrderSearch() {
+    final query = _orderSearchController.text.trim();
+    if (query == _orderSearch) return;
+    setState(() {
+      _orderSearch = query;
+      _orders = [];
+      _totalOrders = 0;
+    });
+    unawaited(_load());
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -181,6 +195,7 @@ class _InventoryOrderWorkflowScreenState
           mineOnly: !receiving && _mineOnly,
           offset: (append ? _orders.length : 0) + rows.length,
           limit: (targetCount - rows.length).clamp(1, 240),
+          search: _orderSearch,
         );
         if (!mounted || scope != _scopeKey || query != _queryKey) return;
         if (page.isEmpty) page = next;
@@ -489,7 +504,7 @@ class _InventoryOrderWorkflowScreenState
             ),
             IconButton(
               tooltip: _text(ko: '새로고침', en: 'Refresh', vi: 'Làm mới'),
-              onPressed: _loading ? null : _load,
+              onPressed: _refreshInPlace,
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
@@ -806,6 +821,29 @@ class _InventoryOrderWorkflowScreenState
           ),
         ),
         if (!receivableOnly) _buildStatusFilters(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 12, 10),
+          child: TextField(
+            key: const Key('inventory_workflow_order_search'),
+            controller: _orderSearchController,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _applyOrderSearch(),
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(Icons.search),
+              hintText: _text(
+                ko: '원재료명 · 주문번호 · 공급업체명 검색',
+                en: 'Search ingredient, order number or supplier',
+                vi: 'Tìm nguyên liệu, số đơn hoặc nhà cung cấp',
+              ),
+              suffixIcon: IconButton(
+                tooltip: _text(ko: '검색', en: 'Search', vi: 'Tìm kiếm'),
+                onPressed: _applyOrderSearch,
+                icon: const Icon(Icons.arrow_forward),
+              ),
+            ),
+          ),
+        ),
         if (_isAccounting)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 12, 10),
@@ -1312,8 +1350,14 @@ class _InventoryOrderWorkflowScreenState
     }.contains(_string(order['status']));
     final draft = _draftReceipt(_detail);
     final canCapture =
-        receivable && PermissionUtils.canCreateInventoryPurchaseOrder(_role);
-    final canFinalize = receivable && _isAccounting && draft != null;
+        receivable &&
+        PermissionUtils.canCreateInventoryPurchaseOrder(_role) &&
+        (draft == null || _string(draft['submitted_at']).isEmpty);
+    final canFinalize =
+        receivable &&
+        _isAccounting &&
+        draft != null &&
+        _string(draft['submitted_at']).isNotEmpty;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -1453,6 +1497,7 @@ class _InventoryOrderWorkflowScreenState
     final receipts = _maps(_detail?['receipts']);
     final canCapture =
         PermissionUtils.canCreateInventoryPurchaseOrder(_role) &&
+        (draft == null || _string(draft['submitted_at']).isEmpty) &&
         const {
           'ordered',
           'partially_received',
@@ -1475,6 +1520,16 @@ class _InventoryOrderWorkflowScreenState
               ),
               style: Theme.of(context).textTheme.titleMedium,
             ),
+            if (draft != null && _string(draft['submitted_at']).isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                _text(
+                  ko: '입고 내역이 제출되었습니다. 회계 계정의 최종 검증을 기다리고 있습니다.',
+                  en: 'Receipt submitted. Awaiting final accounting verification.',
+                  vi: 'Đã gửi phiếu nhập. Đang chờ kế toán xác nhận cuối cùng.',
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             if (_receiptDirty)
               Text(

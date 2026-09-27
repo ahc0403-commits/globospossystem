@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
@@ -224,7 +225,7 @@ void main() {
     );
   });
 
-  testWidgets('all twelve Inventory Purchase dialog entrypoints execute', (
+  testWidgets('Inventory Purchase dialogs and receipt route execute', (
     tester,
   ) async {
     final ingredientFile = XFile.fromData(
@@ -267,6 +268,29 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final router = GoRouter(
+      initialLocation: '/inventory-purchase',
+      routes: [
+        GoRoute(
+          path: '/inventory-purchase',
+          builder: (context, state) => Scaffold(
+            body: InventoryPurchaseScreen(
+              initialSectionIndex: 2,
+              autoLoad: false,
+              pickRecipeImportFile: () async => recipeFiles.removeAt(0),
+              pickIngredientImportFile: () async => ingredientFile,
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/inventory-orders/:orderId',
+          builder: (context, state) => Scaffold(
+            body: Text('Receipt workflow ${state.pathParameters['orderId']}'),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -294,7 +318,7 @@ void main() {
             (ref) => _NewMenuNotifier(),
           ),
         ],
-        child: MaterialApp(
+        child: MaterialApp.router(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.build(),
           locale: const Locale('vi'),
@@ -305,14 +329,7 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: Scaffold(
-            body: InventoryPurchaseScreen(
-              initialSectionIndex: 2,
-              autoLoad: false,
-              pickRecipeImportFile: () async => recipeFiles.removeAt(0),
-              pickIngredientImportFile: () async => ingredientFile,
-            ),
-          ),
+          routerConfig: router,
         ),
       ),
     );
@@ -377,11 +394,15 @@ void main() {
       const Key('inventory_repeat_purchase_order_action'),
       const Key('inventory_repeat_purchase_order_dialog'),
     );
-    await _openAndDismiss(
-      tester,
+    final receiptAction = find.byKey(
       const Key('inventory_receipt_confirmation_action'),
-      const Key('inventory_receipt_confirmation_dialog'),
     );
+    await tester.ensureVisible(receiptAction);
+    await tester.tap(receiptAction);
+    await tester.pumpAndSettle();
+    expect(find.text('Receipt workflow purchase-order-1'), findsOneWidget);
+    router.go('/inventory-purchase');
+    await tester.pumpAndSettle();
 
     await _selectSection(tester, 4);
     await _openAndDismiss(

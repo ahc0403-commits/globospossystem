@@ -51,3 +51,11 @@ run_sql "$INVENTORY_ROOT/scripts/verify_inventory_workflow_all_stores.sql"
 
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_receiving_integrity.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_v2_workflow.test.sql"
+run_sql "$INVENTORY_ROOT/scripts/preflight_inventory_receipt_submission_lock_audit.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20260927010000_inventory_receipt_submission_lock_audit.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_inventory_receipt_submission_lock_audit.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/inventory_receipt_submission_lock_audit.test.sql"
+run_sql "$INVENTORY_ROOT/scripts/preflight_inventory_workflow_order_search.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20260927011000_inventory_workflow_order_search.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_inventory_workflow_order_search.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/inventory_workflow_order_search.test.sql"
