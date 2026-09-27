@@ -111,12 +111,11 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/inventory_purchase/inventory_purchase_screen.dart',
-    directCalls: 14,
+    directCalls: 13,
     test: 'test/inventory_purchase_overlay_operational_test.dart',
     markers: [
       'inventory_recommendation_run_dialog',
       'inventory_recommendation_adjustment_dialog',
-      'inventory_receipt_confirmation_dialog',
       'inventory_stock_audit_dialog',
       'inventory_supplier_dialog',
       'inventory_product_dialog',
@@ -370,7 +369,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 131 dialog and sheet entrypoints map to operational tests', () {
+  test('all 130 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -382,10 +381,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 130);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 129);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      131,
+      130,
     );
 
     final settings = File(
