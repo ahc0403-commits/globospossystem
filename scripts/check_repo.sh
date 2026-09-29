@@ -25,6 +25,9 @@ bash scripts/test_admin_menu_item_archive.sh
 printf 'CHECK_REPO_STEP=kds_tray_floor_partial_batch_sql\n'
 bash scripts/test_kds_tray_floor_partial_batch.sh
 
+printf 'CHECK_REPO_STEP=beverage_sugar_vat_sql\n'
+bash test/beverage_sugar_vat_sql_test.sh
+
 printf 'CHECK_REPO_STEP=qr_menu_category_auto_sync_sql\n'
 bash test/qr_menu_category_auto_sync_sql_test.sh
 

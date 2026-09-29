@@ -1,3 +1,5 @@
+import 'vat_allocation.dart';
+
 const String vatPricingModeExclusive = 'exclusive';
 const String vatPricingModeInclusive = 'inclusive';
 
@@ -26,6 +28,7 @@ class PaymentQuoteLine {
     this.isServiceItem = false,
     this.vatCategory,
     this.vatRate,
+    this.vatProfile = const [],
     this.payingAmountIncTax,
     this.discountAmount = 0,
   });
@@ -38,6 +41,7 @@ class PaymentQuoteLine {
   final bool isServiceItem;
   final String? vatCategory;
   final double? vatRate;
+  final List<Map<String, dynamic>> vatProfile;
   final double? payingAmountIncTax;
   final double discountAmount;
 }
@@ -70,8 +74,8 @@ PaymentQuoteResult calculatePaymentQuote({
   double discountTotal = 0,
 }) {
   var menuSubtotal = 0.0;
-  var foodPretaxSubtotal = 0.0;
-  var alcoholPretaxSubtotal = 0.0;
+  var vat8PretaxSubtotal = 0.0;
+  var vat10PretaxSubtotal = 0.0;
   var existingServiceChargeTotal = 0.0;
   var existingServiceChargeVatTotal = 0.0;
   var serviceItemTotal = 0.0;
@@ -122,17 +126,21 @@ PaymentQuoteResult calculatePaymentQuote({
     }
 
     final lineGross = _roundMoney(line.unitPrice * line.quantity);
-    final vatRate = line.vatCategory?.toLowerCase() == 'alcohol' ? 10.0 : 8.0;
-    late final double pretax;
-    late final double incTax;
-
-    if (vatPricingMode.toLowerCase() == vatPricingModeInclusive) {
-      incTax = lineGross;
-      pretax = _roundMoney(lineGross / (1 + (vatRate / 100)));
-    } else {
-      pretax = lineGross;
-      incTax = pretax + _roundMoney(pretax * vatRate / 100);
-    }
+    final vatRate = line.vatRate == 8 || line.vatRate == 10
+        ? line.vatRate!
+        : line.vatCategory?.toLowerCase() == 'alcohol'
+        ? 10.0
+        : 8.0;
+    final portions = calculateItemVat(
+      profile: line.vatProfile.isNotEmpty
+          ? line.vatProfile
+          : [
+              {'rate': vatRate, 'weight': 1},
+            ],
+      amount: lineGross,
+      pricingMode: vatPricingMode.toLowerCase(),
+    );
+    final incTax = portions.fold<double>(0, (sum, p) => sum + p.total);
 
     menuSubtotal += incTax;
     menuVatLines.add(
@@ -140,6 +148,7 @@ PaymentQuoteResult calculatePaymentQuote({
         id: line.id,
         incTaxCents: (incTax * 100).round(),
         vatRate: vatRate,
+        portions: portions,
         explicitDiscountCents: (line.discountAmount * 100).round(),
       ),
     );
@@ -147,18 +156,20 @@ PaymentQuoteResult calculatePaymentQuote({
         .round()
         .clamp(0, (incTax * 100).round())
         .toInt();
-    if (vatRate == 10.0) {
-      alcoholPretaxSubtotal += pretax;
-    } else {
-      foodPretaxSubtotal += pretax;
+    for (final portion in portions) {
+      if (portion.rate == 10) {
+        vat10PretaxSubtotal += portion.supply;
+      } else if (portion.rate == 8) {
+        vat8PretaxSubtotal += portion.supply;
+      }
     }
   }
 
   final generatedServiceCharge = _calculateGeneratedServiceCharge(
     enabled: serviceChargeEnabled && !hasExistingServiceCharge,
     rate: serviceChargeRate,
-    foodPretaxSubtotal: foodPretaxSubtotal,
-    alcoholPretaxSubtotal: alcoholPretaxSubtotal,
+    vat8PretaxSubtotal: vat8PretaxSubtotal,
+    vat10PretaxSubtotal: vat10PretaxSubtotal,
   );
   final serviceChargeTotal = hasExistingServiceCharge
       ? existingServiceChargeTotal
@@ -195,8 +206,8 @@ PaymentQuoteResult calculatePaymentQuote({
 ({double total, double vat}) _calculateGeneratedServiceCharge({
   required bool enabled,
   required double rate,
-  required double foodPretaxSubtotal,
-  required double alcoholPretaxSubtotal,
+  required double vat8PretaxSubtotal,
+  required double vat10PretaxSubtotal,
 }) {
   if (!enabled || rate <= 0) {
     return (total: 0, vat: 0);
@@ -204,14 +215,14 @@ PaymentQuoteResult calculatePaymentQuote({
 
   var total = 0.0;
   var vat = 0.0;
-  if (foodPretaxSubtotal > 0) {
-    final pretax = _roundMoney(foodPretaxSubtotal * rate / 100);
+  if (vat8PretaxSubtotal > 0) {
+    final pretax = _roundMoney(vat8PretaxSubtotal * rate / 100);
     final vatAmount = _roundMoney(pretax * 8 / 100);
     vat += vatAmount;
     total += pretax + vatAmount;
   }
-  if (alcoholPretaxSubtotal > 0) {
-    final pretax = _roundMoney(alcoholPretaxSubtotal * rate / 100);
+  if (vat10PretaxSubtotal > 0) {
+    final pretax = _roundMoney(vat10PretaxSubtotal * rate / 100);
     final vatAmount = _roundMoney(pretax * 10 / 100);
     vat += vatAmount;
     total += pretax + vatAmount;
@@ -266,10 +277,14 @@ double _calculateDiscountedMenuVat(
 
   var vatTotal = 0.0;
   for (final allocation in allocations) {
-    final incTaxCents = allocation.line.incTaxCents - allocation.cents;
-    final incTax = (incTaxCents < 0 ? 0 : incTaxCents) / 100;
-    final pretax = _roundMoney(incTax / (1 + (allocation.line.vatRate / 100)));
-    vatTotal += incTax - pretax;
+    final portions = allocation.line.portions;
+    final grossCents = portions.map((p) => (p.total * 100).round()).toList();
+    final discounts = allocateVatCents(allocation.cents, grossCents);
+    for (var i = 0; i < portions.length; i++) {
+      final incTax = (grossCents[i] - discounts[i]) / 100;
+      final pretax = _roundMoney(incTax / (1 + portions[i].rate / 100));
+      vatTotal += incTax - pretax;
+    }
   }
   return _roundMoney(vatTotal);
 }
@@ -279,12 +294,14 @@ class _PaymentVatLine {
     required this.id,
     required this.incTaxCents,
     required this.vatRate,
+    required this.portions,
     this.explicitDiscountCents = 0,
   });
 
   final String id;
   final int incTaxCents;
   final double vatRate;
+  final List<VatPortion> portions;
   final int explicitDiscountCents;
 }
 

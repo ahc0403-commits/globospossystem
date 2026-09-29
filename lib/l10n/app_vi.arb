@@ -4120,5 +4120,14 @@
   "revenueForecastSourceSavedProfile": "Thiết lập đã lưu",
   "revenueForecastSourceManualAssumption": "Giả định nhập thủ công",
   "revenueForecastSourceUnavailable": "Không có lịch sử đo · cần nhập",
-  "revenueForecastSourceProxy": "chỉ số thay thế theo sự kiện giao dịch"
+  "revenueForecastSourceProxy": "chỉ số thay thế theo sự kiện giao dịch",
+  "menuBeverageTax": "VAT theo lượng đường của đồ uống",
+  "menuTaxNotApplicable": "Không thuộc quy định đường của nước giải khát",
+  "menuSugarAtMostFive": "Không quá 5 g/100ml · VAT 8%",
+  "menuSugarAboveFive": "Trên 5 g/100ml · VAT 10%",
+  "menuSugarGrams": "Đường tổng số trên nhãn (g/100ml, tùy chọn)",
+  "menuTaxBasis": "Căn cứ nhãn / sản phẩm hoặc phân loại",
+  "menuSugarTaxHelp": "Năm 2026: trên 5 g/100ml áp dụng 10%; đúng 5 áp dụng 8%. Nếu chưa rõ số lượng, chọn nhóm đã xác minh và nhập căn cứ.",
+  "menuTaxInvalid": "Kiểm tra lượng đường, phân loại và căn cứ.",
+  "menuComboVat": "VAT theo thành phần"
 }

@@ -50,16 +50,16 @@ const _frozenAlertFiles = <String, String>{
       'c58c3e55574c01dbbe2d329d78def8b2d085e3808d3b7e79d3cb1caceee08c93',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
-  // Promotion, QR takeout, and non-revenue amount review copy are independent.
+  // Promotion, QR takeout, non-revenue review and beverage tax copy are independent.
   // Arrival behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      '323bb3b02644e9db750264df23c15b995dfe3d7156d5c5f5685aba153af50854',
+      'faba7c196538c05cd6c0491462cef04234a2428559900f69af89c96281308ff6',
   'lib/l10n/app_localizations_ko.dart':
-      '83624981e95c9fc4737db8287abf7e675f9a19ba5399c98a04c09290ee139add',
+      'bda845f9be39d6be1c624b2d8d4108512abf317acfba67d8f2e8743a2d1fe494',
   'lib/l10n/app_localizations_vi.dart':
-      '31837972b4b6c1e2ca55872d91c229030c4aba400be040b38c72c4736fc65b86',
+      'fa059a028307684ba406b9d38f003ce63bdc666207887d9ce84b13dd3823342e',
   'lib/l10n/app_localizations_en.dart':
-      '45fa0e1638b2db71c1de2db3ebb642ca96c7d4d7b148345be21c6a67a489878a',
+      '2cbe64b83f4cde56896b7d01b3d33392c001929c86fc46f6dc2f8e740433ed5d',
 };
 
 void main() {

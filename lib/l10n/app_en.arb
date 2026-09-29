@@ -4121,5 +4121,14 @@
   "revenueForecastSourceSavedProfile": "Saved settings",
   "revenueForecastSourceManualAssumption": "Manual assumption",
   "revenueForecastSourceUnavailable": "No measurable history · input required",
-  "revenueForecastSourceProxy": "transaction-event proxy"
+  "revenueForecastSourceProxy": "transaction-event proxy",
+  "menuBeverageTax": "Beverage sugar VAT",
+  "menuTaxNotApplicable": "Not subject to the beverage sugar rule",
+  "menuSugarAtMostFive": "At most 5 g/100ml · VAT 8%",
+  "menuSugarAboveFive": "Above 5 g/100ml · VAT 10%",
+  "menuSugarGrams": "Labelled total sugar (g/100ml, optional)",
+  "menuTaxBasis": "Label / product or classification basis",
+  "menuSugarTaxHelp": "2026: above 5 g/100ml is 10%; exactly 5 is 8%. If the exact amount is unknown, select a confirmed band and enter its basis.",
+  "menuTaxInvalid": "Check the sugar amount, classification and basis.",
+  "menuComboVat": "VAT by component"
 }

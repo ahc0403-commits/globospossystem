@@ -1,3 +1,4 @@
+import '../payments/beverage_tax.dart';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
@@ -135,11 +136,14 @@ class MenuService {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
     required int sortOrder,
   }) async {
     final response = await supabase.rpc(
-      'admin_create_menu_item_i18n_paperless',
+      beverageTax == null
+          ? 'admin_create_menu_item_i18n_paperless'
+          : 'admin_create_menu_item_with_tax',
       params: {
         'p_store_id': storeId,
         'p_category_id': categoryId,
@@ -147,6 +151,7 @@ class MenuService {
         'p_name_vi': nameVi,
         'p_name_en': nameEn,
         'p_paperless_name_vi': paperlessNameVi,
+        if (beverageTax != null) 'p_tax': beverageTax.toJson(),
         'p_price': price,
         'p_sort_order': sortOrder,
         'p_is_available': true,
@@ -229,16 +234,20 @@ class MenuService {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
   }) async {
     await supabase.rpc(
-      'admin_update_menu_item_i18n_paperless',
+      beverageTax == null
+          ? 'admin_update_menu_item_i18n_paperless'
+          : 'admin_update_menu_item_with_tax',
       params: {
         'p_item_id': itemId,
         'p_name_ko': nameKo,
         'p_name_vi': nameVi,
         'p_name_en': nameEn,
         'p_paperless_name_vi': paperlessNameVi,
+        if (beverageTax != null) 'p_tax': beverageTax.toJson(),
         'p_price': price,
       },
     );

@@ -1,3 +1,5 @@
+import '../../../core/payments/beverage_tax.dart';
+import '../widgets/beverage_tax_editor.dart';
 import '../../../core/i18n/menu_localization.dart';
 import 'dart:typed_data';
 
@@ -1017,6 +1019,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final paperlessNameViController = TextEditingController();
     final nameEnController = TextEditingController();
     final priceController = TextEditingController();
+    var beverageTax = const BeverageTax();
     XFile? selectedPhoto;
     Uint8List? selectedPreviewBytes;
     var isCombo = false;
@@ -1082,6 +1085,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     keyboardType: TextInputType.number,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  BeverageTaxEditor(
+                    value: beverageTax,
+                    onChanged: (value) =>
+                        setDialogState(() => beverageTax = value),
                   ),
                   const SizedBox(height: 16),
                   _ComboMenuEditor(
@@ -1155,6 +1164,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                     return;
                   }
+                  if (!beverageTax.isValid ||
+                      (isCombo && beverageTax.isApplicable)) {
+                    showErrorToast(context, l10n.menuTaxInvalid);
+                    return;
+                  }
                   if (isCombo && comboQuantities.isEmpty) {
                     showErrorToast(context, l10n.menuComboComponentRequired);
                     return;
@@ -1170,6 +1184,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           paperlessNameVi: paperlessNameVi.isEmpty
                               ? null
                               : paperlessNameVi,
+                          beverageTax: beverageTax,
                           price: price,
                           isCombo: isCombo,
                           comboComponents: comboComponents,
@@ -1183,6 +1198,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           paperlessNameVi: paperlessNameVi.isEmpty
                               ? null
                               : paperlessNameVi,
+                          beverageTax: beverageTax,
                           price: price,
                           photo: photo,
                           isCombo: isCombo,
@@ -1234,6 +1250,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       text: originalPaperlessNameVi,
     );
     final nameEnController = TextEditingController(text: originalNameEn);
+    final originalBeverageTax = BeverageTax.fromJson(item);
+    var beverageTax = originalBeverageTax;
     final rawPrice = item['price'];
     final initialPrice = switch (rawPrice) {
       num value => value.toDouble(),
@@ -1325,6 +1343,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     ),
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  BeverageTaxEditor(
+                    value: beverageTax,
+                    vatCategory: item['vat_category']?.toString(),
+                    onChanged: (value) =>
+                        setDialogState(() => beverageTax = value),
                   ),
                   const SizedBox(height: 16),
                   _ComboMenuEditor(
@@ -1434,6 +1459,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                     return;
                   }
+                  if (!beverageTax.isValid ||
+                      (isCombo && beverageTax.isApplicable)) {
+                    showErrorToast(context, l10n.menuTaxInvalid);
+                    return;
+                  }
                   if (isCombo && comboQuantities.isEmpty) {
                     showErrorToast(context, l10n.menuComboComponentRequired);
                     return;
@@ -1443,7 +1473,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       nameVi != originalNameVi ||
                       paperlessNameVi != originalPaperlessNameVi ||
                       nameEn != originalNameEn ||
-                      price != initialPrice;
+                      price != initialPrice ||
+                      beverageTax.sugarClass !=
+                          originalBeverageTax.sugarClass ||
+                      beverageTax.sugarGrams !=
+                          originalBeverageTax.sugarGrams ||
+                      beverageTax.basisNote != originalBeverageTax.basisNote;
                   final photoChanged =
                       selectedPhoto != null || removeExistingPhoto;
                   final comboChanged =
@@ -1471,6 +1506,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       paperlessNameVi: paperlessNameVi.isEmpty
                           ? null
                           : paperlessNameVi,
+                      beverageTax: beverageTax,
                       price: price,
                     );
                     if (!detailsSaved) return;
@@ -2230,7 +2266,7 @@ class _ItemsPanel extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '₫${numberFormat.format(priceValue)}',
+                                    '₫${numberFormat.format(priceValue)} · ${isCombo ? l10n.menuComboVat : 'VAT ${BeverageTax.fromJson(item).vatRate(vatCategory: item['vat_category']?.toString()).toInt()}%'}',
                                     style: AppFonts.system(
                                       color: AppColors.textSecondary,
                                       fontSize: 13,

@@ -455,7 +455,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await _db
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
+            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, vat_profile_snapshot, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -668,7 +668,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await _db
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
+          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, vat_profile_snapshot, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -1890,6 +1890,12 @@ PaymentQuoteLine _paymentQuoteLineFromRow(
     },
     vatCategory: row['vat_category']?.toString() ?? vatCategory,
     vatRate: _nullableDoubleValue(row['vat_rate']),
+    vatProfile:
+        (row['vat_profile_snapshot'] as List?)
+            ?.whereType<Map>()
+            .map((part) => Map<String, dynamic>.from(part))
+            .toList() ??
+        const [],
     payingAmountIncTax: _nullableDoubleValue(row['paying_amount_inc_tax']),
     discountAmount: lineDiscounts?[row['id']?.toString() ?? ''] ?? 0,
   );
