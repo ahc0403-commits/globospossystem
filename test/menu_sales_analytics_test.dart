@@ -9,6 +9,7 @@ Map<String, dynamic> _menuRow({
   required dynamic revenue,
   required dynamic orders,
   bool isCombo = false,
+  String analyticsGroup = 'food',
 }) {
   return {
     'rank': rank,
@@ -26,10 +27,64 @@ Map<String, dynamic> _menuRow({
     'takeaway_quantity': 0,
     'delivery_quantity': 0,
     'is_combo': isCombo,
+    'analytics_group': analyticsGroup,
   };
 }
 
 void main() {
+  test('separates top food and drink while preserving combo ranking', () {
+    final analytics = MenuSalesAnalytics.fromJson({
+      'summary': const {},
+      'menu_rows': [
+        _menuRow(
+          rank: 1,
+          key: 'combo',
+          name: 'Combo',
+          quantity: 20,
+          revenue: 200000,
+          orders: 5,
+          isCombo: true,
+        ),
+        _menuRow(
+          rank: 2,
+          key: 'drink',
+          name: 'Drink',
+          quantity: 12,
+          revenue: 120000,
+          orders: 4,
+          analyticsGroup: 'drink',
+        ),
+        _menuRow(
+          rank: 3,
+          key: 'food',
+          name: 'Food',
+          quantity: 8,
+          revenue: 160000,
+          orders: 3,
+        ),
+      ],
+      'hour_rows': const [],
+      'top_menu_hour_rows': const [],
+      'scope': const {},
+    });
+
+    expect(analytics.topCombo?.displayName, 'Combo');
+    expect(analytics.topDrink?.displayName, 'Drink');
+    expect(analytics.topFood?.displayName, 'Food');
+    expect(
+      analytics
+          .sortedRows(MenuSalesSort.quantity, group: MenuSalesGroup.drink)
+          .map((row) => row.displayName),
+      ['Drink'],
+    );
+    expect(
+      analytics
+          .sortedRows(MenuSalesSort.quantity, group: MenuSalesGroup.food)
+          .map((row) => row.displayName),
+      ['Food'],
+    );
+  });
+
   test('parses mixed numeric JSON and zero-fills all 24 HCM hours', () {
     final analytics = MenuSalesAnalytics.fromJson({
       'summary': {

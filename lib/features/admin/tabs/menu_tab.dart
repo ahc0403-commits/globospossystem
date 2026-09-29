@@ -718,76 +718,105 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final nameKoController = TextEditingController();
     final nameViController = TextEditingController();
     final nameEnController = TextEditingController();
+    var analyticsGroup = 'food';
 
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          key: const Key('admin_menu_add_category_dialog'),
-          backgroundColor: AppColors.surface1,
-          title: Text(
-            l10n.menuAddCategory,
-            style: AppFonts.system(color: AppColors.textPrimary),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                key: const Key('admin_menu_category_name_ko'),
-                controller: nameKoController,
-                style: AppFonts.system(color: AppColors.textPrimary),
-                decoration: InputDecoration(labelText: l10n.menuNameKorean),
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            key: const Key('admin_menu_add_category_dialog'),
+            backgroundColor: AppColors.surface1,
+            title: Text(
+              l10n.menuAddCategory,
+              style: AppFonts.system(color: AppColors.textPrimary),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  key: const Key('admin_menu_category_name_ko'),
+                  controller: nameKoController,
+                  style: AppFonts.system(color: AppColors.textPrimary),
+                  decoration: InputDecoration(labelText: l10n.menuNameKorean),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('admin_menu_category_name_vi'),
+                  controller: nameViController,
+                  style: AppFonts.system(color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    labelText: l10n.menuNameVietnamese,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('admin_menu_category_name_en'),
+                  controller: nameEnController,
+                  style: AppFonts.system(color: AppColors.textPrimary),
+                  decoration: InputDecoration(labelText: l10n.menuNameEnglish),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('admin_menu_category_analytics_group'),
+                  initialValue: analyticsGroup,
+                  decoration: InputDecoration(
+                    labelText: l10n.menuSalesCategoryGroup,
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'food',
+                      child: Text(l10n.menuSalesGroupFood),
+                    ),
+                    DropdownMenuItem(
+                      value: 'drink',
+                      child: Text(l10n.menuSalesGroupDrink),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => analyticsGroup = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const Key('admin_menu_category_name_vi'),
-                controller: nameViController,
-                style: AppFonts.system(color: AppColors.textPrimary),
-                decoration: InputDecoration(labelText: l10n.menuNameVietnamese),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const Key('admin_menu_category_name_en'),
-                controller: nameEnController,
-                style: AppFonts.system(color: AppColors.textPrimary),
-                decoration: InputDecoration(labelText: l10n.menuNameEnglish),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.amber500,
+                  foregroundColor: AppColors.surface0,
+                ),
+                onPressed: () async {
+                  final nameKo = nameKoController.text.trim();
+                  final nameVi = nameViController.text.trim();
+                  final nameEn = nameEnController.text.trim();
+                  if (nameKo.isEmpty || nameVi.isEmpty || nameEn.isEmpty) {
+                    showErrorToast(context, l10n.menuEnterCategoryName);
+                    return;
+                  }
+
+                  final success = await menuNotifier.addCategory(
+                    nameKo: nameKo,
+                    nameVi: nameVi,
+                    nameEn: nameEn,
+                    analyticsGroup: analyticsGroup,
+                  );
+                  if (context.mounted) {
+                    if (success) {
+                      Navigator.of(context).pop();
+                      showSuccessToast(context, l10n.menuCategoryAdded(nameKo));
+                    }
+                  }
+                },
+                child: Text(l10n.add),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
-              ),
-              onPressed: () async {
-                final nameKo = nameKoController.text.trim();
-                final nameVi = nameViController.text.trim();
-                final nameEn = nameEnController.text.trim();
-                if (nameKo.isEmpty || nameVi.isEmpty || nameEn.isEmpty) {
-                  showErrorToast(context, l10n.menuEnterCategoryName);
-                  return;
-                }
-
-                final success = await menuNotifier.addCategory(
-                  nameKo: nameKo,
-                  nameVi: nameVi,
-                  nameEn: nameEn,
-                );
-                if (context.mounted) {
-                  if (success) {
-                    Navigator.of(context).pop();
-                    showSuccessToast(context, l10n.menuCategoryAdded(nameKo));
-                  }
-                }
-              },
-              child: Text(l10n.add),
-            ),
-          ],
         );
       },
     );
@@ -810,6 +839,10 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         category['name_ko']?.toString() ?? category['name']?.toString() ?? '';
     final originalNameVi = category['name_vi']?.toString() ?? '';
     final originalNameEn = category['name_en']?.toString() ?? '';
+    final originalAnalyticsGroup = category['analytics_group'] == 'drink'
+        ? 'drink'
+        : 'food';
+    var analyticsGroup = originalAnalyticsGroup;
     if (categoryId.isEmpty) return;
     final nameKoController = TextEditingController(text: originalNameKo);
     final nameViController = TextEditingController(text: originalNameVi);
@@ -817,67 +850,94 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        key: const Key('admin_menu_edit_category_dialog'),
-        backgroundColor: AppColors.surface1,
-        title: Text(l10n.menuEditCategory),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              key: const Key('admin_menu_edit_category_name'),
-              controller: nameKoController,
-              autofocus: true,
-              style: AppFonts.system(color: AppColors.textPrimary),
-              decoration: InputDecoration(labelText: l10n.menuNameKorean),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          key: const Key('admin_menu_edit_category_dialog'),
+          backgroundColor: AppColors.surface1,
+          title: Text(l10n.menuEditCategory),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const Key('admin_menu_edit_category_name'),
+                controller: nameKoController,
+                autofocus: true,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.menuNameKorean),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nameViController,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.menuNameVietnamese),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nameEnController,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.menuNameEnglish),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: const Key('admin_menu_edit_category_analytics_group'),
+                initialValue: analyticsGroup,
+                decoration: InputDecoration(
+                  labelText: l10n.menuSalesCategoryGroup,
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'food',
+                    child: Text(l10n.menuSalesGroupFood),
+                  ),
+                  DropdownMenuItem(
+                    value: 'drink',
+                    child: Text(l10n.menuSalesGroupDrink),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setDialogState(() => analyticsGroup = value);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: nameViController,
-              style: AppFonts.system(color: AppColors.textPrimary),
-              decoration: InputDecoration(labelText: l10n.menuNameVietnamese),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: nameEnController,
-              style: AppFonts.system(color: AppColors.textPrimary),
-              decoration: InputDecoration(labelText: l10n.menuNameEnglish),
+            FilledButton(
+              onPressed: () async {
+                final nameKo = nameKoController.text.trim();
+                final nameVi = nameViController.text.trim();
+                final nameEn = nameEnController.text.trim();
+                if (nameKo.isEmpty || nameVi.isEmpty || nameEn.isEmpty) {
+                  showErrorToast(context, l10n.menuEnterCategoryName);
+                  return;
+                }
+                if (nameKo == originalNameKo &&
+                    nameVi == originalNameVi &&
+                    nameEn == originalNameEn &&
+                    analyticsGroup == originalAnalyticsGroup) {
+                  showErrorToast(context, l10n.noChanges);
+                  return;
+                }
+                final success = await menuNotifier.updateCategory(
+                  categoryId: categoryId,
+                  nameKo: nameKo,
+                  nameVi: nameVi,
+                  nameEn: nameEn,
+                  analyticsGroup: analyticsGroup,
+                );
+                if (!context.mounted || !success) return;
+                Navigator.of(context).pop();
+                showSuccessToast(context, l10n.menuCategorySaved(nameKo));
+              },
+              child: Text(l10n.save),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final nameKo = nameKoController.text.trim();
-              final nameVi = nameViController.text.trim();
-              final nameEn = nameEnController.text.trim();
-              if (nameKo.isEmpty || nameVi.isEmpty || nameEn.isEmpty) {
-                showErrorToast(context, l10n.menuEnterCategoryName);
-                return;
-              }
-              if (nameKo == originalNameKo &&
-                  nameVi == originalNameVi &&
-                  nameEn == originalNameEn) {
-                showErrorToast(context, l10n.noChanges);
-                return;
-              }
-              final success = await menuNotifier.updateCategory(
-                categoryId: categoryId,
-                nameKo: nameKo,
-                nameVi: nameVi,
-                nameEn: nameEn,
-              );
-              if (!context.mounted || !success) return;
-              Navigator.of(context).pop();
-              showSuccessToast(context, l10n.menuCategorySaved(nameKo));
-            },
-            child: Text(l10n.save),
-          ),
-        ],
       ),
     );
 

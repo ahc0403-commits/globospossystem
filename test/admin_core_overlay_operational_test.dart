@@ -247,6 +247,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    required String analyticsGroup,
   }) async {
     addCategoryCalls += 1;
     return true;
@@ -258,6 +259,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    required String analyticsGroup,
   }) async {
     editCategoryCalls += 1;
     return true;

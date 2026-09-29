@@ -150,6 +150,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    required String analyticsGroup,
   }) async {
     try {
       final currentCategories = state.categories.valueOrNull ?? [];
@@ -158,6 +159,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameKo: nameKo,
         nameVi: nameVi,
         nameEn: nameEn,
+        analyticsGroup: analyticsGroup,
         sortOrder: currentCategories.length,
       );
       await fetchCategories();
@@ -176,6 +178,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    required String analyticsGroup,
   }) async {
     try {
       await menuService.updateCategory(
@@ -183,6 +186,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameKo: nameKo,
         nameVi: nameVi,
         nameEn: nameEn,
+        analyticsGroup: analyticsGroup,
       );
       await fetchCategories();
       state = state.copyWith(clearError: true);
