@@ -16,7 +16,11 @@ end = source.index('$$;', start) + 3
 definition = source[start:end].replace(
     'FUNCTION public.get_paperless_operations_report(',
     'FUNCTION public.get_paperless_operations_report_pre_meal_start(', 1)
-Path(sys.argv[1]).write_text(definition + '\n')
+detail_source = Path('supabase/migrations/20260917130000_paperless_menu_floor_timing_detail.sql').read_text()
+detail_start = detail_source.index('CREATE OR REPLACE FUNCTION public.get_paperless_menu_timing_detail(')
+detail_end = detail_source.index('$$;', detail_start) + 3
+Path(sys.argv[1]).write_text(
+    definition + '\n' + detail_source[detail_start:detail_end] + '\n')
 PY
 
 docker run --detach --rm --name "$fixture_name" \
@@ -34,4 +38,6 @@ run_sql < supabase/migrations/20260915200000_menu_display_localization.sql >/dev
 run_sql < test/fixtures/menu_analytics_correction_setup.sql >/dev/null
 run_sql < supabase/migrations/20260929040000_menu_analytics_ledger_names_and_groups.sql >/dev/null
 run_sql < test/sql/menu_analytics_correction_test.sql >/dev/null
+run_sql < supabase/migrations/20260929050000_paperless_operations_alias_residuals.sql >/dev/null
+run_sql < test/sql/paperless_operations_alias_residuals_test.sql >/dev/null
 printf 'MENU_ANALYTICS_CORRECTION_SQL_TEST=PASS\n'
