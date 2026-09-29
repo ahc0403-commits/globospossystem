@@ -63,8 +63,11 @@ BEGIN
 END $function$;
 
 CREATE TABLE public.emergency_order_queue(
-  id uuid, session_id uuid, order_id uuid, restaurant_id uuid, created_at timestamptz
+  id uuid, session_id uuid, order_id uuid, restaurant_id uuid, created_at timestamptz,
+  queue_no text, table_number text, physical_floor_label text, floor_label text,
+  physical_floor_inferred boolean
 );
+ALTER TABLE public.tables ADD COLUMN floor_label text;
 CREATE TABLE public.emergency_fulfillment_sessions(id uuid, status text);
 CREATE TABLE public.emergency_fulfillment_items(
   id uuid, restaurant_id uuid, session_id uuid, order_id uuid, order_item_id uuid,
