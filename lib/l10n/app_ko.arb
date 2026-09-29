@@ -4120,5 +4120,14 @@
   "revenueForecastSourceSavedProfile": "저장된 설정",
   "revenueForecastSourceManualAssumption": "직접 입력한 가정값",
   "revenueForecastSourceUnavailable": "측정 이력 없음 · 직접 입력 필요",
-  "revenueForecastSourceProxy": "거래 이벤트 기준 대체 지표"
+  "revenueForecastSourceProxy": "거래 이벤트 기준 대체 지표",
+  "menuBeverageTax": "음료 당류별 VAT",
+  "menuTaxNotApplicable": "음료 당류 기준 대상 아님",
+  "menuSugarAtMostFive": "5g/100ml 이하 · VAT 8%",
+  "menuSugarAboveFive": "5g/100ml 초과 · VAT 10%",
+  "menuSugarGrams": "표시 총당류 (g/100ml, 선택)",
+  "menuTaxBasis": "라벨·상품 또는 분류 확인 근거",
+  "menuSugarTaxHelp": "2026년 기준: 5g/100ml 초과 10%, 정확히 5g은 8%입니다. 수치를 모르면 확인한 구간과 근거를 입력하세요.",
+  "menuTaxInvalid": "당류 수치, 분류 및 확인 근거를 확인하세요.",
+  "menuComboVat": "구성품별 VAT"
 }

@@ -1,3 +1,4 @@
+import 'package:globos_pos_system/core/payments/beverage_tax.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -294,6 +295,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
@@ -314,6 +316,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
   }) async {
     editItemCalls += 1;

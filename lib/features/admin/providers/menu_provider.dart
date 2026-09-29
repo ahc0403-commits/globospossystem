@@ -1,3 +1,4 @@
+import '../../../core/payments/beverage_tax.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -75,6 +76,9 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
     if (message.contains('MENU_COMBO_')) {
       return 'Choose at least one valid non-combo menu and quantity.';
+    }
+    if (message.contains('MENU_TAX_')) {
+      return 'Invalid beverage sugar classification or basis.';
     }
     if (message.contains('MENU_IMAGE_')) {
       return 'The menu photo could not be saved. Choose another image and try again.';
@@ -234,6 +238,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
@@ -250,6 +255,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameVi: nameVi,
         nameEn: nameEn,
         paperlessNameVi: paperlessNameVi,
+        beverageTax: beverageTax,
         price: price,
         sortOrder: sortOrder,
       );
@@ -288,6 +294,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
     required XFile photo,
     bool isCombo = false,
@@ -305,6 +312,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameVi: nameVi,
         nameEn: nameEn,
         paperlessNameVi: paperlessNameVi,
+        beverageTax: beverageTax,
         price: price,
         sortOrder: sortOrder,
       );
@@ -421,6 +429,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
   }) async {
     try {
@@ -430,6 +439,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameVi: nameVi,
         nameEn: nameEn,
         paperlessNameVi: paperlessNameVi,
+        beverageTax: beverageTax,
         price: price,
       );
       await fetchItems();

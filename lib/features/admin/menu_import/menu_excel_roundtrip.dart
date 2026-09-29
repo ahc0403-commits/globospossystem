@@ -1,3 +1,4 @@
+import '../../../core/payments/beverage_tax.dart';
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
@@ -22,6 +23,7 @@ const menuRoundTripHeaders = <String>[
   '판매가능',
   'QR메뉴노출',
   '메뉴순서',
+  ...beverageTaxExcelHeaders,
 ];
 
 const _paperlessNameViHeader = '페이퍼리스 메뉴명(VI)';
@@ -61,6 +63,7 @@ class MenuRoundTripCategory {
 class MenuRoundTripItem {
   const MenuRoundTripItem({
     required this.sourceRow,
+    this.beverageTax,
     required this.storeId,
     required this.categoryId,
     required this.itemId,
@@ -75,6 +78,7 @@ class MenuRoundTripItem {
     required this.sortOrder,
   });
 
+  final BeverageTax? beverageTax;
   final int sourceRow;
   final String storeId;
   final String categoryId;
@@ -93,6 +97,7 @@ class MenuRoundTripItem {
 
   Map<String, dynamic> toJson() => {
     'source_row': sourceRow,
+    if (beverageTax != null) ...beverageTax!.toJson(),
     'store_id': storeId,
     'category_id': categoryId,
     'item_id': itemId,
@@ -184,7 +189,7 @@ List<int> buildMenuRoundTripWorkbook({
         TextCellValue(categoryNameVi),
         TextCellValue(categoryNameEn),
         IntCellValue(categorySortOrder),
-        ...List<CellValue>.generate(10, (_) => TextCellValue('')),
+        ...List<CellValue>.generate(13, (_) => TextCellValue('')),
       ]);
       continue;
     }
@@ -210,6 +215,11 @@ List<int> buildMenuRoundTripWorkbook({
         BoolCellValue(item['is_available'] == true),
         BoolCellValue(item['is_visible_public'] == true),
         IntCellValue(_mapInt(item['sort_order'])),
+        TextCellValue(
+          item['beverage_sugar_tax_class']?.toString() ?? 'not_applicable',
+        ),
+        TextCellValue(item['sugar_g_per_100ml']?.toString() ?? ''),
+        TextCellValue(item['tax_basis_note']?.toString() ?? ''),
       ]);
     }
   }
@@ -261,7 +271,11 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
     return null;
   }
   final missing = menuRoundTripHeaders
-      .where((header) => header != _paperlessNameViHeader)
+      .where(
+        (header) =>
+            header != _paperlessNameViHeader &&
+            !beverageTaxExcelHeaders.contains(header),
+      )
       .where((header) => !headerIndexes.containsKey(header))
       .toList();
   if (missing.isNotEmpty) {
@@ -391,6 +405,12 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
       issues.add('$sourceRow행: $_paperlessNameViHeader은 200자 이하여야 합니다.');
     }
     _validateName(itemNameEn, sourceRow, '메뉴명(EN)', issues);
+    final beverageTax = parseBeverageTaxExcelRow(
+      headerIndexes,
+      text,
+      sourceRow,
+      issues,
+    );
     if (description.length > 1000) {
       issues.add('$sourceRow행: 설명은 1000자 이하여야 합니다.');
     }
@@ -428,6 +448,7 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
       items.add(
         MenuRoundTripItem(
           sourceRow: sourceRow,
+          beverageTax: beverageTax,
           storeId: storeId,
           categoryId: categoryId,
           itemId: itemId,
