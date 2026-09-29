@@ -34,6 +34,7 @@ class MenuSalesAnalyticsPanel extends ConsumerStatefulWidget {
 class _MenuSalesAnalyticsPanelState
     extends ConsumerState<MenuSalesAnalyticsPanel> {
   MenuSalesSort _sort = MenuSalesSort.quantity;
+  MenuSalesGroup _group = MenuSalesGroup.all;
   _MenuSalesMetric _metric = _MenuSalesMetric.quantity;
   bool _showAll = false;
   MenuSalesScope _scope = MenuSalesScope.all;
@@ -183,6 +184,7 @@ class _MenuSalesAnalyticsPanelState
                   if (_scope == scope) return;
                   setState(() {
                     _scope = scope;
+                    _group = MenuSalesGroup.all;
                     _showAll = false;
                     _selectedMenuKey = null;
                   });
@@ -224,6 +226,8 @@ class _MenuSalesAnalyticsPanelState
   Widget _buildAnalytics(BuildContext context, MenuSalesAnalytics analytics) {
     final topMenu = analytics.topMenu!;
     final topCombo = analytics.topCombo;
+    final topFood = analytics.topFood;
+    final topDrink = analytics.topDrink;
     final summary = analytics.summary;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -247,6 +251,11 @@ class _MenuSalesAnalyticsPanelState
           phone: phone,
           bounded: wide,
           onSortChanged: (sort) => setState(() => _sort = sort),
+          group: _group,
+          onGroupChanged: (group) => setState(() {
+            _group = group;
+            _showAll = false;
+          }),
           onShowAllChanged: () => setState(() => _showAll = !_showAll),
           scope: _scope,
         );
@@ -298,6 +307,38 @@ class _MenuSalesAnalyticsPanelState
                   tone: PosColors.success,
                   width: metricWidth,
                 ),
+                if (_scope != MenuSalesScope.combo)
+                  _MenuSalesMetricCard(
+                    key: const Key('menu_sales_top_food'),
+                    label: context.l10n.menuSalesTopFood,
+                    value:
+                        topFood?.localizedName(
+                          Localizations.localeOf(context).languageCode,
+                        ) ??
+                        '—',
+                    detail: topFood == null
+                        ? context.l10n.menuSalesNoGroupData
+                        : '${context.l10n.menuSalesUnits(topFood.soldQuantity)} · '
+                              '${widget.currency.format(topFood.menuSalesAmount)} VND',
+                    tone: PosColors.accent,
+                    width: metricWidth,
+                  ),
+                if (_scope != MenuSalesScope.combo)
+                  _MenuSalesMetricCard(
+                    key: const Key('menu_sales_top_drink'),
+                    label: context.l10n.menuSalesTopDrink,
+                    value:
+                        topDrink?.localizedName(
+                          Localizations.localeOf(context).languageCode,
+                        ) ??
+                        '—',
+                    detail: topDrink == null
+                        ? context.l10n.menuSalesNoGroupData
+                        : '${context.l10n.menuSalesUnits(topDrink.soldQuantity)} · '
+                              '${widget.currency.format(topDrink.menuSalesAmount)} VND',
+                    tone: PosColors.info,
+                    width: metricWidth,
+                  ),
                 _MenuSalesMetricCard(
                   label: context.l10n.menuSalesTotalQuantity,
                   value: '${summary.soldQuantity}',
@@ -755,6 +796,8 @@ class _MenuSalesRanking extends StatelessWidget {
     required this.phone,
     required this.bounded,
     required this.onSortChanged,
+    required this.group,
+    required this.onGroupChanged,
     required this.onShowAllChanged,
     required this.scope,
   });
@@ -766,16 +809,23 @@ class _MenuSalesRanking extends StatelessWidget {
   final bool phone;
   final bool bounded;
   final ValueChanged<MenuSalesSort> onSortChanged;
+  final MenuSalesGroup group;
+  final ValueChanged<MenuSalesGroup> onGroupChanged;
   final VoidCallback onShowAllChanged;
   final MenuSalesScope scope;
 
   @override
   Widget build(BuildContext context) {
-    final sorted = analytics.sortedRows(sort);
+    final sorted = analytics.sortedRows(sort, group: group);
     final visible = showAll ? sorted : sorted.take(10).toList(growable: false);
     final list = Column(
       children: [
-        if (!phone) const _MenuSalesTableHeader(),
+        if (!phone && visible.isNotEmpty) const _MenuSalesTableHeader(),
+        if (visible.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(child: Text(context.l10n.menuSalesNoGroupData)),
+          ),
         for (var index = 0; index < visible.length; index++)
           Padding(
             padding: EdgeInsets.only(top: index == 0 ? 0 : 6),
@@ -838,12 +888,36 @@ class _MenuSalesRanking extends StatelessWidget {
               ),
             ],
           ),
+          if (scope != MenuSalesScope.combo) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MenuSalesSortChip(
+                  label: context.l10n.menuSalesGroupAll,
+                  selected: group == MenuSalesGroup.all,
+                  onSelected: () => onGroupChanged(MenuSalesGroup.all),
+                ),
+                _MenuSalesSortChip(
+                  label: context.l10n.menuSalesGroupFood,
+                  selected: group == MenuSalesGroup.food,
+                  onSelected: () => onGroupChanged(MenuSalesGroup.food),
+                ),
+                _MenuSalesSortChip(
+                  label: context.l10n.menuSalesGroupDrink,
+                  selected: group == MenuSalesGroup.drink,
+                  onSelected: () => onGroupChanged(MenuSalesGroup.drink),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 10),
           if (bounded)
             Expanded(child: SingleChildScrollView(child: list))
           else
             list,
-          if (analytics.menuRows.length > 10) ...[
+          if (sorted.length > 10) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
               key: const Key('menu_sales_show_all'),

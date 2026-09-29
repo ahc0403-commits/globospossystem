@@ -35,6 +35,7 @@ MenuSalesAnalytics _analytics() {
       'takeaway_quantity': 5,
       'delivery_quantity': 5 - index.clamp(0, 5),
       'is_combo': rank == 1,
+      'analytics_group': rank == 3 ? 'drink' : 'food',
     };
   });
   final hours = List.generate(24, (hour) {
@@ -151,6 +152,31 @@ Widget _launcherApp() {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('ranking filters drinks without losing top food and combo', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1024, 768));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('menu_sales_top_food')), findsOneWidget);
+    expect(find.byKey(const Key('menu_sales_top_drink')), findsOneWidget);
+    expect(find.byKey(const Key('menu_sales_top_combo')), findsOneWidget);
+    final ranking = find.byKey(const Key('menu_sales_ranking'));
+    await tester.tap(find.descendant(of: ranking, matching: find.text('음료')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: ranking, matching: find.text('메뉴 3')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: ranking, matching: find.text('메뉴 2')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final code in ['en', 'vi']) {
     testWidgets('rankings and chart labels use $code menu data', (
       tester,

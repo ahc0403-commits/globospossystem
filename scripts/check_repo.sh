@@ -20,6 +20,8 @@ printf 'CHECK_REPO_STEP=menu_localization_sql\n'
 bash scripts/test_menu_localization.sh
 printf 'CHECK_REPO_STEP=bunsik_receipt_ledger_names_sql\n'
 bash scripts/test_bunsik_receipt_ledger_names.sh
+printf 'CHECK_REPO_STEP=menu_analytics_correction_sql\n'
+bash scripts/test_menu_analytics_correction.sh
 
 printf 'CHECK_REPO_STEP=admin_menu_item_archive_sql\n'
 bash scripts/test_admin_menu_item_archive.sh

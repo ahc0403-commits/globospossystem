@@ -116,15 +116,17 @@ class MenuService {
     required String nameVi,
     required String nameEn,
     required int sortOrder,
+    required String analyticsGroup,
   }) async {
     await supabase.rpc(
-      'admin_create_menu_category_i18n',
+      'admin_create_menu_category_with_group',
       params: {
         'p_store_id': storeId,
         'p_name_ko': nameKo,
         'p_name_vi': nameVi,
         'p_name_en': nameEn,
         'p_sort_order': sortOrder,
+        'p_analytics_group': analyticsGroup,
       },
     );
   }
@@ -165,14 +167,16 @@ class MenuService {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    required String analyticsGroup,
   }) async {
     await supabase.rpc(
-      'admin_update_menu_category_i18n',
+      'admin_update_menu_category_with_group',
       params: {
         'p_category_id': categoryId,
         'p_name_ko': nameKo,
         'p_name_vi': nameVi,
         'p_name_en': nameEn,
+        'p_analytics_group': analyticsGroup,
       },
     );
   }

@@ -58,6 +58,17 @@ List<int> buildMenuSalesAnalyticsWorkbook({
     TextCellValue('Top Combo Sales Amount'),
     DoubleCellValue(topCombo?.menuSalesAmount ?? 0),
   ]);
+  for (final (label, row) in [
+    ('Top Food', analytics.topFood),
+    ('Top Drink', analytics.topDrink),
+  ]) {
+    menuSheet.appendRow([
+      TextCellValue(label),
+      TextCellValue(row?.localizedName(languageCode) ?? ''),
+      TextCellValue('Menu Sales Amount'),
+      DoubleCellValue(row?.menuSalesAmount ?? 0),
+    ]);
+  }
   menuSheet.appendRow([TextCellValue('')]);
   menuSheet.appendRow([
     TextCellValue('Rank'),
@@ -74,6 +85,7 @@ List<int> buildMenuSalesAnalyticsWorkbook({
     TextCellValue('Identity Quality'),
     TextCellValue('Name Changed In Period'),
     TextCellValue('Combo'),
+    TextCellValue('Analytics Group'),
   ]);
   final menuRows = analytics.sortedRows(MenuSalesSort.quantity);
   for (var index = 0; index < menuRows.length; index++) {
@@ -93,6 +105,7 @@ List<int> buildMenuSalesAnalyticsWorkbook({
       TextCellValue(row.identityQuality),
       BoolCellValue(row.nameChangedInPeriod),
       BoolCellValue(row.isCombo),
+      TextCellValue(row.analyticsGroup),
     ]);
   }
 

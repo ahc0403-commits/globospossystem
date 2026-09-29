@@ -5,6 +5,8 @@ import '../../main.dart';
 
 enum MenuSalesSort { quantity, revenue, orders }
 
+enum MenuSalesGroup { all, food, drink }
+
 enum MenuSalesScope {
   all('all'),
   regular('regular'),
@@ -110,6 +112,7 @@ class MenuSalesRow {
     required this.takeawayQuantity,
     required this.deliveryQuantity,
     required this.isCombo,
+    this.analyticsGroup = 'food',
   });
 
   final int rank;
@@ -131,6 +134,7 @@ class MenuSalesRow {
   final int takeawayQuantity;
   final int deliveryQuantity;
   final bool isCombo;
+  final String analyticsGroup;
 
   bool get usesNameFallback => identityQuality == 'name_fallback';
 
@@ -154,6 +158,11 @@ class MenuSalesRow {
       takeawayQuantity: menuSalesInt(json['takeaway_quantity']),
       deliveryQuantity: menuSalesInt(json['delivery_quantity']),
       isCombo: json['is_combo'] == true,
+      analyticsGroup: json['is_combo'] == true
+          ? 'combo'
+          : json['analytics_group'] == 'drink'
+          ? 'drink'
+          : 'food',
     );
   }
 }
@@ -235,6 +244,16 @@ class MenuSalesAnalytics {
 
   MenuSalesRow? get topMenu => menuRows.isEmpty ? null : menuRows.first;
 
+  MenuSalesRow? get topFood => _topGroup('food');
+  MenuSalesRow? get topDrink => _topGroup('drink');
+
+  MenuSalesRow? _topGroup(String group) {
+    final rows = sortedRows(
+      MenuSalesSort.quantity,
+    ).where((row) => row.analyticsGroup == group);
+    return rows.isEmpty ? null : rows.first;
+  }
+
   MenuSalesRow? get topCombo {
     MenuSalesRow? result;
     for (final row in menuRows.where((row) => row.isCombo)) {
@@ -248,8 +267,19 @@ class MenuSalesAnalytics {
     return result;
   }
 
-  List<MenuSalesRow> sortedRows(MenuSalesSort sort) {
-    final rows = List<MenuSalesRow>.from(menuRows);
+  List<MenuSalesRow> sortedRows(
+    MenuSalesSort sort, {
+    MenuSalesGroup group = MenuSalesGroup.all,
+  }) {
+    final rows = List<MenuSalesRow>.from(
+      menuRows.where(
+        (row) => switch (group) {
+          MenuSalesGroup.all => true,
+          MenuSalesGroup.food => row.analyticsGroup == 'food',
+          MenuSalesGroup.drink => row.analyticsGroup == 'drink',
+        },
+      ),
+    );
     rows.sort((left, right) {
       final primary = switch (sort) {
         MenuSalesSort.quantity => right.soldQuantity.compareTo(

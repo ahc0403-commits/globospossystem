@@ -195,7 +195,12 @@ void main() {
     expect(workbook.tables.keys, containsAll(['Menu Sales', 'Menu by Hour']));
     expect(workbook.tables.keys, isNot(contains('Sheet1')));
     expect(workbook.tables['Menu Sales']!.rows[2][1]!.value.toString(), 'all');
-    expect(workbook.tables['Menu Sales']!.rows[10][1]!.value.toString(), '쌀국수');
+    expect(
+      workbook.tables['Menu Sales']!.rows.any(
+        (row) => row.length > 1 && row[1]?.value.toString() == '쌀국수',
+      ),
+      isTrue,
+    );
   });
 
   testWidgets('operations performance downloads all analysis slices', (
