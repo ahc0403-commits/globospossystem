@@ -18,12 +18,39 @@ pg_ctl -D "$BUNSIK_TMP/data" -l "$BUNSIK_TMP/server.log" -o "-h 127.0.0.1 -p $BU
 python3 "$BUNSIK_ROOT/scripts/tests/bunsik_inventory_fixture.py" "$BUNSIK_ROOT" "$BUNSIK_TMP/fixture.sql"
 run_sql() { psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 -f "$1"; }
 run_sql "$BUNSIK_TMP/fixture.sql" >/dev/null
+run_sql "$BUNSIK_ROOT/scripts/preflight_bunsik_inventory_code_reset.sql"
+psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+ BEGIN DELETE FROM inventory_receipt_lines WHERE id=test_uuid(3); RAISE EXCEPTION 'SUBMITTED_GUARD_MISSING';
+ EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'INVENTORY_RECEIPT_SUBMITTED_LOCKED' THEN RAISE; END IF; END;
+ BEGIN DELETE FROM inventory_receipts WHERE id=test_uuid(4); RAISE EXCEPTION 'CONFIRMED_GUARD_MISSING';
+ EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'INVENTORY_RECEIPT_SUBMITTED_LOCKED' THEN RAISE; END IF; END;
+END $$;
+SQL
 run_sql "$BUNSIK_ROOT/supabase/migrations/20260930010000_bunsik_inventory_code_reset.sql"
 run_sql "$BUNSIK_ROOT/scripts/verify_bunsik_inventory_code_reset.sql"
+psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM inventory_receipts WHERE id=test_uuid(7) AND status='confirmed') THEN RAISE EXCEPTION 'BINH_RECEIPT_CHANGED'; END IF;
+ BEGIN DELETE FROM inventory_receipt_lines WHERE id=test_uuid(8); RAISE EXCEPTION 'CONFIRMED_LINE_GUARD_NOT_RESTORED';
+ EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'INVENTORY_RECEIPT_CONFIRMED_IMMUTABLE' THEN RAISE; END IF; END;
+ BEGIN DELETE FROM inventory_receipts WHERE id=test_uuid(7); RAISE EXCEPTION 'CONFIRMED_HEADER_GUARD_NOT_RESTORED';
+ EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'INVENTORY_RECEIPT_SUBMITTED_LOCKED' THEN RAISE; END IF; END;
+END $$;
+SQL
 # An accidental rerun must refuse to delete the newly cloned sample.
 if run_sql "$BUNSIK_ROOT/supabase/migrations/20260930010000_bunsik_inventory_code_reset.sql" >"$BUNSIK_TMP/rerun.log" 2>&1; then echo 'Reset rerun unexpectedly accepted' >&2; exit 1; fi
 run_sql "$BUNSIK_ROOT/scripts/rollback_bunsik_inventory_code_reset.sql"
 psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF (SELECT count(*) FROM inventory_products WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a')<>104 OR NOT EXISTS(SELECT 1 FROM inventory_purchase_orders WHERE purchase_order_no='SAMPLE-OLD') THEN RAISE EXCEPTION 'ROLLBACK_FAILED'; END IF; END \$\$;" >/dev/null
+psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM inventory_receipts WHERE id=test_uuid(4) AND status='confirmed' AND submitted_at IS NOT NULL)
+ OR NOT EXISTS(SELECT 1 FROM inventory_receipt_lines WHERE id=test_uuid(5))
+ OR NOT EXISTS(SELECT 1 FROM inventory_receipt_change_history WHERE receipt_id=test_uuid(2)) THEN RAISE EXCEPTION 'LOCKED_RECEIPT_ROLLBACK_FAILED'; END IF;
+ BEGIN DELETE FROM inventory_receipt_lines WHERE id=test_uuid(3); RAISE EXCEPTION 'ROLLBACK_GUARD_NOT_RESTORED';
+ EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'INVENTORY_RECEIPT_SUBMITTED_LOCKED' THEN RAISE; END IF; END;
+END $$;
+SQL
 run_sql "$BUNSIK_ROOT/supabase/migrations/20260930020000_inventory_stock_audit_excel.sql"
 run_sql "$BUNSIK_ROOT/supabase/tests/inventory_stock_audit_excel_test.sql"
 
