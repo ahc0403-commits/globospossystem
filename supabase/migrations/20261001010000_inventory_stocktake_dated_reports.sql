@@ -30,6 +30,7 @@ CREATE TABLE public.inventory_stock_movements (
  stock_before numeric NOT NULL,
  stock_after numeric NOT NULL,
  effective_at timestamptz NOT NULL,
+ business_date date NOT NULL,
  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  transaction_id uuid,
  transaction_type text NOT NULL DEFAULT 'adjust',
@@ -63,7 +64,7 @@ UPDATE public.inventory_transactions t SET effective_at=t.created_at,
 
 CREATE FUNCTION public.capture_inventory_stock_movement() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth AS $$
-DECLARE sid uuid; moment timestamptz:=clock_timestamp(); previous numeric;
+DECLARE sid uuid; moment timestamptz:=clock_timestamp(); previous numeric; business_day date;
 BEGIN
  IF TG_OP='INSERT' THEN
   INSERT INTO public.inventory_stock_checkpoints VALUES(NEW.id,NEW.restaurant_id,moment,coalesce(NEW.current_stock,0));
@@ -73,9 +74,10 @@ BEGIN
  previous:=coalesce(OLD.current_stock,0);
  IF coalesce(NEW.current_stock,0)=previous THEN RETURN NEW; END IF;
  sid:=nullif(current_setting('globos.stocktake_session',true),'')::uuid;
- IF sid IS NOT NULL THEN SELECT effective_at INTO moment FROM public.inventory_stock_audit_sessions WHERE id=sid AND restaurant_id=NEW.restaurant_id; END IF;
- INSERT INTO public.inventory_stock_movements(restaurant_id,ingredient_id,quantity_base,stock_before,stock_after,effective_at,reference_type,reference_id,created_by)
- VALUES(NEW.restaurant_id,NEW.id,coalesce(NEW.current_stock,0)-previous,previous,coalesce(NEW.current_stock,0),coalesce(moment,clock_timestamp()),CASE WHEN sid IS NULL THEN 'direct_stock_change' ELSE 'inventory_stock_audit' END,sid,auth.uid());
+ IF sid IS NOT NULL THEN SELECT effective_at,count_business_date INTO moment,business_day FROM public.inventory_stock_audit_sessions WHERE id=sid AND restaurant_id=NEW.restaurant_id; END IF;
+ business_day:=coalesce(business_day,(moment AT TIME ZONE 'Asia/Ho_Chi_Minh')::date);
+ INSERT INTO public.inventory_stock_movements(restaurant_id,ingredient_id,quantity_base,stock_before,stock_after,effective_at,business_date,reference_type,reference_id,created_by)
+ VALUES(NEW.restaurant_id,NEW.id,coalesce(NEW.current_stock,0)-previous,previous,coalesce(NEW.current_stock,0),coalesce(moment,clock_timestamp()),business_day,CASE WHEN sid IS NULL THEN 'direct_stock_change' ELSE 'inventory_stock_audit' END,sid,auth.uid());
  RETURN NEW;
 END $$;
 CREATE TRIGGER inventory_stock_movement_capture AFTER INSERT OR UPDATE ON public.inventory_items FOR EACH ROW EXECUTE FUNCTION public.capture_inventory_stock_movement();
@@ -96,7 +98,7 @@ BEGIN
   NEW.effective_date:=coalesce(NEW.effective_date,(NEW.effective_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date);
   NEW.stock_before:=m.stock_before; NEW.stock_after:=m.stock_after;
   UPDATE public.inventory_stock_movements SET transaction_id=NEW.id,transaction_type=NEW.transaction_type,
-   reference_type=NEW.reference_type,reference_id=NEW.reference_id,note=NEW.note,effective_at=NEW.effective_at WHERE id=m.id;
+   reference_type=NEW.reference_type,reference_id=NEW.reference_id,note=NEW.note,effective_at=NEW.effective_at,business_date=NEW.effective_date WHERE id=m.id;
   -- An explicitly backdated event arriving after a newer physical count must
   -- not deduct that already observed stock again. Reject atomically for review.
   SELECT max(s.effective_at) INTO cutoff FROM public.inventory_stock_audit_sessions s
@@ -345,7 +347,7 @@ BEGIN
  END IF;
  SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.effective_at,x.id),'[]') INTO movements FROM (
   SELECT m.id,m.ingredient_id,snap->>'product_code' product_code,snap->>'product_name' product_name,snap->>'base_unit' base_unit,
-   (m.effective_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date business_date,m.effective_at,m.recorded_at,m.quantity_base,
+   m.business_date,m.effective_at,m.recorded_at,m.quantity_base,
    m.transaction_type,m.reference_type,m.reference_id,m.note
   FROM public.inventory_stock_movements m JOIN LATERAL (SELECT x snap FROM jsonb_array_elements(s.count_snapshot) x WHERE x->>'inventory_item_id'=m.ingredient_id::text) q ON true
   WHERE m.restaurant_id=p_store_id AND m.effective_at>coalesce(s.effective_at,s.completed_at)

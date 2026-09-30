@@ -89,6 +89,16 @@ BEGIN
  IF (preview->>'can_complete')::boolean OR preview->'rows'->0->>'issue'<>'HISTORY_UNVERIFIED' THEN RAISE EXCEPTION 'UNKNOWN_HISTORY_ACCEPTED'; END IF;
 END $$;
 
+DO $$ DECLARE store uuid:='3a268807-771f-4fd4-84fe-e1b0b00de40a'; s jsonb; lines jsonb; preview jsonb;
+BEGIN
+ -- A close after midnight still belongs to the selected previous business day.
+ s:=prepare_inventory_stock_audit_v2(store,'2026-09-30','2026-10-01T00:10:00+07:00');
+ SELECT jsonb_agg(jsonb_build_object('product_id',x->>'product_id','actual_quantity_base',73,'counted_at','2026-10-01T00:10:00+07:00')) INTO lines FROM jsonb_array_elements(s->'snapshot') x;
+ preview:=preview_inventory_stock_audit_v3(store,(s->>'id')::uuid,lines);
+ PERFORM save_inventory_stock_audit_v3(store,(s->>'id')::uuid,1,lines,true,NULL,preview->>'token');
+ IF NOT EXISTS(SELECT 1 FROM inventory_stock_movements WHERE reference_id=(s->>'id')::uuid AND business_date='2026-09-30' AND (effective_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date='2026-10-01') THEN RAISE EXCEPTION 'MIDNIGHT_BUSINESS_DAY_LOST'; END IF;
+END $$;
+
 SET request.jwt.claim.role='authenticated';
 SELECT expect_stock_audit_error($q$SELECT list_inventory_stock_audits('3a268807-771f-4fd4-84fe-e1b0b00de40a')$q$,'FORBIDDEN');
 SELECT expect_stock_audit_error($q$SELECT prepare_inventory_stock_audit_v2('3a268807-771f-4fd4-84fe-e1b0b00de40a','2026-09-30','2026-09-30T16:00:00Z')$q$,'FORBIDDEN');
