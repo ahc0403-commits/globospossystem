@@ -1187,25 +1187,47 @@ class InventoryService {
     params: {'p_store_id': storeId, 'p_rows': rows, 'p_apply': apply},
   );
 
-  Future<String> saveInventoryStockAudit({
+  Future<Map<String, dynamic>> prepareInventoryStockAudit({
+    required String storeId,
+    String? sessionId,
+  }) => _rpcMap(
+    'prepare_inventory_stock_audit',
+    params: {'p_store_id': storeId, 'p_session_id': sessionId},
+  );
+
+  Future<void> cancelInventoryStockAudit({
+    required String storeId,
+    required String sessionId,
+    required int version,
+  }) async {
+    await supabase.rpc(
+      'cancel_inventory_stock_audit',
+      params: {
+        'p_store_id': storeId,
+        'p_session_id': sessionId,
+        'p_expected_version': version,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> saveInventoryStockAudit({
     required String storeId,
     required List<Map<String, dynamic>> lines,
     String? memo,
     required bool complete,
-    String? sessionId,
-  }) async {
-    final result = await supabase.rpc(
-      'save_inventory_stock_audit',
-      params: {
-        'p_store_id': storeId,
-        'p_lines': lines,
-        'p_memo': memo,
-        'p_complete': complete,
-        'p_session_id': sessionId,
-      },
-    );
-    return result.toString();
-  }
+    required String sessionId,
+    required int expectedVersion,
+  }) => _rpcMap(
+    'save_inventory_stock_audit_v2',
+    params: {
+      'p_store_id': storeId,
+      'p_lines': lines,
+      'p_memo': memo,
+      'p_complete': complete,
+      'p_session_id': sessionId,
+      'p_expected_version': expectedVersion,
+    },
+  );
 
   Future<List<Map<String, dynamic>>> fetchRecentInventoryPurchaseOrders({
     required String storeId,

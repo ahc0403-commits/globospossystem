@@ -1921,12 +1921,14 @@ class InventoryPurchaseStockAuditState {
   final String? error;
   final String? lastSessionId;
   final bool lastCompleted;
+  final Map<String, dynamic>? session;
 
   const InventoryPurchaseStockAuditState({
     this.isSaving = false,
     this.error,
     this.lastSessionId,
     this.lastCompleted = false,
+    this.session,
   });
 
   InventoryPurchaseStockAuditState copyWith({
@@ -1935,11 +1937,13 @@ class InventoryPurchaseStockAuditState {
     bool clearError = false,
     String? lastSessionId,
     bool? lastCompleted,
+    Map<String, dynamic>? session,
   }) => InventoryPurchaseStockAuditState(
     isSaving: isSaving ?? this.isSaving,
     error: clearError ? null : (error ?? this.error),
     lastSessionId: lastSessionId ?? this.lastSessionId,
     lastCompleted: lastCompleted ?? this.lastCompleted,
+    session: session ?? this.session,
   );
 }
 
@@ -1948,25 +1952,77 @@ class InventoryPurchaseStockAuditNotifier
   InventoryPurchaseStockAuditNotifier()
     : super(const InventoryPurchaseStockAuditState());
 
+  void selectStore(String storeId) {
+    if (state.session?['store_id'] != storeId) {
+      state = const InventoryPurchaseStockAuditState();
+    }
+  }
+
+  Future<Map<String, dynamic>?> prepare(
+    String storeId, {
+    String? sessionId,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      final session = await inventoryService.prepareInventoryStockAudit(
+        storeId: storeId,
+        sessionId: sessionId,
+      );
+      state = state.copyWith(
+        isSaving: false,
+        session: session,
+        lastSessionId: session['id']?.toString(),
+        lastCompleted: session['status'] == 'completed',
+      );
+      return session;
+    } catch (e) {
+      state = state.copyWith(isSaving: false, error: _mapStockAuditError(e));
+      return null;
+    }
+  }
+
+  Future<bool> cancel(String storeId) async {
+    final session = state.session;
+    if (session == null || session['store_id'] != storeId) return false;
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.cancelInventoryStockAudit(
+        storeId: storeId,
+        sessionId: session['id'].toString(),
+        version: (session['version'] as num).toInt(),
+      );
+      state = const InventoryPurchaseStockAuditState();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isSaving: false, error: _mapStockAuditError(e));
+      return false;
+    }
+  }
+
   Future<bool> save({
     required String storeId,
     required List<Map<String, dynamic>> lines,
     String? memo,
     required bool complete,
     String? sessionId,
+    int? expectedVersion,
   }) async {
+    final session = state.session;
+    if (session == null || session['store_id'] != storeId) return false;
     state = state.copyWith(isSaving: true, clearError: true);
     try {
-      final savedSessionId = await inventoryService.saveInventoryStockAudit(
+      final saved = await inventoryService.saveInventoryStockAudit(
         storeId: storeId,
         lines: lines,
         memo: memo,
         complete: complete,
-        sessionId: sessionId ?? state.lastSessionId,
+        sessionId: sessionId ?? session['id'].toString(),
+        expectedVersion: expectedVersion ?? (session['version'] as num).toInt(),
       );
       state = state.copyWith(
         isSaving: false,
-        lastSessionId: savedSessionId,
+        lastSessionId: saved['id'].toString(),
+        session: saved,
         lastCompleted: complete,
       );
       return true;
@@ -1980,6 +2036,18 @@ class InventoryPurchaseStockAuditNotifier
     final fallback = 'Failed to save stock audit.';
     final message = error.toString();
 
+    if (message.contains('INVENTORY_STOCK_AUDIT_STOCK_CHANGED')) {
+      return 'Stock or item data changed after download. Restart the stocktake and recount with a new template.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_VERSION_CHANGED')) {
+      return 'A newer draft was saved. Download the updated template.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_INCOMPLETE')) {
+      return 'Count every item or give an explicit exclusion reason before completion.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_COUNT_TIME_INVALID')) {
+      return 'Enter the actual count time after template download.';
+    }
     if (message.contains('INVENTORY_STOCK_AUDIT_FORBIDDEN')) {
       return 'No permission to save stock audit for this store.';
     }

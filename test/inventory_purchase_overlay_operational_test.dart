@@ -14,6 +14,7 @@ import 'package:globos_pos_system/features/inventory/ingredient_excel_import.dar
 import 'package:globos_pos_system/features/inventory/inventory_provider.dart';
 import 'package:globos_pos_system/features/inventory/recipe_excel_import.dart';
 import 'package:globos_pos_system/features/inventory_purchase/inventory_purchase_screen.dart';
+import 'package:globos_pos_system/features/inventory_purchase/stock_audit_excel_import.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -137,6 +138,37 @@ class _SnapshotNotifier
   }
 }
 
+Map<String, dynamic> _stockAuditSession(String storeId) => {
+  'id': 'audit-session',
+  'store_id': storeId,
+  'version': 1,
+  'status': 'planned',
+  'exported_at': '2020-01-01T00:00:00Z',
+  'lines': <Map<String, dynamic>>[],
+  'snapshot': List.generate(
+    123,
+    (i) => {
+      'product_id': 'product-$i',
+      'product_code': 'WR$i',
+      'product_name': 'Count item $i',
+      'base_unit': 'g',
+      'current_stock_base': 1000,
+    },
+  ),
+};
+
+class _StockAuditNotifier extends InventoryPurchaseStockAuditNotifier {
+  @override
+  Future<Map<String, dynamic>?> prepare(
+    String storeId, {
+    String? sessionId,
+  }) async {
+    final session = _stockAuditSession(storeId);
+    state = state.copyWith(session: session, lastSessionId: 'audit-session');
+    return session;
+  }
+}
+
 class _SupplierNotifier extends InventoryPurchaseSupplierCatalogNotifier {
   _SupplierNotifier() {
     state = const InventoryPurchaseSupplierCatalogState(
@@ -249,6 +281,30 @@ void main() {
       TextCellValue('Thịt bò'),
       DoubleCellValue(100),
     ]);
+    final countExcel = Excel.decodeBytes(
+      buildStockAuditTemplate(_stockAuditSession(_storeId)),
+    );
+    countExcel[stockAuditSettingsSheet]
+        .cell(CellIndex.indexByString('B6'))
+        .value = TextCellValue(
+      DateTime.now().toUtc().toIso8601String(),
+    );
+    for (var i = 2; i <= 124; i++) {
+      countExcel[stockAuditSheet].cell(CellIndex.indexByString('D$i')).value =
+          IntCellValue(0);
+    }
+    final countFiles = [
+      XFile.fromData(
+        Uint8List.fromList(countExcel.encode()!),
+        name: 'count.xlsx',
+        length: countExcel.encode()!.length,
+      ),
+      XFile.fromData(
+        Uint8List.fromList([1, 2, 3]),
+        name: 'invalid.xlsx',
+        length: 3,
+      ),
+    ];
     final recipeFiles = <XFile>[
       XFile.fromData(
         Uint8List.fromList(validExcel.encode()!),
@@ -279,6 +335,7 @@ void main() {
               autoLoad: false,
               pickRecipeImportFile: () async => recipeFiles.removeAt(0),
               pickIngredientImportFile: () async => ingredientFile,
+              pickStockAuditImportFile: () async => countFiles.removeAt(0),
             ),
           ),
         ),
@@ -312,6 +369,9 @@ void main() {
           ),
           inventoryPurchaseStockStatusProvider.overrideWith(
             (ref) => _StockStatusNotifier(),
+          ),
+          inventoryPurchaseStockAuditProvider.overrideWith(
+            (ref) => _StockAuditNotifier(),
           ),
           recipeProvider.overrideWith((ref) => _RecipeNotifier()),
           inventoryPurchaseNewMenuProvider.overrideWith(
@@ -468,6 +528,22 @@ void main() {
       tester,
       const Key('inventory_stock_audit_action'),
       const Key('inventory_stock_audit_dialog'),
+    );
+
+    await _openAndDismiss(
+      tester,
+      const Key('inventory_stock_audit_excel_import_action'),
+      const Key('inventory_stock_audit_excel_preview_dialog'),
+    );
+    await _openAndDismiss(
+      tester,
+      const Key('inventory_stock_audit_excel_import_action'),
+      const Key('inventory_stock_audit_excel_error_dialog'),
+    );
+    await _openAndDismiss(
+      tester,
+      const Key('inventory_stock_audit_restart_action'),
+      const Key('inventory_stock_audit_restart_dialog'),
     );
 
     await _selectSection(tester, 10);

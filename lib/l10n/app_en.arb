@@ -4137,5 +4137,26 @@
   "menuTaxBasis": "Label / product or classification basis",
   "menuSugarTaxHelp": "2026: above 5 g/100ml is 10%; exactly 5 is 8%. If the exact amount is unknown, select a confirmed band and enter its basis.",
   "menuTaxInvalid": "Check the sugar amount, classification and basis.",
-  "menuComboVat": "VAT by component"
+  "menuComboVat": "VAT by component",
+  "inventoryStockAuditDownload": "Download count sheet",
+  "inventoryStockAuditUpload": "Upload count sheet",
+  "inventoryStockAuditExcelPreview": "Stocktake preview",
+  "inventoryStockAuditExcelSummary": "Counted: {counted} · Uncounted: {blank} · Excluded: {excluded}",
+  "inventoryStockAuditExcelHelp": "Blank quantities are uncounted; 0 means zero stock. Save a draft to keep counts without changing stock. Complete after counting all items or entering exclusion reasons.",
+  "inventoryStockAuditFileError": "Unable to read stocktake file",
+  "inventoryStockAuditRestart": "Restart stocktake",
+  "inventoryStockAuditRestartHelp": "Discard this draft and download a fresh snapshot. Recount the items before completing.",
+  "@inventoryStockAuditExcelSummary": {
+    "placeholders": {
+      "counted": {
+        "type": "int"
+      },
+      "blank": {
+        "type": "int"
+      },
+      "excluded": {
+        "type": "int"
+      }
+    }
+  }
 }
