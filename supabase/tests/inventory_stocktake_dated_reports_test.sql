@@ -6,6 +6,12 @@ UPDATE inventory_stock_checkpoints SET opening_stock=100,tracked_from='2026-09-2
 DO $$ DECLARE store uuid:='3a268807-771f-4fd4-84fe-e1b0b00de40a'; s jsonb; lines jsonb; preview jsonb; result jsonb; report jsonb; item uuid; pid uuid; transactions int; original_report jsonb;
 BEGIN
  s:=prepare_inventory_stock_audit_v2(store,'2026-09-30','2026-09-30T23:00:00+07:00');
+ -- Existing 104 ingredients use supplier-item links, not the legacy text field.
+ IF EXISTS(SELECT 1 FROM jsonb_array_elements(s->'snapshot') x WHERE nullif(btrim(x->>'supplier_name'),'') IS NULL)
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(s->'snapshot') x JOIN inventory_products p ON p.id=(x->>'product_id')::uuid
+  WHERE x->>'supplier_name' IS DISTINCT FROM (SELECT string_agg(DISTINCT supplier.supplier_name,' / ' ORDER BY supplier.supplier_name)
+   FROM inventory_supplier_items link JOIN inventory_suppliers supplier ON supplier.id=link.supplier_id WHERE link.product_id=p.id))
+ THEN RAISE EXCEPTION 'LINKED_SUPPLIER_MISSING_FROM_TEMPLATE'; END IF;
  PERFORM expect_stock_audit_error(format('SELECT save_inventory_stock_audit_v2(%L,%L,1,''[]''::jsonb,false)',store,s->>'id'),'DATED_FORMAT_REQUIRED');
  item:=(s->'snapshot'->0->>'inventory_item_id')::uuid; pid:=(s->'snapshot'->0->>'product_id')::uuid;
  SELECT jsonb_agg(jsonb_build_object('product_id',x->>'product_id','actual_quantity_base',80,'counted_at','2026-09-30T16:00:00Z','excluded_reason',null,'memo',null)) INTO lines FROM jsonb_array_elements(s->'snapshot') x;

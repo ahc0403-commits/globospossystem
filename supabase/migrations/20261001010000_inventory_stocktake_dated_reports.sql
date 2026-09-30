@@ -170,7 +170,9 @@ BEGIN
   'product_updated_at',p.updated_at,'current_stock_base',public.inventory_stock_at(i.id,least(p_effective_at,moment))->'quantity',
   'baseline_source',public.inventory_stock_at(i.id,least(p_effective_at,moment))->>'source',
   'baseline_provisional',p_effective_at>moment,'unit_cost',nullif(i.cost_per_unit,0),
-  'supplier_name',coalesce(i.supplier_name,'')) ORDER BY p.product_code,p.id) INTO snapshot
+  'supplier_name',coalesce((SELECT string_agg(DISTINCT supplier.supplier_name,' / ' ORDER BY supplier.supplier_name)
+   FROM public.inventory_supplier_items link JOIN public.inventory_suppliers supplier ON supplier.id=link.supplier_id
+   WHERE link.product_id=p.id),nullif(btrim(i.supplier_name),''),'')) ORDER BY p.product_code,p.id) INTO snapshot
  FROM public.inventory_products p JOIN public.inventory_items i ON i.id=p.inventory_item_id
  WHERE p.restaurant_id=p_store_id AND p.is_active AND i.is_active;
  IF snapshot IS NULL THEN RAISE EXCEPTION 'INVENTORY_STOCK_AUDIT_LINES_REQUIRED'; END IF;
