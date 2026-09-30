@@ -99,6 +99,18 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM inventory_stock_movements WHERE reference_id=(s->>'id')::uuid AND business_date='2026-09-30' AND (effective_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date='2026-10-01') THEN RAISE EXCEPTION 'MIDNIGHT_BUSINESS_DAY_LOST'; END IF;
 END $$;
 
+DO $$ DECLARE store uuid:='3a268807-771f-4fd4-84fe-e1b0b00de40a'; s jsonb; lines jsonb; preview jsonb; item uuid;
+BEGIN
+ s:=prepare_inventory_stock_audit_v2(store,(clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,clock_timestamp());
+ item:=(s->'snapshot'->0->>'inventory_item_id')::uuid;
+ SELECT jsonb_agg(jsonb_build_object('product_id',x->>'product_id','actual_quantity_base',CASE WHEN x->>'inventory_item_id'=item::text THEN 0 ELSE NULL END,
+  'counted_at',s->>'effective_at','excluded_reason',CASE WHEN x->>'inventory_item_id'=item::text THEN NULL ELSE 'not counted in negative-balance test' END)) INTO lines FROM jsonb_array_elements(s->'snapshot') x;
+ UPDATE inventory_items SET current_stock=current_stock-5 WHERE id=item;
+ preview:=preview_inventory_stock_audit_v3(store,(s->>'id')::uuid,lines);
+ PERFORM save_inventory_stock_audit_v3(store,(s->>'id')::uuid,1,lines,true,NULL,preview->>'token');
+ IF (SELECT current_stock FROM inventory_items WHERE id=item)<>-5 OR (SELECT quantity FROM inventory_items WHERE id=item)<>0 THEN RAISE EXCEPTION 'NEGATIVE_POS_BALANCE_CLAMPED'; END IF;
+END $$;
+
 SET request.jwt.claim.role='authenticated';
 SELECT expect_stock_audit_error($q$SELECT list_inventory_stock_audits('3a268807-771f-4fd4-84fe-e1b0b00de40a')$q$,'FORBIDDEN');
 SELECT expect_stock_audit_error($q$SELECT prepare_inventory_stock_audit_v2('3a268807-771f-4fd4-84fe-e1b0b00de40a','2026-09-30','2026-09-30T16:00:00Z')$q$,'FORBIDDEN');

@@ -239,7 +239,7 @@ BEGIN
    ELSE window_net:=(public.inventory_stock_at(item.id,observed)->>'quantity')::numeric-baseline; END IF;
   END IF;
   normalized:=actual-window_net;
-  IF normalized<0 OR normalized>999999999.999 OR normalized+net NOT BETWEEN -999999999.999 AND 999999999.999 THEN issue:='RESULT_QUANTITY_INVALID'; END IF;
+  IF normalized<0 OR normalized>999999999.999 OR normalized+net NOT BETWEEN -999999999.999 AND 999999999.999 OR abs(normalized-baseline)>999999999.999 OR abs(normalized+net-coalesce(item.current_stock,0))>999999999.999 THEN issue:='RESULT_QUANTITY_INVALID'; END IF;
   IF baseline IS NULL THEN
    -- Explicit initial anchor: comparison remains NULL, no invented POS zero.
    normalized:=actual;
@@ -306,7 +306,9 @@ BEGIN
   IF p_complete AND row->>'actual_quantity_base' IS NOT NULL THEN
    item_id:=(row->>'inventory_item_id')::uuid;
    PERFORM set_config('globos.stocktake_session',s.id::text,true);
-   UPDATE public.inventory_items SET current_stock=(row->>'current_after_base')::numeric,quantity=(row->>'current_after_base')::numeric,updated_at=clock_timestamp() WHERE id=item_id;
+   -- quantity is the nonnegative counted anchor; current_stock is the
+   -- subsequent POS balance and may be negative after later consumption.
+   UPDATE public.inventory_items SET current_stock=(row->>'current_after_base')::numeric,quantity=(row->>'actual_quantity_base')::numeric,updated_at=clock_timestamp() WHERE id=item_id;
    INSERT INTO public.inventory_transactions(restaurant_id,ingredient_id,transaction_type,quantity_g,reference_type,reference_id,
     note,created_by,effective_at,effective_date,stock_before,stock_after)
    VALUES(p_store_id,item_id,'adjust',(row->>'adjustment_base')::numeric,'inventory_stock_audit',s.id,coalesce(row->>'memo',p_memo,'Dated stocktake'),auth.uid(),s.effective_at,s.count_business_date,(row->>'current_before_base')::numeric,(row->>'current_after_base')::numeric);
