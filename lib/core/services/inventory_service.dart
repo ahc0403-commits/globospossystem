@@ -1190,8 +1190,52 @@ class InventoryService {
   Future<Map<String, dynamic>> prepareInventoryStockAudit({
     required String storeId,
     String? sessionId,
+    String? businessDate,
+    DateTime? effectiveAt,
+  }) => sessionId != null
+      ? _rpcMap(
+          'get_inventory_stock_audit_v2',
+          params: {'p_store_id': storeId, 'p_session_id': sessionId},
+        )
+      : _rpcMap(
+          'prepare_inventory_stock_audit_v2',
+          params: {
+            'p_store_id': storeId,
+            'p_business_date': businessDate,
+            'p_effective_at': effectiveAt?.toUtc().toIso8601String(),
+          },
+        );
+
+  Future<Map<String, dynamic>> previewInventoryStockAudit({
+    required String storeId,
+    required String sessionId,
+    required List<Map<String, dynamic>> lines,
+    bool initializeMissing = false,
+    bool acknowledgeLegacy = false,
   }) => _rpcMap(
-    'prepare_inventory_stock_audit',
+    'preview_inventory_stock_audit_v3',
+    params: {
+      'p_store_id': storeId,
+      'p_session_id': sessionId,
+      'p_lines': lines,
+      'p_initialize_missing': initializeMissing,
+      'p_acknowledge_legacy': acknowledgeLegacy,
+    },
+  );
+
+  Future<List<Map<String, dynamic>>> listInventoryStockAudits(
+    String storeId, {
+    String? businessDate,
+  }) => _rpcList(
+    'list_inventory_stock_audits',
+    params: {'p_store_id': storeId, 'p_business_date': businessDate},
+  );
+
+  Future<Map<String, dynamic>> getInventoryStockAuditReport(
+    String storeId,
+    String sessionId,
+  ) => _rpcMap(
+    'get_inventory_stock_audit_report',
     params: {'p_store_id': storeId, 'p_session_id': sessionId},
   );
 
@@ -1217,8 +1261,12 @@ class InventoryService {
     required bool complete,
     required String sessionId,
     required int expectedVersion,
+    bool dated = false,
+    String? previewToken,
+    bool initializeMissing = false,
+    bool acknowledgeLegacy = false,
   }) => _rpcMap(
-    'save_inventory_stock_audit_v2',
+    dated ? 'save_inventory_stock_audit_v3' : 'save_inventory_stock_audit_v2',
     params: {
       'p_store_id': storeId,
       'p_lines': lines,
@@ -1226,6 +1274,11 @@ class InventoryService {
       'p_complete': complete,
       'p_session_id': sessionId,
       'p_expected_version': expectedVersion,
+      if (dated) ...{
+        'p_preview_token': previewToken,
+        'p_initialize_missing': initializeMissing,
+        'p_acknowledge_legacy': acknowledgeLegacy,
+      },
     },
   );
 

@@ -162,6 +162,8 @@ class _StockAuditNotifier extends InventoryPurchaseStockAuditNotifier {
   Future<Map<String, dynamic>?> prepare(
     String storeId, {
     String? sessionId,
+    String? businessDate,
+    DateTime? effectiveAt,
   }) async {
     final session = _stockAuditSession(storeId);
     state = state.copyWith(session: session, lastSessionId: 'audit-session');
@@ -573,6 +575,13 @@ Future<void> _openAndDismiss(
   await tester.ensureVisible(action);
   await tester.tap(action);
   await tester.pumpAndSettle();
+  final dateDialog = find.byKey(const Key('stocktake_reference_date_dialog'));
+  if (dateDialog.evaluate().isNotEmpty) {
+    await tester.tap(
+      find.descendant(of: dateDialog, matching: find.byType(FilledButton)),
+    );
+    await tester.pumpAndSettle();
+  }
   final dialog = find.byKey(dialogKey);
   expect(dialog, findsOneWidget, reason: '$actionKey did not open $dialogKey');
   Navigator.of(tester.element(dialog)).pop();

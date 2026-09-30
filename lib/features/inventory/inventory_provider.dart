@@ -1961,12 +1961,16 @@ class InventoryPurchaseStockAuditNotifier
   Future<Map<String, dynamic>?> prepare(
     String storeId, {
     String? sessionId,
+    String? businessDate,
+    DateTime? effectiveAt,
   }) async {
     state = state.copyWith(isSaving: true, clearError: true);
     try {
       final session = await inventoryService.prepareInventoryStockAudit(
         storeId: storeId,
         sessionId: sessionId,
+        businessDate: businessDate,
+        effectiveAt: effectiveAt,
       );
       state = state.copyWith(
         isSaving: false,
@@ -2006,6 +2010,9 @@ class InventoryPurchaseStockAuditNotifier
     required bool complete,
     String? sessionId,
     int? expectedVersion,
+    String? previewToken,
+    bool initializeMissing = false,
+    bool acknowledgeLegacy = false,
   }) async {
     final session = state.session;
     if (session == null || session['store_id'] != storeId) return false;
@@ -2018,6 +2025,10 @@ class InventoryPurchaseStockAuditNotifier
         complete: complete,
         sessionId: sessionId ?? session['id'].toString(),
         expectedVersion: expectedVersion ?? (session['version'] as num).toInt(),
+        dated: session['template_version'] == 2,
+        previewToken: previewToken,
+        initializeMissing: initializeMissing,
+        acknowledgeLegacy: acknowledgeLegacy,
       );
       state = state.copyWith(
         isSaving: false,
@@ -2036,6 +2047,15 @@ class InventoryPurchaseStockAuditNotifier
     final fallback = 'Failed to save stock audit.';
     final message = error.toString();
 
+    if (message.contains('INVENTORY_STOCK_AUDIT_PREVIEW_CHANGED')) {
+      return '영업 거래가 추가되었습니다. 최신 미리보기를 확인하고 다시 확정하세요. / Refresh preview before completing.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_RECONCILIATION_REQUIRED')) {
+      return '기준 재고·거래 이력·최근 실사 충돌을 확인하세요. / Reconcile stock history before completing.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_DATE_INVALID')) {
+      return '베트남 시간 기준으로 실사 업무일과 기준시각을 확인하세요. / Invalid business date or reference time.';
+    }
     if (message.contains('INVENTORY_STOCK_AUDIT_STOCK_CHANGED')) {
       return 'Stock or item data changed after download. Restart the stocktake and recount with a new template.';
     }
@@ -2046,7 +2066,7 @@ class InventoryPurchaseStockAuditNotifier
       return 'Count every item or give an explicit exclusion reason before completion.';
     }
     if (message.contains('INVENTORY_STOCK_AUDIT_COUNT_TIME_INVALID')) {
-      return 'Enter the actual count time after template download.';
+      return '실측 시각에 시간대를 포함하고 기준일을 확인하세요. / Invalid count observation time.';
     }
     if (message.contains('INVENTORY_STOCK_AUDIT_FORBIDDEN')) {
       return 'No permission to save stock audit for this store.';

@@ -22,6 +22,7 @@ import '../inventory/inventory_provider.dart';
 import '../inventory/recipe_excel_import.dart';
 import 'inventory_purchase_document_service.dart';
 import 'stock_audit_excel_import.dart';
+import 'stock_audit_dated_dialogs.dart';
 
 typedef RecipeImportFilePicker = Future<XFile?> Function();
 typedef IngredientImportFilePicker = Future<XFile?> Function();
@@ -1319,9 +1320,7 @@ class _InventoryPurchaseScreenState
   }
 
   Future<void> _showStockAuditDialog({required String storeId}) async {
-    final session = await ref
-        .read(inventoryPurchaseStockAuditProvider.notifier)
-        .prepare(storeId);
+    final session = await _prepareDatedStockAudit(storeId);
     if (!mounted || session == null) return;
     final l10n = context.l10n;
     final rows = List<Map<String, dynamic>>.from(session['snapshot'] as List);
@@ -1408,6 +1407,7 @@ class _InventoryPurchaseScreenState
                         _buildStockAuditSubmitInput(
                           rows: rows,
                           controllers: controllers,
+                          countedAt: session['effective_at']?.toString(),
                           memo: memoController.text,
                           complete: false,
                         ),
@@ -1421,6 +1421,7 @@ class _InventoryPurchaseScreenState
                         _buildStockAuditSubmitInput(
                           rows: rows,
                           controllers: controllers,
+                          countedAt: session['effective_at']?.toString(),
                           memo: memoController.text,
                           complete: true,
                         ),
@@ -1440,16 +1441,24 @@ class _InventoryPurchaseScreenState
 
     if (input == null || !mounted) return;
 
-    final ok = await ref
-        .read(inventoryPurchaseStockAuditProvider.notifier)
-        .save(
-          storeId: storeId,
-          lines: input.lines,
-          memo: input.memo,
-          complete: input.complete,
-          sessionId: session['id'].toString(),
-          expectedVersion: (session['version'] as num).toInt(),
-        );
+    final ok = session['template_version'] == 2
+        ? await _reviewAndSaveDatedAudit(
+            storeId,
+            session,
+            input.lines,
+            rows.length - input.lines.length,
+            input.memo,
+          )
+        : await ref
+              .read(inventoryPurchaseStockAuditProvider.notifier)
+              .save(
+                storeId: storeId,
+                lines: input.lines,
+                memo: input.memo,
+                complete: input.complete,
+                sessionId: session['id'].toString(),
+                expectedVersion: (session['version'] as num).toInt(),
+              );
     if (!mounted) return;
     if (ok) {
       await Future.wait([
@@ -1467,6 +1476,7 @@ class _InventoryPurchaseScreenState
     required Map<String, TextEditingController> controllers,
     required String memo,
     required bool complete,
+    String? countedAt,
   }) {
     final lines = <Map<String, dynamic>>[];
     for (final row in rows) {
@@ -1477,7 +1487,7 @@ class _InventoryPurchaseScreenState
       lines.add({
         'product_id': productId,
         'actual_quantity_base': actual,
-        'counted_at': DateTime.now().toUtc().toIso8601String(),
+        'counted_at': countedAt ?? DateTime.now().toUtc().toIso8601String(),
         'excluded_reason': null,
         'memo': null,
       });
@@ -4347,15 +4357,76 @@ class _InventoryPurchaseScreenState
     ]);
   }
 
+  Future<Map<String, dynamic>?> _prepareDatedStockAudit(String storeId) async {
+    final existing = ref.read(inventoryPurchaseStockAuditProvider).session;
+    if (existing?['store_id'] == storeId &&
+        existing?['template_version'] == 2 &&
+        (existing?['status'] == 'planned' ||
+            existing?['status'] == 'in_progress')) {
+      return ref
+          .read(inventoryPurchaseStockAuditProvider.notifier)
+          .prepare(storeId, sessionId: existing!['id'].toString());
+    }
+    final choice = await selectStockAuditDate(context);
+    if (choice == null ||
+        !mounted ||
+        ref.read(adminScopedStoreIdProvider) != storeId) {
+      return null;
+    }
+    return ref
+        .read(inventoryPurchaseStockAuditProvider.notifier)
+        .prepare(
+          storeId,
+          businessDate: choice.businessDate,
+          effectiveAt: choice.effectiveAt,
+        );
+  }
+
+  Future<bool> _reviewAndSaveDatedAudit(
+    String storeId,
+    Map<String, dynamic> session,
+    List<Map<String, dynamic>> lines,
+    int blanks,
+    String? memo,
+  ) async {
+    while (true) {
+      if (!mounted || ref.read(adminScopedStoreIdProvider) != storeId) {
+        return false;
+      }
+      final decision = await reviewDatedStockAudit(
+        context,
+        storeId: storeId,
+        session: session,
+        lines: lines,
+        blankCount: blanks,
+      );
+      if (decision == null || !mounted) return false;
+      final ok = await ref
+          .read(inventoryPurchaseStockAuditProvider.notifier)
+          .save(
+            storeId: storeId,
+            sessionId: session['id'].toString(),
+            expectedVersion: (session['version'] as num).toInt(),
+            lines: lines,
+            memo: memo,
+            complete: decision.complete,
+            previewToken: decision.token,
+            initializeMissing: decision.initializeMissing,
+            acknowledgeLegacy: decision.acknowledgeLegacy,
+          );
+      if (ok) return true;
+      final error = ref.read(inventoryPurchaseStockAuditProvider).error;
+      if (error?.contains('Refresh preview') != true) return false;
+    }
+  }
+
   Future<void> _exportStockAudit(String storeId) async {
     setState(() => _isWorkingStockAuditFile = true);
     try {
-      final session = await ref
-          .read(inventoryPurchaseStockAuditProvider.notifier)
-          .prepare(storeId);
+      final session = await _prepareDatedStockAudit(storeId);
       if (!mounted || session == null) return;
       await FileSaver.instance.saveFile(
-        name: 'stocktake_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}',
+        name: stockAuditFileName(session),
         bytes: Uint8List.fromList(buildStockAuditTemplate(session)),
         ext: 'xlsx',
         mimeType: MimeType.microsoftExcel,
@@ -4398,6 +4469,32 @@ class _InventoryPurchaseScreenState
         storeId: storeId,
         session: session,
       );
+      if (session['template_version'] == 2 &&
+          session['status'] == 'completed') {
+        final ok = await ref
+            .read(inventoryPurchaseStockAuditProvider.notifier)
+            .save(
+              storeId: storeId,
+              sessionId: session['id'].toString(),
+              expectedVersion: (session['version'] as num).toInt(),
+              lines: imported.lines,
+              memo: session['memo']?.toString(),
+              complete: true,
+            );
+        if (ok && mounted) await _reloadStoreScope(storeId);
+        return;
+      }
+      if (session['template_version'] == 2) {
+        final ok = await _reviewAndSaveDatedAudit(
+          storeId,
+          session,
+          imported.lines,
+          imported.blankCount,
+          session['memo']?.toString(),
+        );
+        if (ok && mounted) await _reloadStoreScope(storeId);
+        return;
+      }
       final targets = {
         for (final row in List<Map<String, dynamic>>.from(
           session['snapshot'] as List,
@@ -4626,6 +4723,12 @@ class _InventoryPurchaseScreenState
         ),
       ],
       children: [
+        StockAuditReportPanel(
+          storeId: storeId,
+          refreshVersion:
+              '${stockAuditState.lastSessionId}/${stockAuditState.session?['version']}',
+        ),
+        const SizedBox(height: ToastSpacingTokens.md),
         ToastMetricStrip(
           dense: true,
           metrics: [

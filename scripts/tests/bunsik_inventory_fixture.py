@@ -14,6 +14,10 @@ def function(text,name):
  assert match,name
  return match[0]
 parts=[(root/'test/fixtures/inventory_workflow_setup.sql').read_text(),"""
+CREATE TABLE public.order_items(id uuid,order_id uuid);
+CREATE TABLE public.payments(id uuid,order_id uuid,created_at timestamptz);
+ALTER TABLE public.inventory_transactions ADD COLUMN stock_before numeric, ADD COLUMN stock_after numeric, ADD COLUMN effective_date date;
+ALTER TABLE public.inventory_items ADD CONSTRAINT inventory_items_quantity_check CHECK(quantity>=0);
 ALTER TABLE public.inventory_items ADD COLUMN name text, ADD COLUMN unit text, ADD COLUMN created_at timestamptz DEFAULT now(), ADD COLUMN cost_per_unit numeric DEFAULT 0, ADD COLUMN supplier_name text, ADD COLUMN is_active boolean DEFAULT true;
 ALTER TABLE public.inventory_items ALTER COLUMN id SET DEFAULT gen_random_uuid();
 ALTER TABLE public.inventory_items ALTER COLUMN updated_at SET DEFAULT now();
