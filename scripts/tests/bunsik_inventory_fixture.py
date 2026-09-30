@@ -4,6 +4,7 @@ import csv,re,sys
 root,output=map(Path,sys.argv[1:]);migrations=root/'supabase/migrations'
 base=(migrations/'20260506000000_inventory_purchase_office_contracts.sql').read_text()
 approval=(migrations/'20260827150000_inventory_purchase_approval_receiving_prices.sql').read_text()
+receipt_guard=(migrations/'20260927010000_inventory_receipt_submission_lock_audit.sql').read_text()
 def table(text,name):
  match=re.search(r'CREATE TABLE IF NOT EXISTS public\.'+name+r' \([\s\S]*?\n\);',text)
  assert match,name
@@ -20,6 +21,7 @@ ALTER TABLE public.inventory_items ALTER COLUMN updated_at SET DEFAULT now();
 for name in ['inventory_suppliers','inventory_products','inventory_supplier_items','inventory_purchase_orders','inventory_purchase_order_lines','inventory_receipts','inventory_receipt_lines','inventory_daily_consumption','inventory_recommendation_runs','inventory_recommendation_lines','inventory_stock_audit_sessions','inventory_stock_audit_lines']:
  parts.append(table(base,name))
 parts.append("ALTER TABLE public.inventory_supplier_items ADD COLUMN allows_fractional_quantity boolean GENERATED ALWAYS AS (order_unit IN ('kg','g','l','ml')) STORED;")
+parts.append("ALTER TABLE public.inventory_receipts ADD COLUMN submitted_at timestamptz;")
 for name in ['inventory_supplier_item_price_history','inventory_purchase_approval_events','inventory_purchase_documents']:
  parts.append(table(approval,name))
 parts += [function(approval,'capture_inventory_supplier_price_history'),"CREATE TRIGGER inventory_supplier_item_price_history_trigger AFTER INSERT OR UPDATE OF unit_price,tax_rate ON public.inventory_supplier_items FOR EACH ROW EXECUTE FUNCTION public.capture_inventory_supplier_price_history();"]
@@ -27,7 +29,6 @@ parts += [function(approval,'capture_inventory_supplier_price_history'),"CREATE 
 parts.append("""
 CREATE TABLE public.inventory_receipt_confirmation_attempts(id uuid DEFAULT gen_random_uuid(),purchase_order_id uuid REFERENCES public.inventory_purchase_orders(id),receipt_id uuid REFERENCES public.inventory_receipts(id));
 CREATE TABLE public.inventory_receipt_submission_attempts(receipt_id uuid REFERENCES public.inventory_receipts(id),attempt_key text);
-CREATE TABLE public.inventory_receipt_change_history(id uuid DEFAULT gen_random_uuid(),receipt_id uuid REFERENCES public.inventory_receipts(id));
 CREATE TABLE public.inventory_receipt_issues(id uuid DEFAULT gen_random_uuid(),restaurant_id uuid,receipt_line_id uuid REFERENCES public.inventory_receipt_lines(id),purchase_order_id uuid REFERENCES public.inventory_purchase_orders(id));
 CREATE TABLE public.inventory_supplier_returns(id uuid DEFAULT gen_random_uuid(),restaurant_id uuid,receipt_line_id uuid REFERENCES public.inventory_receipt_lines(id),purchase_order_id uuid REFERENCES public.inventory_purchase_orders(id));
 CREATE TABLE public.inventory_purchase_request_lines(id uuid,product_id uuid REFERENCES public.inventory_products(id));
@@ -35,8 +36,10 @@ CREATE TABLE public.procurement_quote_lines(id uuid,supplier_item_id uuid REFERE
 CREATE TABLE public.menu_recipes(id uuid,ingredient_id uuid REFERENCES public.inventory_items(id) ON DELETE CASCADE);
 CREATE TABLE public.inventory_physical_counts(id uuid,ingredient_id uuid REFERENCES public.inventory_items(id) ON DELETE CASCADE);
 """)
+parts.append(receipt_guard[receipt_guard.index('CREATE TABLE public.inventory_receipt_change_history'):receipt_guard.index('CREATE INDEX inventory_receipt_change_history_receipt_time')])
 parts.append("""
 CREATE FUNCTION public.can_access_inventory_purchase_store(p_store_id uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT COALESCE(auth.role(),'')='service_role' OR EXISTS(SELECT 1 FROM public.users WHERE auth_id=auth.uid() AND restaurant_id=p_store_id AND is_active) $$;
+CREATE FUNCTION public.can_verify_inventory_receipt(p_store_id uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 INSERT INTO public.brands VALUES('a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878');
 INSERT INTO public.restaurants(id,brand_id,name) VALUES('8bc9eef5-dcd5-46b1-b931-23f77132322c','a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878','BunsikClub Binh Thanh'),('3a268807-771f-4fd4-84fe-e1b0b00de40a','a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878','BunsikClub SAMPLE');
 SET request.jwt.claim.role='service_role';
@@ -64,9 +67,18 @@ INSERT INTO public.inventory_receipts(id,purchase_order_id,restaurant_id,supplie
 INSERT INTO public.inventory_receipt_lines(id,receipt_id,purchase_order_line_id,product_id,received_quantity_base) SELECT test_uuid(3),test_uuid(2),id,product_id,100 FROM public.inventory_purchase_order_lines WHERE purchase_order_id=test_uuid(1);
 INSERT INTO public.inventory_receipt_confirmation_attempts(purchase_order_id,receipt_id) VALUES(test_uuid(1),test_uuid(2));
 INSERT INTO public.inventory_receipt_submission_attempts VALUES(test_uuid(2),'old-attempt');
-INSERT INTO public.inventory_receipt_change_history(receipt_id) VALUES(test_uuid(2));
+INSERT INTO public.inventory_receipt_change_history(receipt_id,record_type,record_id,action) VALUES(test_uuid(2),'receipt',test_uuid(2),'update');
 INSERT INTO public.inventory_receipt_issues(restaurant_id,receipt_line_id,purchase_order_id) VALUES('3a268807-771f-4fd4-84fe-e1b0b00de40a',test_uuid(3),test_uuid(1));
 INSERT INTO public.inventory_supplier_returns(restaurant_id,receipt_line_id,purchase_order_id) VALUES('3a268807-771f-4fd4-84fe-e1b0b00de40a',test_uuid(3),test_uuid(1));
 UPDATE public.inventory_items SET current_stock=-5 WHERE id=(SELECT inventory_item_id FROM public.inventory_products WHERE restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c' ORDER BY product_code LIMIT 1);
+UPDATE public.inventory_receipts SET submitted_at=now() WHERE id=test_uuid(2);
+INSERT INTO public.inventory_receipts(id,purchase_order_id,restaurant_id,supplier_id,status,submitted_at) SELECT test_uuid(4),test_uuid(1),'3a268807-771f-4fd4-84fe-e1b0b00de40a',supplier_id,'confirmed',now() FROM public.inventory_purchase_orders WHERE id=test_uuid(1);
+INSERT INTO public.inventory_receipt_lines(id,receipt_id,product_id,received_quantity_base) SELECT test_uuid(5),test_uuid(4),id,100 FROM public.inventory_products WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a' LIMIT 1;
+INSERT INTO public.inventory_purchase_orders(id,purchase_order_no,restaurant_id,supplier_id) SELECT test_uuid(6),'BINH-KEEP','8bc9eef5-dcd5-46b1-b931-23f77132322c',id FROM public.inventory_suppliers LIMIT 1;
+INSERT INTO public.inventory_receipts(id,purchase_order_id,restaurant_id,supplier_id,status,submitted_at) SELECT test_uuid(7),test_uuid(6),'8bc9eef5-dcd5-46b1-b931-23f77132322c',supplier_id,'confirmed',now() FROM public.inventory_purchase_orders WHERE id=test_uuid(6);
+INSERT INTO public.inventory_receipt_lines(id,receipt_id,product_id,received_quantity_base) SELECT test_uuid(8),test_uuid(7),id,100 FROM public.inventory_products WHERE restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c' LIMIT 1;
 """)
+# Install the production guards after seed creation, including immutable
+# confirmed and locked submitted receipts. Reset/rollback must handle both.
+parts.append(receipt_guard[receipt_guard.index('CREATE FUNCTION public.guard_inventory_receipt_header_change'):receipt_guard.index('REVOKE ALL ON FUNCTION public.guard_inventory_receipt_header_change')])
 output.write_text('\n\n'.join(parts))

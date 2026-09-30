@@ -5,6 +5,10 @@ LOCK TABLE public.inventory_products,public.inventory_items,public.inventory_sup
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM public.inventory_purchase_orders WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a') OR EXISTS(SELECT 1 FROM public.inventory_stock_audit_sessions WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a') OR EXISTS(SELECT 1 FROM public.inventory_transactions WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a') THEN RAISE EXCEPTION 'BUNSIK_ROLLBACK_NEW_SAMPLE_ACTIVITY'; END IF;
 END $$;
+-- Restore confirmed/submitted SAMPLE receipt snapshots under exclusive locks;
+-- the same transaction restores the normal guards before committing.
+ALTER TABLE public.inventory_receipt_lines DISABLE TRIGGER inventory_receipt_line_change_guard;
+ALTER TABLE public.inventory_receipts DISABLE TRIGGER inventory_receipt_header_change_guard;
 DELETE FROM public.inventory_supplier_items WHERE product_id IN(SELECT id FROM public.inventory_products WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a');
 DELETE FROM public.inventory_products WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a';
 DELETE FROM public.inventory_items WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a';
@@ -108,4 +112,6 @@ DELETE FROM public.inventory_supplier_items WHERE product_id IN (SELECT (n->>'pr
 DELETE FROM public.inventory_products WHERE id IN (SELECT (n->>'product_id')::uuid FROM inventory_migration_backup.bunsik_20260930 z CROSS JOIN LATERAL jsonb_array_elements(z.rows)n WHERE table_name='new_binh_ids');
 DELETE FROM public.inventory_items WHERE id IN (SELECT (n->>'item_id')::uuid FROM inventory_migration_backup.bunsik_20260930 z CROSS JOIN LATERAL jsonb_array_elements(z.rows)n WHERE table_name='new_binh_ids');
 UPDATE public.inventory_products p SET product_code=old.product_code,updated_at=now() FROM inventory_migration_backup.bunsik_20260930 z CROSS JOIN LATERAL jsonb_populate_recordset(NULL::public.inventory_products,z.rows) old WHERE z.table_name='binh_products' AND p.id=old.id;
+ALTER TABLE public.inventory_receipts ENABLE TRIGGER inventory_receipt_header_change_guard;
+ALTER TABLE public.inventory_receipt_lines ENABLE TRIGGER inventory_receipt_line_change_guard;
 COMMIT;
