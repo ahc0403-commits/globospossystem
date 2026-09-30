@@ -55,3 +55,20 @@ run_sql "$BUNSIK_ROOT/supabase/migrations/20260930020000_inventory_stock_audit_e
 run_sql "$BUNSIK_ROOT/supabase/tests/inventory_stock_audit_excel_test.sql"
 
 python3 "$BUNSIK_ROOT/scripts/tests/stock_audit_concurrency.py" "$BUNSIK_PORT"
+
+run_sql "$BUNSIK_ROOT/supabase/migrations/20261001010000_inventory_stocktake_dated_reports.sql"
+run_sql "$BUNSIK_ROOT/supabase/tests/inventory_stocktake_dated_reports_test.sql"
+python3 "$BUNSIK_ROOT/scripts/tests/stocktake_dated_concurrency.py" "$BUNSIK_PORT"
+
+psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 -c "CREATE TABLE dated_rollback_stock AS SELECT id,current_stock FROM inventory_items;" >/dev/null
+run_sql "$BUNSIK_ROOT/scripts/rollback_inventory_stocktake_dated_reports.sql"
+psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+SET request.jwt.claim.role='service_role';
+DO $$ DECLARE sid uuid; report jsonb; BEGIN
+ IF EXISTS(SELECT 1 FROM dated_rollback_stock b JOIN inventory_items i USING(id) WHERE b.current_stock IS DISTINCT FROM i.current_stock) THEN RAISE EXCEPTION 'ROLLBACK_CHANGED_STOCK'; END IF;
+ SELECT id INTO sid FROM inventory_stock_audit_sessions WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a' AND template_version=2 AND status='completed' LIMIT 1;
+ report:=get_inventory_stock_audit_report('3a268807-771f-4fd4-84fe-e1b0b00de40a',sid);
+ IF jsonb_array_length(report->'rows')=0 OR report->'report' IS NULL THEN RAISE EXCEPTION 'ROLLBACK_LOST_REPORT'; END IF;
+END $$;
+SELECT 'Rollback retains quantities and completed report: PASS';
+SQL
