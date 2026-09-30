@@ -1,0 +1,129 @@
+{
+  "source_file": "/Users/andreahn/Downloads/Bunsik Inventory Items - Dung.xlsx",
+  "source_sha256": "02b3a2db9ab27b9ca5bf4691cd237d19987cbdc0e73c1c31a23e6fc876411d20",
+  "generated_at": "2026-09-30T22:43:31.516713+07:00",
+  "store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+  "store_name": "BunsikClub Binh Thanh",
+  "source_sheets": [
+    "GENERAL",
+    "WOORI",
+    "OTOKI",
+    "YK",
+    "SHOPEE",
+    "PHUC LOC KOREA",
+    "MEAT BOX",
+    "NAKYUNG TTEOKJIP",
+    "DRINKS",
+    "PACKAGING"
+  ],
+  "detail_counts": {
+    "WOORI": 77,
+    "OTOKI": 10,
+    "YK": 6,
+    "SHOPEE": 4,
+    "PHUC LOC KOREA": 2,
+    "MEAT BOX": 4,
+    "NAKYUNG TTEOKJIP": 1,
+    "DRINKS": 6,
+    "PACKAGING": 13
+  },
+  "general_item_count": 110,
+  "unique_total": 123,
+  "existing_db_matches": 104,
+  "new_items": 19,
+  "unmatched_db_products": 0,
+  "normalized_name_mismatches": 0,
+  "duplicate_codes": 0,
+  "invalid_code_formats": 0,
+  "general_detail_code_mismatches": 0,
+  "general_prefix_mismatches": [
+    {
+      "cell": "GENERAL!A10",
+      "source_prefix": "SH",
+      "purchase_request_code": "SP004"
+    },
+    {
+      "cell": "GENERAL!A11",
+      "source_prefix": "SH",
+      "purchase_request_code": "SP001"
+    },
+    {
+      "cell": "GENERAL!A12",
+      "source_prefix": "SH",
+      "purchase_request_code": "SP003"
+    },
+    {
+      "cell": "GENERAL!A13",
+      "source_prefix": "SH",
+      "purchase_request_code": "SP002"
+    },
+    {
+      "cell": "GENERAL!A95",
+      "source_prefix": "NA",
+      "purchase_request_code": "NK001"
+    },
+    {
+      "cell": "GENERAL!A96",
+      "source_prefix": "ME",
+      "purchase_request_code": "MB001"
+    },
+    {
+      "cell": "GENERAL!A97",
+      "source_prefix": "ME",
+      "purchase_request_code": "MB002"
+    },
+    {
+      "cell": "GENERAL!A98",
+      "source_prefix": "ME",
+      "purchase_request_code": "MB003"
+    },
+    {
+      "cell": "GENERAL!A99",
+      "source_prefix": "ME",
+      "purchase_request_code": "MB004"
+    },
+    {
+      "cell": "GENERAL!A100",
+      "source_prefix": "ME",
+      "purchase_request_code": "OT001"
+    }
+  ],
+  "supplier_name_source_policy": "GENERAL J cells; PACKAGING retained as source sheet label, not invented commercial supplier name",
+  "source_modified": false,
+  "production_mutations": false,
+  "stocktake_importer_implemented": false,
+  "live_audit_signature": "save_inventory_stock_audit(p_store_id uuid, p_lines jsonb, p_memo text)",
+  "live_audit_immediately_applies_stock": true,
+  "source_audit_signature_has_5_parameters": true,
+  "artifact": "Bunsik_Inventory_Mapping_and_Count_20260930.xlsx",
+  "scope": {
+    "source_and_stocktake_store": "BunsikClub Binh Thanh",
+    "source_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+    "test_clone_target_store": "BunsikClub SAMPLE",
+    "test_clone_target_store_id": "3a268807-771f-4fd4-84fe-e1b0b00de40a",
+    "sequence": [
+      "change Binh Thanh 104 codes",
+      "register Binh Thanh 19 missing products",
+      "remove all sample test inventory and dependencies",
+      "copy all 123 Binh Thanh products to sample with new UUIDs",
+      "stocktake Binh Thanh only"
+    ]
+  },
+  "sample_current_product_count": 104,
+  "sample_existing_code_matches": 104,
+  "sample_product_names_different_from_source": [
+    "8332",
+    "8483",
+    "9090"
+  ],
+  "sample_test_dependencies": {
+    "purchase_orders": 12,
+    "purchase_order_lines": 27,
+    "receipts": 5,
+    "receipt_lines": 11,
+    "supplier_items": 105,
+    "supplier_price_history": 105
+  },
+  "sample_clone_rows": 123,
+  "sample_stocktake_required": false
+}

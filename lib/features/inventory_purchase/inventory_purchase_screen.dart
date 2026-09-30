@@ -21,6 +21,7 @@ import '../inventory/ingredient_excel_import.dart';
 import '../inventory/inventory_provider.dart';
 import '../inventory/recipe_excel_import.dart';
 import 'inventory_purchase_document_service.dart';
+import 'stock_audit_excel_import.dart';
 
 typedef RecipeImportFilePicker = Future<XFile?> Function();
 typedef IngredientImportFilePicker = Future<XFile?> Function();
@@ -32,12 +33,14 @@ class InventoryPurchaseScreen extends ConsumerStatefulWidget {
     this.autoLoad = true,
     this.pickRecipeImportFile,
     this.pickIngredientImportFile,
+    this.pickStockAuditImportFile,
   });
 
   final int initialSectionIndex;
   final bool autoLoad;
   final RecipeImportFilePicker? pickRecipeImportFile;
   final IngredientImportFilePicker? pickIngredientImportFile;
+  final IngredientImportFilePicker? pickStockAuditImportFile;
 
   @override
   ConsumerState<InventoryPurchaseScreen> createState() =>
@@ -56,6 +59,7 @@ class _InventoryPurchaseScreenState
   bool _isImportingRecipes = false;
   bool _isExportingIngredientTemplate = false;
   bool _isImportingIngredients = false;
+  bool _isWorkingStockAuditFile = false;
   bool _liveRefreshInFlight = false;
 
   @override
@@ -227,6 +231,7 @@ class _InventoryPurchaseScreenState
   }
 
   Future<void> _reloadStoreScope(String storeId) async {
+    ref.read(inventoryPurchaseStockAuditProvider.notifier).selectStore(storeId);
     await Future.wait([
       ref.read(inventoryPurchaseOverviewProvider.notifier).load(storeId),
       ref.read(inventoryPurchaseStockStatusProvider.notifier).load(storeId),
@@ -1313,23 +1318,26 @@ class _InventoryPurchaseScreenState
     }
   }
 
-  Future<void> _showStockAuditDialog({
-    required String storeId,
-    required List<Map<String, dynamic>> stockRows,
-    String? currentSessionId,
-  }) async {
+  Future<void> _showStockAuditDialog({required String storeId}) async {
+    final session = await ref
+        .read(inventoryPurchaseStockAuditProvider.notifier)
+        .prepare(storeId);
+    if (!mounted || session == null) return;
     final l10n = context.l10n;
-    final rows = stockRows
-        .where((row) => _string(row['product_id']).isNotEmpty)
-        .take(20)
-        .toList();
+    final rows = List<Map<String, dynamic>>.from(session['snapshot'] as List);
     if (rows.isEmpty) return;
+    final saved = {
+      for (final line in List<Map<String, dynamic>>.from(
+        session['lines'] as List,
+      ))
+        line['product_id'].toString(): line,
+    };
     final controllers = <String, TextEditingController>{};
     for (final row in rows) {
-      final productId = row['product_id']?.toString();
-      if (productId == null) continue;
+      final productId = row['product_id'].toString();
+      final value = saved[productId]?['actual_quantity_base'];
       controllers[productId] = TextEditingController(
-        text: _quantity(row['current_stock_base']),
+        text: value == null ? '' : value.toString(),
       );
     }
     final memoController = TextEditingController();
@@ -1407,7 +1415,7 @@ class _InventoryPurchaseScreenState
                 child: Text(l10n.inventoryPurchaseSaveDraft),
               ),
               FilledButton(
-                onPressed: countedCount == 0
+                onPressed: countedCount != rows.length
                     ? null
                     : () => Navigator.of(context).pop(
                         _buildStockAuditSubmitInput(
@@ -1439,7 +1447,8 @@ class _InventoryPurchaseScreenState
           lines: input.lines,
           memo: input.memo,
           complete: input.complete,
-          sessionId: currentSessionId,
+          sessionId: session['id'].toString(),
+          expectedVersion: (session['version'] as num).toInt(),
         );
     if (!mounted) return;
     if (ok) {
@@ -1468,6 +1477,8 @@ class _InventoryPurchaseScreenState
       lines.add({
         'product_id': productId,
         'actual_quantity_base': actual,
+        'counted_at': DateTime.now().toUtc().toIso8601String(),
+        'excluded_reason': null,
         'memo': null,
       });
     }
@@ -1520,7 +1531,14 @@ class _InventoryPurchaseScreenState
   }
 
   double? _parseStockAuditQuantity(String? value) {
-    return parseDecimalInput(value);
+    final quantity = parseDecimalInput(value);
+    if (quantity == null ||
+        !quantity.isFinite ||
+        quantity > 999999999.999 ||
+        (quantity * 1000 - (quantity * 1000).round()).abs() > 0.00001) {
+      return null;
+    }
+    return quantity;
   }
 
   Future<void> _printPurchaseOrderPdf(String orderId) async {
@@ -4329,6 +4347,209 @@ class _InventoryPurchaseScreenState
     ]);
   }
 
+  Future<void> _exportStockAudit(String storeId) async {
+    setState(() => _isWorkingStockAuditFile = true);
+    try {
+      final session = await ref
+          .read(inventoryPurchaseStockAuditProvider.notifier)
+          .prepare(storeId);
+      if (!mounted || session == null) return;
+      await FileSaver.instance.saveFile(
+        name: 'stocktake_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}',
+        bytes: Uint8List.fromList(buildStockAuditTemplate(session)),
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.inventoryStockAuditFileError)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isWorkingStockAuditFile = false);
+    }
+  }
+
+  Future<void> _importStockAudit(String storeId) async {
+    setState(() => _isWorkingStockAuditFile = true);
+    try {
+      const type = XTypeGroup(label: 'Excel', extensions: ['xlsx']);
+      final file =
+          await (widget.pickStockAuditImportFile?.call() ??
+              openFile(acceptedTypeGroups: const [type]));
+      if (file == null || !mounted) return;
+      if (await file.length() > 10 * 1024 * 1024) {
+        throw const StockAuditImportException(['File exceeds 10 MB.']);
+      }
+      final bytes = await file.readAsBytes();
+      final settings = readStockAuditSettings(bytes);
+      if (settings['store_id'] != storeId) {
+        throw const StockAuditImportException([
+          'This file belongs to another store.',
+        ]);
+      }
+      final session = await ref
+          .read(inventoryPurchaseStockAuditProvider.notifier)
+          .prepare(storeId, sessionId: settings['session_id']);
+      if (!mounted || session == null) return;
+      final imported = parseStockAuditWorkbook(
+        bytes,
+        storeId: storeId,
+        session: session,
+      );
+      final targets = {
+        for (final row in List<Map<String, dynamic>>.from(
+          session['snapshot'] as List,
+        ))
+          row['product_id'].toString(): row,
+      };
+      final l10n = context.l10n;
+      final complete = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          key: const Key('inventory_stock_audit_excel_preview_dialog'),
+          title: Text(l10n.inventoryStockAuditExcelPreview),
+          content: SizedBox(
+            width: 780,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    l10n.inventoryStockAuditExcelSummary(
+                      imported.countedCount,
+                      imported.blankCount,
+                      imported.excludedCount,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(l10n.inventoryStockAuditExcelHelp),
+                  const SizedBox(height: 12),
+                  _SimpleDataTable(
+                    columns: [
+                      l10n.inventoryPurchaseProductName,
+                      l10n.inventoryPurchaseSystemStock,
+                      l10n.inventoryPurchaseCountedQuantity,
+                      l10n.inventoryPurchaseVariance,
+                    ],
+                    rows: imported.lines.map((line) {
+                      final target = targets[line['product_id']]!;
+                      final actual = line['actual_quantity_base'];
+                      return [
+                        _string(target['product_name']),
+                        _quantity(target['current_stock_base']),
+                        actual == null
+                            ? _string(line['excluded_reason'])
+                            : '${_quantity(actual)} ${target['base_unit']}',
+                        actual == null
+                            ? '-'
+                            : _quantity(
+                                (actual as num) -
+                                    _num(target['current_stock_base']),
+                              ),
+                      ];
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.cancel),
+            ),
+            TextButton(
+              onPressed: imported.lines.isEmpty
+                  ? null
+                  : () => Navigator.pop(context, false),
+              child: Text(l10n.inventoryPurchaseSaveDraft),
+            ),
+            FilledButton(
+              onPressed: imported.canComplete
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              child: Text(l10n.inventoryPurchaseCompleteAudit),
+            ),
+          ],
+        ),
+      );
+      if (complete == null || !mounted) return;
+      final ok = await ref
+          .read(inventoryPurchaseStockAuditProvider.notifier)
+          .save(
+            storeId: storeId,
+            lines: imported.lines,
+            memo: session['memo']?.toString(),
+            complete: complete,
+            sessionId: session['id'].toString(),
+            expectedVersion: (session['version'] as num).toInt(),
+          );
+      if (ok && mounted) await _reloadStoreScope(storeId);
+    } on StockAuditImportException catch (e) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          key: const Key('inventory_stock_audit_excel_error_dialog'),
+          title: Text(context.l10n.inventoryStockAuditFileError),
+          content: SizedBox(
+            width: 640,
+            child: SingleChildScrollView(
+              child: Text(e.issues.take(30).join('\n')),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(context.l10n.close),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.inventoryStockAuditFileError)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isWorkingStockAuditFile = false);
+    }
+  }
+
+  Future<void> _restartStockAudit(String storeId) async {
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('inventory_stock_audit_restart_dialog'),
+        title: Text(l10n.inventoryStockAuditRestart),
+        content: Text(l10n.inventoryStockAuditRestartHelp),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.inventoryStockAuditRestart),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true &&
+        mounted &&
+        await ref
+            .read(inventoryPurchaseStockAuditProvider.notifier)
+            .cancel(storeId) &&
+        mounted) {
+      await _exportStockAudit(storeId);
+    }
+  }
+
   Widget _buildAuditPage({
     required String storeId,
     required InventoryPurchaseStockStatusState stockStatus,
@@ -4336,7 +4557,6 @@ class _InventoryPurchaseScreenState
   }) {
     final l10n = context.l10n;
     final rows = stockStatus.rows
-        .take(10)
         .map(
           (row) => [
             _string(row['product_name'], fallback: '-'),
@@ -4355,6 +4575,39 @@ class _InventoryPurchaseScreenState
       error: stockStatus.error ?? stockAuditState.error,
       actions: [
         PosActionButton(
+          key: const Key('inventory_stock_audit_template_download_action'),
+          label: l10n.inventoryStockAuditDownload,
+          tone: PosActionTone.secondary,
+          icon: Icons.download_outlined,
+          compact: true,
+          onPressed: stockAuditState.isSaving || _isWorkingStockAuditFile
+              ? null
+              : () => _exportStockAudit(storeId),
+        ),
+        PosActionButton(
+          key: const Key('inventory_stock_audit_excel_import_action'),
+          label: l10n.inventoryStockAuditUpload,
+          tone: PosActionTone.secondary,
+          icon: Icons.upload_file_outlined,
+          compact: true,
+          onPressed: stockAuditState.isSaving || _isWorkingStockAuditFile
+              ? null
+              : () => _importStockAudit(storeId),
+        ),
+        if (stockAuditState.session?['store_id'] == storeId &&
+            !stockAuditState.lastCompleted)
+          PosActionButton(
+            key: const Key('inventory_stock_audit_restart_action'),
+            label: l10n.inventoryStockAuditRestart,
+            tone: PosActionTone.secondary,
+            icon: Icons.restart_alt,
+            compact: true,
+            onPressed: stockAuditState.isSaving || _isWorkingStockAuditFile
+                ? null
+                : () => _restartStockAudit(storeId),
+          ),
+
+        PosActionButton(
           key: const Key('inventory_stock_audit_action'),
           label: l10n.inventoryPurchaseStockAuditInput,
           tone: PosActionTone.primary,
@@ -4363,13 +4616,12 @@ class _InventoryPurchaseScreenState
           disabledReason: stockStatus.rows.isEmpty
               ? PosActionDisabledReason.upstreamPending
               : PosActionDisabledReason.noSelection,
-          onPressed: stockStatus.rows.isEmpty || stockAuditState.isSaving
+          onPressed:
+              stockStatus.rows.isEmpty ||
+                  stockAuditState.isSaving ||
+                  _isWorkingStockAuditFile
               ? null
-              : () => _showStockAuditDialog(
-                  storeId: storeId,
-                  stockRows: stockStatus.rows,
-                  currentSessionId: stockAuditState.lastSessionId,
-                ),
+              : () => _showStockAuditDialog(storeId: storeId),
           compact: true,
         ),
       ],

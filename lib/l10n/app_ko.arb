@@ -4136,5 +4136,26 @@
   "menuTaxBasis": "라벨·상품 또는 분류 확인 근거",
   "menuSugarTaxHelp": "2026년 기준: 5g/100ml 초과 10%, 정확히 5g은 8%입니다. 수치를 모르면 확인한 구간과 근거를 입력하세요.",
   "menuTaxInvalid": "당류 수치, 분류 및 확인 근거를 확인하세요.",
-  "menuComboVat": "구성품별 VAT"
+  "menuComboVat": "구성품별 VAT",
+  "inventoryStockAuditDownload": "실사표 다운로드",
+  "inventoryStockAuditUpload": "실사 엑셀 업로드",
+  "inventoryStockAuditExcelPreview": "재고 실사 미리보기",
+  "inventoryStockAuditExcelSummary": "실사 {counted}개 · 미입력 {blank}개 · 제외 {excluded}개",
+  "inventoryStockAuditExcelHelp": "빈 수량은 미실사, 0은 재고 없음입니다. 임시 저장은 재고를 변경하지 않습니다. 모든 품목을 실사하거나 제외 사유를 입력한 후 완료하세요.",
+  "inventoryStockAuditFileError": "실사 파일을 확인하세요",
+  "inventoryStockAuditRestart": "실사 다시 시작",
+  "inventoryStockAuditRestartHelp": "현재 초안을 취소하고 새 실사표를 받습니다. 완료 전에 품목을 다시 실사하세요.",
+  "@inventoryStockAuditExcelSummary": {
+    "placeholders": {
+      "counted": {
+        "type": "int"
+      },
+      "blank": {
+        "type": "int"
+      },
+      "excluded": {
+        "type": "int"
+      }
+    }
+  }
 }

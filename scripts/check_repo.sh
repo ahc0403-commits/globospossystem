@@ -39,6 +39,7 @@ printf 'CHECK_REPO_STEP=inventory_purchase_orderer_catalog_sql\n'
 bash test/inventory_purchase_orderer_catalog_sql_test.sh
 
 printf 'CHECK_REPO_STEP=inventory_workflow_sql\n'
+bash scripts/test_bunsik_inventory_stocktake.sh
 bash scripts/test_inventory_workflow_all_stores.sh
 bash scripts/test_procurement_v2.sh
 

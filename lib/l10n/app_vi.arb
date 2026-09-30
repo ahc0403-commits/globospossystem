@@ -4136,5 +4136,26 @@
   "menuTaxBasis": "Căn cứ nhãn / sản phẩm hoặc phân loại",
   "menuSugarTaxHelp": "Năm 2026: trên 5 g/100ml áp dụng 10%; đúng 5 áp dụng 8%. Nếu chưa rõ số lượng, chọn nhóm đã xác minh và nhập căn cứ.",
   "menuTaxInvalid": "Kiểm tra lượng đường, phân loại và căn cứ.",
-  "menuComboVat": "VAT theo thành phần"
+  "menuComboVat": "VAT theo thành phần",
+  "inventoryStockAuditDownload": "Tải bảng kiểm kê",
+  "inventoryStockAuditUpload": "Tải lên bảng kiểm kê",
+  "inventoryStockAuditExcelPreview": "Xem trước kiểm kê",
+  "inventoryStockAuditExcelSummary": "Đã đếm: {counted} · Chưa đếm: {blank} · Loại trừ: {excluded}",
+  "inventoryStockAuditExcelHelp": "Ô trống là chưa đếm; 0 là hết hàng. Lưu nháp không đổi tồn kho. Đếm toàn bộ hoặc nhập lý do loại trừ trước khi hoàn tất.",
+  "inventoryStockAuditFileError": "Không thể đọc tệp kiểm kê",
+  "inventoryStockAuditRestart": "Bắt đầu lại kiểm kê",
+  "inventoryStockAuditRestartHelp": "Hủy bản nháp và tải bảng mới. Đếm lại trước khi hoàn tất.",
+  "@inventoryStockAuditExcelSummary": {
+    "placeholders": {
+      "counted": {
+        "type": "int"
+      },
+      "blank": {
+        "type": "int"
+      },
+      "excluded": {
+        "type": "int"
+      }
+    }
+  }
 }

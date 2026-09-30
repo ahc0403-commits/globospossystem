@@ -195,7 +195,7 @@ void main() {
       expect(service, contains('createRepeatInventoryPurchaseOrder'));
       expect(service, contains("'create_repeat_inventory_purchase_order'"));
       expect(service, contains('saveInventoryStockAudit'));
-      expect(service, contains("'save_inventory_stock_audit'"));
+      expect(service, contains("'save_inventory_stock_audit_v2'"));
       expect(service, contains('fetchInventoryCostAnalysis'));
       expect(service, contains("'get_inventory_cost_analysis'"));
       expect(service, contains('refreshInventoryDailyConsumption'));
