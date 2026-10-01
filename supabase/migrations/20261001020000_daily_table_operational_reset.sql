@@ -186,7 +186,8 @@ BEGIN
     UPDATE public.leftover_packaging_requests SET status='cancelled',updated_at=p_observed_at
     WHERE order_id=v_order.id AND status NOT IN ('completed','cancelled');
     UPDATE public.print_jobs SET status='cancelled',updated_at=p_observed_at
-    WHERE order_id=v_order.id AND status IN ('pending','failed');
+    WHERE order_id=v_order.id AND status IN ('pending','failed')
+      AND COALESCE(copy_type::text,'') NOT IN ('receipt','delivery_driver_receipt');
     UPDATE public.customer_payment_displays
     SET order_id=NULL,status='idle',payload=NULL,shown_by_user_id=NULL,shown_at=NULL,updated_at=p_observed_at
     WHERE store_id=p_store_id AND order_id=v_order.id AND COALESCE(payload->>'phase','payment')='payment';
@@ -555,7 +556,17 @@ BEGIN
     AND p_business_date IS DISTINCT FROM (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN
     RAISE EXCEPTION 'ORDER_BUSINESS_DAY_EXPIRED';
   END IF;
-  v_order:=public.create_order_with_client_mutation_id(p_store_id,p_table_id,p_items,p_client_mutation_id);
+  IF NULLIF(btrim(COALESCE(p_client_mutation_id,'')),'') IS NULL THEN
+    RAISE EXCEPTION 'CLIENT_MUTATION_ID_REQUIRED';
+  END IF;
+  -- Some deployed databases use the client's existing create_order fallback
+  -- without the optional idempotency RPC/ledger. Keep the day validation on
+  -- that path as well; do not require an unrelated historical rollout.
+  IF to_regprocedure('public.create_order_with_client_mutation_id(uuid,uuid,jsonb,text)') IS NOT NULL THEN
+    v_order:=public.create_order_with_client_mutation_id(p_store_id,p_table_id,p_items,p_client_mutation_id);
+  ELSE
+    v_order:=public.create_order(p_store_id,p_table_id,p_items);
+  END IF;
   IF NOT public.table_order_is_current(v_order) THEN RAISE EXCEPTION 'ORDER_BUSINESS_DAY_EXPIRED'; END IF;
   RETURN v_order;
 END;

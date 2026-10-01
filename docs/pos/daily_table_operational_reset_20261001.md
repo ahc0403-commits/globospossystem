@@ -13,8 +13,8 @@ Asia/Ho_Chi_Minh date. BunsikClub Binh Thanh is the initial enabled store.
   operations, and list the order for cashier/manager review. No automatic
   balance collection, refund, inventory reversal, or invoice cancellation.
 - Cancel remaining KDS, ready-lot, packaging, and operational print work.
-  Recorded quantities and completed prints survive. Historical payment
-  receipts can still be reprinted.
+  Recorded quantities, completed prints, and pending/failed financial receipt
+  jobs survive. Historical payment receipts can still be reprinted.
 - Release occupied tables only when no current active order exists. Reserved
   tables, delivery orders, and stores without the policy are preserved.
 - System cancellation amounts join the existing cancellation report total.
@@ -29,6 +29,9 @@ Cashiers can select a preparing table and clear its unpaid order with a reason.
 Existing payment and permission protections remain in the cancellation RPC.
 Previous-day offline requests are archived locally before removal from replay;
 they are never merged automatically into today's new customer order.
+Server business-day validation also works on deployed databases that lack the
+optional client-mutation RPC/ledger, using the existing `create_order` fallback.
+That legacy path retains its existing retry behavior without adding idempotency.
 
 ## Release and verification
 

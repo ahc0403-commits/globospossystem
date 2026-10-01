@@ -40,7 +40,10 @@ INSERT INTO emergency_combo_component_items(order_id,order_item_id) VALUES(test_
 INSERT INTO emergency_floor_direct_items(order_id,order_item_id,floor_served_quantity) VALUES(test_uuid(2004),test_uuid(3004),1);
 INSERT INTO emergency_floor_ready_lots(order_id,ready_quantity,served_quantity) VALUES(test_uuid(2004),3,1);
 INSERT INTO leftover_packaging_requests(order_id) VALUES(test_uuid(2004));
-INSERT INTO print_jobs(order_id,status) VALUES(test_uuid(2004),'pending'),(test_uuid(2004),'done');
+INSERT INTO print_jobs(order_id,status,copy_type) VALUES
+ (test_uuid(2004),'pending','kitchen'),(test_uuid(2004),'done','receipt'),
+ (test_uuid(2004),'pending','receipt'),(test_uuid(2004),'failed','receipt'),
+ (test_uuid(2004),'pending','delivery_driver_receipt');
 INSERT INTO einvoice_jobs VALUES(test_uuid(5000),test_uuid(2006),'pending');
 INSERT INTO customer_payment_displays(store_id,order_id,status,payload) VALUES(test_uuid(1),test_uuid(2004),'showing','{"phase":"payment"}');
 UPDATE table_operational_reset_policies SET is_enabled=true;
@@ -71,6 +74,9 @@ SELECT test_assert((SELECT ready_quantity=3 AND served_quantity=1 AND voided_qua
 SELECT test_assert((SELECT status='cancelled' FROM leftover_packaging_requests),'leftovers no longer pending');
 SELECT test_assert((SELECT count(*)=1 FROM print_jobs WHERE order_id=test_uuid(2004) AND status='done'),'printed receipt retained');
 SELECT test_assert((SELECT count(*)=1 FROM print_jobs WHERE order_id=test_uuid(2004) AND status='cancelled'),'pending print cancelled');
+SELECT test_assert((SELECT count(*)=3 FROM print_jobs WHERE order_id=test_uuid(2004)
+ AND status IN ('pending','failed') AND copy_type IN ('receipt','delivery_driver_receipt')),
+ 'pending and failed financial receipts remain printable');
 SELECT ensure_store_operational_day(test_uuid(1));
 SELECT test_assert((SELECT count(*)=6 FROM order_operational_closures),'repeat reset is idempotent');
 SELECT test_assert(NOT (qr_get_active_order('incident-qr')->>'active')::boolean,'QR sees empty table after closure');
@@ -105,8 +111,8 @@ DO $$ BEGIN
   test_uuid(1600),true,test_uuid(1001));
  RAISE EXCEPTION 'STALE_QR_ACCEPTED'; EXCEPTION WHEN OTHERS THEN PERFORM test_assert(SQLERRM='QR_ORDER_CONTEXT_CHANGED','stale QR context cannot attach to new table'); END;
 END $$;
-INSERT INTO print_jobs(order_id,copy_type) VALUES(test_uuid(2004),'receipt');
-SELECT test_assert((SELECT count(*)=1 FROM print_jobs WHERE order_id=test_uuid(2004) AND copy_type='receipt'),'historical payment receipt can still be printed');
+INSERT INTO print_jobs(id,order_id,copy_type) VALUES(test_uuid(5010),test_uuid(2004),'receipt');
+SELECT test_assert((SELECT count(*)=1 FROM print_jobs WHERE id=test_uuid(5010) AND copy_type='receipt'),'historical payment receipt can still be printed');
 -- Real QR core creates a fresh order on the released table and cashier search
 -- finds it in today's scope. Throttle from the reproduction batch is expired.
 UPDATE qr_order_batches SET created_at=now()-interval '1 minute';
