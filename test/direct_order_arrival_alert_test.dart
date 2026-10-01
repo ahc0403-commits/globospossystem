@@ -20,12 +20,14 @@ final _cursor0 = DirectOrderArrivalCursor(
 );
 final _time0 = DateTime.utc(2026, 8, 21, 12);
 
+// Daily reset adds independent cashier/locale copy; arrival scenarios below
+// remain unchanged. Cashier clear/review widgets have operational coverage.
 const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
   // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   'lib/features/cashier/cashier_screen.dart':
-      '293cffae0d0de2c027b69e74f0d2ebc0b2a4afb083e5fb95a7af68c322bd7db1',
+      'c8e7574f674cbd9980cc2ffb804e8e99d25efc3809baa6d5e38988f1a0a8069a',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
   // Intentional event-merge fix; behavioral regressions live in
@@ -53,13 +55,13 @@ const _frozenAlertFiles = <String, String>{
   // Promotion, QR takeout, non-revenue review, beverage tax, and menu analytics
   // and stocktake copy are independent. Arrival behavior remains covered below.
   'lib/l10n/app_localizations.dart':
-      'f10eec425780c10f7e0c68bffaa23f16a79c4f35244e60beb23cb468e8af2624',
+      'e0d591b4600ec58b904713e3e53f664efbd3e243c9a1f1a60d43970a21586fed',
   'lib/l10n/app_localizations_ko.dart':
-      'c40871a5ff7028f7eb10a5e5bfd82edab3d995665a97bdf426e0e48d4819c140',
+      '036d3677f8d921b84c63b65383d1dc97418724a0b7c3045d32d25f0d3f49ca04',
   'lib/l10n/app_localizations_vi.dart':
-      '2f089676550117f4cab0fe8f0957626aad72eaca1af2757c93254a20e674fa4f',
+      '59194b0cfa3b35d372b8078cb676bf4b934421575f91cc33214a20e105d6a280',
   'lib/l10n/app_localizations_en.dart':
-      '85096e34e740036e45e3accb9c59cfd214040fd1db56057b5c7fbb0da2ea7121',
+      '22deb70cac0e4b903805a3248109c2089b0f4f6ffb01ea06b8d56fa4d6b2eaec',
 };
 
 void main() {

@@ -131,4 +131,40 @@ void main() {
     await queue.enqueue(mutation(1));
     expect((await queue.list()).single.id, 'mutation-1');
   });
+
+  test(
+    'expired replay is archived with its original items before removal',
+    () async {
+      final preferences = await SharedPreferences.getInstance();
+      final queue = OfflineMutationQueueService(preferences: preferences);
+      final original = mutation(1);
+      await queue.enqueue(original);
+      await queue.enqueue(mutation(2));
+      await queue.archiveExpired(original);
+      await queue.archiveExpired(original);
+
+      final restored = OfflineMutationQueueService(preferences: preferences);
+      expect((await restored.list()).single.id, 'mutation-2');
+      final archive = await restored.expiredMutations();
+      expect(archive, hasLength(1));
+      expect(archive.single['payload'], original.payload);
+      expect(archive.single['createdAt'], original.createdAt.toIso8601String());
+      expect(archive.single['expiryReason'], 'business_day_expired');
+    },
+  );
+
+  test(
+    'damaged archive keeps the original request in the replay queue',
+    () async {
+      final preferences = await SharedPreferences.getInstance();
+      final queue = OfflineMutationQueueService(preferences: preferences);
+      await queue.enqueue(mutation(1));
+      await preferences.setString('pos_expired_order_mutations_v1', '{damaged');
+      await expectLater(
+        queue.archiveExpired(mutation(1)),
+        throwsFormatException,
+      );
+      expect((await queue.list()).single.payload, mutation(1).payload);
+    },
+  );
 }

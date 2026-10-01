@@ -150,6 +150,7 @@ class OfflineMutationQueueService {
   static const _backupKey = 'pos_offline_mutation_queue_backup_v2';
   static const _schemaVersion = 2;
   static const _maximumQueueItems = 1000;
+  static const _expiredKey = 'pos_expired_order_mutations_v1';
 
   final SharedPreferences? _preferences;
   Future<void> _operationTail = Future<void>.value();
@@ -205,6 +206,45 @@ class OfflineMutationQueueService {
       generation: snapshot.generation + 1,
     );
   });
+
+  /// Preserve the original request before removing it from automatic replay.
+  /// An archive/storage failure leaves the active request available for retry.
+  Future<void> archiveExpired(QueuedMutation mutation) => _serialized(() async {
+    final prefs = await _prefs();
+    final raw = prefs.getString(_expiredKey);
+    final archived = raw == null ? <dynamic>[] : jsonDecode(raw) as List;
+    if (!archived.any((row) => (row as Map)['id'] == mutation.id)) {
+      if (archived.length >= _maximumQueueItems) {
+        throw const OfflineQueueCapacityException(_maximumQueueItems);
+      }
+      archived.add({
+        ...mutation.toJson(),
+        'expiryReason': 'business_day_expired',
+        'archivedAt': DateTime.now().toUtc().toIso8601String(),
+      });
+      if (!await prefs.setString(_expiredKey, jsonEncode(archived))) {
+        throw const OfflineQueueStorageException(
+          'Failed to archive expired order.',
+        );
+      }
+    }
+    final snapshot = await _read();
+    await _write(
+      snapshot.records.where((entry) => entry.id != mutation.id).toList(),
+      generation: snapshot.generation + 1,
+    );
+  });
+
+  Future<List<Map<String, dynamic>>> expiredMutations() =>
+      _serialized(() async {
+        final raw = (await _prefs()).getString(_expiredKey);
+        return raw == null
+            ? []
+            : [
+                for (final row in jsonDecode(raw) as List)
+                  Map<String, dynamic>.from(row as Map),
+              ];
+      });
 
   Future<void> markFailed(String id, Object error) => _serialized(() async {
     final snapshot = await _read();

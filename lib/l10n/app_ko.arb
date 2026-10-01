@@ -4157,5 +4157,19 @@
         "type": "int"
       }
     }
+  },
+  "cashierClearTable": "테이블 비우기",
+  "cashierClearTableReason": "테이블을 비우는 이유",
+  "cashierClearTableFailed": "테이블을 비우지 못했습니다. 새로고침 후 결제 기록과 서빙 상태를 확인해 주세요.",
+  "cashierExpiredPaymentReview": "전일 결제 확인",
+  "cashierExpiredPaymentReviewDetail": "테이블 운영은 종료되었으며 결제 기록은 보존되었습니다. 관리자가 주문 ID로 남은 금액을 확인해 주세요.",
+  "cashierDailyResetCount": "전일 주문 {count}건 정리",
+  "orderBusinessDayExpired": "전일 영업이 종료되어 이전 주문은 다시 전송되지 않습니다. 테이블을 확인하고 새 주문을 시작해 주세요.",
+  "@cashierDailyResetCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

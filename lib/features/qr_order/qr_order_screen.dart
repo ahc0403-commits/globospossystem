@@ -12,6 +12,7 @@ import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/floor_label.dart';
+import '../../core/utils/time_utils.dart';
 
 class QrOrderScreen extends StatefulWidget {
   const QrOrderScreen({
@@ -59,6 +60,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   Timer? _menuRefreshTimer;
   Timer? _displayResetTimer;
   Timer? _liveMenuDebounceTimer;
+  Timer? _businessDayTimer;
   RealtimeChannel? _menuChannel;
   String? _subscribedStoreId;
   Future<void>? _pendingMenuLoad;
@@ -79,6 +81,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     WidgetsBinding.instance.addObserver(this);
     unawaited(_loadMenu());
     _scheduleMenuSafetyRefresh();
+    _scheduleBusinessDayRefresh();
   }
 
   @override
@@ -116,12 +119,31 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     );
   }
 
+  void _scheduleBusinessDayRefresh() {
+    _businessDayTimer?.cancel();
+    final day = TimeUtils.currentVietnamBusinessDay();
+    _businessDayTimer = Timer(day.refreshDelay(DateTime.now().toUtc()), () {
+      if (!mounted) return;
+      setState(() {
+        _orderContextEpoch++;
+        _cart.clear();
+        _comboDrinkChoices.clear();
+        _clientOrderId = null;
+        _result = null;
+        _activeOrder = null;
+      });
+      unawaited(_loadMenu(showLoading: false));
+      _scheduleBusinessDayRefresh();
+    });
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _menuRefreshTimer?.cancel();
     _displayResetTimer?.cancel();
     _liveMenuDebounceTimer?.cancel();
+    _businessDayTimer?.cancel();
     _menuChannel?.unsubscribe();
     super.dispose();
   }

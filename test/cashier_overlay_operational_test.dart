@@ -12,6 +12,9 @@ import 'package:globos_pos_system/core/services/bank_transfer_alert_sound.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
 import 'package:globos_pos_system/core/services/digital_receipt_service.dart';
 import 'package:globos_pos_system/core/services/menu_service.dart';
+import 'package:globos_pos_system/core/services/order_service.dart';
+import 'package:globos_pos_system/core/services/operational_day_service.dart';
+import 'package:globos_pos_system/core/utils/time_utils.dart';
 import 'package:globos_pos_system/core/services/payment_proof_service.dart';
 import 'package:globos_pos_system/core/services/payment_service.dart';
 import 'package:globos_pos_system/core/services/restaurant_cutoff_service.dart';
@@ -26,6 +29,7 @@ import 'package:globos_pos_system/features/direct_order/direct_order_staff_servi
 import 'package:globos_pos_system/features/order/order_model.dart';
 import 'package:globos_pos_system/features/payment/payment_provider.dart';
 import 'package:globos_pos_system/features/table/table_provider.dart';
+import 'package:globos_pos_system/features/table/table_order_preview.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -239,16 +243,32 @@ class _PaymentNotifier extends PaymentNotifier {
     this.completeOrdersOnPayment = false,
     this.changeNonRevenueAmountOnce = false,
     CashierOrder? initialOrder,
+    this.preparingTable = false,
   }) {
     state = PaymentState(
       orders: [
-        initialOrder ?? _cashierOrder,
+        if (!preparingTable) initialOrder ?? _cashierOrder,
         if (includeSecondOrder) _cashierOrderB,
       ],
     );
   }
 
   final bool completeOrdersOnPayment;
+  final bool preparingTable;
+
+  @override
+  Future<CashierOrderSearchResult?> searchActiveOrderForCashier({
+    required String storeId,
+    required String query,
+  }) async => preparingTable
+      ? CashierOrderSearchResult(
+          orderId: 'preparing-order',
+          tableNumber: 'A1',
+          status: 'pending',
+          orderSource: 'staff',
+          createdAt: DateTime.now(),
+        )
+      : super.searchActiveOrderForCashier(storeId: storeId, query: query);
   final bool changeNonRevenueAmountOnce;
   int cancelledOrders = 0;
   int cancelledItems = 0;
@@ -473,7 +493,15 @@ class _PaymentNotifier extends PaymentNotifier {
 }
 
 class _TableNotifier extends WaiterTableNotifier {
-  _TableNotifier({bool includeSecondOrder = false, int? tableCount}) {
+  _TableNotifier({
+    bool includeSecondOrder = false,
+    int? tableCount,
+    WaiterTableState? initialState,
+  }) {
+    if (initialState != null) {
+      state = initialState;
+      return;
+    }
     final effectiveTableCount = tableCount ?? (includeSecondOrder ? 2 : 1);
     state = WaiterTableState(
       tables: [
@@ -500,6 +528,46 @@ class _TableNotifier extends WaiterTableNotifier {
   @override
   Future<void> loadTables(String storeId, {bool showLoading = true}) async {}
 }
+
+class _ClearTableOrderService extends OrderService {
+  final calls = <(String, String, String)>[];
+  @override
+  Future<void> cancelCurrentTableOrder({
+    required String storeId,
+    required String tableId,
+    required String reason,
+  }) async {
+    calls.add((storeId, tableId, reason));
+  }
+}
+
+WaiterTableState _resetTableState() => WaiterTableState(
+  tables: [
+    PosTable(
+      id: 'table-a1',
+      storeId: _storeId,
+      tableNumber: 'A1',
+      status: 'occupied',
+      seatCount: 4,
+    ),
+  ],
+  orderPreviewByTableId: const {
+    'table-a1': TableOrderPreview(orderId: 'preparing-order', lines: []),
+  },
+  operationalDay: OperationalDayState(
+    enabled: true,
+    window: TimeUtils.currentVietnamBusinessDay(),
+    cancelledToday: 1,
+    financialReviews: const [
+      OperationalOrderReview(
+        orderId: 'old-paid-order',
+        tableNumber: '1222',
+        businessDate: '2026-09-30',
+        paidTotal: 40000,
+      ),
+    ],
+  ),
+);
 
 class _PaymentProofService extends PaymentProofService {
   int markRequiredCalls = 0;
@@ -615,6 +683,71 @@ void main() {
       anonKey: 'test-anon-key',
     );
   });
+
+  testWidgets('cashier requires a reason to clear an unpaid preparing table', (
+    tester,
+  ) async {
+    final service = _ClearTableOrderService();
+    await _pumpCashier(
+      tester,
+      preparingTable: true,
+      tableState: _resetTableState(),
+      orderService: service,
+    );
+    await tester.tap(find.byKey(const Key('table_first_card')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cashier_clear_table_action')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('cashier_clear_table_reason_dialog')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const Key('cashier_clear_table_confirm')),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(
+      find.byKey(const Key('cashier_clear_table_reason')),
+      'No guests; cashier mistake',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('cashier_clear_table_confirm')));
+    await tester.pumpAndSettle();
+    expect(service.calls, [
+      (_storeId, 'table-a1', 'No guests; cashier mistake'),
+    ]);
+    expect(
+      find.byKey(const Key('cashier_clear_table_reason_dialog')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'cashier lists the old partial payment without selecting it for collection',
+    (tester) async {
+      final harness = await _pumpCashier(
+        tester,
+        preparingTable: true,
+        tableState: _resetTableState(),
+      );
+      await tester.tap(find.byKey(const Key('cashier_expired_payment_review')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('cashier_expired_payment_review_dialog')),
+        findsOneWidget,
+      );
+      expect(find.text('#old-paid-order'), findsOneWidget);
+      expect(find.text('40.000 VND'), findsOneWidget);
+      expect(harness.notifier.state.selectedOrder, isNull);
+      expect(harness.notifier.processedMethod, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('cashier item rows show only the selected menu language', (
     tester,
@@ -1881,6 +2014,9 @@ Future<_CashierHarness> _pumpCashier(
   bool completeOrdersOnPayment = false,
   bool changeNonRevenueAmountOnce = false,
   CashierOrder? initialOrder,
+  bool preparingTable = false,
+  WaiterTableState? tableState,
+  OrderService? orderService,
   int? tableCount,
   Size physicalSize = const Size(1440, 1000),
   BankTransferAlertService? bankTransferAlertService,
@@ -1908,6 +2044,7 @@ Future<_CashierHarness> _pumpCashier(
     completeOrdersOnPayment: completeOrdersOnPayment,
     changeNonRevenueAmountOnce: changeNonRevenueAmountOnce,
     initialOrder: initialOrder,
+    preparingTable: preparingTable,
   );
   final proofService = _PaymentProofService();
   final paymentService = _PaymentService();
@@ -1926,6 +2063,7 @@ Future<_CashierHarness> _pumpCashier(
       GoRoute(
         path: '/cashier',
         builder: (_, __) => CashierScreen(
+          orderServiceOverride: orderService,
           paymentProofServiceOverride: proofService,
           paymentServiceOverride: paymentService,
           restaurantCutoffServiceOverride: _CutoffService(),
@@ -1975,6 +2113,7 @@ Future<_CashierHarness> _pumpCashier(
           (ref) => _TableNotifier(
             includeSecondOrder: includeSecondOrder,
             tableCount: tableCount,
+            initialState: tableState,
           ),
         ),
         restaurantCutoffStateProvider.overrideWith(
