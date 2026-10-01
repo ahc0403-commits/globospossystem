@@ -13,11 +13,26 @@ BEGIN
     RAISE EXCEPTION 'RESET_PRIVILEGE_INVALID';
   END IF;
   FOREACH v_name IN ARRAY ARRAY['public.qr_place_order_pre_takeout_core(text,jsonb,uuid)',
-    'public.qr_get_active_order_pre_takeout(text)','public.qr_get_active_order_pre_display_reset(text)',
-    'public.qr_place_order_before_non_revenue_guard(text,jsonb,uuid,boolean,uuid)'] LOOP
+    'public.qr_get_active_order_pre_takeout(text)','public.qr_get_active_order_pre_display_reset(text)'] LOOP
     SELECT pg_get_functiondef(v_name::regprocedure) INTO v_definition;
     IF position('table_order_is_current' IN v_definition)=0 THEN RAISE EXCEPTION 'RESET_QR_SCOPE_MISSING: %',v_name; END IF;
   END LOOP;
+  v_name:='public.qr_place_order_before_non_revenue_guard(text,jsonb,uuid,boolean,uuid)';
+  SELECT pg_get_functiondef(v_name::regprocedure) INTO v_definition;
+  IF position('table_order_is_current' IN v_definition)=0 THEN
+    -- Production also has a takeout-availability wrapper with no order
+    -- selection of its own. Verify its actual selecting delegate instead.
+    IF v_definition ~* '\m(FROM|JOIN)\s+(public\.)?orders\M'
+      OR position('RETURN public.qr_place_order_pre_takeout_availability(' IN v_definition)=0
+      OR to_regprocedure('public.qr_place_order_pre_takeout_availability(text,jsonb,uuid,boolean,uuid)') IS NULL THEN
+      RAISE EXCEPTION 'RESET_QR_SCOPE_MISSING: %',v_name;
+    END IF;
+    v_name:='public.qr_place_order_pre_takeout_availability(text,jsonb,uuid,boolean,uuid)';
+    SELECT pg_get_functiondef(v_name::regprocedure) INTO v_definition;
+    IF position('table_order_is_current' IN v_definition)=0 THEN
+      RAISE EXCEPTION 'RESET_QR_SCOPE_MISSING: %',v_name;
+    END IF;
+  END IF;
   IF EXISTS (SELECT 1 FROM public.order_operational_closures c JOIN public.orders o ON o.id=c.order_id
     WHERE o.operational_closed_at IS DISTINCT FROM c.closed_at OR o.table_id IS DISTINCT FROM c.table_id
       OR (c.closure_kind='unpaid_cancelled' AND o.status<>'cancelled')) THEN
