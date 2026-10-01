@@ -186,7 +186,8 @@ BEGIN
     UPDATE public.leftover_packaging_requests SET status='cancelled',updated_at=p_observed_at
     WHERE order_id=v_order.id AND status NOT IN ('completed','cancelled');
     UPDATE public.print_jobs SET status='cancelled',updated_at=p_observed_at
-    WHERE order_id=v_order.id AND status IN ('pending','failed');
+    WHERE order_id=v_order.id AND status IN ('pending','failed')
+      AND COALESCE(copy_type::text,'') NOT IN ('receipt','delivery_driver_receipt');
     UPDATE public.customer_payment_displays
     SET order_id=NULL,status='idle',payload=NULL,shown_by_user_id=NULL,shown_at=NULL,updated_at=p_observed_at
     WHERE store_id=p_store_id AND order_id=v_order.id AND COALESCE(payload->>'phase','payment')='payment';

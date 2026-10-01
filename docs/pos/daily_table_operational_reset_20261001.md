@@ -13,8 +13,8 @@ Asia/Ho_Chi_Minh date. BunsikClub Binh Thanh is the initial enabled store.
   operations, and list the order for cashier/manager review. No automatic
   balance collection, refund, inventory reversal, or invoice cancellation.
 - Cancel remaining KDS, ready-lot, packaging, and operational print work.
-  Recorded quantities and completed prints survive. Historical payment
-  receipts can still be reprinted.
+  Recorded quantities, completed prints, and pending/failed financial receipt
+  jobs survive. Historical payment receipts can still be reprinted.
 - Release occupied tables only when no current active order exists. Reserved
   tables, delivery orders, and stores without the policy are preserved.
 - System cancellation amounts join the existing cancellation report total.
