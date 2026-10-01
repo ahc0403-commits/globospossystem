@@ -51,7 +51,7 @@ psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d postgres -v ON_ERROR_STOP=1
 printf 'DAILY_TABLE_OPERATIONAL_RESET_SQL_TEST=PASS\n'
 
 # Verify the actual production apply wrapper and its atomic incident safeguard.
-for reset_apply_case in success changed_payment; do
+for reset_apply_case in success changed_payment legacy_without_mutation_rpc; do
   reset_apply_db="daily_reset_apply_$reset_apply_case"
   createdb -h 127.0.0.1 -p "$RESET_PORT" -U postgres "$reset_apply_db"
   run_sql "$RESET_TMP/fixture.sql" "$reset_apply_db" >/dev/null
@@ -61,6 +61,11 @@ SELECT 'a797c8d3-0315-4f91-8a71-66c40c8db945',restaurant_id,table_id,status,crea
 INSERT INTO order_items(order_id,restaurant_id,menu_item_id,status)
 VALUES('a797c8d3-0315-4f91-8a71-66c40c8db945',test_uuid(1),test_uuid(10),'ready');
 SQL
+  if [[ "$reset_apply_case" == "legacy_without_mutation_rpc" ]]; then
+    psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d "$reset_apply_db" -v ON_ERROR_STOP=1 \
+      -c "DROP FUNCTION create_order_with_client_mutation_id(uuid,uuid,jsonb,text); DROP TABLE pos_client_mutation_attempts;" >/dev/null
+  fi
+  run_sql "$RESET_ROOT/scripts/preflight_daily_table_operational_reset.sql" "$reset_apply_db" >/dev/null
   if [[ "$reset_apply_case" == "changed_payment" ]]; then
     psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d "$reset_apply_db" -v ON_ERROR_STOP=1 \
       -c "INSERT INTO payments(order_id,restaurant_id,amount) VALUES('a797c8d3-0315-4f91-8a71-66c40c8db945',test_uuid(1),40);" >/dev/null
@@ -73,6 +78,29 @@ SQL
     run_sql "$RESET_ROOT/scripts/verify_daily_table_operational_reset.sql" "$reset_apply_db" >/dev/null
     psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d "$reset_apply_db" -v ON_ERROR_STOP=1 \
       -c "SELECT test_assert((SELECT status='available' FROM tables WHERE id=test_uuid(101)),'guarded apply releases incident'); SELECT test_assert((SELECT count(*)=1 FROM audit_logs WHERE action='recover_stale_1222'),'guarded apply records incident reason');" >/dev/null
+    if [[ "$reset_apply_case" == "legacy_without_mutation_rpc" ]]; then
+      psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d "$reset_apply_db" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
+BEGIN;
+SET LOCAL request.jwt.claim.sub='91000000-0000-4000-8000-000000000004';
+SET LOCAL request.jwt.claim.role='authenticated';
+SELECT test_assert((create_order_for_business_day(test_uuid(1),test_uuid(101),
+ '[{"menu_item_id":"91000000-0000-4000-8000-000000000011","quantity":1}]',
+ 'legacy-today',(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)).id IS NOT NULL,
+ 'today creation works without optional mutation RPC or ledger');
+DO $$ BEGIN
+ BEGIN PERFORM create_order_for_business_day(test_uuid(1),test_uuid(102),'[]','legacy-expired',
+  (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date-1);
+ RAISE EXCEPTION 'OLD_OFFLINE_ACCEPTED'; EXCEPTION WHEN OTHERS THEN
+  PERFORM test_assert(SQLERRM='ORDER_BUSINESS_DAY_EXPIRED','legacy path rejects expired offline creation'); END;
+ BEGIN PERFORM create_order_for_business_day(test_uuid(1),test_uuid(102),'[]','',
+  (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date);
+ RAISE EXCEPTION 'EMPTY_MUTATION_ACCEPTED'; EXCEPTION WHEN OTHERS THEN
+  PERFORM test_assert(SQLERRM='CLIENT_MUTATION_ID_REQUIRED','legacy path requires mutation identity'); END;
+END $$;
+ROLLBACK;
+SQL
+      printf 'DAILY_TABLE_OPERATIONAL_RESET_LEGACY_COMPAT=PASS\n'
+    fi
   fi
 done
 printf 'DAILY_TABLE_OPERATIONAL_RESET_GUARDED_APPLY=PASS\n'

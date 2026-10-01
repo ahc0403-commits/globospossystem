@@ -12,8 +12,7 @@ BEGIN
     'public.create_buffet_order(uuid,uuid,integer,jsonb)','public.qr_get_active_order(text)',
     'public.qr_place_order(text,jsonb,uuid,boolean,uuid)',
     'public.qr_place_order_pre_takeout_core(text,jsonb,uuid)',
-    'public.recalc_order_status(uuid)','public.cancel_order(uuid,uuid,boolean)',
-    'public.create_order_with_client_mutation_id(uuid,uuid,jsonb,text)'] LOOP
+    'public.recalc_order_status(uuid)','public.cancel_order(uuid,uuid,boolean)'] LOOP
     IF to_regprocedure(v_name) IS NULL THEN RAISE EXCEPTION 'RESET_RPC_MISSING: %',v_name; END IF;
   END LOOP;
   IF to_regclass('public.order_operational_closures') IS NOT NULL THEN RAISE EXCEPTION 'RESET_ALREADY_INSTALLED'; END IF;

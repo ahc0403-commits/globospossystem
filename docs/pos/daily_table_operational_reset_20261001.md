@@ -29,6 +29,9 @@ Cashiers can select a preparing table and clear its unpaid order with a reason.
 Existing payment and permission protections remain in the cancellation RPC.
 Previous-day offline requests are archived locally before removal from replay;
 they are never merged automatically into today's new customer order.
+Server business-day validation also works on deployed databases that lack the
+optional client-mutation RPC/ledger, using the existing `create_order` fallback.
+That legacy path retains its existing retry behavior without adding idempotency.
 
 ## Release and verification
 
