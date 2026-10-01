@@ -65,7 +65,7 @@ SQL
     psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d "$reset_apply_db" -v ON_ERROR_STOP=1 \
       -c "INSERT INTO payments(order_id,restaurant_id,amount) VALUES('a797c8d3-0315-4f91-8a71-66c40c8db945',test_uuid(1),40);" >/dev/null
     if run_sql "$RESET_ROOT/scripts/apply_daily_table_operational_reset.sql" "$reset_apply_db" >"$RESET_TMP/apply-failed.log" 2>&1; then exit 1; fi
-    rg -q 'INCIDENT_PAYMENT_CHANGED_REVIEW_REQUIRED' "$RESET_TMP/apply-failed.log"
+    grep -q 'INCIDENT_PAYMENT_CHANGED_REVIEW_REQUIRED' "$RESET_TMP/apply-failed.log"
     psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d "$reset_apply_db" -v ON_ERROR_STOP=1 \
       -c "SELECT test_assert(to_regclass('public.order_operational_closures') IS NULL,'failed recovery rolls back schema and policy');" >/dev/null
   else
