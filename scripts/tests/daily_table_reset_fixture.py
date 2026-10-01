@@ -43,7 +43,8 @@ CREATE FUNCTION create_buffet_order(p_store_id uuid,p_table_id uuid,p_guest_coun
 RETURNS orders LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth AS $$
 BEGIN RETURN create_order(p_store_id,p_table_id,p_extra_items); END $$;
 """)
-parts.append(function("20260909160000_qr_order_display_reset.sql", "qr_place_order", "qr_place_order_before_non_revenue_guard"))
+parts.append(function("20260909160000_qr_order_display_reset.sql", "qr_place_order", "qr_place_order_pre_takeout_availability"))
+parts.append(function("20260916140000_qr_takeout_availability.sql", "qr_place_order", "qr_place_order_before_non_revenue_guard"))
 parts.append(function("20260923010000_non_revenue_checkout_concurrency.sql", "qr_place_order"))
 parts.append(function("20260812154000_qr_floor_direct_delivery_progress.sql", "qr_get_active_order", "qr_get_active_order_pre_takeout"))
 parts.append(function("20260823010000_takeout_leftover_packaging.sql", "qr_get_active_order", "qr_get_active_order_pre_display_reset"))

@@ -10,7 +10,8 @@ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
 SELECT nullif(current_setting('request.jwt.claim.role',true),'') $$;
 GRANT USAGE ON SCHEMA auth TO anon,authenticated,service_role;
-CREATE TABLE restaurants(id uuid PRIMARY KEY,name text,is_active boolean DEFAULT true);
+CREATE TABLE restaurants(id uuid PRIMARY KEY,name text,is_active boolean DEFAULT true,
+ qr_takeout_enabled boolean DEFAULT true,qr_takeout_resume_at timestamptz);
 CREATE TABLE users(id uuid PRIMARY KEY,auth_id uuid,restaurant_id uuid,role text,is_active boolean DEFAULT true);
 CREATE FUNCTION is_super_admin() RETURNS boolean LANGUAGE sql STABLE AS $$
 SELECT EXISTS(SELECT 1 FROM users WHERE auth_id=auth.uid() AND role='super_admin' AND is_active) $$;

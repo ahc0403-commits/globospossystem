@@ -43,6 +43,13 @@ store, and catches up stale operations. The 1222 incident is rechecked under
 lock; new payment facts abort its recovery for review.
 
 Preflight, verification, and policy rollback scripts share the migration slug.
+Verification checks the guarded selecting delegate when a takeout-availability
+wrapper does not select orders itself. Both wrapper layouts are covered.
+If guarded apply committed but post-commit verification failed, correct the
+verification and use `scripts/resume_daily_table_operational_reset_verification.sh`
+from a clean exact main with its required GitHub check successful. It repeats
+the production source/target/check gates, verifies installed state, and registers
+migration history without reapplying the schema or repeating the recovery.
 Rollback stops the policy/cron while retaining closure history and guards;
 it does not resurrect yesterday's customer orders.
 

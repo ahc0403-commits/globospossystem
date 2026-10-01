@@ -41,6 +41,17 @@ run_sql "$RESET_ROOT/scripts/preflight_daily_table_operational_reset.sql"
 psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction \
   -f "$RESET_ROOT/supabase/migrations/20261001020000_daily_table_operational_reset.sql" >/dev/null
 run_sql "$RESET_ROOT/scripts/verify_daily_table_operational_reset.sql"
+# A delegate that actually selects old orders must fail verification. The
+# temporary DDL rolls back when the verification rejects it.
+if psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction \
+  --command "DO \$\$ DECLARE d text; BEGIN d:=replace(pg_get_functiondef('public.qr_place_order_pre_takeout_availability(text,jsonb,uuid,boolean,uuid)'::regprocedure),' AND public.table_order_is_current(order_row)',''); EXECUTE d; END \$\$;" \
+  -f "$RESET_ROOT/scripts/verify_daily_table_operational_reset.sql" >"$RESET_TMP/unsafe-delegate.log" 2>&1; then
+  printf 'Expected unguarded QR delegate verification to fail.\n' >&2
+  exit 1
+fi
+grep -q 'RESET_QR_SCOPE_MISSING' "$RESET_TMP/unsafe-delegate.log"
+run_sql "$RESET_ROOT/scripts/verify_daily_table_operational_reset.sql" >/dev/null
+printf 'DAILY_TABLE_OPERATIONAL_RESET_QR_CHAIN_VERIFICATION=PASS\n'
 if ! run_sql "$RESET_ROOT/supabase/tests/daily_table_operational_reset_test.sql" >"$RESET_TMP/behavior.log" 2>&1; then
   tail -50 "$RESET_TMP/behavior.log"
   exit 1
@@ -51,7 +62,7 @@ psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d postgres -v ON_ERROR_STOP=1
 printf 'DAILY_TABLE_OPERATIONAL_RESET_SQL_TEST=PASS\n'
 
 # Verify the actual production apply wrapper and its atomic incident safeguard.
-for reset_apply_case in success changed_payment legacy_without_mutation_rpc; do
+for reset_apply_case in success changed_payment legacy_without_mutation_rpc legacy_without_takeout_wrapper; do
   reset_apply_db="daily_reset_apply_$reset_apply_case"
   createdb -h 127.0.0.1 -p "$RESET_PORT" -U postgres "$reset_apply_db"
   run_sql "$RESET_TMP/fixture.sql" "$reset_apply_db" >/dev/null
@@ -64,6 +75,10 @@ SQL
   if [[ "$reset_apply_case" == "legacy_without_mutation_rpc" ]]; then
     psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d "$reset_apply_db" -v ON_ERROR_STOP=1 \
       -c "DROP FUNCTION create_order_with_client_mutation_id(uuid,uuid,jsonb,text); DROP TABLE pos_client_mutation_attempts;" >/dev/null
+  fi
+  if [[ "$reset_apply_case" == "legacy_without_takeout_wrapper" ]]; then
+    psql -X -h 127.0.0.1 -p "$RESET_PORT" -U postgres -d "$reset_apply_db" -v ON_ERROR_STOP=1 \
+      -c "DROP FUNCTION qr_place_order_before_non_revenue_guard(text,jsonb,uuid,boolean,uuid); ALTER FUNCTION qr_place_order_pre_takeout_availability(text,jsonb,uuid,boolean,uuid) RENAME TO qr_place_order_before_non_revenue_guard;" >/dev/null
   fi
   run_sql "$RESET_ROOT/scripts/preflight_daily_table_operational_reset.sql" "$reset_apply_db" >/dev/null
   if [[ "$reset_apply_case" == "changed_payment" ]]; then
