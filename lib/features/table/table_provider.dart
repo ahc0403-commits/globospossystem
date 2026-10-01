@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/tables_service.dart';
+import '../../core/services/operational_day_service.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/polling_utils.dart';
 import '../../main.dart';
@@ -16,12 +17,14 @@ class WaiterTableState {
     this.orderPreviewByTableId = const {},
     this.isLoading = false,
     this.error,
+    this.operationalDay,
   });
 
   final List<PosTable> tables;
   final Map<String, TableOrderPreview> orderPreviewByTableId;
   final bool isLoading;
   final String? error;
+  final OperationalDayState? operationalDay;
 
   WaiterTableState copyWith({
     List<PosTable>? tables,
@@ -29,6 +32,7 @@ class WaiterTableState {
     bool? isLoading,
     String? error,
     bool clearError = false,
+    OperationalDayState? operationalDay,
   }) {
     return WaiterTableState(
       tables: tables ?? this.tables,
@@ -36,6 +40,7 @@ class WaiterTableState {
           orderPreviewByTableId ?? this.orderPreviewByTableId,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
+      operationalDay: operationalDay ?? this.operationalDay,
     );
   }
 }
@@ -49,6 +54,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   RealtimeChannel? _channel;
   String? _subscribedRestaurantId;
   Timer? _pollTimer;
+  Timer? _businessDayTimer;
   String? _pollStoreId;
   bool _realtimeConnected = false;
 
@@ -57,6 +63,18 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
       state = state.copyWith(isLoading: true, clearError: true);
     }
     try {
+      final operationalDay = await operationalDayService.ensureStoreDay(
+        storeId,
+      );
+      _businessDayTimer?.cancel();
+      _businessDayTimer = Timer(
+        operationalDay.window.refreshDelay(DateTime.now().toUtc()),
+        () {
+          if (mounted && _subscribedRestaurantId == storeId) {
+            unawaited(loadTables(storeId, showLoading: false));
+          }
+        },
+      );
       final response = await tablesService.fetchTables(storeId);
       Map<String, TableOrderPreview> orderPreviewByTableId = const {};
       try {
@@ -78,6 +96,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
           .toList();
 
       state = state.copyWith(
+        operationalDay: operationalDay,
         tables: _sortTables(tables),
         orderPreviewByTableId: orderPreviewByTableId,
         isLoading: false,
@@ -225,13 +244,25 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   Future<Map<String, TableOrderPreview>> _fetchActiveOrderPreviews(
     String storeId,
   ) async {
-    final response = await supabase
+    final operationalDay = await operationalDayService.ensureStoreDay(storeId);
+    var query = supabase
         .from('orders')
         .select(
           'id, table_id, status, created_at, order_items(id, created_at, label, quantity, status, menu_items(name, name_ko, name_vi, name_en))',
         )
         .eq('restaurant_id', storeId)
-        .not('status', 'in', '(completed,cancelled)')
+        .not('status', 'in', '(completed,cancelled)');
+    if (operationalDay.supportsClosure) {
+      query = query.isFilter('operational_closed_at', null);
+    }
+    if (operationalDay.enabled) {
+      query = query.or(
+        'sales_channel.neq.dine_in,sales_channel.is.null,'
+        'and(created_at.gte.${operationalDay.window.startIso8601},'
+        'created_at.lt.${operationalDay.window.endIso8601})',
+      );
+    }
+    final response = await query
         .order('created_at', ascending: false)
         .order('created_at', referencedTable: 'order_items', ascending: true)
         .order('id', referencedTable: 'order_items', ascending: true);
@@ -311,6 +342,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
 
   @override
   void dispose() {
+    _businessDayTimer?.cancel();
     _pollTimer?.cancel();
     _pollTimer = null;
     _pollStoreId = null;

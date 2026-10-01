@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:globos_pos_system/core/services/qr_order_service.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/core/utils/time_utils.dart';
 import 'package:globos_pos_system/features/qr_order/qr_order_screen.dart';
 
 class _FakeQrOrderService extends QrOrderService {
@@ -168,6 +169,45 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets(
+    'Vietnam midnight clears an unsent QR cart and reloads the table',
+    (tester) async {
+      var reads = 0;
+      final delay = TimeUtils.currentVietnamBusinessDay().refreshDelay(
+        DateTime.now().toUtc(),
+      );
+      await _pumpQr(
+        tester,
+        menuSafetyRefreshInterval: const Duration(days: 2),
+        service: _service(
+          fetchActive: (_) async {
+            reads++;
+            return _noActiveOrder;
+          },
+        ),
+      );
+      await tester.tap(find.byKey(const Key('qr_add_food')));
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('qr_open_review')))
+            .onPressed,
+        isNotNull,
+      );
+      await tester.pump(delay + const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(reads, greaterThan(1));
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('qr_open_review')))
+            .onPressed,
+        isNull,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      _expectNoLayoutFailure(tester);
+    },
+  );
+
   testWidgets('disabled takeout exposes dine-in controls only', (tester) async {
     List<QrOrderLine>? submitted;
     const dineInOnlyMenu = QrOrderMenu(

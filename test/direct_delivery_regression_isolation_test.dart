@@ -7,9 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 const _migrationPath =
     'supabase/migrations/20260821130000_direct_delivery_ordering.sql';
 
+// Daily reset changes are covered by QR midnight and cashier clear/review
+// widget tests, plus the isolated SQL behavior and concurrency suites.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      '14eaeb6d1629981b0c615a8b887f9d3e1d7806403e5668f60b06d86f56abd6c1',
+      'fe1d5b4eca7bff30215b34919e59d46c7d65d0d3e2712c033e9a2a5d7bcd4228',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.
@@ -17,7 +19,7 @@ const _frozenFiles = <String, String>{
   // menu_language_switch_test + routed/overlay operational suites cover behavior.
   // Non-revenue checkout now reconfirms totals after concurrent additions.
   'lib/features/cashier/cashier_screen.dart':
-      '293cffae0d0de2c027b69e74f0d2ebc0b2a4afb083e5fb95a7af68c322bd7db1',
+      'c8e7574f674cbd9980cc2ffb804e8e99d25efc3809baa6d5e38988f1a0a8069a',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.

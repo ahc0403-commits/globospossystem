@@ -1,4 +1,6 @@
 import '../../main.dart';
+import '../utils/time_utils.dart';
+import 'operational_day_service.dart';
 
 class OrderService {
   bool _isRpcSignatureMismatch(Object error, String functionName) {
@@ -18,8 +20,33 @@ class OrderService {
     required String tableId,
     required List<Map<String, dynamic>> items,
     String? clientMutationId,
+    String? businessDate,
   }) async {
     if (clientMutationId != null) {
+      try {
+        final day = await operationalDayService.ensureStoreDay(storeId);
+        final result = await supabase.rpc(
+          'create_order_for_business_day',
+          params: {
+            'p_store_id': storeId,
+            'p_table_id': tableId,
+            'p_items': items,
+            'p_client_mutation_id': clientMutationId,
+            'p_business_date': businessDate ?? day.window.dateKey,
+          },
+        );
+        return Map<String, dynamic>.from(result as Map);
+      } catch (error) {
+        if (!_isRpcSignatureMismatch(error, 'create_order_for_business_day')) {
+          rethrow;
+        }
+        // Old servers cannot validate an offline business date. Never replay
+        // a previous day's creation through an unguarded compatibility RPC.
+        if (businessDate != null &&
+            businessDate != TimeUtils.currentVietnamBusinessDay().dateKey) {
+          rethrow;
+        }
+      }
       try {
         final result = await supabase.rpc(
           'create_order_with_client_mutation_id',
@@ -175,6 +202,22 @@ class OrderService {
       params: {'p_order_id': orderId, 'p_store_id': storeId},
     );
     return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<void> cancelCurrentTableOrder({
+    required String storeId,
+    required String tableId,
+    required String reason,
+  }) async {
+    await supabase.rpc(
+      'cancel_current_table_order',
+      params: {
+        'p_store_id': storeId,
+        'p_table_id': tableId,
+        'p_reason': reason,
+      },
+    );
+    operationalDayService.invalidate(storeId);
   }
 
   Future<Map<String, dynamic>> requestLeftoverPackaging({

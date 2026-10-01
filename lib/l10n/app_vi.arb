@@ -4157,5 +4157,19 @@
         "type": "int"
       }
     }
+  },
+  "cashierClearTable": "Dọn bàn",
+  "cashierClearTableReason": "Lý do dọn bàn",
+  "cashierClearTableFailed": "Không thể dọn bàn. Vui lòng làm mới và kiểm tra thanh toán hoặc món đã giao.",
+  "cashierExpiredPaymentReview": "Thanh toán ngày trước",
+  "cashierExpiredPaymentReviewDetail": "Phiên sử dụng bàn đã kết thúc. Thanh toán được giữ nguyên; quản lý cần kiểm tra số tiền còn lại bằng mã đơn.",
+  "cashierDailyResetCount": "Đã đóng {count} đơn ngày trước",
+  "orderBusinessDayExpired": "Ngày kinh doanh trước đã kết thúc. Đơn này sẽ không được gửi lại. Kiểm tra bàn và tạo đơn mới.",
+  "@cashierDailyResetCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

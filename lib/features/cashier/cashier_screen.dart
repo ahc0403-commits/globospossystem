@@ -23,6 +23,7 @@ import '../../core/services/discount_service.dart';
 import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/services/menu_service.dart';
+import '../../core/services/order_service.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
@@ -112,6 +113,7 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.menuServiceOverride,
     this.digitalReceiptServiceOverride,
     this.directOrderStaffServiceOverride,
+    this.orderServiceOverride,
     this.bankTransferAlertPollInterval = const Duration(seconds: 30),
     this.deliveryStatusPollInterval = const Duration(seconds: 30),
   });
@@ -125,6 +127,7 @@ class CashierScreen extends ConsumerStatefulWidget {
   final MenuService? menuServiceOverride;
   final DigitalReceiptService? digitalReceiptServiceOverride;
   final DirectOrderStaffService? directOrderStaffServiceOverride;
+  final OrderService? orderServiceOverride;
   final Duration bankTransferAlertPollInterval;
   final Duration deliveryStatusPollInterval;
 
@@ -1403,6 +1406,40 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       }
     });
     if (payableOrder != null) notifier.selectOrder(payableOrder);
+    if (payableOrder == null && table.isOccupied) {
+      _orderSearchController.text = table.tableNumber;
+      unawaited(_handleOrderSearch(storeId: table.storeId, notifier: notifier));
+    }
+  }
+
+  Future<void> _clearSelectedTable(String storeId) async {
+    final tableId = _selectedTableId;
+    if (tableId == null) return;
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => const _ClearTableReasonDialog(),
+    );
+    if (reason == null || !mounted) return;
+    try {
+      await (widget.orderServiceOverride ?? orderService)
+          .cancelCurrentTableOrder(
+            storeId: storeId,
+            tableId: tableId,
+            reason: reason,
+          );
+      await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+      await ref.read(paymentProvider.notifier).loadOrders(storeId);
+      if (!mounted) return;
+      setState(() {
+        _orderSearchResult = null;
+        _orderSearchFeedback = null;
+        _orderSearchController.clear();
+      });
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, context.l10n.cashierClearTableFailed);
+      }
+    }
   }
 
   @override
@@ -1794,6 +1831,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     paymentState: paymentState,
                     notifier: notifier,
                   ),
+                  onClearSelectedTable:
+                      storeId != null &&
+                          isOnline &&
+                          canCancelOrders &&
+                          tableState.orderPreviewByTableId.containsKey(
+                            _selectedTableId,
+                          )
+                      ? () => _clearSelectedTable(storeId)
+                      : null,
                 )
               : _SelectedOrderView(
                   order: selectedOrder,
@@ -5946,12 +5992,51 @@ class _CashierTableOverview extends StatelessWidget {
     required this.selectedTableId,
     required this.onRetry,
     required this.onTapTable,
+    this.onClearSelectedTable,
   });
 
   final WaiterTableState state;
   final String? selectedTableId;
   final VoidCallback? onRetry;
   final ValueChanged<PosTable> onTapTable;
+  final VoidCallback? onClearSelectedTable;
+
+  void _showFinancialReviews(BuildContext context) {
+    final day = state.operationalDay;
+    if (day == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('cashier_expired_payment_review_dialog'),
+        title: Text(context.l10n.cashierExpiredPaymentReview),
+        content: SizedBox(
+          width: 520,
+          height: 320,
+          child: ListView(
+            children: [
+              Text(context.l10n.cashierExpiredPaymentReviewDetail),
+              for (final review in day.financialReviews)
+                ListTile(
+                  title: Text(
+                    '${context.l10n.cashierTableLabel(review.tableNumber)} · ${review.businessDate}',
+                  ),
+                  subtitle: Text('#${review.orderId}'),
+                  trailing: Text(
+                    '${NumberFormat('#,###', 'vi_VN').format(review.paidTotal)} VND',
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.close),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -6001,6 +6086,28 @@ class _CashierTableOverview extends StatelessWidget {
       trailing: Wrap(
         spacing: 6,
         children: [
+          if (onClearSelectedTable != null)
+            TextButton.icon(
+              key: const Key('cashier_clear_table_action'),
+              onPressed: onClearSelectedTable,
+              icon: const Icon(Icons.clear_all_rounded),
+              label: Text(l10n.cashierClearTable),
+            ),
+          if (state.operationalDay?.financialReviews.isNotEmpty == true)
+            TextButton.icon(
+              key: const Key('cashier_expired_payment_review'),
+              onPressed: () => _showFinancialReviews(context),
+              icon: const Icon(Icons.receipt_long_rounded),
+              label: Text(l10n.cashierExpiredPaymentReview),
+            ),
+          if ((state.operationalDay?.cancelledToday ?? 0) > 0)
+            ToastStatusBadge(
+              label: l10n.cashierDailyResetCount(
+                state.operationalDay!.cancelledToday,
+              ),
+              color: PosColors.info,
+              compact: true,
+            ),
           ToastStatusBadge(
             label: '${state.tables.length}',
             color: PosColors.info,
@@ -6973,4 +7080,51 @@ class _PaymentMethod {
   final String label;
   final Color color;
   final IconData icon;
+}
+
+class _ClearTableReasonDialog extends StatefulWidget {
+  const _ClearTableReasonDialog();
+
+  @override
+  State<_ClearTableReasonDialog> createState() =>
+      _ClearTableReasonDialogState();
+}
+
+class _ClearTableReasonDialogState extends State<_ClearTableReasonDialog> {
+  final _reasonController = TextEditingController();
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    key: const Key('cashier_clear_table_reason_dialog'),
+    title: Text(context.l10n.cashierCancelOrderTitle),
+    content: TextField(
+      key: const Key('cashier_clear_table_reason'),
+      controller: _reasonController,
+      autofocus: true,
+      maxLength: 300,
+      decoration: InputDecoration(
+        labelText: context.l10n.cashierClearTableReason,
+      ),
+      onChanged: (_) => setState(() {}),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text(context.l10n.cancel),
+      ),
+      FilledButton(
+        key: const Key('cashier_clear_table_confirm'),
+        onPressed: _reasonController.text.trim().length < 3
+            ? null
+            : () => Navigator.pop(context, _reasonController.text.trim()),
+        child: Text(context.l10n.waiterCancelOrderAction),
+      ),
+    ],
+  );
 }

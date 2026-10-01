@@ -4158,5 +4158,19 @@
         "type": "int"
       }
     }
+  },
+  "cashierClearTable": "Clear table",
+  "cashierClearTableReason": "Why is this table being cleared?",
+  "cashierClearTableFailed": "The table could not be cleared. Refresh and check payments or served items.",
+  "cashierExpiredPaymentReview": "Previous-day payments",
+  "cashierExpiredPaymentReviewDetail": "These table operations have ended. Recorded payments are preserved; management must review the remaining balance using the order ID.",
+  "cashierDailyResetCount": "{count} previous-day orders closed",
+  "orderBusinessDayExpired": "The previous business day has ended. This order will not be sent again. Check the table and start a new order.",
+  "@cashierDailyResetCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

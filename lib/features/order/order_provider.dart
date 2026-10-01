@@ -6,8 +6,10 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/services/offline_mutation_queue_service.dart';
 import '../../core/services/order_service.dart';
+import '../../core/services/operational_day_service.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/polling_utils.dart';
+import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 import 'order_model.dart';
 
@@ -62,6 +64,8 @@ class OrderNotifier extends StateNotifier<OrderState> {
   String? _subscribedStoreId;
   String? _subscribedTableId;
   Timer? _pollTimer;
+  Timer? _businessDayTimer;
+  String? _businessDate;
   bool _realtimeConnected = false;
   final _uuid = const Uuid();
 
@@ -155,6 +159,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
   }
 
   void clearSession() {
+    _businessDayTimer?.cancel();
     _unsubscribeOrderItems();
     state = state.copyWith(
       cart: const [],
@@ -177,14 +182,45 @@ class OrderNotifier extends StateNotifier<OrderState> {
     bool syncOffline = true,
   }) async {
     try {
-      final response = await supabase
+      final operationalDay = await operationalDayService.ensureStoreDay(
+        storeId,
+      );
+      if (operationalDay.enabled &&
+          _businessDate != null &&
+          _businessDate != operationalDay.window.dateKey) {
+        state = state.copyWith(cart: const [], clearActiveOrder: true);
+      }
+      _businessDate = operationalDay.window.dateKey;
+      _businessDayTimer?.cancel();
+      _businessDayTimer = Timer(
+        operationalDay.window.refreshDelay(DateTime.now().toUtc()),
+        () {
+          if (mounted &&
+              _subscribedStoreId == storeId &&
+              _subscribedTableId == tableId) {
+            unawaited(loadActiveOrder(tableId, storeId));
+          }
+        },
+      );
+      var query = supabase
           .from('orders')
           .select(
             'id, table_id, status, created_at, guest_count, leftover_packaging_requests(status), order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, is_takeout, item_type, combo_components, menu_items(name, name_ko, name_vi, name_en))',
           )
           .eq('table_id', tableId)
           .eq('restaurant_id', storeId)
-          .not('status', 'in', '(completed,cancelled)')
+          .not('status', 'in', '(completed,cancelled)');
+      if (operationalDay.supportsClosure) {
+        query = query.isFilter('operational_closed_at', null);
+      }
+      if (operationalDay.enabled) {
+        query = query.or(
+          'sales_channel.neq.dine_in,sales_channel.is.null,'
+          'and(created_at.gte.${operationalDay.window.startIso8601},'
+          'created_at.lt.${operationalDay.window.endIso8601})',
+        );
+      }
+      final response = await query
           .order('created_at', ascending: false)
           .order('created_at', referencedTable: 'order_items', ascending: true)
           .order('id', referencedTable: 'order_items', ascending: true)
@@ -194,7 +230,11 @@ class OrderNotifier extends StateNotifier<OrderState> {
           ? null
           : Order.fromJson(Map<String, dynamic>.from(response.first));
 
-      state = state.copyWith(activeOrder: activeOrder, clearError: true);
+      state = state.copyWith(
+        activeOrder: activeOrder,
+        clearActiveOrder: activeOrder == null,
+        clearError: true,
+      );
       if (syncOffline) {
         unawaited(syncOfflineQueue(storeId, tableId: tableId));
       }
@@ -748,15 +788,26 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
 
     state = state.copyWith(isSyncingOfflineQueue: true, clearError: true);
+    var archivedExpired = false;
     try {
+      final operationalDay = await operationalDayService.ensureStoreDay(
+        storeId,
+      );
       for (final entry in queue) {
         try {
+          if (operationalDay.expiresMutation(entry.createdAt)) {
+            await offlineMutationQueueService.archiveExpired(entry);
+            archivedExpired = true;
+            state = state.copyWith(error: 'ORDER_BUSINESS_DAY_EXPIRED');
+            continue;
+          }
           if (entry.type == OfflineMutationQueueService.createOrderType) {
             await orderService.createOrder(
               storeId: storeId,
               tableId: entry.payload['tableId']?.toString() ?? '',
               items: _payloadItems(entry),
               clientMutationId: entry.id,
+              businessDate: TimeUtils.formatDate(entry.createdAt),
             );
           } else if (entry.type ==
               OfflineMutationQueueService.addItemsToOrderType) {
@@ -769,6 +820,13 @@ class OrderNotifier extends StateNotifier<OrderState> {
           }
           await offlineMutationQueueService.remove(entry.id);
         } catch (error) {
+          if (error is PostgrestException &&
+              (error.message == 'ORDER_BUSINESS_DAY_EXPIRED' ||
+                  error.message == 'ORDER_OPERATIONS_CLOSED')) {
+            await offlineMutationQueueService.archiveExpired(entry);
+            archivedExpired = true;
+            continue;
+          }
           if (_isRecoverableConnectivityError(error)) {
             await offlineMutationQueueService.markFailed(entry.id, error);
             break;
@@ -780,6 +838,8 @@ class OrderNotifier extends StateNotifier<OrderState> {
           );
         }
       }
+    } catch (error) {
+      state = state.copyWith(error: _mapOrderError(error, 'Sync failed'));
     } finally {
       await _refreshOfflineQueueCount();
       state = state.copyWith(isSyncingOfflineQueue: false);
@@ -788,6 +848,17 @@ class OrderNotifier extends StateNotifier<OrderState> {
     if (tableId != null) {
       await loadActiveOrder(tableId, storeId);
     }
+    if (archivedExpired && mounted) {
+      state = state.copyWith(error: 'ORDER_BUSINESS_DAY_EXPIRED');
+    }
+  }
+
+  @override
+  void dispose() {
+    _businessDayTimer?.cancel();
+    _pollTimer?.cancel();
+    unawaited(_unsubscribeOrderItems());
+    super.dispose();
   }
 }
 
@@ -803,6 +874,8 @@ String _mapOrderError(Object error, String fallbackPrefix) {
     return switch (error.message) {
       'RESTAURANT_KITCHEN_CLOSED' => 'RESTAURANT_KITCHEN_CLOSED',
       'RESTAURANT_DAILY_SALES_CLOSED' => 'RESTAURANT_DAILY_SALES_CLOSED',
+      'ORDER_BUSINESS_DAY_EXPIRED' ||
+      'ORDER_OPERATIONS_CLOSED' => 'ORDER_BUSINESS_DAY_EXPIRED',
       'TABLE_ALREADY_OCCUPIED' => 'The selected table is already occupied.',
       'TABLE_NOT_AVAILABLE' => 'The selected table is not available.',
       'TABLE_NOT_FOUND' => 'The selected table could not be found.',

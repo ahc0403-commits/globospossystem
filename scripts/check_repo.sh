@@ -16,6 +16,9 @@ flutter test
 printf 'CHECK_REPO_STEP=migration_version_uniqueness\n'
 bash test/migration_version_uniqueness_test.sh
 
+printf 'CHECK_REPO_STEP=daily_table_operational_reset_sql\n'
+bash scripts/test_daily_table_operational_reset.sh
+
 printf 'CHECK_REPO_STEP=menu_localization_sql\n'
 bash scripts/test_menu_localization.sh
 printf 'CHECK_REPO_STEP=bunsik_receipt_ledger_names_sql\n'
