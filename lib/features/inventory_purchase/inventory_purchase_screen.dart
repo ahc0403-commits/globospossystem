@@ -4653,17 +4653,6 @@ class _InventoryPurchaseScreenState
     required InventoryPurchaseStockAuditState stockAuditState,
   }) {
     final l10n = context.l10n;
-    final rows = stockStatus.rows
-        .map(
-          (row) => [
-            _string(row['product_name'], fallback: '-'),
-            _displayStock(row),
-            '-',
-            '-',
-            _riskLabel(row['risk_status'], context),
-          ],
-        )
-        .toList();
 
     return _PageShell(
       title: l10n.inventoryPurchaseStockAuditTitle,
@@ -4723,12 +4712,6 @@ class _InventoryPurchaseScreenState
         ),
       ],
       children: [
-        StockAuditReportPanel(
-          storeId: storeId,
-          refreshVersion:
-              '${stockAuditState.lastSessionId}/${stockAuditState.session?['version']}',
-        ),
-        const SizedBox(height: ToastSpacingTokens.md),
         ToastMetricStrip(
           dense: true,
           metrics: [
@@ -4736,42 +4719,13 @@ class _InventoryPurchaseScreenState
               label: l10n.inventoryPurchaseAuditTargets,
               value: l10n.inventoryPurchaseCountItems(stockStatus.rows.length),
             ),
-            ToastMetric(
-              label: l10n.inventoryPurchaseRecentSession,
-              value: stockAuditState.lastSessionId == null
-                  ? '-'
-                  : l10n.inventoryPurchaseSaved,
-              tone: ToastColorTokens.accent,
-            ),
-            ToastMetric(
-              label: l10n.inventoryPurchaseRecentStatus,
-              value: stockAuditState.lastCompleted
-                  ? l10n.inventoryPurchaseCompleted
-                  : l10n.inventoryPurchaseInProgress,
-              tone: stockAuditState.lastCompleted
-                  ? ToastColorTokens.success
-                  : ToastColorTokens.warning,
-            ),
           ],
         ),
         const SizedBox(height: ToastSpacingTokens.md),
-        _DataCard(
-          title: l10n.inventoryPurchaseAuditTargetItems,
-          trailing: ToastStatusBadge(
-            label: l10n.inventoryPurchaseApplyStockOnComplete,
-            color: ToastColorTokens.warning,
-            compact: true,
-          ),
-          child: _SimpleDataTable(
-            columns: [
-              l10n.inventoryPurchaseProductName,
-              l10n.inventoryPurchaseSystemStock,
-              l10n.inventoryPurchaseCountedQuantity,
-              l10n.inventoryPurchaseVariance,
-              l10n.status,
-            ],
-            rows: rows,
-          ),
+        StockAuditReportPanel(
+          storeId: storeId,
+          refreshVersion:
+              '${stockAuditState.lastSessionId}/${stockAuditState.session?['version']}',
         ),
       ],
     );

@@ -499,6 +499,8 @@ class StockAuditReportPanel extends StatefulWidget {
 class _StockAuditReportPanelState extends State<StockAuditReportPanel> {
   final date = TextEditingController();
   List<Map<String, dynamic>> sessions = [];
+  Map<String, dynamic>? balances;
+  int loadGeneration = 0;
   bool busy = false;
   String? error;
   @override
@@ -524,30 +526,41 @@ class _StockAuditReportPanelState extends State<StockAuditReportPanel> {
 
   Future<void> load() async {
     final store = widget.storeId;
+    final generation = ++loadGeneration;
+    final businessDate = date.text.trim().isEmpty ? null : date.text.trim();
     setState(() {
       busy = true;
       error = null;
+      sessions = [];
+      balances = null;
     });
     try {
-      final result = await inventoryService.listInventoryStockAudits(
-        store,
-        businessDate: date.text.trim().isEmpty ? null : date.text.trim(),
-      );
-      if (mounted && widget.storeId == store) {
+      final results = await Future.wait<Object>([
+        inventoryService.listInventoryStockAudits(
+          store,
+          businessDate: businessDate,
+        ),
+        inventoryService.getInventoryStockAuditBalances(
+          store,
+          businessDate: businessDate,
+        ),
+      ]);
+      if (mounted && widget.storeId == store && generation == loadGeneration) {
         setState(() {
-          sessions = result;
+          sessions = results[0] as List<Map<String, dynamic>>;
+          balances = results[1] as Map<String, dynamic>;
           busy = false;
         });
       }
     } catch (_) {
-      if (mounted && widget.storeId == store) {
+      if (mounted && widget.storeId == store && generation == loadGeneration) {
         setState(() {
           busy = false;
           error = auditText(
             context,
-            '실사 이력 조회 실패',
-            'Could not load count history',
-            'Không tải được lịch sử',
+            '실사 이력·기준일 재고 조회 실패',
+            'Could not load count history and dated stock',
+            'Không tải được lịch sử và tồn kho theo ngày',
           );
         });
       }
@@ -642,9 +655,9 @@ class _StockAuditReportPanelState extends State<StockAuditReportPanel> {
                   decoration: InputDecoration(
                     labelText: auditText(
                       context,
-                      '실사 업무일 (빈칸: 최근 100건)',
-                      'Business date (blank: latest 100)',
-                      'Ngày kinh doanh (trống: 100 gần nhất)',
+                      '실사 업무일 (빈칸: 최근 완료일)',
+                      'Business date (blank: latest completed date)',
+                      'Ngày kiểm kê (trống: ngày hoàn tất gần nhất)',
                     ),
                     hintText: _dateHint,
                   ),
@@ -683,6 +696,66 @@ class _StockAuditReportPanelState extends State<StockAuditReportPanel> {
                   : const Icon(Icons.assessment_outlined),
               onTap: busy ? null : () => open(s['id'].toString()),
             ),
+          if (balances != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              '${balances!['business_date']} · ${stockAuditHcm(balances!['effective_at'])}',
+              key: const Key('stocktake_balance_reference'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text(
+              auditText(
+                context,
+                '실사 반영 ${_maps(balances!['rows']).where((r) => r['actual_quantity_base'] != null).length} / 전체 ${_maps(balances!['rows']).length}',
+                'Counted ${_maps(balances!['rows']).where((r) => r['actual_quantity_base'] != null).length} / total ${_maps(balances!['rows']).length}',
+                'Đã kiểm ${_maps(balances!['rows']).where((r) => r['actual_quantity_base'] != null).length} / tổng ${_maps(balances!['rows']).length}',
+              ),
+              key: const Key('stocktake_balance_summary'),
+            ),
+            const SizedBox(height: 8),
+            _table(
+              [
+                auditText(context, '품목', 'Item', 'Mặt hàng'),
+                auditText(
+                  context,
+                  '기준일 시스템 재고',
+                  'System stock at reference',
+                  'Tồn kho tại thời điểm',
+                ),
+                auditText(
+                  context,
+                  '실사 수량',
+                  'Counted quantity',
+                  'Số lượng kiểm đếm',
+                ),
+                auditText(context, '차이', 'Difference', 'Chênh lệch'),
+                auditText(context, '상태', 'Status', 'Trạng thái'),
+              ],
+              _maps(balances!['rows'])
+                  .map(
+                    (r) => [
+                      '${r['product_code']} ${r['product_name']}',
+                      _baseStock(r['system_quantity_base'], r['base_unit']),
+                      _baseStock(r['actual_quantity_base'], r['base_unit']),
+                      _baseStock(r['variance_quantity_base'], r['base_unit']),
+                      r['actual_quantity_base'] == null
+                          ? auditText(
+                              context,
+                              '미실사',
+                              'Not counted',
+                              'Chưa kiểm',
+                            )
+                          : auditText(
+                              context,
+                              '반영 완료',
+                              'Applied',
+                              'Đã cập nhật',
+                            ),
+                    ],
+                  )
+                  .toList(),
+            ),
+          ],
           if (!busy && sessions.isEmpty)
             Text(
               auditText(
@@ -1023,3 +1096,14 @@ List<Map<String, dynamic>> _maps(dynamic v) =>
     (v as List? ?? []).map((r) => Map<String, dynamic>.from(r as Map)).toList();
 String _q(dynamic v) => v is num ? NumberFormat('#,##0.###').format(v) : '-';
 String _signed(dynamic v) => v is num && v > 0 ? '+${_q(v)}' : _q(v);
+
+String _baseStock(dynamic quantity, dynamic unit) {
+  if (quantity is! num) return '-';
+  final factor = unit == 'g' || unit == 'ml' ? 1000 : 1;
+  final label = unit == 'g'
+      ? 'kg'
+      : unit == 'ml'
+      ? 'L'
+      : unit.toString();
+  return '${NumberFormat('#,##0.######').format(quantity / factor)} $label';
+}
