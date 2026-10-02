@@ -26,6 +26,9 @@ class ReceiptBuilder {
     double vatAmount = 0,
     double? receivedAmount,
     double changeAmount = 0,
+    String? directFulfillmentType,
+    String? directDeliveryPaymentMode,
+    String? directReferenceCode,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -101,7 +104,32 @@ class ReceiptBuilder {
     }
     bytes.addAll(generator.hr());
 
-    bytes.addAll(generator.text(_escText('Ban: $tableNumber')));
+    if (directFulfillmentType != null) {
+      bytes.addAll(
+        generator.text(
+          directFulfillmentType == 'pickup'
+              ? 'MANG DI - NHAN TAI CUA HANG'
+              : 'GIAO HANG',
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      if (directReferenceCode != null) {
+        bytes.addAll(
+          generator.text('Ma don: ${_escText(directReferenceCode)}'),
+        );
+      }
+      if (directFulfillmentType == 'delivery') {
+        bytes.addAll(
+          generator.text(
+            directDeliveryPaymentMode == 'customer_direct'
+                ? 'Phi Grab: khach tra truc tiep tai xe'
+                : 'Phi Grab da tra truoc - khong tra them',
+          ),
+        );
+      }
+    } else {
+      bytes.addAll(generator.text(_escText('Ban: $tableNumber')));
+    }
     bytes.addAll(generator.hr());
 
     bytes.addAll(
@@ -250,6 +278,7 @@ class ReceiptBuilder {
     required double deliveryFeeTotal,
     required double finalTotal,
     required DateTime printedAt,
+    String deliveryPaymentMode = 'store_prepaid',
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -327,7 +356,11 @@ class ReceiptBuilder {
     bytes.addAll(generator.hr());
     bytes.addAll(_amountRow(generator, 'Tien mon', menuTotal));
     bytes.addAll(_amountRow(generator, 'Phi dich vu', serviceChargeTotal));
-    bytes.addAll(_amountRow(generator, 'Phi giao hang Grab', deliveryFeeTotal));
+    if (deliveryPaymentMode == 'store_prepaid') {
+      bytes.addAll(
+        _amountRow(generator, 'Phi giao hang Grab', deliveryFeeTotal),
+      );
+    }
     bytes.addAll(
       generator.row([
         PosColumn(
@@ -345,13 +378,17 @@ class ReceiptBuilder {
     bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
-        'Khach can tra: ${_formatVnd(0)}',
+        deliveryPaymentMode == 'customer_direct'
+            ? 'Khach tra phi Grab truc tiep tai xe'
+            : 'Khach can tra: ${_formatVnd(0)}',
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
     bytes.addAll(
       generator.text(
-        'KHONG THU THEM TIEN CUA KHACH',
+        deliveryPaymentMode == 'customer_direct'
+            ? 'KHONG THU LAI TIEN MON'
+            : 'KHONG THU THEM TIEN CUA KHACH',
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
@@ -402,6 +439,7 @@ class ReceiptBuilder {
         deliveryFeeTotal: driverReceipt.deliveryFeeTotal,
         finalTotal: driverReceipt.finalTotal,
         printedAt: driverReceipt.printedAt,
+        deliveryPaymentMode: driverReceipt.deliveryPaymentMode,
       );
     }
 
@@ -538,6 +576,21 @@ class ReceiptBuilder {
     bool showPrices = false,
   }) {
     final bytes = <int>[];
+    if (ticket.directFulfillmentType != null) {
+      bytes.addAll(
+        generator.text(
+          ticket.directFulfillmentType == 'pickup'
+              ? 'MANG DI - NHAN TAI CUA HANG'
+              : 'GIAO HANG',
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      bytes.addAll(
+        generator.text(
+          'Ma don: ${_escText(ticket.directReferenceCode ?? ticket.ticketCode)}',
+        ),
+      );
+    }
     if (ticket.printedReason == 'added_items') {
       bytes.addAll(
         generator.text(
@@ -840,6 +893,8 @@ class PrintTicket {
     required this.items,
     this.orderNotes,
     this.deliveryDriverReceipt,
+    this.directFulfillmentType,
+    this.directReferenceCode,
   });
 
   final String ticket;
@@ -852,6 +907,8 @@ class PrintTicket {
   final List<PrintTicketItem> items;
   final String? orderNotes;
   final QueuedDeliveryDriverReceipt? deliveryDriverReceipt;
+  final String? directFulfillmentType;
+  final String? directReferenceCode;
 
   factory PrintTicket.fromPayload(Map<String, dynamic> payload) {
     final rawItems = payload['items'];
@@ -859,6 +916,8 @@ class PrintTicket {
     final ticket = payload['ticket']?.toString() ?? 'kitchen';
     return PrintTicket(
       ticket: ticket,
+      directFulfillmentType: payload['direct_fulfillment_type']?.toString(),
+      directReferenceCode: payload['direct_reference_code']?.toString(),
       floorLabel: payload['floor_label']?.toString() ?? '-',
       tableNumber: payload['table_number']?.toString() ?? '-',
       ticketCode: payload['ticket_code']?.toString() ?? '-',
@@ -972,6 +1031,9 @@ class PrintTicketComboComponent {
 
 class QueuedPaymentReceipt {
   const QueuedPaymentReceipt({
+    this.directFulfillmentType,
+    this.directDeliveryPaymentMode,
+    this.directReferenceCode,
     required this.restaurantName,
     required this.tableNumber,
     required this.items,
@@ -991,6 +1053,9 @@ class QueuedPaymentReceipt {
     required this.changeAmount,
   });
 
+  final String? directFulfillmentType;
+  final String? directDeliveryPaymentMode;
+  final String? directReferenceCode;
   final String restaurantName;
   final String tableNumber;
   final List<ReceiptItem> items;
@@ -1020,6 +1085,10 @@ class QueuedPaymentReceipt {
         ? payload[combinedKey] ?? payload[standardKey]
         : payload[standardKey];
     return QueuedPaymentReceipt(
+      directFulfillmentType: payload['direct_fulfillment_type']?.toString(),
+      directDeliveryPaymentMode: payload['direct_delivery_payment_mode']
+          ?.toString(),
+      directReferenceCode: payload['direct_reference_code']?.toString(),
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       tableNumber: payload['table_number']?.toString() ?? '-',
       items: itemRows.whereType<Map>().map((item) {
@@ -1108,6 +1177,7 @@ class QueuedPaymentReceipt {
 
 class QueuedDeliveryDriverReceipt {
   const QueuedDeliveryDriverReceipt({
+    this.deliveryPaymentMode = 'store_prepaid',
     required this.restaurantName,
     required this.referenceCode,
     required this.customerName,
@@ -1134,6 +1204,7 @@ class QueuedDeliveryDriverReceipt {
   final double deliveryFeeTotal;
   final double finalTotal;
   final DateTime printedAt;
+  final String deliveryPaymentMode;
 
   factory QueuedDeliveryDriverReceipt.fromPayload(
     Map<String, dynamic> payload,
@@ -1141,6 +1212,9 @@ class QueuedDeliveryDriverReceipt {
     final rawItems = payload['items'];
     final itemRows = rawItems is List ? rawItems : const <Object?>[];
     return QueuedDeliveryDriverReceipt(
+      deliveryPaymentMode:
+          payload['direct_delivery_payment_mode']?.toString() ??
+          'store_prepaid',
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       referenceCode:
           payload['reference_code']?.toString() ??

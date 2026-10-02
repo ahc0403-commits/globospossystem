@@ -647,6 +647,71 @@ void main() {
       },
     );
 
+    test(
+      'print agent carries direct type and Grab ownership to payment receipts',
+      () async {
+        for (final mode in [
+          'not_applicable',
+          'customer_direct',
+          'store_prepaid',
+        ]) {
+          final backend = _FakePrintJobBackend(
+            jobs: [
+              PrintAgentJob.fromJson({
+                'id': 'direct-receipt',
+                'destination_id': 'dest',
+                'payload': {
+                  'ticket': 'receipt',
+                  'restaurant_name': 'Bunsik',
+                  'items': [],
+                  'total_amount': mode == 'store_prepaid' ? 135000 : 110000,
+                  'payment_method': 'BANKTRANSFER',
+                  'at': '2026-10-02T12:00:00+07:00',
+                  'direct_fulfillment_type': mode == 'not_applicable'
+                      ? 'pickup'
+                      : 'delivery',
+                  'direct_delivery_payment_mode': mode,
+                  'direct_reference_code': 'DPICKUP01',
+                },
+              }),
+            ],
+            destinations: const {
+              'dest': PrintDestination(
+                id: 'dest',
+                name: 'Cashier',
+                ip: '192.168.1.52',
+                port: 9100,
+                purpose: 'receipt',
+              ),
+            },
+          );
+          final printer = _FakePrinterService(PrintResult.success);
+          final agent = PrintJobAgentService(
+            backend: backend,
+            printerService: printer,
+            networkCapabilityService: _availableNetwork,
+          );
+          await agent.processOnce('store-1');
+          final output = String.fromCharCodes(printer.prints.single.bytes);
+          expect(output, contains('DPICKUP01'));
+          if (mode == 'not_applicable') {
+            expect(output, contains('MANG DI - NHAN TAI CUA HANG'));
+            expect(output, isNot(contains('Phi Grab')));
+          } else {
+            expect(
+              output,
+              contains(
+                mode == 'customer_direct'
+                    ? 'khach tra truc tiep tai xe'
+                    : 'da tra truoc - khong tra them',
+              ),
+            );
+          }
+          expect(backend.completed.single.ok, isTrue);
+        }
+      },
+    );
+
     test('processOnce renders receipt jobs as payment receipts', () async {
       final backend = _FakePrintJobBackend(
         jobs: [

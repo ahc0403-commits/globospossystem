@@ -30,11 +30,15 @@ export class SafeHttpError extends Error {
 export const directOrderActionRegistry = Object.freeze(
   {
     storefront: { actor: "public", rateLimit: 60 },
+    storefront_v2: { actor: "public", rateLimit: 60 },
     create_session: { actor: "public", rateLimit: 60 },
     submit: { actor: "public", rateLimit: 60 },
+    submit_v2: { actor: "public", rateLimit: 60 },
     status: { actor: "public", rateLimit: 60 },
     status_v2: { actor: "public", rateLimit: 60 },
+    status_v3: { actor: "public", rateLimit: 60 },
     orders_v2: { actor: "public", rateLimit: 60 },
+    orders_v3: { actor: "public", rateLimit: 60 },
     message: { actor: "public", rateLimit: 60 },
     cancel: { actor: "public", rateLimit: 60 },
     proof_upload_url: { actor: "public", rateLimit: 10 },
@@ -473,6 +477,17 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_STOREFRONT_NOT_FOUND: unavailable("DIRECT_ORDER_UNAVAILABLE"),
   DIRECT_ORDER_SESSION_INVALID: unavailable("DIRECT_ORDER_UNAVAILABLE"),
   DIRECT_ORDER_REQUEST_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_FULFILLMENT_TYPE_LOCKED: conflict(
+    "DIRECT_ORDER_FULFILLMENT_TYPE_LOCKED",
+  ),
+  DIRECT_ORDER_PICKUP_FEE_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_PICKUP_DISPATCH_FORBIDDEN: conflict(
+    "DIRECT_ORDER_PICKUP_DISPATCH_FORBIDDEN",
+  ),
+  DIRECT_ORDER_PICKUP_NOT_APPROVED: conflict(
+    "DIRECT_ORDER_PICKUP_NOT_APPROVED",
+  ),
+  DIRECT_ORDER_PICKUP_NOT_READY: conflict("DIRECT_ORDER_PICKUP_NOT_READY"),
   DIRECT_ORDER_STOREFRONT_PAUSED: conflict("DIRECT_ORDER_STOREFRONT_PAUSED"),
   DIRECT_ORDER_OUTSIDE_HOURS: conflict("DIRECT_ORDER_OUTSIDE_HOURS"),
   DIRECT_ORDER_OPEN_REQUEST_EXISTS: conflict(
@@ -697,11 +712,14 @@ function productionDependencies(): DirectOrderDependencies {
     request: Request,
   ): Promise<unknown> => {
     switch (action) {
-      case "storefront": {
+      case "storefront":
+      case "storefront_v2": {
         const slug = requiredString(body, "slug", 63, slugPattern);
         const value = await rpc(
           service,
-          "direct_order_public_storefront",
+          action === "storefront_v2"
+            ? "direct_order_public_storefront_v2"
+            : "direct_order_public_storefront",
           { p_slug: slug },
         );
         if (!value) throw new SafeHttpError(404, "DIRECT_ORDER_UNAVAILABLE");
@@ -728,7 +746,8 @@ function productionDependencies(): DirectOrderDependencies {
         );
         return { ...value, secret };
       }
-      case "submit": {
+      case "submit":
+      case "submit_v2": {
         const sessionId = requiredUuid(body, "session_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
         const clientRequestId = requiredUuid(body, "client_request_id");
@@ -740,12 +759,18 @@ function productionDependencies(): DirectOrderDependencies {
         }
         const payload = body.payload as JsonObject;
         directOrderLocale(payload.locale);
-        return await rpc(service, "direct_order_public_submit", {
-          p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
-          p_client_request_id: clientRequestId,
-          p_payload: payload,
-        });
+        return await rpc(
+          service,
+          action === "submit_v2"
+            ? "direct_order_public_submit_v2"
+            : "direct_order_public_submit",
+          {
+            p_session_id: sessionId,
+            p_secret_hash: await sha256Hex(secret),
+            p_client_request_id: clientRequestId,
+            p_payload: payload,
+          },
+        );
       }
       case "status": {
         const sessionId = requiredUuid(body, "session_id");
@@ -757,24 +782,38 @@ function productionDependencies(): DirectOrderDependencies {
           p_request_id: requestId,
         });
       }
-      case "status_v2": {
+      case "status_v2":
+      case "status_v3": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
-        return await rpc(service, "direct_order_public_status_v2", {
-          p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
-          p_request_id: requestId,
-        });
+        return await rpc(
+          service,
+          action === "status_v3"
+            ? "direct_order_public_status_v3"
+            : "direct_order_public_status_v2",
+          {
+            p_session_id: sessionId,
+            p_secret_hash: await sha256Hex(secret),
+            p_request_id: requestId,
+          },
+        );
       }
-      case "orders_v2": {
+      case "orders_v2":
+      case "orders_v3": {
         const sessionId = requiredUuid(body, "session_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
-        return await rpc(service, "direct_order_public_orders_v2", {
-          p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
-          p_limit: 50,
-        });
+        return await rpc(
+          service,
+          action === "orders_v3"
+            ? "direct_order_public_orders_v3"
+            : "direct_order_public_orders_v2",
+          {
+            p_session_id: sessionId,
+            p_secret_hash: await sha256Hex(secret),
+            p_limit: 50,
+          },
+        );
       }
       case "message": {
         const sessionId = requiredUuid(body, "session_id");
@@ -1038,7 +1077,7 @@ function productionDependencies(): DirectOrderDependencies {
       const address = clientAddress(request);
       if (!address) return false;
       const key = await hmacSha256Hex(
-        `${action}:${address}`,
+        `${action.replace(/_v[23]$/, "")}:${address}`,
         rateLimitSecret,
       );
       const data = await rpc(service, "direct_order_consume_public_rate", {

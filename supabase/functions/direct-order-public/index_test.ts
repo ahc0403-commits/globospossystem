@@ -214,16 +214,20 @@ Deno.test("requires JSON and enforces the 64 KiB limit in UTF-8 bytes", async ()
   assertEquals(utf8Oversized.status, 413, "UTF-8 byte limit status");
 });
 
-Deno.test("action registry is exact and dispatches all 14 boundaries", async () => {
+Deno.test("action registry is exact and dispatches all supported boundaries", async () => {
   assertEquals(
     Object.keys(directOrderActionRegistry),
     [
       "storefront",
+      "storefront_v2",
       "create_session",
       "submit",
+      "submit_v2",
       "status",
       "status_v2",
+      "status_v3",
       "orders_v2",
+      "orders_v3",
       "message",
       "cancel",
       "proof_upload_url",
@@ -362,8 +366,13 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    81,
+    86,
     "registered SQL error count",
+  );
+  assertEquals(
+    normalizeRpcError("DIRECT_ORDER_FULFILLMENT_TYPE_LOCKED").status,
+    409,
+    "fulfillment retry conflict",
   );
   const conflict = normalizeRpcError(
     "duplicate: DIRECT_ORDER_OPEN_REQUEST_EXISTS detail=private",

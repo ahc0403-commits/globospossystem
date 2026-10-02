@@ -9,8 +9,34 @@ class DirectOrderCopy {
     _ => vi,
   };
 
-  String get directDelivery =>
-      _pick('배달 주문', 'Đặt giao hàng', 'Delivery order');
+  String get directDelivery => _pick(
+    '배달 · 포장 주문',
+    'Đặt giao hàng / mang đi',
+    'Delivery / pickup orders',
+  );
+  String get delivery => _pick('배달', 'Giao hàng', 'Delivery');
+  String get pickup => _pick('포장 · 픽업', 'Nhận tại cửa hàng', 'Store pickup');
+  String get contact => _pick('수령 정보', 'Thông tin nhận hàng', 'Pickup details');
+  String get pickupHelp => _pick(
+    '준비 완료 후 매장에서 직접 수령해 주세요. 음식값은 매장에 먼저 송금합니다.',
+    'Nhận tại cửa hàng khi món đã sẵn sàng. Vui lòng chuyển khoản tiền món trước.',
+    'Collect at the store when ready. Pay the store by bank transfer first.',
+  );
+  String get pickupComplete =>
+      _pick('고객 수령 완료', 'Khách đã nhận hàng', 'Customer collected');
+  String get pickupConfirm => _pick(
+    '주문번호·수령코드를 확인하고 고객에게 음식을 전달했나요?',
+    'Đã kiểm tra mã đơn/mã nhận và giao món cho khách?',
+    'Have you checked the order/pickup code and handed the food to the customer?',
+  );
+  String get pickupReady =>
+      _pick('수령 준비 완료', 'Sẵn sàng nhận tại cửa hàng', 'Ready for collection');
+  String get pickupCode => _pick('수령코드', 'Mã nhận hàng', 'Pickup code');
+  String get prepaidHelp => _pick(
+    '그랩비가 포함된 금액입니다. 기사에게 추가로 지급하지 마세요.',
+    'Đã gồm phí Grab. Không trả thêm phí cho tài xế.',
+    'Grab fee is included. Do not pay the driver again.',
+  );
   String get menu => _pick('메뉴', 'Thực đơn', 'Menu');
   String get address => _pick('배송지', 'Địa chỉ', 'Address');
   String get orderStatus => _pick('주문 현황', 'Trạng thái', 'Order status');
@@ -18,23 +44,26 @@ class DirectOrderCopy {
   String get cartEmpty =>
       _pick('메뉴를 선택해 주세요.', 'Vui lòng chọn món.', 'Please choose an item.');
   String get pausedTitle => _pick(
-    '현재 배달 주문을 잠시 쉬고 있습니다',
+    '현재 배달·포장 주문을 잠시 쉬고 있습니다',
     'Cửa hàng đang tạm ngưng nhận đơn giao hàng',
-    'Delivery ordering is temporarily paused',
+    'Delivery/pickup ordering is temporarily paused',
   );
   String get pausedMessage => _pick(
-    '현재 주문량이 많아 새 배달 주문을 받기 어렵습니다. 불편을 드려 정말 죄송합니다. 잠시 후 다시 주문해 주세요.',
+    '현재 주문량이 많아 새 배달·포장 주문을 받기 어렵습니다. 불편을 드려 정말 죄송합니다. 잠시 후 다시 주문해 주세요.',
     'Hiện tại cửa hàng có nhiều đơn nên tạm thời chưa thể nhận thêm đơn giao hàng. Chúng tôi thành thật xin lỗi vì sự bất tiện này. Vui lòng quay lại đặt hàng sau ít phút.',
-    'We are handling a high volume of orders and cannot accept new delivery orders right now. We are very sorry for the inconvenience. Please try again a little later.',
+    'We are handling a high volume of orders and cannot accept new delivery/pickup orders right now. We are very sorry for the inconvenience. Please try again a little later.',
   );
   String get paused => pausedTitle;
   String get apologyEmojiLabel =>
       _pick('죄송한 마음', 'Lời xin lỗi chân thành', 'A sincere apology');
   String get checkAgain => _pick('다시 확인', 'Kiểm tra lại', 'Check again');
   String get deliveryOpen =>
-      _pick('배달 OPEN', 'Giao hàng OPEN', 'Delivery OPEN');
-  String get deliveryClosed =>
-      _pick('배달 CLOSED', 'Giao hàng CLOSED', 'Delivery CLOSED');
+      _pick('배달·포장 OPEN', 'Giao hàng / Mang đi OPEN', 'Delivery / Pickup OPEN');
+  String get deliveryClosed => _pick(
+    '배달·포장 CLOSED',
+    'Giao hàng / Mang đi CLOSED',
+    'Delivery / Pickup CLOSED',
+  );
   String get deliveryNotConfigured =>
       _pick('배달 미설정', 'Chưa bật giao hàng', 'Delivery not configured');
   String get deliveryStateUnavailable => _pick(
@@ -43,56 +72,61 @@ class DirectOrderCopy {
     'Delivery state unavailable',
   );
   String get pauseConfirmTitle => _pick(
-    '배달 주문을 닫을까요?',
-    'Tạm ngưng nhận đơn giao hàng?',
-    'Close delivery ordering?',
+    '배달·포장 주문을 닫을까요?',
+    'Tạm ngưng nhận đơn giao hàng/mang đi?',
+    'Close delivery/pickup ordering?',
   );
   String get pauseConfirmMessage => _pick(
-    '새 배달 주문 접수만 중지됩니다. 이미 접수된 주문은 계속 처리할 수 있습니다.',
-    'Chỉ ngưng nhận đơn giao hàng mới. Các đơn đã nhận vẫn có thể tiếp tục xử lý.',
-    'Only new delivery orders will stop. Orders already received can still be processed.',
+    '새 배달·포장 주문 접수만 중지됩니다. 이미 접수된 주문은 계속 처리할 수 있습니다.',
+    'Chỉ ngưng nhận đơn giao hàng/mang đi mới. Các đơn đã nhận vẫn có thể tiếp tục xử lý.',
+    'Only new delivery/pickup orders will stop. Orders already received can still be processed.',
   );
   String get pauseAction =>
-      _pick('배달 주문 닫기', 'Tạm ngưng giao hàng', 'Close delivery');
+      _pick('배달·포장 주문 닫기', 'Tạm ngưng giao hàng', 'Close delivery / pickup');
   String get resumeConfirmTitle => _pick(
-    '배달 주문을 다시 열까요?',
-    'Nhận lại đơn giao hàng?',
-    'Reopen delivery ordering?',
+    '배달·포장 주문을 다시 열까요?',
+    'Nhận lại đơn giao hàng/mang đi?',
+    'Reopen delivery/pickup ordering?',
   );
   String get resumeConfirmMessage => _pick(
-    '주방에서 새 배달 주문을 받을 준비가 되었는지 확인해 주세요.',
-    'Vui lòng xác nhận bếp đã sẵn sàng nhận đơn giao hàng mới.',
-    'Please confirm that the kitchen is ready for new delivery orders.',
+    '주방에서 새 배달·포장 주문을 받을 준비가 되었는지 확인해 주세요.',
+    'Vui lòng xác nhận bếp đã sẵn sàng nhận đơn giao hàng/mang đi mới.',
+    'Please confirm that the kitchen is ready for new delivery/pickup orders.',
   );
   String get resumeAction =>
-      _pick('배달 주문 열기', 'Mở lại giao hàng', 'Reopen delivery');
+      _pick('배달·포장 주문 열기', 'Mở lại giao hàng', 'Reopen delivery / pickup');
   String get keepCurrentState => _pick('취소', 'Hủy', 'Cancel');
   String get deliveryPausedSuccess => _pick(
-    '새 배달 주문 접수를 닫았습니다.',
-    'Đã tạm ngưng nhận đơn giao hàng mới.',
-    'New delivery ordering is closed.',
+    '새 배달·포장 주문 접수를 닫았습니다.',
+    'Đã tạm ngưng nhận đơn giao hàng/mang đi mới.',
+    'New delivery/pickup ordering is closed.',
   );
   String get deliveryResumedSuccess => _pick(
-    '새 배달 주문 접수를 열었습니다.',
+    '새 배달·포장 주문 접수를 열었습니다.',
     'Đã mở lại nhận đơn giao hàng.',
-    'New delivery ordering is open.',
+    'New delivery/pickup ordering is open.',
   );
   String get unavailable => _pick(
     '배달 주문 페이지를 불러올 수 없습니다.',
     'Không thể tải trang đặt giao hàng.',
-    'Delivery ordering is unavailable.',
+    'Delivery/pickup ordering is unavailable.',
   );
   String errorMessage(String code) => switch (code) {
     'DIRECT_ORDER_STOREFRONT_PAUSED' => paused,
     'DIRECT_ORDER_OUTSIDE_HOURS' || 'DIRECT_ORDER_APPROVAL_CUTOFF' => _pick(
       '현재는 배달 주문 시간이 아닙니다.',
       'Hiện không phải giờ nhận đơn giao hàng.',
-      'Delivery ordering is currently closed.',
+      'Delivery/pickup ordering is currently closed.',
     ),
     'DIRECT_ORDER_OPEN_REQUEST_EXISTS' => _pick(
       '진행 중인 배달 주문을 먼저 확인해 주세요.',
       'Vui lòng kiểm tra đơn giao hàng đang xử lý.',
       'Please check your active delivery order first.',
+    ),
+    'DIRECT_ORDER_FULFILLMENT_TYPE_LOCKED' => _pick(
+      '전송 중인 주문의 배달·포장 유형은 변경할 수 없습니다. 기존 유형으로 다시 접수하거나 내 주문을 확인해 주세요.',
+      'Không thể đổi hình thức của đơn đang gửi. Thử lại hình thức ban đầu hoặc kiểm tra đơn của bạn.',
+      'An order being sent cannot change type. Retry the original type or check My orders.',
     ),
     'DIRECT_ORDER_ADDRESS_INVALID' => _pick(
       '배송지 정보를 다시 확인해 주세요.',
@@ -226,6 +260,14 @@ class DirectOrderCopy {
     'DIRECT_ORDER_SEPAY_CANDIDATE_INVALID' ||
     'DIRECT_ORDER_CUSTOMER_DIRECT_FEE_MUST_BE_EMPTY' ||
     'DIRECT_ORDER_DELIVERY_PAYMENT_MODE_CONFLICT' ||
+    'DIRECT_ORDER_PICKUP_FEE_INVALID' => _pick(
+      '포장 주문에는 배송비를 입력할 수 없습니다.',
+      'Đơn mang đi không có phí giao hàng.',
+      'Pickup orders cannot include a delivery fee.',
+    ),
+    'DIRECT_ORDER_PICKUP_NOT_APPROVED' ||
+    'DIRECT_ORDER_PICKUP_NOT_READY' ||
+    'DIRECT_ORDER_PICKUP_DISPATCH_FORBIDDEN' ||
     'DIRECT_DELIVERY_TICKET_VERSION_CONFLICT' ||
     'DIRECT_DELIVERY_TICKET_TRANSITION_INVALID' ||
     'DIRECT_ORDER_DELIVERY_NOT_DISPATCHED' ||
@@ -301,6 +343,16 @@ class DirectOrderCopy {
     'Add details so the driver can find you',
   );
   String get deliveryNote => _pick('요청사항', 'Ghi chú', 'Note');
+  String get submitForPickup => _pick(
+    '포장 주문 금액 확인 요청',
+    'Yêu cầu xác nhận đơn mang đi',
+    'Request pickup quote',
+  );
+  String get requiredPickupFields => _pick(
+    '받는 분과 전화번호를 입력해 주세요.',
+    'Vui lòng nhập tên và số điện thoại.',
+    'Please enter your name and phone number.',
+  );
   String get submitForQuote =>
       _pick('배송비 견적 요청', 'Yêu cầu báo phí giao hàng', 'Request delivery quote');
   String get requiredFields => _pick(
@@ -443,29 +495,29 @@ class DirectOrderCopy {
   );
 
   String get arrivalAlertTitle =>
-      _pick('배달 주문', 'Đơn giao hàng', 'Delivery order');
+      _pick('배달·포장 주문', 'Đơn giao hàng / mang đi', 'Delivery / pickup order');
   String arrivalAlertBody(int count) => count == 1
       ? _pick(
-          '새 배달 주문이 들어왔습니다.',
-          'Có đơn giao hàng mới.',
-          'A new delivery order has arrived.',
+          '새 배달·포장 주문이 들어왔습니다.',
+          'Có đơn giao hàng/mang đi mới.',
+          'A new delivery/pickup order has arrived.',
         )
       : _pick(
-          '새 배달 주문 $count건이 들어왔습니다.',
-          'Có $count đơn giao hàng mới.',
-          '$count new delivery orders have arrived.',
+          '새 배달·포장 주문 $count건이 들어왔습니다.',
+          'Có $count đơn giao hàng/mang đi mới.',
+          '$count new delivery/pickup orders have arrived.',
         );
   String arrivalPendingChip(int count) => _pick(
-    '배달 주문 · $count',
-    'Đơn giao hàng · $count',
-    'Delivery order · $count',
+    '배달·포장 주문 · $count',
+    'Đơn giao hàng / mang đi · $count',
+    'Delivery / pickup order · $count',
   );
   String get viewArrivalOrder => _pick('주문 확인', 'Xem đơn', 'View order');
 
   String get directOrderDesk => _pick(
-    '직접 배달 주문 데스크',
-    'Bàn đơn giao hàng trực tiếp',
-    'Direct delivery desk',
+    '배달·포장 주문 데스크',
+    'Bàn đơn giao hàng / mang đi',
+    'Delivery / pickup desk',
   );
   String get incomingOrders => _pick('주문 대기열', 'Hàng đợi đơn', 'Order queue');
   String get noOrders => _pick(
@@ -490,9 +542,9 @@ class DirectOrderCopy {
     'Delivery fee payment',
   );
   String get customerPaysDriver => _pick(
-    '고객이 기사에게 직접 결제',
-    'Khách trả trực tiếp cho tài xế',
-    'Customer pays the driver',
+    '그랩비 현장결제 · 고객이 기사에게 지급',
+    'Phí Grab trả khi nhận · Khách trả tài xế',
+    'Grab fee on arrival · Customer pays driver',
   );
   String get customerPaysDriverHelp => _pick(
     '배송비는 매장 결제 금액과 Bill에 포함되지 않습니다.',
@@ -500,9 +552,9 @@ class DirectOrderCopy {
     'The delivery fee is excluded from the store payment and bill.',
   );
   String get storePrepaysDriver => _pick(
-    '매장이 기사비 대납',
-    'Cửa hàng trả trước phí tài xế',
-    'Store prepays the driver',
+    '그랩비 선결제 · 매장이 기사비 대납',
+    'Phí Grab trả trước · Cửa hàng trả tài xế',
+    'Grab fee prepaid · Store pays driver',
   );
   String get storePrepaysDriverHelp => _pick(
     '기사를 호출해 실제 금액을 확인하고 고객 동의를 받은 뒤 입력해 주세요.',
@@ -711,9 +763,9 @@ class DirectOrderCopy {
   }
 
   String get kitchenBoard => _pick(
-    '직접 배달 주방 보드',
-    'Bảng bếp giao hàng',
-    'Direct delivery kitchen board',
+    '배달·포장 주방 보드',
+    'Bảng bếp giao hàng / mang đi',
+    'Delivery / pickup kitchen board',
   );
   String get pending => _pick('신규', 'Mới', 'New');
   String get startPreparing => _pick('조리 시작', 'Bắt đầu làm', 'Start preparing');
@@ -876,11 +928,11 @@ class DirectOrderCopy {
     _ => state,
   };
   String get paidDirect =>
-      _pick('입금확인 · 직접배달', 'Đã trả · Giao trực tiếp', 'PAID · DIRECT DELIVERY');
+      _pick('입금확인 · 직접주문', 'Đã trả · Đơn trực tiếp', 'PAID · DIRECT ORDER');
   String get noTickets => _pick(
-    '표시할 배달 티켓이 없습니다.',
-    'Không có phiếu giao hàng.',
-    'No delivery tickets to show.',
+    '표시할 주문 티켓이 없습니다.',
+    'Không có phiếu đơn hàng.',
+    'No order tickets to show.',
   );
   String get waitingForDispatch =>
       _pick('배차 대기', 'Chờ điều phối', 'Waiting for dispatch');

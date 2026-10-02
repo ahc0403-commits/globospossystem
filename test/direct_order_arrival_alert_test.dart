@@ -82,24 +82,24 @@ void main() {
   test('arrival copy follows cashier locale in all 9 customer pairs', () {
     const expected = {
       'ko': [
-        '배달 주문',
-        '새 배달 주문이 들어왔습니다.',
-        '새 배달 주문 3건이 들어왔습니다.',
-        '배달 주문 · 4',
+        '배달·포장 주문',
+        '새 배달·포장 주문이 들어왔습니다.',
+        '새 배달·포장 주문 3건이 들어왔습니다.',
+        '배달·포장 주문 · 4',
         '주문 확인',
       ],
       'vi': [
-        'Đơn giao hàng',
-        'Có đơn giao hàng mới.',
-        'Có 3 đơn giao hàng mới.',
-        'Đơn giao hàng · 4',
+        'Đơn giao hàng / mang đi',
+        'Có đơn giao hàng/mang đi mới.',
+        'Có 3 đơn giao hàng/mang đi mới.',
+        'Đơn giao hàng / mang đi · 4',
         'Xem đơn',
       ],
       'en': [
-        'Delivery order',
-        'A new delivery order has arrived.',
-        '3 new delivery orders have arrived.',
-        'Delivery order · 4',
+        'Delivery / pickup order',
+        'A new delivery/pickup order has arrived.',
+        '3 new delivery/pickup orders have arrived.',
+        'Delivery / pickup order · 4',
         'View order',
       ],
     };
@@ -227,8 +227,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 35));
       await tester.pump();
 
-      expect(find.text('Delivery order'), findsOneWidget);
-      expect(find.text('2 new delivery orders have arrived.'), findsOneWidget);
+      expect(find.text('Delivery / pickup order'), findsOneWidget);
+      expect(
+        find.text('2 new delivery/pickup orders have arrived.'),
+        findsOneWidget,
+      );
       expect(presented, [2]);
       expect(sound.plays, 1);
       expect(
@@ -292,8 +295,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 5));
     await tester.pump();
 
-    expect(find.text('Delivery order'), findsOneWidget);
-    expect(find.text('A new delivery order has arrived.'), findsOneWidget);
+    expect(find.text('Delivery / pickup order'), findsOneWidget);
+    expect(
+      find.text('A new delivery/pickup order has arrived.'),
+      findsOneWidget,
+    );
     expect(presented, [1]);
     expect(sound.plays, 1);
     await events.close();
