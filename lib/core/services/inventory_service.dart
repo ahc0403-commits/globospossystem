@@ -681,9 +681,13 @@ class InventoryService {
     int? shelfLifeDays,
     bool isOrderable = true,
     String? supplierSku,
+    bool setSafetyStock = false,
+    double? safetyStockBase,
   }) async {
     final result = await supabase.rpc(
-      'upsert_inventory_product_with_supplier',
+      setSafetyStock
+          ? 'upsert_inventory_product_with_supplier_v2'
+          : 'upsert_inventory_product_with_supplier',
       params: {
         'p_store_id': storeId,
         'p_supplier_id': supplierId,
@@ -699,6 +703,7 @@ class InventoryService {
         'p_shelf_life_days': shelfLifeDays,
         'p_is_orderable': isOrderable,
         'p_supplier_sku': supplierSku,
+        if (setSafetyStock) 'p_safety_stock_base': safetyStockBase,
       },
     );
     return Map<String, dynamic>.from(result as Map);

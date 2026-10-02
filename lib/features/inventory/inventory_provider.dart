@@ -992,6 +992,8 @@ class InventoryPurchaseProductCatalogNotifier
     int? shelfLifeDays,
     bool isOrderable = true,
     String? supplierSku,
+    bool setSafetyStock = false,
+    double? safetyStockBase,
   }) async {
     state = state.copyWith(isSaving: true, clearError: true);
     try {
@@ -1010,6 +1012,8 @@ class InventoryPurchaseProductCatalogNotifier
         shelfLifeDays: shelfLifeDays,
         isOrderable: isOrderable,
         supplierSku: supplierSku,
+        setSafetyStock: setSafetyStock,
+        safetyStockBase: safetyStockBase,
       );
       await load(storeId);
       state = state.copyWith(isSaving: false);
