@@ -1231,6 +1231,14 @@ class InventoryService {
     params: {'p_store_id': storeId, 'p_business_date': businessDate},
   );
 
+  Future<Map<String, dynamic>> getInventoryStockAuditBalances(
+    String storeId, {
+    String? businessDate,
+  }) => _rpcMap(
+    'get_inventory_stock_audit_balances',
+    params: {'p_store_id': storeId, 'p_business_date': businessDate},
+  );
+
   Future<Map<String, dynamic>> getInventoryStockAuditReport(
     String storeId,
     String sessionId,

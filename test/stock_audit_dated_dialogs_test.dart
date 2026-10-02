@@ -52,6 +52,40 @@ void main() {
         if (request.url.path.endsWith('list_inventory_stock_audits')) {
           result = [session];
         } else if (request.url.path.endsWith(
+          'get_inventory_stock_audit_balances',
+        )) {
+          result = {
+            'business_date': '2026-09-30',
+            'effective_at': '2026-09-30T16:59:59Z',
+            'rows': [
+              {...row, 'system_quantity_base': 80, 'variance_quantity_base': 0},
+              {
+                'product_code': 'NK001',
+                'product_name': 'Rice cake',
+                'base_unit': 'g',
+                'system_quantity_base': 2000,
+                'actual_quantity_base': 2000,
+                'variance_quantity_base': 0,
+              },
+              {
+                'product_code': 'ZERO',
+                'product_name': 'Zero stock',
+                'base_unit': 'ea',
+                'system_quantity_base': 0,
+                'actual_quantity_base': 0,
+                'variance_quantity_base': 0,
+              },
+              {
+                'product_code': 'BLANK',
+                'product_name': 'Blank stock',
+                'base_unit': 'ea',
+                'system_quantity_base': 12,
+                'actual_quantity_base': null,
+                'variance_quantity_base': null,
+              },
+            ],
+          };
+        } else if (request.url.path.endsWith(
           'get_inventory_stock_audit_report',
         )) {
           result = {
@@ -227,6 +261,12 @@ void main() {
         reason:
             '${tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList()} / $requests',
       );
+      expect(find.text('실사 반영 3 / 전체 4'), findsOneWidget);
+      expect(find.text('2 kg'), findsNWidgets(2));
+      expect(find.text('0.2 kg'), findsNothing);
+      expect(find.text('미실사'), findsOneWidget);
+      expect(find.text('반영 완료'), findsNWidgets(3));
+      expect(find.text('80 ea'), findsNWidgets(2));
       await tester.tap(find.byKey(const Key('stocktake_report_session')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('stocktake_report_dialog')), findsOneWidget);

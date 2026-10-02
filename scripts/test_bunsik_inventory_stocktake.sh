@@ -60,6 +60,12 @@ run_sql "$BUNSIK_ROOT/supabase/migrations/20261001010000_inventory_stocktake_dat
 run_sql "$BUNSIK_ROOT/supabase/tests/inventory_stocktake_dated_reports_test.sql"
 python3 "$BUNSIK_ROOT/scripts/tests/stocktake_dated_concurrency.py" "$BUNSIK_PORT"
 
+run_sql "$BUNSIK_ROOT/scripts/preflight_inventory_stocktake_counted_balances.sql"
+run_sql "$BUNSIK_ROOT/supabase/migrations/20261002010000_inventory_stocktake_counted_balances.sql"
+run_sql "$BUNSIK_ROOT/scripts/verify_inventory_stocktake_counted_balances.sql"
+run_sql "$BUNSIK_ROOT/supabase/tests/inventory_stocktake_counted_balances_test.sql"
+run_sql "$BUNSIK_ROOT/scripts/rollback_inventory_stocktake_counted_balances.sql"
+
 psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 -c "CREATE TABLE dated_rollback_stock AS SELECT id,current_stock FROM inventory_items;" >/dev/null
 run_sql "$BUNSIK_ROOT/scripts/rollback_inventory_stocktake_dated_reports.sql"
 psql -X -h 127.0.0.1 -p "$BUNSIK_PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
