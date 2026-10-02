@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/core/payments/vietqr_payload.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
@@ -27,6 +28,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   final bool pauseOnSubmit;
   DirectOrderAddress? submittedAddress;
   bool? submittedRememberAddress;
+  DirectOrderFulfillmentType? submittedFulfillmentType;
   int submitCalls = 0;
   int clearAddressCalls = 0;
   int clearActiveRequestCalls = 0;
@@ -39,6 +41,7 @@ class _StorefrontFixtureService extends DirectOrderService {
       DirectOrderStorefront(
         storeId: 'fixture-store',
         storeName: 'GLOBOS BUNSIK',
+        storeAddress: '69 Nguyen Gia Tri, Binh Thanh',
         slug: 'fixture-store',
         paused: paused,
         minimumOrderAmount: 100000,
@@ -170,10 +173,13 @@ class _StorefrontFixtureService extends DirectOrderService {
     required Map<String, String> itemNotes,
     required DirectOrderAddress address,
     required bool rememberAddress,
+    DirectOrderFulfillmentType fulfillmentType =
+        DirectOrderFulfillmentType.delivery,
     String? customerNote,
   }) async {
     submitCalls++;
     submittedAddress = address;
+    submittedFulfillmentType = fulfillmentType;
     submittedRememberAddress = rememberAddress;
     if (pauseOnSubmit) {
       throw const DirectOrderException('DIRECT_ORDER_STOREFRONT_PAUSED');
@@ -214,6 +220,69 @@ Future<void> _openAddress(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('pickup needs contact only and shows store collection address', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final service = _StorefrontFixtureService();
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('ko')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('포장 · 픽업').first);
+    await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('수령 정보').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('direct_address_input')), findsNothing);
+    expect(find.byKey(const Key('direct_address_detail')), findsNothing);
+    expect(find.textContaining('69 Nguyen Gia Tri, Binh Thanh'), findsWidgets);
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'Pickup Customer');
+    await tester.enterText(fields.at(1), '0901234567');
+    final submit = find.byKey(const Key('direct_submit_quote_request'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(service.submitCalls, 1);
+    expect(service.submittedFulfillmentType, DirectOrderFulfillmentType.pickup);
+    expect(service.submittedAddress?.customerName, 'Pickup Customer');
+    expect(service.submittedRememberAddress, false);
+    expect(service.clearAddressCalls, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'pickup ready shows collection code instead of dispatch progress',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: const DirectOrderStatus(
+          requestId: 'pickup-ready',
+          referenceCode: 'DPICKUP01',
+          state: 'approved',
+          fulfillmentType: DirectOrderFulfillmentType.pickup,
+          fulfillmentStatus: 'ready',
+          pickupCode: '4821',
+          messages: [],
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('수령 준비 완료'), findsWidgets);
+      expect(find.textContaining('4821'), findsWidgets);
+      expect(find.text('포장 · 픽업'), findsWidgets);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('completed order remains visible with an explicit final status', (
     tester,
   ) async {
@@ -304,11 +373,84 @@ void main() {
     expect(find.text('#DAAAAAAAA'), findsOneWidget);
     expect(find.text('#DBBBBBBBB'), findsOneWidget);
     expect(find.text('#DCCCCCCCC'), findsOneWidget);
-    expect(find.text('배달 중 · 메뉴 2개'), findsOneWidget);
-    expect(find.text('견적 완료 · 메뉴 1개'), findsOneWidget);
-    expect(find.text('주문이 완료되었습니다 · 메뉴 3개'), findsOneWidget);
+    expect(find.text('배달 · 배달 중 · 메뉴 2개'), findsOneWidget);
+    expect(find.text('배달 · 견적 완료 · 메뉴 1개'), findsOneWidget);
+    expect(find.text('배달 · 주문이 완료되었습니다 · 메뉴 3개'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'cashier Grab policy changes customer instructions and transfer QR amount',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      for (final prepaid in [false, true]) {
+        final total = prepaid ? 135000.0 : 110000.0;
+        final service = _StorefrontFixtureService(
+          activeStatus: DirectOrderStatus(
+            requestId: 'delivery-quote',
+            referenceCode: 'DFEEMODE',
+            state: 'quoted',
+            messages: const [],
+            quote: DirectOrderQuote(
+              id: 'quote',
+              version: 1,
+              menuTotal: 100000,
+              serviceChargeTotal: 10000,
+              deliveryFeeTotal: prepaid ? 25000 : 0,
+              finalTotal: total,
+              status: 'active',
+              expiresAt: DateTime.utc(2099),
+              deliveryPaymentMode: prepaid
+                  ? 'store_prepaid'
+                  : 'customer_direct',
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _fixtureApp(service: service, locale: const Locale('ko')),
+        );
+        await tester.pumpAndSettle();
+        await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const Key('direct_open_payment_details')),
+        );
+        await tester.tap(find.byKey(const Key('direct_open_payment_details')));
+        await tester.pumpAndSettle();
+        final paint = tester.widget<CustomPaint>(
+          find.descendant(
+            of: find.byType(QrImageView),
+            matching: find.byType(CustomPaint),
+          ),
+        );
+        final actual = await tester.runAsync(
+          () => (paint.painter! as QrPainter).toImageData(210),
+        );
+        final expected = await tester.runAsync(
+          () => QrPainter(
+            data: VietQrPayload.bankTransfer(
+              bankBin: '970436',
+              accountNumber: '123456789',
+              amount: total.toInt(),
+              purpose: 'DFEEMODE',
+            ),
+            version: QrVersions.auto,
+            gapless: true,
+          ).toImageData(210),
+        );
+        expect(actual!.buffer.asUint8List(), expected!.buffer.asUint8List());
+        expect(
+          find.textContaining(
+            prepaid ? '기사에게 추가로 지급하지 마세요' : '매장 결제 금액과 Bill에 포함되지 않습니다',
+          ),
+          findsWidgets,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      }
+    },
+  );
 
   testWidgets('quoted order shows VAT and complete bank transfer details', (
     tester,
@@ -432,10 +574,10 @@ void main() {
 
     expect(find.byKey(const Key('direct_order_closed_state')), findsOneWidget);
     expect(find.text('🙏'), findsOneWidget);
-    expect(find.text('현재 배달 주문을 잠시 쉬고 있습니다'), findsOneWidget);
+    expect(find.text('현재 배달·포장 주문을 잠시 쉬고 있습니다'), findsOneWidget);
     expect(
       find.text(
-        '현재 주문량이 많아 새 배달 주문을 받기 어렵습니다. 불편을 드려 정말 죄송합니다. 잠시 후 다시 주문해 주세요.',
+        '현재 주문량이 많아 새 배달·포장 주문을 받기 어렵습니다. 불편을 드려 정말 죄송합니다. 잠시 후 다시 주문해 주세요.',
       ),
       findsOneWidget,
     );

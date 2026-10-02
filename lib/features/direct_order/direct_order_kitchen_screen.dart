@@ -279,7 +279,10 @@ class _TicketCard extends StatelessWidget {
     final actionLabel = switch (next) {
       'preparing' => copy.startPreparing,
       'ready' => copy.markReady,
-      _ => copy.waitingForDispatch,
+      _ =>
+        ticket['fulfillment_type'] == 'pickup'
+            ? copy.pickupReady
+            : copy.waitingForDispatch,
     };
 
     return Semantics(
@@ -318,18 +321,29 @@ class _TicketCard extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      '#${ticket['pickup_code'] ?? ''}',
-                      style: const TextStyle(
-                        fontSize: 27,
-                        fontWeight: FontWeight.w900,
-                      ),
+                  Text(
+                    '#${ticket['pickup_code'] ?? ''}',
+                    style: const TextStyle(
+                      fontSize: 27,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  Chip(label: Text(copy.stateLabel(status))),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      Chip(
+                        label: Text(
+                          ticket['fulfillment_type'] == 'pickup'
+                              ? copy.pickup
+                              : copy.delivery,
+                        ),
+                      ),
+                      Chip(label: Text(copy.stateLabel(status))),
+                    ],
+                  ),
                 ],
               ),
             ),

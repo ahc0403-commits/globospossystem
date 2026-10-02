@@ -325,6 +325,9 @@ class PrintJobAgentService implements PrintAgentDriver {
       vatAmount: receipt.vatAmount,
       receivedAmount: receipt.receivedAmount,
       changeAmount: receipt.changeAmount,
+      directFulfillmentType: receipt.directFulfillmentType,
+      directDeliveryPaymentMode: receipt.directDeliveryPaymentMode,
+      directReferenceCode: receipt.directReferenceCode,
     );
   }
 }

@@ -112,14 +112,19 @@ class DirectOrderDriverReceiptStatus {
 
 enum DirectOrderDeliveryPaymentMode {
   customerDirect('customer_direct'),
-  storePrepaid('store_prepaid');
+  storePrepaid('store_prepaid'),
+  notApplicable('not_applicable');
 
   const DirectOrderDeliveryPaymentMode(this.value);
 
   final String value;
 
   static DirectOrderDeliveryPaymentMode fromValue(Object? value) =>
-      value == storePrepaid.value ? storePrepaid : customerDirect;
+      value == notApplicable.value
+      ? notApplicable
+      : value == storePrepaid.value
+      ? storePrepaid
+      : customerDirect;
 }
 
 class DirectOrderStaffService {
@@ -452,6 +457,21 @@ class DirectOrderStaffService {
       ),
     );
   }
+
+  Future<Map<String, dynamic>> completePickup({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_cashier_complete_pickup',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+      },
+    ),
+  );
 
   Future<Map<String, dynamic>> completeDelivery({
     required String storeId,

@@ -50,6 +50,7 @@ class _DirectOrderCashierScreenState
   String? _selectedId;
   String? _error;
   String? _stateFilter;
+  String? _fulfillmentFilter;
   bool _loading = true;
   bool _busy = false;
   int _refreshRevision = 0;
@@ -107,14 +108,16 @@ class _DirectOrderCashierScreenState
             ? null
             : [_stateFilter!],
       );
-      final rows = fulfillmentFilter
-          ? allRows
-                .where(
-                  (row) =>
-                      row['fulfillment_status']?.toString() == _stateFilter,
-                )
-                .toList(growable: false)
-          : allRows;
+      final rows = allRows
+          .where(
+            (row) =>
+                (!fulfillmentFilter ||
+                    row['fulfillment_status']?.toString() == _stateFilter) &&
+                (_fulfillmentFilter == null ||
+                    (row['fulfillment_type'] ?? 'delivery') ==
+                        _fulfillmentFilter),
+          )
+          .toList(growable: false);
       Map<String, dynamic>? detail;
       final requestedSelection = _selectedId;
       final selectedId =
@@ -128,7 +131,9 @@ class _DirectOrderCashierScreenState
         );
       }
       final driverReceiptStatus =
-          selectedId != null && detail?['financial'] is Map
+          selectedId != null &&
+              detail?['financial'] is Map &&
+              _map(detail?['request'])['fulfillment_type'] != 'pickup'
           ? await _loadDriverReceiptStatus(storeId, selectedId)
           : const DirectOrderDriverReceiptStatus.empty();
       final customerReceiptStatus =
@@ -180,7 +185,9 @@ class _DirectOrderCashierScreenState
         storeId: storeId,
         requestId: id,
       );
-      final driverReceiptStatus = detail['financial'] is Map
+      final driverReceiptStatus =
+          detail['financial'] is Map &&
+              _map(detail['request'])['fulfillment_type'] != 'pickup'
           ? await _loadDriverReceiptStatus(storeId, id)
           : const DirectOrderDriverReceiptStatus.empty();
       final customerReceiptStatus = detail['financial'] is Map
@@ -232,8 +239,11 @@ class _DirectOrderCashierScreenState
   }
 
   Future<void> _sendQuote() async {
+    final pickup = _map(_detail?['request'])['fulfillment_type'] == 'pickup';
     final fee =
-        _deliveryPaymentMode == DirectOrderDeliveryPaymentMode.customerDirect
+        (pickup ||
+            _deliveryPaymentMode ==
+                DirectOrderDeliveryPaymentMode.customerDirect)
         ? 0
         : parseDirectOrderVnd(_feeController.text);
     if (fee == null || _storeId == null || _selectedId == null) {
@@ -244,7 +254,9 @@ class _DirectOrderCashierScreenState
         storeId: _storeId!,
         requestId: _selectedId!,
         deliveryFee: fee.toDouble(),
-        deliveryPaymentMode: _deliveryPaymentMode,
+        deliveryPaymentMode: pickup
+            ? DirectOrderDeliveryPaymentMode.notApplicable
+            : _deliveryPaymentMode,
         note: _quoteNoteController.text.trim(),
       );
     }, _copy.quoteSent);
@@ -631,6 +643,47 @@ class _DirectOrderCashierScreenState
     );
   }
 
+  Future<void> _completePickup() async {
+    final fulfillment = _map(_detail?['fulfillment']);
+    if (_storeId == null ||
+        _selectedId == null ||
+        fulfillment['status'] != 'ready') {
+      return;
+    }
+    final storeId = _storeId!;
+    final requestId = _selectedId!;
+    final referenceCode = _map(_detail?['request'])['reference_code'];
+    final confirmed = await showDirectOrderDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(_copy.pickupComplete),
+        content: Text(
+          '$referenceCode · ${fulfillment['pickup_code']}\n${_copy.pickupConfirm}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(_copy.close),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(_copy.pickupComplete),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    await _act(
+      () => directOrderStaffService.completePickup(
+        storeId: storeId,
+        requestId: requestId,
+        expectedVersion: (fulfillment['version'] as num).toInt(),
+      ),
+      _copy.pickupComplete,
+    );
+  }
+
   Future<void> _completeDelivery() async {
     final fulfillment = _map(_detail?['fulfillment']);
     final request = _map(_detail?['request']);
@@ -836,6 +889,29 @@ class _DirectOrderCashierScreenState
     return Column(
       children: [
         Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Wrap(
+            spacing: 6,
+            children: [
+              for (final type in <String?>[null, 'delivery', 'pickup'])
+                ChoiceChip(
+                  label: Text(
+                    type == null
+                        ? _copy.all
+                        : type == 'pickup'
+                        ? _copy.pickup
+                        : _copy.delivery,
+                  ),
+                  selected: _fulfillmentFilter == type,
+                  onSelected: (_) {
+                    setState(() => _fulfillmentFilter = type);
+                    _refresh();
+                  },
+                ),
+            ],
+          ),
+        ),
+        Padding(
           padding: const EdgeInsets.all(12),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -904,7 +980,7 @@ class _DirectOrderCashierScreenState
                     ],
                   ),
                   subtitle: Text(
-                    '${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}',
+                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}',
                   ),
                   trailing: row['final_total'] == null
                       ? null
@@ -931,6 +1007,7 @@ class _DirectOrderCashierScreenState
     final items = _maps(_detail?['items']);
     final quote = _activeQuote;
     final financial = _detail?['financial'];
+    final isPickup = request['fulfillment_type'] == 'pickup';
     final state = request['state']?.toString() ?? '';
     final fulfillment = _map(_detail?['fulfillment']);
     final fulfillmentStatus = fulfillment['status']?.toString() ?? '';
@@ -946,12 +1023,13 @@ class _DirectOrderCashierScreenState
               '#${request['reference_code'] ?? ''}',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            Chip(label: Text(isPickup ? _copy.pickup : _copy.delivery)),
             Chip(label: Text(_copy.stateLabel(displayState))),
           ],
         ),
         const SizedBox(height: 12),
         _Section(
-          title: _copy.addressAndContact,
+          title: isPickup ? _copy.contact : _copy.addressAndContact,
           icon: Icons.location_on_outlined,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1009,7 +1087,7 @@ class _DirectOrderCashierScreenState
           ),
         ),
         const SizedBox(height: 12),
-        if (state == 'awaiting_quote' || state == 'quoted')
+        if (!isPickup && (state == 'awaiting_quote' || state == 'quoted'))
           _Section(
             title: _copy.enterGrabFee,
             icon: Icons.delivery_dining_outlined,
@@ -1084,6 +1162,22 @@ class _DirectOrderCashierScreenState
               ],
             ),
           ),
+        if (isPickup && (state == 'awaiting_quote' || state == 'quoted'))
+          FilledButton.icon(
+            key: const Key('direct_pickup_send_quote'),
+            onPressed: _busy ? null : _sendQuote,
+            icon: const Icon(Icons.send_outlined),
+            label: Text(_copy.sendQuote),
+          ),
+        if (isPickup && fulfillmentStatus == 'ready') ...[
+          Text('${_copy.pickupCode}: ${fulfillment['pickup_code'] ?? ''}'),
+          FilledButton.icon(
+            key: const Key('direct_order_complete_pickup'),
+            onPressed: _busy ? null : _completePickup,
+            icon: const Icon(Icons.check_circle_outline),
+            label: Text(_copy.pickupComplete),
+          ),
+        ],
         if (quote != null) ...[
           const SizedBox(height: 12),
           _Section(
@@ -1099,15 +1193,16 @@ class _DirectOrderCashierScreenState
                   label: _copy.serviceCharge,
                   value: _vnd(quote['service_charge_total']),
                 ),
-                if (DirectOrderDeliveryPaymentMode.fromValue(
-                      quote['delivery_payment_mode'] ?? 'store_prepaid',
-                    ) ==
-                    DirectOrderDeliveryPaymentMode.storePrepaid)
+                if (!isPickup &&
+                    DirectOrderDeliveryPaymentMode.fromValue(
+                          quote['delivery_payment_mode'] ?? 'store_prepaid',
+                        ) ==
+                        DirectOrderDeliveryPaymentMode.storePrepaid)
                   _AmountRow(
                     label: _copy.storeCollectedDeliveryFee,
                     value: _vnd(quote['delivery_fee_total']),
                   )
-                else
+                else if (!isPickup)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.delivery_dining_outlined),
@@ -1186,9 +1281,9 @@ class _DirectOrderCashierScreenState
           const SizedBox(height: 12),
           _buildCustomerReceiptSection(),
           const SizedBox(height: 12),
-          _buildDriverReceiptSection(),
+          if (!isPickup) _buildDriverReceiptSection(),
           const SizedBox(height: 12),
-          if (fulfillmentStatus != 'completed')
+          if (!isPickup && fulfillmentStatus != 'completed')
             _Section(
               title: _copy.grabTrackingUrl,
               icon: Icons.delivery_dining,

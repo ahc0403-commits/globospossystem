@@ -94,7 +94,7 @@ class DirectOrderService {
   }
 
   Future<DirectOrderStorefront> fetchStorefront(String slug) async {
-    final data = await _invoke({'action': 'storefront', 'slug': slug});
+    final data = await _invoke({'action': 'storefront_v2', 'slug': slug});
     return DirectOrderStorefront.fromJson(data);
   }
 
@@ -139,6 +139,8 @@ class DirectOrderService {
     required Map<String, String> itemNotes,
     required DirectOrderAddress address,
     required bool rememberAddress,
+    DirectOrderFulfillmentType fulfillmentType =
+        DirectOrderFulfillmentType.delivery,
     String? customerNote,
   }) async {
     final preferences = await SharedPreferences.getInstance();
@@ -146,6 +148,16 @@ class DirectOrderService {
         ? '$_pendingSubmitKeyPrefix$slug'
         : '$_pendingSubmitKeyPrefix${slug}_$draftId';
     var clientRequestId = preferences.getString(pendingKey);
+    final pendingTypeKey = '${pendingKey}_fulfillment_type';
+    final pendingType = preferences.getString(pendingTypeKey);
+    if (clientRequestId != null &&
+        pendingType != null &&
+        pendingType != fulfillmentType.name) {
+      throw const DirectOrderException('DIRECT_ORDER_FULFILLMENT_TYPE_LOCKED');
+    }
+    if (!await preferences.setString(pendingTypeKey, fulfillmentType.name)) {
+      throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
+    }
     if (clientRequestId == null || !_uuidPattern.hasMatch(clientRequestId)) {
       clientRequestId = const Uuid().v4();
       final saved = await preferences.setString(pendingKey, clientRequestId);
@@ -154,12 +166,13 @@ class DirectOrderService {
       }
     }
     final data = await _invoke({
-      'action': 'submit',
+      'action': 'submit_v2',
       'session_id': session.id,
       'secret': session.secret,
       'client_request_id': clientRequestId,
       'payload': {
         'locale': locale,
+        'fulfillment_type': fulfillmentType.name,
         'customer_note': customerNote,
         'items': cart.entries
             .where((entry) => entry.value > 0)
@@ -171,7 +184,13 @@ class DirectOrderService {
               },
             )
             .toList(growable: false),
-        'address': address.toJson(),
+        'address': fulfillmentType == DirectOrderFulfillmentType.pickup
+            ? {
+                'customer_name': address.customerName,
+                'customer_phone': address.customerPhone,
+                'address_source': 'pickup',
+              }
+            : address.toJson(),
       },
     });
     _expectExactResponseFields(data, const {
@@ -198,10 +217,13 @@ class DirectOrderService {
       throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
     }
     await preferences.remove(pendingKey);
-    if (rememberAddress) {
-      await saveAddress(slug, address);
-    } else {
-      await clearAddress(slug);
+    await preferences.remove(pendingTypeKey);
+    if (fulfillmentType == DirectOrderFulfillmentType.delivery) {
+      if (rememberAddress) {
+        await saveAddress(slug, address);
+      } else {
+        await clearAddress(slug);
+      }
     }
     return submission;
   }
@@ -265,7 +287,7 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status_v2',
+      'action': 'status_v3',
       'session_id': session.id,
       'secret': session.secret,
       'request_id': requestId,
@@ -277,7 +299,7 @@ class DirectOrderService {
     required DirectOrderSession session,
   }) async {
     final data = await _invokeValue({
-      'action': 'orders_v2',
+      'action': 'orders_v3',
       'session_id': session.id,
       'secret': session.secret,
     });

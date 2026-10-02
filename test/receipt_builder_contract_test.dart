@@ -3,6 +3,38 @@ import 'package:globos_pos_system/core/hardware/receipt_builder.dart';
 import 'package:globos_pos_system/core/utils/floor_label.dart';
 
 void main() {
+  test('pickup kitchen slip includes order type and reference', () async {
+    final ticket = PrintTicket.fromPayload({
+      'ticket': 'kitchen',
+      'items': [
+        {'label': 'Kimbap', 'qty': 1},
+      ],
+      'direct_fulfillment_type': 'pickup',
+      'direct_reference_code': 'DPICKUP01',
+    });
+    final output = String.fromCharCodes(
+      await ReceiptBuilder.buildKitchenTicket(ticket),
+    );
+    expect(output, contains('MANG DI - NHAN TAI CUA HANG'));
+    expect(output, contains('DPICKUP01'));
+  });
+  test('direct-pay driver slip never calls the Grab fee prepaid', () async {
+    final ticket = PrintTicket.fromPayload({
+      'ticket': 'delivery_driver_receipt',
+      'items': [],
+      'final_total': 110000,
+      'delivery_fee_total': 0,
+      'direct_delivery_payment_mode': 'customer_direct',
+    });
+    final output = String.fromCharCodes(
+      await ReceiptBuilder.buildKitchenTicket(ticket),
+    );
+    expect(output, contains('Khach tra phi Grab truc tiep tai xe'));
+    expect(output, contains('KHONG THU LAI TIEN MON'));
+    expect(output, isNot(contains('Khach can tra: 0 VND')));
+    expect(output, isNot(contains('Phi giao hang Grab')));
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('payment receipt emits ESC/POS payload with cut command', () async {

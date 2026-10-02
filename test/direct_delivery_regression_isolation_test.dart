@@ -36,8 +36,10 @@ const _frozenFiles = <String, String>{
   // Real SQL/API and Excel coverage lives in financial_inputs_postgrest_test.dart.
   'lib/features/report/report_provider.dart':
       'dd2d2e3ac50b1961c5fe3d99e17de6f585e84bf48aab137d79bef6f28f9a757a',
+  // Direct fulfillment metadata passes through the existing payment renderer.
+  // wifi_printer_service_test verifies printed pickup and both Grab payment modes.
   'lib/core/hardware/print_job_agent_service.dart':
-      '5c976d66666e47e3a9a2de7cf7cda39a6c6827792015cb414b118925409b03db',
+      'bc78d9e92d1ed3716c0362e409a53baa7892e85c0bda445659476801fe7d4fca',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
       '812fdaa3f993520983fc87e4bdb2c1f28c7ccca23f0eb384d69fdf42f4101993',
   'supabase/migrations/20260722050000_kitchen_direct_completion.sql':

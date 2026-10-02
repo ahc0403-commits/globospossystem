@@ -1773,14 +1773,14 @@ void main() {
   ) async {
     final harness = await _pumpCashier(tester);
 
-    expect(find.text('Giao hàng OPEN'), findsOneWidget);
+    expect(find.text('Giao hàng / Mang đi OPEN'), findsOneWidget);
     await tester.tap(
       find.byKey(const Key('cashier_delivery_availability_toggle')),
     );
     await tester.pumpAndSettle();
     expect(
       find.text(
-        'Chỉ ngưng nhận đơn giao hàng mới. Các đơn đã nhận vẫn có thể tiếp tục xử lý.',
+        'Chỉ ngưng nhận đơn giao hàng/mang đi mới. Các đơn đã nhận vẫn có thể tiếp tục xử lý.',
       ),
       findsOneWidget,
     );
@@ -1789,7 +1789,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Giao hàng CLOSED'), findsOneWidget);
+    expect(find.text('Giao hàng / Mang đi CLOSED'), findsOneWidget);
     expect(harness.directOrderStaffService.setPausedValues, [true]);
 
     await tester.tap(
@@ -1797,7 +1797,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.text('Vui lòng xác nhận bếp đã sẵn sàng nhận đơn giao hàng mới.'),
+      find.text(
+        'Vui lòng xác nhận bếp đã sẵn sàng nhận đơn giao hàng/mang đi mới.',
+      ),
       findsOneWidget,
     );
     await tester.tap(
@@ -1805,7 +1807,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Giao hàng OPEN'), findsOneWidget);
+    expect(find.text('Giao hàng / Mang đi OPEN'), findsOneWidget);
     expect(harness.directOrderStaffService.setPausedValues, [true, false]);
   });
 
@@ -1814,7 +1816,7 @@ void main() {
   ) async {
     await _pumpCashier(tester, physicalSize: const Size(700, 900));
 
-    expect(find.byTooltip('Giao hàng OPEN'), findsOneWidget);
+    expect(find.byTooltip('Giao hàng / Mang đi OPEN'), findsOneWidget);
     expect(
       find.byKey(const Key('cashier_delivery_availability_toggle')),
       findsOneWidget,
@@ -1835,7 +1837,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Giao hàng OPEN'), findsOneWidget);
+    expect(find.text('Giao hàng / Mang đi OPEN'), findsOneWidget);
     expect(harness.directOrderStaffService.setPausedValues, isEmpty);
   });
 
@@ -1856,7 +1858,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Giao hàng OPEN'), findsOneWidget);
+    expect(find.text('Giao hàng / Mang đi OPEN'), findsOneWidget);
     expect(harness.directOrderStaffService.setPausedValues, [true]);
   });
 
@@ -1893,7 +1895,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Giao hàng CLOSED'), findsOneWidget);
+    expect(find.text('Giao hàng / Mang đi CLOSED'), findsOneWidget);
   });
 
   testWidgets('offline and failed reads disable availability changes', (

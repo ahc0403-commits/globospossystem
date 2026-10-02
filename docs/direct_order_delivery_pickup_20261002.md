@@ -1,0 +1,19 @@
+# Direct delivery and store pickup
+
+One existing storefront URL and QR serve both delivery and store pickup. The customer selects the fulfillment type before submitting the order. Pickup collects name/phone and shows the restaurant address; saved delivery addresses are retained. Delivery collects the existing address details. Both types retain the existing bank-transfer and verified cashier approval flow.
+
+Cashiers choose the Grab payment policy for delivery: `store_prepaid` includes the actual quoted fee in the store payment, while `customer_direct` excludes it and tells the customer to pay the driver on arrival. Pickup has `not_applicable` and a zero fee enforced by the server. Customer payment instructions, Bills and driver slips reflect the policy. Financial pickup orders use `sales_channel=takeaway`; delivery remains `delivery`.
+
+Pickup preparation uses the existing direct-order kitchen board in both print and paperless stores. The dedicated ticket progresses pending → preparing → ready → cashier-confirmed collected. Pickup is excluded from the native dine-in/floor/tray queue, with accurate paperless snapshots retained. Ordinary POS takeaway and delivery keep their existing routing. Collection checks cashier/store access, ticket version, approved payment and readiness, and supports idempotent replay.
+
+The request's type is immutable. An uncertain submission retains its client request ID and type for a safe retry. Versioned public actions (`storefront_v2`, `submit_v2`, `status_v3`, `orders_v3`) preserve legacy action projections and share rate-limit buckets with their aliases. Existing orders default to delivery.
+
+## Validation and release state
+
+The migration was applied to a network-disconnected disposable Supabase Postgres instance assembled from current production schema/function definitions without row data. `supabase/tests/direct_order_delivery_pickup_test.sql` passed against the actual VAT, verified payment, `process_payment`, receipt, inventory and fulfillment functions. It verifies pickup isolation, ordinary takeaway as a negative control, zero fees, immutable type, context cleanup, receipt metadata, optimistic version checks, idempotent collection, legacy API shape, public grants and both delivery payment modes. Test mutations roll back. The SQL suite can be rerun after `supabase/tests/fixtures/direct_delivery_test_fixture.sql` in a prepared `codex_direct_*` database; it refuses other database names.
+
+Widget/service tests cover contact-only pickup, collection codes, preservation of saved addresses and ambiguous submission retries. The displayed QR raster is checked against the transfer amount for both Grab policies. Print-agent tests exercise actual ESC/POS output for pickup and both Grab policies. An independent Judge approved the local preflight. `bash scripts/check_repo.sh` passed (1,668 Flutter tests, the repository's isolated SQL/API suites, Deno/Node checks and the release web build); later QR/layout changes passed focused UI tests and fatal-info analysis.
+
+Source implementation and isolated migration verification do not establish production deployment. Production must follow `scripts/deploy_pos_production.sh`: freshly fetched, clean exact main HEAD, successful `POS release contract` on that exact pushed SHA, then migrations, Edge Function and Flutter web. Apply the migration before the new Edge/web clients. Existing link/QR do not change. Keep this feature pending production deployment until those steps and operational smoke verification succeed.
+
+For a runtime incident, pause shared storefront intake to stop new delivery/pickup submissions while preserving existing orders. Do not remove the type/mode columns or destroy pickup records as a rollback. An older web client cannot render pickup ownership correctly, so restore a compatible release or pause intake while deploying a forward repair.

@@ -68,6 +68,9 @@ class _DirectOrderStorefrontScreenState
   DirectOrderStatus? _status;
   List<DirectOrderSummary> _orders = const [];
   _CustomerView _view = _CustomerView.menu;
+  DirectOrderFulfillmentType _fulfillmentType =
+      DirectOrderFulfillmentType.delivery;
+  bool get _isPickup => _fulfillmentType == DirectOrderFulfillmentType.pickup;
   Timer? _statusTimer;
   bool _loading = true;
   bool _submitting = false;
@@ -232,8 +235,9 @@ class _DirectOrderStorefrontScreenState
   DirectOrderAddress? _composeAddress() {
     if (_nameController.text.trim().isEmpty ||
         _phoneController.text.trim().isEmpty ||
-        _addressController.text.trim().length < 3 ||
-        _detailController.text.trim().isEmpty) {
+        (!_isPickup &&
+            (_addressController.text.trim().length < 3 ||
+                _detailController.text.trim().isEmpty))) {
       return null;
     }
     return DirectOrderAddress(
@@ -252,7 +256,7 @@ class _DirectOrderStorefrontScreenState
     }
     final address = _composeAddress();
     if (address == null) {
-      _snack(_copy.requiredFields);
+      _snack(_isPickup ? _copy.requiredPickupFields : _copy.requiredFields);
       return;
     }
     if (!RegExp(r'^[+]?[0-9][0-9 -]{7,19}$').hasMatch(address.customerPhone)) {
@@ -272,7 +276,8 @@ class _DirectOrderStorefrontScreenState
         cart: _cart,
         itemNotes: _itemNotes,
         address: address,
-        rememberAddress: _rememberAddress,
+        rememberAddress: _rememberAddress && !_isPickup,
+        fulfillmentType: _fulfillmentType,
         customerNote: _noteController.text.trim(),
       );
       final status = await widget.service.fetchStatus(
@@ -282,7 +287,7 @@ class _DirectOrderStorefrontScreenState
       final orders = await widget.service.listOrders(session: session);
       if (!mounted) return;
       setState(() {
-        _savedAddress = _rememberAddress ? address : null;
+        if (!_isPickup) _savedAddress = _rememberAddress ? address : null;
         _status = status;
         _orders = orders;
         _view = _CustomerView.status;
@@ -477,7 +482,7 @@ class _DirectOrderStorefrontScreenState
                         ),
                         title: Text('#${order.referenceCode}'),
                         subtitle: Text(
-                          '${_copy.stateLabel(status)} · '
+                          '${order.isPickup ? _copy.pickup : _copy.delivery} · ${_copy.stateLabel(status)} · '
                           '${_copy.itemsCount(order.itemCount)}',
                         ),
                         trailing: Text(
@@ -617,6 +622,8 @@ class _DirectOrderStorefrontScreenState
           messages: messages,
           fulfillmentStatus: latest.fulfillmentStatus,
           grabTrackingUrl: latest.grabTrackingUrl,
+          fulfillmentType: latest.fulfillmentType,
+          pickupCode: latest.pickupCode,
           fulfillmentVersion: latest.fulfillmentVersion,
           completedAt: latest.completedAt,
           proofReview: latest.proofReview,
@@ -784,6 +791,7 @@ class _DirectOrderStorefrontScreenState
             children: [
               _ProgressTabs(
                 selected: _view,
+                isPickup: _isPickup,
                 copy: _copy,
                 canOpenAddress: _cart.isNotEmpty,
                 hasStatus: _status != null,
@@ -804,6 +812,33 @@ class _DirectOrderStorefrontScreenState
         ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 132),
           children: [
+            SegmentedButton<DirectOrderFulfillmentType>(
+              key: const Key('direct_fulfillment_type'),
+              segments: [
+                ButtonSegment(
+                  value: DirectOrderFulfillmentType.delivery,
+                  label: Text(_copy.delivery),
+                  icon: const Icon(Icons.delivery_dining),
+                ),
+                ButtonSegment(
+                  value: DirectOrderFulfillmentType.pickup,
+                  label: Text(_copy.pickup),
+                  icon: const Icon(Icons.takeout_dining_outlined),
+                ),
+              ],
+              selected: {_fulfillmentType},
+              onSelectionChanged: _submitting
+                  ? null
+                  : (values) =>
+                        setState(() => _fulfillmentType = values.single),
+            ),
+            if (_isPickup)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  '${_storefront!.storeAddress}\n${_copy.pickupHelp}',
+                ),
+              ),
             for (final category in storefront.categories) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
@@ -824,9 +859,10 @@ class _DirectOrderStorefrontScreenState
             right: 12,
             bottom: 12,
             child: _BottomActionCard(
-              leading: '$_cartCount ${_copy.cart}',
+              leading:
+                  '${_isPickup ? _copy.pickup : _copy.delivery} · $_cartCount ${_copy.cart}',
               amount: _money.format(_cartSubtotal),
-              label: _copy.address,
+              label: _isPickup ? _copy.contact : _copy.address,
               onPressed: () => _selectView(_CustomerView.address),
             ),
           ),
@@ -932,7 +968,16 @@ class _DirectOrderStorefrontScreenState
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
-        if (_savedAddress != null) ...[
+        Text(
+          _isPickup ? _copy.pickup : _copy.delivery,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        if (_isPickup)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text('${_storefront!.storeAddress}\n${_copy.pickupHelp}'),
+          ),
+        if (!_isPickup && _savedAddress != null) ...[
           Card(
             color: PosColors.infoMuted,
             child: Padding(
@@ -965,32 +1010,34 @@ class _DirectOrderStorefrontScreenState
           ),
           const SizedBox(height: 12),
         ],
-        TextField(
-          key: const Key('direct_address_input'),
-          controller: _addressController,
-          maxLength: 500,
-          minLines: 1,
-          maxLines: 3,
-          keyboardType: TextInputType.streetAddress,
-          decoration: InputDecoration(
-            labelText: _copy.deliveryAddress,
-            hintText: _copy.addressInputHint,
-            counterText: '',
-            prefixIcon: const Icon(Icons.home_outlined),
+        if (!_isPickup) ...[
+          TextField(
+            key: const Key('direct_address_input'),
+            controller: _addressController,
+            maxLength: 500,
+            minLines: 1,
+            maxLines: 3,
+            keyboardType: TextInputType.streetAddress,
+            decoration: InputDecoration(
+              labelText: _copy.deliveryAddress,
+              hintText: _copy.addressInputHint,
+              counterText: '',
+              prefixIcon: const Icon(Icons.home_outlined),
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          key: const Key('direct_address_detail'),
-          controller: _detailController,
-          maxLength: 300,
-          decoration: InputDecoration(
-            counterText: '',
-            labelText: _copy.detailAddress,
-            hintText: _copy.detailAddressHint,
-            prefixIcon: const Icon(Icons.apartment_rounded),
+          const SizedBox(height: 16),
+          TextField(
+            key: const Key('direct_address_detail'),
+            controller: _detailController,
+            maxLength: 300,
+            decoration: InputDecoration(
+              counterText: '',
+              labelText: _copy.detailAddress,
+              hintText: _copy.detailAddressHint,
+              prefixIcon: const Icon(Icons.apartment_rounded),
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 12),
         Row(
           children: [
@@ -1032,14 +1079,15 @@ class _DirectOrderStorefrontScreenState
             prefixIcon: const Icon(Icons.notes_rounded),
           ),
         ),
-        CheckboxListTile(
-          value: _rememberAddress,
-          contentPadding: EdgeInsets.zero,
-          title: Text(_copy.rememberAddress),
-          subtitle: Text(_copy.savedOnlyOnDevice),
-          onChanged: (value) =>
-              setState(() => _rememberAddress = value ?? false),
-        ),
+        if (!_isPickup)
+          CheckboxListTile(
+            value: _rememberAddress,
+            contentPadding: EdgeInsets.zero,
+            title: Text(_copy.rememberAddress),
+            subtitle: Text(_copy.savedOnlyOnDevice),
+            onChanged: (value) =>
+                setState(() => _rememberAddress = value ?? false),
+          ),
         const SizedBox(height: 8),
         FilledButton.icon(
           key: const Key('direct_submit_quote_request'),
@@ -1050,7 +1098,7 @@ class _DirectOrderStorefrontScreenState
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.request_quote_outlined),
-          label: Text(_copy.submitForQuote),
+          label: Text(_isPickup ? _copy.submitForPickup : _copy.submitForQuote),
         ),
       ],
     );
@@ -1102,7 +1150,11 @@ class _DirectOrderStorefrontScreenState
         PosColors.warning,
         _copy.preparing,
       ),
-      'ready' => (Icons.inventory_2_outlined, PosColors.info, _copy.ready),
+      'ready' => (
+        Icons.inventory_2_outlined,
+        PosColors.info,
+        status.isPickup ? _copy.pickupReady : _copy.ready,
+      ),
       'dispatched' => (
         Icons.delivery_dining_rounded,
         PosColors.success,
@@ -1172,6 +1224,7 @@ class _DirectOrderStorefrontScreenState
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 5),
+            Text(status.isPickup ? _copy.pickup : _copy.delivery),
             Text(
               status.referenceCode,
               style: Theme.of(
@@ -1235,6 +1288,7 @@ class _DirectOrderStorefrontScreenState
     final currentStep = switch (status.fulfillmentStatus) {
       'completed' => 4,
       'dispatched' => 3,
+      'ready' when status.isPickup => 3,
       'preparing' || 'ready' => 2,
       _ when status.state == 'approved' => 1,
       _ => 0,
@@ -1243,8 +1297,16 @@ class _DirectOrderStorefrontScreenState
       (Icons.receipt_long_outlined, _copy.progressOrderConfirmed),
       (Icons.account_balance_wallet_outlined, _copy.progressPaymentConfirmed),
       (Icons.restaurant_outlined, _copy.progressPreparing),
-      (Icons.delivery_dining_outlined, _copy.progressGrabHandoff),
-      (Icons.check_circle_outline_rounded, _copy.progressCompleted),
+      (
+        status.isPickup
+            ? Icons.takeout_dining_outlined
+            : Icons.delivery_dining_outlined,
+        status.isPickup ? _copy.pickupReady : _copy.progressGrabHandoff,
+      ),
+      (
+        Icons.check_circle_outline_rounded,
+        status.isPickup ? _copy.pickupComplete : _copy.progressCompleted,
+      ),
     ];
     return Card(
       key: const Key('direct_order_customer_progress'),
@@ -1253,6 +1315,8 @@ class _DirectOrderStorefrontScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (status.isPickup && status.pickupCode != null)
+              Text('${_copy.pickupCode}: ${status.pickupCode}'),
             Text(
               _copy.orderProgress,
               style: Theme.of(context).textTheme.titleMedium,
@@ -1290,7 +1354,22 @@ class _DirectOrderStorefrontScreenState
             const SizedBox(height: 12),
             _amountRow(_copy.menuTotal, quote.menuTotal),
             _amountRow(_copy.serviceCharge, quote.serviceChargeTotal),
-            _amountRow(_copy.deliveryFee, quote.deliveryFeeTotal),
+            Text(
+              status.isPickup
+                  ? _copy.pickup
+                  : (quote.deliveryPaymentMode == 'store_prepaid'
+                        ? _copy.storePrepaysDriver
+                        : _copy.customerPaysDriver),
+            ),
+            if (!status.isPickup &&
+                quote.deliveryPaymentMode == 'store_prepaid')
+              _amountRow(_copy.deliveryFee, quote.deliveryFeeTotal),
+            if (!status.isPickup)
+              Text(
+                quote.deliveryPaymentMode == 'store_prepaid'
+                    ? _copy.prepaidHelp
+                    : _copy.customerPaysDriverHelp,
+              ),
             const Divider(height: 24),
             _amountRow(_copy.finalTotal, quote.finalTotal, strong: true),
             _amountRow(_copy.includedVat, quote.vatTotal),
@@ -1357,6 +1436,13 @@ class _DirectOrderStorefrontScreenState
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
+                Text(
+                  status.isPickup
+                      ? _copy.pickup
+                      : (quote.deliveryPaymentMode == 'store_prepaid'
+                            ? _copy.prepaidHelp
+                            : _copy.customerPaysDriverHelp),
+                ),
                 _amountRow(_copy.finalTotal, quote.finalTotal, strong: true),
                 _amountRow(_copy.includedVat, quote.vatTotal),
                 if (isResubmission) ...[
@@ -1654,6 +1740,7 @@ class _CustomerProgressRow extends StatelessWidget {
 class _ProgressTabs extends StatelessWidget {
   const _ProgressTabs({
     required this.selected,
+    required this.isPickup,
     required this.copy,
     required this.canOpenAddress,
     required this.hasStatus,
@@ -1661,6 +1748,7 @@ class _ProgressTabs extends StatelessWidget {
   });
 
   final _CustomerView selected;
+  final bool isPickup;
   final DirectOrderCopy copy;
   final bool canOpenAddress;
   final bool hasStatus;
@@ -1684,7 +1772,7 @@ class _ProgressTabs extends StatelessWidget {
             context,
             _CustomerView.address,
             Icons.location_on_outlined,
-            copy.address,
+            isPickup ? copy.contact : copy.address,
             canOpenAddress,
           ),
           _tab(

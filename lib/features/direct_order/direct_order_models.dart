@@ -71,6 +71,17 @@ List<dynamic> _requiredList(Map<String, dynamic> json, String key) {
   return value;
 }
 
+enum DirectOrderFulfillmentType {
+  delivery,
+  pickup;
+
+  static DirectOrderFulfillmentType fromValue(Object? value) {
+    if (value == null || value == 'delivery') return delivery;
+    if (value == 'pickup') return pickup;
+    return _invalidModel('fulfillment_type');
+  }
+}
+
 class DirectOrderBank {
   const DirectOrderBank({
     required this.bin,
@@ -202,6 +213,7 @@ class DirectOrderStorefront {
   const DirectOrderStorefront({
     required this.storeId,
     required this.storeName,
+    this.storeAddress = '',
     required this.slug,
     required this.paused,
     required this.minimumOrderAmount,
@@ -215,6 +227,7 @@ class DirectOrderStorefront {
 
   final String storeId;
   final String storeName;
+  final String storeAddress;
   final String slug;
   final bool paused;
   final double minimumOrderAmount;
@@ -229,6 +242,7 @@ class DirectOrderStorefront {
     _expectKeys(json, const {
       'store_id',
       'store_name',
+      'store_address',
       'slug',
       'paused',
       'ordering_starts_at',
@@ -248,6 +262,7 @@ class DirectOrderStorefront {
     return DirectOrderStorefront(
       storeId: _requiredString(json, 'store_id'),
       storeName: _requiredString(json, 'store_name'),
+      storeAddress: _optionalString(json, 'store_address') ?? '',
       slug: _requiredString(json, 'slug'),
       paused: _requiredBool(json, 'paused'),
       minimumOrderAmount: _requiredNumber(
@@ -518,6 +533,7 @@ class DirectOrderProofReview {
 class DirectOrderSummary {
   const DirectOrderSummary({
     required this.requestId,
+    this.fulfillmentType = DirectOrderFulfillmentType.delivery,
     required this.referenceCode,
     required this.state,
     required this.createdAt,
@@ -529,6 +545,8 @@ class DirectOrderSummary {
   });
 
   final String requestId;
+  final DirectOrderFulfillmentType fulfillmentType;
+  bool get isPickup => fulfillmentType == DirectOrderFulfillmentType.pickup;
   final String referenceCode;
   final String state;
   final DateTime createdAt;
@@ -545,6 +563,7 @@ class DirectOrderSummary {
   factory DirectOrderSummary.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
       'request_id',
+      'fulfillment_type',
       'reference_code',
       'state',
       'created_at',
@@ -556,6 +575,9 @@ class DirectOrderSummary {
     });
     return DirectOrderSummary(
       requestId: _requiredString(json, 'request_id'),
+      fulfillmentType: DirectOrderFulfillmentType.fromValue(
+        json['fulfillment_type'],
+      ),
       referenceCode: _requiredString(json, 'reference_code'),
       state: _requiredString(json, 'state'),
       createdAt: _requiredDateTime(json, 'created_at'),
@@ -608,6 +630,7 @@ class DirectOrderMessage {
 class DirectOrderStatus {
   const DirectOrderStatus({
     required this.requestId,
+    this.fulfillmentType = DirectOrderFulfillmentType.delivery,
     required this.referenceCode,
     required this.state,
     required this.messages,
@@ -615,11 +638,14 @@ class DirectOrderStatus {
     this.fulfillmentStatus,
     this.grabTrackingUrl,
     this.fulfillmentVersion,
+    this.pickupCode,
     this.completedAt,
     this.proofReview,
   });
 
   final String requestId;
+  final DirectOrderFulfillmentType fulfillmentType;
+  bool get isPickup => fulfillmentType == DirectOrderFulfillmentType.pickup;
   final String referenceCode;
   final String state;
   final DirectOrderQuote? quote;
@@ -627,12 +653,14 @@ class DirectOrderStatus {
   final String? fulfillmentStatus;
   final String? grabTrackingUrl;
   final int? fulfillmentVersion;
+  final String? pickupCode;
   final DateTime? completedAt;
   final DirectOrderProofReview? proofReview;
 
   factory DirectOrderStatus.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
       'request_id',
+      'fulfillment_type',
       'store_id',
       'reference_code',
       'state',
@@ -706,6 +734,9 @@ class DirectOrderStatus {
     }
     return DirectOrderStatus(
       requestId: _requiredString(json, 'request_id'),
+      fulfillmentType: DirectOrderFulfillmentType.fromValue(
+        json['fulfillment_type'],
+      ),
       referenceCode: _requiredString(json, 'reference_code'),
       state: _requiredString(json, 'state'),
       quote: quoteRaw is Map
@@ -722,6 +753,9 @@ class DirectOrderStatus {
           : null,
       grabTrackingUrl: dispatchRaw is Map
           ? dispatchRaw['grab_tracking_url']?.toString()
+          : null,
+      pickupCode: fulfillmentRaw is Map
+          ? fulfillmentRaw['pickup_code']?.toString()
           : null,
       fulfillmentVersion: fulfillmentRaw is Map
           ? (fulfillmentRaw['version'] as num?)?.toInt()
