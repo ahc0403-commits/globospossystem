@@ -9,12 +9,14 @@ class _OperationalCoverage {
     required this.test,
     required this.markers,
     this.indirectEntrypoints = 0,
+    this.additionalTests = const [],
   });
 
   final String source;
   final int directCalls;
   final int indirectEntrypoints;
   final String test;
+  final List<String> additionalTests;
   final List<String> markers;
 
   int get totalEntrypoints => directCalls + indirectEntrypoints;
@@ -113,8 +115,11 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/inventory_purchase/inventory_purchase_screen.dart',
-    directCalls: 16,
+    directCalls: 15,
+    indirectEntrypoints:
+        2, // Explicit DialogRoutes wait for controller teardown.
     test: 'test/inventory_purchase_overlay_operational_test.dart',
+    additionalTests: ['test/inventory_safety_stock_widget_test.dart'],
     markers: [
       'inventory_recommendation_run_dialog',
       'inventory_recommendation_adjustment_dialog',
@@ -124,6 +129,7 @@ const _coverage = <_OperationalCoverage>[
       'inventory_stock_audit_restart_dialog',
       'inventory_supplier_dialog',
       'inventory_product_dialog',
+      'inventory_safety_stock_dialog',
       'inventory_supplier_item_dialog',
       'inventory_manual_purchase_order_dialog',
       'inventory_repeat_purchase_order_dialog',
@@ -384,7 +390,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 138 dialog and sheet entrypoints map to operational tests', () {
+  test('all 139 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -396,10 +402,18 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 137);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 136);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      138,
+      139,
+    );
+
+    final inventory = File(
+      'lib/features/inventory_purchase/inventory_purchase_screen.dart',
+    ).readAsStringSync();
+    expect(
+      RegExp(r'\bDialogRoute<bool>\s*\(').allMatches(inventory),
+      hasLength(2),
     );
 
     final settings = File(
@@ -413,7 +427,10 @@ void main() {
         hasLength(item.totalEntrypoints),
         reason: '${item.source} needs one operational marker per entrypoint',
       );
-      final operationalTest = File(item.test).readAsStringSync();
+      final operationalTest = [
+        item.test,
+        ...item.additionalTests,
+      ].map((path) => File(path).readAsStringSync()).join('\n');
       for (final marker in item.markers) {
         expect(
           operationalTest,
