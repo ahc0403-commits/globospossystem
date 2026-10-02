@@ -4712,6 +4712,16 @@ class _InventoryPurchaseScreenState
         ),
       ],
       children: [
+        ToastMetricStrip(
+          dense: true,
+          metrics: [
+            ToastMetric(
+              label: l10n.inventoryPurchaseAuditTargets,
+              value: l10n.inventoryPurchaseCountItems(stockStatus.rows.length),
+            ),
+          ],
+        ),
+        const SizedBox(height: ToastSpacingTokens.md),
         StockAuditReportPanel(
           storeId: storeId,
           refreshVersion:
