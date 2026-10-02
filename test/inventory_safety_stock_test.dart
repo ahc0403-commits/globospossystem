@@ -24,6 +24,9 @@ void main() {
     ]) {
       expect(InventorySafetyStock.parse(invalid), isNull, reason: invalid);
     }
+    expect(InventorySafetyStock.isValid(0.000001, 'ea'), isFalse);
+    expect(InventorySafetyStock.isValid(0.001, 'ea'), isTrue);
+    expect(InventorySafetyStock.isValid(0.000001, 'g'), isTrue);
     expect(InventorySafetyStock.isValid(-1, 'g'), isFalse);
     expect(InventorySafetyStock.isValid(double.infinity, 'g'), isFalse);
     expect(InventorySafetyStock.isValid(1000000, 'g'), isFalse);

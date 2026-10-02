@@ -1030,6 +1030,32 @@ class InventoryPurchaseProductCatalogNotifier
     }
   }
 
+  Future<bool> saveSafetyStock({
+    required String storeId,
+    required String productId,
+    required String baseUnit,
+    double? safetyStockBase,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.setInventoryProductSafetyStock(
+        storeId: storeId,
+        productId: productId,
+        baseUnit: baseUnit,
+        safetyStockBase: safetyStockBase,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapProductCatalogError(e, 'Failed to save safety stock.'),
+      );
+      return false;
+    }
+  }
+
   Future<bool> setProductActive({
     required String storeId,
     required String productId,

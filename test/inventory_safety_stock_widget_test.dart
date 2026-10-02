@@ -87,7 +87,8 @@ void main() {
       httpClient: MockClient((request) async {
         final path = request.url.path;
         dynamic result = <dynamic>[];
-        if (path.endsWith('upsert_inventory_product_with_supplier_v2')) {
+        if ((path.endsWith('upsert_inventory_product_with_supplier_v2') ||
+            path.endsWith('set_inventory_product_safety_stock'))) {
           final body = jsonDecode(request.body) as Map<String, dynamic>;
           writes.add(body);
           if (rejectSave) {
@@ -274,6 +275,37 @@ void main() {
       expect(find.text('미설정'), findsNWidgets(2));
       expect(find.text('0 L'), findsNothing);
       expect(find.text('안전재고 이하'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'threshold-only setting works without supplier or shelf-life metadata',
+    (tester) async {
+      _product.remove('shelf_life_days');
+      addTearDown(() => _product['shelf_life_days'] = 30);
+      await mount(tester);
+      final action = find.byKey(const ValueKey('inventory_safety_stock_oil'));
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      final input = find.byKey(
+        const Key('inventory_safety_stock_setting_field'),
+      );
+      expect(tester.widget<TextField>(input).controller!.text, '5');
+      await tester.enterText(input, '2,5');
+      await tester.tap(
+        find.byKey(const Key('inventory_safety_stock_save_action')),
+      );
+      await tester.pumpAndSettle();
+      expect(writes.single['p_safety_stock_base'], 2500);
+      expect(writes.single['p_expected_base_unit'], 'ml');
+      expect(writes.single.containsKey('p_supplier_id'), isFalse);
+      expect(writes.single.containsKey('p_shelf_life_days'), isFalse);
+      expect(
+        find.byKey(const Key('inventory_safety_stock_dialog')),
+        findsNothing,
+      );
       expect(tester.takeException(), isNull);
     },
   );

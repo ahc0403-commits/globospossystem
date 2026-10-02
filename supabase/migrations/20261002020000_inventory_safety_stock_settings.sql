@@ -1,3 +1,52 @@
+-- Threshold-only editing also works for legacy products without supplier or
+-- shelf-life metadata. The physical stock and product catalog remain untouched.
+CREATE OR REPLACE FUNCTION public.set_inventory_product_safety_stock(
+  p_store_id UUID, p_product_id UUID, p_safety_stock_base NUMERIC,
+  p_expected_base_unit TEXT DEFAULT NULL
+) RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public, auth
+AS $$
+DECLARE
+  v_product public.inventory_products%ROWTYPE;
+  v_item public.inventory_items%ROWTYPE;
+  v_threshold NUMERIC(12,3);
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'AUTHENTICATION_REQUIRED'; END IF;
+  IF NOT public.can_access_inventory_purchase_store(p_store_id) THEN
+    RAISE EXCEPTION 'INVENTORY_PRODUCT_FORBIDDEN';
+  END IF;
+  IF p_safety_stock_base IS NOT NULL AND (
+    p_safety_stock_base::text IN ('NaN','Infinity','-Infinity')
+    OR p_safety_stock_base < 0 OR p_safety_stock_base > 999999999.999
+    OR p_safety_stock_base IS DISTINCT FROM round(p_safety_stock_base,3)
+  ) THEN RAISE EXCEPTION 'INVENTORY_SAFETY_STOCK_INVALID'; END IF;
+  v_threshold := p_safety_stock_base;
+  SELECT * INTO v_product FROM public.inventory_products
+  WHERE id=p_product_id AND restaurant_id=p_store_id AND is_active=true;
+  IF NOT FOUND THEN RAISE EXCEPTION 'PRODUCT_NOT_FOUND'; END IF;
+  SELECT * INTO v_item FROM public.inventory_items
+  WHERE id=v_product.inventory_item_id AND restaurant_id=p_store_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'PRODUCT_NOT_FOUND'; END IF;
+  IF p_expected_base_unit IS NOT NULL AND v_item.unit IS DISTINCT FROM p_expected_base_unit THEN
+    RAISE EXCEPTION 'INVENTORY_SAFETY_STOCK_UNIT_CHANGED';
+  END IF;
+  IF v_item.reorder_point IS DISTINCT FROM v_threshold THEN
+    -- No quantity/current_stock write and no inventory movement.
+    UPDATE public.inventory_items SET reorder_point=v_threshold, updated_at=now()
+    WHERE id=v_item.id AND restaurant_id=p_store_id;
+    INSERT INTO public.audit_logs(actor_id,action,entity_type,entity_id,details)
+    VALUES(auth.uid(),'inventory_safety_stock_updated','inventory_items',v_item.id,
+      jsonb_build_object('store_id',p_store_id,'old_reorder_point',v_item.reorder_point,
+        'new_reorder_point',v_threshold,'base_unit',v_item.unit));
+  END IF;
+  RETURN jsonb_build_object('product_id',p_product_id,'safety_stock_base',v_threshold,
+    'base_unit',v_item.unit);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.set_inventory_product_safety_stock(UUID,UUID,NUMERIC,TEXT) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.set_inventory_product_safety_stock(UUID,UUID,NUMERIC,TEXT) TO authenticated;
+
 -- Save safety stock with the existing product/supplier transaction. Old clients
 -- keep their RPC and existing thresholds; this endpoint explicitly supports NULL.
 CREATE OR REPLACE FUNCTION public.upsert_inventory_product_with_supplier_v2(
@@ -25,7 +74,6 @@ DECLARE
   v_product public.inventory_products%ROWTYPE;
   v_supplier_item public.inventory_supplier_items%ROWTYPE;
   v_previous_supplier_item public.inventory_supplier_items%ROWTYPE;
-  v_item public.inventory_items%ROWTYPE;
   v_threshold NUMERIC(12,3);
 BEGIN
   IF auth.uid() IS NULL THEN
@@ -37,6 +85,7 @@ BEGIN
   IF p_safety_stock_base IS NOT NULL AND (
     p_safety_stock_base::text IN ('NaN','Infinity','-Infinity')
     OR p_safety_stock_base < 0 OR p_safety_stock_base > 999999999.999
+    OR p_safety_stock_base IS DISTINCT FROM round(p_safety_stock_base,3)
   ) THEN
     RAISE EXCEPTION 'INVENTORY_SAFETY_STOCK_INVALID';
   END IF;
@@ -65,20 +114,9 @@ BEGIN
   );
   v_result := jsonb_build_object('product',to_jsonb(v_product),
     'supplier_item',to_jsonb(v_supplier_item));
-  SELECT * INTO v_item FROM public.inventory_items
-  WHERE id = (v_result->'product'->>'inventory_item_id')::uuid
-    AND restaurant_id = p_store_id FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'PRODUCT_NOT_FOUND'; END IF;
-  IF v_item.reorder_point IS DISTINCT FROM v_threshold THEN
-    -- Never write quantity/current_stock: changing a warning threshold does not
-    -- establish a count baseline or create an inventory movement.
-    UPDATE public.inventory_items SET reorder_point = v_threshold, updated_at = now()
-    WHERE id = v_item.id AND restaurant_id = p_store_id;
-    INSERT INTO public.audit_logs(actor_id, action, entity_type, entity_id, details)
-    VALUES(auth.uid(), 'inventory_safety_stock_updated', 'inventory_items', v_item.id,
-      jsonb_build_object('store_id',p_store_id,'old_reorder_point',v_item.reorder_point,
-        'new_reorder_point',v_threshold,'base_unit',v_product.base_unit));
-  END IF;
+  PERFORM public.set_inventory_product_safety_stock(
+    p_store_id,v_product.id,v_threshold,v_product.base_unit
+  );
   RETURN v_result || jsonb_build_object('safety_stock_base',v_threshold);
 END;
 $$;

@@ -27,7 +27,7 @@ DO $$ DECLARE result jsonb; invalid numeric; BEGIN
  ASSERT (SELECT reorder_point IS NULL FROM inventory_items WHERE id=test_uuid(501));
  PERFORM upsert_inventory_product_with_supplier_v2(test_uuid(101),test_uuid(201),test_uuid(301),p_name:='Oil',p_stock_unit:='can',p_base_unit:='ml',p_base_unit_factor:=25000,p_safety_stock_base:=0);
  ASSERT (SELECT reorder_point=0 FROM inventory_items WHERE id=test_uuid(501));
- FOREACH invalid IN ARRAY ARRAY[-1::numeric,'NaN'::numeric,'Infinity'::numeric,1000000000::numeric] LOOP
+ FOREACH invalid IN ARRAY ARRAY[-1::numeric,0.00001::numeric,'NaN'::numeric,'Infinity'::numeric,1000000000::numeric] LOOP
   BEGIN
    PERFORM upsert_inventory_product_with_supplier_v2(test_uuid(101),test_uuid(201),test_uuid(301),p_name:='Must not save',p_stock_unit:='can',p_safety_stock_base:=invalid);
    RAISE EXCEPTION 'INVALID_ACCEPTED';
@@ -65,3 +65,41 @@ DO $$ BEGIN
  EXCEPTION WHEN OTHERS THEN ASSERT SQLERRM='AUTHENTICATION_REQUIRED',SQLERRM; END;
 END $$;
 SELECT 'Safety stock values, stock preservation, atomicity and store permissions: PASS';
+SET request.jwt.claim.sub='00000000-0000-4000-8000-000000000001';
+INSERT INTO inventory_items(id,restaurant_id,name,unit,quantity,current_stock) VALUES(test_uuid(503),test_uuid(101),'Legacy bag','ea',20,18);
+INSERT INTO inventory_products(id,restaurant_id,name,inventory_item_id,stock_unit,base_unit,base_unit_factor) VALUES(test_uuid(303),test_uuid(101),'Legacy bag',test_uuid(503),'bag','ea',5);
+DO $$ BEGIN
+ PERFORM set_inventory_product_safety_stock(test_uuid(101),test_uuid(303),4,'ea');
+ ASSERT (SELECT reorder_point=4 AND quantity=20 AND current_stock=18 FROM inventory_items WHERE id=test_uuid(503));
+ ASSERT NOT EXISTS(SELECT 1 FROM inventory_supplier_items WHERE product_id=test_uuid(303));
+ ASSERT (SELECT shelf_life_days IS NULL FROM inventory_products WHERE id=test_uuid(303));
+ PERFORM set_inventory_product_safety_stock(test_uuid(101),test_uuid(303),NULL,'ea');
+ ASSERT (SELECT reorder_point IS NULL FROM inventory_items WHERE id=test_uuid(503));
+ PERFORM set_inventory_product_safety_stock(test_uuid(101),test_uuid(303),0,'ea');
+ ASSERT (SELECT reorder_point=0 FROM inventory_items WHERE id=test_uuid(503));
+ BEGIN
+  PERFORM set_inventory_product_safety_stock(test_uuid(101),test_uuid(303),1000,'g');
+  RAISE EXCEPTION 'STALE_UNIT_ACCEPTED';
+ EXCEPTION WHEN OTHERS THEN ASSERT SQLERRM='INVENTORY_SAFETY_STOCK_UNIT_CHANGED',SQLERRM; END;
+ BEGIN
+  PERFORM set_inventory_product_safety_stock(test_uuid(102),test_uuid(302),4,'ea');
+  RAISE EXCEPTION 'OTHER_STORE_ACCEPTED';
+ EXCEPTION WHEN OTHERS THEN ASSERT SQLERRM='INVENTORY_PRODUCT_FORBIDDEN',SQLERRM; END;
+ ASSERT (SELECT reorder_point=0 AND quantity=20 AND current_stock=18 FROM inventory_items WHERE id=test_uuid(503));
+ ASSERT (SELECT count(*) FROM inventory_transactions)=0;
+END $$;
+SELECT 'Legacy products, unset/zero and stale unit protection: PASS';
+SET request.jwt.claim.sub='00000000-0000-4000-8000-000000000002';
+DO $$ BEGIN
+ BEGIN
+  PERFORM set_inventory_product_safety_stock(test_uuid(101),test_uuid(303),4,'ea');
+  RAISE EXCEPTION 'OPERATOR_THRESHOLD_WRITE_ACCEPTED';
+ EXCEPTION WHEN OTHERS THEN ASSERT SQLERRM='INVENTORY_PRODUCT_FORBIDDEN',SQLERRM; END;
+END $$;
+SET request.jwt.claim.sub='';
+DO $$ BEGIN
+ BEGIN
+  PERFORM set_inventory_product_safety_stock(test_uuid(101),test_uuid(303),4,'ea');
+  RAISE EXCEPTION 'ANONYMOUS_THRESHOLD_WRITE_ACCEPTED';
+ EXCEPTION WHEN OTHERS THEN ASSERT SQLERRM='AUTHENTICATION_REQUIRED',SQLERRM; END;
+END $$;
