@@ -21,6 +21,7 @@ import '../inventory/ingredient_excel_import.dart';
 import '../inventory/inventory_provider.dart';
 import '../inventory/recipe_excel_import.dart';
 import 'inventory_purchase_document_service.dart';
+import 'inventory_safety_stock.dart';
 import 'stock_audit_excel_import.dart';
 import 'stock_audit_dated_dialogs.dart';
 
@@ -351,7 +352,7 @@ class _InventoryPurchaseScreenState
         orders: orders,
         storeId: storeId,
       ),
-      1 => _buildStockStatusPage(stockStatus),
+      1 => _buildStockStatusPage(stockStatus, productCatalog),
       2 => _buildPurchaseManagementPage(
         storeId: storeId,
         snapshot: snapshot,
@@ -525,9 +526,16 @@ class _InventoryPurchaseScreenState
     );
   }
 
-  Widget _buildStockStatusPage(InventoryPurchaseStockStatusState state) {
+  Widget _buildStockStatusPage(
+    InventoryPurchaseStockStatusState state,
+    InventoryPurchaseProductCatalogState catalog,
+  ) {
     final l10n = context.l10n;
     final rows = state.rows;
+    final safetyStockByProduct = {
+      for (final product in catalog.products)
+        product['id']: _nestedMap(product['inventory_item'])['reorder_point'],
+    };
     final danger = rows
         .where((row) => _string(row['risk_status']) == 'danger')
         .length;
@@ -539,8 +547,8 @@ class _InventoryPurchaseScreenState
     return _PageShell(
       title: l10n.inventoryPurchaseStockStatusTitle,
       subtitle: l10n.inventoryPurchaseStockStatusSubtitle,
-      isLoading: state.isLoading,
-      error: state.error,
+      isLoading: state.isLoading || catalog.isLoading,
+      error: state.error ?? catalog.error,
       children: [
         ToastMetricStrip(
           dense: true,
@@ -574,6 +582,8 @@ class _InventoryPurchaseScreenState
               l10n.inventoryPurchaseProductName,
               l10n.superAdminCategory,
               l10n.inventoryPurchaseCurrentStock,
+              l10n.inventorySafetyStockShort,
+              l10n.inventorySafetyStockStatus,
               l10n.inventoryPurchaseRecent4DayAvg,
               l10n.inventoryPurchaseRecent7DayAvg,
               l10n.inventoryPurchaseEstimatedDays,
@@ -584,7 +594,24 @@ class _InventoryPurchaseScreenState
                   (row) => [
                     _string(row['product_name'], fallback: '-'),
                     _string(row['category'], fallback: '-'),
-                    _displayStock(row),
+                    _physicalStockText(
+                      row['current_stock_base'],
+                      _string(row['base_unit']),
+                      context,
+                    ),
+                    _safetyStockText(
+                      safetyStockByProduct[row['product_id']],
+                      _string(row['base_unit']),
+                      context,
+                    ),
+                    safetyStockByProduct[row['product_id']] == null
+                        ? l10n.inventorySafetyStockUnset
+                        : InventorySafetyStock.needsReorder(
+                            row['current_stock_base'],
+                            safetyStockByProduct[row['product_id']],
+                          )
+                        ? l10n.inventorySafetyStockLow
+                        : l10n.inventorySafetyStockEnough,
                     _quantity(row['recent_4_day_avg']),
                     _quantity(row['recent_7_day_avg']),
                     l10n.inventoryPurchaseDaysValue(
@@ -1902,6 +1929,8 @@ class _InventoryPurchaseScreenState
                 ),
                 onEdit: (product) =>
                     _showProductDialog(storeId: storeId, product: product),
+                onSetSafetyStock: (product) =>
+                    _showSafetyStockDialog(storeId: storeId, product: product),
                 onToggleActive: (product) =>
                     _toggleProductActive(storeId: storeId, product: product),
               ),
@@ -2149,6 +2178,121 @@ class _InventoryPurchaseScreenState
     }
   }
 
+  Future<void> _showSafetyStockDialog({
+    required String storeId,
+    required Map<String, dynamic> product,
+  }) async {
+    final baseUnit = _string(product['base_unit']);
+    final item = _nestedMap(product['inventory_item']);
+    final controller = TextEditingController(
+      text: InventorySafetyStock.input(item['reorder_point'], baseUnit),
+    );
+    final l10n = context.l10n;
+    String? error;
+    bool saving = false;
+    final route = DialogRoute<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          key: const Key('inventory_safety_stock_dialog'),
+          title: Text(l10n.inventorySafetyStock),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_string(product['name'])),
+                const SizedBox(height: ToastSpacingTokens.sm),
+                Text(
+                  '${l10n.inventoryPurchaseCurrentStock}: ${_physicalStockText(item['current_stock'], baseUnit, context)}',
+                ),
+                const SizedBox(height: ToastSpacingTokens.md),
+                TextField(
+                  key: const Key('inventory_safety_stock_setting_field'),
+                  controller: controller,
+                  enabled: !saving,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: l10n.inventorySafetyStockShort,
+                    suffixText: _safetyStockUnit(baseUnit, context),
+                    helperText: l10n.inventorySafetyStockHelp,
+                    helperMaxLines: 4,
+                    errorText: error,
+                    errorMaxLines: 3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              key: const Key('inventory_safety_stock_save_action'),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final raw = controller.text.trim();
+                      final quantity = InventorySafetyStock.parse(raw);
+                      if (raw.isNotEmpty &&
+                          (quantity == null ||
+                              !InventorySafetyStock.isValid(
+                                quantity,
+                                baseUnit,
+                              ))) {
+                        setDialogState(
+                          () => error = l10n.inventorySafetyStockInvalid,
+                        );
+                        return;
+                      }
+                      setDialogState(() {
+                        saving = true;
+                        error = null;
+                      });
+                      final ok = await ref
+                          .read(
+                            inventoryPurchaseProductCatalogProvider.notifier,
+                          )
+                          .saveSafetyStock(
+                            storeId: storeId,
+                            productId: product['id'].toString(),
+                            baseUnit: baseUnit,
+                            safetyStockBase: quantity == null
+                                ? null
+                                : InventorySafetyStock.toBase(
+                                    quantity,
+                                    baseUnit,
+                                  ),
+                          );
+                      if (!dialogContext.mounted) return;
+                      if (ok) {
+                        Navigator.of(dialogContext).pop(true);
+                      } else {
+                        setDialogState(() {
+                          saving = false;
+                          error = l10n.inventorySafetyStockSaveFailed;
+                        });
+                      }
+                    },
+              child: Text(l10n.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    final saved = await Navigator.of(context).push(route);
+    await route.completed;
+    controller.dispose();
+    if (saved == true && mounted) await _reloadStoreScope(storeId);
+  }
+
   Future<void> _showProductDialog({
     required String storeId,
     Map<String, dynamic>? product,
@@ -2196,6 +2340,12 @@ class _InventoryPurchaseScreenState
       text: _string(product?['stock_unit'], fallback: 'kg'),
     );
     var baseUnit = _string(product?['base_unit'], fallback: 'g');
+    final safetyStockController = TextEditingController(
+      text: InventorySafetyStock.input(
+        _nestedMap(product?['inventory_item'])['reorder_point'],
+        baseUnit,
+      ),
+    );
     final factorController = TextEditingController(
       text: _quantity(product?['base_unit_factor'] ?? 1000),
     );
@@ -2220,8 +2370,9 @@ class _InventoryPurchaseScreenState
             .toList()
           ..sort();
     String? validationMessage;
+    bool saving = false;
 
-    final saved = await showDialog<bool>(
+    final route = DialogRoute<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -2349,6 +2500,21 @@ class _InventoryPurchaseScreenState
                           ),
                         ),
                         TextField(
+                          key: const Key(
+                            'inventory_product_safety_stock_field',
+                          ),
+                          controller: safetyStockController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: l10n.inventorySafetyStock,
+                            suffixText: _safetyStockUnit(baseUnit, context),
+                            helperText: l10n.inventorySafetyStockHelp,
+                            helperMaxLines: 3,
+                          ),
+                        ),
+                        TextField(
                           controller: storageController,
                           decoration: InputDecoration(
                             labelText: l10n.inventoryPurchaseStorageType,
@@ -2426,83 +2592,129 @@ class _InventoryPurchaseScreenState
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: saving
+                    ? null
+                    : () => Navigator.of(context).pop(false),
                 child: Text(l10n.cancel),
               ),
               FilledButton(
-                onPressed: () async {
-                  final productCode = codeController.text.trim();
-                  final name = nameController.text.trim();
-                  final category = categoryController.text.trim();
-                  final stockUnit = stockUnitController.text.trim();
-                  final factor = parseDecimalInput(factorController.text);
-                  final shelfLife = shelfLifeController.text.trim().isEmpty
-                      ? null
-                      : parseIntInput(shelfLifeController.text);
-                  if (productCode.isEmpty) {
-                    setDialogState(() {
-                      validationMessage =
-                          'Product code is required so testers can identify the item consistently.';
-                    });
-                    return;
-                  }
-                  if (supplierId == null || supplierId!.isEmpty) {
-                    setDialogState(() {
-                      validationMessage =
-                          'An active supplier is required. Register a supplier first.';
-                    });
-                    return;
-                  }
-                  if (name.isEmpty) {
-                    setDialogState(() {
-                      validationMessage = 'Product name is required.';
-                    });
-                    return;
-                  }
-                  if (category.isEmpty) {
-                    setDialogState(() {
-                      validationMessage =
-                          'Category is required. Choose an existing category or type a new one.';
-                    });
-                    return;
-                  }
-                  if (stockUnit.isEmpty || factor == null) {
-                    setDialogState(() {
-                      validationMessage =
-                          'Display stock unit and base-unit factor are required.';
-                    });
-                    return;
-                  }
-                  if (shelfLife == null || shelfLife < 0) {
-                    setDialogState(() {
-                      validationMessage =
-                          'Shelf life days is required and must be zero or higher.';
-                    });
-                    return;
-                  }
-                  setDialogState(() => validationMessage = null);
-                  final ok = await ref
-                      .read(inventoryPurchaseProductCatalogProvider.notifier)
-                      .saveProductWithSupplier(
-                        storeId: storeId,
-                        supplierId: supplierId!,
-                        productId: product?['id']?.toString(),
-                        productCode: productCode,
-                        name: name,
-                        category: category,
-                        stockUnit: stockUnit,
-                        baseUnit: baseUnit,
-                        baseUnitFactor: factor,
-                        imageUrl: _nullableText(imageController.text),
-                        storageType: _nullableText(storageController.text),
-                        shelfLifeDays: shelfLife,
-                        isOrderable: isOrderable,
-                        supplierSku: _nullableText(supplierSkuController.text),
-                      );
-                  if (context.mounted) {
-                    Navigator.of(context).pop(ok);
-                  }
-                },
+                key: const Key('inventory_product_save_action'),
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final rawSafetyStock = safetyStockController.text
+                            .trim();
+                        final safetyStock = InventorySafetyStock.parse(
+                          rawSafetyStock,
+                        );
+                        if (rawSafetyStock.isNotEmpty &&
+                            (safetyStock == null ||
+                                !InventorySafetyStock.isValid(
+                                  safetyStock,
+                                  baseUnit,
+                                ))) {
+                          setDialogState(() {
+                            validationMessage =
+                                l10n.inventorySafetyStockInvalid;
+                          });
+                          return;
+                        }
+                        final productCode = codeController.text.trim();
+                        final name = nameController.text.trim();
+                        final category = categoryController.text.trim();
+                        final stockUnit = stockUnitController.text.trim();
+                        final factor = parseDecimalInput(factorController.text);
+                        final shelfLife =
+                            shelfLifeController.text.trim().isEmpty
+                            ? null
+                            : parseIntInput(shelfLifeController.text);
+                        if (productCode.isEmpty) {
+                          setDialogState(() {
+                            validationMessage =
+                                'Product code is required so testers can identify the item consistently.';
+                          });
+                          return;
+                        }
+                        if (supplierId == null || supplierId!.isEmpty) {
+                          setDialogState(() {
+                            validationMessage =
+                                'An active supplier is required. Register a supplier first.';
+                          });
+                          return;
+                        }
+                        if (name.isEmpty) {
+                          setDialogState(() {
+                            validationMessage = 'Product name is required.';
+                          });
+                          return;
+                        }
+                        if (category.isEmpty) {
+                          setDialogState(() {
+                            validationMessage =
+                                'Category is required. Choose an existing category or type a new one.';
+                          });
+                          return;
+                        }
+                        if (stockUnit.isEmpty || factor == null) {
+                          setDialogState(() {
+                            validationMessage =
+                                'Display stock unit and base-unit factor are required.';
+                          });
+                          return;
+                        }
+                        if (shelfLife == null || shelfLife < 0) {
+                          setDialogState(() {
+                            validationMessage =
+                                'Shelf life days is required and must be zero or higher.';
+                          });
+                          return;
+                        }
+                        setDialogState(() {
+                          validationMessage = null;
+                          saving = true;
+                        });
+                        final ok = await ref
+                            .read(
+                              inventoryPurchaseProductCatalogProvider.notifier,
+                            )
+                            .saveProductWithSupplier(
+                              storeId: storeId,
+                              supplierId: supplierId!,
+                              productId: product?['id']?.toString(),
+                              productCode: productCode,
+                              name: name,
+                              category: category,
+                              stockUnit: stockUnit,
+                              baseUnit: baseUnit,
+                              baseUnitFactor: factor,
+                              imageUrl: _nullableText(imageController.text),
+                              storageType: _nullableText(
+                                storageController.text,
+                              ),
+                              shelfLifeDays: shelfLife,
+                              isOrderable: isOrderable,
+                              supplierSku: _nullableText(
+                                supplierSkuController.text,
+                              ),
+                              setSafetyStock: true,
+                              safetyStockBase: safetyStock == null
+                                  ? null
+                                  : InventorySafetyStock.toBase(
+                                      safetyStock,
+                                      baseUnit,
+                                    ),
+                            );
+                        if (!context.mounted) return;
+                        if (ok) {
+                          Navigator.of(context).pop(true);
+                        } else {
+                          setDialogState(() {
+                            saving = false;
+                            validationMessage =
+                                l10n.inventorySafetyStockSaveFailed;
+                          });
+                        }
+                      },
                 child: Text(l10n.save),
               ),
             ],
@@ -2510,6 +2722,23 @@ class _InventoryPurchaseScreenState
         },
       ),
     );
+
+    final saved = await Navigator.of(context).push(route);
+    await route.completed;
+    for (final controller in [
+      supplierSkuController,
+      codeController,
+      nameController,
+      categoryController,
+      stockUnitController,
+      safetyStockController,
+      factorController,
+      imageController,
+      storageController,
+      shelfLifeController,
+    ]) {
+      controller.dispose();
+    }
 
     if (saved == true && mounted) {
       await _reloadStoreScope(storeId);
@@ -5817,6 +6046,7 @@ class _ProductManagementList extends StatelessWidget {
     required this.saving,
     required this.onSelect,
     required this.onEdit,
+    required this.onSetSafetyStock,
     required this.onToggleActive,
   });
 
@@ -5826,6 +6056,7 @@ class _ProductManagementList extends StatelessWidget {
   final bool saving;
   final ValueChanged<Map<String, dynamic>> onSelect;
   final ValueChanged<Map<String, dynamic>> onEdit;
+  final ValueChanged<Map<String, dynamic>> onSetSafetyStock;
   final ValueChanged<Map<String, dynamic>> onToggleActive;
 
   @override
@@ -5854,6 +6085,7 @@ class _ProductManagementList extends StatelessWidget {
             saving: saving,
             onSelect: onSelect,
             onEdit: onEdit,
+            onSetSafetyStock: onSetSafetyStock,
             onToggleActive: onToggleActive,
           ),
           if (product != products.last) const Divider(height: 1),
@@ -5871,6 +6103,7 @@ class _ProductManagementRow extends StatelessWidget {
     required this.saving,
     required this.onSelect,
     required this.onEdit,
+    required this.onSetSafetyStock,
     required this.onToggleActive,
   });
 
@@ -5880,6 +6113,7 @@ class _ProductManagementRow extends StatelessWidget {
   final bool saving;
   final ValueChanged<Map<String, dynamic>> onSelect;
   final ValueChanged<Map<String, dynamic>> onEdit;
+  final ValueChanged<Map<String, dynamic>> onSetSafetyStock;
   final ValueChanged<Map<String, dynamic>> onToggleActive;
 
   @override
@@ -5901,61 +6135,58 @@ class _ProductManagementRow extends StatelessWidget {
         onTap: () => onSelect(product),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: ToastSpacingTokens.sm),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _string(product['name'], fallback: '-'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _textStyle(
-                        size: 12.5,
-                        weight: FontWeight.w900,
-                        color: ToastColorTokens.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      l10n.inventoryPurchaseProductRowSubtitle(
-                        _string(
-                          product['product_code'],
-                          fallback: l10n.inventoryPurchaseNoCode,
-                        ),
-                        _string(
-                          product['category'],
-                          fallback: l10n.inventoryPurchaseNoCategory,
-                        ),
-                        _string(product['stock_unit'], fallback: '-'),
-                        _string(product['base_unit'], fallback: '-'),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _textStyle(
-                        size: 11,
-                        weight: FontWeight.w600,
-                        color: ToastColorTokens.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${l10n.inventoryPurchaseSupplier}: ${supplierNames.isEmpty ? '-' : supplierNames}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _textStyle(
-                        size: 11,
-                        weight: FontWeight.w700,
-                        color: supplierNames.isEmpty
-                            ? ToastColorTokens.danger
-                            : ToastColorTokens.textSecondary,
-                      ),
-                    ),
-                  ],
+          child: _CatalogActionRow(
+            details: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _string(product['name'], fallback: '-'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _textStyle(
+                    size: 12.5,
+                    weight: FontWeight.w900,
+                    color: ToastColorTokens.textPrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(width: ToastSpacingTokens.sm),
+                const SizedBox(height: 2),
+                Text(
+                  l10n.inventoryPurchaseProductRowSubtitle(
+                    _string(
+                      product['product_code'],
+                      fallback: l10n.inventoryPurchaseNoCode,
+                    ),
+                    _string(
+                      product['category'],
+                      fallback: l10n.inventoryPurchaseNoCategory,
+                    ),
+                    _string(product['stock_unit'], fallback: '-'),
+                    _string(product['base_unit'], fallback: '-'),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _textStyle(
+                    size: 11,
+                    weight: FontWeight.w600,
+                    color: ToastColorTokens.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${l10n.inventoryPurchaseSupplier}: ${supplierNames.isEmpty ? '-' : supplierNames}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _textStyle(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: supplierNames.isEmpty
+                        ? ToastColorTokens.danger
+                        : ToastColorTokens.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
               ToastStatusBadge(
                 label: orderable
                     ? l10n.inventoryPurchaseOrderable
@@ -5965,7 +6196,6 @@ class _ProductManagementRow extends StatelessWidget {
                     : ToastColorTokens.warning,
                 compact: true,
               ),
-              const SizedBox(width: ToastSpacingTokens.sm),
               ToastStatusBadge(
                 label: active
                     ? l10n.inventoryPurchaseActive
@@ -5975,7 +6205,16 @@ class _ProductManagementRow extends StatelessWidget {
                     : ToastColorTokens.textSecondary,
                 compact: true,
               ),
-              const SizedBox(width: ToastSpacingTokens.sm),
+              PosActionButton(
+                key: ValueKey('inventory_safety_stock_${product['id']}'),
+                label: l10n.inventorySafetyStockShort,
+                tone: PosActionTone.secondary,
+                icon: Icons.shield_outlined,
+                onPressed: saving || !active
+                    ? null
+                    : () => onSetSafetyStock(product),
+                compact: true,
+              ),
               PosActionButton(
                 label: l10n.edit,
                 tone: PosActionTone.secondary,
@@ -5983,7 +6222,6 @@ class _ProductManagementRow extends StatelessWidget {
                 onPressed: saving ? null : () => onEdit(product),
                 compact: true,
               ),
-              const SizedBox(width: ToastSpacingTokens.sm),
               PosActionButton(
                 label: active ? l10n.inventoryPurchasePause : l10n.use,
                 tone: active ? PosActionTone.destructive : PosActionTone.affirm,
@@ -6047,9 +6285,29 @@ class _ProductDetailPanel extends StatelessWidget {
         const Divider(height: 1),
         _KeyValueRow(
           label: l10n.inventoryPurchaseCurrentStock,
-          value: _quantity(inventoryItem['current_stock']),
-          helper:
-              '${l10n.inventoryPurchaseReorderPoint(_quantity(inventoryItem['reorder_point']))} · ${l10n.inventoryNeedsReorder} when stock is below this value',
+          value: _physicalStockText(
+            inventoryItem['current_stock'],
+            _string(product!['base_unit']),
+            context,
+          ),
+          helper: '',
+        ),
+        const Divider(height: 1),
+        _KeyValueRow(
+          label: l10n.inventorySafetyStock,
+          value: _safetyStockText(
+            inventoryItem['reorder_point'],
+            _string(product!['base_unit']),
+            context,
+          ),
+          helper: inventoryItem['reorder_point'] == null
+              ? l10n.inventorySafetyStockUnset
+              : InventorySafetyStock.needsReorder(
+                  inventoryItem['current_stock'],
+                  inventoryItem['reorder_point'],
+                )
+              ? l10n.inventorySafetyStockLow
+              : l10n.inventorySafetyStockEnough,
         ),
         const Divider(height: 1),
         _KeyValueRow(
@@ -6127,43 +6385,40 @@ class _SupplierItemRow extends StatelessWidget {
     final active = item['is_active'] == true;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: ToastSpacingTokens.sm),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${_string(product['name'], fallback: '-')} · ${_string(supplier['supplier_name'], fallback: '-')}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: _textStyle(
-                    size: 12.5,
-                    weight: FontWeight.w900,
-                    color: ToastColorTokens.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.inventoryPurchaseSupplierItemRowSubtitle(
-                    _string(item['order_unit'], fallback: '-'),
-                    _quantity(item['order_unit_quantity_base']),
-                    _string(product['base_unit'], fallback: ''),
-                    _quantity(item['min_order_quantity']),
-                    _int(item['lead_time_days']),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: _textStyle(
-                    size: 11,
-                    weight: FontWeight.w600,
-                    color: ToastColorTokens.textSecondary,
-                  ),
-                ),
-              ],
+      child: _CatalogActionRow(
+        details: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${_string(product['name'], fallback: '-')} · ${_string(supplier['supplier_name'], fallback: '-')}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _textStyle(
+                size: 12.5,
+                weight: FontWeight.w900,
+                color: ToastColorTokens.textPrimary,
+              ),
             ),
-          ),
-          const SizedBox(width: ToastSpacingTokens.sm),
+            const SizedBox(height: 2),
+            Text(
+              l10n.inventoryPurchaseSupplierItemRowSubtitle(
+                _string(item['order_unit'], fallback: '-'),
+                _quantity(item['order_unit_quantity_base']),
+                _string(product['base_unit'], fallback: ''),
+                _quantity(item['min_order_quantity']),
+                _int(item['lead_time_days']),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _textStyle(
+                size: 11,
+                weight: FontWeight.w600,
+                color: ToastColorTokens.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        actions: [
           Text(
             _money(item['unit_price']),
             style: _textStyle(
@@ -6172,14 +6427,12 @@ class _SupplierItemRow extends StatelessWidget {
               color: ToastColorTokens.textPrimary,
             ),
           ),
-          const SizedBox(width: ToastSpacingTokens.sm),
           if (item['is_preferred'] == true)
             ToastStatusBadge(
               label: l10n.inventoryPurchaseDefault,
               color: ToastColorTokens.accent,
               compact: true,
             ),
-          const SizedBox(width: ToastSpacingTokens.sm),
           ToastStatusBadge(
             label: active
                 ? l10n.inventoryPurchaseActive
@@ -6189,7 +6442,6 @@ class _SupplierItemRow extends StatelessWidget {
                 : ToastColorTokens.textSecondary,
             compact: true,
           ),
-          const SizedBox(width: ToastSpacingTokens.sm),
           PosActionButton(
             label: l10n.edit,
             tone: PosActionTone.secondary,
@@ -6197,7 +6449,6 @@ class _SupplierItemRow extends StatelessWidget {
             onPressed: saving ? null : () => onEdit(item),
             compact: true,
           ),
-          const SizedBox(width: ToastSpacingTokens.sm),
           PosActionButton(
             label: active ? l10n.inventoryPurchasePause : l10n.use,
             tone: active ? PosActionTone.destructive : PosActionTone.affirm,
@@ -8161,4 +8412,62 @@ bool _printableStatus(Object? value) {
     'partially_received',
     'received',
   }.contains(_string(value));
+}
+
+String _safetyStockUnit(String baseUnit, BuildContext context) =>
+    baseUnit == 'ea'
+    ? context.l10n.inventorySafetyStockPieces
+    : InventorySafetyStock.unit(baseUnit);
+
+String _physicalStockText(
+  Object? quantity,
+  String baseUnit,
+  BuildContext context,
+) {
+  final input = InventorySafetyStock.input(quantity, baseUnit);
+  return input.isEmpty ? '-' : '$input ${_safetyStockUnit(baseUnit, context)}';
+}
+
+String _safetyStockText(
+  Object? quantity,
+  String baseUnit,
+  BuildContext context,
+) => quantity == null
+    ? context.l10n.inventorySafetyStockUnset
+    : '${InventorySafetyStock.input(quantity, baseUnit)} ${_safetyStockUnit(baseUnit, context)}';
+
+/// Keep catalog edit actions reachable when the master-data list is narrow.
+class _CatalogActionRow extends StatelessWidget {
+  const _CatalogActionRow({required this.details, required this.actions});
+  final Widget details;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final buttons = Wrap(
+        spacing: ToastSpacingTokens.sm,
+        runSpacing: ToastSpacingTokens.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: actions,
+      );
+      if (constraints.maxWidth < 640) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            details,
+            const SizedBox(height: ToastSpacingTokens.sm),
+            buttons,
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: details),
+          const SizedBox(width: ToastSpacingTokens.sm),
+          buttons,
+        ],
+      );
+    },
+  );
 }

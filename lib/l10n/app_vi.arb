@@ -4171,5 +4171,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "inventorySafetyStock": "Tồn kho an toàn (ngưỡng đặt lại)",
+  "inventorySafetyStockShort": "Tồn kho an toàn",
+  "inventorySafetyStockStatus": "Trạng thái tồn kho an toàn",
+  "inventorySafetyStockUnset": "Chưa thiết lập",
+  "inventorySafetyStockHelp": "Cảnh báo khi tồn kho bằng hoặc thấp hơn mức này. Để trống để bỏ thiết lập; 0 là một mức hợp lệ.",
+  "inventorySafetyStockInvalid": "Nhập số lượng hợp lệ từ 0 trở lên.",
+  "inventorySafetyStockSaveFailed": "Không thể lưu nguyên liệu và tồn kho an toàn. Vui lòng thử lại.",
+  "inventorySafetyStockLow": "Bằng hoặc dưới mức an toàn",
+  "inventorySafetyStockEnough": "Trên mức an toàn",
+  "inventorySafetyStockPieces": "cái"
 }

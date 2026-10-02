@@ -41,6 +41,9 @@ bash test/qr_menu_category_auto_sync_sql_test.sh
 printf 'CHECK_REPO_STEP=inventory_purchase_orderer_catalog_sql\n'
 bash test/inventory_purchase_orderer_catalog_sql_test.sh
 
+printf 'CHECK_REPO_STEP=inventory_safety_stock_sql\n'
+bash scripts/test_inventory_safety_stock.sh
+
 printf 'CHECK_REPO_STEP=inventory_workflow_sql\n'
 bash scripts/test_bunsik_inventory_stocktake.sh
 bash scripts/test_inventory_workflow_all_stores.sh

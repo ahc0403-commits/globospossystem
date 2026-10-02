@@ -4171,5 +4171,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "inventorySafetyStock": "안전재고(재주문 기준)",
+  "inventorySafetyStockShort": "안전재고",
+  "inventorySafetyStockStatus": "안전재고 상태",
+  "inventorySafetyStockUnset": "미설정",
+  "inventorySafetyStockHelp": "현재 재고가 이 수량 이하이면 알립니다. 빈칸은 미설정이며 0도 설정값입니다.",
+  "inventorySafetyStockInvalid": "0 이상의 유효한 수량을 입력하세요.",
+  "inventorySafetyStockSaveFailed": "원재료와 안전재고를 저장하지 못했습니다. 다시 시도하세요.",
+  "inventorySafetyStockLow": "안전재고 이하",
+  "inventorySafetyStockEnough": "안전재고 초과",
+  "inventorySafetyStockPieces": "개"
 }

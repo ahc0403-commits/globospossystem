@@ -4172,5 +4172,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "inventorySafetyStock": "Safety stock (reorder point)",
+  "inventorySafetyStockShort": "Safety stock",
+  "inventorySafetyStockStatus": "Safety stock status",
+  "inventorySafetyStockUnset": "Not set",
+  "inventorySafetyStockHelp": "Warn when stock is at or below this quantity. Leave blank to unset; 0 is a valid threshold.",
+  "inventorySafetyStockInvalid": "Enter a valid quantity of 0 or greater.",
+  "inventorySafetyStockSaveFailed": "Could not save the ingredient and safety stock. Please retry.",
+  "inventorySafetyStockLow": "At or below safety stock",
+  "inventorySafetyStockEnough": "Above safety stock",
+  "inventorySafetyStockPieces": "ea"
 }
