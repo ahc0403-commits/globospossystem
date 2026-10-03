@@ -44,14 +44,14 @@ class DirectOrderCopy {
   String get cartEmpty =>
       _pick('메뉴를 선택해 주세요.', 'Vui lòng chọn món.', 'Please choose an item.');
   String get pausedTitle => _pick(
-    '현재 배달·포장 주문을 잠시 쉬고 있습니다',
-    'Cửa hàng đang tạm ngưng nhận đơn giao hàng',
-    'Delivery/pickup ordering is temporarily paused',
+    '현재 배달·포장 주문 접수가 닫혀 있습니다',
+    'Cửa hàng hiện không nhận đơn giao hàng / mang đi',
+    'Delivery/pickup ordering is currently closed',
   );
   String get pausedMessage => _pick(
-    '현재 주문량이 많아 새 배달·포장 주문을 받기 어렵습니다. 불편을 드려 정말 죄송합니다. 잠시 후 다시 주문해 주세요.',
-    'Hiện tại cửa hàng có nhiều đơn nên tạm thời chưa thể nhận thêm đơn giao hàng. Chúng tôi thành thật xin lỗi vì sự bất tiện này. Vui lòng quay lại đặt hàng sau ít phút.',
-    'We are handling a high volume of orders and cannot accept new delivery/pickup orders right now. We are very sorry for the inconvenience. Please try again a little later.',
+    '주문 접수시간은 매일 11:00–22:00 (베트남 시간)입니다. 영업시간 중에도 매장 사정으로 접수가 잠시 중지될 수 있습니다. 이미 접수된 주문은 계속 처리됩니다.',
+    'Giờ nhận đơn hằng ngày: 11:00–22:00 (giờ Việt Nam). Cửa hàng có thể tạm ngưng nhận đơn trong giờ mở cửa. Các đơn đã nhận vẫn tiếp tục được xử lý.',
+    'Order daily from 11:00 to 22:00 (Vietnam time). The store may temporarily pause new orders during opening hours. Orders already received will continue to be processed.',
   );
   String get paused => pausedTitle;
   String get apologyEmojiLabel =>

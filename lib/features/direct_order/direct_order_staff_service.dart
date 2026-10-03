@@ -35,23 +35,27 @@ class DirectOrderAvailability {
     required this.enabled,
     required this.paused,
     required this.updatedAt,
+    this.hoursOpen = true,
   });
 
   final bool configured;
   final bool enabled;
   final bool paused;
   final DateTime? updatedAt;
+  final bool hoursOpen;
 
-  bool get acceptingOrders => configured && enabled && !paused;
-  bool get canChange => configured && enabled;
+  bool get acceptingOrders => configured && enabled && !paused && hoursOpen;
+  bool get canChange => configured && enabled && hoursOpen;
 
   factory DirectOrderAvailability.fromJson(Map<String, dynamic> json) {
     const expected = {'configured', 'enabled', 'paused', 'updated_at'};
-    if (json.keys.toSet().difference(expected).isNotEmpty ||
+    const allowed = {...expected, 'hours_open'};
+    if (json.keys.toSet().difference(allowed).isNotEmpty ||
         expected.difference(json.keys.toSet()).isNotEmpty ||
         json['configured'] is! bool ||
         json['enabled'] is! bool ||
-        json['paused'] is! bool) {
+        json['paused'] is! bool ||
+        (json.containsKey('hours_open') && json['hours_open'] is! bool)) {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
     }
     final rawUpdatedAt = json['updated_at'];
@@ -68,6 +72,7 @@ class DirectOrderAvailability {
       enabled: json['enabled'] as bool,
       paused: json['paused'] as bool,
       updatedAt: updatedAt,
+      hoursOpen: json['hours_open'] as bool? ?? true,
     );
   }
 }
@@ -407,7 +412,7 @@ class DirectOrderStaffService {
   }) async {
     final result = _map(
       await supabase.rpc(
-        'direct_order_staff_get_availability',
+        'direct_order_staff_get_availability_v2',
         params: {'p_store_id': storeId},
       ),
     );
@@ -418,13 +423,11 @@ class DirectOrderStaffService {
     required String storeId,
     required bool paused,
   }) async {
-    final result = _map(
-      await supabase.rpc(
-        'direct_order_staff_set_paused',
-        params: {'p_store_id': storeId, 'p_is_paused': paused},
-      ),
+    await supabase.rpc(
+      'direct_order_staff_set_paused',
+      params: {'p_store_id': storeId, 'p_is_paused': paused},
     );
-    return DirectOrderAvailability.fromJson(result);
+    return getAvailability(storeId: storeId);
   }
 
   Future<Map<String, dynamic>> transitionTicket({
@@ -552,8 +555,8 @@ class DirectOrderStaffService {
           'p_public_slug': slug,
           'p_is_enabled': enabled,
           'p_is_paused': paused,
-          'p_ordering_starts_at': '10:00',
-          'p_ordering_cutoff_at': '21:30',
+          'p_ordering_starts_at': '11:00',
+          'p_ordering_cutoff_at': '22:00',
           'p_minimum_order_amount': minimumOrder,
           'p_quote_ttl_minutes': 20,
           'p_default_latitude': latitude,
