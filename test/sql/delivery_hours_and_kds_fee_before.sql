@@ -13,3 +13,14 @@ BEGIN
  RAISE EXCEPTION 'PILOT_ALWAYS_OPEN_BUG_NOT_REPRODUCED'; END IF;
 END $$;
 SELECT 'FEE_AS_WORK_AND_ALWAYS_OPEN_REPRODUCED' AS result;
+-- Reproduce the actual production schema gap as well as the fee/hours bugs.
+DROP FUNCTION public.direct_order_staff_get_availability(uuid);
+DROP FUNCTION public.direct_order_staff_set_paused(uuid,boolean);
+DO $$ DECLARE d text;
+BEGIN
+ SELECT pg_get_functiondef('public.direct_order_staff_quote(uuid,uuid,numeric,text)'::regprocedure) INTO d;
+ IF position('storefront.is_paused = false' IN d)=0 THEN
+  EXECUTE replace(d,'    AND storefront.is_enabled = true',
+   E'    AND storefront.is_enabled = true\n    AND storefront.is_paused = false');
+ END IF;
+END $$;

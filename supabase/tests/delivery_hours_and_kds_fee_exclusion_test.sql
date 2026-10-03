@@ -87,6 +87,10 @@ BEGIN
  e:=NULL;
  BEGIN PERFORM public.direct_order_public_submit(s,secret,gen_random_uuid(),p); EXCEPTION WHEN OTHERS THEN e:=SQLERRM; END;
  IF e IS DISTINCT FROM 'DIRECT_ORDER_STOREFRONT_PAUSED' THEN RAISE EXCEPTION 'MANUAL_PAUSE_IGNORED:%',e; END IF;
+ f:=photo_test.create_request();
+ UPDATE public.direct_order_requests SET state='awaiting_quote' WHERE id=(f->>'request_id')::uuid;
+ UPDATE public.direct_order_quotes SET status='superseded' WHERE id=(f->>'quote_id')::uuid;
+ PERFORM public.direct_order_staff_quote(v_store,(f->>'request_id')::uuid,0,NULL);
  f:=photo_test.create_request(); PERFORM photo_test.approve(f);
  PERFORM photo_test.assert_single_graph((f->>'request_id')::uuid);
  PERFORM set_config('direct_order.test_local_time','22:00',true);

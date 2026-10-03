@@ -51,6 +51,117 @@ SELECT pg_temp.delivery_hours_patch('public.emergency_sync_order_item()',
   $old$NEW.item_type IN ('wet_tissue_charge', 'buffet_cover_charge')$old$,
   $new$NEW.item_type IN ('wet_tissue_charge', 'buffet_cover_charge', 'service_charge')$new$);
 
+-- Older production releases may lack the cashier availability RPCs. Install
+-- their current-main contracts before applying the scheduled-closure anchors.
+CREATE OR REPLACE FUNCTION public.direct_order_staff_get_availability(
+  p_store_id uuid
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_catalog
+AS $$
+DECLARE
+  v_storefront public.direct_order_storefronts%ROWTYPE;
+BEGIN
+  PERFORM public.direct_order_require_actor(
+    p_store_id,
+    ARRAY['cashier', 'admin', 'store_admin', 'brand_admin', 'super_admin']
+  );
+
+  SELECT * INTO v_storefront
+  FROM public.direct_order_storefronts storefront
+  WHERE storefront.restaurant_id = p_store_id;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'configured', false,
+      'enabled', false,
+      'paused', false,
+      'updated_at', NULL
+    );
+  END IF;
+
+  RETURN jsonb_build_object(
+    'configured', true,
+    'enabled', v_storefront.is_enabled,
+    'paused', v_storefront.is_paused,
+    'updated_at', v_storefront.updated_at
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.direct_order_staff_get_availability(uuid)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.direct_order_staff_get_availability(uuid)
+  TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.direct_order_staff_set_paused(
+  p_store_id uuid,
+  p_is_paused boolean
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_catalog
+AS $$
+DECLARE
+  v_storefront public.direct_order_storefronts%ROWTYPE;
+  v_previous boolean;
+BEGIN
+  PERFORM public.direct_order_require_actor(
+    p_store_id,
+    ARRAY['cashier', 'admin', 'store_admin', 'brand_admin', 'super_admin']
+  );
+
+  IF p_is_paused IS NULL THEN
+    RAISE EXCEPTION 'DIRECT_ORDER_REQUEST_INPUT_INVALID';
+  END IF;
+
+  SELECT * INTO v_storefront
+  FROM public.direct_order_storefronts storefront
+  WHERE storefront.restaurant_id = p_store_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR NOT v_storefront.is_enabled THEN
+    RAISE EXCEPTION 'DIRECT_ORDER_STOREFRONT_DISABLED';
+  END IF;
+
+  v_previous := v_storefront.is_paused;
+  IF v_previous IS DISTINCT FROM p_is_paused THEN
+    UPDATE public.direct_order_storefronts
+    SET is_paused = p_is_paused,
+        updated_by = (SELECT auth.uid()),
+        updated_at = now()
+    WHERE restaurant_id = p_store_id
+    RETURNING * INTO v_storefront;
+
+    INSERT INTO public.audit_logs(
+      actor_id, action, entity_type, entity_id, details
+    ) VALUES (
+      (SELECT auth.uid()),
+      'direct_order_intake_availability_changed',
+      'direct_order_storefronts',
+      p_store_id,
+      jsonb_build_object(
+        'store_id', p_store_id,
+        'previous_paused', v_previous,
+        'paused', v_storefront.is_paused,
+        'source', 'cashier_main'
+      )
+    );
+  END IF;
+
+  RETURN jsonb_build_object(
+    'configured', true,
+    'enabled', v_storefront.is_enabled,
+    'paused', v_storefront.is_paused,
+    'updated_at', v_storefront.updated_at
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.direct_order_staff_set_paused(uuid, boolean)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.direct_order_staff_set_paused(uuid, boolean)
+  TO authenticated, service_role;
+
 -- Keep the legacy public/staff JSON contracts: paused now includes auto-close.
 SELECT pg_temp.delivery_hours_patch('public.direct_order_public_storefront(text)',
   $old$'paused', storefront.is_paused,$old$,
@@ -91,14 +202,19 @@ SELECT pg_temp.delivery_hours_patch('public.direct_order_approve_payment(uuid,uu
   $new$  -- The intake window never blocks review of an already submitted payment.$new$);
 -- Some historical/current production approval definitions retain this guard.
 DO $approval_pause$
-DECLARE v_definition text; v_guard text := E'\n    AND storefront.is_paused = false';
+DECLARE v_definition text; v_guard text := E'\n    AND storefront.is_paused = false'; v_signature text;
 BEGIN
-  SELECT pg_get_functiondef('public.direct_order_approve_payment(uuid,uuid,numeric,text)'::regprocedure)
+  FOREACH v_signature IN ARRAY ARRAY[
+    'public.direct_order_staff_quote(uuid,uuid,numeric,text)',
+    'public.direct_order_approve_payment(uuid,uuid,numeric,text)'
+  ] LOOP
+  SELECT pg_get_functiondef(v_signature::regprocedure)
     INTO v_definition;
   IF (length(v_definition)-length(replace(v_definition,v_guard,''))) / length(v_guard) > 1 THEN
     RAISE EXCEPTION 'DELIVERY_HOURS_APPROVAL_PAUSE_DRIFT';
   END IF;
   EXECUTE replace(v_definition,v_guard,'');
+  END LOOP;
 END;
 $approval_pause$;
 
@@ -139,6 +255,8 @@ BEGIN
      OR position('''service_charge''' IN v_sync)=0
      OR position('DIRECT_ORDER_APPROVAL_CUTOFF' IN v_approve)>0
      OR position('storefront.is_paused = false' IN v_approve)>0
+     OR position('storefront.is_paused = false' IN pg_get_functiondef(
+       'public.direct_order_staff_quote(uuid,uuid,numeric,text)'::regprocedure))>0
      OR EXISTS(SELECT 1 FROM public.direct_order_storefronts WHERE
        ordering_starts_at <> '11:00' OR ordering_cutoff_at <> '22:00' OR NOT ordering_hours_enforced)
      OR EXISTS(SELECT 1 FROM public.emergency_fulfillment_items f JOIN public.order_items i
