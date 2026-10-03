@@ -74,6 +74,9 @@ for file,name in [
  ('20260810170000_emergency_digital_fulfillment.sql','emergency_record_progress'),
 ]: hours+=function(file,name)
 (tmp/'hours-functions.sql').write_text(hours)
+(tmp/'delivery-progress-function.sql').write_text(function(
+ '20260917150000_kds_kitchen_complete_tray_handoff_batch.sql',
+ 'emergency_preserve_started_quantity'))
 PY
 docker run --detach --rm --name "$PHOTO_CONTAINER" \
  --env POSTGRES_HOST_AUTH_METHOD=trust --env POSTGRES_DB=codex_direct_photo postgres:15 >/dev/null
@@ -138,4 +141,9 @@ if [[ "${DELIVERY_HOURS_TEST:-0}" == 1 ]]; then
   run_sql "$PHOTO_ROOT/supabase/migrations/20261003093000_delivery_hours_and_kds_fee_exclusion.sql" >/dev/null
   run_sql "$PHOTO_ROOT/supabase/tests/delivery_hours_and_kds_fee_exclusion_test.sql"
   printf 'DELIVERY_HOURS_AND_KDS_FEE_SQL_TEST=PASS\n'
+  run_sql "$PHOTO_ROOT/test/fixtures/delivery_individual_progress_setup.sql" >/dev/null
+  run_sql "$PHOTO_TMP/delivery-progress-function.sql" >/dev/null
+  run_sql "$PHOTO_ROOT/test/sql/delivery_individual_progress_before.sql"
+  run_sql "$PHOTO_ROOT/supabase/migrations/20261003100000_delivery_individual_kitchen_progress.sql" >/dev/null
+  run_sql "$PHOTO_ROOT/supabase/tests/delivery_individual_kitchen_progress_test.sql"
 fi
