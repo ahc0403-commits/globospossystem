@@ -24,7 +24,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   final DirectOrderAddress? savedAddress;
   final DirectOrderStatus? activeStatus;
   final List<DirectOrderSummary>? orderSummaries;
-  final bool paused;
+  bool paused;
   final bool pauseOnSubmit;
   DirectOrderAddress? submittedAddress;
   bool? submittedRememberAddress;
@@ -35,49 +35,52 @@ class _StorefrontFixtureService extends DirectOrderService {
   var fetchStatusCalls = 0;
   var sendMessageCalls = 0;
   var ensureSessionCalls = 0;
+  var fetchStorefrontCalls = 0;
 
   @override
-  Future<DirectOrderStorefront> fetchStorefront(String slug) async =>
-      DirectOrderStorefront(
-        storeId: 'fixture-store',
-        storeName: 'GLOBOS BUNSIK',
-        storeAddress: '69 Nguyen Gia Tri, Binh Thanh',
-        slug: 'fixture-store',
-        paused: paused,
-        minimumOrderAmount: 100000,
-        defaultLatitude: 10.8,
-        defaultLongitude: 106.7,
-        googleMapsBrowserKey: null,
-        bank: const DirectOrderBank(
-          bin: '970436',
-          accountNumber: '123456789',
-          accountHolder: 'GLOBOS VN',
-          label: 'Vietcombank',
+  Future<DirectOrderStorefront> fetchStorefront(String slug) async {
+    fetchStorefrontCalls += 1;
+    return DirectOrderStorefront(
+      storeId: 'fixture-store',
+      storeName: 'GLOBOS BUNSIK',
+      storeAddress: '69 Nguyen Gia Tri, Binh Thanh',
+      slug: 'fixture-store',
+      paused: paused,
+      minimumOrderAmount: 100000,
+      defaultLatitude: 10.8,
+      defaultLongitude: 106.7,
+      googleMapsBrowserKey: null,
+      bank: const DirectOrderBank(
+        bin: '970436',
+        accountNumber: '123456789',
+        accountHolder: 'GLOBOS VN',
+        label: 'Vietcombank',
+      ),
+      categories: const [
+        DirectOrderCategory(
+          id: 'popular',
+          nameKo: '인기 메뉴',
+          nameVi: 'Món phổ biến',
+          nameEn: 'Popular',
+          sortOrder: 1,
         ),
-        categories: const [
-          DirectOrderCategory(
-            id: 'popular',
-            nameKo: '인기 메뉴',
-            nameVi: 'Món phổ biến',
-            nameEn: 'Popular',
-            sortOrder: 1,
-          ),
-        ],
-        items: const [
-          DirectOrderMenuItem(
-            id: 'tteokbokki',
-            categoryId: 'popular',
-            nameKo: '즉석 떡볶이',
-            nameVi: 'Tokbokki cay',
-            nameEn: 'Spicy tteokbokki',
-            description: 'Bánh gạo, chả cá và sốt cay',
-            price: 125000,
-            imageUrl: null,
-            vatCategory: 'food',
-            sortOrder: 1,
-          ),
-        ],
-      );
+      ],
+      items: const [
+        DirectOrderMenuItem(
+          id: 'tteokbokki',
+          categoryId: 'popular',
+          nameKo: '즉석 떡볶이',
+          nameVi: 'Tokbokki cay',
+          nameEn: 'Spicy tteokbokki',
+          description: 'Bánh gạo, chả cá và sốt cay',
+          price: 125000,
+          imageUrl: null,
+          vatCategory: 'food',
+          sortOrder: 1,
+        ),
+      ],
+    );
+  }
 
   @override
   Future<DirectOrderSession> ensureSession({
@@ -194,6 +197,7 @@ class _StorefrontFixtureService extends DirectOrderService {
 Widget _fixtureApp({
   _StorefrontFixtureService? service,
   Locale locale = const Locale('vi'),
+  DateTime Function() now = DateTime.now,
 }) => ProviderScope(
   child: MaterialApp(
     theme: AppTheme.build(),
@@ -208,6 +212,7 @@ Widget _fixtureApp({
     home: DirectOrderStorefrontScreen(
       slug: 'fixture-store',
       service: service ?? _StorefrontFixtureService(),
+      now: now,
     ),
   ),
 );
@@ -220,6 +225,40 @@ Future<void> _openAddress(WidgetTester tester) async {
 }
 
 void main() {
+  for (final hour in [11, 22]) {
+    testWidgets('open storefront refreshes automatically at Vietnam $hour:00', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues(const {});
+      var now = DateTime.utc(
+        2026,
+        10,
+        3,
+        hour - 7,
+      ).subtract(const Duration(seconds: 2));
+      final service = _StorefrontFixtureService(paused: hour == 11);
+      await tester.pumpWidget(_fixtureApp(service: service, now: () => now));
+      await tester.pumpAndSettle();
+      expect(service.fetchStorefrontCalls, 1);
+      expect(
+        find.byKey(const Key('direct_order_closed_state')),
+        hour == 11 ? findsOneWidget : findsNothing,
+      );
+      service.paused = hour == 22;
+      now = now.add(const Duration(seconds: 3));
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(service.fetchStorefrontCalls, 2);
+      expect(
+        find.byKey(const Key('direct_order_closed_state')),
+        hour == 22 ? findsOneWidget : findsNothing,
+      );
+      expect(service.ensureSessionCalls, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('pickup needs contact only and shows store collection address', (
     tester,
   ) async {
@@ -574,13 +613,8 @@ void main() {
 
     expect(find.byKey(const Key('direct_order_closed_state')), findsOneWidget);
     expect(find.text('🙏'), findsOneWidget);
-    expect(find.text('현재 배달·포장 주문을 잠시 쉬고 있습니다'), findsOneWidget);
-    expect(
-      find.text(
-        '현재 주문량이 많아 새 배달·포장 주문을 받기 어렵습니다. 불편을 드려 정말 죄송합니다. 잠시 후 다시 주문해 주세요.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text(const DirectOrderCopy('ko').pausedTitle), findsOneWidget);
+    expect(find.textContaining('11:00–22:00 (베트남 시간)'), findsOneWidget);
     expect(find.text('즉석 떡볶이'), findsNothing);
     expect(service.ensureSessionCalls, 1);
     expect(tester.takeException(), isNull);

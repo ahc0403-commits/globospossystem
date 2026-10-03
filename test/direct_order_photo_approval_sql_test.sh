@@ -57,6 +57,23 @@ for match in re.finditer(r"SELECT pg_temp\.direct_pickup_patch\('public\.direct_
 if latest.count('SELECT pg_temp.direct_pickup_patch(')!=7:
  raise RuntimeError('Current-main pickup approval anchors changed')
 (tmp/'current-main-approval.sql').write_text(latest)
+# The operating-hours regression reuses this disposable real-payment database.
+hours=''
+for file,name in [
+ (base,'direct_order_validate_session'),
+ (base,'direct_order_public_storefront'),
+ (base,'direct_order_admin_upsert_storefront'),
+ ('20260907130000_direct_delivery_manual_addresses.sql','direct_order_public_submit'),
+ ('20260907150000_cashier_direct_delivery_availability.sql','direct_order_staff_get_availability'),
+ ('20260907150000_cashier_direct_delivery_availability.sql','direct_order_staff_set_paused'),
+ ('20260811170000_pos_paperless_receipts.sql','get_store_fulfillment_mode'),
+ ('20260824060000_direct_delivery_kds_routing.sql','capture_order_item_fulfillment_mode'),
+ ('20260812151000_floor_direct_beverage_runtime.sql','emergency_sync_order_item'),
+ ('20260810170000_emergency_digital_fulfillment.sql','emergency_floor_label'),
+ ('20260815170000_kds_card_menu_sync.sql','get_emergency_station_snapshot'),
+ ('20260810170000_emergency_digital_fulfillment.sql','emergency_record_progress'),
+]: hours+=function(file,name)
+(tmp/'hours-functions.sql').write_text(hours)
 PY
 docker run --detach --rm --name "$PHOTO_CONTAINER" \
  --env POSTGRES_HOST_AUTH_METHOD=trust --env POSTGRES_DB=codex_direct_photo postgres:15 >/dev/null
@@ -113,3 +130,12 @@ printf 'DIRECT_ORDER_PHOTO_APPROVAL_SQL_TEST=PASS\n'
 printf 'DIRECT_ORDER_PHOTO_APPROVAL_CONCURRENCY=PASS\n'
 printf 'DIRECT_ORDER_PHOTO_APPROVAL_ROLLBACK=PASS\n'
 printf 'DIRECT_ORDER_PHOTO_APPROVAL_OPERATIONAL_SMOKE=PASS\n'
+if [[ "${DELIVERY_HOURS_TEST:-0}" == 1 ]]; then
+  run_sql "$PHOTO_ROOT/test/fixtures/delivery_hours_and_kds_fee_setup.sql" >/dev/null
+  run_sql "$PHOTO_TMP/hours-functions.sql" >/dev/null
+  run_sql "$PHOTO_ROOT/supabase/tests/fixtures/direct_delivery_test_clock.sql" >/dev/null
+  run_sql "$PHOTO_ROOT/test/sql/delivery_hours_and_kds_fee_before.sql"
+  run_sql "$PHOTO_ROOT/supabase/migrations/20261003093000_delivery_hours_and_kds_fee_exclusion.sql" >/dev/null
+  run_sql "$PHOTO_ROOT/supabase/tests/delivery_hours_and_kds_fee_exclusion_test.sql"
+  printf 'DELIVERY_HOURS_AND_KDS_FEE_SQL_TEST=PASS\n'
+fi

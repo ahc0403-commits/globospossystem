@@ -2780,7 +2780,8 @@ class _CashierDeliveryAvailabilityButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final copy = DirectOrderCopy(Localizations.localeOf(context).languageCode);
     final isWaiting = loading || saving;
-    final isConfigured = availability?.canChange == true;
+    final isConfigured =
+        availability?.configured == true && availability?.enabled == true;
     final isPaused = availability?.paused == true;
     final label = isWaiting && availability == null
         ? copy.loading
@@ -2789,7 +2790,9 @@ class _CashierDeliveryAvailabilityButton extends StatelessWidget {
         : !isConfigured
         ? copy.deliveryNotConfigured
         : isPaused
-        ? copy.deliveryClosed
+        ? availability?.hoursOpen == false
+              ? '${copy.deliveryClosed} · 11:00–22:00'
+              : copy.deliveryClosed
         : copy.deliveryOpen;
     final color = failed || !isConfigured
         ? PosColors.textMuted

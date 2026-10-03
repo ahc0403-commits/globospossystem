@@ -18,6 +18,7 @@ import 'direct_order_arrival_alert_sound.dart';
 import 'direct_order_copy.dart';
 import 'direct_order_localization.dart';
 import 'direct_order_dialog.dart';
+import 'direct_order_hours.dart';
 import 'direct_order_models.dart';
 import 'direct_order_service.dart';
 
@@ -31,6 +32,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
     this.statusSafetyRefreshInterval = const Duration(seconds: 15),
     this.statusSafetyRefreshJitter = const Duration(seconds: 3),
     this.pollRandom,
+    this.now = DateTime.now,
   });
 
   final String slug;
@@ -38,6 +40,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
   final Duration statusSafetyRefreshInterval;
   final Duration statusSafetyRefreshJitter;
   final math.Random? pollRandom;
+  final DateTime Function() now;
 
   @override
   State<DirectOrderStorefrontScreen> createState() =>
@@ -72,6 +75,7 @@ class _DirectOrderStorefrontScreenState
       DirectOrderFulfillmentType.delivery;
   bool get _isPickup => _fulfillmentType == DirectOrderFulfillmentType.pickup;
   Timer? _statusTimer;
+  Timer? _hoursTimer;
   bool _loading = true;
   bool _submitting = false;
   bool _rememberAddress = false;
@@ -102,6 +106,7 @@ class _DirectOrderStorefrontScreenState
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
+    _hoursTimer?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -114,11 +119,42 @@ class _DirectOrderStorefrontScreenState
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _isForeground = state == AppLifecycleState.resumed;
-    if (_isForeground && _session != null) {
-      unawaited(_refreshStatusAfterResume());
+    if (_isForeground) {
+      unawaited(_refreshStorefrontAvailability());
+      if (_session != null) unawaited(_refreshStatusAfterResume());
     } else {
       _statusTimer?.cancel();
       _statusTimer = null;
+      _hoursTimer?.cancel();
+      _hoursTimer = null;
+    }
+  }
+
+  void _scheduleHoursRefresh({bool retry = false}) {
+    _hoursTimer?.cancel();
+    if (!_isForeground) return;
+    final now = widget.now();
+    _hoursTimer = Timer(
+      retry
+          ? const Duration(seconds: 30)
+          : directOrderNextHoursChange(now).difference(now) +
+                const Duration(seconds: 1),
+      _refreshStorefrontAvailability,
+    );
+  }
+
+  Future<void> _refreshStorefrontAvailability() async {
+    final generation = _loadGeneration;
+    try {
+      final storefront = await widget.service.fetchStorefront(widget.slug);
+      if (!mounted || generation != _loadGeneration || !_isForeground) return;
+      setState(() {
+        _storefront = storefront;
+        _pausedByServer = false;
+      });
+      _scheduleHoursRefresh();
+    } catch (_) {
+      if (mounted && _isForeground) _scheduleHoursRefresh(retry: true);
     }
   }
 
@@ -187,6 +223,7 @@ class _DirectOrderStorefrontScreenState
       if (saved != null) _populateAddress(saved);
       if (status != null) unawaited(_notifyForStatus(status));
       if (orders.any((order) => !order.isTerminal)) _startStatusPolling();
+      _scheduleHoursRefresh();
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
@@ -295,8 +332,10 @@ class _DirectOrderStorefrontScreenState
       _startStatusPolling();
     } catch (error) {
       if (error is DirectOrderException &&
-          error.code == 'DIRECT_ORDER_STOREFRONT_PAUSED') {
+          (error.code == 'DIRECT_ORDER_STOREFRONT_PAUSED' ||
+              error.code == 'DIRECT_ORDER_OUTSIDE_HOURS')) {
         if (mounted) setState(() => _pausedByServer = true);
+        _scheduleHoursRefresh();
       } else {
         _showError(error);
       }

@@ -1916,6 +1916,30 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  testWidgets('scheduled closure cannot be reopened by cashier', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(
+      tester,
+      deliveryAvailability: const DirectOrderAvailability(
+        configured: true,
+        enabled: true,
+        paused: true,
+        hoursOpen: false,
+        updatedAt: null,
+      ),
+    );
+    expect(
+      find.text('Giao hàng / Mang đi CLOSED · 11:00–22:00'),
+      findsOneWidget,
+    );
+    final button = tester.widget<FilledButton>(
+      find.byKey(const Key('cashier_delivery_availability_toggle')),
+    );
+    expect(button.onPressed, isNull);
+    expect(harness.directOrderStaffService.setPausedValues, isEmpty);
+  });
+
   testWidgets('disabled storefront cannot be opened by cashier', (
     tester,
   ) async {
