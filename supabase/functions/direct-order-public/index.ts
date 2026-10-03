@@ -554,6 +554,9 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_PAYMENT_PROOF_REQUIRED: conflict(
     "DIRECT_ORDER_PAYMENT_PROOF_REQUIRED",
   ),
+  DIRECT_ORDER_PAYMENT_REVIEW_CHANGED: conflict(
+    "DIRECT_ORDER_PAYMENT_REVIEW_CHANGED",
+  ),
   DIRECT_ORDER_VERIFIED_PAYMENT_REQUIRED: conflict(
     "DIRECT_ORDER_VERIFIED_PAYMENT_REQUIRED",
   ),
@@ -610,6 +613,8 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_PILOT_SAFETY_VERIFY_FAILED: internalFailure,
   DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_FAILED: internalFailure,
   DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_VERIFY_FAILED: internalFailure,
+  DIRECT_ORDER_PHOTO_APPROVAL_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_PHOTO_APPROVAL_VERIFICATION_FAILED: internalFailure,
 });
 
 export function normalizeRpcError(message: string): SafeHttpError {

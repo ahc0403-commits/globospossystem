@@ -23,7 +23,7 @@ actual changes write one old/new audit, while a same-value replay is idempotent.
 |---|---|---|---|
 | `awaiting_quote` | successful public submit | cashier quote -> `quoted`; cashier reject -> `rejected`; customer cancel -> `cancelled`; chat | no legacy order/payment/ticket exists |
 | `quoted` | first or replacement cashier quote | re-quote stays `quoted` with next version; proof commit -> `awaiting_payment_review`; reject/cancel; chat | only one active quote; old active quote becomes superseded |
-| `awaiting_payment_review` | structurally validated proof commit or verified SePay link | cashier requests proof replacement while state remains unchanged; replacement proof resolves the request; verified cashier approve -> `approved`; cashier reject -> `rejected`; chat | approval is blocked while a proof replacement request is open; customer cancel and re-quote forbidden; an image alone cannot authorize approval and SePay never auto-approves |
+| `awaiting_payment_review` | structurally validated proof commit or verified SePay link | cashier requests proof replacement while state remains unchanged; replacement proof resolves the request; cashier photo confirmation -> `approved`; cashier reject -> `rejected`; chat | approval is blocked while a proof replacement request is open; customer cancel and re-quote forbidden; photo upload alone never approves; an authenticated cashier reviews the photo and approves without requiring SePay |
 | `approved` | successful atomic manual approval | chat; Grab dispatch and direct kitchen lifecycle | request remains approved while ticket progresses; approve replay returns same financial IDs |
 | `rejected` | cashier rejection from any pre-approval state | no state transition | chat/cancel/quote/approve forbidden |
 | `cancelled` | customer cancel from awaiting_quote/quoted | no state transition | chat/quote/approve/reject forbidden |
@@ -84,18 +84,21 @@ pending -> preparing -> ready -> dispatched -> completed
 Approval is the only direct-to-legacy write path:
 
 1. Validate actor/input, acquire request-specific transaction advisory lock.
-2. Return existing financial identity immediately on replay.
-3. Row-lock request and locked quote; validate state, cutoff, enabled storefront,
-   fulfillment mode, emergency/promotion, quote expiry, unchanged menu, and a
-   linked incoming SePay transaction with the exact store and final amount. An
-   uploaded image is supporting evidence only. The new-intake pause value is
-   not an existing-request approval precondition.
+2. Return existing financial identity on replay. The photo endpoint also checks
+   the approved quote, amount and photo ID against the original approval audit.
+3. Row-lock request and locked quote; validate state, cutoff, storefront,
+   unchanged menu, exact amount and pending proof replacement. The staff photo
+   approval endpoint requires the displayed quote and latest customer photo to
+   match the locked quote. Its browsing TTL may have elapsed. Staff review is
+   sufficient without a bank integration; the optional legacy verified-transfer
+   endpoint remains available to its existing callers.
 4. Insert one delivery order, menu lines, attributable delivery-fee line, one
    direct ticket and its item snapshots.
 5. Call the unchanged `process_payment` exactly once.
 6. Reconcile final order/payment totals.
 7. Insert the unique direct financial bridge, set request approved, and write
-   one fixed system message and audit record.
+   one fixed system message and audit record, including `review_method` and
+   `proof_message_id` for customer photo review.
 8. Enqueue the first customer Bill once. Missing destinations or print failures
    remain visible and retryable without rolling back the completed payment.
 
