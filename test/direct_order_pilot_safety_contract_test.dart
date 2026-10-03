@@ -30,7 +30,8 @@ void main() {
   test('SQL contract exercises the reported pilot failure cases', () {
     final sql = File(sqlTestPath).readAsStringSync();
     for (final scenario in [
-      'image-only approval was not blocked',
+      'photo submission auto-approved',
+      'cashier photo approval failed without SePay',
       'transaction reuse was not blocked',
       'customer bill was not automatically queued',
       'customer bill retry was not idempotent',

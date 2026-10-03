@@ -201,6 +201,11 @@ class DirectOrderCopy {
       'Please review the transfer proof first.',
     ),
     'DIRECT_ORDER_VERIFIED_PAYMENT_REQUIRED' => verifiedPaymentRequired,
+    'DIRECT_ORDER_PAYMENT_REVIEW_CHANGED' => _pick(
+      '결제 사진이나 견적이 변경되었습니다. 다시 확인해 주세요.',
+      'Ảnh chuyển khoản hoặc báo giá đã thay đổi. Vui lòng kiểm tra lại.',
+      'The payment photo or quote changed. Please review it again.',
+    ),
     'DIRECT_ORDER_PROOF_REVIEW_ALREADY_OPEN' => _pick(
       '이미 이미지 재전송을 요청했습니다.',
       'Đã có yêu cầu gửi lại ảnh.',
@@ -632,14 +637,21 @@ class DirectOrderCopy {
     'Chỉ có thể duyệt sau khi liên kết giao dịch thực tế với đơn này.',
     'Link a verified bank transfer to this order before approval.',
   );
+  String get reviewPaymentAmount =>
+      _pick('입금액 확인', 'Kiểm tra số tiền', 'Review payment amount');
+  String get photoAwaitingSubmission => _pick(
+    '고객의 결제 사진을 기다리고 있습니다.',
+    'Đang chờ ảnh chuyển khoản của khách.',
+    'Waiting for the customer’s payment photo.',
+  );
   String get confirmedAmount =>
       _pick('확인한 입금액', 'Số tiền đã xác nhận', 'Confirmed transfer amount');
   String get bankReference =>
       _pick('은행 거래번호·메모', 'Mã giao dịch ngân hàng', 'Bank reference');
   String get manualApprovalCheck => _pick(
-    '시스템이 확인한 실제 입금과 주문 금액이 일치합니다. 승인 시 주문이 주방으로 전달됩니다.',
-    'Giao dịch thực tế do hệ thống xác nhận khớp với đơn. Khi duyệt, đơn sẽ được gửi vào bếp.',
-    'The verified bank transfer matches this order. Approval sends the order to the kitchen.',
+    '고객이 보낸 사진의 금액과 주문번호를 확인해 주세요. 승인하면 주방으로 전달됩니다.',
+    'Kiểm tra số tiền và mã đơn trên ảnh khách gửi. Duyệt để gửi đơn vào bếp.',
+    'Check the amount and order code in the customer’s photo. Approval sends the order to the kitchen.',
   );
   String get approveAndSendKitchen => _pick(
     '입금 승인·주방 전달',
@@ -860,9 +872,9 @@ class DirectOrderCopy {
   String get quoteBreakdown =>
       _pick('최종 견적', 'Chi tiết báo giá', 'Final quote');
   String get supportingEvidence => _pick(
-    '입금 이미지는 참고 자료입니다. 실제 SePay 입금 거래를 연결해야 승인할 수 있습니다.',
-    'Ảnh chuyển khoản chỉ để tham khảo. Phải liên kết giao dịch SePay thực tế mới có thể duyệt.',
-    'The image is supporting evidence. A verified SePay transfer must be linked before approval.',
+    '고객이 보낸 결제 사진을 확인한 후 승인해 주세요.',
+    'Kiểm tra ảnh chuyển khoản khách gửi trước khi duyệt.',
+    'Review the customer’s payment photo before approving.',
   );
   String get linked => _pick('연결됨', 'Đã liên kết', 'Linked');
   String get link => _pick('연결', 'Liên kết', 'Link');

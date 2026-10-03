@@ -355,6 +355,7 @@ INSERT INTO _expected_direct_function_access VALUES
 ('public.direct_order_staff_link_sepay(uuid,uuid,uuid)',true,true),
 ('public.direct_order_staff_verified_payment_evidence(uuid,uuid)',true,true),
 ('public.direct_order_approve_payment(uuid,uuid,numeric,text)',true,true),
+('public.direct_order_approve_photo_payment(uuid,uuid,numeric,uuid,uuid)',true,true),
 ('public.direct_order_approve_verified_payment(uuid,uuid)',true,true),
 ('public.direct_order_customer_receipt_status(uuid,uuid)',true,true),
 ('public.enqueue_direct_order_customer_receipt(uuid,uuid,boolean)',true,true),

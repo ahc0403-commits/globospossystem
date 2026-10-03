@@ -264,11 +264,20 @@ class DirectOrderStaffService {
   Future<Map<String, dynamic>> approve({
     required String storeId,
     required String requestId,
+    required num confirmedAmount,
+    required String quoteId,
+    required String proofMessageId,
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_approve_verified_payment',
-        params: {'p_store_id': storeId, 'p_request_id': requestId},
+        'direct_order_approve_photo_payment',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_confirmed_amount': confirmedAmount,
+          'p_quote_id': quoteId,
+          'p_proof_message_id': proofMessageId,
+        },
       ),
     );
   }

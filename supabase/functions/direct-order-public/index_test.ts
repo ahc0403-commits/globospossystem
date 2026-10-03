@@ -366,7 +366,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    86,
+    89,
     "registered SQL error count",
   );
   assertEquals(
@@ -384,6 +384,13 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
     "conflict public code",
   );
   const forbidden = normalizeRpcError("DIRECT_ORDER_FORBIDDEN");
+  const changedPhoto = normalizeRpcError("DIRECT_ORDER_PAYMENT_REVIEW_CHANGED");
+  assertEquals(changedPhoto.status, 409, "changed payment photo status");
+  assertEquals(
+    changedPhoto.code,
+    "DIRECT_ORDER_PAYMENT_REVIEW_CHANGED",
+    "changed payment photo code",
+  );
   assertEquals(forbidden.status, 403, "forbidden status");
   assertEquals(forbidden.code, "REQUEST_FORBIDDEN", "forbidden public code");
   const proofReview = normalizeRpcError(
