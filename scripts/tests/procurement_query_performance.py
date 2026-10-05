@@ -47,16 +47,16 @@ INSERT INTO public.inventory_purchase_orders(id,purchase_order_no,restaurant_id,
 INSERT INTO public.inventory_purchase_order_lines(id,purchase_order_id,product_id,ordered_quantity_base,ordered_quantity_unit,order_unit,unit_price,order_unit_quantity_base_snapshot,tax_rate_snapshot)
  SELECT test_uuid(600000+n),test_uuid(500000+n),test_uuid(301),1,1,'ea',100,1,0 FROM generate_series(1,{count}) n;
 INSERT INTO public.inventory_receipts(id,purchase_order_id,restaurant_id,supplier_id,status)
- SELECT test_uuid(700000+n),test_uuid(500000+n),test_uuid(101),test_uuid(490001+(n%20)),'confirmed' FROM generate_series(1,{count}) n;
+ SELECT test_uuid(700000+n),test_uuid(500000+n),test_uuid(101),test_uuid(490001+(n%20)),'draft' FROM generate_series(1,{count}) n;
 INSERT INTO public.inventory_receipt_lines(id,receipt_id,purchase_order_line_id,product_id,received_quantity_base,accepted_quantity_base,actual_unit_price)
  SELECT test_uuid(800000+n),test_uuid(700000+n),test_uuid(600000+n),test_uuid(301),1,1,100 FROM generate_series(1,{count}) n;
+UPDATE public.inventory_receipts SET status='confirmed' WHERE id IN (SELECT test_uuid(700000+n) FROM generate_series(1,{count}) n);
 ANALYZE public.inventory_purchase_orders;ANALYZE public.inventory_purchase_order_lines;ANALYZE public.inventory_receipts;ANALYZE public.inventory_receipt_lines;
 """
     # Each query sees an identical rolled-back fixture. Includes internal plans, not only the RPC function boundary.
     for name,query in [('supplier',supplier_query),('snapshot_50',snapshot_query),('page_20',page_query)]:
         plan=json.loads(sql('BEGIN;'+seed+f'EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) {query};ROLLBACK;'))[0]
-        if True:
-            assert not any(p.get('Subplan Name','').startswith('SubPlan') for p in walk(plan['Plan'])),f'{name}: no correlated relation-wide SubPlan'
+        assert not any(p.get('Subplan Name','').startswith('SubPlan') for p in walk(plan['Plan'])),f'{name}: no correlated relation-wide SubPlan'
         plan_path=pathlib.Path('/tmp/procurement-explain-20261005');plan_path.mkdir(exist_ok=True)
         (plan_path/f'{name}_{count}.json').write_text(json.dumps(plan,indent=2))
         # Ten DB execution samples in the same fixture; network timing is not represented.
