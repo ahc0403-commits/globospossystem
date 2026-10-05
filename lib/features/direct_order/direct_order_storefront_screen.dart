@@ -53,6 +53,7 @@ class _DirectOrderStorefrontScreenState
   final String _submitDraftId = const Uuid().v4();
   final _cart = <String, int>{};
   final _itemNotes = <String, String>{};
+  final _dinerController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
@@ -107,6 +108,7 @@ class _DirectOrderStorefrontScreenState
     WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
     _hoursTimer?.cancel();
+    _dinerController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -160,7 +162,7 @@ class _DirectOrderStorefrontScreenState
 
   Future<void> _refreshStatusAfterResume() async {
     await _refreshStatus(silent: true);
-    if (mounted && _orders.any((order) => !order.isTerminal)) {
+    if (mounted && _hasPendingUpdates) {
       _startStatusPolling();
     }
   }
@@ -173,11 +175,20 @@ class _DirectOrderStorefrontScreenState
       _pausedByServer = false;
     });
     try {
-      final storefront = await widget.service.fetchStorefront(widget.slug);
-      final session = await widget.service.ensureSession(
-        slug: widget.slug,
-        locale: _languageCode,
-      );
+      final cached = await widget.service.loadCachedSession(widget.slug);
+      DirectOrderStorefront storefront;
+      try {
+        storefront = await widget.service.fetchStorefront(widget.slug);
+      } catch (_) {
+        if (cached == null) rethrow;
+        storefront = await widget.service.resumeStorefront(cached);
+      }
+      final session =
+          cached ??
+          await widget.service.ensureSession(
+            slug: widget.slug,
+            locale: _languageCode,
+          );
       final values = await Future.wait<Object?>([
         widget.service.loadAddress(widget.slug),
         widget.service.loadActiveRequestId(widget.slug),
@@ -222,7 +233,7 @@ class _DirectOrderStorefrontScreenState
       });
       if (saved != null) _populateAddress(saved);
       if (status != null) unawaited(_notifyForStatus(status));
-      if (orders.any((order) => !order.isTerminal)) _startStatusPolling();
+      if (_hasPendingUpdates) _startStatusPolling();
       _scheduleHoursRefresh();
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
@@ -243,7 +254,32 @@ class _DirectOrderStorefrontScreenState
     _rememberAddress = true;
   }
 
-  void _selectView(_CustomerView view) => setState(() => _view = view);
+  Future<void> _selectView(_CustomerView view) async {
+    if (view != _CustomerView.status) {
+      try {
+        final storefront = await widget.service.fetchStorefront(widget.slug);
+        if (!mounted) return;
+        setState(() {
+          _storefront = storefront;
+          _pausedByServer = false;
+        });
+      } catch (error) {
+        if (!mounted) return;
+        if (_status == null) {
+          _showError(error);
+          return;
+        }
+        setState(() => _pausedByServer = true);
+      }
+    }
+    if (mounted) setState(() => _view = view);
+  }
+
+  bool get _hasPendingUpdates =>
+      _orders.any((order) => !order.isTerminal) ||
+      (_status?.delivery?.offer?.status == 'accepted' &&
+          (_status?.delivery?.offer?.refundDue ?? 0) > 0 &&
+          _status?.delivery?.offer?.refundRecorded == false);
 
   void _changeQuantity(String itemId, int delta) {
     setState(() {
@@ -291,6 +327,11 @@ class _DirectOrderStorefrontScreenState
       setState(() => _view = _CustomerView.menu);
       return;
     }
+    final dinerCount = int.tryParse(_dinerController.text.trim());
+    if (dinerCount == null || dinerCount < 1 || dinerCount > 100) {
+      _snack(_copy.errorMessage('DIRECT_ORDER_DINER_COUNT_INVALID'));
+      return;
+    }
     final address = _composeAddress();
     if (address == null) {
       _snack(_isPickup ? _copy.requiredPickupFields : _copy.requiredFields);
@@ -316,6 +357,7 @@ class _DirectOrderStorefrontScreenState
         rememberAddress: _rememberAddress && !_isPickup,
         fulfillmentType: _fulfillmentType,
         customerNote: _noteController.text.trim(),
+        dinerCount: dinerCount,
       );
       final status = await widget.service.fetchStatus(
         session: session,
@@ -347,7 +389,7 @@ class _DirectOrderStorefrontScreenState
   void _startStatusPolling() {
     _statusTimer?.cancel();
     _statusTimer = null;
-    if (!_isForeground || !_orders.any((order) => !order.isTerminal)) return;
+    if (!_isForeground || !_hasPendingUpdates) return;
     _statusTimer = Timer(
       jitteredPollDelay(
         widget.statusSafetyRefreshInterval,
@@ -357,7 +399,7 @@ class _DirectOrderStorefrontScreenState
       () async {
         _statusTimer = null;
         await _refreshStatus(silent: true);
-        if (mounted && _orders.any((order) => !order.isTerminal)) {
+        if (mounted && _hasPendingUpdates) {
           _startStatusPolling();
         }
       },
@@ -407,7 +449,7 @@ class _DirectOrderStorefrontScreenState
         _orders = orders;
         if (status != null) _status = status;
       });
-      if (!orders.any((order) => !order.isTerminal)) {
+      if (!orders.any((order) => !order.isTerminal) && !_hasPendingUpdates) {
         _statusTimer?.cancel();
         _statusTimer = null;
       }
@@ -473,7 +515,7 @@ class _DirectOrderStorefrontScreenState
         _view = _CustomerView.status;
         _loading = false;
       });
-      if (_orders.any((order) => !order.isTerminal)) _startStatusPolling();
+      if (_hasPendingUpdates) _startStatusPolling();
     } catch (error) {
       if (!mounted || revision != _statusMutationRevision) return;
       setState(() => _loading = false);
@@ -666,6 +708,7 @@ class _DirectOrderStorefrontScreenState
           fulfillmentVersion: latest.fulfillmentVersion,
           completedAt: latest.completedAt,
           proofReview: latest.proofReview,
+          delivery: latest.delivery,
         );
       });
     } catch (error) {
@@ -710,6 +753,8 @@ class _DirectOrderStorefrontScreenState
   }
 
   Future<void> _startNewOrder() async {
+    await _selectView(_CustomerView.menu);
+    if (!mounted || (_storefront?.paused ?? true) || _pausedByServer) return;
     await widget.service.clearActiveRequest(widget.slug);
     if (!mounted) return;
     _statusMutationRevision += 1;
@@ -718,11 +763,12 @@ class _DirectOrderStorefrontScreenState
       _cart.clear();
       _itemNotes.clear();
       _noteController.clear();
+      _dinerController.clear();
       _messageController.clear();
       _view = _CustomerView.menu;
       if (_savedAddress != null) _populateAddress(_savedAddress!);
     });
-    if (_orders.any((order) => !order.isTerminal)) _startStatusPolling();
+    if (_hasPendingUpdates) _startStatusPolling();
   }
 
   Future<void> _clearSavedAddress() async {
@@ -813,8 +859,22 @@ class _DirectOrderStorefrontScreenState
         onAction: _load,
       );
     }
-    if ((_storefront!.paused || _pausedByServer) && _status == null) {
-      return _DeliveryClosedMessage(copy: _copy, onCheckAgain: _load);
+    if ((_storefront!.paused || _pausedByServer) &&
+        _view != _CustomerView.status) {
+      return Column(
+        children: [
+          Expanded(
+            child: _DeliveryClosedMessage(copy: _copy, onCheckAgain: _load),
+          ),
+          if (_status != null)
+            SafeArea(
+              child: TextButton(
+                onPressed: () => _selectView(_CustomerView.status),
+                child: Text(_copy.orderStatus),
+              ),
+            ),
+        ],
+      );
     }
     final content = switch (_view) {
       _CustomerView.menu => _buildMenu(),
@@ -1049,6 +1109,40 @@ class _DirectOrderStorefrontScreenState
           ),
           const SizedBox(height: 12),
         ],
+        TextField(
+          key: const Key('direct_diner_count_input'),
+          controller: _dinerController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          maxLength: 3,
+          decoration: InputDecoration(
+            labelText: _copy.dinerQuestion,
+            helperText: _copy.dinerHelp,
+            helperMaxLines: 3,
+            counterText: '',
+            prefixIcon: const Icon(Icons.groups_outlined),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: () {
+                    final n = int.tryParse(_dinerController.text) ?? 1;
+                    _dinerController.text = '${(n - 1).clamp(1, 100)}';
+                  },
+                  icon: const Icon(Icons.remove),
+                ),
+                IconButton(
+                  onPressed: () {
+                    final n = int.tryParse(_dinerController.text) ?? 0;
+                    _dinerController.text = '${(n + 1).clamp(1, 100)}';
+                  },
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         if (!_isPickup) ...[
           TextField(
             key: const Key('direct_address_input'),
@@ -1159,6 +1253,10 @@ class _DirectOrderStorefrontScreenState
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           _statusHero(status),
+          if (status.delivery?.offer?.isPending == true) ...[
+            const SizedBox(height: 12),
+            _pickupOfferCard(status),
+          ],
           if (!{'rejected', 'cancelled', 'expired'}.contains(status.state)) ...[
             const SizedBox(height: 12),
             _orderProgressCard(status),
@@ -1178,6 +1276,93 @@ class _DirectOrderStorefrontScreenState
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Future<void> _decidePickup(DirectOrderStatus status, bool accept) async {
+    final session = _session;
+    final offer = status.delivery?.offer;
+    if (session == null || offer == null || _submitting) return;
+    var alreadyPaid =
+        status.state == 'awaiting_payment_review' || status.state == 'approved';
+    if (accept && status.state == 'quoted') {
+      final paid = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          key: const Key('direct_pickup_payment_status_dialog'),
+          title: Text(_copy.pickup),
+          content: Text(_copy.pickupQuestion),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(_copy.notTransferred),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(_copy.alreadyTransferred),
+            ),
+          ],
+        ),
+      );
+      if (paid == null) return;
+      alreadyPaid = paid;
+    }
+    if (!mounted) return;
+    setState(() => _submitting = true);
+    try {
+      await widget.service.decidePickup(
+        session: session,
+        requestId: status.requestId,
+        offerId: offer.id,
+        accept: accept,
+        alreadyPaid: alreadyPaid,
+      );
+      await _refreshStatus();
+      if (mounted) _startStatusPolling();
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Widget _pickupOfferCard(DirectOrderStatus status) {
+    final delivery = status.delivery!;
+    return Card(
+      key: const Key('direct_pickup_offer'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _copy.pickupQuestion,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(delivery.offer!.reason),
+            Text(delivery.storeName),
+            Text(delivery.storeAddress),
+            if (delivery.offer!.refundDue > 0)
+              Text(
+                '${_copy.refundPending}: ${_money.format(delivery.offer!.refundDue)}',
+              ),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: const Key('direct_accept_pickup'),
+              onPressed: _submitting ? null : () => _decidePickup(status, true),
+              child: Text(_copy.acceptPickup),
+            ),
+            TextButton(
+              key: const Key('direct_decline_pickup'),
+              onPressed: _submitting
+                  ? null
+                  : () => _decidePickup(status, false),
+              child: Text(_copy.keepDelivery),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1202,7 +1387,9 @@ class _DirectOrderStorefrontScreenState
       'completed' => (
         Icons.check_circle_outline_rounded,
         PosColors.success,
-        _copy.completed,
+        status.delivery?.isPickup == true
+            ? _copy.pickupCompleted
+            : _copy.completed,
       ),
       _ => switch (status.state) {
         'awaiting_quote' => (
@@ -1270,6 +1457,31 @@ class _DirectOrderStorefrontScreenState
                 context,
               ).textTheme.labelLarge?.copyWith(color: tone),
             ),
+            if (status.delivery != null) ...[
+              const SizedBox(height: 8),
+              Text(_copy.packingCount(status.delivery!.dinerCount)),
+              if (status.delivery!.isPickup) ...[
+                Text(_copy.pickup),
+                Text(status.delivery!.storeName),
+                Text(status.delivery!.storeAddress),
+              ],
+              if (status.delivery!.provider != null)
+                Text(
+                  status.delivery!.providerName ??
+                      status.delivery!.provider!.toUpperCase(),
+                ),
+              if (status.delivery!.driverContact != null)
+                Text(status.delivery!.driverContact!),
+              if (status.delivery!.offer?.status == 'accepted' &&
+                  (status.delivery!.offer?.refundDue ?? 0) > 0)
+                Text(
+                  '${status.delivery!.offer!.refundRecorded ? _copy.refundRecorded : _copy.refundPending}: ${_money.format(status.delivery!.offer!.refundDue)}',
+                ),
+              if (status.delivery!.paidTotal != null)
+                Text(
+                  '${_copy.netReceived}: ${_money.format(status.delivery!.paidTotal! - status.delivery!.refundedTotal)}',
+                ),
+            ],
             if (fulfillment != null) ...[
               const SizedBox(height: 10),
               Chip(
@@ -1286,11 +1498,14 @@ class _DirectOrderStorefrontScreenState
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
-            if (status.grabTrackingUrl != null) ...[
+            if ((status.delivery?.trackingUrl ?? status.grabTrackingUrl) !=
+                null) ...[
               const SizedBox(height: 10),
               FilledButton.icon(
                 onPressed: () async {
-                  final uri = Uri.tryParse(status.grabTrackingUrl!);
+                  final uri = Uri.tryParse(
+                    status.delivery?.trackingUrl ?? status.grabTrackingUrl!,
+                  );
                   if (uri != null) {
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
                   }
@@ -1325,7 +1540,7 @@ class _DirectOrderStorefrontScreenState
 
   Widget _orderProgressCard(DirectOrderStatus status) {
     final currentStep = switch (status.fulfillmentStatus) {
-      'completed' => 4,
+      'completed' => status.delivery?.isPickup == true ? 3 : 4,
       'dispatched' => 3,
       'ready' when status.isPickup => 3,
       'preparing' || 'ready' => 2,
@@ -1336,12 +1551,8 @@ class _DirectOrderStorefrontScreenState
       (Icons.receipt_long_outlined, _copy.progressOrderConfirmed),
       (Icons.account_balance_wallet_outlined, _copy.progressPaymentConfirmed),
       (Icons.restaurant_outlined, _copy.progressPreparing),
-      (
-        status.isPickup
-            ? Icons.takeout_dining_outlined
-            : Icons.delivery_dining_outlined,
-        status.isPickup ? _copy.pickupReady : _copy.progressGrabHandoff,
-      ),
+      if (!status.isPickup)
+        (Icons.delivery_dining_outlined, _copy.progressGrabHandoff),
       (
         Icons.check_circle_outline_rounded,
         status.isPickup ? _copy.pickupComplete : _copy.progressCompleted,

@@ -47,10 +47,11 @@ void main() {
         itemNotes: {},
         address: address,
         rememberAddress: false,
+        dinerCount: 3,
         fulfillmentType: DirectOrderFulfillmentType.pickup,
       );
       final payload = sent!['payload'] as Map;
-      expect(sent!['action'], 'submit_v2');
+      expect(sent!['action'], 'submit_v3');
       expect(payload['fulfillment_type'], 'pickup');
       expect(payload['address'], {
         'customer_name': 'Customer',
@@ -96,6 +97,7 @@ void main() {
             itemNotes: {},
             address: address,
             rememberAddress: false,
+            dinerCount: 3,
             fulfillmentType: type,
           );
       await expectLater(

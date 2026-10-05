@@ -34,6 +34,9 @@ export const directOrderActionRegistry = Object.freeze(
     create_session: { actor: "public", rateLimit: 60 },
     submit: { actor: "public", rateLimit: 60 },
     submit_v2: { actor: "public", rateLimit: 60 },
+    submit_v3: { actor: "public", rateLimit: 60 },
+    resume_storefront: { actor: "public", rateLimit: 60 },
+    decide_pickup: { actor: "public", rateLimit: 60 },
     status: { actor: "public", rateLimit: 60 },
     status_v2: { actor: "public", rateLimit: 60 },
     status_v3: { actor: "public", rateLimit: 60 },
@@ -622,9 +625,41 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_PILOT_SAFETY_VERIFY_FAILED: internalFailure,
   DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_FAILED: internalFailure,
   DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_VERIFY_FAILED: internalFailure,
+  DIRECT_ORDER_DINER_COUNT_INVALID: invalidRequest(
+    "DIRECT_ORDER_DINER_COUNT_INVALID",
+  ),
+  DIRECT_ORDER_PICKUP_INPUT_INVALID: invalidRequest(
+    "DIRECT_ORDER_PICKUP_INPUT_INVALID",
+  ),
+  DIRECT_ORDER_FULFILLMENT_CHANGED: conflict(
+    "DIRECT_ORDER_FULFILLMENT_CHANGED",
+  ),
+  DIRECT_ORDER_PICKUP_NOT_ALLOWED: conflict("DIRECT_ORDER_PICKUP_NOT_ALLOWED"),
+  DIRECT_ORDER_REFUND_NOT_DUE: conflict("DIRECT_ORDER_REFUND_NOT_DUE"),
+  DIRECT_ORDER_REFUND_RECONCILIATION_REQUIRED: conflict(
+    "DIRECT_ORDER_REFUND_RECONCILIATION_REQUIRED",
+  ),
+  DIRECT_ORDER_PICKUP_OFFER_PENDING: conflict(
+    "DIRECT_ORDER_PICKUP_OFFER_PENDING",
+  ),
+  DIRECT_ORDER_ACTIVE_REQUESTS_EXIST: conflict(
+    "DIRECT_ORDER_ACTIVE_REQUESTS_EXIST",
+  ),
+  DIRECT_ORDER_FALLBACK_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_FALLBACK_VERIFICATION_FAILED: internalFailure,
   DIRECT_ORDER_PHOTO_APPROVAL_ANCHOR_DRIFT: internalFailure,
   DIRECT_ORDER_PHOTO_APPROVAL_VERIFICATION_FAILED: internalFailure,
 });
+
+export function directOrderDinerCount(value: unknown): number {
+  if (
+    typeof value !== "number" || !Number.isInteger(value) || value < 1 ||
+    value > 100
+  ) {
+    throw new SafeHttpError(400, "DIRECT_ORDER_DINER_COUNT_INVALID");
+  }
+  return value;
+}
 
 export function normalizeRpcError(message: string): SafeHttpError {
   const code = Object.keys(sqlDomainErrorRegistry).find((candidate) =>
@@ -761,7 +796,8 @@ function productionDependencies(): DirectOrderDependencies {
         return { ...value, secret };
       }
       case "submit":
-      case "submit_v2": {
+      case "submit_v2":
+      case "submit_v3": {
         const sessionId = requiredUuid(body, "session_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
         const clientRequestId = requiredUuid(body, "client_request_id");
@@ -773,9 +809,12 @@ function productionDependencies(): DirectOrderDependencies {
         }
         const payload = body.payload as JsonObject;
         directOrderLocale(payload.locale);
+        if (action === "submit_v3") directOrderDinerCount(payload.diner_count);
         return await rpc(
           service,
-          action === "submit_v2"
+          action === "submit_v3"
+            ? "direct_order_public_submit_v3"
+            : action === "submit_v2"
             ? "direct_order_public_submit_v2"
             : "direct_order_public_submit",
           {
@@ -812,6 +851,35 @@ function productionDependencies(): DirectOrderDependencies {
             p_request_id: requestId,
           },
         );
+      }
+      case "resume_storefront": {
+        const sessionId = requiredUuid(body, "session_id");
+        const secret = requiredString(body, "secret", 128, secretPattern);
+        const value = asObject(
+          await rpc(service, "direct_order_public_resume_storefront", {
+            p_session_id: sessionId,
+            p_secret_hash: await sha256Hex(secret),
+          }),
+        );
+        return { ...value, google_maps_browser_key: null };
+      }
+      case "decide_pickup": {
+        const sessionId = requiredUuid(body, "session_id");
+        const secret = requiredString(body, "secret", 128, secretPattern);
+        if (
+          typeof body.accept !== "boolean" ||
+          typeof body.already_paid !== "boolean"
+        ) {
+          throw new SafeHttpError(400, "DIRECT_ORDER_PICKUP_INPUT_INVALID");
+        }
+        return await rpc(service, "direct_order_public_decide_pickup", {
+          p_session_id: sessionId,
+          p_secret_hash: await sha256Hex(secret),
+          p_request_id: requiredUuid(body, "request_id"),
+          p_offer_id: requiredUuid(body, "offer_id"),
+          p_accept: body.accept,
+          p_already_paid: body.already_paid,
+        });
       }
       case "orders_v2":
       case "orders_v3": {

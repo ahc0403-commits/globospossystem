@@ -3,6 +3,7 @@ import {
   createDirectOrderHandler,
   directOrderActionRegistry,
   type DirectOrderDependencies,
+  directOrderDinerCount,
   directOrderLocale,
   directOrderSecretKeyName,
   normalizeRpcError,
@@ -223,6 +224,9 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "create_session",
       "submit",
       "submit_v2",
+      "submit_v3",
+      "resume_storefront",
+      "decide_pickup",
       "status",
       "status_v2",
       "status_v3",
@@ -366,7 +370,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    94,
+    104,
     "registered SQL error count",
   );
   assertEquals(
@@ -531,5 +535,20 @@ Deno.test("direct order locale accepts only ko vi en", () => {
       "INVALID_REQUEST",
       `rejected ${String(invalid)}`,
     );
+  }
+});
+
+Deno.test("diner count accepts whole people and rejects missing or invalid values", () => {
+  for (const n of [1, 3, 100]) {
+    assertEquals(directOrderDinerCount(n), n, "valid count");
+  }
+  for (const n of [null, undefined, "3", 0, -1, 101, 1.5, NaN, Infinity]) {
+    let rejected = false;
+    try {
+      directOrderDinerCount(n);
+    } catch {
+      rejected = true;
+    }
+    assertEquals(rejected, true, "invalid count rejected");
   }
 });

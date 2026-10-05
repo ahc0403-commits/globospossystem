@@ -258,6 +258,10 @@ class _TicketCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = ticket['status']?.toString() ?? 'pending';
+    final delivery = ticket['delivery'] is Map
+        ? Map<String, dynamic>.from(ticket['delivery'] as Map)
+        : <String, dynamic>{};
+    final isPickup = delivery['method'] == 'pickup';
     final items = ticket['items'] is List
         ? (ticket['items'] as List)
               .whereType<Map>()
@@ -280,8 +284,10 @@ class _TicketCard extends StatelessWidget {
       'preparing' => copy.startPreparing,
       'ready' => copy.markReady,
       _ =>
-        ticket['fulfillment_type'] == 'pickup'
-            ? copy.pickupReady
+        isPickup
+            ? (status == 'completed'
+                  ? copy.pickupCompleted
+                  : copy.waitingForPickup)
             : copy.waitingForDispatch,
     };
 
@@ -301,7 +307,7 @@ class _TicketCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      copy.paidDirect,
+                      isPickup ? copy.pickup : copy.paidDirect,
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 13,
@@ -345,6 +351,12 @@ class _TicketCard extends StatelessWidget {
                     ],
                   ),
                 ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              child: Text(
+                copy.packingCount((delivery['diner_count'] as num?)?.toInt()),
               ),
             ),
             const Divider(height: 1),

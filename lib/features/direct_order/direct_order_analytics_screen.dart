@@ -152,8 +152,22 @@ class _DirectOrderAnalyticsScreenState
                           width: width,
                           label: '${_copy.grabCost} / ${_copy.feeVariance}',
                           value:
-                              '${_vnd(summary['grab_cost'])} / ${_vnd(summary['delivery_fee_variance'])}',
+                              '${_vnd(summary['delivery_cost'] ?? summary['grab_cost'])} / ${_vnd(summary['delivery_fee_variance'])}',
                           icon: Icons.balance_outlined,
+                        ),
+                        _Kpi(
+                          width: width,
+                          label: _copy.netReceived,
+                          value: _vnd(
+                            summary['net_sales'] ?? summary['gross_sales'],
+                          ),
+                          icon: Icons.account_balance_wallet_outlined,
+                        ),
+                        _Kpi(
+                          width: width,
+                          label: _copy.refundRecorded,
+                          value: _vnd(summary['refund_total']),
+                          icon: Icons.keyboard_return_outlined,
                         ),
                       ],
                     );

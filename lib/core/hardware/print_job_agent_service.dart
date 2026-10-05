@@ -328,6 +328,9 @@ class PrintJobAgentService implements PrintAgentDriver {
       directFulfillmentType: receipt.directFulfillmentType,
       directDeliveryPaymentMode: receipt.directDeliveryPaymentMode,
       directReferenceCode: receipt.directReferenceCode,
+      dinerCount: receipt.dinerCount,
+      fulfillmentMethod: receipt.fulfillmentMethod,
+      refundedTotal: receipt.refundedTotal,
     );
   }
 }

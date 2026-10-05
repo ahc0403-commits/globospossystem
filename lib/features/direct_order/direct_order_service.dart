@@ -98,6 +98,48 @@ class DirectOrderService {
     return DirectOrderStorefront.fromJson(data);
   }
 
+  Future<DirectOrderSession?> loadCachedSession(String slug) async {
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString('$_sessionKeyPrefix$slug');
+    if (raw == null) return null;
+    try {
+      final session = DirectOrderSession.fromJson(
+        Map<String, dynamic>.from(jsonDecode(raw) as Map),
+      );
+      return session.isValid ? session : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<DirectOrderStorefront> resumeStorefront(
+    DirectOrderSession session,
+  ) async => DirectOrderStorefront.fromJson(
+    await _invoke({
+      'action': 'resume_storefront',
+      'session_id': session.id,
+      'secret': session.secret,
+    }),
+  );
+
+  Future<void> decidePickup({
+    required DirectOrderSession session,
+    required String requestId,
+    required String offerId,
+    required bool accept,
+    bool alreadyPaid = false,
+  }) async {
+    await _invoke({
+      'action': 'decide_pickup',
+      'session_id': session.id,
+      'secret': session.secret,
+      'request_id': requestId,
+      'offer_id': offerId,
+      'accept': accept,
+      'already_paid': alreadyPaid,
+    });
+  }
+
   Future<DirectOrderSession> ensureSession({
     required String slug,
     required String locale,
@@ -142,7 +184,11 @@ class DirectOrderService {
     DirectOrderFulfillmentType fulfillmentType =
         DirectOrderFulfillmentType.delivery,
     String? customerNote,
+    int? dinerCount,
   }) async {
+    if (dinerCount == null || dinerCount < 1 || dinerCount > 100) {
+      throw const DirectOrderException('DIRECT_ORDER_DINER_COUNT_INVALID');
+    }
     final preferences = await SharedPreferences.getInstance();
     final pendingKey = draftId == null
         ? '$_pendingSubmitKeyPrefix$slug'
@@ -166,13 +212,14 @@ class DirectOrderService {
       }
     }
     final data = await _invoke({
-      'action': 'submit_v2',
+      'action': 'submit_v3',
       'session_id': session.id,
       'secret': session.secret,
       'client_request_id': clientRequestId,
       'payload': {
         'locale': locale,
         'fulfillment_type': fulfillmentType.name,
+        'diner_count': dinerCount,
         'customer_note': customerNote,
         'items': cart.entries
             .where((entry) => entry.value > 0)

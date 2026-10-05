@@ -641,11 +641,14 @@ class DirectOrderStatus {
     this.pickupCode,
     this.completedAt,
     this.proofReview,
+    this.delivery,
   });
 
   final String requestId;
   final DirectOrderFulfillmentType fulfillmentType;
-  bool get isPickup => fulfillmentType == DirectOrderFulfillmentType.pickup;
+  bool get isPickup =>
+      delivery?.isPickup == true ||
+      fulfillmentType == DirectOrderFulfillmentType.pickup;
   final String referenceCode;
   final String state;
   final DirectOrderQuote? quote;
@@ -656,6 +659,7 @@ class DirectOrderStatus {
   final String? pickupCode;
   final DateTime? completedAt;
   final DirectOrderProofReview? proofReview;
+  final DirectOrderDelivery? delivery;
 
   factory DirectOrderStatus.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
@@ -671,6 +675,7 @@ class DirectOrderStatus {
       'fulfillment',
       'dispatch',
       'proof_review',
+      'delivery',
     });
     final quoteRaw = json['quote'];
     if (quoteRaw != null && quoteRaw is! Map) _invalidModel('quote');
@@ -728,6 +733,9 @@ class DirectOrderStatus {
       _requiredString(dispatch, 'grab_tracking_url');
       _requiredDateTime(dispatch, 'sent_at');
     }
+    if (json['delivery'] != null && json['delivery'] is! Map) {
+      _invalidModel('delivery');
+    }
     final proofReviewRaw = json['proof_review'];
     if (proofReviewRaw != null && proofReviewRaw is! Map) {
       _invalidModel('proof_review');
@@ -766,11 +774,126 @@ class DirectOrderStatus {
               'completed_at',
             )
           : null,
+      delivery: json['delivery'] is Map
+          ? DirectOrderDelivery.fromJson(
+              Map<String, dynamic>.from(json['delivery'] as Map),
+            )
+          : null,
       proofReview: proofReviewRaw is Map
           ? DirectOrderProofReview.fromJson(
               Map<String, dynamic>.from(proofReviewRaw),
             )
           : null,
+    );
+  }
+}
+
+class DirectOrderDelivery {
+  const DirectOrderDelivery({
+    this.dinerCount,
+    this.method = 'delivery',
+    this.version = 1,
+    this.storeName = '',
+    this.storeAddress = '',
+    this.provider,
+    this.providerName,
+    this.trackingUrl,
+    this.driverContact,
+    this.offer,
+    this.paidTotal,
+    this.refundedTotal = 0,
+  });
+  final int? dinerCount;
+  final String method;
+  final int version;
+  final String storeName;
+  final String storeAddress;
+  final String? provider;
+  final String? providerName;
+  final String? trackingUrl;
+  final String? driverContact;
+  final DirectOrderPickupOffer? offer;
+  final double? paidTotal;
+  final double refundedTotal;
+  bool get isPickup => method == 'pickup';
+  factory DirectOrderDelivery.fromJson(Map<String, dynamic> json) {
+    _expectKeys(json, const {
+      'diner_count',
+      'method',
+      'version',
+      'store_name',
+      'store_address',
+      'provider',
+      'provider_name',
+      'tracking_url',
+      'driver_contact',
+      'pickup_offer',
+      'paid_total',
+      'refunded_total',
+    });
+    final count = json['diner_count'];
+    final version = _requiredNumber(json, 'version');
+    final method = _requiredString(json, 'method');
+    if ((count != null && (count is! int || count < 1 || count > 100)) ||
+        version is! int ||
+        version < 1 ||
+        !{'delivery', 'pickup'}.contains(method)) {
+      _invalidModel('delivery');
+    }
+    final offer = json['pickup_offer'];
+    if (offer != null && offer is! Map) _invalidModel('pickup_offer');
+    return DirectOrderDelivery(
+      dinerCount: count as int?,
+      method: method,
+      version: version,
+      storeName: _requiredString(json, 'store_name'),
+      storeAddress: _optionalString(json, 'store_address') ?? '',
+      provider: _optionalString(json, 'provider'),
+      providerName: _optionalString(json, 'provider_name'),
+      trackingUrl: _optionalString(json, 'tracking_url'),
+      driverContact: _optionalString(json, 'driver_contact'),
+      offer: offer is Map
+          ? DirectOrderPickupOffer.fromJson(Map<String, dynamic>.from(offer))
+          : null,
+      paidTotal: _optionalDouble(json, 'paid_total'),
+      refundedTotal: _requiredNumber(json, 'refunded_total').toDouble(),
+    );
+  }
+}
+
+class DirectOrderPickupOffer {
+  const DirectOrderPickupOffer({
+    required this.id,
+    required this.status,
+    required this.reason,
+    this.refundDue = 0,
+    this.refundRecorded = false,
+  });
+  final String id;
+  final String status;
+  final String reason;
+  final double refundDue;
+  final bool refundRecorded;
+  bool get isPending => status == 'proposed';
+  factory DirectOrderPickupOffer.fromJson(Map<String, dynamic> json) {
+    _expectKeys(json, const {
+      'id',
+      'status',
+      'reason',
+      'refund_due',
+      'refund_recorded',
+      'refunded_at',
+    });
+    final status = _requiredString(json, 'status');
+    if (!{'proposed', 'accepted', 'declined'}.contains(status)) {
+      _invalidModel('pickup_offer.status');
+    }
+    return DirectOrderPickupOffer(
+      id: _requiredString(json, 'id'),
+      status: status,
+      reason: _requiredString(json, 'reason'),
+      refundDue: _requiredNumber(json, 'refund_due').toDouble(),
+      refundRecorded: _requiredBool(json, 'refund_recorded'),
     );
   }
 }

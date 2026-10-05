@@ -250,6 +250,7 @@ class _DirectOrderSettingsScreenState
                                 SwitchListTile(
                                   value: _enabled,
                                   title: Text(_copy.enableStorefront),
+                                  subtitle: Text(_copy.pageActivationHelp),
                                   secondary: const Icon(Icons.public),
                                   onChanged: (value) {
                                     if (value && !_accountingApproved) {

@@ -49,9 +49,9 @@ class DirectOrderCopy {
     'Delivery/pickup ordering is currently closed',
   );
   String get pausedMessage => _pick(
-    '주문 접수시간은 매일 11:00–22:00 (베트남 시간)입니다. 영업시간 중에도 매장 사정으로 접수가 잠시 중지될 수 있습니다. 이미 접수된 주문은 계속 처리됩니다.',
-    'Giờ nhận đơn hằng ngày: 11:00–22:00 (giờ Việt Nam). Cửa hàng có thể tạm ngưng nhận đơn trong giờ mở cửa. Các đơn đã nhận vẫn tiếp tục được xử lý.',
-    'Order daily from 11:00 to 22:00 (Vietnam time). The store may temporarily pause new orders during opening hours. Orders already received will continue to be processed.',
+    '현재 주문이 많아 배달이 지연되고 있습니다. 잠시 후 다시 주문해 주세요.',
+    'Hiện có nhiều đơn nên giao hàng bị chậm. Vui lòng thử đặt lại sau ít phút.',
+    'Delivery is delayed due to a high volume of orders. Please try ordering again a little later.',
   );
   String get paused => pausedTitle;
   String get apologyEmojiLabel =>
@@ -111,7 +111,151 @@ class DirectOrderCopy {
     'Không thể tải trang đặt giao hàng.',
     'Delivery/pickup ordering is unavailable.',
   );
+  String get confirm => _pick('확인', 'Xác nhận', 'Confirm');
+  String get dinerQuestion => _pick(
+    '몇 명이 식사하시나요?',
+    'Có bao nhiêu người ăn?',
+    'How many people will be eating?',
+  );
+  String get dinerHelp => _pick(
+    '인원수에 맞춰 일회용품을 준비합니다. (1~100명)',
+    'Chúng tôi chuẩn bị dụng cụ dùng một lần theo số người. (1–100)',
+    'We prepare disposable utensils for this many people. (1–100)',
+  );
+  String packingCount(int? count) => count == null
+      ? _pick('식사 인원 미입력', 'Chưa nhập số người ăn', 'Diner count not provided')
+      : _pick(
+          '식사 인원 $count명 · 일회용품 $count세트',
+          '$count người · $count bộ dụng cụ',
+          '$count diners · $count utensil sets',
+        );
+  String get pickupQuestion => _pick(
+    '배달 기사를 배정하지 못했습니다. 방문 포장으로 변경하시겠어요?',
+    'Không tìm được tài xế. Bạn có muốn đến lấy tại cửa hàng?',
+    'No driver is available. Would you like to collect your order?',
+  );
+  String get offerPickup => _pick(
+    '기사 미배정 · 방문 포장 제안',
+    'Không có tài xế · đề nghị đến lấy',
+    'No driver · offer store pickup',
+  );
+  String get acceptPickup =>
+      _pick('방문 포장으로 변경', 'Đổi sang tự đến lấy', 'Change to store pickup');
+  String get keepDelivery =>
+      _pick('배달 대기 유지', 'Tiếp tục chờ giao hàng', 'Keep waiting for delivery');
+  String get pickupOffered => _pick(
+    '고객의 방문 포장 동의를 기다립니다.',
+    'Đang chờ khách đồng ý đến lấy.',
+    'Waiting for the customer to accept store pickup.',
+  );
+  String get pickupOriginalPaymentHelp => _pick(
+    '이미 송금한 주문은 원견적과 입금 사진으로 확인해 주세요. 승인 후 수취한 배달비를 환불합니다.',
+    'Đơn đã chuyển tiền giữ nguyên báo giá và ảnh chuyển khoản. Sau khi duyệt, hoàn lại phí giao hàng đã thu.',
+    'Keep the original quote and transfer photo for an already paid order. Refund the collected delivery fee after approval.',
+  );
+  String get waitingForPickup =>
+      _pick('고객 수령 대기', 'Chờ khách đến lấy', 'Waiting for customer pickup');
+  String get pickupCompleted =>
+      _pick('고객 수령 완료', 'Khách đã nhận hàng', 'Customer collected the order');
+  String get alreadyTransferred => _pick(
+    '이미 송금했습니다',
+    'Tôi đã chuyển khoản',
+    'I have already transferred payment',
+  );
+  String get notTransferred => _pick(
+    '아직 송금 전입니다',
+    'Tôi chưa chuyển khoản',
+    'I have not transferred payment yet',
+  );
+  String get refundPending => _pick(
+    '배달비 환불 대기',
+    'Chờ hoàn phí giao hàng',
+    'Delivery fee refund pending',
+  );
+  String get refundRecorded => _pick(
+    '배달비 환불 기록 완료',
+    'Đã ghi nhận hoàn phí giao hàng',
+    'Delivery fee refund recorded',
+  );
+  String get refundConfirmHelp => _pick(
+    '배달비를 은행이체로 실제 환불한 후 거래 참조를 입력하세요. 이 버튼은 환불 기록만 저장합니다.',
+    'Sau khi thực tế hoàn phí bằng chuyển khoản, nhập mã giao dịch. Nút này chỉ ghi nhận hoàn tiền.',
+    'Enter the transfer reference after actually refunding the fee by bank transfer. This button only records the refund.',
+  );
+  String get refundReference =>
+      _pick('환불 이체 참조', 'Mã giao dịch hoàn tiền', 'Refund transfer reference');
+  String get recordRefund => _pick(
+    '은행이체 환불 완료 기록',
+    'Ghi nhận đã hoàn qua chuyển khoản',
+    'Record completed bank transfer refund',
+  );
+  String get deliveryProvider =>
+      _pick('배달 업체', 'Đơn vị giao hàng', 'Delivery provider');
+  String get otherProvider => _pick('기타', 'Khác', 'Other');
+  String get providerName => _pick('업체 이름', 'Tên đơn vị', 'Provider name');
+  String get driverContact => _pick(
+    '기사 연락 정보 (링크가 없으면 필수)',
+    'Thông tin tài xế (bắt buộc nếu không có link)',
+    'Driver contact (required without a link)',
+  );
+  String get grabProvider => _pick('Grab', 'Grab', 'Grab');
+  String get beProvider => _pick('BE', 'BE', 'BE');
+  String get handoffDriver =>
+      _pick('기사에게 전달 완료', 'Đã giao cho tài xế', 'Confirm driver handoff');
+  String get editDinerCount =>
+      _pick('식사 인원 수정', 'Sửa số người ăn', 'Edit diner count');
+  String get pickupReason => _pick(
+    '기사 미배정 사유',
+    'Lý do không có tài xế',
+    'Reason no driver is available',
+  );
+  String get netReceived => _pick(
+    '환불 후 순수취액',
+    'Thực nhận sau hoàn tiền',
+    'Net received after refunds',
+  );
+  String get pageActivationHelp => _pick(
+    '주문량이 많으면 신규 접수 일시 중지를 사용하세요. 진행 중 주문이 있으면 페이지를 비활성화할 수 없습니다.',
+    'Khi quá tải, hãy tạm ngưng đơn mới. Không thể tắt trang khi có đơn đang xử lý.',
+    'Use intake pause when busy. The page cannot be disabled while orders are in progress.',
+  );
   String errorMessage(String code) => switch (code) {
+    'DIRECT_ORDER_DINER_COUNT_INVALID' => _pick(
+      '식사 인원을 1~100 사이의 정수로 입력하세요.',
+      'Nhập số người nguyên từ 1 đến 100.',
+      'Enter a whole number of diners from 1 to 100.',
+    ),
+    'DIRECT_ORDER_ACTIVE_REQUESTS_EXIST' => pageActivationHelp,
+    'DIRECT_ORDER_FULFILLMENT_CHANGED' ||
+    'DIRECT_ORDER_PICKUP_NOT_ALLOWED' ||
+    'DIRECT_ORDER_PICKUP_OFFER_PENDING' => _pick(
+      '주문 처리 상태가 변경되었습니다. 새로고침 후 확인하세요.',
+      'Trạng thái đơn đã thay đổi. Vui lòng tải lại.',
+      'The order status changed. Refresh and check again.',
+    ),
+    'DIRECT_ORDER_REFUND_RECONCILIATION_REQUIRED' => _pick(
+      '기존 환불 내역 또는 환불 수단을 확인한 뒤 정산해야 합니다.',
+      'Cần đối soát khoản hoàn trước hoặc phương thức hoàn tiền.',
+      'Reconcile existing refunds or the refund method before proceeding.',
+    ),
+    'DIRECT_ORDER_PICKUP_FEE_MUST_BE_ZERO' => _pick(
+      '방문 포장 배송비는 0이어야 합니다.',
+      'Phí giao hàng cho đơn tự lấy phải bằng 0.',
+      'Store pickup delivery fees must be zero.',
+    ),
+    'DIRECT_ORDER_PICKUP_INPUT_INVALID' ||
+    'DIRECT_ORDER_REFUND_NOT_DUE' => _pick(
+      '포장 전환 또는 환불 정보를 확인해 주세요.',
+      'Kiểm tra thông tin tự lấy hoặc hoàn tiền.',
+      'Check the pickup or refund details.',
+    ),
+    'DIRECT_ORDER_PICKUP_OFFERED' => pickupQuestion,
+    'DIRECT_ORDER_PICKUP_ACCEPTED' => pickup,
+    'DIRECT_ORDER_PICKUP_DECLINED' => keepDelivery,
+    'DIRECT_ORDER_PICKUP_REFUNDED' => refundRecorded,
+    'DIRECT_ORDER_PICKUP_COMPLETED' => pickupCompleted,
+    'DIRECT_ORDER_DRIVER_HANDOFF' => handoffDriver,
+
     'DIRECT_ORDER_STOREFRONT_PAUSED' => paused,
     'DIRECT_ORDER_OUTSIDE_HOURS' || 'DIRECT_ORDER_APPROVAL_CUTOFF' => _pick(
       '현재는 배달 주문 시간이 아닙니다.',
@@ -232,9 +376,9 @@ class DirectOrderCopy {
       'Please check the confirmed amount and bank reference.',
     ),
     'DIRECT_ORDER_DISPATCH_INPUT_INVALID' => _pick(
-      'Grab 공유 링크와 실제 배송비를 다시 확인해 주세요.',
-      'Vui lòng kiểm tra lại link Grab và phí giao hàng thực tế.',
-      'Please check the Grab link and actual delivery fee.',
+      '배송 추적 링크와 실제 배송비를 다시 확인해 주세요.',
+      'Vui lòng kiểm tra lại link giao hàng và phí giao hàng thực tế.',
+      'Please check the delivery link and actual delivery fee.',
     ),
     'DIRECT_ORDER_CASH_PAYOUT_LOCKED' => _pick(
       '이미 금고에서 지급한 배달비는 변경할 수 없습니다.',
@@ -366,7 +510,7 @@ class DirectOrderCopy {
     'Please enter your name and phone number.',
   );
   String get submitForQuote =>
-      _pick('배송비 견적 요청', 'Yêu cầu báo phí giao hàng', 'Request delivery quote');
+      _pick('주문 요청', 'Gửi yêu cầu đặt món', 'Request order');
   String get requiredFields => _pick(
     '배송 주소(3자 이상), 상세주소, 받는 분, 전화번호를 모두 입력해 주세요.',
     'Vui lòng nhập địa chỉ giao hàng (ít nhất 3 ký tự), địa chỉ chi tiết, tên và số điện thoại.',
@@ -442,8 +586,7 @@ class DirectOrderCopy {
   String get dispatched => _pick('배달 중', 'Đang giao', 'Out for delivery');
   String get completed =>
       _pick('주문이 완료되었습니다', 'Đơn hàng đã hoàn tất', 'Your order is complete');
-  String get openGrab =>
-      _pick('Grab 배송 확인', 'Theo dõi trên Grab', 'Track on Grab');
+  String get openGrab => _pick('배송 확인', 'Theo dõi giao hàng', 'Track delivery');
   String get chat => _pick('매장과 채팅', 'Nhắn với cửa hàng', 'Chat with store');
   String get messageHint =>
       _pick('메시지를 입력하세요', 'Nhập tin nhắn', 'Type a message');
@@ -544,9 +687,9 @@ class DirectOrderCopy {
       _pick('배송지·연락처', 'Địa chỉ & liên hệ', 'Address & contact');
   String get orderItems => _pick('주문 메뉴', 'Món đã đặt', 'Order items');
   String get enterGrabFee => _pick(
-    '고객에게 안내할 Grab 배송비',
-    'Phí Grab báo khách',
-    'Grab fee quoted to customer',
+    '고객에게 안내할 배송비',
+    'Phí giao hàng báo khách',
+    'Delivery fee quoted to customer',
   );
   String get deliveryPaymentMethod => _pick(
     '배송비 결제 방식',
@@ -674,23 +817,23 @@ class DirectOrderCopy {
     'Rejection reason (optional)',
   );
   String get grabTrackingUrl =>
-      _pick('Grab 공유 링크', 'Link theo dõi Grab', 'Grab tracking link');
+      _pick('배송 추적 링크', 'Link theo dõi giao hàng', 'Delivery tracking link');
   String get actualGrabFee =>
-      _pick('실제 Grab 비용', 'Phí Grab thực tế', 'Actual Grab cost');
+      _pick('실제 배달 비용', 'Phí giao hàng thực tế', 'Actual delivery cost');
   String get actualGrabFeeCashPayout => _pick(
-    '실제 Grab 비용 (금고 현금 지출)',
-    'Phí Grab thực tế (chi tiền mặt từ két)',
-    'Actual Grab cost (cash paid from safe)',
+    '실제 배달 비용 (금고 현금 지출)',
+    'Phí giao hàng thực tế (chi tiền mặt từ két)',
+    'Actual delivery cost (cash paid from safe)',
   );
   String get deliveryCashPayoutRequired => _pick(
-    'Grab 링크와 금고에서 지급한 실제 배달비를 입력해 주세요.',
-    'Nhập link Grab và phí giao hàng thực tế đã chi tiền mặt từ két.',
-    'Enter the Grab link and the actual delivery fee paid in cash from the safe.',
+    '배송 링크와 금고에서 지급한 실제 배달비를 입력해 주세요.',
+    'Nhập link giao hàng và phí giao hàng thực tế đã chi tiền mặt từ két.',
+    'Enter the delivery link and the actual delivery fee paid in cash from the safe.',
   );
   String get sendGrabLink => _pick(
-    '고객에게 Grab 링크 전송',
-    'Gửi link Grab cho khách',
-    'Send Grab link to customer',
+    '고객에게 배송 정보 전송',
+    'Gửi link giao hàng cho khách',
+    'Send delivery information to customer',
   );
   String get driverReceipt => _pick(
     '배달 기사용 영수증',
@@ -733,9 +876,9 @@ class DirectOrderCopy {
         _ => _pick('출력 요청 없음', 'Chưa yêu cầu in', 'Not queued'),
       };
   String get driverReceiptHelp => _pick(
-    '배송지와 고객 청구 Grab 배송비가 포함된 결제 완료 전표입니다.',
-    'Phiếu đã thanh toán gồm địa chỉ giao hàng và phí Grab thu của khách.',
-    'A paid handoff slip with the delivery address and customer-charged Grab fee.',
+    '배송지와 고객 청구 배송비가 포함된 결제 완료 전표입니다.',
+    'Phiếu đã thanh toán gồm địa chỉ giao hàng và phí giao hàng thu của khách.',
+    'A paid handoff slip with the delivery address and customer-charged delivery fee.',
   );
   String get printDriverReceipt =>
       _pick('기사용 영수증 출력', 'In phiếu cho tài xế', 'Print driver receipt');
@@ -804,7 +947,7 @@ class DirectOrderCopy {
   String get deliveryFeeSales =>
       _pick('고객 배송비', 'Phí giao hàng thu', 'Delivery fees charged');
   String get grabCost =>
-      _pick('실제 Grab 비용', 'Chi phí Grab', 'Actual Grab cost');
+      _pick('실제 배달 비용', 'Chi phí giao hàng', 'Actual delivery cost');
   String get feeVariance => _pick('배송비 차액', 'Chênh lệch phí', 'Fee variance');
   String get ordersByHour => _pick('시간대별 주문', 'Đơn theo giờ', 'Orders by hour');
   String get ordersByRegion =>
@@ -818,7 +961,7 @@ class DirectOrderCopy {
   String get enableStorefront =>
       _pick('외부 주문 활성화', 'Bật đặt hàng bên ngoài', 'Enable storefront');
   String get pauseStorefront =>
-      _pick('주문 일시중지', 'Tạm dừng nhận đơn', 'Pause ordering');
+      _pick('신규 주문 접수 일시 중지', 'Tạm dừng nhận đơn mới', 'Pause new orders');
   String get accountingApproval =>
       _pick('회계 처리 방식 승인', 'Kế toán phê duyệt', 'Accounting approval');
   String get accountingApprovalWarning => _pick(
@@ -901,9 +1044,9 @@ class DirectOrderCopy {
     'The final amount was sent to the customer.',
   );
   String get grabLinkSent => _pick(
-    'Grab 링크를 고객에게 보냈습니다.',
-    'Đã gửi link Grab cho khách.',
-    'The Grab link was sent to the customer.',
+    '배송 링크를 고객에게 보냈습니다.',
+    'Đã gửi link giao hàng cho khách.',
+    'The delivery link was sent to the customer.',
   );
   String get completeOrder => _pick('주문 완료', 'Hoàn tất đơn', 'Complete order');
   String get completeOrderConfirmTitle => _pick(
@@ -912,9 +1055,9 @@ class DirectOrderCopy {
     'Confirm delivery completion',
   );
   String get completeOrderConfirmMessage => _pick(
-    'Grab에서 고객에게 배달 완료된 것을 확인했습니다.',
-    'Tôi đã xác nhận trên Grab rằng đơn đã được giao cho khách.',
-    'I confirmed in Grab that the order was delivered to the customer.',
+    '배달 업체에서 고객에게 배달 완료된 것을 확인했습니다.',
+    'Tôi đã xác nhận với đơn vị giao hàng rằng đơn đã được giao cho khách.',
+    'I confirmed with the delivery provider that the order was delivered to the customer.',
   );
   String get orderCompletedSuccess => _pick(
     '주문을 완료 처리했습니다.',
@@ -922,9 +1065,9 @@ class DirectOrderCopy {
     'The order was marked complete.',
   );
   String get invalidGrabLink => _pick(
-    '올바른 Grab 공유 링크를 입력하세요.',
-    'Nhập đúng liên kết chia sẻ Grab.',
-    'Enter a valid Grab share link.',
+    '올바른 배송 추적 링크를 입력하세요.',
+    'Nhập đúng liên kết giao hàng.',
+    'Enter a valid delivery share link.',
   );
   String get backToQueue => _pick('주문 목록', 'Danh sách đơn', 'Order queue');
   String get all => _pick('전체', 'Tất cả', 'All');

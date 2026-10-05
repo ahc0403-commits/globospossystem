@@ -179,6 +179,7 @@ class _StorefrontFixtureService extends DirectOrderService {
     DirectOrderFulfillmentType fulfillmentType =
         DirectOrderFulfillmentType.delivery,
     String? customerNote,
+    int? dinerCount,
   }) async {
     submitCalls++;
     submittedAddress = address;
@@ -217,10 +218,26 @@ Widget _fixtureApp({
   ),
 );
 
+Future<void> _revealSubmit(WidgetTester tester) async {
+  tester.testTextInput.hide();
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('direct_submit_quote_request')),
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> _openAddress(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
   await tester.pump();
   await tester.tap(find.text('Địa chỉ').last);
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.byKey(const Key('direct_diner_count_input')),
+    '3',
+  );
   await tester.pumpAndSettle();
 }
 
@@ -279,11 +296,20 @@ void main() {
     expect(find.byKey(const Key('direct_address_input')), findsNothing);
     expect(find.byKey(const Key('direct_address_detail')), findsNothing);
     expect(find.textContaining('69 Nguyen Gia Tri, Binh Thanh'), findsWidgets);
-    final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), 'Pickup Customer');
-    await tester.enterText(fields.at(1), '0901234567');
+    await tester.enterText(
+      find.byKey(const Key('direct_recipient_name')),
+      'Pickup Customer',
+    );
+    await tester.enterText(
+      find.byKey(const Key('direct_recipient_phone')),
+      '0901234567',
+    );
+    await tester.enterText(
+      find.byKey(const Key('direct_diner_count_input')),
+      '3',
+    );
     final submit = find.byKey(const Key('direct_submit_quote_request'));
-    await tester.ensureVisible(submit);
+    await _revealSubmit(tester);
     await tester.tap(submit);
     await tester.pumpAndSettle();
     expect(service.submitCalls, 1);
@@ -614,7 +640,10 @@ void main() {
     expect(find.byKey(const Key('direct_order_closed_state')), findsOneWidget);
     expect(find.text('🙏'), findsOneWidget);
     expect(find.text(const DirectOrderCopy('ko').pausedTitle), findsOneWidget);
-    expect(find.textContaining('11:00–22:00 (베트남 시간)'), findsOneWidget);
+    expect(
+      find.text(const DirectOrderCopy('ko').pausedMessage),
+      findsOneWidget,
+    );
     expect(find.text('즉석 떡볶이'), findsNothing);
     expect(service.ensureSessionCalls, 1);
     expect(tester.takeException(), isNull);
@@ -716,7 +745,7 @@ void main() {
     await tester.scrollUntilVisible(
       submit,
       300,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.tap(submit);
     await tester.pumpAndSettle();
@@ -778,6 +807,7 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const Key('direct_submit_quote_request')),
       );
+      await _revealSubmit(tester);
       await tester.tap(find.byKey(const Key('direct_submit_quote_request')));
       await tester.pumpAndSettle();
       expect(service.submitCalls, 1);
@@ -801,7 +831,7 @@ void main() {
     await tester.pumpAndSettle();
     await _openAddress(tester);
     final submit = find.byKey(const Key('direct_submit_quote_request'));
-    await tester.ensureVisible(submit);
+    await _revealSubmit(tester);
     await tester.tap(submit);
     await tester.pumpAndSettle();
     expect(service.submitCalls, 0);
@@ -810,6 +840,7 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
     for (final entry in {
+      'direct_diner_count_input': '3',
       'direct_address_input': '1 Song Hanh, Ho Chi Minh',
       'direct_address_detail': '1001',
       'direct_recipient_name': 'Test',
@@ -817,7 +848,7 @@ void main() {
     }.entries) {
       await tester.enterText(find.byKey(Key(entry.key)), entry.value);
     }
-    await tester.ensureVisible(submit);
+    await _revealSubmit(tester);
     await tester.tap(submit);
     await tester.pumpAndSettle();
     expect(service.submitCalls, 0);
@@ -858,6 +889,7 @@ void main() {
         250,
         scrollable: find.byType(Scrollable).first,
       );
+      await _revealSubmit(tester);
       await tester.tap(find.byKey(const Key('direct_submit_quote_request')));
       await tester.pumpAndSettle();
       expect(
