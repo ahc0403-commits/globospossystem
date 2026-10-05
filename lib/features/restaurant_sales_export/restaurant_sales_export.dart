@@ -111,7 +111,8 @@ class RestaurantSalesExport {
     (total, receipt) =>
         total + receipt.issues.where(_isBlockingRestaurantIssue).length,
   );
-  bool get isReadyForDownload => receiptCount > 0 && blockingIssueCount == 0;
+  bool get isReadyForDownload =>
+      !isSampleEntity && receiptCount > 0 && blockingIssueCount == 0;
 }
 
 String restaurantHcmBusinessDate(DateTime value) {

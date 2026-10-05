@@ -34,4 +34,8 @@ END $$;
 SQL
 run_sql < supabase/migrations/20260906140000_restaurant_sales_report_anytime.sql >/dev/null
 run_sql < test/sql/restaurant_sales_report_anytime_test.sql >/dev/null
+for attempt in 1 2; do
+  run_sql < supabase/migrations/20261005060000_restaurant_sales_report_sample_exclusion.sql >/dev/null
+  run_sql < test/sql/restaurant_sales_report_sample_exclusion_test.sql >/dev/null
+done
 printf 'RESTAURANT_REPORT_READY_SQL_TEST=PASS\n'

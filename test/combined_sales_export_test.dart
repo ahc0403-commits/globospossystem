@@ -95,6 +95,47 @@ void main() {
     expect(buildCombinedSalesWorkbook(combined.single), isNotEmpty);
   });
 
+  test('excludes SAMPLE from selectable tax entities and report totals', () {
+    final combined = combineSalesExportsByTaxEntity(
+      restaurantExports: [
+        _restaurantExport(isSampleEntity: true),
+        _restaurantExport(),
+      ],
+      photoExports: [_photoExport()],
+    );
+
+    expect(combined, hasLength(1));
+    expect(combined.single.taxEntityId, 'entity-production');
+    expect(combined.single.grossSales, 162000);
+    expect(combined.single.receiptCount, 2);
+  });
+
+  test('a SAMPLE-only day has no tax-report export', () {
+    expect(
+      combineSalesExportsByTaxEntity(
+        restaurantExports: [_restaurantExport(isSampleEntity: true)],
+        photoExports: const [],
+      ),
+      isEmpty,
+    );
+  });
+
+  test('SAMPLE cannot be downloaded through either workbook builder', () {
+    final sample = _restaurantExport(isSampleEntity: true);
+    final combined = CombinedSalesExport(
+      taxEntityId: sample.taxEntityId,
+      sellerTaxCode: sample.sellerTaxCode,
+      sellerLegalName: sample.sellerLegalName,
+      restaurant: sample,
+      photo: null,
+    );
+
+    expect(sample.isReadyForDownload, isFalse);
+    expect(combined.isReadyForDownload, isFalse);
+    expect(() => buildRestaurantSalesWorkbook(sample), throwsFormatException);
+    expect(() => buildCombinedSalesWorkbook(combined), throwsFormatException);
+  });
+
   test('validates the registered Photo export response before MISA use', () {
     final exports = createPhotoSalesRegisteredExports({
       'business_date': '2026-09-02',
@@ -162,19 +203,23 @@ void main() {
   });
 }
 
-RestaurantSalesExport _restaurantExport({RestaurantSalesReceipt? receipt}) =>
-    RestaurantSalesExport(
-      businessDate: '2026-09-02',
-      taxEntityId: 'entity-production',
-      sellerTaxCode: '0318453298',
-      sellerLegalName: 'AKJ INTERNATIONAL',
-      isSampleEntity: false,
-      storeCount: 1,
-      receiptCount: 1,
-      grossSales: 108000,
-      finalizedAt: DateTime.parse('2026-09-02T22:20:00+07:00'),
-      receipts: [receipt ?? _restaurantReceipt()],
-    );
+RestaurantSalesExport _restaurantExport({
+  RestaurantSalesReceipt? receipt,
+  bool isSampleEntity = false,
+}) => RestaurantSalesExport(
+  businessDate: '2026-09-02',
+  taxEntityId: isSampleEntity ? 'entity-sample' : 'entity-production',
+  sellerTaxCode: isSampleEntity
+      ? 'PENDING_SAMPLE_STORE_TAX_PROFILE'
+      : '0318453298',
+  sellerLegalName: isSampleEntity ? 'BunsikClub SAMPLE' : 'AKJ INTERNATIONAL',
+  isSampleEntity: isSampleEntity,
+  storeCount: 1,
+  receiptCount: 1,
+  grossSales: 108000,
+  finalizedAt: DateTime.parse('2026-09-02T22:20:00+07:00'),
+  receipts: [receipt ?? _restaurantReceipt()],
+);
 
 RestaurantSalesReceipt _restaurantReceipt({
   bool isRedInvoice = false,
