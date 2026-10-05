@@ -8,7 +8,7 @@
 |---|---|
 | 소스 | POS 11개·Office 11개 추가 migration, 화면·bridge·문서·회귀 테스트 구현 |
 | migration 적용 | 격리 로컬 DB에서 적용·검증. 생산 DB 미적용 |
-| 배포 | 수행하지 않음. 정확한 pushed SHA의 GitHub release gate 미수행 |
+| 배포 | 수행하지 않음. 리뷰 PR의 exact pushed SHA CI 실행 중. 운영 main의 release gate는 미완료 |
 | 현장 | 실제 역할 배정·매장 정책 활성화·업체 발송·지급·교육·시범 운영 미수행 |
 | 검토용 체크아웃 | POS와 Office 구매 변경 분리. POS `origin/main` `5d992a77`, Office `06088e1` 기반 |
 
@@ -116,6 +116,6 @@ Office 구매 migration `20261005020000`~`20261005029000` 및 `20261005032000` 1
 
 기존 사용자 변경은 보존했다. 원 Office Git의 `pack too short`/bad HEAD는 삭제·복구하지 않았다. 건강한 별도 clone에서 확인한 origin/main에 구매 변경만 적용했고 동시 작업의 store batch/sales 변경은 원 체크아웃에 보존했다. 최초 backup이 없는 Office page와 three-way 파일은 건강한 baseline과 구매 추가 부분을 대조했다. 완전한 작업 전 snapshot을 주장하지 않는다.
 
-검토 위치: [POS](/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system), [Office](/Users/andreahn/Documents/procurement-release-20261005/office). 모두 `codex/procurement-process-20261005` 로컬 branch에 구매 변경을 commit으로 보존했다. push/PR은 수행하지 않았다. 운영 릴리스는 POS `scripts/deploy_pos_production.sh`, Office 기존 gate/wrapper를 사용하며 Office는 clean exact origin/main, migration history 해결, 명시 확인이 필요하다.
+검토 위치: [POS](/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system), [Office](/Users/andreahn/Documents/procurement-release-20261005/office). 모두 `codex/procurement-process-20261005` 로컬 branch에 구매 변경을 commit으로 보존했다. 구매 변경을 push하고 [POS #537](https://github.com/ahc0403-commits/globospossystem/pull/537), [Office #168](https://github.com/ahc0403-commits/restaurant_office_app/pull/168) draft PR을 만들었다. CI는 실행 중이며 merge/운영 배포는 수행하지 않았다. 운영 릴리스는 POS `scripts/deploy_pos_production.sh`, Office 기존 gate/wrapper를 사용하며 Office는 clean exact origin/main, migration history 해결, 명시 확인이 필요하다.
 
 복구는 신규 PR 생성 중단과 호환 릴리스로 진행한다. 확정 재고·반품·지급을 삭제하거나 증빙 금액으로 실제 원장을 대체하지 않는다.

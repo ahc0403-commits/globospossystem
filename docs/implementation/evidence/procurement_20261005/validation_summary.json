@@ -55,5 +55,10 @@
     "Permission/workflow fixture is partly stubbed; native operator E2E remains required",
     "Primary Office Git corruption preserved; healthy review clone used",
     "Concurrent unrelated primary changes preserved, newer main changes retained in review"
-  ]
+  ],
+  "review_pull_requests": {
+    "pos": "https://github.com/ahc0403-commits/globospossystem/pull/537",
+    "office": "https://github.com/ahc0403-commits/restaurant_office_app/pull/168"
+  },
+  "github_ci_at_evidence_creation": "running, no release PASS claimed"
 }

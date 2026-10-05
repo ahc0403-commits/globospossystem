@@ -4,14 +4,14 @@
     {
       "repository": "globos_pos_system",
       "path": "docs/implementation/pos_procurement_process_implementation_20261005.md",
-      "sha256": "e825b8372116fa10da1566af6b91609c250463e1ea5e0c92a065556452431448",
-      "bytes": 15862
+      "sha256": "9f55c692d83d1bceb1075b97e3e8b32659ecc62fc266dabece69804a5771c8bf",
+      "bytes": 16137
     },
     {
       "repository": "globos_pos_system",
       "path": "docs/operations/pos_procurement_rollout_20261005.md",
-      "sha256": "899762f9746cb3d04236de24d530be14706c4afa73abc40fd036a8ad5d42c27c",
-      "bytes": 6698
+      "sha256": "7fca09bb940feb4bcc49887ef0caaab298fa4756451599a678e4068ec13e7e08",
+      "bytes": 6714
     },
     {
       "repository": "globos_pos_system",

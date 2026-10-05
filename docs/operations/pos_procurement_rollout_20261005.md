@@ -42,7 +42,7 @@
 | 상태 | SHA/버전·시각 | 실행자·증거 | 결과 |
 |---|---|---|---|
 | 소스 검토 | 로컬 review branch | source manifest·diff | 준비 |
-| 필수 CI | 미실행 | exact head 체크 링크 필요 | 미완료 |
+| 필수 CI | 리뷰 PR head 실행 중 | exact head 완료 결과 필요 | 미완료 |
 | 운영 배포 확인 | 없음 | 사용자 명시 확인 필요 | 미완료 |
 | POS migration | 미적용 | production wrapper evidence 필요 | 미완료 |
 | Office migration | 미적용 | history/고정 project evidence 필요 | 미완료 |
