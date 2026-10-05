@@ -93,7 +93,7 @@ Invoice 전 회사 선결제와 취소 환불은 별도 AP를 만들지 않고 �
 | POS 구매 Flutter | 23 passed + 전체 대화상자 141개 coverage contract |
 | Office 구매 Flutter + 기존 기능 | 47 passed (25 focused + 기존 22 기능, golden 제외) |
 | POS/Office focused analyze | No issues found |
-| Office bridge | `deno check` PASS. 최신 main 통합 후 review 95 passed (공용 모드·위조 확인·권한/타 매장·HR 생략·개인 모드 회귀 포함) |
+| Office bridge | `deno check` PASS. 최신 main 통합 후 review 100 passed (공용 모드·위조 확인·권한/타 매장·HR 생략·개인 모드 회귀 포함) |
 | Office i18n | KO/EN/VI 세 검사 PASS |
 | PDF | 양쪽 합계 12개, 각 200라인·날짜·비고·PR 합계·외부 비공개 필드 제외 확인 |
 | 웹 build | 양쪽 PASS. Office wrapper 사용. POS의 기존 폰트/wasm 관련 경고는 남음 |
