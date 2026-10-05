@@ -1,4 +1,5 @@
 {
+  "deliberryRetiredMessage": "Deliberry 연동은 종료되었습니다.",
   "@@locale": "ko",
   "appTitle": "글로보스 POS",
   "back": "뒤로",
@@ -1170,7 +1171,7 @@
   "photoOpsSalaryTitle": "급여",
   "photoOpsSalarySubtitle": "활성 매장의 현재 급여 예상치입니다.",
   "photoOpsStoreScopeTitle": "매장 범위",
-  "photoOpsStoreScopeSubtitle": "포토오브제는 오피스 운영만 담당하며 Deliberry 정산은 관리자 워크플로우에 남아 있습니다.",
+  "photoOpsStoreScopeSubtitle": "포토오브제 오피스 운영을 관리합니다.",
   "photoOpsHeroTitle": "배달 정산이나 적색 인보이스 업무 없이 오피스와 연동된 워크스페이스에서 매출, 근태, 재고, 급여를 관리하세요.",
   "photoOpsContextSubtitle": "Photo Ops는 매장 단위 업무를 대체하지 않고 본사가 실시간 매장 상태를 파악하도록 돕습니다.",
   "photoOpsMetaRole": "역할",

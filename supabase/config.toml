@@ -3,3 +3,16 @@ verify_jwt = false
 
 [functions.direct-order-public]
 verify_jwt = false
+
+# Retired endpoints return HTTP 410 without reading data or vendor credentials.
+[functions.deliberry-webhook]
+verify_jwt = false
+
+[functions.deliberry-dispatcher]
+verify_jwt = false
+
+[functions.generate-settlement]
+verify_jwt = false
+
+[functions.generate_delivery_settlement]
+verify_jwt = false

@@ -164,7 +164,7 @@ const _routeStateCoverage = <_RouteStateCoverage>[
     operationalTest:
         'test/globos_pos_operational_ui_coverage_contract_test.dart',
     stateMarkers: [
-      'all ten Admin tabs render localized selected operational workspaces',
+      'all nine Admin tabs render localized selected operational workspaces',
       'selectedNav',
       'Tristate.isTrue',
     ],

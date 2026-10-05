@@ -13,6 +13,17 @@ dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
 flutter test
 
+printf 'CHECK_REPO_STEP=deliberry_retirement\n'
+bash test/deliberry_retirement_sql_test.sh
+deno fmt --check \
+  supabase/functions/_shared/retired_deliberry.ts \
+  supabase/functions/_shared/retired_deliberry_test.ts \
+  supabase/functions/deliberry-webhook/index.ts \
+  supabase/functions/deliberry-dispatcher/index.ts \
+  supabase/functions/generate-settlement/index.ts \
+  supabase/functions/generate_delivery_settlement/index.ts
+deno test --no-config supabase/functions/_shared/retired_deliberry_test.ts
+
 printf 'CHECK_REPO_STEP=migration_version_uniqueness\n'
 bash test/migration_version_uniqueness_test.sh
 
@@ -101,6 +112,8 @@ printf 'CHECK_REPO_STEP=deploy_shell_syntax\n'
 bash -n scripts/deploy_pos_production.sh
 printf 'CHECK_REPO_STEP=deploy_clean_worktree_contract\n'
 bash test/pos_deploy_clean_worktree_checks_test.sh
+printf 'CHECK_REPO_STEP=deliberry_retirement_deploy_contract\n'
+bash test/deliberry_retirement_deploy_contract_test.sh
 printf 'CHECK_REPO_STEP=deploy_git_history_contract\n'
 bash test/pos_deploy_git_history_guard_test.sh
 printf 'CHECK_REPO_STEP=production_migration_gate_contract\n'

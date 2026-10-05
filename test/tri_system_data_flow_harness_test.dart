@@ -28,8 +28,8 @@ String readOfficeFile(String path) {
 }
 
 void main() {
-  group('tri-system Deliberry -> POS -> Office data flow harness', () {
-    test('static contracts keep all three systems wired through read fences', () {
+  group('historical Deliberry -> POS -> Office data flow harness', () {
+    test('historical records retain Office read fences after vendor retirement', () {
       if (!officeContractFilesAvailable) {
         markTestSkipped(
           'Office app checkout is unavailable; set OFFICE_APP_ROOT to run '
@@ -122,28 +122,14 @@ void main() {
       );
       expect(posSalesView, contains('count(*)::integer as event_count'));
 
-      expect(deliberrySettlementFunction, contains(".from('external_sales')"));
-      expect(
+      // Existing sales remain readable by Office; generation is retired.
+      for (final source in [
         deliberrySettlementFunction,
-        contains(".from('delivery_settlements')"),
-      );
-      expect(
-        deliberrySettlementFunction,
-        contains("source_system: 'deliberry'"),
-      );
-      expect(
-        deliberrySettlementFunction,
-        contains(".update({ settlement_id: settlement.id })"),
-      );
-      expect(
         legacySettlementFunction,
-        contains('.from("delivery_settlements")'),
-      );
-      expect(
-        legacySettlementFunction,
-        contains('.eq("source_system", "deliberry")'),
-      );
-      expect(legacySettlementFunction, contains('SETTLEMENT_ALREADY_EXISTS'));
+      ]) {
+        expect(source, contains('Deno.serve(retiredDeliberryResponse)'));
+        expect(source, isNot(contains('.from(')));
+      }
 
       expect(
         officeBridge,

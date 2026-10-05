@@ -483,6 +483,11 @@ run_checks() {
   log "Static analysis"
   run dart analyze
 
+  log "Deliberry retirement regression tests"
+  run bash "$ROOT_DIR/test/deliberry_retirement_sql_test.sh"
+  run deno test --no-config \
+    "$ROOT_DIR/supabase/functions/_shared/retired_deliberry_test.ts"
+
   log "Password lifecycle Edge tests"
   run deno test --allow-env=ALLOWED_ORIGINS \
     "$ROOT_DIR/supabase/functions/complete-initial-password-change/index_test.ts"
@@ -904,6 +909,41 @@ deploy_pos_edge_functions() {
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy direct-order-public \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  # Retired endpoints must replace any previously deployed active handlers.
+  run supabase functions deploy deliberry-webhook \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy deliberry-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy generate-settlement \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy generate_delivery_settlement \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+}
+
+verify_deliberry_retirement_readiness() {
+  log "Deliberry retirement endpoint verification"
+  local function_name status response_file
+  for function_name in deliberry-webhook deliberry-dispatcher \
+    generate-settlement generate_delivery_settlement; do
+    if [[ "$DRY_RUN" == "1" ]]; then
+      printf '+ POST %s without credentials; require HTTP 410\n' "$function_name"
+      continue
+    fi
+    response_file="$(mktemp)"
+    if ! status="$(curl -sS --max-time 30 -o "$response_file" -w '%{http_code}' \
+      -X POST "$SUPABASE_URL/functions/v1/$function_name" \
+      -H 'Content-Type: application/json' --data '{}')"; then
+      rm -f "$response_file"
+      fail "Could not verify retired endpoint $function_name."
+    fi
+    if [[ "$status" != "410" ]] || \
+      ! grep -q 'DELIBERRY_INTEGRATION_RETIRED' "$response_file"; then
+      rm -f "$response_file"
+      fail "Retired endpoint $function_name must return HTTP 410."
+    fi
+    rm -f "$response_file"
+    printf '%s: retired (HTTP 410).\n' "$function_name"
+  done
 }
 
 verify_emergency_dispatcher_readiness() {
@@ -1030,6 +1070,7 @@ main() {
   # safe against the predecessor schema; the web app is deployed only after the
   # fail-closed migration and verification succeed.
   deploy_pos_edge_functions
+  verify_deliberry_retirement_readiness
   verify_remote_allowed_origin
   verify_emergency_dispatcher_readiness
   apply_migration

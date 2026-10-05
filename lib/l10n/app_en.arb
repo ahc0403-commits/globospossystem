@@ -1,4 +1,5 @@
 {
+  "deliberryRetiredMessage": "The Deliberry integration has been retired.",
   "@@locale": "en",
   "appTitle": "GLOBOS POS",
   "back": "Back",
@@ -1171,7 +1172,7 @@
   "photoOpsSalaryTitle": "Salary",
   "photoOpsSalarySubtitle": "Current payroll estimate for the active store.",
   "photoOpsStoreScopeTitle": "Store Scope",
-  "photoOpsStoreScopeSubtitle": "Photo Objet stays on office operations while Deliberry settlement remains in the admin workflow.",
+  "photoOpsStoreScopeSubtitle": "Manage Photo Objet office operations.",
   "photoOpsHeroTitle": "Manage sales, attendance, inventory, and salary in an office-linked workspace without delivery-settlement or red-invoice tasks.",
   "photoOpsContextSubtitle": "Photo Ops keeps HQ aware of live store health without replacing the store-level workflow.",
   "photoOpsMetaRole": "Role",
