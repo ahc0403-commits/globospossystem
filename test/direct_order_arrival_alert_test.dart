@@ -54,15 +54,16 @@ const _frozenAlertFiles = <String, String>{
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
   // Promotion, QR takeout, non-revenue review, beverage tax, and menu analytics
-  // stocktake, and safety-stock copy are independent. Arrival behavior remains covered below.
+  // stocktake, safety-stock, and Deliberry retirement copy are independent.
+  // Arrival behavior remains covered below.
   'lib/l10n/app_localizations.dart':
-      '4d6d5a764c6047cf17095433f720bb61099147d47fdf5c34abdb101720551a27',
+      '5f300501b9287103e72d155d5120169697c4bbe1a0a95c2b35af037d49efabc4',
   'lib/l10n/app_localizations_ko.dart':
-      '039d586ac5e8efa509e68811a9db218f637c0fb85c4eb228711f95d3df69007b',
+      '4c5390e886955b3c3b9a78ed75b70e17bbdc5bc5120e2747776a89425ae78e79',
   'lib/l10n/app_localizations_vi.dart':
-      '96367f46630f49ed9a432f983c8977fb52f420d551296cbbedd538475427cc6e',
+      '190ac5581fc193b790b7fe284808821afe4cc3a91dca1c6af1832631acec2700',
   'lib/l10n/app_localizations_en.dart':
-      'b482fb79033c7f4e8c5bc19d792125c8e19540125c106abe1e79f9d1a5252242',
+      'a06e77172fbdde9247280f7401c9171e1cefbf58d00e94822b10155be7bb2aec',
 };
 
 void main() {
