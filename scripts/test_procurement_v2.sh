@@ -69,12 +69,17 @@ run_sql "$INVENTORY_ROOT/supabase/migrations/20261005034000_procurement_nonstock
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261005035000_procurement_document_storage_scope.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261005036000_procurement_legacy_entry_and_evidence.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261005037000_procurement_accounting_status.sql" >/dev/null
-run_sql "$INVENTORY_ROOT/supabase/migrations/20261005038000_procurement_employee_payment_owners.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261005039000_procurement_role_roster_and_metrics.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261005040000_procurement_read_indexes.sql" >/dev/null
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_fixed_account_fixture.py" "$INVENTORY_ROOT" "$INVENTORY_TMP/fixed-accounts.sql"
+run_sql "$INVENTORY_TMP/fixed-accounts.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005041000_procurement_store_verifier_accounts.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005042000_procurement_shared_role_roster.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005043000_procurement_employee_payment_owners.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_upgrade_compatibility.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_process_contract.test.sql"
 
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_paged_reads.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_shared_roles.test.sql"
 
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"

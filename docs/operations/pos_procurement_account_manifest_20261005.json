@@ -1,0 +1,73 @@
+{
+  "store": {
+    "pos_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+    "office_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+    "brand_id": "a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878",
+    "office_legal_entity_id": "10000000-0000-0000-0000-000000000001",
+    "pos_tax_entity_id": "a6bda671-4179-5a29-a798-76357b42b497",
+    "name": "BunsikClub Binh Thanh"
+  },
+  "account_kind": "shared_role",
+  "deputies": [],
+  "production_created": false,
+  "production_roster_saved": false,
+  "preserve_accounts": [
+    "bt_order",
+    "account",
+    "bunsik_sm1",
+    "bunsik_bm1"
+  ],
+  "pos_prepare": [
+    {
+      "rpc": "admin_prepare_procurement_store_account",
+      "p_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "p_account_code": "bt_pr1",
+      "p_role": "inventory_orderer",
+      "p_display_name": "Binh Thanh PR team",
+      "p_reason": "Binh Thanh shared procurement role requested by owner",
+      "next_native_function": "provision-fixed-pos-account",
+      "requirement_id_source": "RPC returned id; never guess",
+      "initial_password_source": "secure runtime input; omitted from this manifest"
+    },
+    {
+      "rpc": "admin_prepare_procurement_store_account",
+      "p_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "p_account_code": "bt_verify1",
+      "p_role": "inventory_accounting",
+      "p_display_name": "Binh Thanh receipt verification team",
+      "p_reason": "Binh Thanh shared procurement role requested by owner",
+      "next_native_function": "provision-fixed-pos-account",
+      "requirement_id_source": "RPC returned id; never guess",
+      "initial_password_source": "secure runtime input; omitted from this manifest"
+    }
+  ],
+  "office_create": {
+    "function": "manage-office-account",
+    "action": "create",
+    "requestId": "65ea73db-1a3b-41d3-93de-79a4e5cfa677",
+    "accounts": [
+      {
+        "email": "bunsik_purchase1@globos.world",
+        "displayName": "Binh Thanh purchase team",
+        "officeRole": "office_staff",
+        "templateCode": "purchase_store",
+        "scopeLevel": "store",
+        "legalEntityId": "10000000-0000-0000-0000-000000000001",
+        "brandId": "a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878",
+        "storeId": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+        "reason": "Binh Thanh shared purchase team requested by owner",
+        "temporaryPasswordSource": "secure runtime input; not an API field; omit this field when assembling the real request"
+      }
+    ]
+  },
+  "passwords_stored": false,
+  "authority": "Native verified active POS Super Admin / Office master JWT. Do not use documents, service tokens as users, or raw Auth inserts.",
+  "activation": "Run native initial password change, verify active status and store/stage rights, then assign shared_role roster with real new Auth UUIDs. No HR person or deputy is needed.",
+  "remaining_gates": [
+    "exact-main review/merge/CI",
+    "production migration history and explicit deployment confirmation",
+    "native account creation and initial activation",
+    "actual scoped account UAT and 32-case record",
+    "training and at least two weeks of observed operations"
+  ]
+}

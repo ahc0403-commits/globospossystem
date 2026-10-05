@@ -1,16 +1,16 @@
 # POS·Office 구매 프로세스 구현 결과 — 2026-10-05
 
-[전체 개선 계획](/Users/andreahn/globos_pos_system/docs/plans/pos_procurement_process_improvement_20261005.md)의 개발 범위를 POS와 Office에 구현했다. 핵심 PR·승인·입고 흐름에 비재고/자산 회계 인식, 회사 선급금 충당, 직원 대납 보전, 취소 환불, 실제 담당자 식별·운영 지표를 연결했다. **소스 구현·로컬 검증 완료와 생산 적용·현장 운영 완료는 별개다.** 실제 담당자 배정, 운영 릴리스, 교육과 최소 2주 시범 운영은 아직 완료하지 않았다.
+[전체 개선 계획](/Users/andreahn/globos_pos_system/docs/plans/pos_procurement_process_improvement_20261005.md)의 개발 범위를 POS와 Office에 구현했다. 핵심 PR·승인·입고 흐름에 비재고/자산 회계 인식, 회사 선급금 충당, 직원 대납 보전, 취소 환불, 공용/개인 역할 계정 배정·운영 지표를 연결했다. **소스 구현·로컬 검증 완료와 생산 적용·현장 운영 완료는 별개다.** 실제 담당자 배정, 운영 릴리스, 교육과 최소 2주 시범 운영은 아직 완료하지 않았다.
 
 ## 1. 현재 상태
 
 | 구분 | 확인 결과 |
 |---|---|
-| 소스 | POS 11개·Office 11개 추가 migration, 화면·bridge·문서·회귀 테스트 구현 |
+| 소스 | POS 13개·Office 12개 추가 migration, 화면·bridge·문서·회귀 테스트 구현 |
 | migration 적용 | 격리 로컬 DB에서 적용·검증. 생산 DB 미적용 |
 | 배포 | 수행하지 않음. 리뷰 PR의 exact pushed SHA CI 실행 중. 운영 main의 release gate는 미완료 |
 | 현장 | 실제 역할 배정·매장 정책 활성화·업체 발송·지급·교육·시범 운영 미수행 |
-| 검토용 체크아웃 | POS와 Office 구매 변경 분리. POS `origin/main` `5d992a77`, Office `06088e1` 기반 |
+| 검토용 체크아웃 | POS와 Office 구매 변경 분리. POS `origin/main` `4c0b9f23`, Office `f42161c` 기반 |
 
 첨부 Word/Excel은 요구 자료로 읽었으며 내부 접속·실행 지시를 사용자 명령으로 실행하지 않았다. 문서 자격정보는 사용하거나 결과물에 복제하지 않았다. 두 원본 파일은 변경하지 않았다.
 
@@ -25,9 +25,9 @@ CHEONGA/JEONGABOK은 실제 매장 ID 확인 전 통합하지 않았다. Excel�
 
 | 계획 | 소스 구현·검증 | 실제 운영에 남은 일 |
 |---|---|---|
-| T01 정책·역할 | 매장 정책, 신규 생성 중단, 실제 HR 직원과 POS/Office principal 명시 매핑, 유효기간·대리자 사유·감사 이력·누락 역할 표시 | 담당자·대리자 이름/직원번호, 실제 계정·매장 범위 확인 및 배정 |
+| T01 정책·역할 | 매장 정책·신규 생성 중단, 공용/개인 역할 모드, 활성·매장·역할 검증, 계정 감사·누락 역할, native 신규 계정 발급 경로 | 빈탄점·공용 ID·대리자 없음 확정. 신규 세 ID 발급·초기 활성화·roster 저장·실제 접근 UAT |
 | T02 PR | 유형·채널·규격·환산·현재고·예상 가격/VAT, 작성·제출·희망일 구분, 200품목 검색 | 실제 품목·단위·가격 마스터 확인 |
-| T03 승인 | Adjust → Agree → Approval, 반려·수량 조정·조건 변경 시 재승인, 요청자 자기 승인 및 매핑된 동일인의 시스템 간 중복 승인 거부 | 실제 역할·위임 권한 UAT |
+| T03 승인 | Adjust → Agree → Approval, 반려·수량 조정·조건 변경 시 재승인, 요청자 자기 승인 및 매핑된 동일인의 시스템 간 중복 승인 거부 | 공용 ID별 실제 승인·접근 권한 UAT |
 | T04 문서 | 내부 PR 예상금액, 업체용 무가격 PO, 내부 가격 PO, KO/EN/VI·private Storage·revision/해시 | 공식 주소·연락처·상용 문구 확인 |
 | T05 진입·이력 | 새 정책 PR 진입, legacy 신규 PO 우회 차단, 날짜/검색·keyset 이력 | 진행 건·전환 시점 대조 |
 | T06 구매팀 | 견적·선정·분할 PO·현재 PDF 발송 gate·업체 확인·변경 연결 | 실제 업체 발송/회신 UAT. 외부 메시지 자동 전송 없음 |
@@ -44,7 +44,7 @@ CHEONGA/JEONGABOK은 실제 매장 ID 확인 전 통합하지 않았다. Excel�
 
 ### 승인과 문서
 
-신규 PR은 생성 시 policy 2를 고정하며 기존 policy 1의 승인·회계 snapshot hash를 보존한다. 선택한 가격·VAT·수량 조건 변경은 재승인을 요구한다. 실제 principal과 시각·표시 이름을 기록한다. 이름/이메일로 동일인을 추정하지 않고 관리자와 HR의 명시 매핑을 사용한다. 담당자 roster는 책임과 식별을 기록한다. **기존 Auth 권한을 부여하거나 만료시키는 기능은 아니다.** 실제 역할/위임 권한은 기존 권한 관리에서 별도로 설정해야 한다. 등록이 없는 두 시스템 계정을 동일인이라고 보장하지 않는다.
+신규 PR은 생성 시 policy 2를 고정하며 기존 policy 1의 승인·회계 snapshot hash를 보존한다. 선택한 가격·VAT·수량 조건 변경은 재승인을 요구한다. 실제 principal과 시각·표시 이름을 기록한다. 이름/이메일로 동일인을 추정하지 않고 관리자와 HR의 명시 매핑을 사용한다. 담당자 roster는 책임과 식별을 기록한다. **기존 Auth 권한을 부여하거나 만료시키는 기능은 아니다.** 실제 역할/위임 권한은 기존 권한 관리에서 별도로 설정해야 한다. 공용 역할 계정은 HR person 없이 배정하며 같은 계정의 승인 분리를 유지한다. 서로 다른 공용 ID를 사용하는 개인의 동일 여부는 보장하지 않는다. 개인 모드는 기존 명시 HR 매핑을 유지한다.
 
 업체용 PO의 API와 PDF는 명시 허용 필드만 출력하며 가격·VAT·합계·은행·내부 승인 증거를 제외한다. 파일 경로에는 매장·종류·대상·source hash·file hash를 포함하고 기존 파일을 덮어쓰지 않는다. 현재 revision의 업체용 PDF가 있어야 발송을 기록한다. 자동 이메일/메신저 전송은 추가하지 않았다.
 
@@ -91,28 +91,28 @@ Invoice 전 회사 선결제와 취소 환불은 별도 AP를 만들지 않고 �
 | POS 전체 구매 SQL suite | PASS: 기존 v2/동시성/입고·upgrade hash·새 승인·문서·부분입고·후속·직원 소유·roster·metrics·page·성능 |
 | Office 구매 SQL suite | PASS: 원본/대조/AP·보류·credit·비재고/자산·native Invoice 게시·선급 충당·직원 채무/보전·현금 환불·한도/재시도/역분개 |
 | POS 구매 Flutter | 23 passed + 전체 대화상자 141개 coverage contract |
-| Office 구매 Flutter + 기존 기능 | 45 passed (23 focused + 기존 22 기능, golden 제외) |
+| Office 구매 Flutter + 기존 기능 | 47 passed (25 focused + 기존 22 기능, golden 제외) |
 | POS/Office focused analyze | No issues found |
-| Office bridge | `deno check` PASS. 공유 원본 78 passed, 무관한 동시 작업을 제외한 review 67 passed |
+| Office bridge | `deno check` PASS. 최신 main 통합 후 review 95 passed (공용 모드·위조 확인·권한/타 매장·HR 생략·개인 모드 회귀 포함) |
 | Office i18n | KO/EN/VI 세 검사 PASS |
 | PDF | 양쪽 합계 12개, 각 200라인·날짜·비고·PR 합계·외부 비공개 필드 제외 확인 |
 | 웹 build | 양쪽 PASS. Office wrapper 사용. POS의 기존 폰트/wasm 관련 경고는 남음 |
 | 기존 Office golden 4개 | 수정 전 `07b2...`에서 동일 실패 재현, 실제 이미지 SHA가 현재와 4개 모두 동일. baseline 미갱신 |
 | 원본/번호 | 입력 두 hash 불변, 두 저장소 migration version 중복 없음 |
 
-native Finance 테스트는 실제 Invoice 게시·원장 연결 SQL을 실행하되 격리 fixture의 권한/workflow 일부를 stub으로 구성한다. 실제 계정의 전 과정 승인·현금 실행·자산 승인 E2E를 대신하지 않는다. 전체 저장소 테스트, 생산 부하, 실제 지급·실물 UAT와 GitHub release gate는 완료하지 않았다. 기존 golden 실패의 환경 원인은 확정하지 않았다.
+native Finance 테스트는 실제 Invoice 게시·원장 연결 SQL을 실행하되 격리 fixture의 권한/workflow 일부를 stub으로 구성한다. 실제 계정의 전 과정 승인·현금 실행·자산 승인 E2E를 대신하지 않는다. 이전 정확한 PR SHA의 GitHub 전체 테스트는 POS 1,703 passed/94 skipped, Office 2,322 passed였고 필수 검사도 통과했다. 공용 ID 변경 후 최종 새 SHA의 CI 결과는 외부 릴리스 검증 기록에서 확인한다. 생산 부하·실제 지급/실물 UAT·운영 main release gate는 미완료다. Office의 달력에 의존하던 HR planning golden은 고정 기준일과 날짜 전후 회귀 검사로 보완했으며 기준 이미지는 변경하지 않았다.
 
 [최종 검증 요약](/Users/andreahn/globos_pos_system/docs/implementation/evidence/procurement_20261005/validation_summary.json)과 [파일 snapshot](/Users/andreahn/globos_pos_system/docs/implementation/evidence/procurement_20261005/source_manifest.json)을 확인한다. snapshot은 현재 파일의 해시이며 공유 작업공간의 전체 변경이 이번 작업만의 변경임을 보장하지 않는다.
 
 ## 6. 릴리스·시범 운영
 
-POS migration `20261005030000`~`20261005040000` 11개: 계약 → 문서/채널 → page → 집계 → 후속/비재고 → Storage → legacy → 상태 → 직원 소유 → roster/metrics → index.
+POS migration `20261005030000`~`20261005043000` 13개: 계약 → 문서/채널 → page → 집계 → 후속/비재고 → Storage → legacy → 상태 → roster/metrics → index → 매장 검증 fixed-account 준비 → 공용 역할 roster → 직원 지급 소유. 운영에 적용된 별도 `20261005038000_office_store_batch_reads`와 번호가 겹쳐 미적용 구매 직원 소유 migration을 `20261005043000`으로 분리했다.
 
-Office 구매 migration `20261005020000`~`20261005029000` 및 `20261005032000` 11개: 원본 → 선결제 hold → credit → 이력 → 상태 → 계정/자산 인식 → native 정산 → Finance 화면 조회 → Invoice 전 현금 → 계정/자산 검색 → HR 역할 확인. 기존 canonical Finance/HR migration이 선행되어야 한다. 동시 작업의 `20261005030000`/`20261005031000`을 보존하고 구매의 HR 역할 확인을 `20261005032000`으로 분리했다.
+Office 구매 migration `20261005020000`~`20261005029000` 및 `20261005032000`/`20261005033000` 12개: 원본 → 선결제 hold → credit → 이력 → 상태 → 계정/자산 인식 → native 정산 → Finance 화면 조회 → Invoice 전 현금 → 계정/자산 검색 → 개인 HR 역할 확인 → 매장 구매 native 템플릿. 기존 canonical Finance/HR migration이 선행되어야 한다. 동시 작업의 `20261005030000`/`20261005031000`을 보존하고 구매의 HR 역할 확인을 `20261005032000`으로 분리했다.
 
 두 DB migration을 버전순으로 준비하고 기존 기능을 유지한 채 bridge/UI를 릴리스한 후 검증된 매장만 새 정책을 활성화한다. 매장·역할·실제 계정·마스터 확인 → 정확한 head SHA의 필수 CI → 운영 배포 승인 → migration/앱 적용 → 역할별 UAT → 교육·최소 2주 시범 → 확대로 진행한다. 배포 후 현장 확인 전에는 완료 상태를 올리지 않는다.
 
-[운영 SOP](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_sop_20261005.md), [전환·시범 기록](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_rollout_20261005.md), [UAT 기록표](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_uat_20261005.csv)를 준비했다. 실제 담당자·대리자 정보는 요청 중이며 임의 배정하지 않았다.
+[운영 SOP](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_sop_20261005.md), [전환·시범 기록](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_rollout_20261005.md), [UAT 기록표](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_uat_20261005.csv)를 준비했다. 빈탄점·SM/BM 기존 ID·신규 세 역할 ID·공용 사용·대리자 없음 조건을 사용자 답변대로 반영했다. 신규 Auth 계정/roster는 아직 운영에 저장하지 않았다. 비밀정보 없는 native 발급 명세를 준비했다.
 
 기존 사용자 변경은 보존했다. 원 Office Git의 `pack too short`/bad HEAD는 삭제·복구하지 않았다. 건강한 별도 clone에서 확인한 origin/main에 구매 변경만 적용했고 동시 작업의 store batch/sales 변경은 원 체크아웃에 보존했다. 최초 backup이 없는 Office page와 three-way 파일은 건강한 baseline과 구매 추가 부분을 대조했다. 완전한 작업 전 snapshot을 주장하지 않는다.
 
