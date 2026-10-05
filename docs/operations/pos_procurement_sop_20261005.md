@@ -65,3 +65,7 @@ Invoice 전 회사 선결제 또는 취소 환불은 구매 화면의 원장 연
 구매 작업함의 운영 지표를 열어 최근 90일 PR/PO·승인 단계별 대기·열린 승인 대기의 p95 경과시간·무가격 PO 출력·회계 보류를 확인한다. 입고 검증 대기와 미결 이슈는 현재 전체 미완료 건이다. p95는 완료된 처리시간이나 확정 SLA가 아니다. 관찰 시각과 범위를 함께 기록한다. 기존 보충 제안은 사람이 검토한 후 PR을 만들며 자동 발주로 처리하지 않는다.
 
 관리자에게 표시되는 누락 역할을 채우고 실제 계정 권한과 대조한다. 배포 전후 [운영 전환표](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_rollout_20261005.md)와 [UAT 기록표](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_uat_20261005.csv)를 사용한다. 로컬 자동 테스트 결과를 실제 교육/UAT 결과 칸에 복사하지 않는다.
+
+## SAMPLE 실습
+
+실습은 [샘플 매장 절차](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_sample_training_20261005.md)의 공용 역할 계정으로 SAMPLE 매장에서 진행한다. `sp_pr1` 요청 → `bunsik_sm2` Adjust → `bunsik_bm1` Agree → `sp_purchase1` Approval → `sp_order` 수령 → `sp_verify1` 검증 순서로 연습한다. 실제 발송·지급 대신 명시된 교육 증빙을 사용하고, 빈탄점 실거래·재고를 변경하지 않는다.

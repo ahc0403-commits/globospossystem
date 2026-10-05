@@ -76,3 +76,11 @@ Office의 현재 빈탄점 법인은 `AKJ` (`10000000-0000-0000-0000-00000000000
 ## 중단·복구
 
 차이가 있으면 신규 PR 생성을 중단하고 진행 건과 실제 원장을 유지한다. 동일 command/proof로 재시도하며 중복 건을 만들지 않는다. 게시 전표 오류는 기존 조정/역분개 절차를 사용한다. 확정 입고·지급 삭제, 원장 숫자의 직접 덮어쓰기, 과거 승인 생성으로 복구하지 않는다. 원인·영향·복구 증거와 재개 확인을 남긴다.
+
+## SAMPLE 연습 매장 추가
+
+사용자가 동일 역할의 연습용 공용 ID를 요청했다. 신규 `sp_pr1`·`sp_verify1`·`sp_purchase1@globos.world`를 빈탄점 계정과 별도로 발급한다. 기존 `sp_order`·`bunsik_sm2`·`bunsik_bm1`·`account`는 유지한다. 샘플에도 HR 직원 연결과 대리자는 필요 없다.
+
+POS SAMPLE 매장·기존 역할 접근을 운영 DB에서 읽기 전용으로 확인했다. Office에는 SAMPLE 매장 연결이 없어, 승인된 운영 전환에서 고정 범위 설정 SQL로 별도 비세무 교육 법인·매장 연결을 만든 뒤 `purchase_store` 계정을 발급한다. 새 Auth·Office 연결·roster·정책·실습은 아직 미실행이다.
+
+[샘플 발급·실습 절차](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_sample_training_20261005.md)를 먼저 수행하고 U33·U34 및 적용 가능한 U01–U29를 실제 샘플 계정으로 확인한다. 이후 빈탄점 실사용 UAT·활성화·2주 시범을 진행한다. 필수 CI의 새 head 결과는 외부 최종 검증 기록을 기준으로 한다.

@@ -1,41 +1,41 @@
 {
   "scope": "Current procurement review-checkout source snapshots before final commit; final exact committed hashes/CI are in external review_manifest.json. Primary user changes preserved.",
-  "created_at_utc": "2026-10-05T13:08:53.693097+00:00",
+  "created_at_utc": "2026-10-05T13:35:25.597128+00:00",
   "files": [
     {
       "repository": "globos_pos_system",
       "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
       "path": "docs/implementation/pos_procurement_process_implementation_20261005.md",
-      "sha256": "61789cb480ba6270f158b6b63fdc2158b1c857beb98237caa8c19fd2303ff135",
-      "bytes": 17810
+      "sha256": "936ae65c5eb0b5e4866b5bec6ba27b6785df7912e648e2f1488a779d6ab44989",
+      "bytes": 18623
     },
     {
       "repository": "globos_pos_system",
       "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
       "path": "docs/operations/pos_procurement_account_manifest_20261005.json",
-      "sha256": "6e5c85acb5d21f23be7baa12103eb71c7136ab1475ef7c35f379f8a0938cb3f5",
-      "bytes": 3140
+      "sha256": "6e944f977920e3f7a789418ed95daa48530e6bf9a639137021f38c13100fc662",
+      "bytes": 7340
     },
     {
       "repository": "globos_pos_system",
       "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
       "path": "docs/operations/pos_procurement_rollout_20261005.md",
-      "sha256": "9efdaccd1b83f158acea7e2fd54d1ddce50c415247e2d09ffe0d6ecf1df680b0",
-      "bytes": 8542
+      "sha256": "b7add4612e03cf6516623b7f225628d2272fb9cfced9da8fb14b933059620257",
+      "bytes": 9646
     },
     {
       "repository": "globos_pos_system",
       "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
       "path": "docs/operations/pos_procurement_sop_20261005.md",
-      "sha256": "2f27a33b4de03cc999e4b1b4c715f686e2a449b2f08a1e51db401471d05c2ba6",
-      "bytes": 11431
+      "sha256": "86e4bddecdb8202d850b549c6a9d33f26019891927b097a6c416656c014573ec",
+      "bytes": 11928
     },
     {
       "repository": "globos_pos_system",
       "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
       "path": "docs/operations/pos_procurement_uat_20261005.csv",
-      "sha256": "f24fe4643485f1537304a0d2e5f8a00cd1c83eaba292603b86a2a865e95940f3",
-      "bytes": 4223
+      "sha256": "7d52f1b07325c3db79e3ed1898c187308cc15442b87f4a84f5d44105b37c39eb",
+      "bytes": 4777
     },
     {
       "repository": "globos_pos_system",
@@ -468,8 +468,8 @@
       "repository": "restaurant_office_app",
       "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
       "path": "scripts/test_procurement_invoice_lines.sh",
-      "sha256": "1f8d499b16c3dcd21b4521a60490644500631db5b88f32bda6bd0e233dc6878a",
-      "bytes": 4201
+      "sha256": "6b80113ec85cb147a935b3ea36aecb68d04cb9e37b338bc0e5b29062a996abe7",
+      "bytes": 7093
     },
     {
       "repository": "restaurant_office_app",
@@ -694,6 +694,34 @@
       "path": "test/hr_operational_portfolio_pages_test.dart",
       "sha256": "254ad8d5815afb4c34b6447c47e315938e6af1617b08ef08edf9e6c3ae6cf819",
       "bytes": 16770
+    },
+    {
+      "repository": "globos_pos_system",
+      "path": "docs/operations/pos_procurement_sample_training_20261005.md",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "sha256": "475304c376ca8376cb773ddadc97c7e5ada410507f57bde7e1ec1aabe56fcb16",
+      "bytes": 5261
+    },
+    {
+      "repository": "restaurant_office_app",
+      "path": "scripts/operations/configure_procurement_sample_scope.sql",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "sha256": "ac7629bbdcea58b15f24da267b7cfd75520ecacd80f613696307e0e4fd34f10e",
+      "bytes": 2813
+    },
+    {
+      "repository": "restaurant_office_app",
+      "path": "scripts/tests/procurement_sample_scope_fixture.py",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "sha256": "961b5c7c9d5659112c57e38b82959206a96d1e1e9baa3f707710251a6f2ecf28",
+      "bytes": 1603
+    },
+    {
+      "repository": "restaurant_office_app",
+      "path": "supabase/tests/procurement_sample_scope.test.sql",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "sha256": "ad93ef31a4ea5b6529c0556e8dcc565ee64e415d418ee2003af399ac75e1db9a",
+      "bytes": 1390
     }
   ]
 }
