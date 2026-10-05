@@ -35,6 +35,28 @@ Map<String, dynamic> normalizeInventoryItemPatch(Map<String, dynamic> data) {
 }
 
 class InventoryService {
+  Future<Map<String, dynamic>> fetchProcurementPage(
+    String storeId,
+    Map<String, dynamic> query,
+  ) => _rpcMap(
+    'procurement_workspace_page',
+    params: {'p_store_id': storeId, 'p_query': query},
+  );
+  Future<Map<String, dynamic>> procurementDocumentData(
+    String storeId,
+    String kind,
+    String id,
+    String audience,
+  ) => _rpcMap(
+    'procurement_document_data',
+    params: {
+      'p_store_id': storeId,
+      'p_kind': kind,
+      'p_record_id': id,
+      'p_audience': audience,
+    },
+  );
+
   Future<Map<String, dynamic>> fetchProcurementWorkspace(String storeId) =>
       _rpcMap('procurement_workspace', params: {'p_store_id': storeId});
 

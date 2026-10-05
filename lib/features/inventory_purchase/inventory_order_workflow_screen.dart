@@ -1,7 +1,13 @@
+import '../../main.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
+import '../procurement/procurement_process_labels.dart';
+import '../procurement/procurement_document_pdf.dart';
+import 'package:file_saver/file_saver.dart';
+import 'package:crypto/crypto.dart';
+import '../../core/ui/app_fonts.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:file_saver/file_saver.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -71,6 +77,7 @@ class _InventoryOrderWorkflowScreenState
   List<Map<String, dynamic>> _orders = const [];
   List<Map<String, dynamic>> _suppliers = const [];
   List<Map<String, dynamic>> _supplierItems = const [];
+  Map<String, dynamic> _procurementPolicy = {};
   Map<String, dynamic>? _detail;
   String? _selectedOrderId;
   String? _selectedAccountingStoreId;
@@ -235,6 +242,7 @@ class _InventoryOrderWorkflowScreenState
         if (catalog != null) {
           _suppliers = _maps(catalog['suppliers']);
           _supplierItems = _maps(catalog['items']);
+          _procurementPolicy = _map(catalog['procurement_policy']);
         }
         _selectedOrderId = selected;
         _loadedScope = scope;
@@ -459,48 +467,7 @@ class _InventoryOrderWorkflowScreenState
                 vi: 'Yêu cầu mua hàng',
               ),
               icon: const Icon(Icons.playlist_add_check),
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      final storeId = _isAccounting
-                          ? _selectedAccountingStoreId
-                          : _storeId;
-                      if (storeId == null ||
-                          !await _leaveReceipt() ||
-                          !context.mounted) {
-                        return;
-                      }
-                      await Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ProcurementWorkspacePage(
-                            load: () =>
-                                _service.fetchProcurementWorkspace(storeId),
-                            openEvidence: (receiptId, path) async {
-                              final url = await _service
-                                  .inventoryReceiptStatementUrl(path);
-                              if (!await launchUrl(
-                                Uri.parse(url),
-                                mode: LaunchMode.externalApplication,
-                              )) {
-                                throw StateError(
-                                  'PROCUREMENT_EVIDENCE_UNAVAILABLE',
-                                );
-                              }
-                            },
-                            execute: (action, id, version, key, payload) =>
-                                _service.executeProcurementCommand(
-                                  storeId: storeId,
-                                  action: action,
-                                  recordId: id,
-                                  version: version,
-                                  idempotencyKey: key,
-                                  payload: payload,
-                                ),
-                          ),
-                        ),
-                      );
-                      if (mounted) await _load();
-                    },
+              onPressed: _busy ? null : _openProcurement,
             ),
             IconButton(
               tooltip: _text(ko: '새로고침', en: 'Refresh', vi: 'Làm mới'),
@@ -815,7 +782,15 @@ class _InventoryOrderWorkflowScreenState
                 FilledButton.icon(
                   onPressed: _busy ? null : _createDraft,
                   icon: const Icon(Icons.add),
-                  label: Text(_text(ko: '새 발주', en: 'New', vi: 'Tạo đơn')),
+                  label: Text(
+                    _procurementPolicy['three_stage_required'] == true
+                        ? _text(
+                            ko: '새 구매요청',
+                            en: 'New purchase request',
+                            vi: 'Tạo yêu cầu mua hàng',
+                          )
+                        : _text(ko: '새 발주', en: 'New', vi: 'Tạo đơn'),
+                  ),
                 ),
             ],
           ),
@@ -1916,7 +1891,124 @@ class _InventoryOrderWorkflowScreenState
     });
   }
 
+  Future<void> _openProcurement() async {
+    final storeId = _isAccounting ? _selectedAccountingStoreId : _storeId;
+    if (storeId == null || !await _leaveReceipt() || !mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProcurementWorkspacePage(
+          load: () => _service.fetchProcurementWorkspace(storeId),
+          loadPage: (query) => _service.fetchProcurementPage(storeId, query),
+          exportDocument: (kind, record, audience) async {
+            final language = Localizations.localeOf(context).languageCode;
+            final source = await _service.procurementDocumentData(
+              storeId,
+              kind,
+              record['id'].toString(),
+              audience,
+            );
+            if (!context.mounted) return;
+            final bytes = await buildProcurementDocumentPdf(
+              source,
+              labels: {
+                for (final key in [
+                  'dates',
+                  'titlePr',
+                  'titlePo',
+                  'category',
+                  'channel',
+                  'raw_material',
+                  'tools',
+                  'stationery',
+                  'other',
+                  'ordinary',
+                  'shopee',
+                  'reason',
+                  'item',
+                  'specification',
+                  'quantity',
+                  'unit',
+                  'estimate',
+                  'amount',
+                  'stock',
+                  'approveStore',
+                  'approveBrand',
+                  'approvePurchase',
+                  'notes',
+                  'expectedVat',
+                  'expectedTotal',
+                ])
+                  key: procurementProcessLabel(key, language),
+              },
+              fontAsset: AppFonts.assetPath,
+            );
+            final hash = source['source_hash'].toString();
+            final fileHash = sha256.convert(bytes).toString();
+            final path =
+                '$storeId/procurement/$kind/${record['id']}/$audience/$hash/$fileHash.pdf';
+            await supabase.storage
+                .from('inventory-purchase-documents')
+                .uploadBinary(
+                  path,
+                  bytes,
+                  fileOptions: const FileOptions(
+                    contentType: 'application/pdf',
+                    upsert: true,
+                  ),
+                );
+            await supabase.rpc(
+              'record_procurement_document',
+              params: {
+                'p_store_id': storeId,
+                'p_kind': kind,
+                'p_record_id': record['id'],
+                'p_audience': audience,
+                'p_source_hash': hash,
+                'p_storage_path': path,
+                'p_sha256': fileHash,
+                'p_size_bytes': bytes.length,
+              },
+            );
+            await FileSaver.instance.saveFile(
+              name:
+                  '${record['request_no'] ?? record['purchase_order_no']}-$audience',
+              bytes: bytes,
+              ext: 'pdf',
+              mimeType: MimeType.pdf,
+            );
+          },
+          openEvidence: (receiptId, path) async {
+            final url = await _service.inventoryReceiptStatementUrl(path);
+            if (!await launchUrl(
+              Uri.parse(url),
+              mode: LaunchMode.externalApplication,
+            )) {
+              throw StateError('PROCUREMENT_EVIDENCE_UNAVAILABLE');
+            }
+          },
+          execute: (action, id, version, key, payload) =>
+              _service.executeProcurementCommand(
+                storeId: storeId,
+                action: action,
+                recordId: id,
+                version: version,
+                idempotencyKey: key,
+                payload: payload,
+              ),
+        ),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
   Future<void> _createDraft() async {
+    if (_procurementPolicy['three_stage_required'] == true) {
+      await _openProcurement();
+      return;
+    }
+
     final input = await showDialog<InventoryPurchaseDraftOrderInput>(
       context: context,
       builder: (_) => InventoryPurchaseDraftOrderDialog(

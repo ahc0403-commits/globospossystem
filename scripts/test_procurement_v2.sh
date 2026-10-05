@@ -59,3 +59,22 @@ run_sql "$INVENTORY_ROOT/scripts/preflight_inventory_workflow_order_search.sql" 
 run_sql "$INVENTORY_ROOT/supabase/migrations/20260927011000_inventory_workflow_order_search.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/scripts/verify_inventory_workflow_order_search.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/inventory_workflow_order_search.test.sql"
+
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_upgrade_fixture.sql"
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005030000_procurement_process_contract.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005031000_procurement_documents_and_channel.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005032000_procurement_paged_reads.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005033000_procurement_set_based_evidence.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005034000_procurement_nonstock_returns.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005035000_procurement_document_storage_scope.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005036000_procurement_legacy_entry_and_evidence.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005037000_procurement_accounting_status.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005038000_procurement_employee_payment_owners.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005039000_procurement_role_roster_and_metrics.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005040000_procurement_read_indexes.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_upgrade_compatibility.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_process_contract.test.sql"
+
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_paged_reads.test.sql"
+
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"

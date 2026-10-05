@@ -1,7 +1,19 @@
+import 'procurement_metrics.dart';
+import 'procurement_catalog_dialog.dart';
+import 'procurement_process_labels.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+
+typedef ProcurementPageLoad =
+    Future<Map<String, dynamic>> Function(Map<String, dynamic> query);
+typedef ProcurementExport =
+    Future<void> Function(
+      String kind,
+      Map<String, dynamic> record,
+      String audience,
+    );
 
 typedef ProcurementLoad = Future<Map<String, dynamic>> Function();
 typedef ProcurementExecute =
@@ -20,10 +32,14 @@ class ProcurementWorkspacePage extends StatefulWidget {
     required this.load,
     required this.execute,
     this.onOpenOrder,
+    this.loadPage,
+    this.exportDocument,
     this.openEvidence,
   });
   final Future<void> Function(String receiptId, String path)? openEvidence;
   final ProcurementLoad load;
+  final ProcurementPageLoad? loadPage;
+  final ProcurementExport? exportDocument;
   final ProcurementExecute execute;
   final ValueChanged<String>? onOpenOrder;
   @override
@@ -33,6 +49,14 @@ class ProcurementWorkspacePage extends StatefulWidget {
 
 class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   Map<String, dynamic> _data = {};
+  final Map<String, dynamic> _query = {};
+  String? _selectedOrderId;
+  String? _catalogCursor;
+  String copy(String key) => procurementProcessLabel(
+    key,
+    Localizations.localeOf(context).languageCode,
+  );
+
   Map<String, dynamic>? _pending;
   String? _selectedId, _error, _journalKey;
   bool _loading = true, _busy = false;
@@ -60,9 +84,35 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     final generation = ++_generation;
     if (mounted) setState(() => _loading = true);
     try {
-      final data = await widget.load();
+      final data = widget.loadPage == null
+          ? await widget.load()
+          : await widget.loadPage!({
+              ..._query,
+              if (_selectedId != null) 'request_id': _selectedId,
+              if (_selectedOrderId != null) 'order_id': _selectedOrderId,
+            });
       if (data['contract_version'] != 2) {
         throw StateError('PROCUREMENT_CONTRACT_NOT_READY');
+      }
+      if (widget.loadPage != null) {
+        final incoming = rows(data['products']);
+        if (_selectedId == null && _selectedOrderId == null) {
+          _catalogCursor = incoming.lastOrNull?['id']?.toString();
+        } else {
+          data['products'] = {
+            for (final p in [...rows(_data['products']), ...incoming])
+              p['id']: p,
+          }.values.toList();
+          data['supplier_items'] = {
+            for (final p in [
+              ...rows(_data['supplier_items']),
+              ...rows(data['supplier_items']),
+            ])
+              p['id']: p,
+          }.values.toList();
+          data['catalog_has_more'] =
+              _data['catalog_has_more'] ?? data['catalog_has_more'];
+        }
       }
       final identity = map(data['actor']);
       final key =
@@ -202,6 +252,10 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     ),
     'amend_po' => t('변경 구매요청', 'Purchase amendment', 'Yêu cầu sửa mua hàng'),
     'create_request' => t('요청 작성', 'Request created', 'Tạo yêu cầu'),
+    'brand_review' => copy('brand_review'),
+    'brand_approve' => copy('brand_approve'),
+    'adjust_request' => copy('adjust_request'),
+    'cancel_request' => copy('cancel_request'),
     'configure' => t('구매 정책 변경', 'Policy updated', 'Cập nhật chính sách'),
     'cancelled' => t('취소', 'Cancelled', 'Đã hủy'),
     'draft' => t('작성 중', 'Draft', 'Bản nháp'),
@@ -266,12 +320,234 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     );
   }
 
+  Future<void> _saveProduct() async {
+    final value = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => ProcurementCatalogDialog(
+        label: copy,
+        suppliers: {
+          for (final s in rows(_data['supplier_items']))
+            s['supplier_id'].toString(): s['supplier_name'].toString(),
+        },
+      ),
+    );
+    if (value != null) await _execute('save_product', null, value);
+  }
+
+  void _createdDate(String key, String input) {
+    final value = input.trim();
+    final parsed = DateTime.tryParse(value);
+    final candidate = {..._query};
+    if (value.isEmpty) {
+      candidate.remove(key);
+    } else {
+      candidate[key] = value;
+    }
+    if (value.isNotEmpty &&
+            (parsed == null ||
+                !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value) ||
+                parsed.toIso8601String().substring(0, 10) != value) ||
+        candidate['created_from'] != null &&
+            candidate['created_to'] != null &&
+            candidate['created_from'].toString().compareTo(
+                  candidate['created_to'].toString(),
+                ) >
+                0) {
+      setState(() => _error = copy('dateFilterInvalid'));
+      return;
+    }
+    _query.clear();
+    _query.addAll(candidate);
+    _query.removeWhere(
+      (key, _) =>
+          key.startsWith('request_before') || key.startsWith('order_before'),
+    );
+    _selectedId = null;
+    _selectedOrderId = null;
+    _load();
+  }
+
+  Widget _accountingStatus(Map<String, dynamic> order) {
+    final status = map(order['accounting_status']);
+    if (status.isEmpty) return const SizedBox.shrink();
+    return Text(
+      '${copy('accountingStatus')}: ${status['invoice_count']} / ${status['payable_count']} / ${status['held_count']} / ${status['paid_count']}\n${status['stale'] == true || status['reconciliation_required'] == true ? copy('accountingRefresh') : status['observed_at'] ?? ''}',
+    );
+  }
+
+  Future<void> _toggleNewRequests() async {
+    final policy = map(_data['policy']);
+    await _execute(
+      'configure',
+      {...policy, 'id': _data['store_id']},
+      {
+        ...policy,
+        'enabled': true,
+        'new_requests_enabled': policy['new_requests_enabled'] == false,
+      },
+    );
+  }
+
+  Future<void> _moreCatalog() async {
+    if (widget.loadPage == null || _catalogCursor == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final data = await widget.loadPage!({
+        ..._query,
+        'catalog_after': _catalogCursor,
+      });
+      if (!mounted) return;
+      final incoming = rows(data['products']);
+      _catalogCursor = incoming.lastOrNull?['id']?.toString();
+      setState(
+        () => _data = {
+          ..._data,
+          'products': {
+            for (final p in [...rows(_data['products']), ...incoming])
+              p['id']: p,
+          }.values.toList(),
+          'supplier_items': {
+            for (final p in [
+              ...rows(_data['supplier_items']),
+              ...rows(data['supplier_items']),
+            ])
+              p['id']: p,
+          }.values.toList(),
+          'catalog_has_more': data['catalog_has_more'],
+        },
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = _errorText(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _nextEvidence(String kind) async {
+    final key = switch (kind) {
+      'receipt' => 'receipts',
+      'event' => 'events',
+      'issue' => 'issues',
+      'return' => 'returns',
+      'legacy' => 'legacy_terms_review',
+      _ => 'quotes',
+    };
+    final list = kind == 'quote'
+        ? rows(map(_data['request_detail'])['quotes'])
+        : rows(_data[key]);
+    if (list.isEmpty) return;
+    final last = list.last;
+    _query['${kind}_before'] =
+        last[kind == 'receipt' ? 'received_at' : 'created_at'];
+    _query['${kind}_before_id'] = last['id'];
+    await _load();
+  }
+
+  Future<void> _selectRequest(String id) async {
+    _query.removeWhere(
+      (key, _) => [
+        'receipt_',
+        'event_',
+        'issue_',
+        'return_',
+        'quote_',
+      ].any(key.startsWith),
+    );
+    setState(() {
+      _selectedId = id;
+      _selectedOrderId = null;
+    });
+    if (widget.loadPage != null) await _load();
+  }
+
+  Future<void> _selectOrder(String id) async {
+    _query.removeWhere(
+      (key, _) =>
+          ['receipt_', 'event_', 'issue_', 'return_'].any(key.startsWith),
+    );
+    setState(() {
+      _selectedOrderId = id;
+    });
+    if (widget.loadPage != null) await _load();
+  }
+
+  Future<void> _next(String kind) async {
+    final records = rows(_data[kind == 'request' ? 'requests' : 'orders']);
+    if (records.isEmpty) return;
+    final last = records.last;
+    _query['${kind}_before'] =
+        last[kind == 'request' ? 'updated_at' : 'created_at'];
+    _query['${kind}_before_id'] = last['id'];
+    _selectedId = null;
+    _selectedOrderId = null;
+    await _load();
+  }
+
+  Future<void> _export(
+    String kind,
+    Map<String, dynamic> record,
+    String audience,
+  ) async {
+    if (widget.exportDocument == null) return;
+    setState(() => _busy = true);
+    try {
+      await widget.exportDocument!(kind, record, audience);
+      await _load();
+    } catch (e) {
+      if (mounted) setState(() => _error = _errorText(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _dates(Map<String, dynamic> r) {
+    final terms = map(r['commercial_terms']);
+    return copy('dates')
+        .replaceAll(
+          '{0}',
+          '${r['pr_created_at'] ?? terms['pr_created_at'] ?? r['created_at'] ?? '—'}',
+        )
+        .replaceAll(
+          '{1}',
+          '${r['pr_submitted_at'] ?? terms['pr_submitted_at'] ?? r['submitted_at'] ?? '—'}',
+        )
+        .replaceAll('{2}', '${r['issued_at'] ?? terms['issued_at'] ?? '—'}');
+  }
+
   Future<void> _action(String action, Map<String, dynamic> request) async {
     if (action == 'save_request') {
       await _editRequest(request);
       return;
     }
-    if (action == 'return_request') {
+    if (action == 'adjust_request') {
+      final lines = rows(request['lines']);
+      final value = await _fields(
+        copy('adjust_request'),
+        {
+          'reason': copy('reason'),
+          for (final l in lines)
+            l['id'].toString(): '${l['product_name']} · ${l['requested_unit']}',
+        },
+        initial: {
+          for (final l in lines)
+            l['id'].toString(): l['requested_quantity'].toString(),
+        },
+      );
+      if (value != null) {
+        await _execute(action, request, {
+          'reason': value['reason'],
+          'lines': [
+            for (final l in lines)
+              {
+                'request_line_id': l['id'],
+                'quantity': value[l['id'].toString()],
+              },
+          ],
+        });
+      }
+      return;
+    }
+    if (action == 'return_request' || action == 'cancel_request') {
       final value = await _fields(label(action), {
         'reason': t('반려 사유', 'Reason', 'Lý do'),
       });
@@ -363,8 +639,27 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       );
       return;
     }
+    if (!mounted) return;
+    final activate = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(copy('activatePolicy')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Icon(Icons.close),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Icon(Icons.check),
+          ),
+        ],
+      ),
+    );
+    if (activate != true || !mounted) return;
     await _execute('configure', policy.isEmpty ? null : policy, {
       'enabled': true,
+      'three_stage_required': true,
       'quantity_review_multiplier': quantityMultiplier,
       'high_value_amount': amount,
       'max_price_increase_percent': percent,
@@ -373,9 +668,12 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   }
 
   Widget _receiptCard(Map<String, dynamic> receipt, bool unavailable) {
-    final order = rows(
-      _data['orders'],
-    ).where((o) => o['id'] == receipt['purchase_order_id']).firstOrNull;
+    final detail = map(_data['order_detail']);
+    final order = detail['id'] == receipt['purchase_order_id']
+        ? detail
+        : rows(
+            _data['orders'],
+          ).where((o) => o['id'] == receipt['purchase_order_id']).firstOrNull;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -546,7 +844,10 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   @override
   Widget build(BuildContext context) {
     final requests = rows(_data['requests']);
-    final selected = requests.where((r) => r['id'] == _selectedId).firstOrNull;
+    final detail = map(_data['request_detail']);
+    final selected = detail['id'] == _selectedId && detail.isNotEmpty
+        ? detail
+        : requests.where((r) => r['id'] == _selectedId).firstOrNull;
     final unavailable = _busy || _pending != null;
     return Scaffold(
       appBar: AppBar(
@@ -628,10 +929,85 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                   spacing: 12,
                   runSpacing: 8,
                   children: [
+                    if (widget.loadPage != null)
+                      TextButton(
+                        onPressed: unavailable
+                            ? null
+                            : () {
+                                _query.clear();
+                                _selectedId = null;
+                                _selectedOrderId = null;
+                                _load();
+                              },
+                        child: Text(copy('firstPage')),
+                      ),
+                    if (widget.loadPage != null)
+                      SizedBox(
+                        width: 220,
+                        child: TextField(
+                          decoration: InputDecoration(
+                            labelText: copy('searchCatalog'),
+                          ),
+                          onSubmitted: (value) {
+                            _query['catalog_search'] = value;
+                            _query.remove('catalog_after');
+                            _load();
+                          },
+                        ),
+                      ),
+                    if (_data['catalog_has_more'] == true)
+                      TextButton(
+                        onPressed: unavailable ? null : _moreCatalog,
+                        child: Text(copy('moreCatalog')),
+                      ),
+                    if (actor['can_office_approve'] == true)
+                      TextButton(
+                        onPressed: unavailable || !enabled
+                            ? null
+                            : _saveProduct,
+                        child: Text(copy('catalogSetup')),
+                      ),
+                    if (widget.loadPage != null)
+                      SizedBox(
+                        width: 220,
+                        child: TextField(
+                          decoration: InputDecoration(
+                            labelText: copy('searchRecords'),
+                          ),
+                          onSubmitted: (value) {
+                            _query['search'] = value;
+                            _query.remove('request_before');
+                            _query.remove('order_before');
+                            _selectedId = null;
+                            _selectedOrderId = null;
+                            _load();
+                          },
+                        ),
+                      ),
+                    if (widget.loadPage != null)
+                      for (final field in ['created_from', 'created_to'])
+                        SizedBox(
+                          width: 180,
+                          child: TextField(
+                            key: Key('procurement_$field'),
+                            decoration: InputDecoration(
+                              labelText: copy(
+                                field == 'created_from'
+                                    ? 'createdFrom'
+                                    : 'createdTo',
+                              ),
+                            ),
+                            onSubmitted: (value) => _createdDate(field, value),
+                          ),
+                        ),
                     if (actor['can_create'] == true)
                       FilledButton.icon(
                         key: const Key('procurement_create_request'),
-                        onPressed: enabled && !unavailable
+                        onPressed:
+                            enabled &&
+                                !unavailable &&
+                                map(_data['policy'])['new_requests_enabled'] !=
+                                    false
                             ? _editRequest
                             : null,
                         icon: const Icon(Icons.add),
@@ -639,18 +1015,13 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                       ),
                     if (actor['can_manage'] == true && enabled)
                       TextButton(
-                        onPressed: unavailable
-                            ? null
-                            : () => _execute(
-                                'configure',
-                                map(_data['policy']),
-                                {...map(_data['policy']), 'enabled': false},
-                              ),
+                        onPressed: unavailable ? null : _toggleNewRequests,
                         child: Text(
-                          t(
-                            '새 구매 기능 중지',
-                            'Pause new purchasing',
-                            'Tạm dừng mua hàng mới',
+                          copy(
+                            map(_data['policy'])['new_requests_enabled'] ==
+                                    false
+                                ? 'resumeNew'
+                                : 'pauseNew',
                           ),
                         ),
                       ),
@@ -665,6 +1036,28 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                 ),
                 const SizedBox(height: 16),
                 ExpansionTile(
+                  title: Text(copy('operatingMetrics')),
+                  onExpansionChanged: (v) {
+                    if (v && _query['include_metrics'] != true) {
+                      _query['include_metrics'] = true;
+                      _load();
+                    }
+                  },
+                  children: [
+                    ProcurementMetrics(
+                      data: map(_data['operating_metrics']),
+                      label: copy,
+                    ),
+                  ],
+                ),
+                ExpansionTile(
+                  initiallyExpanded: _query['include_evidence'] == true,
+                  onExpansionChanged: (v) {
+                    if (v && _query['include_evidence'] != true) {
+                      _query['include_evidence'] = true;
+                      _load();
+                    }
+                  },
                   title: Text(
                     t(
                       '재고·수요 확인',
@@ -677,6 +1070,23 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                   ],
                 ),
 
+                if (widget.loadPage != null && actor['can_view_prices'] == true)
+                  TextButton(
+                    onPressed: unavailable
+                        ? null
+                        : () {
+                            _query['include_legacy'] = true;
+                            _load();
+                          },
+                    child: Text(copy('legacyReview')),
+                  ),
+                if (_data['legacy_has_more'] == true)
+                  TextButton(
+                    onPressed: unavailable
+                        ? null
+                        : () => _nextEvidence('legacy'),
+                    child: Text(copy('nextLegacy')),
+                  ),
                 for (final legacy in rows(_data['legacy_terms_review']))
                   Card(
                     child: ListTile(
@@ -717,14 +1127,26 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                         '${r['request_no']} · ${label(r['status'].toString())}',
                       ),
                       subtitle: Text(
-                        '${r['reason']}\n${r['requested_delivery_date']}',
+                        '${r['reason']}\n${r['requested_delivery_date']}\n${_dates(r)}',
                       ),
                       isThreeLine: true,
-                      onTap: () =>
-                          setState(() => _selectedId = r['id'].toString()),
+                      onTap: () => _selectRequest(r['id'].toString()),
                     ),
                   ),
+                if (_data['request_has_more'] == true)
+                  TextButton(
+                    onPressed: unavailable ? null : () => _next('request'),
+                    child: Text(copy('nextRequests')),
+                  ),
                 if (selected != null) ...[
+                  Text(_dates(selected)),
+                  if (widget.exportDocument != null)
+                    TextButton(
+                      onPressed: unavailable
+                          ? null
+                          : () => _export('pr', selected, 'internal'),
+                      child: Text(copy('prPdf')),
+                    ),
                   const Divider(),
                   Text(
                     '${selected['request_no']}',
@@ -736,7 +1158,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                         '${line['product_name']} · ${line['requested_quantity']} ${line['requested_unit']}',
                       ),
                       subtitle: Text(
-                        '${t('요청 당시 재고', 'Stock at request', 'Tồn kho khi yêu cầu')}: ${line['current_stock_snapshot'] ?? '—'} · ${line['stock_updated_at'] ?? '—'}\n${line['memo'] ?? ''}',
+                        '${t('요청 당시 재고', 'Stock at request', 'Tồn kho khi yêu cầu')}: ${line['current_stock_snapshot'] ?? '—'} · ${line['stock_updated_at'] ?? '—'}\n${line['memo'] ?? ''}\n${copy('estimate')}: ${line['estimated_unit_price'] ?? '—'} / ${line['estimated_order_unit'] ?? '—'}',
                       ),
                     ),
                   Wrap(
@@ -750,6 +1172,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                           'save_request',
                           'submit_request',
                           'store_approve',
+                          'adjust_request',
+                          'brand_approve',
+                          'cancel_request',
                           'return_request',
                           'office_approve',
                           'senior_approve',
@@ -771,11 +1196,12 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                 for (final order in rows(_data['orders']))
                   Card(
                     child: ListTile(
+                      onTap: () => _selectOrder(order['id'].toString()),
                       title: Text(
                         '${order['purchase_order_no']} · ${label(order['procurement_status'].toString())}',
                       ),
                       subtitle: Text(
-                        '${order['supplier_name']} · ${order['requested_delivery_date']}',
+                        '${order['supplier_name']} · ${order['requested_delivery_date']}\n${_dates(order)}',
                       ),
                       trailing: widget.onOpenOrder == null
                           ? null
@@ -786,21 +1212,64 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                             ),
                     ),
                   ),
+                if (map(_data['order_detail']).isNotEmpty)
+                  _accountingStatus(map(_data['order_detail'])),
+                if (_data['order_has_more'] == true)
+                  TextButton(
+                    onPressed: unavailable ? null : () => _next('order'),
+                    child: Text(copy('nextOrders')),
+                  ),
+                if (_data['receipt_has_more'] == true)
+                  TextButton(
+                    onPressed: unavailable
+                        ? null
+                        : () => _nextEvidence('receipt'),
+                    child: Text(copy('nextReceipts')),
+                  ),
+                for (final returned in rows(_data['returns']))
+                  ListTile(
+                    title: Text(
+                      '${label('return_goods')} · ${returned['quantity_base']}',
+                    ),
+                    subtitle: Text(
+                      '${returned['created_at']} · ${returned['reason']} · ${returned['evidence_reference']}',
+                    ),
+                  ),
                 for (final receipt in rows(_data['receipts']))
                   _receiptCard(receipt, unavailable),
                 const Divider(),
+                if (_data['event_has_more'] == true)
+                  TextButton(
+                    onPressed: unavailable
+                        ? null
+                        : () => _nextEvidence('event'),
+                    child: Text(copy('nextEvents')),
+                  ),
                 Text(
                   t('처리 이력', 'History', 'Lịch sử'),
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
+                for (final kind in ['issue', 'return', 'quote'])
+                  if (_data['${kind}_has_more'] == true)
+                    TextButton(
+                      onPressed: unavailable ? null : () => _nextEvidence(kind),
+                      child: Text(
+                        copy(
+                          'next${kind[0].toUpperCase()}${kind.substring(1)}s',
+                        ),
+                      ),
+                    ),
                 for (final e in rows(_data['events']).where(
-                  (e) => _selectedId == null || e['record_id'] == _selectedId,
+                  (e) =>
+                      _selectedId == null ||
+                      e['record_id'] == _selectedId ||
+                      e['record_id'] == _selectedOrderId,
                 ))
                   ListTile(
                     dense: true,
                     title: Text(label(e['action'].toString())),
                     subtitle: Text(
-                      '${e['created_at']} · ${map(e['actor'])['system']} · ${map(e['actor'])['subject_id']}\n${e['reason'] ?? ''}',
+                      '${e['created_at']} · ${map(e['actor'])['display_name'] ?? map(e['actor'])['role'] ?? map(e['actor'])['system']}\n${e['reason'] ?? ''}',
                     ),
                   ),
               ],
@@ -824,6 +1293,12 @@ class ProcurementRequestDialog extends StatefulWidget {
 }
 
 class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
+  String copy(String key) => procurementProcessLabel(
+    key,
+    Localizations.localeOf(context).languageCode,
+  );
+
+  String _category = 'raw_material', _channel = 'ordinary';
   final _form = GlobalKey<FormState>();
   late TextEditingController _reason, _date, _memo;
   late List<Map<String, dynamic>> _lines;
@@ -837,6 +1312,8 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
   void initState() {
     super.initState();
     final r = widget.initial;
+    _category = r?['purchase_category']?.toString() ?? 'raw_material';
+    _channel = r?['purchase_channel']?.toString() ?? 'ordinary';
     _reason = TextEditingController(text: r?['reason']?.toString());
     _date = TextEditingController(
       text:
@@ -865,6 +1342,40 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
     super.dispose();
   }
 
+  num? _estimate(Map<String, dynamic> line) {
+    final product = widget.products
+        .where((p) => p['id'] == line['product_id'])
+        .firstOrNull;
+    final items =
+        widget.supplierItems
+            .where(
+              (p) =>
+                  p['product_id'] == line['product_id'] &&
+                  p['supplier_id'] == line['preferred_supplier_id'],
+            )
+            .toList()
+          ..sort((a, b) {
+            final preferred =
+                (b['is_preferred'] == true ? 1 : 0) -
+                (a['is_preferred'] == true ? 1 : 0);
+            return preferred != 0
+                ? preferred
+                : a['id'].toString().compareTo(b['id'].toString());
+          });
+    if (product == null || items.isEmpty) return null;
+    num n(dynamic v) => v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
+    final i = items.first,
+        conversion = n(items.first['order_unit_quantity_base']);
+    if (conversion <= 0 || !conversion.isFinite || i['unit_price'] == null) {
+      return null;
+    }
+    return n(line['quantity']) *
+        (line['unit'] == product['base_unit'] ? 1 : n(product['conversion'])) /
+        conversion *
+        n(i['unit_price']) *
+        (1 + n(i['tax_rate']) / 100);
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(t('구매요청', 'Purchase request', 'Yêu cầu mua hàng')),
@@ -876,6 +1387,33 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Text(
+                '${copy('expectedTotal')}: ${_lines.any((l) => _estimate(l) == null) ? '—' : _lines.fold<num>(0, (sum, l) => sum + _estimate(l)!).toStringAsFixed(2)} VND',
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                decoration: InputDecoration(labelText: copy('category')),
+                items: [
+                  for (final k in [
+                    'raw_material',
+                    'tools',
+                    'stationery',
+                    'other',
+                  ])
+                    DropdownMenuItem(value: k, child: Text(copy(k))),
+                ],
+                onChanged: (v) => setState(() => _category = v!),
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: _channel,
+                decoration: InputDecoration(labelText: copy('channel')),
+                items: [
+                  for (final k in ['ordinary', 'shopee'])
+                    DropdownMenuItem(value: k, child: Text(copy(k))),
+                ],
+                onChanged: (v) => setState(() => _channel = v!),
+              ),
+
               TextFormField(
                 controller: _reason,
                 decoration: InputDecoration(
@@ -955,7 +1493,8 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
                               decoration: InputDecoration(
                                 labelText: t('필요 수량', 'Quantity', 'Số lượng'),
                               ),
-                              onChanged: (s) => line['quantity'] = s,
+                              onChanged: (s) =>
+                                  setState(() => line['quantity'] = s),
                               validator: (s) =>
                                   s != null &&
                                       RegExp(
@@ -996,7 +1535,8 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
                                     ),
                                   )
                                   .toList(),
-                              onChanged: (u) => line['unit'] = u,
+                              onChanged: (u) =>
+                                  setState(() => line['unit'] = u),
                               validator: (s) => s == null
                                   ? t('단위 선택', 'Select unit', 'Chọn đơn vị')
                                   : null,
@@ -1031,7 +1571,7 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
                                         s['product_id'] == line['product_id'],
                                   ))
                                     s['supplier_id'].toString():
-                                        s['supplier_name'].toString(),
+                                        '${s['supplier_name']} · ${s['unit_price'] ?? '—'} / ${s['order_unit']}',
                                 }.entries
                                 .map(
                                   (e) => DropdownMenuItem(
@@ -1040,7 +1580,8 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
                                   ),
                                 )
                                 .toList(),
-                        onChanged: (s) => line['preferred_supplier_id'] = s,
+                        onChanged: (s) =>
+                            setState(() => line['preferred_supplier_id'] = s),
                       ),
                       TextFormField(
                         initialValue: line['memo']?.toString(),
@@ -1078,6 +1619,8 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
         onPressed: () {
           if (_form.currentState!.validate()) {
             Navigator.pop(context, {
+              'purchase_category': _category,
+              'purchase_channel': _channel,
               'reason': _reason.text.trim(),
               'requested_delivery_date': _date.text,
               'memo': _memo.text,
