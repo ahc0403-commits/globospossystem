@@ -536,6 +536,7 @@ class EmergencyFulfillmentOrder {
     required this.createdAt,
     required this.items,
     this.salesChannel = 'dine_in',
+    this.directFulfillmentType,
     this.lastActionId,
     this.lastActionAt,
     this.stationStartedAt,
@@ -553,6 +554,7 @@ class EmergencyFulfillmentOrder {
   final DateTime createdAt;
   final List<EmergencyFulfillmentItem> items;
   final String salesChannel;
+  final String? directFulfillmentType;
   final String? lastActionId;
   final DateTime? lastActionAt;
   final DateTime? stationStartedAt;
@@ -562,6 +564,7 @@ class EmergencyFulfillmentOrder {
   final int? oldestTrayReadySequence;
 
   bool get isDelivery => salesChannel == 'delivery';
+  bool get isDirectPickup => directFulfillmentType == 'pickup';
   bool get usesKitchenHandoffWorkflow => workflowVersion >= 2 && !isDelivery;
   bool get hasReadyUnservedFood => _operationalItems().any(
     (item) => !item.isFloorDirect && item.readyUnservedQuantity > 0,
@@ -834,6 +837,7 @@ class EmergencyFulfillmentOrder {
   EmergencyFulfillmentOrder copyWith({
     List<EmergencyFulfillmentItem>? items,
     String? salesChannel,
+    String? directFulfillmentType,
     String? lastActionId,
     DateTime? lastActionAt,
     DateTime? stationStartedAt,
@@ -854,6 +858,7 @@ class EmergencyFulfillmentOrder {
     createdAt: createdAt,
     items: items ?? this.items,
     salesChannel: salesChannel ?? this.salesChannel,
+    directFulfillmentType: directFulfillmentType ?? this.directFulfillmentType,
     lastActionId: clearLastAction ? null : (lastActionId ?? this.lastActionId),
     lastActionAt: clearLastAction ? null : (lastActionAt ?? this.lastActionAt),
     stationStartedAt: stationStartedAt ?? this.stationStartedAt,
@@ -895,6 +900,7 @@ class EmergencyFulfillmentOrder {
       tableNumber: json['table_number']?.toString() ?? '-',
       floorLabel: json['floor_label']?.toString() ?? '1F',
       salesChannel: json['sales_channel']?.toString() ?? 'dine_in',
+      directFulfillmentType: json['direct_fulfillment_type']?.toString(),
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now().toUtc(),

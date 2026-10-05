@@ -1535,6 +1535,69 @@ void main() {
     }
   });
 
+  testWidgets('pickup is identified on kitchen and tray without a floor', (
+    tester,
+  ) async {
+    for (final (language, label) in [
+      ('ko', '포장 주문'),
+      ('vi', 'MANG VỀ'),
+      ('en', 'TAKEOUT'),
+    ]) {
+      for (final station in ['kitchen', 'tray']) {
+        final active = _activeState(station);
+        final json = <String, dynamic>{
+          'queue_id': 'queue-1',
+          'order_id': 'order-1',
+          'queue_no': 1,
+          'table_number': 'D6710AE8D',
+          'floor_label': '1F',
+          'created_at': DateTime.now().toIso8601String(),
+          'items': [],
+          'sales_channel': 'takeaway',
+          'direct_fulfillment_type': 'pickup',
+          'workflow_version': 1,
+        };
+        final pickup = EmergencyFulfillmentOrder.fromJson(
+          json,
+        ).copyWith(items: active.orders.first.items);
+        expect(pickup.isDirectPickup, isTrue);
+        expect(pickup.isDelivery, isFalse);
+        expect(pickup.usesKitchenHandoffWorkflow, isFalse);
+        final fixture = _FixtureEmergencyNotifier(
+          active.copyWith(orders: [pickup]),
+        );
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: Locale(language),
+          expectedStationType: station,
+        );
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const Key('emergency_order_table_order-1')),
+              )
+              .data,
+          '$label D6710AE8D',
+        );
+        await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+        await tester.pump();
+        expect(find.textContaining('1F ·'), findsNothing);
+        if (station == 'tray') {
+          final tooltip = switch (language) {
+            'ko' => '수령 준비 완료',
+            'vi' => 'Sẵn sàng nhận',
+            _ => 'Ready for pickup',
+          };
+          expect(find.byTooltip(tooltip), findsWidgets);
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      }
+    }
+  });
+
   testWidgets('delivery card is labeled delivery and omits the floor detail', (
     tester,
   ) async {

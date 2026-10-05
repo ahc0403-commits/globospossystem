@@ -270,6 +270,13 @@ class DirectOrderCopy {
       'Đơn mang đi không có phí giao hàng.',
       'Pickup orders cannot include a delivery fee.',
     ),
+    'DIRECT_ORDER_PICKUP_KDS_SESSION_REQUIRED' => _pick(
+      '주방 전달 모드를 확인한 뒤 다시 승인해 주세요.',
+      'Kiểm tra chế độ bếp rồi duyệt lại đơn.',
+      'Check the kitchen fulfillment mode, then approve again.',
+    ),
+    'DIRECT_ORDER_PICKUP_USE_KDS' ||
+    'DIRECT_ORDER_PICKUP_HANDOFF_FINALIZED' ||
     'DIRECT_ORDER_PICKUP_NOT_APPROVED' ||
     'DIRECT_ORDER_PICKUP_NOT_READY' ||
     'DIRECT_ORDER_PICKUP_DISPATCH_FORBIDDEN' ||
@@ -366,9 +373,9 @@ class DirectOrderCopy {
     'Enter a delivery address (at least 3 characters), address details, recipient and phone number.',
   );
   String get awaitingQuote => _pick(
-    '캐셔가 Grab 배송비를 확인하고 있습니다.',
-    'Thu ngân đang kiểm tra phí Grab.',
-    'The cashier is checking the Grab fee.',
+    '매장에서 주문을 확인하고 있습니다.',
+    'Cửa hàng đang kiểm tra đơn hàng.',
+    'The store is reviewing your order.',
   );
   String get quoteReady => _pick(
     '최종 금액이 준비되었습니다.',

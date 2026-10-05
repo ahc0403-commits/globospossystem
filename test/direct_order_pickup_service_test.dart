@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -119,6 +120,18 @@ void main() {
       expect(sentIds[0], sentIds[1]);
     },
   );
+
+  test('awaiting quote describes store review for both order types', () {
+    expect(DirectOrderCopy('ko').awaitingQuote, '매장에서 주문을 확인하고 있습니다.');
+    expect(
+      DirectOrderCopy('vi').awaitingQuote,
+      'Cửa hàng đang kiểm tra đơn hàng.',
+    );
+    expect(
+      DirectOrderCopy('en').awaitingQuote,
+      'The store is reviewing your order.',
+    );
+  });
 
   test('unknown fulfillment types fail closed', () {
     expect(
