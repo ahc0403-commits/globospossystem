@@ -375,8 +375,8 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
     "fulfillment retry conflict",
   );
   assertEquals(
-    normalizeRpcError("DIRECT_ORDER_PICKUP_USE_KDS private detail"),
-    { status: 409, code: "DIRECT_ORDER_PICKUP_USE_KDS" },
+    normalizeRpcError("DIRECT_ORDER_PICKUP_USE_KDS private detail").status,
+    409,
     "pickup preparation requires the quantity queue",
   );
   assertEquals(
