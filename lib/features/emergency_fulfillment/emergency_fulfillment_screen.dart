@@ -1493,9 +1493,14 @@ class _EmergencyOrderCard extends StatelessWidget {
     );
     final orderIdentifier = order.isDelivery
         ? copy.delivery
+        : order.isDirectPickup
+        ? '${copy.takeout} ${order.tableNumber}'
         : order.tableNumber;
     final baseSemantics = order.isDelivery
         ? '${copy.order} ${order.queueNo}, ${copy.delivery}, '
+              '${visibleItems.length} ${copy.items}, $totalProgress'
+        : order.isDirectPickup
+        ? '${copy.order} ${order.queueNo}, ${copy.takeout} ${order.tableNumber}, '
               '${visibleItems.length} ${copy.items}, $totalProgress'
         : '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
               '${order.floorLabel}, ${visibleItems.length} ${copy.items}, '
@@ -1909,6 +1914,8 @@ class _EmergencyOrderDetails extends StatelessWidget {
                         Text(
                           order.isDelivery
                               ? '${copy.order} #${order.queueNo} · ${copy.delivery}'
+                              : order.isDirectPickup
+                              ? '${copy.order} #${order.queueNo} · ${copy.takeout} ${order.tableNumber}'
                               : '${copy.order} #${order.queueNo} · '
                                     '${copy.table} ${order.tableNumber}',
                           maxLines: 2,
@@ -1917,7 +1924,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         Text(
-                          order.isDelivery
+                          order.isDelivery || order.isDirectPickup
                               ? copy.stageTitle(stationType)
                               : '${order.floorLabel} · ${copy.stageTitle(stationType)}',
                           style: Theme.of(context).textTheme.bodyMedium
@@ -1960,6 +1967,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                       items: visibleItems,
                       stationType: stationType,
                       isDelivery: order.isDelivery,
+                      isDirectPickup: order.isDirectPickup,
                       copy: copy,
                       busy: busy || pending,
                       readyPulseOn: readyPulseOn,
@@ -2138,6 +2146,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
     required this.items,
     required this.stationType,
     this.isDelivery = false,
+    this.isDirectPickup = false,
     required this.copy,
     required this.busy,
     required this.readyPulseOn,
@@ -2150,6 +2159,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
   final List<_EmergencyMenuEntry> items;
   final String stationType;
   final bool isDelivery;
+  final bool isDirectPickup;
   final _EmergencyCopy copy;
   final bool busy;
   final bool readyPulseOn;
@@ -2182,6 +2192,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
               entry: items[index],
               stationType: stationType,
               isDelivery: isDelivery,
+              isDirectPickup: isDirectPickup,
               copy: copy,
               busy: busy,
               readyPulseOn: readyPulseOn,
@@ -2206,6 +2217,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
             entry: items[index],
             stationType: stationType,
             isDelivery: isDelivery,
+            isDirectPickup: isDirectPickup,
             copy: copy,
             busy: busy,
             readyPulseOn: readyPulseOn,
@@ -2237,6 +2249,7 @@ class _EmergencyMenuRow extends StatelessWidget {
     required this.entry,
     required this.stationType,
     required this.isDelivery,
+    this.isDirectPickup = false,
     required this.copy,
     required this.busy,
     required this.readyPulseOn,
@@ -2247,6 +2260,7 @@ class _EmergencyMenuRow extends StatelessWidget {
   final _EmergencyMenuEntry entry;
   final String stationType;
   final bool isDelivery;
+  final bool isDirectPickup;
   final _EmergencyCopy copy;
   final bool busy;
   final bool readyPulseOn;
@@ -2415,7 +2429,11 @@ class _EmergencyMenuRow extends StatelessWidget {
                   key: ValueKey(
                     'emergency_menu_item_complete_${displayItem.id}',
                   ),
-                  tooltip: copy.actionOne(stationType, isDelivery: isDelivery),
+                  tooltip: copy.actionOne(
+                    stationType,
+                    isDelivery: isDelivery,
+                    isDirectPickup: isDirectPickup,
+                  ),
                   onPressed: canAdvance ? onTap : null,
                   icon: const Icon(Icons.check_rounded, size: 20),
                 ),
@@ -2872,16 +2890,21 @@ class _EmergencyCopy {
     'Bếp đã xong·chờ chuyển tầng',
     'Kitchen complete·waiting for floor transfer',
   );
-  String actionOne(String stationType, {bool isDelivery = false}) =>
-      switch (stationType) {
-        'kitchen' => _pick('조리 완료', 'Nấu xong', 'Cooking complete'),
-        'tray' =>
-          isDelivery
-              ? _pick('기사 인계', 'Bàn giao tài xế', 'Handoff to driver')
-              : _pick('층 전달', 'Chuyển lên tầng', 'Send to floor'),
-        'floor' => _pick('고객 전달', 'Đã phục vụ', 'Serve to customer'),
-        _ => completeOne,
-      };
+  String actionOne(
+    String stationType, {
+    bool isDelivery = false,
+    bool isDirectPickup = false,
+  }) => switch (stationType) {
+    'kitchen' => _pick('조리 완료', 'Nấu xong', 'Cooking complete'),
+    'tray' =>
+      isDirectPickup
+          ? _pick('수령 준비 완료', 'Sẵn sàng nhận', 'Ready for pickup')
+          : isDelivery
+          ? _pick('기사 인계', 'Bàn giao tài xế', 'Handoff to driver')
+          : _pick('층 전달', 'Chuyển lên tầng', 'Send to floor'),
+    'floor' => _pick('고객 전달', 'Đã phục vụ', 'Serve to customer'),
+    _ => completeOne,
+  };
   String get serveAllReady => _pick(
     '준비된 음식 모두 전달',
     'Phục vụ tất cả món đã sẵn sàng',

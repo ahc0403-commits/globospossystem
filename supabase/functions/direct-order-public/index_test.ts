@@ -366,13 +366,23 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    89,
+    94,
     "registered SQL error count",
   );
   assertEquals(
     normalizeRpcError("DIRECT_ORDER_FULFILLMENT_TYPE_LOCKED").status,
     409,
     "fulfillment retry conflict",
+  );
+  assertEquals(
+    normalizeRpcError("DIRECT_ORDER_PICKUP_USE_KDS private detail"),
+    { status: 409, code: "DIRECT_ORDER_PICKUP_USE_KDS" },
+    "pickup preparation requires the quantity queue",
+  );
+  assertEquals(
+    normalizeRpcError("DIRECT_ORDER_PICKUP_ITEMS_REQUIRED private detail").code,
+    "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
+    "broken pickup graph does not expose internal details",
   );
   const conflict = normalizeRpcError(
     "duplicate: DIRECT_ORDER_OPEN_REQUEST_EXISTS detail=private",
