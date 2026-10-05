@@ -95,6 +95,13 @@ for file,name in [
  ('20260831010000_kds_realtime_v2.sql','get_kds_ticket_v2'),
  ('20260917150000_kds_kitchen_complete_tray_handoff_batch.sql','kds_set_workflow_event_targets'),
 ]: pickup_functions+=function(file,name)
+# Match the deployed business-day and start/ready wrapper chain. The floor
+# guard belongs to the preserved base reader, not the current public wrapper.
+pickup_functions+='ALTER FUNCTION public.get_kds_ticket_v2(uuid) RENAME TO get_kds_ticket_v2_pre_business_day;\n'
+pickup_functions+=function('20260901130000_operational_order_business_day_scope.sql','get_kds_ticket_v2')
+pickup_functions+='ALTER FUNCTION public.get_kds_ticket_v2(uuid) RENAME TO get_kds_ticket_v2_pre_start_ready;\n'
+pickup_functions+=function('20260916190000_kds_start_ready_serve_workflow.sql','get_kds_ticket_v2')
+pickup_functions+='REVOKE ALL ON FUNCTION public.get_kds_ticket_v2_pre_business_day(uuid),public.get_kds_ticket_v2_pre_start_ready(uuid) FROM PUBLIC,anon,authenticated;\n'
 pickup_functions+='REVOKE ALL ON FUNCTION public.direct_order_is_pickup_pos_order(uuid,uuid) FROM PUBLIC,anon,authenticated;\n'
 # Reuse the exact current-main mode-gate edit (the older payment fixture
 # intentionally started in print mode until the KDS regressions were loaded).

@@ -163,7 +163,7 @@ SET search_path = public, pg_catalog AS $$
     AND COALESCE(request.fulfillment_type, 'delivery') <> 'pickup');
 $$;
 
-SELECT pg_temp.pickup_kds_patch('public.get_kds_ticket_v2(uuid)',
+SELECT pg_temp.pickup_kds_patch('public.get_kds_ticket_v2_pre_business_day(uuid)',
   $old$v_assignment.station_type = 'floor' AND v_sales_channel = 'delivery'$old$,
   $new$v_assignment.station_type = 'floor' AND (v_sales_channel = 'delivery'
     OR public.direct_order_is_pickup_pos_order(v_queue.order_id, v_queue.restaurant_id))$new$);
