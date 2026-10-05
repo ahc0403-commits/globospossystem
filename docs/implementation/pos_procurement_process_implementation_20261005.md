@@ -110,6 +110,8 @@ POS migration `20261005030000`~`20261005043000` 13개: 계약 → 문서/채널 
 
 Office 구매 migration `20261005020000`~`20261005029000` 및 `20261005032000`/`20261005033000` 12개: 원본 → 선결제 hold → credit → 이력 → 상태 → 계정/자산 인식 → native 정산 → Finance 화면 조회 → Invoice 전 현금 → 계정/자산 검색 → 개인 HR 역할 확인 → 매장 구매 native 템플릿. 기존 canonical Finance/HR migration이 선행되어야 한다. 동시 작업의 `20261005030000`/`20261005031000`을 보존하고 구매의 HR 역할 확인을 `20261005032000`으로 분리했다.
 
+POS의 11개 외부 read-only post-apply 검증 SQL과 두 개 embedded 검증을 준비했고 각 migration 직후 격리 DB에서 실행했다. 배포 스크립트의 convention gate를 우회하지 않는다. 인덱스/조회 migration은 하나의 원자적 transaction으로 묶었다.
+
 두 DB migration을 버전순으로 준비하고 기존 기능을 유지한 채 bridge/UI를 릴리스한 후 검증된 매장만 새 정책을 활성화한다. 매장·역할·실제 계정·마스터 확인 → 정확한 head SHA의 필수 CI → 운영 배포 승인 → migration/앱 적용 → 역할별 UAT → 교육·최소 2주 시범 → 확대로 진행한다. 배포 후 현장 확인 전에는 완료 상태를 올리지 않는다.
 
 [운영 SOP](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_sop_20261005.md), [전환·시범 기록](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_rollout_20261005.md), [UAT 기록표](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_uat_20261005.csv)를 준비했다. 빈탄점·SM/BM 기존 ID·신규 세 역할 ID·공용 사용·대리자 없음 조건을 사용자 답변대로 반영했다. 신규 Auth 계정/roster는 아직 운영에 저장하지 않았다. 비밀정보 없는 native 발급 명세를 준비했다.

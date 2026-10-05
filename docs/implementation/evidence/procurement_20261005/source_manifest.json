@@ -1,13 +1,13 @@
 {
-  "scope": "Current procurement review-checkout source snapshots before final commit. Primary worktrees preserve unrelated user changes; final committed review hashes and CI are in external review_manifest.json.",
-  "created_at_utc": "2026-10-05T13:04:31.960349+00:00",
+  "scope": "Current procurement review-checkout source snapshots before final commit; final exact committed hashes/CI are in external review_manifest.json. Primary user changes preserved.",
+  "created_at_utc": "2026-10-05T13:08:53.693097+00:00",
   "files": [
     {
       "repository": "globos_pos_system",
       "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
       "path": "docs/implementation/pos_procurement_process_implementation_20261005.md",
-      "sha256": "ab1acbebc90e97f4f2bab88ef0b762b36bf02ed1d55b4081fbfc4577c7b14da4",
-      "bytes": 17518
+      "sha256": "61789cb480ba6270f158b6b63fdc2158b1c857beb98237caa8c19fd2303ff135",
+      "bytes": 17810
     },
     {
       "repository": "globos_pos_system",
@@ -111,8 +111,8 @@
       "repository": "globos_pos_system",
       "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
       "path": "scripts/test_procurement_v2.sh",
-      "sha256": "1563860861863415615ede9b6b276566be231eddf53b24f81380ef1c99af10a1",
-      "bytes": 6449
+      "sha256": "3d9516a899ec789323d10686c36f150fb4305cdb48b0f06ccc23cdad7ce2d743",
+      "bytes": 7412
     },
     {
       "repository": "globos_pos_system",
@@ -134,6 +134,83 @@
       "path": "scripts/tests/procurement_query_performance.py",
       "sha256": "2ad33b059029a9a5a8556a68e3170c540f20be231bcf18aeb986d00f627528bf",
       "bytes": 7473
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_accounting_status.sql",
+      "sha256": "94e802723d29c4157f9497637676286775a646dac15f809cff1cd377ba95e6a1",
+      "bytes": 660
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_document_storage_scope.sql",
+      "sha256": "02090c6b0d9fe8208bab6ce09c247001f6dd93fa8a07dfc09e4ea02a4c4beb0d",
+      "bytes": 664
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_documents_and_channel.sql",
+      "sha256": "e4cf41eb0925551cc49d0fad3951155287a5eff831b7fdcdfc9bc17895b3e1c9",
+      "bytes": 602
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_employee_payment_owners.sql",
+      "sha256": "3e4b31ea92f9d8412c3dd62da52bb9800125a55d02771d462b695bba68ff1710",
+      "bytes": 871
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_legacy_entry_and_evidence.sql",
+      "sha256": "4e5726e9a466c1aa5a39309dd59e9ffacebb68e91af47d33ca73453da0ebdbf7",
+      "bytes": 639
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_nonstock_returns.sql",
+      "sha256": "36f47eefc20f2f6ef99eec1359ae3cac71efc571a7fb0298b2ea9a2a13d0ba20",
+      "bytes": 735
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_paged_reads.sql",
+      "sha256": "b2aa6a1b3e45b8945f51932333bfe3a1300abc2acf6c3da2bd5421e60ff0d428",
+      "bytes": 460
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_process_contract.sql",
+      "sha256": "1444cbbbb20622bea6e4d6a3c90ad8cbe9a283b939c9f72fdfcaf7758617bebc",
+      "bytes": 1716
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_read_indexes.sql",
+      "sha256": "14d48d2c8dbd4595aa678530067692aa6ddb8504577fa563a03da15e7bfaebc6",
+      "bytes": 604
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_role_roster_and_metrics.sql",
+      "sha256": "e8168ccdc774c8561b8867f2d3f37df23b3be55c40449da3e619afd0de39df85",
+      "bytes": 838
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_set_based_evidence.sql",
+      "sha256": "8eeda29d88d56b67154290d2b9d29c3c2bb8ece21c3bc9783ab9410ecbdc4867",
+      "bytes": 822
     },
     {
       "repository": "globos_pos_system",
@@ -223,8 +300,8 @@
       "repository": "globos_pos_system",
       "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
       "path": "supabase/migrations/20261005040000_procurement_read_indexes.sql",
-      "sha256": "753a7677bda82f29d6b19e982fb037217870522ebec5c557fb4f4159e68978bc",
-      "bytes": 1700
+      "sha256": "285781a0c74b21181aa764ca5267fa2f1ce5e40b8c0035c046ce75bfeb42bfa0",
+      "bytes": 1685
     },
     {
       "repository": "globos_pos_system",

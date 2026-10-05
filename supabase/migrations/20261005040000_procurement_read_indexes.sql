@@ -2,8 +2,6 @@ BEGIN;
 -- The cross-store legacy/v2 batch cannot use the existing v2-only page index.
 CREATE INDEX procurement_orders_all_workflows_page ON public.inventory_purchase_orders(restaurant_id,created_at DESC,id DESC);
 CREATE INDEX procurement_receipt_lines_receipt ON public.inventory_receipt_lines(receipt_id,id);
-COMMIT;
-BEGIN;
 CREATE OR REPLACE FUNCTION public.procurement_orders_batch(p_store_ids uuid[],p_status text DEFAULT NULL,p_before timestamptz DEFAULT NULL,p_before_id uuid DEFAULT NULL,p_limit integer DEFAULT 100)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,auth AS $$
 BEGIN
