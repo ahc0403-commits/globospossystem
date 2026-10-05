@@ -1,0 +1,26 @@
+[
+  {
+    "usage_rows": 100,
+    "execution_ms": 2.697,
+    "usage_scan_loops": [
+      1
+    ],
+    "shared_hit_blocks": 161
+  },
+  {
+    "usage_rows": 1000,
+    "execution_ms": 12.52,
+    "usage_scan_loops": [
+      1
+    ],
+    "shared_hit_blocks": 122
+  },
+  {
+    "usage_rows": 10000,
+    "execution_ms": 111.209,
+    "usage_scan_loops": [
+      1
+    ],
+    "shared_hit_blocks": 256
+  }
+]

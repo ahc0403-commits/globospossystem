@@ -1,0 +1,30 @@
+{
+  "baseline_sha": "07b2b2a2c16d2a3647bdf881c02b9cb36581f514",
+  "status": "4 baseline mismatches reproduced; actual images unchanged; stored goldens not updated",
+  "images": [
+    {
+      "image": "procurement_inventory_order_testImage.png",
+      "unmodified_07b2_actual_sha256": "706c420297e177fd5b6c79e701cd2864cfba47beed40da868ae1c168d390b341",
+      "current_actual_sha256": "706c420297e177fd5b6c79e701cd2864cfba47beed40da868ae1c168d390b341",
+      "byte_identical": true
+    },
+    {
+      "image": "procurement_purchase_decision_testImage.png",
+      "unmodified_07b2_actual_sha256": "c8b39f85f102df5f34887cb509cb14b15d4d253a5d124686ec14a409601b556e",
+      "current_actual_sha256": "c8b39f85f102df5f34887cb509cb14b15d4d253a5d124686ec14a409601b556e",
+      "byte_identical": true
+    },
+    {
+      "image": "procurement_purchase_queue_testImage.png",
+      "unmodified_07b2_actual_sha256": "7cb582732bc3b49b16f431d48608a71711ed256ed9c8eaea4c3d41b10c73c147",
+      "current_actual_sha256": "7cb582732bc3b49b16f431d48608a71711ed256ed9c8eaea4c3d41b10c73c147",
+      "byte_identical": true
+    },
+    {
+      "image": "procurement_receipt_comparison_testImage.png",
+      "unmodified_07b2_actual_sha256": "084f8650c9941dd0ff24740e628cacc668f732fd46a5ddda14d2d37208898e21",
+      "current_actual_sha256": "084f8650c9941dd0ff24740e628cacc668f732fd46a5ddda14d2d37208898e21",
+      "byte_identical": true
+    }
+  ]
+}

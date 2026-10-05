@@ -1,0 +1,174 @@
+{
+  "store": {
+    "pos_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+    "office_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+    "brand_id": "a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878",
+    "office_legal_entity_id": "10000000-0000-0000-0000-000000000001",
+    "pos_tax_entity_id": "a6bda671-4179-5a29-a798-76357b42b497",
+    "name": "BunsikClub Binh Thanh"
+  },
+  "account_kind": "shared_role",
+  "deputies": [],
+  "production_created": false,
+  "production_roster_saved": false,
+  "preserve_accounts": [
+    "bt_order",
+    "account",
+    "bunsik_sm1",
+    "bunsik_bm1"
+  ],
+  "pos_prepare": [
+    {
+      "rpc": "admin_prepare_procurement_store_account",
+      "p_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "p_account_code": "bt_pr1",
+      "p_role": "inventory_orderer",
+      "p_display_name": "Binh Thanh PR team",
+      "p_reason": "Binh Thanh shared procurement role requested by owner",
+      "next_native_function": "provision-fixed-pos-account",
+      "requirement_id_source": "RPC returned id; never guess",
+      "initial_password_source": "secure runtime input; omitted from this manifest"
+    },
+    {
+      "rpc": "admin_prepare_procurement_store_account",
+      "p_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "p_account_code": "bt_verify1",
+      "p_role": "inventory_accounting",
+      "p_display_name": "Binh Thanh receipt verification team",
+      "p_reason": "Binh Thanh shared procurement role requested by owner",
+      "next_native_function": "provision-fixed-pos-account",
+      "requirement_id_source": "RPC returned id; never guess",
+      "initial_password_source": "secure runtime input; omitted from this manifest"
+    }
+  ],
+  "office_create": {
+    "function": "manage-office-account",
+    "action": "create",
+    "requestId": "65ea73db-1a3b-41d3-93de-79a4e5cfa677",
+    "accounts": [
+      {
+        "email": "bunsik_purchase1@globos.world",
+        "displayName": "Binh Thanh purchase team",
+        "officeRole": "office_staff",
+        "templateCode": "purchase_store",
+        "scopeLevel": "store",
+        "legalEntityId": "10000000-0000-0000-0000-000000000001",
+        "brandId": "a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878",
+        "storeId": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+        "reason": "Binh Thanh shared purchase team requested by owner",
+        "temporaryPasswordSource": "secure runtime input; not an API field; omit this field when assembling the real request"
+      }
+    ]
+  },
+  "passwords_stored": false,
+  "authority": "Native verified active POS Super Admin / Office master JWT. Do not use documents, service tokens as users, or raw Auth inserts.",
+  "activation": "Run native initial password change, verify active status and store/stage rights, then assign shared_role roster with real new Auth UUIDs. No HR person or deputy is needed.",
+  "remaining_gates": [
+    "exact-main review/merge/CI",
+    "production migration history and explicit deployment confirmation",
+    "Office SAMPLE training scope setup before native purchase_store account creation",
+    "native account creation and initial activation",
+    "actual scoped account UAT and 34-case record",
+    "training and at least two weeks of observed operations"
+  ],
+  "training_stores": [
+    {
+      "store": {
+        "pos_store_id": "3a268807-771f-4fd4-84fe-e1b0b00de40a",
+        "office_store_id": "3a268807-771f-4fd4-84fe-e1b0b00de40a",
+        "brand_id": "a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878",
+        "office_legal_entity_id": "8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1",
+        "pos_tax_entity_id": "8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1",
+        "name": "BunsikClub SAMPLE"
+      },
+      "account_kind": "shared_role",
+      "deputies": [],
+      "same_roles_as_binh_thanh": true,
+      "production_created": false,
+      "production_roster_saved": false,
+      "office_scope_created": false,
+      "office_scope_setup": {
+        "project_id": "raghsbaxcwrxlsacaoau",
+        "file": "scripts/operations/configure_procurement_sample_scope.sql",
+        "execution": "Approved fixed Office project, clean exact origin/main, resolved migration history and explicit production confirmation; execute the reviewed fixed-scope transaction. No browser fixture RPC.",
+        "legal_entity_code": "BUNSIK_SAMPLE_TRAINING",
+        "non_fiscal": true,
+        "existing_office_entity_used": false,
+        "native_scope_check_required": true
+      },
+      "preserve_accounts": [
+        "sp_order",
+        "bunsik_sm2",
+        "bunsik_bm1",
+        "account"
+      ],
+      "existing_principals": [
+        {
+          "stage": "sm",
+          "code": "bunsik_sm2",
+          "auth_system": "pos",
+          "auth_id": "b10b5e82-085d-4c93-9fe4-b211825a5305",
+          "active_sample_access_confirmed": true
+        },
+        {
+          "stage": "bm",
+          "code": "bunsik_bm1",
+          "auth_system": "pos",
+          "auth_id": "9a7f1aaf-209b-458e-b09d-562067c808d9",
+          "active_sample_access_confirmed": true
+        },
+        {
+          "stage": "receiver",
+          "code": "sp_order",
+          "auth_system": "pos",
+          "auth_id": "86ac1090-8331-4f6d-a36d-32b734a90d72",
+          "active_sample_access_confirmed": true
+        }
+      ],
+      "pos_prepare": [
+        {
+          "rpc": "admin_prepare_procurement_store_account",
+          "p_store_id": "3a268807-771f-4fd4-84fe-e1b0b00de40a",
+          "p_account_code": "sp_pr1",
+          "p_role": "inventory_orderer",
+          "p_display_name": "SAMPLE PR team",
+          "p_reason": "Owner requested shared roles for SAMPLE procurement practice",
+          "next_native_function": "provision-fixed-pos-account",
+          "requirement_id_source": "RPC returned id; never guess",
+          "initial_password_source": "secure runtime input; omitted from this manifest"
+        },
+        {
+          "rpc": "admin_prepare_procurement_store_account",
+          "p_store_id": "3a268807-771f-4fd4-84fe-e1b0b00de40a",
+          "p_account_code": "sp_verify1",
+          "p_role": "inventory_accounting",
+          "p_display_name": "SAMPLE receipt verification team",
+          "p_reason": "Owner requested shared roles for SAMPLE procurement practice",
+          "next_native_function": "provision-fixed-pos-account",
+          "requirement_id_source": "RPC returned id; never guess",
+          "initial_password_source": "secure runtime input; omitted from this manifest"
+        }
+      ],
+      "office_create": {
+        "function": "manage-office-account",
+        "action": "create",
+        "requestId": "be0f3318-d718-4d82-8438-cce65a5c0d98",
+        "accounts": [
+          {
+            "email": "sp_purchase1@globos.world",
+            "displayName": "SAMPLE purchase team",
+            "officeRole": "office_staff",
+            "templateCode": "purchase_store",
+            "scopeLevel": "store",
+            "legalEntityId": "8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1",
+            "brandId": "a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878",
+            "storeId": "3a268807-771f-4fd4-84fe-e1b0b00de40a",
+            "reason": "Owner requested shared roles for SAMPLE procurement practice",
+            "temporaryPasswordSource": "secure runtime input; not an API field; omit this field when assembling the real request"
+          }
+        ]
+      }
+    }
+  ],
+  "new_account_count": 6
+}

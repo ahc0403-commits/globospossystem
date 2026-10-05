@@ -1,0 +1,727 @@
+{
+  "scope": "Current procurement review-checkout source snapshots before final commit; final exact committed hashes/CI are in external review_manifest.json. Primary user changes preserved.",
+  "created_at_utc": "2026-10-05T13:35:25.597128+00:00",
+  "files": [
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "docs/implementation/pos_procurement_process_implementation_20261005.md",
+      "sha256": "936ae65c5eb0b5e4866b5bec6ba27b6785df7912e648e2f1488a779d6ab44989",
+      "bytes": 18623
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "docs/operations/pos_procurement_account_manifest_20261005.json",
+      "sha256": "6e944f977920e3f7a789418ed95daa48530e6bf9a639137021f38c13100fc662",
+      "bytes": 7340
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "docs/operations/pos_procurement_rollout_20261005.md",
+      "sha256": "b7add4612e03cf6516623b7f225628d2272fb9cfced9da8fb14b933059620257",
+      "bytes": 9646
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "docs/operations/pos_procurement_sop_20261005.md",
+      "sha256": "86e4bddecdb8202d850b549c6a9d33f26019891927b097a6c416656c014573ec",
+      "bytes": 11928
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "docs/operations/pos_procurement_uat_20261005.csv",
+      "sha256": "7d52f1b07325c3db79e3ed1898c187308cc15442b87f4a84f5d44105b37c39eb",
+      "bytes": 4777
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "docs/plans/pos_procurement_process_improvement_20261005.md",
+      "sha256": "43faa88a7e6e5fd1627e300604c753cc5955736a6508270da00d184c7b67922f",
+      "bytes": 69226
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "docs/procurement/PROCUREMENT_V2_CONTRACT.md",
+      "sha256": "4cdff41bca31b2cdfbd1bd436eb7e48c12c375b863d01d9ed2e941aa371c564b",
+      "bytes": 8037
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "lib/core/services/inventory_service.dart",
+      "sha256": "fee506f248242970c088738703ed33407e31c78538cd523db7ba2ed4f12bd8b5",
+      "bytes": 64414
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "lib/features/inventory_purchase/inventory_order_workflow_screen.dart",
+      "sha256": "46ad0ee8673e4a22dcca667aa253605e36453880bc9047542f0d0b122f058753",
+      "bytes": 142465
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "lib/features/procurement/procurement_catalog_dialog.dart",
+      "sha256": "6ba0436acd3f8df77e24c8ffb5c52a8324b8e6cc741e0b8baa3e69896b2dd4be",
+      "bytes": 7894
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "lib/features/procurement/procurement_document_pdf.dart",
+      "sha256": "d7d6732b66da8833b92ec3c31a624938575b026116b8fa0de356cf6fb00baa90",
+      "bytes": 5045
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "lib/features/procurement/procurement_metrics.dart",
+      "sha256": "4b6b474881a1dbe716ddf7e7ea07d266add2addebc9986da452d471c1d372ed1",
+      "bytes": 1966
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "lib/features/procurement/procurement_process_labels.dart",
+      "sha256": "95062e66ee126893fc77e6f2fd9685ed9e5adfb0a3607b1cea6c22dd450037f8",
+      "bytes": 11432
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "lib/features/procurement/procurement_workspace.dart",
+      "sha256": "ae69f8f7be8814ce065b01ed60ff0f82243b0f1a0ad571b0fcf96bc1b52ef7b1",
+      "bytes": 66067
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/check_repo.sh",
+      "sha256": "fd48dd14c016d0bf2be1f0a796fa7c2af7f8f23e8bd30223b2d316d761f025e1",
+      "bytes": 4946
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/test_procurement_v2.sh",
+      "sha256": "3d9516a899ec789323d10686c36f150fb4305cdb48b0f06ccc23cdad7ce2d743",
+      "bytes": 7412
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/tests/procurement_fixed_account_fixture.py",
+      "sha256": "a49781b67ed0c4bb1c58d124051727ab93036d1eb8a0b043198ddc5808b61d7b",
+      "bytes": 1406
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/tests/procurement_pdf_content.py",
+      "sha256": "3e55111ab573d5bca364ffecce1da67e3b6a92112a959a11c60822c1ab6e8f59",
+      "bytes": 1290
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/tests/procurement_query_performance.py",
+      "sha256": "2ad33b059029a9a5a8556a68e3170c540f20be231bcf18aeb986d00f627528bf",
+      "bytes": 7473
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_accounting_status.sql",
+      "sha256": "94e802723d29c4157f9497637676286775a646dac15f809cff1cd377ba95e6a1",
+      "bytes": 660
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_document_storage_scope.sql",
+      "sha256": "02090c6b0d9fe8208bab6ce09c247001f6dd93fa8a07dfc09e4ea02a4c4beb0d",
+      "bytes": 664
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_documents_and_channel.sql",
+      "sha256": "e4cf41eb0925551cc49d0fad3951155287a5eff831b7fdcdfc9bc17895b3e1c9",
+      "bytes": 602
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_employee_payment_owners.sql",
+      "sha256": "3e4b31ea92f9d8412c3dd62da52bb9800125a55d02771d462b695bba68ff1710",
+      "bytes": 871
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_legacy_entry_and_evidence.sql",
+      "sha256": "4e5726e9a466c1aa5a39309dd59e9ffacebb68e91af47d33ca73453da0ebdbf7",
+      "bytes": 639
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_nonstock_returns.sql",
+      "sha256": "36f47eefc20f2f6ef99eec1359ae3cac71efc571a7fb0298b2ea9a2a13d0ba20",
+      "bytes": 735
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_paged_reads.sql",
+      "sha256": "b2aa6a1b3e45b8945f51932333bfe3a1300abc2acf6c3da2bd5421e60ff0d428",
+      "bytes": 460
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_process_contract.sql",
+      "sha256": "1444cbbbb20622bea6e4d6a3c90ad8cbe9a283b939c9f72fdfcaf7758617bebc",
+      "bytes": 1716
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_read_indexes.sql",
+      "sha256": "14d48d2c8dbd4595aa678530067692aa6ddb8504577fa563a03da15e7bfaebc6",
+      "bytes": 604
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_role_roster_and_metrics.sql",
+      "sha256": "e8168ccdc774c8561b8867f2d3f37df23b3be55c40449da3e619afd0de39df85",
+      "bytes": 838
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "scripts/verify_procurement_set_based_evidence.sql",
+      "sha256": "8eeda29d88d56b67154290d2b9d29c3c2bb8ece21c3bc9783ab9410ecbdc4867",
+      "bytes": 822
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/functions/provision-fixed-pos-account/index.ts",
+      "sha256": "4dedd5ca67757d8361ad602788fd255c67287ff89dd8064fd7c3b65d4ad9e24d",
+      "bytes": 13300
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/functions/provision-fixed-pos-account/policy.ts",
+      "sha256": "68c08c3ab9fee57b0e7591d2b34fc91cde50b94d2988dc941a1818071745b835",
+      "bytes": 892
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/functions/provision-fixed-pos-account/policy_test.ts",
+      "sha256": "05f3dde6392af984ceec609f1084de7d35a5c93b78846aaf71d8af2f2dfef9f0",
+      "bytes": 1842
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005030000_procurement_process_contract.sql",
+      "sha256": "0dd6c31d82623a5a98e42401beb6a84b4063b7e41bde20ca6bd44d546fc60db5",
+      "bytes": 80245
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005031000_procurement_documents_and_channel.sql",
+      "sha256": "65d09425444e28c40d129f7b1746fa3a118c035dfd6ee4f9772f5407f11219cd",
+      "bytes": 9653
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005032000_procurement_paged_reads.sql",
+      "sha256": "fdaa3b6115c59a164d34b20500a29e5d1feb68e9cb5abe4e181debd27566c9e5",
+      "bytes": 17143
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005033000_procurement_set_based_evidence.sql",
+      "sha256": "d5839d4c07725775f32ab0e7e429aec67aea318b18a424fd028b19aa0ac8441c",
+      "bytes": 13705
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005034000_procurement_nonstock_returns.sql",
+      "sha256": "712bf3e200bfac03d75db87f2854e6f09a2681825266bdd7d4ccbf8d4b6e572e",
+      "bytes": 12436
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005035000_procurement_document_storage_scope.sql",
+      "sha256": "fc5f6979cdacfe4b2210e3eb14075f4a27d78bdcd21b703b3b127c12a45467e9",
+      "bytes": 2501
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005036000_procurement_legacy_entry_and_evidence.sql",
+      "sha256": "95f6d428a6a4089aa3acfe19336c7e2db39b54d5f24e7b2a1208e2b1f1e7eec0",
+      "bytes": 5876
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005037000_procurement_accounting_status.sql",
+      "sha256": "23cb9421a20a778e4bfef885a79cf134c7101fb134515f1692adcd108ec9eaf4",
+      "bytes": 1897
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005039000_procurement_role_roster_and_metrics.sql",
+      "sha256": "f4f8998e6e4c3f89461bb863478079828913a3da9381db361bfeb2c884f72e2e",
+      "bytes": 11618
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005040000_procurement_read_indexes.sql",
+      "sha256": "285781a0c74b21181aa764ca5267fa2f1ce5e40b8c0035c046ce75bfeb42bfa0",
+      "bytes": 1685
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005041000_procurement_store_verifier_accounts.sql",
+      "sha256": "86cfac9b430a9d9b105bc16bd71b2b12075302cdccc66d597f769d43f2239ab8",
+      "bytes": 5235
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005042000_procurement_shared_role_roster.sql",
+      "sha256": "5a3847db57f75bb58473a0b5637747d77cb4a508d326218fd6975cd35aaa3c79",
+      "bytes": 6696
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/migrations/20261005043000_procurement_employee_payment_owners.sql",
+      "sha256": "751795938a8e7db98ac2513e071a07ef84a15f5710e3aed7fc7c2a5e33c07820",
+      "bytes": 43898
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/tests/procurement_paged_reads.test.sql",
+      "sha256": "d17c1b0291e378e1170c2419c92615203a61ef36e40a8aed7105555036490f81",
+      "bytes": 3573
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/tests/procurement_process_contract.test.sql",
+      "sha256": "4af9d23e31cda6e4052365a48c4996cce02ce82d584006026169579f1c826258",
+      "bytes": 21092
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/tests/procurement_shared_roles.test.sql",
+      "sha256": "c48667c234aa68dd81aec3cd57d3ea1ba02e04d6114205d0af81a861be4211b5",
+      "bytes": 8253
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/tests/procurement_upgrade_compatibility.test.sql",
+      "sha256": "23a0fcce4626f983957b24e88948313faac585eb36dd30a4ebd87b613a4c22d7",
+      "bytes": 1489
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "supabase/tests/procurement_upgrade_fixture.sql",
+      "sha256": "b2cccfc68cae2040e8f01ab1d4bdb4e7a16d1ef5fb5a7cb4a1da7af425654d47",
+      "bytes": 3224
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "test/dialog_sheet_entrypoint_coverage_contract_test.dart",
+      "sha256": "8500874def0474877d0930109aadda3292376b0dde34bc6ec0ae63542c2f68f0",
+      "bytes": 15411
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "test/features/procurement/procurement_document_pdf_test.dart",
+      "sha256": "056b54ee7954ff3e0783413bb4fc492bc31b6fcf8d6eded6b1d1d9f69a9950d6",
+      "bytes": 4220
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "test/features/procurement/procurement_pagination_test.dart",
+      "sha256": "2303536b1ee5290e353b75e038db52ac7d251ddeab337a7bb36bb73e6c78830e",
+      "bytes": 5484
+    },
+    {
+      "repository": "globos_pos_system",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "path": "test/features/procurement/procurement_workspace_test.dart",
+      "sha256": "e56295d0b66495f8ee65488371f6faadc1f235f6ae34106bd6fac587023c2bcb",
+      "bytes": 11195
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/app/api/pos_data_service.dart",
+      "sha256": "eb8b1410aa4002d4946f036714f50505602b248e160a08110a49fdd253dea921",
+      "bytes": 26050
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/app/i18n/app_strings.dart",
+      "sha256": "a6abf2a1169b2e38cddb19b2e3d0319ac353fc0e9f04bfca2f9037d74f202c4a",
+      "bytes": 1229447
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/inventory_purchase/presentation/inventory_purchase_page.dart",
+      "sha256": "6280b537e4492a30d81b5de7fcc8348cd00948ce6b299bf84abff4307b91584b",
+      "bytes": 65538
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/procurement/procurement_catalog_dialog.dart",
+      "sha256": "68b477546257e626f0e144b71108c435d59c99f2f3fd8a5d320530051014628a",
+      "bytes": 12682
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/procurement/procurement_document_pdf.dart",
+      "sha256": "d7d6732b66da8833b92ec3c31a624938575b026116b8fa0de356cf6fb00baa90",
+      "bytes": 5045
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/procurement/procurement_invoice_lines_dialog.dart",
+      "sha256": "31dd83a1d54ad4995e1e9f6b8dab766736ede6c6671ed844ced6291e19b8638b",
+      "bytes": 14223
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/procurement/procurement_metrics.dart",
+      "sha256": "4b6b474881a1dbe716ddf7e7ea07d266add2addebc9986da452d471c1d372ed1",
+      "bytes": 1966
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/procurement/procurement_payment_reconciliation_dialog.dart",
+      "sha256": "2f09ad99c92a9d66f269ce70e9a0e0579c96a30f09e953bd6072dd79085b8d7f",
+      "bytes": 7274
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/procurement/procurement_workspace.dart",
+      "sha256": "0d186294e7b1704698a4766ba6f30bc589a187f28c62fa1b9c82ef371ee55fb9",
+      "bytes": 106341
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/three_way_match/data/three_way_match_repository.dart",
+      "sha256": "c0a74f9936ce2401219f05aee0ede3f0c8fef9b7d416cfd05c98de4548a03f04",
+      "bytes": 28484
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "lib/features/three_way_match/presentation/three_way_match_page.dart",
+      "sha256": "3af6c497306ed1c66631f2cfd97a3b3fc71130e73bad87be5990cbe0a4df01c9",
+      "bytes": 97848
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "scripts/test_procurement_invoice_lines.sh",
+      "sha256": "6b80113ec85cb147a935b3ea36aecb68d04cb9e37b338bc0e5b29062a996abe7",
+      "bytes": 7093
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "scripts/tests/procurement_permission_template_fixture.py",
+      "sha256": "df736e1009aa62899d64a5aa6b8501e7143e4a2b13e26ce01c69cf5a66335b9f",
+      "bytes": 1044
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/functions/pos-bridge/index.ts",
+      "sha256": "48094bccbef6aac62a3a95db78bba53d2d29351dd603ea8d5762bde1cf29a640",
+      "bytes": 129624
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/functions/pos-bridge/procurement_batch_reads.ts",
+      "sha256": "9a2eb89363781bddb07f17e092fcafb7c379372933460e45ffc34e4a0c63856a",
+      "bytes": 5328
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/functions/pos-bridge/procurement_batch_reads_test.ts",
+      "sha256": "47e1fb177136fceedad1274f0783704d8b3c2768d1bc4ce5b05a62e215195328",
+      "bytes": 3903
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/functions/pos-bridge/procurement_contract.ts",
+      "sha256": "016c74c3e82bb8e1a513dfc8301eb8db442e3a71579c16230c2a486d957741ff",
+      "bytes": 5575
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/functions/pos-bridge/procurement_contract_test.ts",
+      "sha256": "d943a4657028131e998f27350112c3b875148f8aa9e8d3babc299ef36cb7c3e3",
+      "bytes": 4863
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/functions/pos-bridge/procurement_handoff_reads_test.ts",
+      "sha256": "729e473795a84a776b5a1c7e332c248f23128531827510d0a6c8993d618c5548",
+      "bytes": 2654
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/functions/pos-bridge/procurement_principal.ts",
+      "sha256": "3f29112c740fa3e38d294b8c51a1784f814c1d611329473ea7be25ff0fa91137",
+      "bytes": 2886
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/functions/pos-bridge/procurement_principal_test.ts",
+      "sha256": "2425acd2b981f3229a16201d20fb7c387ed4bfc49064c5a27729c578b344a6b1",
+      "bytes": 4501
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005020000_procurement_required_source.sql",
+      "sha256": "2a1e97c8fef217f14f1a7cc60860fd100cca0a98cf474685360dc0d242fdd375",
+      "bytes": 13037
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005021000_procurement_prepayment_payable_hold.sql",
+      "sha256": "2fe34f30bacd5fdf306146475bf946164ce8cda6ba12b21b49420442d170b6b9",
+      "bytes": 3999
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005022000_procurement_credit_followup.sql",
+      "sha256": "7f8d62e3eaa0a6a0f74edb11f633de1422f9149549730da573a221c0a84b0841",
+      "bytes": 1917
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005023000_procurement_office_history_pages.sql",
+      "sha256": "581cdcfc3322960b997284e06157a521d7cab07eae686bc4649b614a4a0cf694",
+      "bytes": 2479
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005024000_procurement_accounting_status_summary.sql",
+      "sha256": "2ae2fbc7c12048d68efd00397c4f19c2c417754669e77b28d0ece026405aa76b",
+      "bytes": 2601
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005025000_procurement_recognition_accounts.sql",
+      "sha256": "facb8760907a230eace2593f7c84f38a352a1622c956f2f901e5271013749092",
+      "bytes": 24818
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005026000_procurement_native_payment_reconciliation.sql",
+      "sha256": "a12f77bc8cb8b77cda23e72e352e788b1fbb47e3f0f767ac859370b8549b58e2",
+      "bytes": 22948
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005027000_procurement_payment_workspace.sql",
+      "sha256": "12bd14eb83c9cc0bcfe05a3114252a0bea1bddff53d5ab8ecb4f87e5a0d35f11",
+      "bytes": 1902
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005028000_procurement_cash_evidence.sql",
+      "sha256": "6abd751ba886ee103d5909db7f7be3cc70bfcb528730e0c8300ffe4dc502b245",
+      "bytes": 8911
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005029000_procurement_recognition_choices.sql",
+      "sha256": "b8c2f9730fa418511e07da11e08fd288bf6b2744589cd3b290cc39b05f521d7d",
+      "bytes": 2152
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005032000_procurement_role_person_confirmation.sql",
+      "sha256": "fd7489385c42b4ed483b43995a9a4df13166f22cfa1264b7ba82bbc27205603b",
+      "bytes": 1303
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/migrations/20261005033000_procurement_store_purchase_template.sql",
+      "sha256": "8ef14529ead36d6e4053478a6b564a4cd4c059231f6ddb63b7d8553e9e7a8a24",
+      "bytes": 1319
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/tests/procurement_cash_evidence.test.sql",
+      "sha256": "b496b255dc5ab0a95a15557f015ef150b5ee90f0c4e1b6d6f279fae2d91fa983",
+      "bytes": 4240
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/tests/procurement_native_accounting.test.sql",
+      "sha256": "828da8e596d003e4d494c96d70d84755db7a97c943405d84ce864dca304d1e66",
+      "bytes": 12434
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/tests/procurement_process_finance.test.sql",
+      "sha256": "0edead626303b2cf8d2ebf9938774248ea37bd357381757e0b8715b423cf7e04",
+      "bytes": 5801
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "supabase/tests/procurement_store_template.test.sql",
+      "sha256": "16426bf3d79fd27f045229299b4b23fe4b50afdc5f8e536b00ef097398dda9ba",
+      "bytes": 976
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "test/features/procurement/procurement_document_pdf_test.dart",
+      "sha256": "de49330f27de2fa2beef30fb2266d0032edadd84d0d071a33c3d5645ac4eec92",
+      "bytes": 4263
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "test/features/procurement/procurement_native_accounting_dialog_test.dart",
+      "sha256": "d37768e45904965ec241d85e4ca1c4f5ef813fb2ca449e20f0121d1a05effdcb",
+      "bytes": 14089
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "test/features/procurement/procurement_pagination_test.dart",
+      "sha256": "fb7424f52fc6262906d3f97a3870ec0f124ff9e8cd77c824f171d83f1cdc0e4f",
+      "bytes": 5857
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "test/features/procurement/procurement_workspace_test.dart",
+      "sha256": "e41b5cbdad4f232e3cefb46a201b960355c30245987b6d7ba85bbd8b8700a315",
+      "bytes": 10444
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "test/fixtures/procurement_invoice_setup.sql",
+      "sha256": "8b92ba72cb37cd742ca4ace0ef9b07736b14c503ae340f72d0fd2e925242d17e",
+      "bytes": 2462
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "test/fixtures/procurement_native_accounting_setup.sql",
+      "sha256": "562f84ff16b3ccbf932b1de492f0e1c19e2b887f0cf22874667ca4475c5b945f",
+      "bytes": 4431
+    },
+    {
+      "repository": "restaurant_office_app",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "path": "test/hr_operational_portfolio_pages_test.dart",
+      "sha256": "254ad8d5815afb4c34b6447c47e315938e6af1617b08ef08edf9e6c3ae6cf819",
+      "bytes": 16770
+    },
+    {
+      "repository": "globos_pos_system",
+      "path": "docs/operations/pos_procurement_sample_training_20261005.md",
+      "root": "/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system",
+      "sha256": "475304c376ca8376cb773ddadc97c7e5ada410507f57bde7e1ec1aabe56fcb16",
+      "bytes": 5261
+    },
+    {
+      "repository": "restaurant_office_app",
+      "path": "scripts/operations/configure_procurement_sample_scope.sql",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "sha256": "ac7629bbdcea58b15f24da267b7cfd75520ecacd80f613696307e0e4fd34f10e",
+      "bytes": 2813
+    },
+    {
+      "repository": "restaurant_office_app",
+      "path": "scripts/tests/procurement_sample_scope_fixture.py",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "sha256": "961b5c7c9d5659112c57e38b82959206a96d1e1e9baa3f707710251a6f2ecf28",
+      "bytes": 1603
+    },
+    {
+      "repository": "restaurant_office_app",
+      "path": "supabase/tests/procurement_sample_scope.test.sql",
+      "root": "/Users/andreahn/Documents/procurement-release-20261005/office",
+      "sha256": "ad93ef31a4ea5b6529c0556e8dcc565ee64e415d418ee2003af399ac75e1db9a",
+      "bytes": 1390
+    }
+  ]
+}

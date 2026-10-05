@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-05",
+  "scope": "Procurement source and local isolated validation, not full-repository/production validation",
+  "source_implemented": true,
+  "production_migrations_applied": false,
+  "production_deployed": false,
+  "operations_verified": false,
+  "review_baselines": {
+    "pos": "5d992a77708a8ea9db1a6005fec4d73bca7a6329",
+    "office": "06088e1d2b5c3436dc526d7ed8812c6f4b8396e6"
+  },
+  "pos_sql_regression": "pass, latest receipt locks/search plus procurement suite and performance",
+  "office_sql_regression": "pass, native recognition/payment/cash evidence and canonical journal scope covered",
+  "pos_flutter_focused": {
+    "passed": 23,
+    "failed": 0
+  },
+  "office_flutter_focused": {
+    "passed": 23,
+    "failed": 0
+  },
+  "office_existing_functional": {
+    "passed": 22,
+    "goldens_excluded": 4
+  },
+  "office_existing_goldens": {
+    "status": "4 preexisting mismatches reproduced on unmodified 07b2; actual image bytes identical",
+    "baseline_updated": false,
+    "comparison": "golden_baseline_comparison.json"
+  },
+  "deno_bridge_all": {
+    "primary_passed": 78,
+    "review_passed": 67,
+    "failed": 0,
+    "difference": "11 unrelated concurrent store-batch tests excluded from review branch"
+  },
+  "pos_analyze": "no issues",
+  "office_analyze": "no issues",
+  "office_i18n": "all 3 checks pass on primary and review",
+  "pdfs_content_verified": 12,
+  "pos_web_compile": "pass, main integration",
+  "office_web_compile": "pass, wrapper/main integration",
+  "performance_scope": "local internal SELECT EXPLAIN/BUFFERS at 100/1000/10000 rows/orders; 10 DB samples/path, transport excluded, 9 full plans",
+  "input_hashes_unchanged": true,
+  "migration_versions_unique": true,
+  "uat_cases_prepared": 30,
+  "uat_cases_executed": 0,
+  "remaining_operational_conditions": [
+    "actual store/roster/deputies/native Auth authority/master/account confirmation",
+    "exact pushed-head required CI",
+    "explicit production confirmation/history/deploy gates",
+    "actual UAT/training and at least 2 weeks pilot"
+  ],
+  "notes": [
+    "Permission/workflow fixture is partly stubbed; native operator E2E remains required",
+    "Primary Office Git corruption preserved; healthy review clone used",
+    "Concurrent unrelated primary changes preserved, newer main changes retained in review"
+  ],
+  "review_pull_requests": {
+    "pos": "https://github.com/ahc0403-commits/globospossystem/pull/537",
+    "office": "https://github.com/ahc0403-commits/restaurant_office_app/pull/168"
+  },
+  "github_ci_at_evidence_creation": "running, no release PASS claimed",
+  "pos_dialog_entrypoint_contract": {
+    "entrypoints": 141,
+    "result": "pass in isolated review branch",
+    "new_dialogs": "product validation/cancel/save and policy cancel/confirm"
+  }
+}

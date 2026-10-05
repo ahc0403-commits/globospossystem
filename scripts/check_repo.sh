@@ -83,6 +83,11 @@ deno check --config supabase/functions/direct-order-public/deno.json \
 deno test --config supabase/functions/direct-order-public/deno.json \
   supabase/functions/direct-order-public/index_test.ts
 
+printf 'CHECK_REPO_STEP=fixed_procurement_account_authority\n'
+deno fmt --check supabase/functions/provision-fixed-pos-account/policy.ts supabase/functions/provision-fixed-pos-account/policy_test.ts
+deno lint supabase/functions/provision-fixed-pos-account/policy.ts supabase/functions/provision-fixed-pos-account/policy_test.ts
+deno check supabase/functions/provision-fixed-pos-account/index.ts
+deno test supabase/functions/provision-fixed-pos-account/policy_test.ts
 printf 'CHECK_REPO_STEP=node_contracts\n'
 (
   cd scripts

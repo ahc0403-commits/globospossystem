@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { canProvisionFixedAccount } from "./policy.ts";
 import {
   createClient,
   type SupabaseClient,
@@ -46,23 +47,7 @@ function response(status: number, payload: Record<string, unknown>) {
 }
 
 function canProvision(callerRole: string, requirement: Requirement): boolean {
-  if (requirement.scope === "legal_entity") {
-    return callerRole === "super_admin";
-  }
-  if (callerRole === "super_admin") return true;
-  if (["brand_admin", "photo_objet_master"].includes(callerRole)) {
-    return !["brand_admin", "photo_objet_master"].includes(requirement.role);
-  }
-  if (["admin", "store_admin"].includes(callerRole)) {
-    return requirement.scope === "store" &&
-      !["brand_manager", "store_manager", "inventory_accounting"].includes(
-      requirement.account_type,
-    ) &&
-      !["brand_admin", "photo_objet_master", "store_admin"].includes(
-        requirement.role,
-      );
-  }
-  return false;
+  return canProvisionFixedAccount(callerRole, requirement);
 }
 
 async function findAuthUserByEmail(
