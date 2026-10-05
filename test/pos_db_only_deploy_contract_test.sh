@@ -40,6 +40,11 @@ printf 'name: db_only_rehearsal\nenvironment:\n  sdk: ^3.8.0\n' \
 printf '{"packages":[]}\n' >"$REHEARSAL_REPO/pubspec.lock"
 printf 'void main() {}\n' >"$REHEARSAL_REPO/test/focused_test.dart"
 printf '.dart_tool/\n' >"$REHEARSAL_REPO/.gitignore"
+cat >"$REHEARSAL_REPO/test/deliberry_retirement_sql_test.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'deliberry retirement SQL\n' >>"$CALL_LOG"
+EOF
 printf '# Supabase CLI authentication is provided by the operator environment.\n' \
   >"$TMP_DIR/production.env"
 

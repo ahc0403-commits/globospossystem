@@ -1,4 +1,5 @@
 {
+  "deliberryRetiredMessage": "Tích hợp Deliberry đã ngừng hoạt động.",
   "@@locale": "vi",
   "appTitle": "GLOBOS POS",
   "back": "Quay lại",
@@ -1170,7 +1171,7 @@
   "photoOpsSalaryTitle": "Lương",
   "photoOpsSalarySubtitle": "Ước tính lương hiện tại cho cửa hàng đang hoạt động.",
   "photoOpsStoreScopeTitle": "Phạm vi cửa hàng",
-  "photoOpsStoreScopeSubtitle": "Photo Objet chỉ xử lý vận hành văn phòng trong khi đối soát Deliberry vẫn ở luồng quản trị.",
+  "photoOpsStoreScopeSubtitle": "Quản lý vận hành văn phòng Photo Objet.",
   "photoOpsHeroTitle": "Quản lý doanh số, chấm công, tồn kho và lương trong một không gian liên kết văn phòng mà không có tác vụ đối soát giao hàng hoặc hóa đơn đỏ.",
   "photoOpsContextSubtitle": "Photo Ops giúp HQ nắm tình trạng cửa hàng trực tiếp mà không thay thế quy trình cấp cửa hàng.",
   "photoOpsMetaRole": "Vai trò",

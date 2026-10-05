@@ -21,7 +21,8 @@ void main() {
       expect(
         executableLines,
         isNot(contains('8689bac6')),
-        reason: 'Must not hardcode the old (or any) secret value in executable code',
+        reason:
+            'Must not hardcode the old (or any) secret value in executable code',
       );
     });
 
@@ -77,13 +78,11 @@ void main() {
       );
     });
 
-    test('edge functions already read from Deno.env', () {
+    test('historical env contract excludes retired settlement handlers', () {
       const edgeFunctions = [
         'supabase/functions/wetax-dispatcher/index.ts',
         'supabase/functions/wetax-poller/index.ts',
         'supabase/functions/wetax-daily-close/index.ts',
-        'supabase/functions/generate-settlement/index.ts',
-        'supabase/functions/generate_delivery_settlement/index.ts',
       ];
       for (final path in edgeFunctions) {
         final file = File(path);
@@ -94,6 +93,16 @@ void main() {
           contains('Deno.env.get'),
           reason: '$path must read CRON_SECRET from env',
         );
+      }
+      for (final name in [
+        'generate-settlement',
+        'generate_delivery_settlement',
+      ]) {
+        final content = File(
+          'supabase/functions/$name/index.ts',
+        ).readAsStringSync();
+        expect(content, contains('Deno.serve(retiredDeliberryResponse)'));
+        expect(content, isNot(contains('Deno.env.get')));
       }
     });
   });

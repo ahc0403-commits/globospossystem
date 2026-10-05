@@ -88,7 +88,6 @@ final _adminLabels = <_LocalizedLabel>[
   (l10n) => l10n.inventory,
   (l10n) => l10n.navQuality,
   (l10n) => l10n.settings,
-  (l10n) => l10n.deliberrySettlement,
   (l10n) => l10n.eInvoice,
 ];
 
@@ -101,7 +100,6 @@ const _adminRootKeys = <Key>[
   Key('inventory_root'),
   Key('qc_root'),
   Key('settings_root'),
-  Key('delivery_settlement_root'),
   Key('einvoice_root'),
 ];
 
@@ -114,7 +112,6 @@ const _adminNavKeys = <Key>[
   Key('nav_inventory'),
   Key('nav_qc'),
   Key('nav_settings'),
-  Key('nav_delivery_settlement'),
   Key('nav_einvoice'),
 ];
 
@@ -326,14 +323,14 @@ void main() {
   );
 
   testWidgets(
-    'all ten Admin tabs render localized selected operational workspaces',
+    'all nine Admin tabs render localized selected operational workspaces',
     (tester) async {
       final semantics = tester.ensureSemantics();
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      expect(_adminLabels, hasLength(10));
-      expect(_adminRootKeys, hasLength(10));
+      expect(_adminLabels, hasLength(9));
+      expect(_adminRootKeys, hasLength(9));
       for (final fixture in _viewportLocales) {
         GoRouter? previousRouter;
         for (var index = 0; index < _adminLabels.length; index++) {

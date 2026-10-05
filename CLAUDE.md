@@ -56,9 +56,12 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
 - **Payment completion must never depend on MISA availability.**
   MISA dispatch is always async. The implemented MISA contract is
   authoritative; WeTax remains historical only.
-- **Both existing settlement edge functions are preserved.**
-  `generate-settlement` (dine-in) and `generate_delivery_settlement`
-  (Deliberry) serve distinct business domains. Do not flag as duplicates.
+- **Deliberry is retired by the owner's 2026-10-05 decision.**
+  Do not accept, dispatch, reprocess, or generate new Deliberry settlements.
+  Preserve historical sales/settlement records and their read contracts.
+  Both `generate-settlement` and `generate_delivery_settlement` currently
+  produce Deliberry settlements; retain their endpoints as HTTP 410 responses.
+  Reactivation requires a new explicit owner decision and migration.
 
 ## 5. Office app coupling (do not break)
 
