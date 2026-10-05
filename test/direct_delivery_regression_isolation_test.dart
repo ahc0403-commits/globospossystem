@@ -41,7 +41,7 @@ const _frozenFiles = <String, String>{
   // Direct fulfillment metadata passes through the existing payment renderer.
   // wifi_printer_service_test verifies printed pickup and both Grab payment modes.
   'lib/core/hardware/print_job_agent_service.dart':
-      'bc78d9e92d1ed3716c0362e409a53baa7892e85c0bda445659476801fe7d4fca',
+      'ce1692aada8a05ffda52e984e6d9b7e4ac3ff52487c2cc2bde9927219dc56a1b',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
       '812fdaa3f993520983fc87e4bdb2c1f28c7ccca23f0eb384d69fdf42f4101993',
   'supabase/migrations/20260722050000_kitchen_direct_completion.sql':

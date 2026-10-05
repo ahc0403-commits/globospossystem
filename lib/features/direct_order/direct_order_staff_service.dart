@@ -15,19 +15,29 @@ String directOrderStaffErrorCode(Object error) {
   return 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE';
 }
 
-String? normalizeGrabTrackingUrl(String input) {
+String? normalizeDeliveryTrackingUrl(String input) {
   var value = input.trim();
-  if (value.isEmpty) return null;
+  if (value.isEmpty || value.length > 2000 || RegExp(r'\s').hasMatch(value)) {
+    return null;
+  }
   if (!value.contains('://')) value = 'https://$value';
   final uri = Uri.tryParse(value);
-  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
-  final host = uri.host.toLowerCase();
-  final validHost =
-      host == 'grab.com' ||
-      host.endsWith('.grab.com') ||
-      host == 'grab.onelink.me';
-  return validHost ? uri.toString() : null;
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty ||
+      !RegExp(
+        r'^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$',
+      ).hasMatch(uri.host) ||
+      value.length > 2000) {
+    return null;
+  }
+  return uri.toString();
 }
+
+// Kept for existing callers; provider identity is independent of URL validation.
+String? normalizeGrabTrackingUrl(String input) =>
+    normalizeDeliveryTrackingUrl(input);
 
 class DirectOrderAvailability {
   const DirectOrderAvailability({
@@ -168,7 +178,7 @@ class DirectOrderStaffService {
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_detail_v2',
+        'direct_order_staff_detail_v3',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
@@ -292,14 +302,73 @@ class DirectOrderStaffService {
     required String requestId,
     required String grabUrl,
     double? actualGrabFee,
+    int? expectedVersion,
+    String provider = 'grab',
+    String? providerName,
+    String? driverContact,
   }) async {
     await supabase.rpc(
-      'direct_order_set_dispatch_with_payment_mode',
+      'direct_order_set_dispatch_v3',
       params: {
         'p_store_id': storeId,
         'p_request_id': requestId,
-        'p_grab_tracking_url': grabUrl,
-        'p_actual_grab_fee': actualGrabFee,
+        'p_tracking_url': grabUrl,
+        'p_actual_fee': actualGrabFee,
+        'p_expected_version': expectedVersion,
+        'p_provider': provider,
+        'p_provider_name': providerName,
+        'p_driver_contact': driverContact,
+      },
+    );
+  }
+
+  Future<void> setDinerCount({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required int dinerCount,
+  }) async {
+    await supabase.rpc(
+      'direct_order_staff_set_diner_count',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_diner_count': dinerCount,
+      },
+    );
+  }
+
+  Future<void> offerPickup({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String reason,
+  }) async {
+    await supabase.rpc(
+      'direct_order_staff_offer_pickup',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_reason': reason,
+      },
+    );
+  }
+
+  Future<void> recordPickupRefund({
+    required String storeId,
+    required String requestId,
+    required String offerId,
+    required String reference,
+  }) async {
+    await supabase.rpc(
+      'direct_order_staff_record_pickup_refund',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_offer_id': offerId,
+        'p_reference': reference,
       },
     );
   }
@@ -401,7 +470,7 @@ class DirectOrderStaffService {
   }) async {
     return _list(
       await supabase.rpc(
-        'direct_delivery_ticket_list',
+        'direct_delivery_ticket_list_v3',
         params: {'p_store_id': storeId, 'p_statuses': statuses, 'p_limit': 200},
       ),
     );
@@ -513,7 +582,7 @@ class DirectOrderStaffService {
         '${value.day.toString().padLeft(2, '0')}';
     return _map(
       await supabase.rpc(
-        'direct_order_analytics',
+        'direct_order_analytics_v3',
         params: {
           'p_store_id': storeId,
           'p_from_date': date(from),

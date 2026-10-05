@@ -12,7 +12,7 @@ docker run --detach --rm --name "$RETIREMENT_CONTAINER" \
   --env POSTGRES_HOST_AUTH_METHOD=trust postgres:15 >/dev/null
 retirement_ready=0
 for retirement_attempt in $(seq 1 60); do
-  if docker exec "$RETIREMENT_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
+  if docker exec "$RETIREMENT_CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
     retirement_ready=1
     break
   fi

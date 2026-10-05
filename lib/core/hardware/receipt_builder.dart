@@ -29,6 +29,9 @@ class ReceiptBuilder {
     String? directFulfillmentType,
     String? directDeliveryPaymentMode,
     String? directReferenceCode,
+    int? dinerCount,
+    String? fulfillmentMethod,
+    double refundedTotal = 0,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -73,6 +76,26 @@ class ReceiptBuilder {
           generator.text(
             _escText(line),
             styles: const PosStyles(align: PosAlign.center),
+          ),
+        );
+      }
+    }
+    if (fulfillmentMethod != null) {
+      bytes.addAll(
+        generator.text(
+          fulfillmentMethod == 'pickup' ? 'TU DEN LAY' : 'GIAO HANG',
+        ),
+      );
+      if (dinerCount != null) {
+        bytes.addAll(
+          generator.text('So nguoi: $dinerCount / Dung cu: $dinerCount bo'),
+        );
+      }
+      if (refundedTotal > 0) {
+        bytes.addAll(generator.text('Da hoan: ${_formatVnd(refundedTotal)}'));
+        bytes.addAll(
+          generator.text(
+            'Thuc nhan: ${_formatVnd(totalAmount - refundedTotal)}',
           ),
         );
       }
@@ -279,6 +302,9 @@ class ReceiptBuilder {
     required double finalTotal,
     required DateTime printedAt,
     String deliveryPaymentMode = 'store_prepaid',
+    int? dinerCount,
+    bool isPickup = false,
+    double refundedTotal = 0,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -292,7 +318,7 @@ class ReceiptBuilder {
     );
     bytes.addAll(
       generator.text(
-        'PHIEU GIAO HANG',
+        isPickup ? 'PHIEU NHAN MANG VE' : 'PHIEU GIAO HANG',
         styles: const PosStyles(
           bold: true,
           align: PosAlign.center,
@@ -322,9 +348,22 @@ class ReceiptBuilder {
     );
     bytes.addAll(generator.text('Khach: ${_escText(customerName)}'));
     bytes.addAll(generator.text('SDT  : ${_escText(customerPhone)}'));
-    bytes.addAll(generator.text('Dia chi giao hang:'));
-    bytes.addAll(generator.text(_escText(formattedAddress)));
-    bytes.addAll(generator.text('Chi tiet: ${_escText(detailAddress)}'));
+    if (!isPickup) {
+      bytes.addAll(generator.text('Dia chi giao hang:'));
+      bytes.addAll(generator.text(_escText(formattedAddress)));
+      bytes.addAll(generator.text('Chi tiet: ${_escText(detailAddress)}'));
+    }
+    if (dinerCount != null) {
+      bytes.addAll(
+        generator.text('So nguoi: $dinerCount / Dung cu: $dinerCount bo'),
+      );
+    }
+    if (refundedTotal > 0) {
+      bytes.addAll(generator.text('Da hoan: ${_formatVnd(refundedTotal)}'));
+      bytes.addAll(
+        generator.text('Thuc nhan: ${_formatVnd(finalTotal - refundedTotal)}'),
+      );
+    }
     bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
@@ -440,6 +479,9 @@ class ReceiptBuilder {
         finalTotal: driverReceipt.finalTotal,
         printedAt: driverReceipt.printedAt,
         deliveryPaymentMode: driverReceipt.deliveryPaymentMode,
+        dinerCount: driverReceipt.dinerCount,
+        isPickup: driverReceipt.isPickup,
+        refundedTotal: driverReceipt.refundedTotal,
       );
     }
 
@@ -459,6 +501,20 @@ class ReceiptBuilder {
       ),
     );
     bytes.addAll(generator.text(_escText('#${ticket.ticketCode}')));
+    if (ticket.fulfillmentMethod != null) {
+      bytes.addAll(
+        generator.text(
+          ticket.fulfillmentMethod == 'pickup' ? 'TU DEN LAY' : 'GIAO HANG',
+        ),
+      );
+      if (ticket.dinerCount != null) {
+        bytes.addAll(
+          generator.text(
+            'So nguoi: ${ticket.dinerCount} / Dung cu: ${ticket.dinerCount} bo',
+          ),
+        );
+      }
+    }
     bytes.addAll(
       generator.text(
         _escText(
@@ -892,6 +948,8 @@ class PrintTicket {
     required this.printedAt,
     required this.items,
     this.orderNotes,
+    this.dinerCount,
+    this.fulfillmentMethod,
     this.deliveryDriverReceipt,
     this.directFulfillmentType,
     this.directReferenceCode,
@@ -906,6 +964,8 @@ class PrintTicket {
   final String printedAt;
   final List<PrintTicketItem> items;
   final String? orderNotes;
+  final int? dinerCount;
+  final String? fulfillmentMethod;
   final QueuedDeliveryDriverReceipt? deliveryDriverReceipt;
   final String? directFulfillmentType;
   final String? directReferenceCode;
@@ -937,6 +997,8 @@ class PrintTicket {
           )
           .toList(),
       orderNotes: payload['order_notes']?.toString(),
+      dinerCount: (payload['diner_count'] as num?)?.toInt(),
+      fulfillmentMethod: payload['fulfillment_method']?.toString(),
       deliveryDriverReceipt: ticket == 'delivery_driver_receipt'
           ? QueuedDeliveryDriverReceipt.fromPayload(payload)
           : null,
@@ -1051,6 +1113,9 @@ class QueuedPaymentReceipt {
     required this.vatAmount,
     required this.receivedAmount,
     required this.changeAmount,
+    this.dinerCount,
+    this.fulfillmentMethod,
+    this.refundedTotal = 0,
   });
 
   final String? directFulfillmentType;
@@ -1073,6 +1138,9 @@ class QueuedPaymentReceipt {
   final double vatAmount;
   final double? receivedAmount;
   final double changeAmount;
+  final int? dinerCount;
+  final String? fulfillmentMethod;
+  final double refundedTotal;
 
   factory QueuedPaymentReceipt.fromPayload(Map<String, dynamic> payload) {
     final rawItems = payload['items'];
@@ -1089,6 +1157,9 @@ class QueuedPaymentReceipt {
       directDeliveryPaymentMode: payload['direct_delivery_payment_mode']
           ?.toString(),
       directReferenceCode: payload['direct_reference_code']?.toString(),
+      dinerCount: (payload['diner_count'] as num?)?.toInt(),
+      fulfillmentMethod: payload['fulfillment_method']?.toString(),
+      refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       tableNumber: payload['table_number']?.toString() ?? '-',
       items: itemRows.whereType<Map>().map((item) {
@@ -1190,6 +1261,9 @@ class QueuedDeliveryDriverReceipt {
     required this.deliveryFeeTotal,
     required this.finalTotal,
     required this.printedAt,
+    this.dinerCount,
+    this.isPickup = false,
+    this.refundedTotal = 0,
   });
 
   final String restaurantName;
@@ -1205,6 +1279,9 @@ class QueuedDeliveryDriverReceipt {
   final double finalTotal;
   final DateTime printedAt;
   final String deliveryPaymentMode;
+  final int? dinerCount;
+  final bool isPickup;
+  final double refundedTotal;
 
   factory QueuedDeliveryDriverReceipt.fromPayload(
     Map<String, dynamic> payload,
@@ -1215,6 +1292,9 @@ class QueuedDeliveryDriverReceipt {
       deliveryPaymentMode:
           payload['direct_delivery_payment_mode']?.toString() ??
           'store_prepaid',
+      dinerCount: (payload['diner_count'] as num?)?.toInt(),
+      isPickup: payload['fulfillment_method'] == 'pickup',
+      refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       referenceCode:
           payload['reference_code']?.toString() ??

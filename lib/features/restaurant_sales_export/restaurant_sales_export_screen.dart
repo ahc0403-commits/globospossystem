@@ -541,10 +541,11 @@ String _subtitle(BuildContext context) => switch (Localizations.localeOf(
   context,
 ).languageCode) {
   'vi' =>
-    'Gộp doanh thu Restaurant và Photo cùng pháp nhân vào một file MISA. Các mã số thuế và cửa hàng SAMPLE vẫn được tách riêng.',
+    'Gộp doanh thu Restaurant và Photo cùng pháp nhân vào một file MISA. Các mã số thuế được tách riêng; doanh thu SAMPLE bị loại khỏi khai thuế.',
   'en' =>
-    'Combine Restaurant and Photo sales for the same legal entity into one MISA file. Seller tax codes and SAMPLE sales remain separate.',
-  _ => '같은 법인의 Restaurant와 Photo 매출을 하나의 MISA 엑셀로 합칩니다. 다른 세금코드와 샘플 매출은 분리됩니다.',
+    'Combine Restaurant and Photo sales for the same legal entity into one MISA file. Seller tax codes remain separate; SAMPLE sales are excluded from tax reporting.',
+  _ =>
+    '같은 법인의 Restaurant와 Photo 매출을 하나의 MISA 엑셀로 합칩니다. 다른 세금코드는 분리하고, 샘플 매출은 신고 대상에서 제외합니다.',
 };
 
 String _downloadLabel(BuildContext context) =>

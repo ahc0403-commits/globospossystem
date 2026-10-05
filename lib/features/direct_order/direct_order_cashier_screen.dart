@@ -40,6 +40,9 @@ class _DirectOrderCashierScreenState
   final _quoteNoteController = TextEditingController();
   final _grabUrlController = TextEditingController();
   final _actualGrabFeeController = TextEditingController();
+  final _providerNameController = TextEditingController();
+  final _driverContactController = TextEditingController();
+  String _deliveryProvider = 'grab';
   Timer? _timer;
   Timer? _chatRefreshTimer;
   List<Map<String, dynamic>> _requests = const [];
@@ -88,6 +91,8 @@ class _DirectOrderCashierScreenState
     _quoteNoteController.dispose();
     _grabUrlController.dispose();
     _actualGrabFeeController.dispose();
+    _providerNameController.dispose();
+    _driverContactController.dispose();
     super.dispose();
   }
 
@@ -148,6 +153,7 @@ class _DirectOrderCashierScreenState
       if (selectedId != requestedSelection && detail != null) {
         _seedOrderInputs(detail);
       }
+      if (detail != null) _seedPickupQuoteInput(detail);
       setState(() {
         _requests = rows;
         _selectedId = selectedId;
@@ -234,10 +240,112 @@ class _DirectOrderCashierScreenState
     }
   }
 
+  Map<String, dynamic> get _delivery => _map(_detail?['delivery']);
+  bool get _isPickup =>
+      _delivery['method'] == 'pickup' ||
+      _map(_detail?['request'])['fulfillment_type'] == 'pickup';
+  bool get _pickupOriginalPaymentPending =>
+      _isPickup &&
+      _map(_detail?['request'])['state'] == 'quoted' &&
+      _number(_activeQuote?['delivery_fee_total']) > 0;
+
+  void _seedPickupQuoteInput(Map<String, dynamic> detail) {
+    if (_map(detail['delivery'])['method'] == 'pickup' &&
+        _map(detail['request'])['state'] == 'awaiting_quote') {
+      _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.customerDirect;
+      _feeController.text = '0';
+    }
+  }
+
+  Future<String?> _inputDialog(
+    String title, {
+    String? help,
+    String initial = '',
+    bool number = false,
+  }) => showDirectOrderDialog<String>(
+    context: context,
+    builder: (context) => _FulfillmentInputDialog(
+      copy: _copy,
+      title: title,
+      help: help,
+      initial: initial,
+      number: number,
+    ),
+  );
+
+  Future<void> _editDinerCount() async {
+    final input = await _inputDialog(
+      _copy.editDinerCount,
+      initial: _delivery['diner_count']?.toString() ?? '',
+      number: true,
+    );
+    if (input == null || !mounted || _storeId == null || _selectedId == null) {
+      return;
+    }
+    final count = int.tryParse(input);
+    if (count == null || count < 1 || count > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_copy.errorMessage('DIRECT_ORDER_DINER_COUNT_INVALID')),
+        ),
+      );
+      return;
+    }
+    await _act(
+      () => directOrderStaffService.setDinerCount(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        expectedVersion: (_delivery['version'] as num?)?.toInt() ?? 1,
+        dinerCount: count,
+      ),
+      _copy.packingCount(count),
+    );
+  }
+
+  Future<void> _offerPickup() async {
+    final reason = await _inputDialog(
+      _copy.pickupReason,
+      initial: _copy.offerPickup,
+    );
+    if (reason == null || !mounted || _storeId == null || _selectedId == null) {
+      return;
+    }
+    await _act(
+      () => directOrderStaffService.offerPickup(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        expectedVersion: (_delivery['version'] as num?)?.toInt() ?? 1,
+        reason: reason,
+      ),
+      _copy.pickupOffered,
+    );
+  }
+
+  Future<void> _recordPickupRefund() async {
+    final reference = await _inputDialog(
+      _copy.refundReference,
+      help: _copy.refundConfirmHelp,
+    );
+    if (reference == null ||
+        !mounted ||
+        _storeId == null ||
+        _selectedId == null) {
+      return;
+    }
+    await _act(
+      () => directOrderStaffService.recordPickupRefund(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        offerId: _map(_delivery['pickup_offer'])['id'].toString(),
+        reference: reference,
+      ),
+      _copy.refundRecorded,
+    );
+  }
+
   Future<void> _sendQuote() async {
-    final pickup = _map(_detail?['request'])['fulfillment_type'] == 'pickup';
     final fee =
-        (pickup ||
+        (_isPickup ||
             _deliveryPaymentMode ==
                 DirectOrderDeliveryPaymentMode.customerDirect)
         ? 0
@@ -250,8 +358,10 @@ class _DirectOrderCashierScreenState
         storeId: _storeId!,
         requestId: _selectedId!,
         deliveryFee: fee.toDouble(),
-        deliveryPaymentMode: pickup
-            ? DirectOrderDeliveryPaymentMode.notApplicable
+        deliveryPaymentMode: _isPickup
+            ? (_map(_detail?['request'])['fulfillment_type'] == 'pickup'
+                  ? DirectOrderDeliveryPaymentMode.notApplicable
+                  : DirectOrderDeliveryPaymentMode.customerDirect)
             : _deliveryPaymentMode,
         note: _quoteNoteController.text.trim(),
       );
@@ -533,12 +643,15 @@ class _DirectOrderCashierScreenState
   }
 
   Future<void> _sendGrab() async {
-    final url = normalizeGrabTrackingUrl(_grabUrlController.text);
+    final url = normalizeDeliveryTrackingUrl(_grabUrlController.text);
     final mode = DirectOrderDeliveryPaymentMode.fromValue(
       (_detail?['financial'] as Map?)?['delivery_payment_mode'],
     );
     final actual = parseDirectOrderVnd(_actualGrabFeeController.text);
-    if (url == null ||
+    if ((_grabUrlController.text.trim().isNotEmpty && url == null) ||
+        (url == null && _driverContactController.text.trim().isEmpty) ||
+        (_deliveryProvider == 'other' &&
+            _providerNameController.text.trim().isEmpty) ||
         (mode == DirectOrderDeliveryPaymentMode.storePrepaid &&
             actual == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -556,7 +669,16 @@ class _DirectOrderCashierScreenState
       () => directOrderStaffService.setDispatch(
         storeId: _storeId!,
         requestId: _selectedId!,
-        grabUrl: url,
+        grabUrl: url ?? '',
+        provider: _deliveryProvider,
+        providerName: _providerNameController.text.trim().isEmpty
+            ? null
+            : _providerNameController.text.trim(),
+        driverContact: _driverContactController.text.trim().isEmpty
+            ? null
+            : _driverContactController.text.trim(),
+        expectedVersion: (_map(_detail?['fulfillment'])['version'] as num?)
+            ?.toInt(),
         actualGrabFee: actual?.toDouble(),
       ),
       _copy.grabLinkSent,
@@ -731,6 +853,9 @@ class _DirectOrderCashierScreenState
     _quoteNoteController.clear();
     _grabUrlController.clear();
     _actualGrabFeeController.clear();
+    _providerNameController.clear();
+    _driverContactController.clear();
+    _deliveryProvider = 'grab';
     _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.customerDirect;
 
     final quotes = _maps(detail['quotes']);
@@ -749,8 +874,14 @@ class _DirectOrderCashierScreenState
       _quoteNoteController.text = activeQuote['cashier_note']?.toString() ?? '';
     }
 
+    _seedPickupQuoteInput(detail);
+
     final dispatch = detail['dispatch'];
     if (dispatch is! Map) return;
+    _deliveryProvider = dispatch['delivery_provider']?.toString() ?? 'grab';
+    _providerNameController.text = dispatch['provider_name']?.toString() ?? '';
+    _driverContactController.text =
+        dispatch['driver_contact']?.toString() ?? '';
     final url = dispatch['grab_tracking_url']?.toString();
     final fee = dispatch['actual_grab_fee'];
     if (url != null && url.isNotEmpty) _grabUrlController.text = url;
@@ -1037,12 +1168,13 @@ class _DirectOrderCashierScreenState
     final items = _maps(_detail?['items']);
     final quote = _activeQuote;
     final financial = _detail?['financial'];
-    final isPickup = request['fulfillment_type'] == 'pickup';
+    final isPickup = _isPickup;
     final state = request['state']?.toString() ?? '';
     final fulfillment = _map(_detail?['fulfillment']);
     final fulfillmentStatus = fulfillment['status']?.toString() ?? '';
     final displayState = fulfillmentStatus.isEmpty ? state : fulfillmentStatus;
     return ListView(
+      key: const Key('direct_staff_detail_list'),
       padding: const EdgeInsets.all(16),
       children: [
         Wrap(
@@ -1055,11 +1187,74 @@ class _DirectOrderCashierScreenState
             ),
             Chip(label: Text(isPickup ? _copy.pickup : _copy.delivery)),
             Chip(label: Text(_copy.stateLabel(displayState))),
+            Chip(
+              label: Text(
+                _isPickup && displayState == 'completed'
+                    ? _copy.pickupCompleted
+                    : _copy.stateLabel(displayState),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         _Section(
-          title: isPickup ? _copy.contact : _copy.addressAndContact,
+          title: _isPickup ? _copy.pickup : _copy.directDelivery,
+          icon: Icons.inventory_2_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _copy.packingCount((_delivery['diner_count'] as num?)?.toInt()),
+              ),
+              if (!{
+                    'dispatched',
+                    'completed',
+                    'cancelled',
+                  }.contains(fulfillmentStatus) &&
+                  !{'rejected', 'cancelled', 'expired'}.contains(state))
+                TextButton(
+                  key: const Key('direct_edit_diner_count'),
+                  onPressed: _busy ? null : _editDinerCount,
+                  child: Text(_copy.editDinerCount),
+                ),
+              if (_map(_delivery['pickup_offer'])['status'] == 'proposed')
+                Text(_copy.pickupOffered),
+              if (!_isPickup &&
+                  !{
+                    'dispatched',
+                    'completed',
+                    'cancelled',
+                  }.contains(fulfillmentStatus) &&
+                  !{'rejected', 'cancelled', 'expired'}.contains(state))
+                OutlinedButton(
+                  key: const Key('direct_offer_pickup'),
+                  onPressed: _busy ? null : _offerPickup,
+                  child: Text(_copy.offerPickup),
+                ),
+              if (_map(_delivery['pickup_offer'])['status'] == 'accepted' &&
+                  _number(_map(_delivery['pickup_offer'])['refund_due']) >
+                      0) ...[
+                Text(
+                  '${_map(_delivery['pickup_offer'])['refund_recorded'] == true ? _copy.refundRecorded : _copy.refundPending}: ${_vnd(_map(_delivery['pickup_offer'])['refund_due'])}',
+                ),
+                if (financial is Map &&
+                    _map(_delivery['pickup_offer'])['refund_recorded'] != true)
+                  FilledButton.tonal(
+                    key: const Key('direct_record_pickup_refund'),
+                    onPressed: _busy ? null : _recordPickupRefund,
+                    child: Text(_copy.recordRefund),
+                  ),
+              ],
+              if (_delivery['paid_total'] != null)
+                Text(
+                  '${_copy.netReceived}: ${_vnd(_number(_delivery['paid_total']) - _number(_delivery['refunded_total']))}',
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _Section(
+          title: _copy.addressAndContact,
           icon: Icons.location_on_outlined,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1117,7 +1312,12 @@ class _DirectOrderCashierScreenState
           ),
         ),
         const SizedBox(height: 12),
-        if (!isPickup && (state == 'awaiting_quote' || state == 'quoted'))
+        if (_pickupOriginalPaymentPending) ...[
+          Text(_copy.pickupOriginalPaymentHelp),
+          const SizedBox(height: 12),
+        ],
+        if ((state == 'awaiting_quote' || state == 'quoted') &&
+            !_pickupOriginalPaymentPending)
           _Section(
             title: _copy.enterGrabFee,
             icon: Icons.delivery_dining_outlined,
@@ -1139,7 +1339,7 @@ class _DirectOrderCashierScreenState
                       child: Text(_copy.storePrepaysDriver),
                     ),
                   ],
-                  onChanged: _busy
+                  onChanged: (_busy || _isPickup)
                       ? null
                       : (value) {
                           if (value == null) return;
@@ -1157,8 +1357,9 @@ class _DirectOrderCashierScreenState
                   key: const Key('direct_order_delivery_fee_input'),
                   controller: _feeController,
                   enabled:
+                      !_isPickup &&
                       _deliveryPaymentMode ==
-                      DirectOrderDeliveryPaymentMode.storePrepaid,
+                          DirectOrderDeliveryPaymentMode.storePrepaid,
                   keyboardType: TextInputType.number,
                   inputFormatters: const [DirectOrderVndInputFormatter()],
                   decoration: InputDecoration(
@@ -1313,12 +1514,54 @@ class _DirectOrderCashierScreenState
           const SizedBox(height: 12),
           if (!isPickup) _buildDriverReceiptSection(),
           const SizedBox(height: 12),
-          if (!isPickup && fulfillmentStatus != 'completed')
+          if (!_isPickup &&
+              fulfillmentStatus == 'ready' &&
+              _map(_delivery['pickup_offer'])['status'] != 'proposed')
             _Section(
               title: _copy.grabTrackingUrl,
               icon: Icons.delivery_dining,
               child: Column(
                 children: [
+                  DropdownButtonFormField<String>(
+                    key: const Key('direct_delivery_provider'),
+                    initialValue: _deliveryProvider,
+                    decoration: InputDecoration(
+                      labelText: _copy.deliveryProvider,
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'grab',
+                        child: Text(_copy.grabProvider),
+                      ),
+                      DropdownMenuItem(
+                        value: 'be',
+                        child: Text(_copy.beProvider),
+                      ),
+                      DropdownMenuItem(
+                        value: 'other',
+                        child: Text(_copy.otherProvider),
+                      ),
+                    ],
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(
+                            () => _deliveryProvider = value ?? 'grab',
+                          ),
+                  ),
+                  if (_deliveryProvider == 'other')
+                    TextField(
+                      key: const Key('direct_provider_name'),
+                      controller: _providerNameController,
+                      decoration: InputDecoration(
+                        labelText: _copy.providerName,
+                      ),
+                    ),
+                  TextField(
+                    key: const Key('direct_driver_contact'),
+                    controller: _driverContactController,
+                    maxLength: 200,
+                    decoration: InputDecoration(labelText: _copy.driverContact),
+                  ),
                   TextField(
                     controller: _grabUrlController,
                     decoration: InputDecoration(
@@ -1354,7 +1597,7 @@ class _DirectOrderCashierScreenState
                     child: FilledButton.icon(
                       onPressed: _busy ? null : _sendGrab,
                       icon: const Icon(Icons.send_outlined),
-                      label: Text(_copy.sendGrabLink),
+                      label: Text(_copy.handoffDriver),
                     ),
                   ),
                 ],
@@ -1505,7 +1748,7 @@ class _DirectOrderCashierScreenState
         : _copy.printDriverReceipt;
 
     return _Section(
-      title: _copy.driverReceipt,
+      title: _isPickup ? _copy.pickup : _copy.driverReceipt,
       icon: Icons.receipt_long_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1665,6 +1908,69 @@ List<Map<String, dynamic>> _maps(Object? value) => value is List
 double _number(Object? value) => value is num
     ? value.toDouble()
     : double.tryParse(value?.toString() ?? '') ?? 0;
+
+class _FulfillmentInputDialog extends StatefulWidget {
+  const _FulfillmentInputDialog({
+    required this.copy,
+    required this.title,
+    required this.initial,
+    required this.number,
+    this.help,
+  });
+  final DirectOrderCopy copy;
+  final String title;
+  final String initial;
+  final bool number;
+  final String? help;
+  @override
+  State<_FulfillmentInputDialog> createState() =>
+      _FulfillmentInputDialogState();
+}
+
+class _FulfillmentInputDialogState extends State<_FulfillmentInputDialog> {
+  late final _controller = TextEditingController(text: widget.initial);
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.help != null) Text(widget.help!),
+          TextField(
+            key: const Key('direct_fulfillment_dialog_input'),
+            controller: _controller,
+            maxLength: widget.number ? 3 : 500,
+            keyboardType: widget.number
+                ? TextInputType.number
+                : TextInputType.text,
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text(widget.copy.keepCurrentState),
+      ),
+      FilledButton(
+        onPressed: () {
+          final value = _controller.text.trim();
+          if (value.isNotEmpty) {
+            Navigator.pop(context, value);
+          }
+        },
+        child: Text(widget.copy.confirm),
+      ),
+    ],
+  );
+}
 
 class _Section extends StatelessWidget {
   const _Section({

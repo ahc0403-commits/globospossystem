@@ -12,7 +12,7 @@ root,tmp=map(Path,sys.argv[1:])
 mdir=root/'supabase/migrations'
 def source(file): return (mdir/file).read_text()
 def function(file,name):
- s=source(file);m=re.search(r'CREATE (?:OR REPLACE )?FUNCTION public\.'+name+r'\(',s)
+ s=source(file);m=re.search(r'CREATE (?:OR REPLACE )?FUNCTION public\.'+name+r'\(',s,re.I)
  if not m: raise RuntimeError(name)
  return s[m.start():s.index('$$;',m.start())+3]+'\n'
 def block(file,label):
@@ -124,6 +124,19 @@ for name in ['kds_realtime_rollouts','kds_store_revisions','kds_change_log']:
  start=realtime.index('CREATE TABLE IF NOT EXISTS public.'+name+' (')
  pickup_tables+=realtime[start:realtime.index('\n);',start)+4]+'\n'
 (tmp/'pickup-realtime-tables.sql').write_text(pickup_tables)
+fallback='ALTER TABLE restaurants ADD COLUMN address text;\nALTER TABLE direct_order_dispatches ADD COLUMN cash_paid_at timestamptz;\nCREATE TABLE print_jobs(id uuid DEFAULT gen_random_uuid(),order_id uuid,restaurant_id uuid,payload jsonb);\n'
+refund=source('20260604001000_pos_payment_refund_void_adjustments.sql')
+a=refund.index('create table if not exists public.payment_adjustments')
+fallback+=refund[a:refund.index('\n);',a)+4]+'\n'
+for file,name in [
+ ('20260604001000_pos_payment_refund_void_adjustments.sql','record_payment_adjustment'),
+ (base,'direct_order_public_status'),
+ ('20261002030000_direct_order_delivery_pickup.sql','direct_order_public_orders_v3'),
+ ('20260910130000_direct_order_customer_payment_and_status.sql','direct_order_staff_list_v2'),
+ ('20260907100000_direct_delivery_cash_payout_daily_closing.sql','direct_order_set_dispatch'),
+ ('20260908120000_direct_order_pilot_safety.sql','direct_order_set_dispatch_with_payment_mode'),
+]: fallback+=function(file,name)
+(tmp/'fallback-main-prerequisites.sql').write_text(fallback)
 PY
 docker run --detach --rm --name "$PHOTO_CONTAINER" \
  --env POSTGRES_HOST_AUTH_METHOD=trust --env POSTGRES_DB=codex_direct_photo postgres:15 >/dev/null
@@ -198,6 +211,12 @@ if [[ "${DELIVERY_HOURS_TEST:-0}" == 1 ]]; then
   run_sql "$PHOTO_TMP/pickup-functions.sql" >/dev/null
   run_sql "$PHOTO_ROOT/test/sql/direct_pickup_kds_before.sql"
   run_sql "$PHOTO_ROOT/supabase/migrations/20261005010000_direct_pickup_kds_handoff.sql" >/dev/null
+  if [[ "${DIRECT_ORDER_FALLBACK_TEST:-0}" == 1 ]]; then
+    run_sql "$PHOTO_TMP/fallback-main-prerequisites.sql" >/dev/null
+    run_sql "$PHOTO_ROOT/supabase/migrations/20261005070000_direct_order_delivery_fallback.sql" >/dev/null
+    run_sql "$PHOTO_ROOT/supabase/migrations/20261005080000_direct_order_fallback_set_based_reads.sql" >/dev/null
+    printf 'DIRECT_ORDER_FALLBACK_CURRENT_MAIN_MIGRATIONS=PASS\n'
+  fi
   run_sql "$PHOTO_ROOT/supabase/tests/direct_pickup_kds_handoff_test.sql"
   # Two recovery sessions execute the exact operational script concurrently.
   PICKUP_RECOVERY_ARGS="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc \
