@@ -4,8 +4,8 @@
     {
       "repository": "globos_pos_system",
       "path": "docs/implementation/pos_procurement_process_implementation_20261005.md",
-      "sha256": "9f55c692d83d1bceb1075b97e3e8b32659ecc62fc266dabece69804a5771c8bf",
-      "bytes": 16137
+      "sha256": "4a99a2442e773b75b61f0e862e53ff685ddd785d8990fc12451ecce2e71f0b11",
+      "bytes": 16464
     },
     {
       "repository": "globos_pos_system",
@@ -274,8 +274,8 @@
     {
       "repository": "restaurant_office_app",
       "path": "supabase/functions/pos-bridge/index.ts",
-      "sha256": "c3787393aff0b2645e380dc0088777fe328e18f4db98e77e26cc0f6a1ef28ee5",
-      "bytes": 129635
+      "sha256": "b41373beaee325b51cb04093eea5d3bce1c61206713a49b269fa781b2846fa15",
+      "bytes": 129658
     },
     {
       "repository": "restaurant_office_app",
@@ -420,6 +420,18 @@
       "path": "test/fixtures/procurement_native_accounting_setup.sql",
       "sha256": "562f84ff16b3ccbf932b1de492f0e1c19e2b887f0cf22874667ca4475c5b945f",
       "bytes": 4431
+    },
+    {
+      "repository": "globos_pos_system",
+      "path": "test/features/procurement/procurement_workspace_test.dart",
+      "sha256": "e56295d0b66495f8ee65488371f6faadc1f235f6ae34106bd6fac587023c2bcb",
+      "bytes": 11195
+    },
+    {
+      "repository": "globos_pos_system",
+      "path": "test/dialog_sheet_entrypoint_coverage_contract_test.dart",
+      "sha256": "b013820bba12b2cf31989cdc7509cbe6fb1cf83c7975d5aa431d56ae73bdd8bc",
+      "bytes": 14618
     }
   ]
 }

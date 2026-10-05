@@ -90,7 +90,7 @@ Invoice 전 회사 선결제와 취소 환불은 별도 AP를 만들지 않고 �
 |---|---|
 | POS 전체 구매 SQL suite | PASS: 기존 v2/동시성/입고·upgrade hash·새 승인·문서·부분입고·후속·직원 소유·roster·metrics·page·성능 |
 | Office 구매 SQL suite | PASS: 원본/대조/AP·보류·credit·비재고/자산·native Invoice 게시·선급 충당·직원 채무/보전·현금 환불·한도/재시도/역분개 |
-| POS 구매 Flutter | 21 passed |
+| POS 구매 Flutter | 23 passed + 전체 대화상자 141개 coverage contract |
 | Office 구매 Flutter + 기존 기능 | 45 passed (23 focused + 기존 22 기능, golden 제외) |
 | POS/Office focused analyze | No issues found |
 | Office bridge | `deno check` PASS. 공유 원본 78 passed, 무관한 동시 작업을 제외한 review 67 passed |
@@ -116,6 +116,6 @@ Office 구매 migration `20261005020000`~`20261005029000` 및 `20261005032000` 1
 
 기존 사용자 변경은 보존했다. 원 Office Git의 `pack too short`/bad HEAD는 삭제·복구하지 않았다. 건강한 별도 clone에서 확인한 origin/main에 구매 변경만 적용했고 동시 작업의 store batch/sales 변경은 원 체크아웃에 보존했다. 최초 backup이 없는 Office page와 three-way 파일은 건강한 baseline과 구매 추가 부분을 대조했다. 완전한 작업 전 snapshot을 주장하지 않는다.
 
-검토 위치: [POS](/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system), [Office](/Users/andreahn/Documents/procurement-release-20261005/office). 모두 `codex/procurement-process-20261005` 로컬 branch에 구매 변경을 commit으로 보존했다. 구매 변경을 push하고 [POS #537](https://github.com/ahc0403-commits/globospossystem/pull/537), [Office #168](https://github.com/ahc0403-commits/restaurant_office_app/pull/168) draft PR을 만들었다. CI는 실행 중이며 merge/운영 배포는 수행하지 않았다. 운영 릴리스는 POS `scripts/deploy_pos_production.sh`, Office 기존 gate/wrapper를 사용하며 Office는 clean exact origin/main, migration history 해결, 명시 확인이 필요하다.
+검토 위치: [POS](/Users/andreahn/.codex/worktrees/procurement-process/globos_pos_system), [Office](/Users/andreahn/Documents/procurement-release-20261005/office). 모두 `codex/procurement-process-20261005` 로컬 branch에 구매 변경을 commit으로 보존했다. 구매 변경을 push하고 [POS #537](https://github.com/ahc0403-commits/globospossystem/pull/537), [Office #168](https://github.com/ahc0403-commits/restaurant_office_app/pull/168) draft PR을 만들었다. CI는 실행 중이며 merge/운영 배포는 수행하지 않았다. 새 상품/정책 대화상자의 실제 취소·검증·확인 동작과 coverage inventory를 보완했다. 정확한 최종 SHA와 CI 결과는 [릴리스 검증 기록](/Users/andreahn/Documents/procurement-release-20261005/release_verification.md)에 별도로 보존한다. 운영 릴리스는 POS `scripts/deploy_pos_production.sh`, Office 기존 gate/wrapper를 사용하며 Office는 clean exact origin/main, migration history 해결, 명시 확인이 필요하다.
 
 복구는 신규 PR 생성 중단과 호환 릴리스로 진행한다. 확정 재고·반품·지급을 삭제하거나 증빙 금액으로 실제 원장을 대체하지 않는다.

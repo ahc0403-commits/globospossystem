@@ -12,7 +12,7 @@
   "pos_sql_regression": "pass, latest receipt locks/search plus procurement suite and performance",
   "office_sql_regression": "pass, native recognition/payment/cash evidence and canonical journal scope covered",
   "pos_flutter_focused": {
-    "passed": 21,
+    "passed": 23,
     "failed": 0
   },
   "office_flutter_focused": {
@@ -60,5 +60,10 @@
     "pos": "https://github.com/ahc0403-commits/globospossystem/pull/537",
     "office": "https://github.com/ahc0403-commits/restaurant_office_app/pull/168"
   },
-  "github_ci_at_evidence_creation": "running, no release PASS claimed"
+  "github_ci_at_evidence_creation": "running, no release PASS claimed",
+  "pos_dialog_entrypoint_contract": {
+    "entrypoints": 141,
+    "result": "pass in isolated review branch",
+    "new_dialogs": "product validation/cancel/save and policy cancel/confirm"
+  }
 }
