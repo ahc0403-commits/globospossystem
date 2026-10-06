@@ -98,4 +98,7 @@ run_sql "$INVENTORY_ROOT/supabase/tests/procurement_combined_receiving.test.sql"
 # Preserve independent confirmation and stock invariants after the new mode.
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_receiving_integrity.test.sql"
 
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261006011000_procurement_account_audit_auth_actor.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_account_audit_auth_actor.test.sql"
+
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
