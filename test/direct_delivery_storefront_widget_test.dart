@@ -9,6 +9,7 @@ import 'package:globos_pos_system/features/direct_order/direct_order_models.dart
 import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_storefront_screen.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
+import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,6 +20,7 @@ class _StorefrontFixtureService extends DirectOrderService {
     this.orderSummaries,
     this.paused = false,
     this.pauseOnSubmit = false,
+    this.extraItems = const [],
   });
 
   final DirectOrderAddress? savedAddress;
@@ -26,6 +28,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   final List<DirectOrderSummary>? orderSummaries;
   bool paused;
   final bool pauseOnSubmit;
+  final List<DirectOrderMenuItem> extraItems;
   DirectOrderAddress? submittedAddress;
   bool? submittedRememberAddress;
   DirectOrderFulfillmentType? submittedFulfillmentType;
@@ -65,8 +68,8 @@ class _StorefrontFixtureService extends DirectOrderService {
           sortOrder: 1,
         ),
       ],
-      items: const [
-        DirectOrderMenuItem(
+      items: [
+        const DirectOrderMenuItem(
           id: 'tteokbokki',
           categoryId: 'popular',
           nameKo: '즉석 떡볶이',
@@ -78,6 +81,7 @@ class _StorefrontFixtureService extends DirectOrderService {
           vatCategory: 'food',
           sortOrder: 1,
         ),
+        ...extraItems,
       ],
     );
   }
@@ -242,6 +246,262 @@ Future<void> _openAddress(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('cart preview lists selected items without submitting an order', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final money = NumberFormat.currency(
+      locale: 'vi_VN',
+      symbol: '₫',
+      decimalDigits: 0,
+    );
+    final service = _StorefrontFixtureService(
+      extraItems: const [
+        DirectOrderMenuItem(
+          id: 'ramen',
+          categoryId: 'popular',
+          nameKo: '떡만두라면',
+          nameVi: 'Ramen bánh gạo và mandu',
+          nameEn: 'Rice cake and dumpling ramen',
+          description: null,
+          price: 69000,
+          imageUrl: null,
+          vatCategory: 'food',
+          sortOrder: 2,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('ko')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('direct_view_cart')), findsNothing);
+    await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
+    await tester.pump();
+    final tteokbokkiCard = find.ancestor(
+      of: find.text('즉석 떡볶이'),
+      matching: find.byType(Card),
+    );
+    await tester.tap(
+      find.descendant(
+        of: tteokbokkiCard,
+        matching: find.byIcon(Icons.add_rounded),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('direct_add_ramen')));
+    await tester.pump();
+    await tester.tap(find.text(money.format(319000)));
+    await tester.pumpAndSettle();
+
+    final sheet = find.byKey(const Key('direct_cart_sheet'));
+    expect(sheet, findsOneWidget);
+    for (final entry in {
+      'tteokbokki': [
+        '즉석 떡볶이',
+        '${money.format(125000)} × 2',
+        money.format(250000),
+      ],
+      'ramen': ['떡만두라면', '${money.format(69000)} × 1', money.format(69000)],
+    }.entries) {
+      final line = find.byKey(Key('direct_cart_item_${entry.key}'));
+      expect(line, findsOneWidget);
+      for (final text in entry.value) {
+        expect(
+          find.descendant(of: line, matching: find.text(text)),
+          findsOneWidget,
+        );
+      }
+    }
+    expect(
+      tester.widget<Text>(find.byKey(const Key('direct_cart_subtotal'))).data,
+      money.format(319000),
+    );
+    expect(service.submitCalls, 0);
+    await tester.tap(find.byKey(const Key('direct_cart_close')));
+    await tester.pumpAndSettle();
+    expect(sheet, findsNothing);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('direct_view_cart')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('direct_cart_address')));
+    await tester.pumpAndSettle();
+    expect(sheet, findsNothing);
+    expect(find.byKey(const Key('direct_address_input')), findsOneWidget);
+    expect(service.submitCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cart preview is localized and responsive in all three locales', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    for (final entry in {
+      'ko': '즉석 떡볶이',
+      'vi': 'Tokbokki cay',
+      'en': 'Spicy tteokbokki',
+    }.entries) {
+      final copy = DirectOrderCopy(entry.key);
+      for (final size in const [
+        Size(320, 568),
+        Size(390, 844),
+        Size(1440, 900),
+      ]) {
+        for (final isPickup in [false, true]) {
+          tester.view.physicalSize = size;
+          final service = _StorefrontFixtureService();
+          await tester.pumpWidget(
+            _fixtureApp(service: service, locale: Locale(entry.key)),
+          );
+          await tester.pumpAndSettle();
+          if (isPickup) {
+            await tester.tap(
+              find.descendant(
+                of: find.byKey(const Key('direct_fulfillment_type')),
+                matching: find.text(copy.pickup),
+              ),
+            );
+            await tester.pump();
+          }
+          await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
+          await tester.pump();
+          expect(
+            find.text(
+              '${isPickup ? copy.pickup : copy.delivery} · ${copy.viewCart} · 1',
+            ),
+            findsOneWidget,
+          );
+          final cartButton = find.byKey(const Key('direct_view_cart'));
+          expect(cartButton.hitTestable(), findsOneWidget);
+          expect(tester.getSize(cartButton).height, lessThanOrEqualTo(132));
+          expect(
+            tester.getTopLeft(cartButton).dy,
+            greaterThan(
+              tester
+                  .getBottomLeft(
+                    find.byKey(const Key('direct_fulfillment_type')),
+                  )
+                  .dy,
+            ),
+          );
+          await tester.tap(find.byKey(const Key('direct_view_cart')));
+          await tester.pumpAndSettle();
+          final sheet = find.byKey(const Key('direct_cart_sheet'));
+          expect(
+            find.descendant(of: sheet, matching: find.text(entry.value)),
+            findsOneWidget,
+          );
+          expect(
+            find.text(isPickup ? copy.vatNotice : copy.cartQuoteNotice),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull, reason: '${entry.key}:$size');
+          await tester.tap(find.byKey(const Key('direct_cart_close')));
+          await tester.pumpAndSettle();
+          // The original footer action must still open the address form directly.
+          await tester.tap(find.byKey(const Key('direct_cart_continue')));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('direct_recipient_name')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const Key('direct_address_input')),
+            isPickup ? findsNothing : findsOneWidget,
+          );
+          expect(service.submitCalls, 0);
+          expect(tester.takeException(), isNull, reason: '${entry.key}:$size');
+          await tester.pumpWidget(const SizedBox.shrink());
+        }
+      }
+    }
+  });
+
+  testWidgets('cart preview scrolls through long names and many selected items', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 568);
+    addTearDown(tester.view.reset);
+    final service = _StorefrontFixtureService(
+      extraItems: List.generate(
+        8,
+        (index) => DirectOrderMenuItem(
+          id: 'extra_$index',
+          categoryId: 'popular',
+          nameKo: '메뉴 $index',
+          nameVi: 'Món $index',
+          nameEn:
+              'Menu $index with rice cakes, dumplings, vegetables and spicy broth',
+          description: null,
+          price: 10000,
+          imageUrl: null,
+          vatCategory: 'food',
+          sortOrder: index + 2,
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('en')),
+    );
+    await tester.pumpAndSettle();
+    for (var index = 0; index < 8; index++) {
+      final add = find.byKey(Key('direct_add_extra_$index'));
+      await tester.scrollUntilVisible(
+        add,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await Scrollable.ensureVisible(tester.element(add), alignment: 0.2);
+      await tester.pumpAndSettle();
+      await tester.tap(add);
+      await tester.pump();
+    }
+    await tester.tap(find.byKey(const Key('direct_view_cart')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('direct_cart_item_tteokbokki')), findsNothing);
+    final last = find.byKey(const Key('direct_cart_item_extra_7'));
+    await tester.scrollUntilVisible(
+      last,
+      200,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('direct_cart_sheet')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find
+          .descendant(
+            of: last,
+            matching: find.text(service.extraItems.last.nameEn),
+          )
+          .hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('direct_cart_address')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('direct_cart_subtotal'))).data,
+      NumberFormat.currency(
+        locale: 'vi_VN',
+        symbol: '₫',
+        decimalDigits: 0,
+      ).format(80000),
+    );
+    expect(service.submitCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final hour in [11, 22]) {
     testWidgets('open storefront refreshes automatically at Vietnam $hour:00', (
       tester,

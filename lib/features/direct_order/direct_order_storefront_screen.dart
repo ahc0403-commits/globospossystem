@@ -305,6 +305,114 @@ class _DirectOrderStorefrontScreenState
 
   int get _cartCount => _cart.values.fold(0, (sum, value) => sum + value);
 
+  Future<void> _showCart() async {
+    final items = _storefront!.items
+        .where((item) => (_cart[item.id] ?? 0) > 0)
+        .toList();
+    final openAddress = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 640),
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          key: const Key('direct_cart_sheet'),
+          height: MediaQuery.sizeOf(context).height * 0.78,
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.shopping_cart_outlined),
+                title: Text(
+                  _copy.cart,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                subtitle: Text(_copy.itemsCount(_cartCount)),
+                trailing: IconButton(
+                  key: const Key('direct_cart_close'),
+                  tooltip: _copy.close,
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 24),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    final quantity = _cart[item.id]!;
+                    return Column(
+                      key: Key('direct_cart_item_${item.id}'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          item.localizedName(_languageCode),
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${_money.format(item.price)} × $quantity',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              _money.format(item.price * quantity),
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(_copy.subtotal)),
+                        const SizedBox(width: 12),
+                        Text(
+                          key: const Key('direct_cart_subtotal'),
+                          _money.format(_cartSubtotal),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _isPickup ? _copy.vatNotice : _copy.cartQuoteNotice,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      key: const Key('direct_cart_address'),
+                      onPressed: () => Navigator.pop(context, true),
+                      icon: const Icon(Icons.arrow_forward_rounded),
+                      label: Text(_isPickup ? _copy.contact : _copy.address),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (mounted && openAddress == true) {
+      await _selectView(_CustomerView.address);
+    }
+  }
+
   DirectOrderAddress? _composeAddress() {
     if (_nameController.text.trim().isEmpty ||
         _phoneController.text.trim().isEmpty ||
@@ -959,9 +1067,10 @@ class _DirectOrderStorefrontScreenState
             bottom: 12,
             child: _BottomActionCard(
               leading:
-                  '${_isPickup ? _copy.pickup : _copy.delivery} · $_cartCount ${_copy.cart}',
+                  '${_isPickup ? _copy.pickup : _copy.delivery} · ${_copy.viewCart} · $_cartCount',
               amount: _money.format(_cartSubtotal),
               label: _isPickup ? _copy.contact : _copy.address,
+              onViewCart: _showCart,
               onPressed: () => _selectView(_CustomerView.address),
             ),
           ),
@@ -2081,12 +2190,14 @@ class _BottomActionCard extends StatelessWidget {
     required this.leading,
     required this.amount,
     required this.label,
+    required this.onViewCart,
     required this.onPressed,
   });
 
   final String leading;
   final String amount;
   final String label;
+  final VoidCallback onViewCart;
   final VoidCallback onPressed;
 
   @override
@@ -2095,46 +2206,78 @@ class _BottomActionCard extends StatelessWidget {
       color: PosTerminalColors.darkShell,
       elevation: 8,
       borderRadius: AppRadius.lg,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: AppRadius.lg,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-          child: Row(
-            children: [
-              Expanded(
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: InkWell(
+              key: const Key('direct_view_cart'),
+              onTap: onViewCart,
+              borderRadius: AppRadius.lg,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 15,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       leading,
-                      style: const TextStyle(
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: PosTerminalColors.darkTextMuted,
                       ),
                     ),
-                    Text(
-                      amount,
-                      style: const TextStyle(
-                        color: PosTerminalColors.darkText,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        amount,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: PosTerminalColors.darkText,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: InkWell(
+              key: const Key('direct_cart_continue'),
+              onTap: onPressed,
+              borderRadius: AppRadius.lg,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 24,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Colors.white,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 6),
-              const Icon(Icons.arrow_forward_rounded, color: Colors.white),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
