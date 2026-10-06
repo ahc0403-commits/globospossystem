@@ -1017,7 +1017,7 @@ class _DirectOrderStorefrontScreenState
     return Stack(
       children: [
         ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 132),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 156),
           children: [
             SegmentedButton<DirectOrderFulfillmentType>(
               key: const Key('direct_fulfillment_type'),
@@ -2217,7 +2217,7 @@ class _BottomActionCard extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 15,
+                  vertical: 12,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2254,7 +2254,7 @@ class _BottomActionCard extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 24,
+                  vertical: 15,
                 ),
                 child: Row(
                   children: [

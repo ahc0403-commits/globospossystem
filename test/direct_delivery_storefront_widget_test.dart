@@ -380,6 +380,9 @@ void main() {
           final cartButton = find.byKey(const Key('direct_view_cart'));
           expect(cartButton.hitTestable(), findsOneWidget);
           expect(tester.getSize(cartButton).height, lessThanOrEqualTo(132));
+          final continueButton = find.byKey(const Key('direct_cart_continue'));
+          expect(continueButton.hitTestable(), findsOneWidget);
+          expect(tester.getSize(continueButton).height, lessThanOrEqualTo(132));
           expect(
             tester.getTopLeft(cartButton).dy,
             greaterThan(
