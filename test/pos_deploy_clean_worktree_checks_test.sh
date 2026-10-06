@@ -130,6 +130,14 @@ printf 'deno check --config %s/supabase/functions/direct-order-public/deno.json 
   "$REHEARSAL_REPO" "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'deno test --config %s/supabase/functions/direct-order-public/deno.json %s/supabase/functions/direct-order-public/index_test.ts\n' \
   "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno fmt --check %s/supabase/functions/_shared/direct_order_push.ts %s/supabase/functions/direct-order-notification-dispatcher\n' \
+  "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno lint %s/supabase/functions/_shared/direct_order_push.ts %s/supabase/functions/direct-order-notification-dispatcher\n' \
+  "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno check --config %s/supabase/functions/direct-order-notification-dispatcher/deno.json %s/supabase/functions/direct-order-notification-dispatcher/index.ts\n' \
+  "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno test --config %s/supabase/functions/direct-order-notification-dispatcher/deno.json %s/supabase/functions/direct-order-notification-dispatcher/index_test.ts\n' \
+  "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'flutter test test/focused_test.dart\n' >>"$TMP_DIR/expected.log"
 cmp "$TMP_DIR/expected.log" "$CALL_LOG"
 [[ -z "$(git -C "$REHEARSAL_REPO" status --porcelain)" ]]

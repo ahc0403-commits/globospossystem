@@ -185,3 +185,15 @@ Behavior tests: `direct_delivery_storefront_widget_test.dart`,
 `direct_order_proof_retry_test.dart`, `receipt_builder_contract_test.dart`,
 `wifi_printer_service_test.dart`, `digital_receipt_pdf_service_test.dart`, and
 `direct_order_receipt_packing_contract_test.sql`.
+
+## Customer and cashier feedback implementation — 2026-10-06
+
+The customer hero, order history, and three-step progress use **확인 대기 / 결제 완료 / 완료**. Detailed preparation/ready/handoff labels remain secondary. Cancelled, rejected, and expired orders show their exception labels rather than a completed progress bar. Payment proof submission is still waiting for cashier confirmation; ready and driver handoff remain paid, not completed.
+
+The reference line opens `DirectOrderDetailsSheet`, displaying persisted item names, quantities, unit prices, line amounts, item notes, order reference/time, quote totals, service charge, delivery fee mode, VAT, payment and refund information. Menu prices/line amounts are before tax; the quoted menu total includes tax. An unavailable snapshot is identified, not rebuilt from today's menu. Opening the sheet makes no additional item requests.
+
+After adding an item, customers can edit a 300-character request below its menu card and in the cart. The request applies to every unit of that cart line; distinct unit requests require separate orders with the present cart model. Notes survive category, locale and address navigation and are submitted through the existing item `note` contract.
+
+The bell opens notification settings. Permission is requested only by the explicit enable action. When supported/configured, customer web push persists after closing the page; permission denial/configuration failure retain status/chat fallback. Pickup ready and actual driver handoff create separate, deduplicated events. Tray packing completion is ready, without pretending a driver received the order.
+
+Cashier default filters are all/waiting/paid/completed, with detailed filters in an expandable section and visible refund exceptions. Chat templates populate an editable draft, never send automatically, and capture the selected order. Quote templates require a stored quote; the fee draft requires staff to confirm the current amount. Copying the draft supports the requested manual Google Translate workflow.

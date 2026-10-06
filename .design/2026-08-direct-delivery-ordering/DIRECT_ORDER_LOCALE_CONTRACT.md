@@ -99,3 +99,9 @@ continue to use N diners / N utensil sets, never menu quantity.
 Paper ESC/POS uses Vietnamese ASCII `SO NGUOI: N`, `DUNG CU: N BO`; missing counts
 use `CHUA NHAP` / `CAN KIEM TRA`. Digital receipt/PDF content retains its existing
 Vietnamese receipt policy (`Số người`, `Dụng cụ`), including 100 sets.
+
+## Customer experience locale additions — 2026-10-06
+
+The three display stages, details, item request controls and notification settings use the current customer viewer locale. Cashier templates use that cashier viewer's locale and preserve customer-entered names, address and notes verbatim. The edited draft can be copied for manual Google Translate; no external translation call or automatic message send is added.
+
+Push-device locale is registered from the customer's current selection and refreshed on page resume or locale change without prompting for permission. Background notification copy comes from that device locale, not the staff device or order locale. `DIRECT_ORDER_PICKUP_READY` and `DIRECT_ORDER_DRIVER_HANDOFF` system messages render via the current viewer locale in chat. Supported codes remain exactly `ko`, `vi`, `en`.

@@ -16,3 +16,6 @@ verify_jwt = false
 
 [functions.generate_delivery_settlement]
 verify_jwt = false
+
+[functions.direct-order-notification-dispatcher]
+verify_jwt = false

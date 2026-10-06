@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/core/payments/vietqr_payload.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_customer_push_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_storefront_screen.dart';
@@ -42,6 +47,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   bool failStatus = false;
   int storefrontCalls = 0;
   DirectOrderAddress? submittedAddress;
+  Map<String, String>? submittedItemNotes;
   bool? submittedRememberAddress;
   DirectOrderFulfillmentType? submittedFulfillmentType;
   int submitCalls = 0;
@@ -217,6 +223,7 @@ class _StorefrontFixtureService extends DirectOrderService {
     submitCalls++;
     submittedAddress = address;
     submittedFulfillmentType = fulfillmentType;
+    submittedItemNotes = Map.of(itemNotes);
     submittedRememberAddress = rememberAddress;
     if (pauseOnSubmit) {
       throw const DirectOrderException('DIRECT_ORDER_STOREFRONT_PAUSED');
@@ -233,22 +240,27 @@ Widget _fixtureApp({
   Locale locale = const Locale('vi'),
   DateTime Function() now = DateTime.now,
   Future<XFile?> Function()? pickProofImage,
+  DirectOrderCustomerPushService? pushService,
 }) => ProviderScope(
-  child: MaterialApp(
-    theme: AppTheme.build(),
-    locale: locale,
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    home: DirectOrderStorefrontScreen(
-      slug: 'fixture-store',
-      service: service ?? _StorefrontFixtureService(),
-      now: now,
-      pickProofImage: pickProofImage,
+  child: RepaintBoundary(
+    key: const Key('direct_customer_visual_boundary'),
+    child: MaterialApp(
+      theme: AppTheme.build(),
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: DirectOrderStorefrontScreen(
+        slug: 'fixture-store',
+        service: service ?? _StorefrontFixtureService(),
+        now: now,
+        pickProofImage: pickProofImage,
+        pushService: pushService,
+      ),
     ),
   ),
 );
@@ -264,6 +276,64 @@ Future<void> _revealSubmit(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _captureCustomerUi(WidgetTester tester, String name) async {
+  final directory = Platform.environment['DIRECT_ORDER_CUSTOMER_SCREENSHOTS'];
+  if (directory == null) return;
+  final originalSize = tester.view.physicalSize;
+  final originalRatio = tester.view.devicePixelRatio;
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(390, 844);
+  await tester.pumpAndSettle();
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const Key('direct_customer_visual_boundary')),
+  );
+  await tester.runAsync(() async {
+    final image = await boundary.toImage(pixelRatio: 1.5);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(directory).create(recursive: true);
+    await File('$directory/$name.png').writeAsBytes(data!.buffer.asUint8List());
+    image.dispose();
+  });
+  tester.view.physicalSize = originalSize;
+  tester.view.devicePixelRatio = originalRatio;
+  await tester.pumpAndSettle();
+}
+
+class _CustomerPushFixture extends DirectOrderCustomerPushService {
+  int explicitEnables = 0;
+  int restores = 0;
+  int disables = 0;
+  Completer<DirectOrderPushReadiness>? pendingEnable;
+  DirectOrderPushReadiness disableResult = DirectOrderPushReadiness.off;
+  @override
+  Future<DirectOrderPushReadiness> enable({
+    required String slug,
+    required DirectOrderSession session,
+    required DirectOrderService service,
+    required String locale,
+    bool restore = false,
+    void Function(String requestId, String kind)? onForeground,
+  }) async {
+    if (restore) {
+      restores++;
+      return DirectOrderPushReadiness.off;
+    }
+    explicitEnables++;
+    return pendingEnable?.future ?? DirectOrderPushReadiness.ready;
+  }
+
+  @override
+  Future<DirectOrderPushReadiness> disable({
+    required String slug,
+    required DirectOrderSession session,
+    required DirectOrderService service,
+    required String locale,
+  }) async {
+    disables++;
+    return disableResult;
+  }
+}
+
 Future<void> _openAddress(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
   await tester.pump();
@@ -277,6 +347,16 @@ Future<void> _openAddress(WidgetTester tester) async {
 }
 
 void main() {
+  setUpAll(() async {
+    if (Platform.environment['DIRECT_ORDER_CUSTOMER_SCREENSHOTS'] == null) {
+      return;
+    }
+    final text = FontLoader('Pretendard')
+      ..addFont(rootBundle.load('assets/fonts/PretendardVariable.ttf'));
+    final icons = FontLoader('MaterialIcons')
+      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await Future.wait([text.load(), icons.load()]);
+  });
   const drinks = DirectOrderCategory(
     id: 'drinks',
     nameKo: '음료',
@@ -870,7 +950,12 @@ void main() {
       await tester.scrollUntilVisible(
         add,
         200,
-        scrollable: find.byType(Scrollable).first,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const PageStorageKey('direct_menu_list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await Scrollable.ensureVisible(tester.element(add), alignment: 0.2);
       await tester.pumpAndSettle();
@@ -1111,9 +1196,9 @@ void main() {
     expect(find.text('#DAAAAAAAA'), findsOneWidget);
     expect(find.text('#DBBBBBBBB'), findsOneWidget);
     expect(find.text('#DCCCCCCCC'), findsOneWidget);
-    expect(find.text('배달 · 배달 중 · 메뉴 2개'), findsOneWidget);
-    expect(find.text('배달 · 견적 완료 · 메뉴 1개'), findsOneWidget);
-    expect(find.text('배달 · 주문이 완료되었습니다 · 메뉴 3개'), findsOneWidget);
+    expect(find.text('배달 · 결제 완료 · 메뉴 2개'), findsOneWidget);
+    expect(find.text('배달 · 확인 대기 · 메뉴 1개'), findsOneWidget);
+    expect(find.text('배달 · 완료 · 메뉴 3개'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1354,7 +1439,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const Key('direct_order_status_title')))
           .data,
-      '조리 중',
+      '결제 완료',
     );
     expect(service.ensureSessionCalls, 1);
     expect(tester.takeException(), isNull);
@@ -1638,7 +1723,7 @@ void main() {
   });
 
   testWidgets(
-    'customer sees the five-stage delivery progress in their locale',
+    'customer sees three payment and fulfillment stages in their locale',
     (tester) async {
       SharedPreferences.setMockInitialValues(const {});
       const status = DirectOrderStatus(
@@ -1661,23 +1746,222 @@ void main() {
         find.byKey(const Key('direct_order_customer_progress')),
         findsOneWidget,
       );
-      expect(find.text('주문 확인'), findsOneWidget);
-      expect(find.text('입금 확인'), findsOneWidget);
-      expect(find.text('메뉴 조리 중'), findsOneWidget);
-      expect(find.text('배달 중'), findsOneWidget);
-      expect(find.text('주문 완료'), findsOneWidget);
+      expect(find.text('확인 대기'), findsOneWidget);
+      expect(find.text('결제 완료'), findsWidgets);
+      expect(find.text('완료'), findsOneWidget);
+      expect(find.text('조리 중'), findsOneWidget);
       final statusTitle = tester.widget<Text>(
         find.byKey(const Key('direct_order_status_title')),
       );
-      expect(statusTitle.data, '조리 중');
-      for (var index = 0; index < 5; index++) {
+      expect(statusTitle.data, '결제 완료');
+      for (var index = 0; index < 3; index++) {
         expect(
           find.byKey(Key('direct_order_progress_step_$index')),
           findsOneWidget,
         );
       }
+      await _captureCustomerUi(tester, 'customer-paid-ko');
       expect(tester.takeException(), isNull);
 
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'item requests survive locale changes, cart review and submission',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService();
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_menu_request_tteokbokki')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('direct_item_request_input_tteokbokki')),
+        '파 제외',
+      );
+      await tester.tap(find.byKey(const Key('direct_item_request_save')));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('메뉴 요청사항: 파 제외'), findsOneWidget);
+      await _captureCustomerUi(tester, 'menu-item-request-ko');
+      await tester.tap(find.text('배달 · 장바구니 보기 · 1'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('direct_cart_sheet')),
+          matching: find.text('메뉴 요청사항: 파 제외'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('direct_cart_close')));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Địa chỉ').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('direct_diner_count_input')),
+        '3',
+      );
+      for (final entry in {
+        'direct_address_input': 'Fixture Street, Ho Chi Minh',
+        'direct_address_detail': 'Door 1',
+        'direct_recipient_name': 'Fixture Recipient',
+        'direct_recipient_phone': '+84901234567',
+      }.entries) {
+        await tester.enterText(find.byKey(Key(entry.key)), entry.value);
+      }
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('direct_submit_quote_request')),
+        300,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).first,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('direct_submit_quote_request')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_submit_quote_request')));
+      await tester.pumpAndSettle();
+      expect(service.submittedItemNotes, {'tteokbokki': '파 제외'});
+      expect(service.submitCalls, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'completed order details use stored items and show tax and separate delivery payment',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final status = DirectOrderStatus(
+        requestId: 'fixture-request',
+        referenceCode: 'DFIXTURE1',
+        state: 'approved',
+        createdAt: DateTime.utc(2026, 10, 6, 2, 15),
+        fulfillmentStatus: 'completed',
+        messages: const [],
+        items: const [
+          DirectOrderItemSnapshot(
+            menuItemId: 'old-menu',
+            nameKo: '주문 당시 메뉴',
+            nameVi: 'Món đã đặt',
+            nameEn: 'Ordered item',
+            unitPrice: 100000,
+            quantity: 1,
+            note: '파 제외',
+          ),
+        ],
+        quote: DirectOrderQuote(
+          id: 'old-quote',
+          menuTotal: 108000,
+          serviceChargeTotal: 0,
+          deliveryFeeTotal: 0,
+          finalTotal: 108000,
+          status: 'locked',
+          expiresAt: DateTime.utc(2026),
+          vatTotal: 8000,
+          deliveryPaymentMode: 'customer_direct',
+        ),
+      );
+      final service = _StorefrontFixtureService(activeStatus: status);
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('direct_open_order_details')),
+      );
+      await tester.tap(find.byKey(const Key('direct_open_order_details')));
+      await tester.pumpAndSettle();
+      expect(find.text('주문 당시 메뉴'), findsOneWidget);
+      expect(find.text('메뉴 요청사항: 파 제외'), findsOneWidget);
+      expect(find.text('주문시간: 2026-10-06 09:15'), findsOneWidget);
+      expect(find.text('총 결제금액'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('direct_order_details_list')),
+          matching: find.text('기사에게 별도 지급 · 매장 결제에 미포함'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        service.fetchStatusCalls,
+        1,
+        reason: 'Opening existing details needs no per-item API calls',
+      );
+      await _captureCustomerUi(tester, 'completed-order-details-ko');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'push permission is explicit and an unfinished enable survives closing settings',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final push = _CustomerPushFixture()
+        ..pendingEnable = Completer<DirectOrderPushReadiness>();
+      await tester.pumpWidget(
+        _fixtureApp(pushService: push, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      expect(push.restores, 1);
+      expect(push.explicitEnables, 0);
+      await tester.tap(find.byKey(const Key('direct_customer_notifications')));
+      await tester.pumpAndSettle();
+      await _captureCustomerUi(tester, 'customer-notification-settings-ko');
+      await tester.tap(find.byKey(const Key('direct_customer_push_toggle')));
+      await tester.pump();
+      expect(push.explicitEnables, 1);
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(const Key('direct_customer_push_toggle')),
+            )
+            .onPressed,
+        isNull,
+      );
+      Navigator.of(
+        tester.element(find.byKey(const Key('direct_customer_push_toggle'))),
+      ).pop();
+      await tester.pumpAndSettle();
+      push.pendingEnable!.complete(DirectOrderPushReadiness.ready);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('direct_customer_notifications')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(DirectOrderCopy('ko').disableCustomerNotifications),
+        findsOneWidget,
+      );
+      push.disableResult = DirectOrderPushReadiness.error;
+      await tester.tap(find.byKey(const Key('direct_customer_push_toggle')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(DirectOrderCopy('ko').disableCustomerNotifications),
+        findsOneWidget,
+      );
+      expect(push.disables, 1);
+      push.disableResult = DirectOrderPushReadiness.off;
+      await tester.tap(find.byKey(const Key('direct_customer_push_toggle')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(DirectOrderCopy('ko').enableCustomerNotifications),
+        findsOneWidget,
+      );
+      expect(push.disables, 2);
+      expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

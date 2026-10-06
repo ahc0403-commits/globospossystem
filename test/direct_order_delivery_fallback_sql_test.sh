@@ -101,7 +101,7 @@ for name in ['direct_order_public_status_v2','direct_order_public_orders_v2','di
 out+=function('20260907100000_direct_delivery_cash_payout_daily_closing.sql','direct_order_set_dispatch')
 out+=function('20260908120000_direct_order_pilot_safety.sql','direct_order_staff_quote_with_payment_mode')
 out+=function('20260908120000_direct_order_pilot_safety.sql','direct_order_set_dispatch_with_payment_mode')
-out+="ALTER TABLE direct_order_requests ADD COLUMN fulfillment_type text NOT NULL DEFAULT 'delivery';\n"
+out+="ALTER TABLE direct_order_requests ADD COLUMN IF NOT EXISTS fulfillment_type text NOT NULL DEFAULT 'delivery';\n"
 out+='CREATE TABLE emergency_order_queue(order_id uuid);\n'
 pickup=source('20261002030000_direct_order_delivery_pickup.sql')
 a=pickup.index('CREATE FUNCTION pg_temp.direct_pickup_patch(')
@@ -218,6 +218,47 @@ run_sql "$PHOTO_TMP/packing_enqueue.sql" >/dev/null
 run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_receipt_packing_context.sql" >/dev/null
 run_sql "$PHOTO_ROOT/supabase/migrations/20261006020000_direct_order_receipt_packing_context.sql" >/dev/null
 run_sql "$PHOTO_ROOT/supabase/tests/direct_order_receipt_packing_contract_test.sql"
+if [[ "${DIRECT_ORDER_CUSTOMER_EXPERIENCE_TEST:-0}" == "1" ]]; then
+ python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYFEEDBACK'
+from pathlib import Path
+import sys
+root,tmp=map(Path,sys.argv[1:])
+s=(root/'supabase/migrations/20260824060000_direct_delivery_kds_routing.sql').read_text()
+a=s.index('CREATE OR REPLACE FUNCTION public.sync_direct_delivery_ticket_from_kds()')
+setup="CREATE TABLE public.emergency_fulfillment_items(order_id uuid,is_cancelled boolean,tray_dispatched_quantity integer,ordered_quantity integer,excused_quantity integer DEFAULT 0);\n"
+definition=s[a:s.index('$$;',a)+3]
+pickup=(root/'supabase/migrations/20261002030000_direct_order_delivery_pickup.sql').read_text()
+helper_start=pickup.index('CREATE FUNCTION public.direct_order_is_pickup_pos_order(')
+setup+='ALTER TABLE public.direct_order_requests ADD COLUMN IF NOT EXISTS fulfillment_type text NOT NULL DEFAULT \'delivery\';\n'
+setup+=pickup[helper_start:pickup.index('$$;',helper_start)+3].replace('CREATE FUNCTION','CREATE OR REPLACE FUNCTION',1)+'\n'
+kds=(root/'supabase/migrations/20261005010000_direct_pickup_kds_handoff.sql').read_text()
+patch=kds.split("SELECT pg_temp.pickup_kds_patch('public.sync_direct_delivery_ticket_from_kds()',",1)[1]
+pickup_branch=patch.split('$new$',1)[1].split('$new$',1)[0]
+definition=definition.replace('BEGIN\n','BEGIN\n'+pickup_branch+'\n',1)
+setup+=definition+'\n'
+setup+="CREATE TABLE feedback_kds_events(order_id uuid,actor_user_id uuid,stage text,delta integer,restaurant_id uuid DEFAULT 'd1000000-0000-4000-8000-000000000002');\nCREATE TRIGGER feedback_kds_event AFTER INSERT ON feedback_kds_events FOR EACH ROW EXECUTE FUNCTION public.sync_direct_delivery_ticket_from_kds();\n"
+(tmp/'feedback_setup.sql').write_text(setup)
+PYFEEDBACK
+ run_sql "$PHOTO_TMP/feedback_setup.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_customer_experience.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261006030000_direct_order_customer_experience.sql" > "$PHOTO_TMP/feedback_migration.log" 2>&1 || { cat "$PHOTO_TMP/feedback_migration.log"; exit 1; }
+ run_sql "$PHOTO_ROOT/scripts/verify_direct_order_customer_experience.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_customer_experience_test.sql"
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "UPDATE public.users SET restaurant_id='d2000000-0000-4000-8000-000000000001' WHERE auth_id=auth.uid();" >/dev/null
+ for feedback_limit in 1 50 100 200; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT jsonb_array_length(public.direct_order_staff_list_v3('d2000000-0000-4000-8000-000000000001',NULL,$feedback_limit)); SELECT pg_stat_force_next_flush();" >/dev/null
+  feedback_rows="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT jsonb_array_length(public.direct_order_staff_list_v3('d2000000-0000-4000-8000-000000000001',NULL,$feedback_limit))")"
+  [[ "$feedback_rows" == "$feedback_limit" ]] || { printf 'FEEDBACK_MEASUREMENT_PAGE_INCOMPLETE\n'; exit 1; }
+  feedback_calls="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.direct_order_fulfillment_context(uuid)'::regprocedure,'public.direct_order_staff_detail_v3(uuid,uuid)'::regprocedure)")"
+  [[ "$feedback_calls" == "0" ]] || { printf 'FEEDBACK_LIST_N_PLUS_ONE\n'; exit 1; }
+  printf 'DIRECT_ORDER_CUSTOMER_LIST limit=%s rows=%s detail_calls=%s\n' "$feedback_limit" "$feedback_rows" "$feedback_calls"
+ done
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "UPDATE public.users u SET restaurant_id=a.restaurant_id FROM fallback_read_test.original_actor a WHERE u.auth_id=auth.uid();" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/rollback_direct_order_customer_experience.sql" >/dev/null
+ rollback_hash="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT md5(pg_get_functiondef('public.sync_direct_delivery_ticket_from_kds()'::regprocedure))")"
+ [[ "$rollback_hash" == "c206203f3aa5e3933e7a8a1327f0f31f" ]] || { printf 'CUSTOMER_ROLLBACK_KDS_MISMATCH\n'; exit 1; }
+ printf 'DIRECT_ORDER_CUSTOMER_EXPERIENCE_SQL_TEST=PASS rollback=PASS\n'
+fi
 # The legacy fixture fixes auth.uid(); use the real JWT lookup semantics here.
 python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYVERIFY'
 from pathlib import Path

@@ -174,11 +174,17 @@ class DirectOrderStaffService {
   Future<List<Map<String, dynamic>>> listRequests({
     required String storeId,
     List<String>? states,
+    String? fulfillmentType,
     int limit = 100,
   }) async {
     final raw = await supabase.rpc(
-      'direct_order_staff_list_v2',
-      params: {'p_store_id': storeId, 'p_states': states, 'p_limit': limit},
+      'direct_order_staff_list_v3',
+      params: {
+        'p_store_id': storeId,
+        'p_states': states,
+        'p_limit': limit,
+        'p_fulfillment_type': fulfillmentType,
+      },
     );
     return _list(raw);
   }

@@ -131,3 +131,13 @@ insertion, immediately before and after the financial bridge (therefore after
 leave the request in payment review with its locked quote/proof but zero legacy
 or ticket/financial approval side effects; a trigger-free retry must create one
 graph.
+
+## Display projection and fulfillment notices — 2026-10-06
+
+`direct_order_display_stage` and the matching Dart projection do not replace persisted request/fulfillment states. Nonapproved requests map to `customer_pending`; approved requests map to `customer_paid`; approved + completed maps to `customer_completed`. Request rejected/cancelled/expired or fulfillment cancelled takes precedence as `customer_exception`.
+
+`direct_order_staff_list_v3` filters display groups or internal states before limiting the page. Previous-day unfinished/payment-waiting requests and pending pickup refunds remain available. It authorizes the store once and groups related item/message/review rows for the selected page.
+
+KDS kitchen completion still starts preparation; complete tray packing sets `ready` once and does not set `dispatched_at`. `direct_order_dispatches` insertion is the driver-handoff notification anchor. Ready pickup tickets and an already-ready order's accepted pickup conversion emit `pickup_ready`. Unique `(request_id,event_kind)` events create one system pickup-ready chat notice and a batched delivery queue for subscribed, valid customer sessions.
+
+Push queue leases last two minutes, use `SKIP LOCKED`, and allow five attempts with backoff. Current lease identity must match acknowledgement. Invalid tokens disable only the same registered token hash. Expired/revoked sessions, disabled devices, terminal orders and events older than one day are skipped. Provider acceptance is not proof of customer receipt; retries after a lost provider response can redisplay the same OS notification tag. Payment/MISA/financial anchors are unchanged.

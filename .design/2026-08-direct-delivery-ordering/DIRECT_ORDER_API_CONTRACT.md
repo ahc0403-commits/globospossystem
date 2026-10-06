@@ -382,3 +382,11 @@ to all copy types for a linked direct order. BEFORE INSERT triggers do not updat
 pending/failed/printing/done states. New dedicated reprints capture current counts.
 The migration does not redefine `process_payment`, financial calculations or
 approval, and is source-only until separately applied through the release gate.
+
+## Customer experience additions — 2026-10-06
+
+- Public Edge action `push_subscription`: session-owned, rate limit 10 per minute. Input: `session_id`, `session_secret`, UUID `device_id`, `locale` in KO/VI/EN, boolean `enabled`, and FCM `token` only when enabled. The Edge hashes the secret and calls service-only `direct_order_public_push_subscription`. Output is exactly `{enabled: boolean}` inside the existing data envelope. Raw tokens and secrets never cross staff/public read APIs or logs. Up to five device identities are allowed per session; unsubscribe sends no token.
+- Authenticated `direct_order_staff_list_v3(p_store_id,p_states,p_limit,p_fulfillment_type)` retains the queue row shape and adds `display_stage` and `refund_pending`; the optional fulfillment filter is applied before the limit and retains native and converted pickup orders. Filters accept customer stage keys or existing request/ticket state keys before the server limit (1..200). Store/role boundaries stay identical to the cashier list. Existing v2 endpoints remain available.
+- Existing public status `created_at` and `items` are now retained in the Dart model for details; no extra public item endpoint is added. Existing submit item `note` persists menu requests.
+- Internal `direct-order-notification-dispatcher`: POST authenticated by CRON_SECRET or service role; claims at most 50 deliveries once, runs at most eight FCM workers, and acknowledges each lease. Claims/acknowledgements and all three push tables are unavailable to anonymous/authenticated clients. No customer address, phone, bank data or session secret appears in the FCM payload.
+- Migration `20261006030000_direct_order_customer_experience.sql` adds tables/RPCs/triggers and schedules the dispatcher every minute with the existing Vault cron secret when pg_cron/pg_net are available. Existing Firebase browser build definitions/VAPID and FIREBASE_SERVICE_ACCOUNT_JSON are reused. Cron availability and physical device receipt must be checked during release.

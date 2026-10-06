@@ -42,6 +42,7 @@ export const directOrderActionRegistry = Object.freeze(
     status_v3: { actor: "public", rateLimit: 60 },
     orders_v2: { actor: "public", rateLimit: 60 },
     orders_v3: { actor: "public", rateLimit: 60 },
+    push_subscription: { actor: "public", rateLimit: 10 },
     message: { actor: "public", rateLimit: 60 },
     cancel: { actor: "public", rateLimit: 60 },
     proof_upload_url: { actor: "public", rateLimit: 10 },
@@ -388,6 +389,32 @@ export function directOrderLocale(
   throw new SafeHttpError(400, "INVALID_REQUEST");
 }
 
+export async function directOrderPushSubscriptionArgs(
+  body: JsonObject,
+): Promise<JsonObject> {
+  const sessionId = requiredUuid(body, "session_id");
+  const secret = requiredString(body, "secret", 128, secretPattern);
+  const deviceId = requiredUuid(body, "device_id");
+  const locale = directOrderLocale(body.locale);
+  if (typeof body.enabled !== "boolean") {
+    throw new SafeHttpError(400, "INVALID_REQUEST");
+  }
+  const token = body.enabled
+    ? requiredString(body, "token", 2048, /^[A-Za-z0-9_:\-]+$/)
+    : null;
+  if (token != null && token.length < 16) {
+    throw new SafeHttpError(400, "INVALID_REQUEST");
+  }
+  return {
+    p_session_id: sessionId,
+    p_secret_hash: await sha256Hex(secret),
+    p_device_id: deviceId,
+    p_token: token,
+    p_locale: locale,
+    p_enabled: body.enabled,
+  };
+}
+
 function configuredOrigins(): string[] {
   return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
@@ -532,6 +559,11 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_QUOTE_EXPIRED: conflict("DIRECT_ORDER_QUOTE_EXPIRED"),
   DIRECT_ORDER_PROOF_PATH_INVALID: invalidRequest("INVALID_PROOF"),
   DIRECT_ORDER_LIMIT_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_FULFILLMENT_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_PUSH_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_PUSH_DEVICE_LIMIT: conflict("DIRECT_ORDER_PUSH_DEVICE_LIMIT"),
+  DIRECT_ORDER_KDS_READY_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_CUSTOMER_EXPERIENCE_CONTRACT_FAILED: internalFailure,
   DIRECT_ORDER_QUOTE_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_REQUEST_NOT_QUOTABLE: conflict(
     "DIRECT_ORDER_REQUEST_NOT_QUOTABLE",
@@ -925,6 +957,13 @@ function productionDependencies(): DirectOrderDependencies {
           p_accept: body.accept,
           p_already_paid: body.already_paid,
         });
+      }
+      case "push_subscription": {
+        return await rpc(
+          service,
+          "direct_order_public_push_subscription",
+          await directOrderPushSubscriptionArgs(body),
+        );
       }
       case "orders_v2":
       case "orders_v3": {
