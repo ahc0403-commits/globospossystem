@@ -333,12 +333,16 @@ class _InventoryOrderWorkflowScreenState
       for (final row in _maps(draft?['line_details']))
         _string(row['purchase_order_line_id']): row,
     };
+    final finalReview =
+        _isAccounting ||
+        (detail?['can_receive_and_confirm'] == true &&
+            _string(draft?['submitted_at']).isNotEmpty);
     for (final line in _maps(detail?['lines'])) {
       final id = _id(line);
       final row = drafts[id];
       final value =
           _number(
-            row?[_isAccounting
+            row?[finalReview
                 ? 'accepted_quantity_base'
                 : 'received_quantity_base'],
           ) /
@@ -1343,11 +1347,11 @@ class _InventoryOrderWorkflowScreenState
           children: [
             Text(
               _text(
-                ko: _isAccounting ? '최종 승인 수량과 단가' : '실제 납품 수량과 단가',
-                en: _isAccounting
+                ko: canFinalize ? '최종 승인 수량과 단가' : '실제 납품 수량과 단가',
+                en: canFinalize
                     ? 'Final approved quantity & price'
                     : 'Actual delivered quantity & price',
-                vi: _isAccounting
+                vi: canFinalize
                     ? 'Số lượng & giá duyệt cuối'
                     : 'Số lượng & giá thực nhận',
               ),

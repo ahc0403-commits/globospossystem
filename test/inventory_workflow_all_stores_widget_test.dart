@@ -291,6 +291,39 @@ void main() {
   );
 
   testWidgets(
+    'combined receiver retains accepted quantities when confirming an earlier submission',
+    (tester) async {
+      final service = _Inventory()..combinedReceiving = true;
+      service.lines.removeRange(1, service.lines.length);
+      service.receipt['received_by'] = 'actor';
+      service.receipt['submitted_at'] = '2026-10-05T12:00:00Z';
+      service.receipt['inspector_name'] = 'Receiver A';
+      final receiptLine =
+          (service.receipt['line_details'] as List).single as Map;
+      receiptLine['received_quantity_base'] = 20;
+      receiptLine['accepted_quantity_base'] = 10;
+      final events = StreamController<PosLiveEvent>.broadcast();
+      final router = await _mount(tester, service, events);
+      await tester.tap(find.text('Receiving'));
+      await tester.pumpAndSettle();
+      final quantity = find.byKey(
+        const ValueKey('inventory_receipt_quantity_line-0'),
+      );
+      expect(tester.widget<TextField>(quantity).controller!.text, '1');
+      expect(find.byKey(const Key('inventory_receipt_verify')), findsOneWidget);
+      expect(find.byKey(const Key('inventory_receipt_submit')), findsNothing);
+      expect(
+        find.text('A separate accounting account must confirm.'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      router.dispose();
+      await events.close();
+    },
+  );
+
+  testWidgets(
     'combined receiving confirms in one submission and refreshes the completed order',
     (tester) async {
       final service = _Inventory()..combinedReceiving = true;
