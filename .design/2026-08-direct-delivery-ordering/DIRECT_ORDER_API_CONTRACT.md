@@ -375,7 +375,7 @@ linked direct order. It returns no customer/financial information and creates no
 job/payment. Flutter uses `DirectOrderStaffService.fetchOrderPackingContext` only
 at native print time; the atomic `PaymentService` file remains unchanged.
 
-Migration `20261006010000_direct_order_receipt_packing_context.sql` enriches new
+Migration `20261006020000_direct_order_receipt_packing_context.sql` enriches new
 print payloads with the reference and new direct digital snapshots with the three
 packing fields. Combined digital snapshots are excluded. Print enrichment applies
 to all copy types for a linked direct order. BEFORE INSERT triggers do not update issued snapshots or jobs in

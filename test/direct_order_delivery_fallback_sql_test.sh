@@ -216,7 +216,7 @@ a=s.index('CREATE OR REPLACE FUNCTION public.enqueue_receipt_print_job(')
 PYPACKING
 run_sql "$PHOTO_TMP/packing_enqueue.sql" >/dev/null
 run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_receipt_packing_context.sql" >/dev/null
-run_sql "$PHOTO_ROOT/supabase/migrations/20261006010000_direct_order_receipt_packing_context.sql" >/dev/null
+run_sql "$PHOTO_ROOT/supabase/migrations/20261006020000_direct_order_receipt_packing_context.sql" >/dev/null
 run_sql "$PHOTO_ROOT/supabase/tests/direct_order_receipt_packing_contract_test.sql"
 # The legacy fixture fixes auth.uid(); use the real JWT lookup semantics here.
 python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYVERIFY'
