@@ -22,6 +22,7 @@ import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
+import '../direct_order/direct_order_staff_service.dart';
 import '../settings/printer_provider.dart';
 
 String _digitalReceiptLabel(BuildContext context) =>
@@ -860,31 +861,51 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     }
 
     final payment = _map(detail['payment']);
-    final bytes = await ReceiptBuilder.buildPaymentReceipt(
-      restaurantName: _receiptRestaurantName(order),
-      tableNumber: _extractTableNumber(order),
-      items: _receiptItems(order),
-      totalAmount: _numValue(
-        payment['amount'] ??
-            payment['paid_amount'] ??
-            payment['settled_amount'],
-      ).toDouble(),
-      paymentMethod: _stringOrDash(
-        payment['method'] ?? payment['payment_method'],
-      ),
-      vatAmount: _receiptVatAmount(order),
-      paidAt: _dateValue(payment['created_at']) ?? DateTime.now(),
-      isService:
-          _stringOrDash(payment['method'] ?? payment['payment_method']) ==
-          'service',
-    );
+    try {
+      final storeId =
+          order['restaurant_id']?.toString() ??
+          payment['restaurant_id']?.toString();
+      if (orderId == null ||
+          orderId.isEmpty ||
+          storeId == null ||
+          storeId.isEmpty) {
+        throw StateError('RECEIPT_ORDER_REQUIRED');
+      }
+      final packing = await directOrderStaffService.fetchOrderPackingContext(
+        orderId: orderId,
+        storeId: storeId,
+      );
+      final bytes = await ReceiptBuilder.buildPaymentReceipt(
+        dinerCount: (packing?['diner_count'] as num?)?.toInt(),
+        fulfillmentMethod: packing?['fulfillment_method']?.toString(),
+        directOrderReference: packing?['direct_order_reference']?.toString(),
+        restaurantName: _receiptRestaurantName(order),
+        tableNumber: _extractTableNumber(order),
+        items: _receiptItems(order),
+        totalAmount: _numValue(
+          payment['amount'] ??
+              payment['paid_amount'] ??
+              payment['settled_amount'],
+        ).toDouble(),
+        paymentMethod: _stringOrDash(
+          payment['method'] ?? payment['payment_method'],
+        ),
+        vatAmount: _receiptVatAmount(order),
+        paidAt: _dateValue(payment['created_at']) ?? DateTime.now(),
+        isService:
+            _stringOrDash(payment['method'] ?? payment['payment_method']) ==
+            'service',
+      );
 
-    final result = await ref.read(printerProvider.notifier).print(bytes);
-    if (!mounted) return;
-    if (result == PrintResult.success) {
-      showSuccessToast(context, l10n.settingsTestPrintComplete);
-    } else {
-      showErrorToast(context, l10n.cashierReceiptPrintFailed);
+      final result = await ref.read(printerProvider.notifier).print(bytes);
+      if (!mounted) return;
+      if (result == PrintResult.success) {
+        showSuccessToast(context, l10n.settingsTestPrintComplete);
+      } else {
+        showErrorToast(context, l10n.cashierReceiptPrintFailed);
+      }
+    } catch (_) {
+      if (mounted) showErrorToast(context, l10n.cashierReceiptPrintFailed);
     }
   }
 

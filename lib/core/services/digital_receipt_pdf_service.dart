@@ -79,6 +79,32 @@ class DigitalReceiptPdfService {
             _detailLine('Ngày / Giờ', timestamp),
             _detailLine('Thu ngân', receipt.cashierCode),
             _detailLine('Bàn', receipt.tableNumber, boldValue: true),
+            if (receipt.isDirectOrder) ...[
+              if (receipt.directOrderReference != null)
+                _detailLine(
+                  'Mã đơn',
+                  receipt.directOrderReference!,
+                  boldValue: true,
+                ),
+              if (receipt.fulfillmentMethod != null)
+                pw.Text(
+                  receipt.fulfillmentMethod == 'pickup'
+                      ? 'TỰ ĐẾN LẤY'
+                      : 'GIAO HÀNG',
+                ),
+              pw.SizedBox(height: 6),
+              pw.Text(
+                receipt.packingDinerLabelVi,
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text(
+                receipt.packingUtensilLabelVi,
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
             _dashedDivider(height: 15),
             _sectionHeader('MÓN', 'THÀNH TIỀN'),
             pw.SizedBox(height: 2),

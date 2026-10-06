@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +13,7 @@ import 'package:globos_pos_system/features/direct_order/direct_order_service.dar
 import 'package:globos_pos_system/features/direct_order/direct_order_storefront_screen.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,14 +25,22 @@ class _StorefrontFixtureService extends DirectOrderService {
     this.paused = false,
     this.pauseOnSubmit = false,
     this.extraItems = const [],
+    this.extraCategories = const [],
+    this.defaultMenu = true,
+    this.proofHandler,
   });
 
   final DirectOrderAddress? savedAddress;
-  final DirectOrderStatus? activeStatus;
+  DirectOrderStatus? activeStatus;
   final List<DirectOrderSummary>? orderSummaries;
   bool paused;
   final bool pauseOnSubmit;
   final List<DirectOrderMenuItem> extraItems;
+  List<DirectOrderCategory> extraCategories;
+  bool defaultMenu;
+  final Future<void> Function(DirectOrderProofAttempt)? proofHandler;
+  bool failStatus = false;
+  int storefrontCalls = 0;
   DirectOrderAddress? submittedAddress;
   bool? submittedRememberAddress;
   DirectOrderFulfillmentType? submittedFulfillmentType;
@@ -43,6 +55,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   @override
   Future<DirectOrderStorefront> fetchStorefront(String slug) async {
     fetchStorefrontCalls += 1;
+    storefrontCalls++;
     return DirectOrderStorefront(
       storeId: 'fixture-store',
       storeName: 'GLOBOS BUNSIK',
@@ -59,28 +72,30 @@ class _StorefrontFixtureService extends DirectOrderService {
         accountHolder: 'GLOBOS VN',
         label: 'Vietcombank',
       ),
-      categories: const [
-        DirectOrderCategory(
+      categories: [
+        const DirectOrderCategory(
           id: 'popular',
           nameKo: '인기 메뉴',
           nameVi: 'Món phổ biến',
           nameEn: 'Popular',
           sortOrder: 1,
         ),
+        ...extraCategories,
       ],
       items: [
-        const DirectOrderMenuItem(
-          id: 'tteokbokki',
-          categoryId: 'popular',
-          nameKo: '즉석 떡볶이',
-          nameVi: 'Tokbokki cay',
-          nameEn: 'Spicy tteokbokki',
-          description: 'Bánh gạo, chả cá và sốt cay',
-          price: 125000,
-          imageUrl: null,
-          vatCategory: 'food',
-          sortOrder: 1,
-        ),
+        if (defaultMenu)
+          const DirectOrderMenuItem(
+            id: 'tteokbokki',
+            categoryId: 'popular',
+            nameKo: '즉석 떡볶이',
+            nameVi: 'Tokbokki cay',
+            nameEn: 'Spicy tteokbokki',
+            description: 'Bánh gạo, chả cá và sốt cay',
+            price: 125000,
+            imageUrl: null,
+            vatCategory: 'food',
+            sortOrder: 1,
+          ),
         ...extraItems,
       ],
     );
@@ -139,6 +154,9 @@ class _StorefrontFixtureService extends DirectOrderService {
     required String requestId,
   }) async {
     fetchStatusCalls += 1;
+    if (failStatus) {
+      throw const DirectOrderException('DIRECT_ORDER_TEMPORARILY_UNAVAILABLE');
+    }
     return activeStatus ??
         const DirectOrderStatus(
           requestId: 'fixture-request',
@@ -168,6 +186,17 @@ class _StorefrontFixtureService extends DirectOrderService {
   @override
   Future<void> clearAddress(String slug) async {
     clearAddressCalls++;
+  }
+
+  @override
+  Future<void> resumePaymentProof({
+    required DirectOrderSession session,
+    required DirectOrderProofAttempt attempt,
+    void Function()? onChanged,
+    bool allowUpload = true,
+  }) async {
+    await proofHandler!(attempt);
+    onChanged?.call();
   }
 
   @override
@@ -203,6 +232,7 @@ Widget _fixtureApp({
   _StorefrontFixtureService? service,
   Locale locale = const Locale('vi'),
   DateTime Function() now = DateTime.now,
+  Future<XFile?> Function()? pickProofImage,
 }) => ProviderScope(
   child: MaterialApp(
     theme: AppTheme.build(),
@@ -218,6 +248,7 @@ Widget _fixtureApp({
       slug: 'fixture-store',
       service: service ?? _StorefrontFixtureService(),
       now: now,
+      pickProofImage: pickProofImage,
     ),
   ),
 );
@@ -246,6 +277,376 @@ Future<void> _openAddress(WidgetTester tester) async {
 }
 
 void main() {
+  const drinks = DirectOrderCategory(
+    id: 'drinks',
+    nameKo: '음료',
+    nameVi: 'Nước uống',
+    nameEn: 'Drinks',
+    sortOrder: 2,
+  );
+  const tea = DirectOrderMenuItem(
+    id: 'tea',
+    categoryId: 'drinks',
+    nameKo: '차',
+    nameVi: 'Trà',
+    nameEn: 'Tea',
+    description: '',
+    price: 25000,
+    imageUrl: null,
+    vatCategory: 'beverage',
+    sortOrder: 2,
+  );
+  DirectOrderStatus quoted() => DirectOrderStatus(
+    requestId: 'proof-request',
+    referenceCode: 'DPROOF01',
+    state: 'quoted',
+    quote: DirectOrderQuote(
+      id: 'quote-1',
+      version: 1,
+      menuTotal: 125000,
+      serviceChargeTotal: 0,
+      deliveryFeeTotal: 0,
+      finalTotal: 125000,
+      status: 'active',
+      expiresAt: DateTime.utc(2099),
+    ),
+    messages: const [],
+  );
+  final png = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  );
+  Future<XFile?> photo() async =>
+      XFile.fromData(png, name: 'transfer.png', mimeType: 'image/png');
+  Future<void> openProof(WidgetTester tester) async {
+    await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('direct_upload_payment_proof')),
+    );
+    await tester.tap(find.byKey(const Key('direct_upload_payment_proof')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'category selection is pinned, local and preserves cart across locale and address',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        extraCategories: [drinks],
+        extraItems: [tea],
+      );
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
+      final calls = service.storefrontCalls;
+      await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
+      await tester.tap(find.byKey(const Key('direct_category_drinks')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsNothing);
+      expect(find.byKey(const Key('direct_add_tea')), findsOneWidget);
+      expect(service.storefrontCalls, calls);
+      await tester.tap(find.byKey(const Key('direct_add_tea')));
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ChoiceChip>(find.byKey(const Key('direct_category_drinks')))
+            .selected,
+        isTrue,
+      );
+      await tester.tap(find.text('배송지').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('direct_diner_count_input')),
+        '3',
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.tap(find.text('메뉴').first);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ChoiceChip>(find.byKey(const Key('direct_category_drinks')))
+            .selected,
+        isTrue,
+      );
+      expect(find.textContaining('장바구니 보기 · 2'), findsOneWidget);
+      service.extraCategories = [];
+      await tester.tap(find.text('배송지').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const Key('direct_diner_count_input')),
+            )
+            .controller!
+            .text,
+        '3',
+      );
+      await tester.tap(find.text('메뉴').first);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ChoiceChip>(find.byKey(const Key('direct_category_all')))
+            .selected,
+        isTrue,
+      );
+      expect(find.byKey(const Key('direct_add_tea')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final width in [360.0, 390.0, 768.0, 1024.0, 1440.0]) {
+    testWidgets('many long categories can reach the last category at $width', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues(const {});
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final categories = List.generate(
+        12,
+        (i) => DirectOrderCategory(
+          id: 'c$i',
+          nameKo: '아주 긴 카테고리 이름 $i',
+          nameVi: 'Danh mục với tên dài $i',
+          nameEn: 'A very long category name $i',
+          sortOrder: i,
+        ),
+      );
+      final service = _StorefrontFixtureService(
+        extraCategories: categories,
+        extraItems: [
+          for (var i = 0; i < 12; i++)
+            DirectOrderMenuItem(
+              id: 'i$i',
+              categoryId: 'c$i',
+              nameKo: '메뉴$i',
+              nameVi: 'Món$i',
+              nameEn: 'Item$i',
+              description: '',
+              price: 10000,
+              imageUrl: null,
+              vatCategory: 'food',
+              sortOrder: i,
+            ),
+        ],
+      );
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('direct_category_c11')),
+        280,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('direct_category_bar')),
+          matching: find.byType(Scrollable),
+        ),
+        maxScrolls: 30,
+      );
+      await tester.drag(
+        find.byKey(const Key('direct_category_bar')),
+        const Offset(-400, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('direct_category_c11')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_category_c11')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_i11')), findsOneWidget);
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsNothing);
+      final top = tester
+          .getTopLeft(find.byKey(const Key('direct_category_bar')))
+          .dy;
+      await tester.drag(
+        find.byKey(const PageStorageKey('direct_menu_list')),
+        const Offset(0, -400),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.byKey(const Key('direct_category_bar'))).dy,
+        top,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('empty menu hides unused categories and provides refresh', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    await tester.pumpWidget(
+      _fixtureApp(service: _StorefrontFixtureService(defaultMenu: false)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Chưa có món để đặt.'), findsOneWidget);
+    expect(find.byKey(const Key('direct_category_popular')), findsNothing);
+  });
+
+  testWidgets('direct screenshot picker cancellation sends nothing', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    var calls = 0;
+    final service = _StorefrontFixtureService(
+      activeStatus: quoted(),
+      proofHandler: (_) async {
+        calls++;
+      },
+    );
+    await tester.pumpWidget(
+      _fixtureApp(service: service, pickProofImage: () async => null),
+    );
+    await tester.pumpAndSettle();
+    await openProof(tester);
+    expect(calls, 0);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(
+      find.byKey(const Key('direct_upload_payment_proof')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'failed screenshot retries the retained photo without payment dialog',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final attempts = <DirectOrderProofAttempt>[];
+      var picks = 0;
+      final service = _StorefrontFixtureService(
+        activeStatus: quoted(),
+        proofHandler: (attempt) async {
+          attempts.add(attempt);
+          if (attempts.length == 1) {
+            throw const DirectOrderException(
+              'PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE',
+            );
+          }
+          attempt.complete = true;
+        },
+      );
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: service,
+          pickProofImage: () {
+            picks++;
+            return photo();
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openProof(tester);
+      expect(find.byType(QrImageView), findsNothing);
+      expect(find.textContaining('DPROOF01'), findsWidgets);
+      await tester.tap(find.byKey(const Key('direct_confirm_payment_proof')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_proof_error')), findsOneWidget);
+      await tester.ensureVisible(
+        find.byKey(const Key('direct_change_payment_proof')),
+      );
+      await tester.tap(find.byKey(const Key('direct_change_payment_proof')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_cancel_payment_proof')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_proof_error')), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('direct_retry_payment_proof')),
+      );
+      await tester.tap(find.byKey(const Key('direct_retry_payment_proof')));
+      await tester.pumpAndSettle();
+      expect(attempts, hasLength(2));
+      expect(identical(attempts[0], attempts[1]), isTrue);
+      expect(picks, 2);
+      expect(service.submitCalls, 0);
+      expect(find.byKey(const Key('direct_proof_sent')), findsOneWidget);
+    },
+  );
+
+  testWidgets('commit success remains sent when status refresh fails', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    late _StorefrontFixtureService service;
+    service = _StorefrontFixtureService(
+      activeStatus: quoted(),
+      proofHandler: (attempt) async {
+        attempt.complete = true;
+        service.failStatus = true;
+      },
+    );
+    await tester.pumpWidget(
+      _fixtureApp(service: service, pickProofImage: photo),
+    );
+    await tester.pumpAndSettle();
+    await openProof(tester);
+    await tester.tap(find.byKey(const Key('direct_confirm_payment_proof')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('direct_proof_sent')), findsOneWidget);
+    expect(find.byKey(const Key('direct_retry_payment_proof')), findsNothing);
+    expect(
+      find.byKey(const Key('direct_refresh_proof_status')),
+      findsOneWidget,
+    );
+    service.failStatus = false;
+    service.activeStatus = const DirectOrderStatus(
+      requestId: 'proof-request',
+      referenceCode: 'DPROOF01',
+      state: 'approved',
+      messages: [],
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('direct_refresh_proof_status')),
+    );
+    await tester.tap(find.byKey(const Key('direct_refresh_proof_status')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('direct_proof_sent')), findsNothing);
+    expect(find.byKey(const Key('direct_upload_payment_proof')), findsNothing);
+  });
+
+  testWidgets(
+    'picker is guarded from the first click and preview cancel sends nothing',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final picker = Completer<XFile?>();
+      var picks = 0;
+      var sends = 0;
+      final service = _StorefrontFixtureService(
+        activeStatus: quoted(),
+        proofHandler: (_) async {
+          sends++;
+        },
+      );
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: service,
+          pickProofImage: () {
+            picks++;
+            return picker.future;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_upload_payment_proof')));
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const Key('direct_upload_payment_proof')),
+            )
+            .onPressed,
+        isNull,
+      );
+      picker.complete(await photo());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_cancel_payment_proof')));
+      await tester.pumpAndSettle();
+      expect(picks, 1);
+      expect(sends, 0);
+    },
+  );
   testWidgets('cart preview lists selected items without submitting an order', (
     tester,
   ) async {
@@ -369,6 +770,10 @@ void main() {
             );
             await tester.pump();
           }
+          await tester.ensureVisible(
+            find.byKey(const Key('direct_add_tteokbokki')),
+          );
+          await tester.pumpAndSettle();
           await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
           await tester.pump();
           expect(
@@ -383,6 +788,11 @@ void main() {
           final continueButton = find.byKey(const Key('direct_cart_continue'));
           expect(continueButton.hitTestable(), findsOneWidget);
           expect(tester.getSize(continueButton).height, lessThanOrEqualTo(132));
+          await tester.drag(
+            find.byKey(const PageStorageKey('direct_menu_list')),
+            const Offset(0, 800),
+          );
+          await tester.pumpAndSettle();
           expect(
             tester.getTopLeft(cartButton).dy,
             greaterThan(
@@ -822,7 +1232,7 @@ void main() {
     await tester.tap(find.byKey(const Key('direct_open_payment_details')));
     await tester.pumpAndSettle();
 
-    expect(find.text('계좌이체 안내'), findsOneWidget);
+    expect(find.text('계좌이체 안내'), findsWidgets);
     expect(find.text('포함된 VAT'), findsWidgets);
     expect(find.textContaining('Vietcombank'), findsOneWidget);
     expect(find.textContaining('123456789'), findsOneWidget);
@@ -830,8 +1240,11 @@ void main() {
     expect(find.text('#D1234VAT1'), findsOneWidget);
     expect(find.byType(QrImageView), findsOneWidget);
     expect(
-      find.byKey(const Key('direct_upload_payment_proof')),
-      findsOneWidget,
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byKey(const Key('direct_upload_payment_proof')),
+      ),
+      findsNothing,
     );
     expect(tester.takeException(), isNull);
   });
@@ -853,7 +1266,7 @@ void main() {
             deliveryFeeTotal: 0,
             finalTotal: 125000,
             status: 'locked',
-            expiresAt: DateTime.utc(2099),
+            expiresAt: DateTime.utc(2020),
             vatTotal: 9259,
           ),
           messages: const [],
@@ -874,13 +1287,15 @@ void main() {
       await tester.drag(find.byType(ListView).last, const Offset(0, -700));
       await tester.pumpAndSettle();
       await tester.ensureVisible(
-        find.byKey(const Key('direct_open_payment_details')),
+        find.byKey(const Key('direct_upload_payment_proof')),
       );
 
       expect(find.textContaining('이미지가 흐림'), findsOneWidget);
       expect(find.textContaining('다시 송금하지 마세요'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('direct_open_payment_details')));
-      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('direct_open_payment_details')),
+        findsNothing,
+      );
 
       expect(find.text('이미지 다시 보내기'), findsWidgets);
       expect(find.byType(QrImageView), findsNothing);

@@ -250,6 +250,27 @@ class _ReceiptPaper extends StatelessWidget {
             _MetaRow(label: copy.paidAt, value: paidAt),
             _MetaRow(label: copy.cashier, value: receipt.cashierCode),
             _MetaRow(label: copy.table, value: receipt.tableNumber),
+            if (receipt.isDirectOrder) ...[
+              if (receipt.directOrderReference != null)
+                _MetaRow(label: 'Mã đơn', value: receipt.directOrderReference!),
+              Text(
+                receipt.fulfillmentMethod == 'pickup'
+                    ? 'TỰ ĐẾN LẤY'
+                    : 'GIAO HÀNG',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                receipt.packingDinerLabelVi,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                receipt.packingUtensilLabelVi,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
+              ),
+            ],
             const Divider(height: 28),
             for (final item in billableItems)
               Padding(

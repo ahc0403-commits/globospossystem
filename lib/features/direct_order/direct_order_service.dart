@@ -11,6 +11,41 @@ import 'direct_order_models.dart';
 typedef DirectOrderInvoker =
     Future<Object?> Function(Map<String, dynamic> body);
 
+typedef DirectOrderProofUploader =
+    Future<void> Function(
+      String path,
+      String token,
+      Uint8List bytes,
+      String mimeType,
+    );
+
+enum DirectOrderProofStage { preparing, uploading, confirming, complete }
+
+/// A screen-owned attempt. Reuse it after a lost response to commit the same
+/// object, rather than create a second photo or change its quote/review owner.
+class DirectOrderProofAttempt {
+  DirectOrderProofAttempt({
+    required this.requestId,
+    required this.quoteId,
+    required this.bytes,
+    required this.mimeType,
+    this.reviewRequestId,
+  });
+
+  final String requestId;
+  final String quoteId;
+  final String? reviewRequestId;
+  final Uint8List bytes;
+  final String mimeType;
+  String? path;
+  String? token;
+  bool storageAttempted = false;
+  bool uploaded = false;
+  bool complete = false;
+  bool outcomeUncertain = false;
+  DirectOrderProofStage stage = DirectOrderProofStage.preparing;
+}
+
 class DirectOrderException implements Exception {
   const DirectOrderException(this.code);
   final String code;
@@ -46,7 +81,11 @@ String _requiredResponseString(Map<String, dynamic> data, String key) {
 }
 
 class DirectOrderService {
-  const DirectOrderService({DirectOrderInvoker? invoker}) : _invoker = invoker;
+  const DirectOrderService({
+    DirectOrderInvoker? invoker,
+    DirectOrderProofUploader? proofUploader,
+  }) : _invoker = invoker,
+       _proofUploader = proofUploader;
 
   static const _sessionKeyPrefix = 'direct_order_session_v1_';
   static const _addressKeyPrefix = 'direct_order_address_v1_';
@@ -55,34 +94,46 @@ class DirectOrderService {
   static const _alertEnabledKeyPrefix = 'direct_order_payment_alert_v1_';
   static const _seenAlertKeyPrefix = 'direct_order_seen_alerts_v1_';
   final DirectOrderInvoker? _invoker;
+  final DirectOrderProofUploader? _proofUploader;
 
   Future<Object?> _invokeValue(Map<String, dynamic> body) async {
-    final injected = _invoker;
-    if (injected != null) return injected(body);
-    final response = await supabase.functions.invoke(
-      'direct-order-public',
-      body: body,
-    );
-    final raw = response.data;
-    if (response.status < 200 || response.status >= 300) {
-      final code = raw is Map && raw.length == 1 && raw['error'] is String
-          ? raw['error'] as String
-          : null;
-      throw DirectOrderException(
-        code?.isNotEmpty == true
-            ? code!
-            : 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE',
+    try {
+      final injected = _invoker;
+      if (injected != null) return await injected(body);
+      final response = await supabase.functions.invoke(
+        'direct-order-public',
+        body: body,
       );
+      final raw = response.data;
+      if (response.status < 200 || response.status >= 300) {
+        final code = raw is Map && raw.length == 1 && raw['error'] is String
+            ? raw['error'] as String
+            : null;
+        throw DirectOrderException(
+          code?.isNotEmpty == true
+              ? code!
+              : 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE',
+        );
+      }
+      if (raw is! Map) {
+        throw const DirectOrderException(
+          'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE',
+        );
+      }
+      final envelope = Map<String, dynamic>.from(raw);
+      if (envelope.length != 1 || !envelope.containsKey('data')) {
+        throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+      }
+      final data = envelope['data'];
+      return data;
+    } on FunctionException catch (error) {
+      final details = error.details;
+      final code =
+          details is Map && details.length == 1 && details['error'] is String
+          ? details['error'] as String
+          : 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE';
+      throw DirectOrderException(code);
     }
-    if (raw is! Map) {
-      throw const DirectOrderException('DIRECT_ORDER_TEMPORARILY_UNAVAILABLE');
-    }
-    final envelope = Map<String, dynamic>.from(raw);
-    if (envelope.length != 1 || !envelope.containsKey('data')) {
-      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
-    }
-    final data = envelope['data'];
-    return data;
   }
 
   Future<Map<String, dynamic>> _invoke(Map<String, dynamic> body) async {
@@ -412,62 +463,151 @@ class DirectOrderService {
     required Uint8List bytes,
     required String mimeType,
   }) async {
-    final upload = await _invoke({
-      'action': 'proof_upload_url_v2',
+    await resumePaymentProof(
+      session: session,
+      attempt: DirectOrderProofAttempt(
+        requestId: requestId,
+        quoteId: quoteId,
+        reviewRequestId: reviewRequestId,
+        bytes: bytes,
+        mimeType: mimeType,
+      ),
+    );
+  }
+
+  Future<void> resumePaymentProof({
+    required DirectOrderSession session,
+    required DirectOrderProofAttempt attempt,
+    void Function()? onChanged,
+    bool allowUpload = true,
+  }) async {
+    if (attempt.complete) return;
+    if (!const {
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+        }.contains(attempt.mimeType) ||
+        attempt.bytes.isEmpty ||
+        attempt.bytes.length > 5242880) {
+      throw const DirectOrderException('INVALID_PROOF');
+    }
+    final identity = <String, dynamic>{
       'session_id': session.id,
       'secret': session.secret,
-      'request_id': requestId,
-      'quote_id': quoteId,
-      'review_request_id': reviewRequestId,
-      'mime_type': mimeType,
-      'size_bytes': bytes.length,
-    });
-    const uploadFields = {
-      'path',
-      'token',
-      'signed_url',
-      'max_bytes',
-      'mime_type',
+      'request_id': attempt.requestId,
+      'quote_id': attempt.quoteId,
+      'review_request_id': attempt.reviewRequestId,
     };
-    final path = upload['path']?.toString() ?? '';
-    final token = upload['token']?.toString() ?? '';
-    if (upload.keys.toSet().difference(uploadFields).isNotEmpty ||
-        !uploadFields.every(upload.containsKey) ||
-        path.isEmpty ||
-        token.isEmpty ||
-        upload['signed_url'] is! String ||
-        upload['max_bytes'] != 5242880 ||
-        upload['mime_type'] != mimeType) {
-      throw const DirectOrderException('PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE');
+    Future<void> commit() async {
+      attempt.outcomeUncertain = true;
+      attempt.stage = DirectOrderProofStage.confirming;
+      onChanged?.call();
+      Map<String, dynamic> response;
+      try {
+        response = await _invoke({
+          ...identity,
+          'action': 'proof_commit_v2',
+          'path': attempt.path,
+        });
+      } on DirectOrderException catch (error) {
+        if (const {
+          'INVALID_PROOF',
+          'PROOF_UPLOAD_INCOMPLETE',
+          'DIRECT_ORDER_PROOF_NOT_ALLOWED',
+          'DIRECT_ORDER_PROOF_REVIEW_NOT_ALLOWED',
+          'DIRECT_ORDER_QUOTE_CHANGED',
+          'DIRECT_ORDER_PROOF_PATH_INVALID',
+        }.contains(error.code)) {
+          attempt.outcomeUncertain = false;
+        }
+        rethrow;
+      }
+      _expectExactResponseFields(response, const {
+        'message_id',
+        'state',
+        'review_request_id',
+        'idempotent',
+      });
+      _requiredResponseString(response, 'message_id');
+      if (_requiredResponseString(response, 'state') !=
+              'awaiting_payment_review' ||
+          response['idempotent'] is! bool ||
+          response['review_request_id'] != attempt.reviewRequestId) {
+        throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+      }
+      attempt.complete = true;
+      attempt.stage = DirectOrderProofStage.complete;
+      attempt.outcomeUncertain = false;
+      onChanged?.call();
     }
-    await supabase.storage
-        .from('direct-order-proofs')
-        .uploadBinaryToSignedUrl(
-          path,
-          token,
-          bytes,
-          FileOptions(contentType: mimeType, upsert: false),
+
+    // A Storage response can be lost after the bytes were saved. Commit first;
+    // only a definite missing object permits uploading to the same path again.
+    if (attempt.storageAttempted) {
+      try {
+        await commit();
+        return;
+      } on DirectOrderException catch (error) {
+        if (error.code != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
+        attempt.outcomeUncertain = false;
+        attempt.uploaded = false;
+      }
+    }
+    if (!allowUpload) {
+      throw const DirectOrderException('DIRECT_ORDER_PROOF_NOT_ALLOWED');
+    }
+    if (attempt.path == null) {
+      attempt.stage = DirectOrderProofStage.preparing;
+      onChanged?.call();
+      final upload = await _invoke({
+        ...identity,
+        'action': 'proof_upload_url_v2',
+        'mime_type': attempt.mimeType,
+        'size_bytes': attempt.bytes.length,
+      });
+      _expectExactResponseFields(upload, const {
+        'path',
+        'token',
+        'signed_url',
+        'max_bytes',
+        'mime_type',
+      });
+      if (upload['signed_url'] is! String ||
+          upload['max_bytes'] != 5242880 ||
+          upload['mime_type'] != attempt.mimeType) {
+        throw const DirectOrderException(
+          'PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE',
         );
-    final commit = await _invoke({
-      'action': 'proof_commit_v2',
-      'session_id': session.id,
-      'secret': session.secret,
-      'request_id': requestId,
-      'quote_id': quoteId,
-      'review_request_id': reviewRequestId,
-      'path': path,
-    });
-    _expectExactResponseFields(commit, const {
-      'message_id',
-      'state',
-      'review_request_id',
-      'idempotent',
-    });
-    _requiredResponseString(commit, 'message_id');
-    if (_requiredResponseString(commit, 'state') != 'awaiting_payment_review' ||
-        commit['idempotent'] is! bool) {
-      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+      }
+      final path = _requiredResponseString(upload, 'path');
+      final token = _requiredResponseString(upload, 'token');
+      attempt.path = path;
+      attempt.token = token;
     }
+    attempt.storageAttempted = true;
+    attempt.stage = DirectOrderProofStage.uploading;
+    attempt.outcomeUncertain = true;
+    onChanged?.call();
+    final uploader = _proofUploader;
+    if (uploader != null) {
+      await uploader(
+        attempt.path!,
+        attempt.token!,
+        attempt.bytes,
+        attempt.mimeType,
+      );
+    } else {
+      await supabase.storage
+          .from('direct-order-proofs')
+          .uploadBinaryToSignedUrl(
+            attempt.path!,
+            attempt.token!,
+            attempt.bytes,
+            FileOptions(contentType: attempt.mimeType, upsert: false),
+          );
+    }
+    attempt.uploaded = true;
+    await commit();
   }
 
   Future<DirectOrderAddress?> loadAddress(String slug) async {

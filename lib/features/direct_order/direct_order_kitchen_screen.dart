@@ -357,6 +357,10 @@ class _TicketCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               child: Text(
                 copy.packingCount((delivery['diner_count'] as num?)?.toInt()),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
             const Divider(height: 1),

@@ -17,6 +17,7 @@ void main() {
     );
     expect(output, contains('MANG DI - NHAN TAI CUA HANG'));
     expect(output, contains('DPICKUP01'));
+    expect(output, contains('DUNG CU: CAN KIEM TRA'));
   });
   test('direct-pay driver slip never calls the Grab fee prepaid', () async {
     final ticket = PrintTicket.fromPayload({
@@ -36,6 +37,163 @@ void main() {
   });
 
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  final forms = <String, Future<List<int>> Function(PrintTicket)>{
+    'kitchen': ReceiptBuilder.buildKitchenTicket,
+    'floor': ReceiptBuilder.buildFloorTicket,
+    'tray': ReceiptBuilder.buildTrayLabel,
+    'confirmation': ReceiptBuilder.buildConfirmationSlip,
+  };
+  for (final form in forms.entries) {
+    for (final method in ['delivery', 'pickup', null]) {
+      test(
+        '${form.key} shows packing count only for delivery/pickup',
+        () async {
+          final ticket = PrintTicket.fromPayload({
+            'ticket': form.key,
+            'floor_label': '1F',
+            'table_number': 'A1',
+            'ticket_code': 'TEST',
+            'items': [
+              {'label': 'Packing menu', 'qty': 7, 'unit_price': 10000},
+            ],
+            if (method != null) ...{
+              'diner_count': 3,
+              'fulfillment_method': method,
+              'direct_order_reference': 'D12345678',
+            },
+            if (method == null) 'guest_count': 3,
+          });
+          final text = String.fromCharCodes(await form.value(ticket));
+          if (method == null) {
+            expect(text, isNot(contains('DUNG CU:')));
+            expect(text, isNot(contains('SO NGUOI:')));
+          } else {
+            expect(text, contains('SO NGUOI: 3'));
+            expect(text, contains('DUNG CU: 3 BO'));
+            expect(text, contains('D12345678'));
+            expect(
+              text,
+              contains(method == 'pickup' ? 'TU DEN LAY' : 'GIAO HANG'),
+            );
+            expect(RegExp('DUNG CU:').allMatches(text), hasLength(1));
+            expect(
+              text.indexOf('DUNG CU:'),
+              lessThan(text.indexOf('Packing menu')),
+            );
+          }
+        },
+      );
+    }
+    test(
+      '${form.key} identifies missing direct counts on every form',
+      () async {
+        final ticket = PrintTicket.fromPayload({
+          'ticket': form.key,
+          'fulfillment_method': 'pickup',
+          'direct_order_reference': 'D12345678',
+        });
+        final text = String.fromCharCodes(await form.value(ticket));
+        expect(text, contains('DUNG CU: CAN KIEM TRA'));
+        expect(text, isNot(contains('DUNG CU: 1 BO')));
+      },
+    );
+  }
+
+  for (final count in [1, 3, 10, 100]) {
+    test(
+      'packing header carries $count sets before menus even without method',
+      () async {
+        final bytes = await ReceiptBuilder.buildPaymentReceipt(
+          restaurantName: 'GLOBOS',
+          tableNumber: '-',
+          items: const [
+            ReceiptItem(name: 'Packing menu', quantity: 9, unitPrice: 10000),
+          ],
+          totalAmount: 90000,
+          paymentMethod: 'banktransfer',
+          paidAt: DateTime.utc(2026),
+          dinerCount: count,
+          directOrderReference: 'D12345678',
+        );
+        final text = String.fromCharCodes(bytes);
+        expect(text, contains('SO NGUOI: $count'));
+        expect(text, contains('DUNG CU: $count BO'));
+        expect(
+          text.indexOf('DUNG CU:'),
+          lessThan(text.indexOf('Packing menu')),
+        );
+        expect(RegExp('DUNG CU:').allMatches(text), hasLength(1));
+        // GS ! 0x01 enables double height, ESC E 0x01 enables bold.
+        expect(text, contains(String.fromCharCodes([0x1d, 0x21, 0x01])));
+        expect(text, contains(String.fromCharCodes([0x1b, 0x45, 0x01])));
+      },
+    );
+  }
+
+  test(
+    'identified direct receipts show a staff check for missing/invalid counts',
+    () async {
+      for (final count in [null, 0, 101]) {
+        final text = String.fromCharCodes(
+          await ReceiptBuilder.buildPaymentReceipt(
+            restaurantName: 'GLOBOS',
+            tableNumber: '-',
+            items: const [],
+            totalAmount: 0,
+            paymentMethod: 'banktransfer',
+            paidAt: DateTime.utc(2026),
+            dinerCount: count,
+            fulfillmentMethod: 'pickup',
+          ),
+        );
+        expect(text, contains('SO NGUOI: CHUA NHAP'));
+        expect(text, contains('DUNG CU: CAN KIEM TRA'));
+        expect(text, isNot(contains('DUNG CU: 1 BO')));
+      }
+    },
+  );
+
+  test(
+    'malformed queued packing values require a staff check rather than truncation',
+    () async {
+      for (final value in [null, 0, 101, 1.5, '3', <int>[]]) {
+        final receipt = QueuedPaymentReceipt.fromPayload({
+          'diner_count': value,
+          'direct_order_reference': 'D12345678',
+        });
+        expect(receipt.dinerCount, isNull);
+        final text = String.fromCharCodes(
+          await ReceiptBuilder.buildPaymentReceipt(
+            restaurantName: receipt.restaurantName,
+            tableNumber: receipt.tableNumber,
+            items: receipt.items,
+            totalAmount: receipt.totalAmount,
+            paymentMethod: receipt.paymentMethod,
+            paidAt: receipt.paidAt,
+            dinerCount: receipt.dinerCount,
+            directOrderReference: receipt.directOrderReference,
+          ),
+        );
+        expect(text, contains('DUNG CU: CAN KIEM TRA'));
+      }
+    },
+  );
+
+  test('regular receipts do not invent disposable sets', () async {
+    final text = String.fromCharCodes(
+      await ReceiptBuilder.buildPaymentReceipt(
+        restaurantName: 'GLOBOS',
+        tableNumber: 'A1',
+        items: const [],
+        totalAmount: 0,
+        paymentMethod: 'cash',
+        paidAt: DateTime.utc(2026),
+      ),
+    );
+    expect(text, isNot(contains('DUNG CU:')));
+    expect(text, isNot(contains('SO NGUOI:')));
+  });
 
   test('payment receipt emits ESC/POS payload with cut command', () async {
     final bytes = await ReceiptBuilder.buildPaymentReceipt(

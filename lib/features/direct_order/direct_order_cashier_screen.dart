@@ -1205,6 +1205,10 @@ class _DirectOrderCashierScreenState
             children: [
               Text(
                 _copy.packingCount((_delivery['diner_count'] as num?)?.toInt()),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               if (!{
                     'dispatched',

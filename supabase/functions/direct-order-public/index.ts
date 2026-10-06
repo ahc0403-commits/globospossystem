@@ -645,6 +645,7 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_ACTIVE_REQUESTS_EXIST: conflict(
     "DIRECT_ORDER_ACTIVE_REQUESTS_EXIST",
   ),
+  DIRECT_ORDER_PACKING_CONTRACT_VERIFICATION_FAILED: internalFailure,
   DIRECT_ORDER_FALLBACK_ANCHOR_DRIFT: internalFailure,
   DIRECT_ORDER_FALLBACK_VERIFICATION_FAILED: internalFailure,
   DIRECT_ORDER_PHOTO_APPROVAL_ANCHOR_DRIFT: internalFailure,
@@ -699,6 +700,50 @@ export function validProofObjectPath(path: string): boolean {
 
 export function validProofPath(path: string, requestId: string): boolean {
   return validProofObjectPath(path) && path.split("/")[1] === requestId;
+}
+
+type ProofStorage = {
+  list: (
+    folder: string,
+    options: { limit: number; search: string },
+  ) => Promise<{
+    data: { name: string }[] | null;
+    error: unknown;
+  }>;
+  download: (path: string) => Promise<{ data: Blob | null; error: unknown }>;
+  remove: (paths: string[]) => Promise<unknown>;
+};
+
+// V1 and V2 share the same verification. Temporary Storage failures must not
+// destroy a valid photo whose upload/commit response may simply have been lost.
+export async function verifyProofUpload(storage: ProofStorage, path: string) {
+  const [storeId, requestId, fileName] = path.split("/");
+  const { data: objects, error: listError } = await storage.list(
+    `${storeId}/${requestId}`,
+    { limit: 2, search: fileName },
+  );
+  if (listError || !objects) {
+    throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+  }
+  if (!objects.some((object) => object.name === fileName)) {
+    throw new SafeHttpError(409, "PROOF_UPLOAD_INCOMPLETE");
+  }
+  const { data: blob, error: downloadError } = await storage.download(path);
+  if (downloadError || !blob) {
+    throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await blob.arrayBuffer());
+  } catch {
+    throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+  }
+  if (
+    !validateProofImage(bytes, fileName.split(".").pop()?.toLowerCase() ?? "")
+  ) {
+    await storage.remove([path]);
+    throw new SafeHttpError(400, "INVALID_PROOF");
+  }
 }
 
 export function directOrderSecretKeyName(
@@ -1020,27 +1065,10 @@ function productionDependencies(): DirectOrderDependencies {
         if (!validProofPath(path, requestId)) {
           throw new SafeHttpError(400, "INVALID_PROOF");
         }
-        const [storeId, , fileName] = path.split("/");
-        const { data: objects, error: listError } = await service.storage
-          .from("direct-order-proofs")
-          .list(`${storeId}/${requestId}`, {
-            limit: 2,
-            search: fileName,
-          });
-        if (
-          listError || !objects?.some((object) => object.name === fileName)
-        ) throw new SafeHttpError(409, "PROOF_UPLOAD_INCOMPLETE");
-        const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
-        const { data: proofBlob, error: downloadError } = await service.storage
-          .from("direct-order-proofs")
-          .download(path);
-        const proofBytes = downloadError || !proofBlob
-          ? null
-          : new Uint8Array(await proofBlob.arrayBuffer());
-        if (!proofBytes || !validateProofImage(proofBytes, extension)) {
-          await service.storage.from("direct-order-proofs").remove([path]);
-          throw new SafeHttpError(400, "INVALID_PROOF");
-        }
+        await verifyProofUpload(
+          service.storage.from("direct-order-proofs"),
+          path,
+        );
         if (isV2) {
           const quoteId = requiredUuid(body, "quote_id");
           const reviewRequestId = body.review_request_id == null

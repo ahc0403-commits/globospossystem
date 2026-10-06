@@ -59,6 +59,9 @@ class DigitalReceipt {
     required this.isService,
     this.legalName,
     this.taxCode,
+    this.dinerCount,
+    this.fulfillmentMethod,
+    this.directOrderReference,
   });
 
   final String id;
@@ -82,6 +85,18 @@ class DigitalReceipt {
   final double changeAmount;
   final String paymentMethod;
   final bool isService;
+  final int? dinerCount;
+  final String? fulfillmentMethod;
+  final String? directOrderReference;
+  bool get isDirectOrder =>
+      fulfillmentMethod != null ||
+      directOrderReference != null ||
+      dinerCount != null;
+  String get packingDinerLabelVi =>
+      dinerCount == null ? 'Số người: Chưa nhập' : 'Số người: $dinerCount';
+  String get packingUtensilLabelVi => dinerCount == null
+      ? 'Dụng cụ: Cần nhân viên kiểm tra'
+      : 'Dụng cụ: $dinerCount bộ';
 
   factory DigitalReceipt.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
@@ -134,6 +149,9 @@ class DigitalReceipt {
       changeAmount: _asDouble(json['change_amount']),
       paymentMethod: json['payment_method']?.toString() ?? 'OTHER',
       isService: json['is_service'] == true,
+      dinerCount: _optionalDinerCount(json['diner_count']),
+      fulfillmentMethod: _optionalText(json['fulfillment_method']),
+      directOrderReference: _optionalText(json['direct_order_reference']),
     );
   }
 }
@@ -170,4 +188,9 @@ int _asInt(Object? value) => switch (value) {
 String? _optionalText(Object? value) {
   final text = value?.toString().trim() ?? '';
   return text.isEmpty ? null : text;
+}
+
+int? _optionalDinerCount(Object? value) {
+  final number = value is num && value == value.toInt() ? value.toInt() : null;
+  return number != null && number >= 1 && number <= 100 ? number : null;
 }
