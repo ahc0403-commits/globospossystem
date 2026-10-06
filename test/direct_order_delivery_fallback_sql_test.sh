@@ -244,6 +244,14 @@ PYFEEDBACK
  run_sql "$PHOTO_ROOT/supabase/migrations/20261006030000_direct_order_customer_experience.sql" > "$PHOTO_TMP/feedback_migration.log" 2>&1 || { cat "$PHOTO_TMP/feedback_migration.log"; exit 1; }
  run_sql "$PHOTO_ROOT/scripts/verify_direct_order_customer_experience.sql" >/dev/null
  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_customer_experience_test.sql"
+ run_sql "$PHOTO_ROOT/test/fixtures/direct_order_customer_experience_races.sql" >/dev/null
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SET statement_timeout='8s'; SELECT feedback_race.staff_event();" > "$PHOTO_TMP/feedback_staff_race.log" 2>&1 &
+ feedback_staff_pid=$!
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SET application_name='direct-customer-session-race'; SET statement_timeout='8s'; SELECT feedback_race.customer_activity();" > "$PHOTO_TMP/feedback_customer_race.log" 2>&1 &
+ feedback_customer_pid=$!
+ wait "$feedback_staff_pid" || { cat "$PHOTO_TMP/feedback_staff_race.log"; exit 1; }
+ wait "$feedback_customer_pid" || { cat "$PHOTO_TMP/feedback_customer_race.log"; exit 1; }
+ printf 'DIRECT_ORDER_CUSTOMER_SESSION_NOTIFICATION_CONCURRENCY=PASS\n'
  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "UPDATE public.users SET restaurant_id='d2000000-0000-4000-8000-000000000001' WHERE auth_id=auth.uid();" >/dev/null
  for feedback_limit in 1 50 100 200; do
   docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT jsonb_array_length(public.direct_order_staff_list_v3('d2000000-0000-4000-8000-000000000001',NULL,$feedback_limit)); SELECT pg_stat_force_next_flush();" >/dev/null

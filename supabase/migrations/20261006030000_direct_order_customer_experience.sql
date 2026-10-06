@@ -183,7 +183,10 @@ BEGIN
     IF (v_request.fulfillment_method<>'delivery' OR v_request.fulfillment_type='pickup') OR NOT EXISTS(SELECT 1 FROM public.direct_order_dispatches
       WHERE request_id=p_request_id) THEN RETURN; END IF;
   ELSE RAISE EXCEPTION 'DIRECT_ORDER_PUSH_INPUT_INVALID'; END IF;
-  PERFORM 1 FROM public.direct_order_sessions WHERE id=v_request.session_id FOR UPDATE;
+  -- Public writers update session.last_seen_at before locking the request.
+  -- KEY SHARE serializes against device registration's explicit session lock
+  -- while remaining compatible with that non-key UPDATE (no lock inversion).
+  PERFORM 1 FROM public.direct_order_sessions WHERE id=v_request.session_id FOR KEY SHARE;
   INSERT INTO public.direct_order_customer_events(request_id,session_id,restaurant_id,event_kind)
     VALUES(v_request.id,v_request.session_id,v_request.restaurant_id,p_kind)
     ON CONFLICT(request_id,event_kind) DO NOTHING RETURNING id INTO v_event_id;
