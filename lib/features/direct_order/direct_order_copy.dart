@@ -41,6 +41,12 @@ class DirectOrderCopy {
   String get address => _pick('배송지', 'Địa chỉ', 'Address');
   String get orderStatus => _pick('주문 현황', 'Trạng thái', 'Order status');
   String get cart => _pick('장바구니', 'Giỏ hàng', 'Cart');
+  String get viewCart => _pick('장바구니 보기', 'Xem giỏ hàng', 'View cart');
+  String get cartQuoteNotice => _pick(
+    '배송비와 세금·서비스 요금은 최종 견적에 반영됩니다.',
+    'Phí giao hàng, thuế và phí dịch vụ sẽ được tính trong báo giá cuối cùng.',
+    'Delivery fees, tax and service charges are included in the final quote.',
+  );
   String get cartEmpty =>
       _pick('메뉴를 선택해 주세요.', 'Vui lòng chọn món.', 'Please choose an item.');
   String get pausedTitle => _pick(
