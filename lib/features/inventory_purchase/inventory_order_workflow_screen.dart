@@ -126,6 +126,8 @@ class _InventoryOrderWorkflowScreenState
   String? get _storeId => ref.read(authProvider).storeId;
   String? get _role => ref.read(authProvider).role;
   bool get _isAccounting => _role == 'inventory_accounting';
+  bool get _combinedReceiving => _detail?['can_receive_and_confirm'] == true;
+  bool get _canConfirmReceipt => _isAccounting || _combinedReceiving;
 
   bool get _canManagePrices =>
       PermissionUtils.canManageInventorySupplierPrices(_role);
@@ -331,12 +333,16 @@ class _InventoryOrderWorkflowScreenState
       for (final row in _maps(draft?['line_details']))
         _string(row['purchase_order_line_id']): row,
     };
+    final finalReview =
+        _isAccounting ||
+        (detail?['can_receive_and_confirm'] == true &&
+            _string(draft?['submitted_at']).isNotEmpty);
     for (final line in _maps(detail?['lines'])) {
       final id = _id(line);
       final row = drafts[id];
       final value =
           _number(
-            row?[_isAccounting
+            row?[finalReview
                 ? 'accepted_quantity_base'
                 : 'received_quantity_base'],
           ) /
@@ -1330,7 +1336,7 @@ class _InventoryOrderWorkflowScreenState
         (draft == null || _string(draft['submitted_at']).isEmpty);
     final canFinalize =
         receivable &&
-        _isAccounting &&
+        _canConfirmReceipt &&
         draft != null &&
         _string(draft['submitted_at']).isNotEmpty;
     return Card(
@@ -1341,11 +1347,11 @@ class _InventoryOrderWorkflowScreenState
           children: [
             Text(
               _text(
-                ko: _isAccounting ? '최종 승인 수량과 단가' : '실제 납품 수량과 단가',
-                en: _isAccounting
+                ko: canFinalize ? '최종 승인 수량과 단가' : '실제 납품 수량과 단가',
+                en: canFinalize
                     ? 'Final approved quantity & price'
                     : 'Actual delivered quantity & price',
-                vi: _isAccounting
+                vi: canFinalize
                     ? 'Số lượng & giá duyệt cuối'
                     : 'Số lượng & giá thực nhận',
               ),
@@ -1499,9 +1505,15 @@ class _InventoryOrderWorkflowScreenState
               const SizedBox(height: 8),
               Text(
                 _text(
-                  ko: '입고 내역이 제출되었습니다. 회계 계정의 최종 검증을 기다리고 있습니다.',
-                  en: 'Receipt submitted. Awaiting final accounting verification.',
-                  vi: 'Đã gửi phiếu nhập. Đang chờ kế toán xác nhận cuối cùng.',
+                  ko: _combinedReceiving
+                      ? '제출된 입고 내역을 검수하고 입고를 확정하세요.'
+                      : '입고 내역이 제출되었습니다. 회계 계정의 최종 검증을 기다리고 있습니다.',
+                  en: _combinedReceiving
+                      ? 'Inspect the submitted receipt and confirm the delivery.'
+                      : 'Receipt submitted. Awaiting final accounting verification.',
+                  vi: _combinedReceiving
+                      ? 'Kiểm tra phiếu nhập đã gửi và xác nhận hàng nhận.'
+                      : 'Đã gửi phiếu nhập. Đang chờ kế toán xác nhận cuối cùng.',
                 ),
               ),
             ],
@@ -1547,13 +1559,19 @@ class _InventoryOrderWorkflowScreenState
                 icon: const Icon(Icons.save_outlined),
                 label: Text(
                   _text(
-                    ko: '확인 · 입고 내역 제출',
-                    en: 'Confirm · submit receipt',
-                    vi: 'Xác nhận · gửi phiếu nhập',
+                    ko: _combinedReceiving
+                        ? '수령·검수 완료 · 입고 확정'
+                        : '확인 · 입고 내역 제출',
+                    en: _combinedReceiving
+                        ? 'Receive, inspect & confirm'
+                        : 'Confirm · submit receipt',
+                    vi: _combinedReceiving
+                        ? 'Nhận, kiểm tra & xác nhận'
+                        : 'Xác nhận · gửi phiếu nhập',
                   ),
                 ),
               ),
-            if (_isAccounting && draft != null) ...[
+            if (_canConfirmReceipt && draft != null) ...[
               Text(_string(draft['inspector_name'], fallback: '-')),
               OutlinedButton.icon(
                 onPressed: _busy ? null : () => _editStatement(draft),
@@ -1566,7 +1584,7 @@ class _InventoryOrderWorkflowScreenState
                   ),
                 ),
               ),
-              if (independent)
+              if (independent || _combinedReceiving)
                 FilledButton.icon(
                   key: const Key('inventory_receipt_verify'),
                   onPressed: _busy
@@ -1881,13 +1899,19 @@ class _InventoryOrderWorkflowScreenState
             : DateFormat('yyyy-MM-dd').format(input.date!),
         'p_memo': input.memo,
       };
-      await _service.submitInventoryReceiptBatch(_pendingReceiptSubmission!);
+      final result = await _service.submitInventoryReceiptBatch(
+        _pendingReceiptSubmission!,
+      );
       if (!mounted) return;
       setState(() {
         _receiptDirty = false;
         _pendingReceiptSubmission = null;
       });
-      await _loadDetail(_id(order), background: true);
+      if (result['status'] == 'confirmed') {
+        await _load(background: true);
+      } else {
+        await _loadDetail(_id(order), background: true);
+      }
     });
   }
 

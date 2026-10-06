@@ -28,17 +28,6 @@
       "next_native_function": "provision-fixed-pos-account",
       "requirement_id_source": "RPC returned id; never guess",
       "initial_password_source": "secure runtime input; omitted from this manifest"
-    },
-    {
-      "rpc": "admin_prepare_procurement_store_account",
-      "p_store_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
-      "p_account_code": "bt_verify1",
-      "p_role": "inventory_accounting",
-      "p_display_name": "Binh Thanh receipt verification team",
-      "p_reason": "Binh Thanh shared procurement role requested by owner",
-      "next_native_function": "provision-fixed-pos-account",
-      "requirement_id_source": "RPC returned id; never guess",
-      "initial_password_source": "secure runtime input; omitted from this manifest"
     }
   ],
   "office_create": {
@@ -136,17 +125,6 @@
           "next_native_function": "provision-fixed-pos-account",
           "requirement_id_source": "RPC returned id; never guess",
           "initial_password_source": "secure runtime input; omitted from this manifest"
-        },
-        {
-          "rpc": "admin_prepare_procurement_store_account",
-          "p_store_id": "3a268807-771f-4fd4-84fe-e1b0b00de40a",
-          "p_account_code": "sp_verify1",
-          "p_role": "inventory_accounting",
-          "p_display_name": "SAMPLE receipt verification team",
-          "p_reason": "Owner requested shared roles for SAMPLE procurement practice",
-          "next_native_function": "provision-fixed-pos-account",
-          "requirement_id_source": "RPC returned id; never guess",
-          "initial_password_source": "secure runtime input; omitted from this manifest"
         }
       ],
       "office_create": {
@@ -167,8 +145,35 @@
             "temporaryPasswordSource": "secure runtime input; not an API field; omit this field when assembling the real request"
           }
         ]
-      }
+      },
+      "combined_receiving": {
+        "account_code": "sp_order",
+        "auth_id": "86ac1090-8331-4f6d-a36d-32b734a90d72",
+        "stages": [
+          "receiver",
+          "verifier"
+        ],
+        "separate_verifier_account_required": false,
+        "initial_password_source": "Owner supplied value; secure runtime input only, omitted from this manifest"
+      },
+      "removed_planned_accounts": [
+        "sp_verify1"
+      ]
     }
   ],
-  "new_account_count": 6
+  "new_account_count": 4,
+  "revision": "2026-10-06 owner consolidated receiving and inspection",
+  "combined_receiving": {
+    "account_code": "bt_order",
+    "auth_id": "4cde54f0-9a28-41ec-99ec-ba2e3fea2d48",
+    "stages": [
+      "receiver",
+      "verifier"
+    ],
+    "separate_verifier_account_required": false,
+    "initial_password_source": "Owner supplied value; secure runtime input only, omitted from this manifest"
+  },
+  "removed_planned_accounts": [
+    "bt_verify1"
+  ]
 }
