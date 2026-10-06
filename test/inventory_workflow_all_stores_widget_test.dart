@@ -37,6 +37,7 @@ class _Inventory extends InventoryService {
   int detailLoads = 0;
   int listLoads = 0;
   bool failNext = false;
+  bool combinedReceiving = false;
   final submissions = <Map<String, dynamic>>[];
   final orderSubmissions = <Map<String, dynamic>>[];
   Map<String, dynamic> quantityWarnings = {
@@ -131,6 +132,7 @@ class _Inventory extends InventoryService {
     detailLoads++;
     return {
       'order': Map<String, dynamic>.from(order),
+      'can_receive_and_confirm': combinedReceiving,
       'lines': lines,
       'receipts': [Map<String, dynamic>.from(receipt)],
       'documents': [],
@@ -152,6 +154,12 @@ class _Inventory extends InventoryService {
     receipt['inspector_name'] = params['p_inspector_name'];
     receipt['row_version'] = 2;
     receipt['line_details'] = params['p_lines'];
+    if (combinedReceiving) {
+      receipt['status'] = 'confirmed';
+      receipt['submitted_at'] = DateTime.now().toIso8601String();
+      order['status'] = 'received';
+      return {'receipt_id': 'receipt', 'row_version': 3, 'status': 'confirmed'};
+    }
     return {'receipt_id': 'receipt', 'row_version': 2};
   }
 
@@ -279,6 +287,52 @@ void main() {
       }
       expect(parseInventoryQuantity('0'), 0);
       expect(parseInventoryQuantity('1,234.5'), 1234.5);
+    },
+  );
+
+  testWidgets(
+    'combined receiving confirms in one submission and refreshes the completed order',
+    (tester) async {
+      final service = _Inventory()..combinedReceiving = true;
+      service.lines.removeRange(1, service.lines.length);
+      final events = StreamController<PosLiveEvent>.broadcast();
+      final router = await _mount(tester, service, events);
+      await tester.tap(find.text('Receiving'));
+      await tester.pumpAndSettle();
+      final field = find.byKey(
+        const ValueKey('inventory_receipt_quantity_line-0'),
+      );
+      await tester.ensureVisible(field);
+      await tester.enterText(field, '2');
+      final submit = find.byKey(const Key('inventory_receipt_submit'));
+      await tester.ensureVisible(submit);
+      expect(find.text('Receive, inspect & confirm'), findsOneWidget);
+      final loads = service.listLoads;
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Inspector name *'),
+        'Receiver A',
+      );
+      await tester.enterText(
+        find.byKey(const Key('inventory_receipt_inspection_note')),
+        'Delivery inspected',
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Confirm'));
+      await tester.pumpAndSettle();
+      expect(service.submissions, hasLength(1));
+      expect(service.receipt['status'], 'confirmed');
+      expect(service.listLoads, greaterThan(loads));
+      expect(find.byKey(const Key('inventory_receipt_verify')), findsNothing);
+      expect(
+        find.text('Receipt submitted. Awaiting final accounting verification.'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      router.dispose();
+      await events.close();
     },
   );
 
