@@ -557,7 +557,7 @@ class DirectOrderSummary {
   final bool hasOpenProofReview;
 
   bool get isTerminal =>
-      fulfillmentStatus == 'completed' ||
+      const {'completed', 'cancelled'}.contains(fulfillmentStatus) ||
       const {'rejected', 'cancelled', 'expired'}.contains(state);
 
   factory DirectOrderSummary.fromJson(Map<String, dynamic> json) {
@@ -627,6 +627,58 @@ class DirectOrderMessage {
   }
 }
 
+class DirectOrderItemSnapshot {
+  const DirectOrderItemSnapshot({
+    required this.menuItemId,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.unitPrice,
+    required this.quantity,
+    this.note,
+  });
+
+  final String menuItemId;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final double unitPrice;
+  final int quantity;
+  final String? note;
+  double get amount => unitPrice * quantity;
+  String localizedName(String locale) => switch (locale) {
+    'ko' => nameKo,
+    'en' => nameEn,
+    _ => nameVi,
+  };
+
+  factory DirectOrderItemSnapshot.fromJson(Map<String, dynamic> json) {
+    _expectKeys(json, const {
+      'menu_item_id',
+      'name_ko',
+      'name_vi',
+      'name_en',
+      'unit_price',
+      'quantity',
+      'note',
+    });
+    final quantity = _requiredNumber(json, 'quantity');
+    final price = _requiredNumber(json, 'unit_price');
+    if (quantity < 1 || quantity != quantity.toInt() || price < 0) {
+      _invalidModel('items');
+    }
+    return DirectOrderItemSnapshot(
+      menuItemId: _requiredString(json, 'menu_item_id'),
+      nameKo: _requiredString(json, 'name_ko'),
+      nameVi: _requiredString(json, 'name_vi'),
+      nameEn: _requiredString(json, 'name_en'),
+      unitPrice: price.toDouble(),
+      quantity: quantity.toInt(),
+      note: _optionalString(json, 'note'),
+    );
+  }
+}
+
 class DirectOrderStatus {
   const DirectOrderStatus({
     required this.requestId,
@@ -634,6 +686,8 @@ class DirectOrderStatus {
     required this.referenceCode,
     required this.state,
     required this.messages,
+    this.createdAt,
+    this.items = const [],
     this.quote,
     this.fulfillmentStatus,
     this.grabTrackingUrl,
@@ -651,6 +705,8 @@ class DirectOrderStatus {
       fulfillmentType == DirectOrderFulfillmentType.pickup;
   final String referenceCode;
   final String state;
+  final DateTime? createdAt;
+  final List<DirectOrderItemSnapshot> items;
   final DirectOrderQuote? quote;
   final List<DirectOrderMessage> messages;
   final String? fulfillmentStatus;
@@ -689,27 +745,15 @@ class DirectOrderStatus {
       _invalidModel('dispatch');
     }
     _requiredString(json, 'store_id');
-    _requiredDateTime(json, 'created_at');
-    for (final row in _requiredList(json, 'items')) {
-      if (row is! Map) _invalidModel('items');
-      final item = Map<String, dynamic>.from(row);
-      _expectKeys(item, const {
-        'menu_item_id',
-        'name_ko',
-        'name_vi',
-        'name_en',
-        'unit_price',
-        'quantity',
-        'note',
-      });
-      _requiredString(item, 'menu_item_id');
-      _requiredString(item, 'name_ko');
-      _requiredString(item, 'name_vi');
-      _requiredString(item, 'name_en');
-      _requiredNumber(item, 'unit_price');
-      _requiredNumber(item, 'quantity');
-      _optionalString(item, 'note');
-    }
+    final createdAt = _requiredDateTime(json, 'created_at');
+    final items = _requiredList(json, 'items')
+        .map((row) {
+          if (row is! Map) _invalidModel('items');
+          return DirectOrderItemSnapshot.fromJson(
+            Map<String, dynamic>.from(row),
+          );
+        })
+        .toList(growable: false);
     if (fulfillmentRaw is Map) {
       final fulfillment = Map<String, dynamic>.from(fulfillmentRaw);
       _expectKeys(fulfillment, const {
@@ -747,6 +791,8 @@ class DirectOrderStatus {
       ),
       referenceCode: _requiredString(json, 'reference_code'),
       state: _requiredString(json, 'state'),
+      createdAt: createdAt,
+      items: items,
       quote: quoteRaw is Map
           ? DirectOrderQuote.fromJson(Map<String, dynamic>.from(quoteRaw))
           : null,

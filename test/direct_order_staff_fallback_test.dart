@@ -30,6 +30,7 @@ class _Staff extends DirectOrderStaffService {
   String ticketStatus = 'ready';
   String state = 'approved';
   String? sentProvider;
+  final sentMessages = <String>[];
   String? sentUrl;
   String? bankReference;
   int? sentTicketVersion;
@@ -38,6 +39,7 @@ class _Staff extends DirectOrderStaffService {
   Future<List<Map<String, dynamic>>> listRequests({
     required String storeId,
     List<String>? states,
+    String? fulfillmentType,
     int limit = 100,
   }) async => [
     {
@@ -106,6 +108,19 @@ class _Staff extends DirectOrderStaffService {
     required String storeId,
     required String requestId,
   }) async => const DirectOrderDriverReceiptStatus.empty();
+  @override
+  Future<Map<String, dynamic>> sendMessage({
+    required String storeId,
+    required String requestId,
+    required String message,
+  }) async {
+    sentMessages.add(message);
+    return {
+      'message_id': 'fixture-message',
+      'created_at': DateTime.utc(2026, 10, 6).toIso8601String(),
+    };
+  }
+
   @override
   Future<void> setDinerCount({
     required String storeId,
@@ -386,4 +401,26 @@ void main() {
       },
     );
   }
+  testWidgets('staff selects and edits a template before sending once', (
+    tester,
+  ) async {
+    final service = _Staff();
+    await _pump(tester, service);
+    await _tap(tester, find.byKey(const Key('direct_chat_templates')));
+    await _tap(tester, find.byKey(const Key('direct_chat_template_address')));
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('direct_staff_chat_input')),
+    );
+    expect(field.controller!.text, contains('D12345678'));
+    expect(field.controller!.text, contains('Customer address Door 1'));
+    expect(service.sentMessages, isEmpty);
+    await tester.enterText(
+      find.byKey(const Key('direct_staff_chat_input')),
+      'Edited fixture message',
+    );
+    await _tap(tester, find.byKey(const Key('direct_staff_chat_send')));
+    expect(service.sentMessages, ['Edited fixture message']);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

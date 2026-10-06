@@ -81,7 +81,7 @@ SCALE_INDEX_ONLY=1 bash scripts/test_scalability_isolated.sh
 printf 'CHECK_REPO_STEP=direct_order_edge_contracts\n'
 bash test/direct_delivery_manual_addresses_sql_test.sh
 DELIVERY_HOURS_TEST=1 bash test/direct_order_photo_approval_sql_test.sh
-bash test/direct_order_delivery_fallback_sql_test.sh
+bash test/direct_order_customer_experience_sql_test.sh
 deno fmt --check \
   supabase/functions/direct-order-public/index.ts \
   supabase/functions/direct-order-public/index_test.ts \
@@ -94,6 +94,14 @@ deno check --config supabase/functions/direct-order-public/deno.json \
   supabase/functions/direct-order-public/index_test.ts
 deno test --config supabase/functions/direct-order-public/deno.json \
   supabase/functions/direct-order-public/index_test.ts
+deno fmt --check supabase/functions/_shared/direct_order_push.ts \
+  supabase/functions/direct-order-notification-dispatcher
+deno lint supabase/functions/_shared/direct_order_push.ts \
+  supabase/functions/direct-order-notification-dispatcher
+deno check --config supabase/functions/direct-order-notification-dispatcher/deno.json \
+  supabase/functions/direct-order-notification-dispatcher/index.ts
+deno test --config supabase/functions/direct-order-notification-dispatcher/deno.json \
+  supabase/functions/direct-order-notification-dispatcher/index_test.ts
 
 printf 'CHECK_REPO_STEP=fixed_procurement_account_authority\n'
 deno fmt --check supabase/functions/provision-fixed-pos-account/policy.ts supabase/functions/provision-fixed-pos-account/policy_test.ts

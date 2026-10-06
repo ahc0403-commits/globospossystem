@@ -14,6 +14,9 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/language_switcher.dart';
 import '../auth/auth_provider.dart';
 import 'direct_order_copy.dart';
+import 'direct_order_stage.dart';
+import 'direct_order_chat_templates.dart';
+import 'package:flutter/services.dart';
 import 'direct_order_dialog.dart';
 import 'direct_order_localization.dart';
 import 'direct_order_money.dart';
@@ -105,28 +108,11 @@ class _DirectOrderCashierScreenState
     final revision = ++_refreshRevision;
     if (!silent) setState(() => _loading = true);
     try {
-      final fulfillmentFilter = const {
-        'preparing',
-        'ready',
-        'dispatched',
-        'completed',
-      }.contains(_stateFilter);
-      final allRows = await directOrderStaffService.listRequests(
+      final rows = await directOrderStaffService.listRequests(
         storeId: storeId,
-        states: _stateFilter == null || fulfillmentFilter
-            ? null
-            : [_stateFilter!],
+        states: _stateFilter == null ? null : [_stateFilter!],
+        fulfillmentType: _fulfillmentFilter,
       );
-      final rows = allRows
-          .where(
-            (row) =>
-                (!fulfillmentFilter ||
-                    row['fulfillment_status']?.toString() == _stateFilter) &&
-                (_fulfillmentFilter == null ||
-                    (row['fulfillment_type'] ?? 'delivery') ==
-                        _fulfillmentFilter),
-          )
-          .toList(growable: false);
       Map<String, dynamic>? detail;
       final requestedSelection = _selectedId;
       final selectedId =
@@ -150,8 +136,9 @@ class _DirectOrderCashierScreenState
           ? await _loadCustomerReceiptStatus(storeId, selectedId)
           : const DirectOrderDriverReceiptStatus.empty();
       if (!mounted || revision != _refreshRevision) return;
-      if (selectedId != requestedSelection && detail != null) {
-        _seedOrderInputs(detail);
+      if (selectedId != requestedSelection) {
+        _chatController.clear();
+        if (detail != null) _seedOrderInputs(detail);
       }
       if (detail != null) _seedPickupQuoteInput(detail);
       setState(() {
@@ -174,6 +161,8 @@ class _DirectOrderCashierScreenState
   }
 
   Future<void> _select(String id) async {
+    if (_busy) return;
+    _chatController.clear();
     final storeId = _storeId;
     if (storeId == null) return;
     final revision = ++_refreshRevision;
@@ -400,16 +389,18 @@ class _DirectOrderCashierScreenState
 
   Future<void> _sendMessage() async {
     final body = _chatController.text.trim();
+    final selectedId = _selectedId;
+    final storeId = _storeId;
     if (body.isEmpty || _storeId == null || _selectedId == null) return;
     if (_busy) return;
     setState(() => _busy = true);
     try {
       final sent = await directOrderStaffService.sendMessage(
-        storeId: _storeId!,
-        requestId: _selectedId!,
+        storeId: storeId!,
+        requestId: selectedId!,
         message: body,
       );
-      if (!mounted) return;
+      if (!mounted || _selectedId != selectedId || _storeId != storeId) return;
       _refreshRevision += 1;
       final currentDetail = _detail;
       _chatController.clear();
@@ -1038,15 +1029,17 @@ class _DirectOrderCashierScreenState
   Widget _buildQueue() {
     const filters = <String?>[
       null,
-      'awaiting_quote',
-      'quoted',
-      'awaiting_payment_review',
-      'approved',
-      'preparing',
-      'ready',
-      'dispatched',
-      'completed',
+      'customer_pending',
+      'customer_paid',
+      'customer_completed',
     ];
+    String filterLabel(String? state) => state == null
+        ? _copy.all
+        : _copy.stageLabel(
+            DirectOrderStage.values.firstWhere(
+              (stage) => stage.filter == state,
+            ),
+          );
     return Column(
       children: [
         Padding(
@@ -1082,19 +1075,58 @@ class _DirectOrderCashierScreenState
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: ChoiceChip(
-                      label: Text(
-                        state == null ? _copy.all : _copy.stateLabel(state),
-                      ),
+                      label: Text(filterLabel(state)),
                       selected: _stateFilter == state,
-                      onSelected: (_) {
-                        setState(() => _stateFilter = state);
-                        _refresh();
-                      },
+                      onSelected: _busy
+                          ? null
+                          : (_) {
+                              setState(() => _stateFilter = state);
+                              _refresh();
+                            },
                     ),
                   ),
               ],
             ),
           ),
+        ),
+        ExpansionTile(
+          key: const Key('direct_staff_advanced_statuses'),
+          title: Text(_copy.advancedStatuses),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final state in const [
+                    'awaiting_quote',
+                    'quoted',
+                    'awaiting_payment_review',
+                    'approved',
+                    'preparing',
+                    'ready',
+                    'dispatched',
+                    'customer_exception',
+                  ])
+                    ChoiceChip(
+                      label: Text(
+                        state == 'customer_exception'
+                            ? _copy.exceptionOrders
+                            : _copy.stateLabel(state),
+                      ),
+                      selected: _stateFilter == state,
+                      onSelected: _busy
+                          ? null
+                          : (_) {
+                              setState(() => _stateFilter = state);
+                              _refresh();
+                            },
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
         if (_loading && _requests.isEmpty)
           const Expanded(child: Center(child: CircularProgressIndicator()))
@@ -1141,7 +1173,7 @@ class _DirectOrderCashierScreenState
                     ],
                   ),
                   subtitle: Text(
-                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}',
+                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}',
                   ),
                   trailing: row['final_total'] == null
                       ? null
@@ -1811,6 +1843,93 @@ class _DirectOrderCashierScreenState
     );
   }
 
+  Future<void> _chooseChatTemplate() async {
+    final selectedId = _selectedId;
+    final detail = _detail;
+    if (_busy || selectedId == null || detail == null) return;
+    final template = await showModalBottomSheet<DirectOrderChatTemplate>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final entry in <(DirectOrderChatTemplate, String)>[
+              (DirectOrderChatTemplate.received, _copy.receiptTemplate),
+              if (_map(detail['active_quote']).isNotEmpty)
+                (DirectOrderChatTemplate.quote, _copy.quoteTemplate),
+              if (!_isPickup)
+                (DirectOrderChatTemplate.address, _copy.addressTemplate),
+              if (!_isPickup)
+                (DirectOrderChatTemplate.deliveryFee, _copy.feeTemplate),
+            ])
+              ListTile(
+                key: Key('direct_chat_template_${entry.$1.name}'),
+                title: Text(entry.$2),
+                onTap: () => Navigator.pop(context, entry.$1),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || template == null || _selectedId != selectedId) return;
+    final request = _map(detail['request']);
+    final delivery = _map(detail['delivery']);
+    final address = _map(detail['address']);
+    int? fee;
+    if (template == DirectOrderChatTemplate.deliveryFee) {
+      // Always ask staff to confirm the current fare rather than assume a quote
+      // of zero means free delivery or reuse an old dispatch fare.
+      final value = await _inputDialog(_copy.feeTemplate, number: true);
+      fee = value == null ? null : parseDirectOrderVnd(value);
+      if (!mounted || fee == null || _selectedId != selectedId) return;
+    }
+    if (_chatController.text.trim().isNotEmpty) {
+      final replace = await showDirectOrderDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(_copy.messageTemplates),
+          content: Text(_copy.replaceDraft),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(_copy.close),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(_copy.confirm),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || replace != true || _selectedId != selectedId) return;
+    }
+    final draft = directOrderChatDraft(
+      template: template,
+      locale: Localizations.localeOf(context).languageCode,
+      storeName: delivery['store_name']?.toString() ?? _copy.shop,
+      referenceCode: request['reference_code']?.toString() ?? '',
+      customerName: address['customer_name']?.toString() ?? '',
+      phone: address['customer_phone']?.toString() ?? '',
+      address: [
+        address['formatted_address'],
+        address['detail_address'],
+      ].where((part) => part != null && part.toString().isNotEmpty).join(' '),
+      pickup: delivery['method'] == 'pickup',
+      customerPaysDriver:
+          DirectOrderDeliveryPaymentMode.fromValue(
+            _map(detail['active_quote'])['delivery_payment_mode']?.toString() ??
+                _deliveryPaymentMode.value,
+          ) ==
+          DirectOrderDeliveryPaymentMode.customerDirect,
+      deliveryFee: fee,
+    );
+    _chatController.value = TextEditingValue(
+      text: draft,
+      selection: TextSelection.collapsed(offset: draft.length),
+    );
+  }
+
   Widget _buildChat() {
     final messages = _maps(_detail?['messages']);
     return Container(
@@ -1878,18 +1997,63 @@ class _DirectOrderCashierScreenState
             ),
           ),
           Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton.icon(
+                    key: const Key('direct_chat_templates'),
+                    onPressed: _busy ? null : _chooseChatTemplate,
+                    icon: const Icon(Icons.quickreply_outlined),
+                    label: Text(_copy.messageTemplates),
+                  ),
+                ),
+                IconButton(
+                  tooltip: _copy.copyDraft,
+                  onPressed: () async {
+                    if (_chatController.text.trim().isEmpty) return;
+                    await Clipboard.setData(
+                      ClipboardData(text: _chatController.text),
+                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(_copy.copied)));
+                    }
+                  },
+                  icon: const Icon(Icons.copy),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              _copy.templateHelp,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _chatController,
-                    decoration: InputDecoration(hintText: _copy.messageHint),
-                    onSubmitted: (_) => _sendMessage(),
+                    key: const Key('direct_staff_chat_input'),
+                    minLines: 1,
+                    maxLines: 4,
+                    maxLength: 2000,
+                    decoration: InputDecoration(
+                      hintText: _copy.messageHint,
+                      counterText: '',
+                    ),
+                    textInputAction: TextInputAction.newline,
                   ),
                 ),
                 const SizedBox(width: 6),
                 IconButton.filled(
+                  key: const Key('direct_staff_chat_send'),
                   onPressed: _busy ? null : _sendMessage,
                   icon: const Icon(Icons.send),
                 ),

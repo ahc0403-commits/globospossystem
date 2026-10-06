@@ -279,8 +279,8 @@ void main() {
         expect(find.byKey(const Key('direct_pickup_offer')), findsNothing);
         expect(find.text(copy.pickup), findsWidgets);
         expect(
-          find.byKey(const Key('direct_order_progress_step_4')),
-          findsNothing,
+          find.byKey(const Key('direct_order_progress_step_2')),
+          findsOneWidget,
         );
         expect(find.text(copy.progressGrabHandoff), findsNothing);
         expect(tester.takeException(), isNull);
@@ -318,24 +318,25 @@ void main() {
       },
     );
   }
-  testWidgets('declining pickup keeps delivery and its five progress stages', (
-    tester,
-  ) async {
-    final service = _Service();
-    await tester.pumpWidget(_app(service, 'en'));
-    await tester.pumpAndSettle();
-    final decline = find.byKey(const Key('direct_decline_pickup'));
-    await tester.ensureVisible(decline);
-    await tester.pumpAndSettle();
-    await tester.tap(decline);
-    await tester.pumpAndSettle();
-    expect(service.accepted, false);
-    expect(
-      find.byKey(const Key('direct_order_progress_step_4')),
-      findsOneWidget,
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  testWidgets(
+    'declining pickup keeps delivery and the three customer progress stages',
+    (tester) async {
+      final service = _Service();
+      await tester.pumpWidget(_app(service, 'en'));
+      await tester.pumpAndSettle();
+      final decline = find.byKey(const Key('direct_decline_pickup'));
+      await tester.ensureVisible(decline);
+      await tester.pumpAndSettle();
+      await tester.tap(decline);
+      await tester.pumpAndSettle();
+      expect(service.accepted, false);
+      expect(
+        find.byKey(const Key('direct_order_progress_step_2')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   testWidgets('a disabled storefront resumes a cached customer order', (
     tester,
   ) async {

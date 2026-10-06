@@ -43,6 +43,7 @@ class _PhotoService extends DirectOrderStaffService {
   Future<List<Map<String, dynamic>>> listRequests({
     required String storeId,
     List<String>? states,
+    String? fulfillmentType,
     int limit = 100,
   }) async => [
     {'id': 'request', 'reference_code': 'D2A54A36B', 'state': state},

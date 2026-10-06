@@ -380,6 +380,28 @@ class DirectOrderService {
     return true;
   }
 
+  Future<void> setPushSubscription({
+    required DirectOrderSession session,
+    required String deviceId,
+    required String locale,
+    required bool enabled,
+    String? token,
+  }) async {
+    final data = await _invoke({
+      'action': 'push_subscription',
+      'session_id': session.id,
+      'secret': session.secret,
+      'device_id': deviceId,
+      'locale': locale,
+      'enabled': enabled,
+      if (enabled) 'token': token,
+    });
+    _expectExactResponseFields(data, const {'enabled'});
+    if (data['enabled'] != enabled) {
+      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+    }
+  }
+
   Future<DirectOrderStatus> fetchStatus({
     required DirectOrderSession session,
     required String requestId,

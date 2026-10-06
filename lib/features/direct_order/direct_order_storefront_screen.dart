@@ -16,6 +16,9 @@ import '../../core/utils/polling_utils.dart';
 import '../../widgets/language_switcher.dart';
 import 'direct_order_arrival_alert_sound.dart';
 import 'direct_order_copy.dart';
+import 'direct_order_stage.dart';
+import 'direct_order_details_sheet.dart';
+import 'direct_order_customer_push_service.dart';
 import 'direct_order_localization.dart';
 import 'direct_order_dialog.dart';
 import 'direct_order_hours.dart';
@@ -34,6 +37,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
     this.pollRandom,
     this.now = DateTime.now,
     this.pickProofImage,
+    this.pushService,
   });
 
   final String slug;
@@ -43,6 +47,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
   final math.Random? pollRandom;
   final DateTime Function() now;
   final Future<XFile?> Function()? pickProofImage;
+  final DirectOrderCustomerPushService? pushService;
 
   @override
   State<DirectOrderStorefrontScreen> createState() =>
@@ -101,6 +106,10 @@ class _DirectOrderStorefrontScreenState
   int _statusMutationRevision = 0;
   bool _isForeground = true;
   late final math.Random _pollRandom;
+  late final DirectOrderCustomerPushService _pushService;
+  DirectOrderPushReadiness _pushReadiness = DirectOrderPushReadiness.off;
+  bool _pushBusy = false;
+  String? _pushLocale;
 
   String get _languageCode =>
       Localizations.maybeLocaleOf(context)?.languageCode ?? 'vi';
@@ -110,6 +119,7 @@ class _DirectOrderStorefrontScreenState
   void initState() {
     super.initState();
     _pollRandom = widget.pollRandom ?? math.Random();
+    _pushService = widget.pushService ?? DirectOrderCustomerPushService();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
@@ -119,6 +129,7 @@ class _DirectOrderStorefrontScreenState
     WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
     _hoursTimer?.cancel();
+    _pushService.dispose();
     _dinerController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
@@ -135,6 +146,14 @@ class _DirectOrderStorefrontScreenState
   void didChangeDependencies() {
     super.didChangeDependencies();
     _revealSelectedCategory();
+    final locale = _languageCode;
+    final changed = _pushLocale != null && _pushLocale != locale;
+    _pushLocale = locale;
+    if (changed && _session != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_setCustomerPush(restore: true));
+      });
+    }
   }
 
   List<DirectOrderCategory> get _menuCategories {
@@ -217,6 +236,7 @@ class _DirectOrderStorefrontScreenState
 
   Future<void> _refreshStatusAfterResume() async {
     await _refreshStatus(silent: true);
+    if (mounted) unawaited(_setCustomerPush(restore: true));
     if (mounted && _hasPendingUpdates) {
       _startStatusPolling();
     }
@@ -291,6 +311,7 @@ class _DirectOrderStorefrontScreenState
       if (status != null) unawaited(_notifyForStatus(status));
       if (_hasPendingUpdates) _startStatusPolling();
       _scheduleHoursRefresh();
+      unawaited(_setCustomerPush(restore: true));
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
@@ -362,6 +383,63 @@ class _DirectOrderStorefrontScreenState
 
   int get _cartCount => _cart.values.fold(0, (sum, value) => sum + value);
 
+  Future<void> _editItemRequest(DirectOrderMenuItem item) async {
+    var draft = _itemNotes[item.id] ?? '';
+    final note = await showDirectOrderDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(item.localizedName(_languageCode)),
+        content: TextFormField(
+          key: Key('direct_item_request_input_${item.id}'),
+          initialValue: draft,
+          onChanged: (value) => draft = value,
+          autofocus: true,
+          maxLength: 300,
+          minLines: 2,
+          maxLines: 4,
+          decoration: InputDecoration(
+            labelText: _copy.itemRequest,
+            hintText: _copy.itemRequestHint,
+            helperText: _copy.itemRequestHelp,
+            helperMaxLines: 3,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(_copy.close),
+          ),
+          FilledButton(
+            key: const Key('direct_item_request_save'),
+            onPressed: () => Navigator.pop(context, draft.trim()),
+            child: Text(_copy.save),
+          ),
+        ],
+      ),
+    );
+    if (mounted && note != null && _cart.containsKey(item.id)) {
+      setState(() {
+        if (note.isEmpty) {
+          _itemNotes.remove(item.id);
+        } else {
+          _itemNotes[item.id] = note;
+        }
+      });
+    }
+  }
+
+  Future<void> _showOrderDetails(DirectOrderStatus status) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        constraints: const BoxConstraints(maxWidth: 920),
+        builder: (context) => DirectOrderDetailsSheet(
+          status: status,
+          languageCode: _languageCode,
+        ),
+      );
+
   Future<void> _showCart() async {
     final items = _storefront!.items
         .where((item) => (_cart[item.id] ?? 0) > 0)
@@ -371,96 +449,111 @@ class _DirectOrderStorefrontScreenState
       isScrollControlled: true,
       useSafeArea: true,
       constraints: const BoxConstraints(maxWidth: 640),
-      builder: (context) => SafeArea(
-        child: SizedBox(
-          key: const Key('direct_cart_sheet'),
-          height: MediaQuery.sizeOf(context).height * 0.78,
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.shopping_cart_outlined),
-                title: Text(
-                  _copy.cart,
-                  style: Theme.of(context).textTheme.titleLarge,
+      builder: (context) => StatefulBuilder(
+        builder: (context, refreshSheet) => SafeArea(
+          child: SizedBox(
+            key: const Key('direct_cart_sheet'),
+            height: MediaQuery.sizeOf(context).height * 0.78,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.shopping_cart_outlined),
+                  title: Text(
+                    _copy.cart,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  subtitle: Text(_copy.itemsCount(_cartCount)),
+                  trailing: IconButton(
+                    key: const Key('direct_cart_close'),
+                    tooltip: _copy.close,
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
                 ),
-                subtitle: Text(_copy.itemsCount(_cartCount)),
-                trailing: IconButton(
-                  key: const Key('direct_cart_close'),
-                  tooltip: _copy.close,
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const Divider(height: 24),
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    final quantity = _cart[item.id]!;
-                    return Column(
-                      key: Key('direct_cart_item_${item.id}'),
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          item.localizedName(_languageCode),
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${_money.format(item.price)} × $quantity',
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const Divider(height: 24),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final quantity = _cart[item.id]!;
+                      return Column(
+                        key: Key('direct_cart_item_${item.id}'),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            item.localizedName(_languageCode),
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${_money.format(item.price)} × $quantity',
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
+                              const SizedBox(width: 12),
+                              Text(
+                                _money.format(item.price * quantity),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ],
+                          ),
+                          if (_itemNotes[item.id]?.isNotEmpty == true)
                             Text(
-                              _money.format(item.price * quantity),
-                              style: Theme.of(context).textTheme.titleMedium,
+                              '${_copy.itemRequest}: ${_itemNotes[item.id]}',
                             ),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
+                          TextButton.icon(
+                            key: Key('direct_cart_request_${item.id}'),
+                            onPressed: () async {
+                              await _editItemRequest(item);
+                              if (context.mounted) refreshSheet(() {});
+                            },
+                            icon: const Icon(Icons.edit_note),
+                            label: Text(_copy.addItemRequest),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: Text(_copy.subtotal)),
-                        const SizedBox(width: 12),
-                        Text(
-                          key: const Key('direct_cart_subtotal'),
-                          _money.format(_cartSubtotal),
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _isPickup ? _copy.vatNotice : _copy.cartQuoteNotice,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      key: const Key('direct_cart_address'),
-                      onPressed: () => Navigator.pop(context, true),
-                      icon: const Icon(Icons.arrow_forward_rounded),
-                      label: Text(_isPickup ? _copy.contact : _copy.address),
-                    ),
-                  ],
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text(_copy.subtotal)),
+                          const SizedBox(width: 12),
+                          Text(
+                            key: const Key('direct_cart_subtotal'),
+                            _money.format(_cartSubtotal),
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _isPickup ? _copy.vatNotice : _copy.cartQuoteNotice,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        key: const Key('direct_cart_address'),
+                        onPressed: () => Navigator.pop(context, true),
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                        label: Text(_isPickup ? _copy.contact : _copy.address),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -591,8 +684,12 @@ class _DirectOrderStorefrontScreenState
               requestId: requestId,
             );
       if (!mounted || revision != _statusMutationRevision) return;
+      setState(() {
+        _orders = orders;
+        if (status != null) _status = status;
+      });
       if (status != null) {
-        await _notifyForStatus(status);
+        unawaited(_notifyForStatus(status));
       }
       for (final order in orders) {
         if (order.requestId == requestId) continue;
@@ -606,14 +703,10 @@ class _DirectOrderStorefrontScreenState
             session: session,
             requestId: order.requestId,
           );
-          await _notifyForStatus(changedStatus);
+          unawaited(_notifyForStatus(changedStatus));
         }
       }
       if (!mounted || revision != _statusMutationRevision) return;
-      setState(() {
-        _orders = orders;
-        if (status != null) _status = status;
-      });
       if (!orders.any((order) => !order.isTerminal) && !_hasPendingUpdates) {
         _statusTimer?.cancel();
         _statusTimer = null;
@@ -639,7 +732,16 @@ class _DirectOrderStorefrontScreenState
     final review = status.proofReview;
     String? eventKey;
     String? message;
-    if (review != null) {
+    if (status.isPickup && status.fulfillmentStatus == 'ready') {
+      eventKey = '${status.requestId}:pickup-ready';
+      message = _copy.pickupReadyNotice;
+    } else if (status.fulfillmentStatus == 'dispatched' &&
+        (status.delivery?.trackingUrl != null ||
+            status.delivery?.driverContact != null ||
+            status.grabTrackingUrl != null)) {
+      eventKey = '${status.requestId}:driver-handoff';
+      message = _copy.driverHandoffNotice;
+    } else if (review != null) {
       eventKey = '${status.requestId}:proof-review:${review.id}';
       message = '${status.referenceCode} · ${_copy.replaceProof}';
     } else if (quote != null && status.state == 'quoted') {
@@ -647,9 +749,18 @@ class _DirectOrderStorefrontScreenState
       message = quote.version > 1 ? _copy.quoteChanged : _copy.quoteArrived;
     }
     if (eventKey == null || message == null) return;
-    final isNew = await widget.service.markAlertSeen(widget.slug, eventKey);
+    bool isNew;
+    try {
+      isNew = await widget.service.markAlertSeen(widget.slug, eventKey);
+    } catch (_) {
+      return;
+    }
     if (!isNew || !mounted) return;
-    _snack('$message ${_money.format(quote?.finalTotal ?? 0)}');
+    _snack(
+      eventKey.contains(':quote:')
+          ? '$message ${_money.format(quote?.finalTotal ?? 0)}'
+          : message,
+    );
     if (_paymentAlertsEnabled) {
       try {
         await directOrderArrivalAlertSoundService.play();
@@ -716,7 +827,10 @@ class _DirectOrderStorefrontScreenState
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final order = _orders[index];
-                      final status = order.fulfillmentStatus ?? order.state;
+                      final stage = directOrderStage(
+                        order.state,
+                        order.fulfillmentStatus,
+                      );
                       return ListTile(
                         key: Key('direct_customer_order_${order.requestId}'),
                         selected: order.requestId == _status?.requestId,
@@ -728,7 +842,7 @@ class _DirectOrderStorefrontScreenState
                         ),
                         title: Text('#${order.referenceCode}'),
                         subtitle: Text(
-                          '${order.isPickup ? _copy.pickup : _copy.delivery} · ${_copy.stateLabel(status)} · '
+                          '${order.isPickup ? _copy.pickup : _copy.delivery} · ${stage == DirectOrderStage.exception ? _copy.stateLabel(order.fulfillmentStatus == 'cancelled' ? 'cancelled' : order.state) : _copy.stageLabel(stage)} · '
                           '${_copy.itemsCount(order.itemCount)}',
                         ),
                         trailing: Text(
@@ -987,6 +1101,8 @@ class _DirectOrderStorefrontScreenState
           requestId: latest.requestId,
           referenceCode: latest.referenceCode,
           state: latest.state,
+          createdAt: latest.createdAt,
+          items: latest.items,
           quote: latest.quote,
           messages: messages,
           fulfillmentStatus: latest.fulfillmentStatus,
@@ -1115,10 +1231,9 @@ class _DirectOrderStorefrontScreenState
               ),
             ),
           IconButton(
-            tooltip: _paymentAlertsEnabled
-                ? _copy.paymentAlertEnabled
-                : _copy.paymentAlertDisabled,
-            onPressed: _togglePaymentAlerts,
+            key: const Key('direct_customer_notifications'),
+            tooltip: _copy.customerNotifications,
+            onPressed: _showCustomerNotifications,
             icon: Icon(
               _paymentAlertsEnabled
                   ? Icons.notifications_active_outlined
@@ -1344,79 +1459,101 @@ class _DirectOrderStorefrontScreenState
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ClipRRect(
-              borderRadius: AppRadius.md,
-              child: SizedBox(
-                width: 88,
-                height: 88,
-                child: item.imageUrl?.isNotEmpty == true
-                    ? Image.network(
-                        item.imageUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _menuPlaceholder(),
-                      )
-                    : _menuPlaceholder(),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.localizedName(_languageCode),
-                    style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: AppRadius.md,
+                  child: SizedBox(
+                    width: 88,
+                    height: 88,
+                    child: item.imageUrl?.isNotEmpty == true
+                        ? Image.network(
+                            item.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _menuPlaceholder(),
+                          )
+                        : _menuPlaceholder(),
                   ),
-                  if (item.description?.trim().isNotEmpty == true) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      item.description!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    _money.format(item.price),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleMedium?.copyWith(color: PosColors.accent),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.localizedName(_languageCode),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      if (item.description?.trim().isNotEmpty == true) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          item.description!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Text(
+                        _money.format(item.price),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(color: PosColors.accent),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (quantity == 0)
-              IconButton.filled(
-                key: Key('direct_add_${item.id}'),
-                onPressed: () => _changeQuantity(item.id, 1),
-                icon: const Icon(Icons.add_rounded),
-              )
-            else
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton.outlined(
-                    onPressed: () => _changeQuantity(item.id, -1),
-                    icon: const Icon(Icons.remove_rounded),
-                  ),
-                  SizedBox(
-                    width: 34,
-                    child: Text(
-                      '$quantity',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
+                ),
+                const SizedBox(width: 8),
+                if (quantity == 0)
                   IconButton.filled(
+                    key: Key('direct_add_${item.id}'),
                     onPressed: () => _changeQuantity(item.id, 1),
                     icon: const Icon(Icons.add_rounded),
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton.outlined(
+                        onPressed: () => _changeQuantity(item.id, -1),
+                        icon: const Icon(Icons.remove_rounded),
+                      ),
+                      SizedBox(
+                        width: 34,
+                        child: Text(
+                          '$quantity',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton.filled(
+                        onPressed: () => _changeQuantity(item.id, 1),
+                        icon: const Icon(Icons.add_rounded),
+                      ),
+                    ],
                   ),
-                ],
+              ],
+            ),
+            if (quantity > 0) ...[
+              const SizedBox(height: 8),
+              if (_itemNotes[item.id]?.isNotEmpty == true)
+                Text(
+                  '${_copy.itemRequest}: ${_itemNotes[item.id]}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: Key('direct_menu_request_${item.id}'),
+                  onPressed: () => _editItemRequest(item),
+                  icon: const Icon(Icons.edit_note),
+                  label: Text(_copy.addItemRequest),
+                ),
               ),
+            ],
           ],
         ),
       ),
@@ -1606,6 +1743,147 @@ class _DirectOrderStorefrontScreenState
     );
   }
 
+  Future<void> _setCustomerPush({
+    bool restore = false,
+    bool disable = false,
+  }) async {
+    final session = _session;
+    if (_pushBusy || session == null) return;
+    setState(() => _pushBusy = true);
+    try {
+      final readiness = disable
+          ? await _pushService.disable(
+              slug: widget.slug,
+              session: session,
+              service: widget.service,
+              locale: _languageCode,
+            )
+          : await _pushService.enable(
+              slug: widget.slug,
+              session: session,
+              service: widget.service,
+              locale: _languageCode,
+              restore: restore,
+              onForeground: (requestId, kind) async {
+                final eventKey =
+                    '$requestId:${kind == 'pickup_ready' ? 'pickup-ready' : 'driver-handoff'}';
+                try {
+                  if (await widget.service.markAlertSeen(
+                        widget.slug,
+                        eventKey,
+                      ) &&
+                      mounted) {
+                    _snack(
+                      kind == 'pickup_ready'
+                          ? _copy.pickupReadyNotice
+                          : _copy.driverHandoffNotice,
+                    );
+                  }
+                } catch (_) {
+                  // A local alert cache failure must not stop status refresh.
+                }
+                if (mounted) unawaited(_refreshStatus(silent: true));
+              },
+            );
+      if (mounted && _session?.id == session.id) {
+        if (disable && readiness == DirectOrderPushReadiness.error) {
+          _snack(_copy.pushFailed);
+          return;
+        }
+        setState(() {
+          _pushReadiness = readiness;
+        });
+      }
+    } catch (_) {
+      if (mounted && !restore) _snack(_copy.pushFailed);
+    } finally {
+      if (mounted) setState(() => _pushBusy = false);
+    }
+  }
+
+  Future<void> _showCustomerNotifications() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    constraints: const BoxConstraints(maxWidth: 640),
+    builder: (context) => StatefulBuilder(
+      builder: (context, refresh) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _customerNotificationCard(() {
+                if (context.mounted) refresh(() {});
+              }),
+              SwitchListTile(
+                value: _paymentAlertsEnabled,
+                title: Text(_copy.paymentAlertEnabled),
+                onChanged: (_) async {
+                  await _togglePaymentAlerts();
+                  if (context.mounted) refresh(() {});
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _customerNotificationCard(VoidCallback refresh) {
+    final message = switch (_pushReadiness) {
+      DirectOrderPushReadiness.ready => _copy.pushReady,
+      DirectOrderPushReadiness.denied => _copy.pushDenied,
+      DirectOrderPushReadiness.unsupported ||
+      DirectOrderPushReadiness.notConfigured => _copy.pushUnavailable,
+      DirectOrderPushReadiness.error => _copy.pushFailed,
+      DirectOrderPushReadiness.off => _copy.pushDisabled,
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _copy.customerNotifications,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(message),
+            const SizedBox(height: 8),
+            Text(_copy.pushHelp),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('direct_customer_push_toggle'),
+              onPressed: _pushBusy
+                  ? null
+                  : () async {
+                      final pending = _setCustomerPush(
+                        disable:
+                            _pushReadiness == DirectOrderPushReadiness.ready,
+                      );
+                      refresh();
+                      await pending;
+                      refresh();
+                    },
+              icon: Icon(
+                _pushReadiness == DirectOrderPushReadiness.ready
+                    ? Icons.notifications_off_outlined
+                    : Icons.notifications_active_outlined,
+              ),
+              label: Text(
+                _pushReadiness == DirectOrderPushReadiness.ready
+                    ? _copy.disableCustomerNotifications
+                    : _copy.enableCustomerNotifications,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatus() {
     final status = _status;
     if (status == null) {
@@ -1622,11 +1900,13 @@ class _DirectOrderStorefrontScreenState
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           _statusHero(status),
+
           if (status.delivery?.offer?.isPending == true) ...[
             const SizedBox(height: 12),
             _pickupOfferCard(status),
           ],
-          if (!{'rejected', 'cancelled', 'expired'}.contains(status.state)) ...[
+          if (directOrderStage(status.state, status.fulfillmentStatus) !=
+              DirectOrderStage.exception) ...[
             const SizedBox(height: 12),
             _orderProgressCard(status),
           ],
@@ -1737,73 +2017,35 @@ class _DirectOrderStorefrontScreenState
   }
 
   Widget _statusHero(DirectOrderStatus status) {
-    final (icon, tone, title) = switch (status.fulfillmentStatus) {
-      'preparing' => (
-        Icons.restaurant_rounded,
-        PosColors.warning,
-        _copy.preparing,
+    final stage = directOrderStage(status.state, status.fulfillmentStatus);
+    final (icon, tone) = switch (stage) {
+      DirectOrderStage.waiting => (Icons.schedule_rounded, PosColors.info),
+      DirectOrderStage.paid => (
+        Icons.account_balance_wallet_outlined,
+        PosColors.accent,
       ),
-      'ready' => (
-        Icons.inventory_2_outlined,
-        PosColors.info,
-        status.isPickup ? _copy.pickupReady : _copy.ready,
-      ),
-      'dispatched' => (
-        Icons.delivery_dining_rounded,
-        PosColors.success,
-        _copy.dispatched,
-      ),
-      'completed' => (
+      DirectOrderStage.completed => (
         Icons.check_circle_outline_rounded,
         PosColors.success,
-        status.delivery?.isPickup == true
-            ? _copy.pickupCompleted
-            : _copy.completed,
       ),
-      _ => switch (status.state) {
-        'awaiting_quote' => (
-          Icons.schedule_rounded,
-          PosColors.info,
-          _copy.awaitingQuote,
-        ),
-        'quoted' => (
-          Icons.request_quote_rounded,
-          PosColors.accent,
-          _copy.quoteReady,
-        ),
-        'awaiting_payment_review' => (
-          Icons.verified_user_outlined,
-          PosColors.warning,
-          _copy.awaitingApproval,
-        ),
-        'approved' => (
-          Icons.restaurant_rounded,
-          PosColors.success,
-          _copy.approved,
-        ),
-        'rejected' => (
-          Icons.error_outline_rounded,
-          PosColors.danger,
-          _copy.rejected,
-        ),
-        'cancelled' => (
-          Icons.cancel_outlined,
-          PosColors.textSecondary,
-          _copy.cancelled,
-        ),
-        _ => (
-          Icons.info_outline_rounded,
-          PosColors.textSecondary,
-          _copy.orderStatus,
-        ),
-      },
+      DirectOrderStage.exception => (Icons.cancel_outlined, PosColors.danger),
     };
+    final title = stage == DirectOrderStage.exception
+        ? _copy.stateLabel(
+            status.fulfillmentStatus == 'cancelled'
+                ? 'cancelled'
+                : status.state,
+          )
+        : _copy.stageLabel(stage);
     final fulfillment = switch (status.fulfillmentStatus) {
       'preparing' => _copy.preparing,
-      'ready' => _copy.ready,
+      'ready' => status.isPickup ? _copy.pickupReady : _copy.ready,
       'dispatched' => _copy.dispatched,
       'completed' => _copy.completed,
-      _ => null,
+      _ =>
+        stage == DirectOrderStage.waiting
+            ? _copy.stateLabel(status.state)
+            : null,
     };
     return Card(
       child: Padding(
@@ -1820,11 +2062,23 @@ class _DirectOrderStorefrontScreenState
             ),
             const SizedBox(height: 5),
             Text(status.isPickup ? _copy.pickup : _copy.delivery),
-            Text(
-              status.referenceCode,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: tone),
+            TextButton(
+              key: const Key('direct_open_order_details'),
+              onPressed: () => _showOrderDetails(status),
+              child: Wrap(
+                spacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  Text(
+                    status.referenceCode,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelLarge?.copyWith(color: tone),
+                  ),
+                  Text(_copy.orderDetails),
+                  const Icon(Icons.chevron_right, size: 18),
+                ],
+              ),
             ),
             if (status.delivery != null) ...[
               const SizedBox(height: 8),
@@ -1908,24 +2162,16 @@ class _DirectOrderStorefrontScreenState
   }
 
   Widget _orderProgressCard(DirectOrderStatus status) {
-    final currentStep = switch (status.fulfillmentStatus) {
-      'completed' => status.delivery?.isPickup == true ? 3 : 4,
-      'dispatched' => 3,
-      'ready' when status.isPickup => 3,
-      'preparing' || 'ready' => 2,
-      _ when status.state == 'approved' => 1,
+    final stage = directOrderStage(status.state, status.fulfillmentStatus);
+    final currentStep = switch (stage) {
+      DirectOrderStage.completed => 2,
+      DirectOrderStage.paid => 1,
       _ => 0,
     };
     final steps = <(IconData, String)>[
-      (Icons.receipt_long_outlined, _copy.progressOrderConfirmed),
-      (Icons.account_balance_wallet_outlined, _copy.progressPaymentConfirmed),
-      (Icons.restaurant_outlined, _copy.progressPreparing),
-      if (!status.isPickup)
-        (Icons.delivery_dining_outlined, _copy.progressGrabHandoff),
-      (
-        Icons.check_circle_outline_rounded,
-        status.isPickup ? _copy.pickupComplete : _copy.progressCompleted,
-      ),
+      (Icons.schedule_outlined, _copy.waitingConfirmation),
+      (Icons.account_balance_wallet_outlined, _copy.paymentCompleted),
+      (Icons.check_circle_outline_rounded, _copy.fulfillmentCompleted),
     ];
     return Card(
       key: const Key('direct_order_customer_progress'),
@@ -1970,7 +2216,9 @@ class _DirectOrderStorefrontScreenState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              _copy.quoteReady,
+              status.state == 'approved'
+                  ? _copy.paymentCompleted
+                  : _copy.quoteReady,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
@@ -1983,15 +2231,12 @@ class _DirectOrderStorefrontScreenState
                         ? _copy.storePrepaysDriver
                         : _copy.customerPaysDriver),
             ),
-            if (!status.isPickup &&
-                quote.deliveryPaymentMode == 'store_prepaid')
-              _amountRow(_copy.deliveryFee, quote.deliveryFeeTotal),
-            if (!status.isPickup)
-              Text(
-                quote.deliveryPaymentMode == 'store_prepaid'
-                    ? _copy.prepaidHelp
-                    : _copy.customerPaysDriverHelp,
-              ),
+            _amountRow(_copy.deliveryFee, quote.deliveryFeeTotal),
+            Text(
+              quote.deliveryPaymentMode == 'customer_direct' && !status.isPickup
+                  ? _copy.deliveryFeeSeparate
+                  : _copy.deliveryFeeIncluded,
+            ),
             const Divider(height: 24),
             _amountRow(_copy.finalTotal, quote.finalTotal, strong: true),
             _amountRow(_copy.includedVat, quote.vatTotal),

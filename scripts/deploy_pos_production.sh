@@ -402,6 +402,8 @@ preflight() {
       fail "Missing public-receipt Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/direct-order-public/index.ts" ]] ||
       fail "Missing direct-order-public Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/index.ts" ]] ||
+      fail "Missing direct-order-notification-dispatcher Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -520,6 +522,18 @@ run_checks() {
   run deno test --config \
     "$ROOT_DIR/supabase/functions/direct-order-public/deno.json" \
     "$ROOT_DIR/supabase/functions/direct-order-public/index_test.ts"
+  run deno fmt --check \
+    "$ROOT_DIR/supabase/functions/_shared/direct_order_push.ts" \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher"
+  run deno lint \
+    "$ROOT_DIR/supabase/functions/_shared/direct_order_push.ts" \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher"
+  run deno check --config \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/deno.json" \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/index.ts"
+  run deno test --config \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/deno.json" \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/index_test.ts"
 
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
@@ -909,6 +923,8 @@ deploy_pos_edge_functions() {
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy direct-order-public \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy direct-order-notification-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   # Retired endpoints must replace any previously deployed active handlers.
   run supabase functions deploy deliberry-webhook \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
@@ -961,6 +977,22 @@ verify_emergency_dispatcher_readiness() {
   [[ "$status" == "401" ]] ||
     fail "Emergency fulfilment dispatcher readiness returned HTTP $status instead of 401."
   printf 'Emergency fulfilment dispatcher secrets and auth gate verified.\n'
+}
+
+verify_direct_order_dispatcher_readiness() {
+  log "Direct order customer notification dispatcher readiness"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '+ POST direct-order-notification-dispatcher without authorization; require HTTP 401\n'
+    return 0
+  fi
+  local status
+  status="$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -X POST \
+    "$SUPABASE_URL/functions/v1/direct-order-notification-dispatcher" \
+    -H 'Content-Type: application/json' --data '{}')" ||
+    fail "Could not reach direct order customer notification dispatcher."
+  [[ "$status" == "401" ]] ||
+    fail "Direct order notification dispatcher returned HTTP $status instead of 401."
+  printf 'Direct order customer notification dispatcher auth gate verified.\n'
 }
 
 verify_remote_allowed_origin() {
@@ -1073,6 +1105,7 @@ main() {
   verify_deliberry_retirement_readiness
   verify_remote_allowed_origin
   verify_emergency_dispatcher_readiness
+  verify_direct_order_dispatcher_readiness
   apply_migration
   local_flutter_build
   deploy_vercel

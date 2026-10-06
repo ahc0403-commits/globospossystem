@@ -5,6 +5,7 @@ import {
   type DirectOrderDependencies,
   directOrderDinerCount,
   directOrderLocale,
+  directOrderPushSubscriptionArgs,
   directOrderSecretKeyName,
   normalizeRpcError,
   resolveProjectSecretKey,
@@ -323,6 +324,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "status_v3",
       "orders_v2",
       "orders_v3",
+      "push_subscription",
       "message",
       "cancel",
       "proof_upload_url",
@@ -461,7 +463,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    105,
+    110,
     "registered SQL error count",
   );
   assertEquals(
@@ -650,5 +652,46 @@ Deno.test("diner count accepts whole people and rejects missing or invalid value
       rejected = true;
     }
     assertEquals(rejected, true, "invalid count rejected");
+  }
+});
+
+Deno.test("customer push registration validates ownership arguments without forwarding raw secrets", async () => {
+  const body = {
+    session_id: "d1000000-0000-4000-8000-000000000001",
+    device_id: "d1000000-0000-4000-8000-000000000002",
+    secret: "s".repeat(43),
+    locale: "ko",
+    enabled: true,
+    token: "fixture_token_0123456789",
+  };
+  const args = await directOrderPushSubscriptionArgs(body);
+  assertEquals(args.p_session_id, body.session_id, "session identity");
+  assertEquals(String(args.p_secret_hash).length, 64, "hashed session proof");
+  assertEquals("secret" in args, false, "raw secret excluded");
+  assertEquals(args.p_token, body.token, "token bound to validated session");
+  assertEquals(
+    (await directOrderPushSubscriptionArgs({
+      ...body,
+      enabled: false,
+      token: undefined,
+    })).p_token,
+    null,
+    "unsubscribe needs no token",
+  );
+  for (
+    const invalid of [
+      { ...body, enabled: "true" },
+      { ...body, token: "short" },
+      { ...body, locale: "xx" },
+      { ...body, device_id: "bad" },
+    ]
+  ) {
+    let status = 0;
+    try {
+      await directOrderPushSubscriptionArgs(invalid);
+    } catch (error) {
+      if (error instanceof SafeHttpError) status = error.status;
+    }
+    assertEquals(status, 400, "invalid push input rejected");
   }
 });

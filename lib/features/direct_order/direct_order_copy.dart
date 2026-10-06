@@ -1,3 +1,5 @@
+import 'direct_order_stage.dart';
+
 class DirectOrderCopy {
   const DirectOrderCopy(this.languageCode);
 
@@ -1131,6 +1133,7 @@ class DirectOrderCopy {
     'approved' => approved,
     'rejected' => rejected,
     'cancelled' => cancelled,
+    'expired' => expired,
     'pending' => pending,
     'preparing' => _pick('조리 중', 'Đang làm', 'Preparing'),
     'ready' => _pick('픽업 준비', 'Sẵn sàng', 'Ready'),
@@ -1161,5 +1164,147 @@ class DirectOrderCopy {
     '회계 승인 전에는 외부 주문을 활성화할 수 없습니다.',
     'Không thể bật trước khi kế toán phê duyệt.',
     'The storefront cannot be enabled before accounting approval.',
+  );
+  String get waitingConfirmation =>
+      _pick('확인 대기', 'Chờ xác nhận', 'Awaiting confirmation');
+  String get paymentCompleted =>
+      _pick('결제 완료', 'Đã thanh toán', 'Payment completed');
+  String get fulfillmentCompleted => _pick('완료', 'Hoàn tất', 'Completed');
+  String get exceptionOrders => _pick(
+    '취소·거절·만료',
+    'Hủy · Từ chối · Hết hạn',
+    'Cancelled · Rejected · Expired',
+  );
+  String get advancedStatuses =>
+      _pick('상세 상태', 'Trạng thái chi tiết', 'Detailed statuses');
+  String stageLabel(DirectOrderStage stage) => switch (stage) {
+    DirectOrderStage.waiting => waitingConfirmation,
+    DirectOrderStage.paid => paymentCompleted,
+    DirectOrderStage.completed => fulfillmentCompleted,
+    DirectOrderStage.exception => exceptionOrders,
+  };
+  String get expired => _pick('만료', 'Hết hạn', 'Expired');
+  String get orderDetails =>
+      _pick('주문 상세보기', 'Chi tiết đơn hàng', 'Order details');
+  String get orderNumber => _pick('주문번호', 'Mã đơn hàng', 'Order number');
+  String get orderTime => _pick('주문시간', 'Thời gian đặt', 'Order time');
+  String get totalPaid => _pick('총 결제금액', 'Tổng đã thanh toán', 'Total paid');
+  String get itemRequest =>
+      _pick('메뉴 요청사항', 'Yêu cầu cho món', 'Item instructions');
+  String get addItemRequest =>
+      _pick('요청사항 추가/수정', 'Thêm / sửa yêu cầu', 'Add / edit instructions');
+  String get itemRequestHint => _pick(
+    '예: 파 제외, 새우 제외, 소스 제외',
+    'Ví dụ: không hành, không tôm, không sốt',
+    'E.g. no spring onions, no shrimp, no sauce',
+  );
+  String get itemRequestHelp => _pick(
+    '이 메뉴의 전체 수량에 적용됩니다.',
+    'Áp dụng cho toàn bộ số lượng món này.',
+    'Applies to all quantities of this item.',
+  );
+  String get deliveryFeeSeparate => _pick(
+    '기사에게 별도 지급 · 매장 결제에 미포함',
+    'Trả riêng cho tài xế · không gồm trong thanh toán cửa hàng',
+    'Paid separately to the driver · excluded from store payment',
+  );
+  String get deliveryFeeIncluded => _pick(
+    '매장 결제금액에 포함',
+    'Đã gồm trong thanh toán cửa hàng',
+    'Included in store payment',
+  );
+  String get deliveryFeePending => _pick(
+    '배송비 미확정',
+    'Chưa xác định phí giao hàng',
+    'Delivery fee not confirmed',
+  );
+  String get refundedAmount => _pick('환불액', 'Số tiền hoàn', 'Amount refunded');
+  String get noItemSnapshot => _pick(
+    '메뉴 상세를 확인할 수 없습니다. 매장에 문의해 주세요.',
+    'Không có chi tiết món. Vui lòng liên hệ cửa hàng.',
+    'Item details are unavailable. Please contact the store.',
+  );
+  String get messageTemplates =>
+      _pick('메시지 템플릿', 'Mẫu tin nhắn', 'Message templates');
+  String get receiptTemplate =>
+      _pick('주문 접수 확인', 'Xác nhận nhận đơn', 'Order received');
+  String get quoteTemplate =>
+      _pick('견적 안내', 'Thông báo báo giá', 'Quote information');
+  String get addressTemplate => _pick(
+    '배송 정보 확인',
+    'Xác nhận thông tin giao hàng',
+    'Confirm delivery details',
+  );
+  String get feeTemplate =>
+      _pick('배송비 확인', 'Xác nhận phí giao hàng', 'Confirm delivery fee');
+  String get templateHelp => _pick(
+    '초안을 수정한 뒤 전송하세요. 영어 응대 시 Google Translate에 복사할 수 있습니다.',
+    'Chỉnh sửa bản nháp trước khi gửi. Có thể sao chép sang Google Translate.',
+    'Edit the draft before sending. You can copy it into Google Translate.',
+  );
+  String get copyDraft => _pick('초안 복사', 'Sao chép bản nháp', 'Copy draft');
+  String get shop => _pick('매장', 'Cửa hàng', 'Store');
+  String get pickupReadyNotice => _pick(
+    '고객님의 주문 준비가 완료되었습니다. 매장 카운터에서 수령해 주세요.',
+    'Đơn hàng đã chuẩn bị xong. Vui lòng nhận tại quầy cửa hàng.',
+    'Your order is ready. Please collect it at the store counter.',
+  );
+  String get driverHandoffNotice => _pick(
+    '고객님의 주문이 배달 기사에게 전달되었으며 현재 배송 중입니다.',
+    'Đơn hàng đã được giao cho tài xế và đang trên đường giao.',
+    'Your order has been handed to the delivery driver and is on its way.',
+  );
+  String get customerNotifications =>
+      _pick('주문 알림', 'Thông báo đơn hàng', 'Order notifications');
+  String get enableCustomerNotifications => _pick(
+    '주문 알림 받기',
+    'Nhận thông báo đơn hàng',
+    'Enable order notifications',
+  );
+  String get disableCustomerNotifications => _pick(
+    '주문 알림 해제',
+    'Tắt thông báo đơn hàng',
+    'Disable order notifications',
+  );
+  String get pushReady => _pick(
+    '화면을 닫아도 주문 알림을 받을 수 있습니다.',
+    'Có thể nhận thông báo ngay cả khi đóng trang.',
+    'You can receive order notifications after closing the page.',
+  );
+  String get pushHelp => _pick(
+    '픽업 준비·기사 인계 시 알려드립니다. iPhone은 홈 화면에 추가한 뒤 알림을 허용해 주세요.',
+    'Thông báo khi món sẵn sàng hoặc giao cho tài xế. Trên iPhone, thêm vào Màn hình chính rồi cho phép thông báo.',
+    'Get notified when pickup is ready or the driver collects your order. On iPhone, add this app to your Home Screen and allow notifications.',
+  );
+  String get pushUnavailable => _pick(
+    '현재 환경에서는 앱 밖 알림을 사용할 수 없습니다. 주문 화면과 채팅에서 확인해 주세요.',
+    'Không thể nhận thông báo ngoài trang trong môi trường này. Kiểm tra trạng thái và trò chuyện.',
+    'Background notifications are unavailable here. Check the order screen and chat.',
+  );
+  String get pushDenied => _pick(
+    '알림 권한이 꺼져 있습니다. 브라우저 설정에서 허용해 주세요.',
+    'Thông báo bị chặn. Cho phép trong cài đặt trình duyệt.',
+    'Notifications are blocked. Allow them in your browser settings.',
+  );
+  String get pushFailed => _pick(
+    '알림 연결에 실패했습니다. 다시 시도해 주세요.',
+    'Không thể kết nối thông báo. Vui lòng thử lại.',
+    'Notification setup failed. Please try again.',
+  );
+  String get pushDisabled => _pick(
+    '앱 밖 주문 알림이 꺼져 있습니다.',
+    'Thông báo ngoài trang đang tắt.',
+    'Background order notifications are off.',
+  );
+
+  String get replaceDraft => _pick(
+    '작성 중인 초안을 템플릿으로 바꿀까요?',
+    'Thay bản nháp đang viết bằng mẫu?',
+    'Replace the current draft with this template?',
+  );
+  String get itemPricesBeforeTax => _pick(
+    '메뉴별 단가와 금액은 세전입니다. 세금은 아래 최종 금액에 포함됩니다.',
+    'Đơn giá và số tiền từng món chưa gồm thuế. Thuế đã gồm trong tổng cuối cùng bên dưới.',
+    'Item prices and amounts are before tax. Tax is included in the final total below.',
   );
 }

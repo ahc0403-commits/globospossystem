@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+FEEDBACK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DIRECT_ORDER_CUSTOMER_EXPERIENCE_TEST=1 bash "$FEEDBACK_ROOT/test/direct_order_delivery_fallback_sql_test.sh"
