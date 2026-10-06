@@ -33,6 +33,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
     this.statusSafetyRefreshJitter = const Duration(seconds: 3),
     this.pollRandom,
     this.now = DateTime.now,
+    this.pickProofImage,
   });
 
   final String slug;
@@ -41,6 +42,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
   final Duration statusSafetyRefreshJitter;
   final math.Random? pollRandom;
   final DateTime Function() now;
+  final Future<XFile?> Function()? pickProofImage;
 
   @override
   State<DirectOrderStorefrontScreen> createState() =>
@@ -60,6 +62,14 @@ class _DirectOrderStorefrontScreenState
   final _detailController = TextEditingController();
   final _noteController = TextEditingController();
   final _messageController = TextEditingController();
+  final _menuScroll = ScrollController();
+  final _categoryScroll = ScrollController();
+  final _categoryKeys = <String, GlobalKey>{};
+  String? _selectedCategoryId;
+  final _proofAttempts = <String, DirectOrderProofAttempt>{};
+  final _proofErrors = <String, String>{};
+  final _proofRefreshFailures = <String>{};
+  String? _proofBusyRequestId;
   final _money = NumberFormat.currency(
     locale: 'vi_VN',
     symbol: '₫',
@@ -81,6 +91,7 @@ class _DirectOrderStorefrontScreenState
   bool _submitting = false;
   bool _rememberAddress = false;
   bool _proofUploading = false;
+  bool _proofSelecting = false;
   bool _sendingMessage = false;
   bool _refreshingStatus = false;
   bool _pausedByServer = false;
@@ -115,7 +126,51 @@ class _DirectOrderStorefrontScreenState
     _detailController.dispose();
     _noteController.dispose();
     _messageController.dispose();
+    _menuScroll.dispose();
+    _categoryScroll.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _revealSelectedCategory();
+  }
+
+  List<DirectOrderCategory> get _menuCategories {
+    final storefront = _storefront;
+    if (storefront == null) return const [];
+    final populated = storefront.items.map((item) => item.categoryId).toSet();
+    return storefront.categories
+        .where((category) => populated.contains(category.id))
+        .toList();
+  }
+
+  void _reconcileCategories() {
+    if (_selectedCategoryId != null &&
+        !_menuCategories.any((c) => c.id == _selectedCategoryId)) {
+      _selectedCategoryId = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _menuScroll.hasClients) _menuScroll.jumpTo(0);
+      });
+    }
+    _revealSelectedCategory();
+  }
+
+  void _revealSelectedCategory() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _view != _CustomerView.menu) return;
+      final target =
+          _categoryKeys[_selectedCategoryId ?? 'all']?.currentContext;
+      if (target != null) Scrollable.ensureVisible(target, alignment: 0.5);
+    });
+  }
+
+  void _selectCategory(String? id) {
+    if (_selectedCategoryId == id) return;
+    setState(() => _selectedCategoryId = id);
+    if (_menuScroll.hasClients) _menuScroll.jumpTo(0);
+    _revealSelectedCategory();
   }
 
   @override
@@ -222,6 +277,7 @@ class _DirectOrderStorefrontScreenState
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _storefront = storefront;
+        _reconcileCategories();
         _session = session;
         _savedAddress = saved;
         _rememberAddress = saved != null;
@@ -261,6 +317,7 @@ class _DirectOrderStorefrontScreenState
         if (!mounted) return;
         setState(() {
           _storefront = storefront;
+          _reconcileCategories();
           _pausedByServer = false;
         });
       } catch (error) {
@@ -716,70 +773,193 @@ class _DirectOrderStorefrontScreenState
     _snack(enabled ? _copy.paymentAlertEnabled : _copy.paymentAlertDisabled);
   }
 
-  Future<void> _uploadProof() async {
+  bool _canSendProof(DirectOrderStatus status) {
+    final quote = status.quote;
+    if (quote == null) return false;
+    if (status.state == 'awaiting_payment_review' &&
+        quote.status == 'locked' &&
+        status.proofReview?.canResubmit == true) {
+      return true;
+    }
+    return status.state == 'quoted' &&
+        quote.status == 'active' &&
+        (quote.expiresAt == null || quote.expiresAt!.isAfter(widget.now()));
+  }
+
+  DirectOrderProofAttempt? _proofAttemptFor(DirectOrderStatus status) {
+    final attempt = _proofAttempts[status.requestId];
+    return attempt?.quoteId == status.quote?.id &&
+            attempt?.reviewRequestId ==
+                (status.proofReview?.canResubmit == true
+                    ? status.proofReview?.id
+                    : null)
+        ? attempt
+        : null;
+  }
+
+  Future<void> _uploadProof({bool retry = false}) async {
     final session = _session;
     final status = _status;
-    if (session == null || status == null) return;
-    final image = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1800,
-      imageQuality: 88,
-    );
-    if (image == null) return;
-    final bytes = await image.readAsBytes();
-    if (!mounted) return;
-    final shouldUpload = await showDirectOrderDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          status.proofReview?.canResubmit == true
-              ? _copy.replaceProof
-              : _copy.attachProof,
-        ),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 420, maxWidth: 420),
-          child: Image.memory(bytes, fit: BoxFit.contain),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(
+    if (_proofUploading || session == null || status?.quote == null) return;
+    var attempt =
+        _proofAttemptFor(status!) ??
+        (retry ? _proofAttempts[status.requestId] : null);
+    if ((!retry || attempt == null) && !_canSendProof(status)) return;
+    setState(() {
+      _proofUploading = true;
+      _proofSelecting = !retry || attempt == null;
+      _proofBusyRequestId = status.requestId;
+      if (retry) _proofErrors.remove(status.requestId);
+      _statusMutationRevision++;
+    });
+    try {
+      if (!retry || attempt == null) {
+        final image =
+            await (widget.pickProofImage?.call() ??
+                ImagePicker().pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 1800,
+                  imageQuality: 88,
+                ));
+        if (image == null) return;
+        final bytes = await image.readAsBytes();
+        if (!mounted || _status?.requestId != status.requestId) return;
+        final extension = image.name.split('.').last.toLowerCase();
+        final mimeType =
+            image.mimeType ??
+            switch (extension) {
+              'png' => 'image/png',
+              'webp' => 'image/webp',
+              _ => 'image/jpeg',
+            };
+        if (bytes.isEmpty ||
+            bytes.length > 5242880 ||
+            !const {
+              'image/jpeg',
+              'image/png',
+              'image/webp',
+            }.contains(mimeType)) {
+          throw const DirectOrderException('INVALID_PROOF');
+        }
+        final shouldUpload = await showDirectOrderDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(
               status.proofReview?.canResubmit == true
                   ? _copy.replaceProof
                   : _copy.attachProof,
             ),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '#${status.referenceCode} · ${_money.format(status.quote!.finalTotal)}',
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: Image.memory(bytes, fit: BoxFit.contain),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                key: const Key('direct_cancel_payment_proof'),
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(
+                  MaterialLocalizations.of(context).cancelButtonLabel,
+                ),
+              ),
+              FilledButton(
+                key: const Key('direct_confirm_payment_proof'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(_copy.attachProof),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-    if (shouldUpload != true || !mounted) return;
-    final extension = image.name.split('.').last.toLowerCase();
-    final mimeType =
-        image.mimeType ??
-        switch (extension) {
-          'png' => 'image/png',
-          'webp' => 'image/webp',
-          _ => 'image/jpeg',
-        };
-    setState(() => _proofUploading = true);
-    try {
-      await widget.service.uploadPaymentProof(
+        );
+        if (shouldUpload != true ||
+            !mounted ||
+            _status?.requestId != status.requestId ||
+            _status?.quote?.id != status.quote!.id ||
+            _status?.proofReview?.id != status.proofReview?.id ||
+            !_canSendProof(_status!)) {
+          return;
+        }
+        attempt = DirectOrderProofAttempt(
+          requestId: status.requestId,
+          quoteId: status.quote!.id,
+          reviewRequestId: status.proofReview?.canResubmit == true
+              ? status.proofReview?.id
+              : null,
+          bytes: bytes,
+          mimeType: mimeType,
+        );
+        _proofAttempts[status.requestId] = attempt;
+        _proofErrors.remove(status.requestId);
+      }
+      if (mounted) setState(() => _proofSelecting = false);
+      await widget.service.resumePaymentProof(
         session: session,
-        requestId: status.requestId,
-        quoteId: status.quote!.id,
-        reviewRequestId: status.proofReview?.id,
-        bytes: bytes,
-        mimeType: mimeType,
+        attempt: attempt,
+        allowUpload:
+            _status?.requestId == status.requestId &&
+            _proofAttemptFor(_status!) == attempt &&
+            _canSendProof(_status!),
+        onChanged: () {
+          if (mounted) setState(() {});
+        },
       );
-      await _refreshStatus();
+      await _refreshProofStatus(session, status.requestId);
     } catch (error) {
-      _showError(error);
+      if (mounted) {
+        if (attempt == null) _showError(error);
+        setState(
+          () => _proofErrors[status.requestId] = error is DirectOrderException
+              ? error.code
+              : 'PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE',
+        );
+        // Reconcile a changed quote, staff approval or another device's upload.
+        await _refreshProofStatus(session, status.requestId);
+      }
     } finally {
-      if (mounted) setState(() => _proofUploading = false);
+      if (mounted) {
+        setState(() {
+          _proofUploading = false;
+          _proofSelecting = false;
+          _proofBusyRequestId = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshProofStatus(
+    DirectOrderSession session,
+    String requestId,
+  ) async {
+    final revision = _statusMutationRevision;
+    try {
+      final latest = await widget.service.fetchStatus(
+        session: session,
+        requestId: requestId,
+      );
+      if (!mounted ||
+          _status?.requestId != requestId ||
+          revision != _statusMutationRevision) {
+        return;
+      }
+      setState(() {
+        _statusMutationRevision++;
+        _status = latest;
+        _proofRefreshFailures.remove(requestId);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _proofRefreshFailures.add(requestId));
     }
   }
 
@@ -1004,6 +1184,7 @@ class _DirectOrderStorefrontScreenState
                 hasStatus: _status != null,
                 onSelected: _selectView,
               ),
+              if (_view == _CustomerView.menu) _buildCategoryBar(),
               Expanded(child: content),
             ],
           ),
@@ -1012,11 +1193,81 @@ class _DirectOrderStorefrontScreenState
     );
   }
 
+  Widget _buildCategoryBar() => LayoutBuilder(
+    builder: (context, constraints) {
+      Widget chip(String? id, String name) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Center(
+          key: _categoryKeys.putIfAbsent(id ?? 'all', GlobalKey.new),
+          child: Tooltip(
+            message: name,
+            child: ChoiceChip(
+              key: Key('direct_category_${id ?? 'all'}'),
+              selected: _selectedCategoryId == id,
+              onSelected: (_) => _selectCategory(id),
+              materialTapTargetSize: MaterialTapTargetSize.padded,
+              label: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 220),
+                child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ),
+        ),
+      );
+      void scroll(double direction) {
+        if (!_categoryScroll.hasClients) return;
+        _categoryScroll.animateTo(
+          (_categoryScroll.offset + direction * 280).clamp(
+            0,
+            _categoryScroll.position.maxScrollExtent,
+          ),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+
+      return SizedBox(
+        height: 64,
+        child: Row(
+          children: [
+            if (constraints.maxWidth >= 600)
+              IconButton(
+                tooltip: _copy.previousCategories,
+                onPressed: () => scroll(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+            Expanded(
+              child: ListView(
+                key: const Key('direct_category_bar'),
+                controller: _categoryScroll,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  chip(null, _copy.allCategories),
+                  for (final category in _menuCategories)
+                    chip(category.id, category.localizedName(_languageCode)),
+                ],
+              ),
+            ),
+            if (constraints.maxWidth >= 600)
+              IconButton(
+                tooltip: _copy.nextCategories,
+                onPressed: () => scroll(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+
   Widget _buildMenu() {
     final storefront = _storefront!;
     return Stack(
       children: [
         ListView(
+          key: const PageStorageKey('direct_menu_list'),
+          controller: _menuScroll,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 156),
           children: [
             SegmentedButton<DirectOrderFulfillmentType>(
@@ -1046,7 +1297,16 @@ class _DirectOrderStorefrontScreenState
                   '${_storefront!.storeAddress}\n${_copy.pickupHelp}',
                 ),
               ),
-            for (final category in storefront.categories) ...[
+            if (_menuCategories.isEmpty) ...[
+              Text(_copy.emptyMenu),
+              TextButton(
+                onPressed: () => _selectView(_CustomerView.menu),
+                child: Text(_copy.refresh),
+              ),
+            ],
+            for (final category in _menuCategories.where(
+              (c) => _selectedCategoryId == null || c.id == _selectedCategoryId,
+            )) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
                 child: Text(
@@ -1698,7 +1958,10 @@ class _DirectOrderStorefrontScreenState
 
   Widget _quoteCard(DirectOrderStatus status) {
     final quote = status.quote!;
-    final canPay = status.state == 'quoted' && quote.status == 'active';
+    final canPay =
+        status.state == 'quoted' &&
+        _canSendProof(status) &&
+        _proofAttemptFor(status)?.complete != true;
     final canResubmit = status.proofReview?.canResubmit == true;
     return Card(
       child: Padding(
@@ -1747,24 +2010,112 @@ class _DirectOrderStorefrontScreenState
                 ),
               ),
             ],
-            if (canPay || canResubmit) ...[
+            if (canPay) ...[
               const SizedBox(height: 14),
-              FilledButton.icon(
+              OutlinedButton.icon(
                 key: const Key('direct_open_payment_details'),
-                onPressed: _proofUploading
-                    ? null
-                    : () => _showPaymentDetails(status),
-                icon: Icon(
-                  canResubmit
-                      ? Icons.refresh_rounded
-                      : Icons.account_balance_wallet_outlined,
-                ),
-                label: Text(canResubmit ? _copy.replaceProof : _copy.payNow),
+                onPressed: () => _showPaymentDetails(status),
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                label: Text(_copy.paymentDetails),
               ),
             ],
+            _buildProofControls(status),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildProofControls(DirectOrderStatus status) {
+    final saved = _proofAttempts[status.requestId];
+    final attempt =
+        _proofAttemptFor(status) ??
+        (saved?.outcomeUncertain == true ? saved : null);
+    final busy = _proofUploading && _proofBusyRequestId == status.requestId;
+    final canSend =
+        _canSendProof(status) &&
+        (attempt == null || _proofAttemptFor(status) == attempt);
+    if (!const {'quoted', 'awaiting_payment_review'}.contains(status.state)) {
+      return const SizedBox.shrink();
+    }
+    final sent =
+        (attempt?.complete == true &&
+            const {
+              'quoted',
+              'awaiting_payment_review',
+            }.contains(status.state)) ||
+        (status.state == 'awaiting_payment_review' &&
+            status.proofReview?.canResubmit != true);
+    if (!canSend && !sent && attempt?.outcomeUncertain != true) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 12),
+        if (sent) ...[
+          Text(_copy.proofSent, key: const Key('direct_proof_sent')),
+          if (_proofRefreshFailures.contains(status.requestId)) ...[
+            Text(_copy.proofStatusUnavailable),
+            TextButton(
+              key: const Key('direct_refresh_proof_status'),
+              onPressed: () => _refreshProofStatus(_session!, status.requestId),
+              child: Text(_copy.refreshProofStatus),
+            ),
+          ],
+        ] else ...[
+          if (attempt != null && !busy) ...[
+            SizedBox(
+              height: 110,
+              child: Image.memory(attempt.bytes, fit: BoxFit.contain),
+            ),
+            if (_proofErrors[status.requestId] != null)
+              Text(
+                _copy.errorMessage(_proofErrors[status.requestId]!),
+                key: const Key('direct_proof_error'),
+              ),
+            if (attempt.outcomeUncertain) Text(_copy.checkingProof),
+          ],
+          FilledButton.icon(
+            key: Key(
+              attempt == null
+                  ? 'direct_upload_payment_proof'
+                  : 'direct_retry_payment_proof',
+            ),
+            onPressed: _proofUploading
+                ? null
+                : () => _uploadProof(retry: attempt != null),
+            icon: busy && !_proofSelecting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add_photo_alternate_outlined),
+            label: Text(
+              busy
+                  ? (_proofSelecting
+                        ? _copy.selectingProof
+                        : attempt?.stage == DirectOrderProofStage.confirming
+                        ? _copy.checkingProof
+                        : _copy.proofUploading)
+                  : attempt != null
+                  ? _copy.retryProof
+                  : status.proofReview?.canResubmit == true
+                  ? _copy.replaceProof
+                  : _copy.attachProof,
+            ),
+          ),
+          if (attempt != null && !attempt.outcomeUncertain && canSend)
+            TextButton(
+              key: const Key('direct_change_payment_proof'),
+              onPressed: _proofUploading ? null : () => _uploadProof(),
+              child: Text(_copy.changeProof),
+            ),
+          if (status.proofReview?.canResubmit != true)
+            Text(_copy.proofOnlyHelp),
+        ],
+      ],
     );
   }
 
@@ -1838,19 +2189,6 @@ class _DirectOrderStorefrontScreenState
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: Text(_copy.close),
-          ),
-          FilledButton.icon(
-            key: const Key('direct_upload_payment_proof'),
-            onPressed: _proofUploading
-                ? null
-                : () {
-                    Navigator.pop(dialogContext);
-                    _uploadProof();
-                  },
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: Text(
-              isResubmission ? _copy.replaceProof : _copy.attachProof,
-            ),
           ),
         ],
       ),

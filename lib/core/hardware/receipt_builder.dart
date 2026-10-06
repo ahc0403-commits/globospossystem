@@ -31,6 +31,7 @@ class ReceiptBuilder {
     String? directReferenceCode,
     int? dinerCount,
     String? fulfillmentMethod,
+    String? directOrderReference,
     double refundedTotal = 0,
   }) async {
     final profile = await CapabilityProfile.load();
@@ -76,26 +77,6 @@ class ReceiptBuilder {
           generator.text(
             _escText(line),
             styles: const PosStyles(align: PosAlign.center),
-          ),
-        );
-      }
-    }
-    if (fulfillmentMethod != null) {
-      bytes.addAll(
-        generator.text(
-          fulfillmentMethod == 'pickup' ? 'TU DEN LAY' : 'GIAO HANG',
-        ),
-      );
-      if (dinerCount != null) {
-        bytes.addAll(
-          generator.text('So nguoi: $dinerCount / Dung cu: $dinerCount bo'),
-        );
-      }
-      if (refundedTotal > 0) {
-        bytes.addAll(generator.text('Da hoan: ${_formatVnd(refundedTotal)}'));
-        bytes.addAll(
-          generator.text(
-            'Thuc nhan: ${_formatVnd(totalAmount - refundedTotal)}',
           ),
         );
       }
@@ -154,6 +135,31 @@ class ReceiptBuilder {
       bytes.addAll(generator.text(_escText('Ban: $tableNumber')));
     }
     bytes.addAll(generator.hr());
+    if (directOrderReference != null &&
+        directOrderReference != directReferenceCode) {
+      bytes.addAll(generator.text('Ma don: ${_escText(directOrderReference)}'));
+    }
+    if (fulfillmentMethod != null ||
+        directFulfillmentType != null ||
+        dinerCount != null ||
+        directOrderReference != null) {
+      bytes.addAll(
+        _buildPackingHeader(
+          generator,
+          dinerCount,
+          fulfillmentMethod == directFulfillmentType ? null : fulfillmentMethod,
+        ),
+      );
+      if (refundedTotal > 0) {
+        bytes.addAll(generator.text('Da hoan: ${_formatVnd(refundedTotal)}'));
+        bytes.addAll(
+          generator.text(
+            'Thuc nhan: ${_formatVnd(totalAmount - refundedTotal)}',
+          ),
+        );
+      }
+      bytes.addAll(generator.hr());
+    }
 
     bytes.addAll(
       generator.row([
@@ -353,11 +359,13 @@ class ReceiptBuilder {
       bytes.addAll(generator.text(_escText(formattedAddress)));
       bytes.addAll(generator.text('Chi tiet: ${_escText(detailAddress)}'));
     }
-    if (dinerCount != null) {
-      bytes.addAll(
-        generator.text('So nguoi: $dinerCount / Dung cu: $dinerCount bo'),
-      );
-    }
+    bytes.addAll(
+      _buildPackingHeader(
+        generator,
+        dinerCount,
+        isPickup ? 'pickup' : 'delivery',
+      ),
+    );
     if (refundedTotal > 0) {
       bytes.addAll(generator.text('Da hoan: ${_formatVnd(refundedTotal)}'));
       bytes.addAll(
@@ -462,6 +470,65 @@ class ReceiptBuilder {
     ),
   ]);
 
+  static List<int> _buildPackingHeader(
+    Generator generator,
+    int? count,
+    String? method,
+  ) {
+    final bytes = <int>[];
+    if (method != null) {
+      bytes.addAll(
+        generator.text(method == 'pickup' ? 'TU DEN LAY' : 'GIAO HANG'),
+      );
+    }
+    if (count == null || count < 1 || count > 100) {
+      bytes.addAll(
+        generator.text(
+          'SO NGUOI: CHUA NHAP',
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      bytes.addAll(
+        generator.text(
+          'DUNG CU: CAN KIEM TRA',
+          styles: const PosStyles(bold: true, height: PosTextSize.size2),
+        ),
+      );
+    } else {
+      bytes.addAll(
+        generator.text('SO NGUOI: $count', styles: const PosStyles(bold: true)),
+      );
+      bytes.addAll(
+        generator.text(
+          'DUNG CU: $count BO',
+          styles: const PosStyles(bold: true, height: PosTextSize.size2),
+        ),
+      );
+    }
+    return bytes;
+  }
+
+  static List<int> _buildTicketPackingHeader(
+    Generator generator,
+    PrintTicket ticket,
+  ) {
+    if (ticket.fulfillmentMethod == null &&
+        ticket.directFulfillmentType == null &&
+        ticket.dinerCount == null &&
+        ticket.directOrderReference == null) {
+      return const [];
+    }
+    return [
+      if (ticket.directOrderReference != null)
+        ...generator.text('Ma don: ${_escText(ticket.directOrderReference!)}'),
+      ..._buildPackingHeader(
+        generator,
+        ticket.dinerCount,
+        ticket.fulfillmentMethod,
+      ),
+    ];
+  }
+
   static Future<List<int>> buildKitchenTicket(PrintTicket ticket) async {
     final driverReceipt = ticket.deliveryDriverReceipt;
     if (ticket.ticket == 'delivery_driver_receipt' && driverReceipt != null) {
@@ -501,20 +568,7 @@ class ReceiptBuilder {
       ),
     );
     bytes.addAll(generator.text(_escText('#${ticket.ticketCode}')));
-    if (ticket.fulfillmentMethod != null) {
-      bytes.addAll(
-        generator.text(
-          ticket.fulfillmentMethod == 'pickup' ? 'TU DEN LAY' : 'GIAO HANG',
-        ),
-      );
-      if (ticket.dinerCount != null) {
-        bytes.addAll(
-          generator.text(
-            'So nguoi: ${ticket.dinerCount} / Dung cu: ${ticket.dinerCount} bo',
-          ),
-        );
-      }
-    }
+    bytes.addAll(_buildTicketPackingHeader(generator, ticket));
     bytes.addAll(
       generator.text(
         _escText(
@@ -539,6 +593,7 @@ class ReceiptBuilder {
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
+    bytes.addAll(_buildTicketPackingHeader(generator, ticket));
     bytes.addAll(_buildTicketBody(generator, ticket));
     return bytes;
   }
@@ -566,6 +621,7 @@ class ReceiptBuilder {
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
+    bytes.addAll(_buildTicketPackingHeader(generator, ticket));
     bytes.addAll(
       _buildTicketBody(generator, ticket, finish: false, showPrices: true),
     );
@@ -598,6 +654,7 @@ class ReceiptBuilder {
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
+    bytes.addAll(_buildTicketPackingHeader(generator, ticket));
     bytes.addAll(_buildTicketBody(generator, ticket, compact: true));
     return bytes;
   }
@@ -950,6 +1007,7 @@ class PrintTicket {
     this.orderNotes,
     this.dinerCount,
     this.fulfillmentMethod,
+    this.directOrderReference,
     this.deliveryDriverReceipt,
     this.directFulfillmentType,
     this.directReferenceCode,
@@ -966,6 +1024,7 @@ class PrintTicket {
   final String? orderNotes;
   final int? dinerCount;
   final String? fulfillmentMethod;
+  final String? directOrderReference;
   final QueuedDeliveryDriverReceipt? deliveryDriverReceipt;
   final String? directFulfillmentType;
   final String? directReferenceCode;
@@ -997,8 +1056,9 @@ class PrintTicket {
           )
           .toList(),
       orderNotes: payload['order_notes']?.toString(),
-      dinerCount: (payload['diner_count'] as num?)?.toInt(),
+      dinerCount: _packingDinerCount(payload['diner_count']),
       fulfillmentMethod: payload['fulfillment_method']?.toString(),
+      directOrderReference: payload['direct_order_reference']?.toString(),
       deliveryDriverReceipt: ticket == 'delivery_driver_receipt'
           ? QueuedDeliveryDriverReceipt.fromPayload(payload)
           : null,
@@ -1115,6 +1175,7 @@ class QueuedPaymentReceipt {
     required this.changeAmount,
     this.dinerCount,
     this.fulfillmentMethod,
+    this.directOrderReference,
     this.refundedTotal = 0,
   });
 
@@ -1140,6 +1201,7 @@ class QueuedPaymentReceipt {
   final double changeAmount;
   final int? dinerCount;
   final String? fulfillmentMethod;
+  final String? directOrderReference;
   final double refundedTotal;
 
   factory QueuedPaymentReceipt.fromPayload(Map<String, dynamic> payload) {
@@ -1157,8 +1219,9 @@ class QueuedPaymentReceipt {
       directDeliveryPaymentMode: payload['direct_delivery_payment_mode']
           ?.toString(),
       directReferenceCode: payload['direct_reference_code']?.toString(),
-      dinerCount: (payload['diner_count'] as num?)?.toInt(),
+      dinerCount: _packingDinerCount(payload['diner_count']),
       fulfillmentMethod: payload['fulfillment_method']?.toString(),
+      directOrderReference: payload['direct_order_reference']?.toString(),
       refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       tableNumber: payload['table_number']?.toString() ?? '-',
@@ -1292,7 +1355,7 @@ class QueuedDeliveryDriverReceipt {
       deliveryPaymentMode:
           payload['direct_delivery_payment_mode']?.toString() ??
           'store_prepaid',
-      dinerCount: (payload['diner_count'] as num?)?.toInt(),
+      dinerCount: _packingDinerCount(payload['diner_count']),
       isPickup: payload['fulfillment_method'] == 'pickup',
       refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
@@ -1348,4 +1411,10 @@ class ReceiptItem {
   final int quantity;
   final double unitPrice;
   final bool isServiceItem;
+}
+
+int? _packingDinerCount(Object? value) {
+  if (value is! num || !value.isFinite || value != value.toInt()) return null;
+  final count = value.toInt();
+  return count >= 1 && count <= 100 ? count : null;
 }

@@ -205,6 +205,33 @@ for operation in consent refund dispatch offer_dispatch; do
  wait "$race_pid_b" || { cat "$PHOTO_TMP/$operation-b.log"; exit 1; }
 done
 run_sql "$PHOTO_ROOT/test/sql/direct_order_delivery_fallback_races_assert.sql"
+run_sql "$PHOTO_ROOT/test/fixtures/direct_order_receipt_packing_setup.sql" >/dev/null
+python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYPACKING'
+from pathlib import Path
+import sys
+root,tmp=map(Path,sys.argv[1:])
+s=(root/'supabase/migrations/20260710002000_receipt_print_queue.sql').read_text()
+a=s.index('CREATE OR REPLACE FUNCTION public.enqueue_receipt_print_job(')
+(tmp/'packing_enqueue.sql').write_text(s[a:s.index('$$;',a)+3])
+PYPACKING
+run_sql "$PHOTO_TMP/packing_enqueue.sql" >/dev/null
+run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_receipt_packing_context.sql" >/dev/null
+run_sql "$PHOTO_ROOT/supabase/migrations/20261006010000_direct_order_receipt_packing_context.sql" >/dev/null
+run_sql "$PHOTO_ROOT/supabase/tests/direct_order_receipt_packing_contract_test.sql"
+# The legacy fixture fixes auth.uid(); use the real JWT lookup semantics here.
+python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYVERIFY'
+from pathlib import Path
+import sys
+root,tmp=map(Path,sys.argv[1:])
+setup="""
+UPDATE public.users SET role='super_admin' WHERE auth_id=auth.uid();
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
+ SELECT NULLIF(current_setting('request.jwt.claim.sub',true),'')::uuid
+$$;
+"""
+(tmp/'packing_verify.sql').write_text(setup+(root/'scripts/verify_direct_order_receipt_packing_context.sql').read_text())
+PYVERIFY
+run_sql "$PHOTO_TMP/packing_verify.sql"
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

@@ -85,3 +85,17 @@ The local contract covers all customer `ko/vi/en` x cashier `ko/vi/en` pairs,
 all three kitchen/admin viewer locales, immediate re-render from the current
 locale, exact chat-original preservation across viewer locales, Edge/SQL
 allowlist rejection, and approval-time KO/VI/EN ticket snapshots.
+
+## 2026-10-06 customer and packing additions
+
+`DirectOrderCopy` localizes category All/empty/overflow directions, independent
+screenshot send/retry/change, picker/upload/reconciliation progress, accepted-photo
+status, status-refresh failure/retry, and the already-transferred hint in KO/VI/EN.
+Category names use the existing locale snapshot with IDs/selection unchanged.
+Failure messages use the current viewer locale; raw technical codes are hidden.
+Missing diner count now asks for a staff check. Staff/customer packing summaries
+continue to use N diners / N utensil sets, never menu quantity.
+
+Paper ESC/POS uses Vietnamese ASCII `SO NGUOI: N`, `DUNG CU: N BO`; missing counts
+use `CHUA NHAP` / `CAN KIEM TRA`. Digital receipt/PDF content retains its existing
+Vietnamese receipt policy (`Số người`, `Dụng cụ`), including 100 sets.

@@ -350,3 +350,35 @@ codes use the same localized unavailable fallback and are never shown raw.
 - Cashier detail returns request-time `name_ko/name_vi/name_en`; direct ticket
   list returns approval-time `name_ko/name_vi/name_en`. Staff Flutter selects
   among these using its current viewer locale and never request locale.
+
+## 2026-10-06 proof recovery and receipt packing
+
+V1/V2 proof commit share `verifyProofUpload`. A successful empty exact-name list
+returns 409 `PROOF_UPLOAD_INCOMPLETE`; list/download/blob-read failures return
+503 `PROOF_TEMPORARILY_UNAVAILABLE` and never remove the file. Only bytes read
+successfully and rejected by existing image validation are removed. Existing
+private Storage, MIME/5 MiB/dimension limits and SQL ownership checks remain.
+
+Flutter keeps a `DirectOrderProofAttempt` per order in screen memory. Lost Storage
+or commit responses reuse its original path/quote/review and call commit before
+uploading again. Only a definite missing object permits retransmitting to the same
+signed path. SDK `FunctionException` envelopes are normalized to the public code.
+Commit responses do not overwrite request state; current status is fetched with
+request/revision guards, so an approved order cannot regress to payment review.
+
+`direct_order_receipt_packing_context(p_store_id uuid,p_order_id uuid)` is an
+additive authenticated staff RPC, allowing cashier/admin/store_admin/brand_admin/
+super_admin with existing store authorization. It validates order/store ownership,
+returns SQL NULL for ordinary POS orders, and returns exactly `diner_count`
+(nullable integer 1..100), `fulfillment_method` and `direct_order_reference` for a
+linked direct order. It returns no customer/financial information and creates no
+job/payment. Flutter uses `DirectOrderStaffService.fetchOrderPackingContext` only
+at native print time; the atomic `PaymentService` file remains unchanged.
+
+Migration `20261006010000_direct_order_receipt_packing_context.sql` enriches new
+print payloads with the reference and new direct digital snapshots with the three
+packing fields. Combined digital snapshots are excluded. Print enrichment applies
+to all copy types for a linked direct order. BEFORE INSERT triggers do not update issued snapshots or jobs in
+pending/failed/printing/done states. New dedicated reprints capture current counts.
+The migration does not redefine `process_payment`, financial calculations or
+approval, and is source-only until separately applied through the release gate.

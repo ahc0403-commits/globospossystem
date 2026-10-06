@@ -147,3 +147,41 @@ Do not introduce raster icons or a second icon library.
 - Status is never communicated by color alone.
 - Every field has a visible label and error/help text.
 - Keyboard focus order follows visual order and returns from dialogs correctly.
+
+## 2026-10-06 customer navigation, screenshots and packing
+
+Source implementation only; production migration/web/Print Station deployment and
+physical printer verification require separate evidence.
+
+- Menu view keeps a horizontal category bar below the progress tabs, outside the
+  vertical menu viewport. `All` is selected initially. Only populated categories
+  from the storefront response are shown, in server order. A selection filters
+  locally and resets vertical scrolling; repeat selection and quantity changes
+  preserve position. Category IDs, cart, notes and diner input survive locale and
+  address navigation. Removed categories fall back to `All`. Desktop arrows and
+  mobile swipes expose overflow; full labels remain available through tooltips.
+- The quote card exposes `Bank transfer details` and `Send transfer screenshot`
+  separately. The account dialog owns QR/account/reference details and close.
+  Screenshot preview identifies the order and amount. Picker/preview cancellation
+  makes no upload request; the picker is guarded from its first click.
+- Failed attempts retain bytes, MIME and exact request/quote/review/path in screen
+  memory. Retry resumes that attempt; an uncertain Storage response is reconciled
+  by committing its existing path first. Photo replacement is unavailable until
+  the uncertain result is resolved. Successful commit remains sent even if status
+  refresh fails, with a separate status refresh action. Staff resubmission presents
+  its reason and no-repeat-transfer warning directly, including locked old quotes.
+  Advanced/terminal states do not request a new screenshot.
+- All direct delivery/pickup forms (payment, kitchen, floor, tray, confirmation,
+  handoff) put `SO NGUOI: N` / `DUNG CU: N BO`
+  above items; utensil sets are bold and double height. Missing/invalid counts on
+  identified direct orders require a staff check. Ordinary dine-in guest counts
+  never imply utensil sets. Cashier/kitchen packing counts are emphasized.
+- Native payment-detail printing reads authorized single-order packing context,
+  without enqueuing a duplicate job. New direct digital snapshots and their 80mm
+  PDF include the count. Receipt text follows the existing Vietnamese policy.
+  Old digital/print snapshots remain immutable; a new reprint uses current counts.
+
+Behavior tests: `direct_delivery_storefront_widget_test.dart`,
+`direct_order_proof_retry_test.dart`, `receipt_builder_contract_test.dart`,
+`wifi_printer_service_test.dart`, `digital_receipt_pdf_service_test.dart`, and
+`direct_order_receipt_packing_contract_test.sql`.

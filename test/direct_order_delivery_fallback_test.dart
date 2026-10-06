@@ -397,7 +397,8 @@ void main() {
       );
       final text = String.fromCharCodes(bytes);
       expect(text, contains('PHIEU NHAN MANG VE'));
-      expect(text, contains('So nguoi: 3 / Dung cu: 3 bo'));
+      expect(text, contains('SO NGUOI: 3'));
+      expect(text, contains('DUNG CU: 3 BO'));
       expect(text, isNot(contains('SECRET_DELIVERY_ADDRESS')));
       expect(text, isNot(contains('PRIVATE_ROOM')));
       expect(text, contains('Da hoan:'));

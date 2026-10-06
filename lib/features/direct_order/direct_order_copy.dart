@@ -129,7 +129,11 @@ class DirectOrderCopy {
     'We prepare disposable utensils for this many people. (1–100)',
   );
   String packingCount(int? count) => count == null
-      ? _pick('식사 인원 미입력', 'Chưa nhập số người ăn', 'Diner count not provided')
+      ? _pick(
+          '식사 인원 미입력 · 직원 확인 필요',
+          'Chưa nhập số người · cần nhân viên kiểm tra',
+          'Diner count missing · staff check required',
+        )
       : _pick(
           '식사 인원 $count명 · 일회용품 $count세트',
           '$count người · $count bộ dụng cụ',
@@ -539,6 +543,45 @@ class DirectOrderCopy {
       _pick('최종 입금액', 'Tổng chuyển khoản', 'Transfer total');
   String get includedVat => _pick('포함된 VAT', 'VAT đã bao gồm', 'Included VAT');
   String get payNow => _pick('결제하기', 'Thanh toán', 'Pay now');
+  String get allCategories => _pick('전체', 'Tất cả', 'All');
+  String get emptyMenu => _pick(
+    '주문 가능한 메뉴가 없습니다.',
+    'Chưa có món để đặt.',
+    'No menu items are available.',
+  );
+  String get previousCategories =>
+      _pick('이전 카테고리', 'Danh mục trước', 'Previous categories');
+  String get nextCategories =>
+      _pick('다음 카테고리', 'Danh mục tiếp', 'Next categories');
+  String get proofOnlyHelp => _pick(
+    '이미 송금했다면 캡처만 보내 주세요.',
+    'Nếu đã chuyển khoản, chỉ cần gửi ảnh.',
+    'If you have transferred payment, just send the screenshot.',
+  );
+  String get retryProof => _pick('다시 보내기', 'Thử gửi lại', 'Retry sending');
+  String get changeProof => _pick('사진 바꾸기', 'Chọn ảnh khác', 'Change photo');
+  String get checkingProof => _pick(
+    '전송 결과 확인 중…',
+    'Đang kiểm tra kết quả gửi…',
+    'Checking upload result…',
+  );
+  String get proofSent => _pick(
+    '입금 캡처 전송 완료 · 매장 확인 대기',
+    'Đã gửi ảnh · chờ cửa hàng kiểm tra',
+    'Screenshot sent · waiting for store review',
+  );
+  String get refreshProofStatus =>
+      _pick('상태 다시 확인', 'Kiểm tra lại trạng thái', 'Check status again');
+  String get proofStatusUnavailable => _pick(
+    '캡처는 접수되었습니다. 주문 현황을 다시 확인해 주세요.',
+    'Ảnh đã được nhận. Vui lòng kiểm tra lại trạng thái đơn.',
+    'The screenshot was received. Check the order status again.',
+  );
+  String get selectingProof => _pick(
+    '사진 선택·확인 중…',
+    'Đang chọn và xem ảnh…',
+    'Selecting and reviewing photo…',
+  );
   String get paymentDetails =>
       _pick('계좌이체 안내', 'Hướng dẫn chuyển khoản', 'Bank transfer details');
   String get bankName => _pick('은행명', 'Ngân hàng', 'Bank');

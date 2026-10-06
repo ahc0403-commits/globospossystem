@@ -145,6 +145,17 @@ enum DirectOrderDeliveryPaymentMode {
 class DirectOrderStaffService {
   const DirectOrderStaffService();
 
+  Future<Map<String, dynamic>?> fetchOrderPackingContext({
+    required String orderId,
+    required String storeId,
+  }) async {
+    final result = await supabase.rpc(
+      'direct_order_receipt_packing_context',
+      params: {'p_order_id': orderId, 'p_store_id': storeId},
+    );
+    return result == null ? null : Map<String, dynamic>.from(result as Map);
+  }
+
   Map<String, dynamic> _map(Object? raw) {
     if (raw is! Map) {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');

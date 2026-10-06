@@ -8,11 +8,102 @@ import {
   directOrderSecretKeyName,
   normalizeRpcError,
   resolveProjectSecretKey,
+  SafeHttpError,
   sqlDomainErrorRegistry,
   validateProofImage,
   validProofObjectPath,
   validProofPath,
+  verifyProofUpload,
 } from "./index.ts";
+
+Deno.test("proof verification retains files on list/download/read failures", async () => {
+  const path = "store/request/photo.png";
+  for (const stage of ["list", "download", "read"]) {
+    let removed = 0;
+    const brokenBlob = new Blob([new Uint8Array(24)]);
+    if (stage === "read") {
+      brokenBlob.arrayBuffer = () => Promise.reject(new Error("interrupted"));
+    }
+    const storage = {
+      list: () =>
+        Promise.resolve({
+          data: [{ name: "photo.png" }],
+          error: stage === "list" ? new Error("temporary") : null,
+        }),
+      download: () =>
+        Promise.resolve({
+          data: brokenBlob,
+          error: stage === "download" ? new Error("temporary") : null,
+        }),
+      remove: () => {
+        removed++;
+        return Promise.resolve({});
+      },
+    };
+    try {
+      await verifyProofUpload(storage, path);
+      throw new Error("expected failure");
+    } catch (error) {
+      assertEquals(
+        error instanceof SafeHttpError && error.status,
+        503,
+        `${stage} temporary status`,
+      );
+      assertEquals(
+        error instanceof SafeHttpError && error.code,
+        "PROOF_TEMPORARILY_UNAVAILABLE",
+        `${stage} public error`,
+      );
+    }
+    assertEquals(removed, 0, `${stage} must not delete valid/unknown bytes`);
+  }
+});
+
+Deno.test("proof verification distinguishes absent, invalid and valid objects", async () => {
+  for (const kind of ["absent", "invalid", "valid"]) {
+    let removed = 0;
+    let downloaded = 0;
+    const png = new Uint8Array(24);
+    png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    png.set([0, 0, 0, 1], 16);
+    png.set([0, 0, 0, 1], 20);
+    const storage = {
+      list: () =>
+        Promise.resolve({
+          data: kind === "absent" ? [] : [{ name: "photo.png" }],
+          error: null,
+        }),
+      download: () => {
+        downloaded++;
+        return Promise.resolve({
+          data: new Blob([kind === "valid" ? png : new Uint8Array(24)]),
+          error: null,
+        });
+      },
+      remove: () => {
+        removed++;
+        return Promise.resolve({});
+      },
+    };
+    let code: unknown = null;
+    try {
+      await verifyProofUpload(storage, "store/request/photo.png");
+    } catch (error) {
+      code = error instanceof SafeHttpError ? error.code : "unexpected";
+    }
+    assertEquals(
+      code,
+      kind === "absent"
+        ? "PROOF_UPLOAD_INCOMPLETE"
+        : kind === "invalid"
+        ? "INVALID_PROOF"
+        : null,
+      `${kind} result`,
+    );
+    assertEquals(removed, kind === "invalid" ? 1 : 0, `${kind} deletion`);
+    assertEquals(downloaded, kind === "absent" ? 0 : 1, `${kind} download`);
+  }
+});
 
 const origin = "https://globospossystem.vercel.app";
 
@@ -370,7 +461,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    104,
+    105,
     "registered SQL error count",
   );
   assertEquals(
@@ -387,6 +478,15 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
     normalizeRpcError("DIRECT_ORDER_PICKUP_ITEMS_REQUIRED private detail").code,
     "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
     "broken pickup graph does not expose internal details",
+  );
+  const packingFailure = normalizeRpcError(
+    "DIRECT_ORDER_PACKING_CONTRACT_VERIFICATION_FAILED",
+  );
+  assertEquals(packingFailure.status, 503, "packing invariant failure status");
+  assertEquals(
+    packingFailure.code,
+    "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
+    "packing invariant sanitized",
   );
   const conflict = normalizeRpcError(
     "duplicate: DIRECT_ORDER_OPEN_REQUEST_EXISTS detail=private",
