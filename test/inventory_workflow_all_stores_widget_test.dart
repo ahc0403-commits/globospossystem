@@ -34,6 +34,38 @@ class _Auth extends AuthNotifier {
 }
 
 class _Inventory extends InventoryService {
+  _Inventory({this.prEnabled = false});
+  final bool prEnabled;
+  final prQueries = <Map<String, dynamic>>[];
+  @override
+  Future<Map<String, dynamic>> fetchProcurementPage(
+    String storeId,
+    Map<String, dynamic> query,
+  ) async {
+    prQueries.add({...query});
+    return {
+      'contract_version': 2,
+      'enabled': true,
+      'store_id': storeId,
+      'actor': {'system': 'pos', 'subject_id': 'actor', 'can_create': true},
+      'requests': [
+        {
+          'id': 'pr-root',
+          'request_no': 'PR-ROOT',
+          'status': 'draft',
+          'created_at': '2026-10-07',
+          'requested_delivery_date': '2026-10-09',
+          'reason': 'Weekly order',
+          'allowed_actions': [],
+        },
+      ],
+      'request_counts': {'pending': 1, 'approved': 0, 'cancelled': 0},
+      'orders': [],
+      'products': [],
+      'supplier_items': [],
+    };
+  }
+
   int detailLoads = 0;
   int listLoads = 0;
   bool failNext = false;
@@ -124,7 +156,14 @@ class _Inventory extends InventoryService {
   @override
   Future<Map<String, dynamic>> fetchInventoryOrderCatalog(
     String storeId,
-  ) async => {'items': [], 'suppliers': []};
+  ) async => {
+    'items': [],
+    'suppliers': [],
+    'procurement_policy': {
+      'enabled': prEnabled,
+      'three_stage_required': prEnabled,
+    },
+  };
   @override
   Future<Map<String, dynamic>> fetchInventoryWorkflowDetail(
     String orderId,
@@ -191,6 +230,7 @@ Future<GoRouter> _mount(
   _Inventory service,
   StreamController<PosLiveEvent> events, {
   String role = 'inventory_orderer',
+  String? initialOrderId,
 }) async {
   tester.view.physicalSize = const Size(1440, 1100);
   tester.view.devicePixelRatio = 1;
@@ -201,7 +241,10 @@ Future<GoRouter> _mount(
     routes: [
       GoRoute(
         path: '/inventory-orders',
-        builder: (_, _) => InventoryOrderWorkflowScreen(service: service),
+        builder: (_, _) => InventoryOrderWorkflowScreen(
+          service: service,
+          initialOrderId: initialOrderId,
+        ),
       ),
     ],
   );
@@ -242,6 +285,50 @@ void main() {
   });
   tearDownAll(() => Supabase.instance.dispose());
 
+  testWidgets(
+    'PR account opens actual requests and keeps receiving and historical orders accessible',
+    (tester) async {
+      final service = _Inventory(prEnabled: true);
+      final events = StreamController<PosLiveEvent>.broadcast();
+      addTearDown(events.close);
+      final router = await _mount(tester, service, events);
+      addTearDown(router.dispose);
+      expect(find.text('Purchase request management'), findsOneWidget);
+      expect(find.text('PR-ROOT · Draft'), findsOneWidget);
+      expect(service.listLoads, 0);
+      expect(service.prQueries.single['request_view'], true);
+      await tester.tap(find.widgetWithText(TextButton, 'Receiving'));
+      await tester.pumpAndSettle();
+      expect(service.listLoads, 1);
+      expect(find.textContaining('PO-OPERATING'), findsWidgets);
+      await tester.tap(find.text('Orders & approvals'));
+      await tester.pumpAndSettle();
+      expect(find.text('PR-ROOT · Draft'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Historical orders'));
+      await tester.pumpAndSettle();
+      expect(service.listLoads, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'explicit PO link keeps its selected detail when PR policy is enabled',
+    (tester) async {
+      final service = _Inventory(prEnabled: true);
+      final events = StreamController<PosLiveEvent>.broadcast();
+      addTearDown(events.close);
+      final router = await _mount(
+        tester,
+        service,
+        events,
+        initialOrderId: 'order-1',
+      );
+      addTearDown(router.dispose);
+      expect(service.prQueries, isEmpty);
+      expect(service.detailLoads, 1);
+      expect(find.textContaining('PO-OPERATING'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
   test(
     'all known states are discoverable and master permissions follow roles',
     () {

@@ -12,29 +12,7 @@ void main() {
         '200-line ${supplier ? 'supplier PO' : 'internal PR'} PDF ($locale)',
         () async {
           final labels = {
-            for (final key in [
-              'titlePo',
-              'titlePr',
-              'dates',
-              'category',
-              'channel',
-              'stationery',
-              'shopee',
-              'reason',
-              'item',
-              'specification',
-              'quantity',
-              'unit',
-              'notes',
-              'estimate',
-              'amount',
-              'stock',
-              'approveStore',
-              'approveBrand',
-              'approvePurchase',
-              'expectedVat',
-              'expectedTotal',
-            ])
+            for (final key in procurementDocumentLabelKeys)
               key: procurementProcessLabel(key, locale),
           };
           final source = {
@@ -95,6 +73,7 @@ void main() {
             source,
             labels: labels,
             fontAsset: 'assets/fonts/PretendardVariable.ttf',
+            printedAt: DateTime.utc(2026, 10, 7, 2, 30),
           );
           expect(ascii.decode(bytes.take(5).toList()), '%PDF-');
           expect(bytes.length, greaterThan(1000));
@@ -108,6 +87,113 @@ void main() {
           ).writeAsBytes(bytes);
         },
       );
+    }
+  }
+  for (final locale in ['ko', 'en', 'vi']) {
+    test(
+      'unpriced draft shows incomplete totals and pending approval ($locale)',
+      () async {
+        final bytes = await buildProcurementDocumentPdf(
+          {
+            'kind': 'pr',
+            'audience': 'internal',
+            'data': {
+              'request_no': 'PR-INCOMPLETE',
+              'status': 'draft',
+              'store_name': 'Example store',
+              'created_at': '2026-10-06T17:30:00Z',
+              'requested_delivery_date': '2026-10-09',
+              'purchase_category': 'beverage',
+              'reason': 'Example only; one price is not registered',
+              'estimates_complete': false,
+              'lines': [
+                {
+                  'product_name': 'Known estimate item',
+                  'requested_quantity': 1,
+                  'requested_unit': 'box',
+                  'quantity_base': 1,
+                  'estimated_conversion': 1,
+                  'estimated_unit_price': 12345.67,
+                  'estimated_amount': 12345.67,
+                  'estimated_tax_rate': 8,
+                  'estimated_order_unit': 'box',
+                },
+                {
+                  'product_name': 'Unpriced item',
+                  'requested_quantity': 2,
+                  'requested_unit': 'box',
+                  'quantity_base': 2,
+                },
+              ],
+            },
+          },
+          labels: {
+            for (final key in procurementDocumentLabelKeys)
+              key: procurementProcessLabel(key, locale),
+          },
+          fontAsset: 'assets/fonts/PretendardVariable.ttf',
+          printedAt: DateTime.utc(2026, 10, 7, 2, 30),
+        );
+        final dir = Directory(
+          '${Directory.systemTemp.path}/procurement-pr-layout-20261007',
+        );
+        await dir.create(recursive: true);
+        await File('${dir.path}/pr-incomplete-$locale.pdf').writeAsBytes(bytes);
+        expect(ascii.decode(bytes.take(5).toList()), '%PDF-');
+      },
+    );
+    for (final count in [1, 11, 50]) {
+      test('$count-line multilingual PR layout ($locale)', () async {
+        final data = {
+          'request_no': 'PR-EXAMPLE-20261007',
+          'status': 'submitted',
+          'store_name': 'GLOBOS 예시 매장 / Cửa hàng mẫu',
+          'created_at': '2026-10-06T17:30:00Z',
+          'submitted_at': '2026-10-07T01:30:00Z',
+          'requested_delivery_date': '2026-10-09',
+          'created_actor': {'display_name': '예시 요청자 / Người yêu cầu mẫu'},
+          'purchase_category': 'beverage',
+          'reason': '교육·검토용 가상 데이터 / Dữ liệu giả để kiểm tra bố cục',
+          'memo': '행과 단위·금액이 여러 페이지에서도 유지되는지 확인합니다.',
+          'estimates_complete': true,
+          'estimated_net': count * 12345.67,
+          'estimated_vat': count * 987.65,
+          'estimated_total': count * 13333.32,
+          'lines': List.generate(
+            count,
+            (i) => {
+              'product_name':
+                  '${i + 1}. 원재료 / Nước giải khát không đường chai thủy tinh',
+              'specification_snapshot': '330 ml × 24 / 긴 규격 표시 확인',
+              'requested_quantity': 1.125,
+              'requested_unit': 'thùng',
+              'quantity_base': 27,
+              'estimated_conversion': 24,
+              'estimated_unit_price': 10973.93,
+              'estimated_amount': 12345.67,
+              'estimated_tax_rate': 8,
+              'estimated_order_unit': 'thùng 24 chai',
+              'current_stock_snapshot': 2.375,
+              'memo': '필요일 확인 / Kiểm tra ngày cần hàng',
+            },
+          ),
+        };
+        final bytes = await buildProcurementDocumentPdf(
+          {'kind': 'pr', 'audience': 'internal', 'data': data},
+          labels: {
+            for (final key in procurementDocumentLabelKeys)
+              key: procurementProcessLabel(key, locale),
+          },
+          fontAsset: 'assets/fonts/PretendardVariable.ttf',
+          printedAt: DateTime.utc(2026, 10, 7, 2, 30),
+        );
+        final dir = Directory(
+          '${Directory.systemTemp.path}/procurement-pr-layout-20261007',
+        );
+        await dir.create(recursive: true);
+        await File('${dir.path}/pr-$count-$locale.pdf').writeAsBytes(bytes);
+        expect(bytes.length, greaterThan(1000));
+      });
     }
   }
 }
