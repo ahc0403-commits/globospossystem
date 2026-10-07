@@ -121,7 +121,7 @@ void main() {
       isNull,
     );
   });
-  testWidgets('creation date filter validates before a bounded page read', (
+  testWidgets('custom period validates dates before a bounded page read', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -146,17 +146,32 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final field = find.byKey(const Key('procurement_created_from'));
-    await tester.ensureVisible(field);
-    await tester.enterText(field, '2026-02-31');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
+    final period = find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButtonFormField<String> &&
+          w.key.toString().contains('procurement_period'),
+    );
+    await tester.tap(period);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Custom period').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Switch to input'));
+    await tester.pumpAndSettle();
+    final start = find.widgetWithText(TextField, 'Start Date');
+    final end = find.widgetWithText(TextField, 'End Date');
+    await tester.enterText(start, '02/31/2026');
+    await tester.enterText(end, '10/07/2026');
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(queries.length, 1);
-    expect(find.text('Enter a valid creation-date range.'), findsOneWidget);
-    await tester.enterText(field, '2026-10-01');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
+    expect(find.text('Invalid format.'), findsOneWidget);
+    await tester.enterText(start, '10/01/2026');
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(queries.length, 2);
     expect(queries.last['created_from'], '2026-10-01');
+    expect(queries.last['created_to'], '2026-10-07');
+    expect(queries.last.containsKey('request_before'), isFalse);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -84,6 +84,13 @@ class _InventoryOrderWorkflowScreenState
   bool _loading = true;
   bool _detailLoading = false;
   bool _busy = false;
+  bool _showLegacyOrders = false;
+  final _prRefresh = ValueNotifier<int>(0);
+  bool get _primaryPr =>
+      _role == 'inventory_orderer' &&
+      _procurementPolicy['three_stage_required'] == true &&
+      _section == _WorkflowSection.orders &&
+      !_showLegacyOrders;
   Object? _error;
 
   @override
@@ -95,6 +102,7 @@ class _InventoryOrderWorkflowScreenState
       (_) => _refreshInPlace(),
     );
     _selectedOrderId = widget.initialOrderId;
+    _showLegacyOrders = widget.initialOrderId != null;
     if (_role == 'inventory_accounting') {
       _section = _WorkflowSection.receiving;
     }
@@ -106,6 +114,7 @@ class _InventoryOrderWorkflowScreenState
     WidgetsBinding.instance.removeObserver(this);
     _syncWatchdog?.cancel();
     _orderSearchController.dispose();
+    _prRefresh.dispose();
     for (final controller in _receiptControllers.values) {
       controller.dispose();
     }
@@ -157,6 +166,10 @@ class _InventoryOrderWorkflowScreenState
       _refreshAgain = true;
       return;
     }
+    if (_primaryPr) {
+      _prRefresh.value++;
+      return;
+    }
     unawaited(_load(background: true));
   }
 
@@ -189,6 +202,27 @@ class _InventoryOrderWorkflowScreenState
       });
     }
     try {
+      Map<String, dynamic>? catalog;
+      if (_role == 'inventory_orderer' &&
+          _section == _WorkflowSection.orders &&
+          !_showLegacyOrders) {
+        catalog = await _service.fetchInventoryOrderCatalog(storeId!);
+        if (!mounted || scope != _scopeKey || query != _queryKey) return;
+        if (_map(catalog['procurement_policy'])['three_stage_required'] ==
+            true) {
+          setState(() {
+            _procurementPolicy = _map(catalog!['procurement_policy']);
+            _loadedScope = scope;
+            _loading = false;
+            _error = null;
+            _orders = [];
+            _detail = null;
+            _selectedOrderId = null;
+            _lastSyncedAt = DateTime.now();
+          });
+          return;
+        }
+      }
       final receiving = _isAccounting || _section == _WorkflowSection.receiving;
       final targetCount = append
           ? 80
@@ -216,8 +250,9 @@ class _InventoryOrderWorkflowScreenState
           break;
         }
       } while (rows.length < targetCount);
-      Map<String, dynamic>? catalog;
-      if (!_isAccounting && (!background || _loadedScope != scope)) {
+      if (catalog == null &&
+          !_isAccounting &&
+          (!background || _loadedScope != scope)) {
         catalog = await _service.fetchInventoryOrderCatalog(storeId!);
       }
       if (!mounted || scope != _scopeKey || query != _queryKey) return;
@@ -430,6 +465,7 @@ class _InventoryOrderWorkflowScreenState
           _statusCounts = {};
           _accessibleStores = [];
           _loadedScope = null;
+          _showLegacyOrders = false;
         });
         unawaited(_load());
       });
@@ -446,6 +482,9 @@ class _InventoryOrderWorkflowScreenState
           if (event.affects({'inventory'})) _refreshInPlace();
         });
       });
+    }
+    if (_primaryPr && _storeId != null) {
+      return _procurementWorkspace(_storeId!, standalone: true);
     }
     return PopScope(
       canPop: !_receiptDirty && !_busy,
@@ -1915,114 +1954,125 @@ class _InventoryOrderWorkflowScreenState
     });
   }
 
+  Widget _procurementWorkspace(
+    String storeId, {
+    bool standalone = false,
+  }) => ProcurementWorkspacePage(
+    key: ValueKey('procurement:$_scopeKey'),
+    requesterView: _role == 'inventory_orderer',
+    refreshListenable: _prRefresh,
+    onOpenReceiving: standalone
+        ? () {
+            setState(() {
+              _section = _WorkflowSection.receiving;
+            });
+            _load(preserveSelection: false);
+          }
+        : null,
+    onOpenLegacy: standalone
+        ? () {
+            setState(() {
+              _showLegacyOrders = true;
+            });
+            _load(preserveSelection: false);
+          }
+        : null,
+    onLogout: standalone
+        ? () async {
+            await ref.read(authProvider.notifier).logout();
+          }
+        : null,
+    onOpenOrder: (id) {
+      if (!standalone) Navigator.of(context).pop();
+      setState(() {
+        _section = _WorkflowSection.receiving;
+        _selectedOrderId = id;
+      });
+      _load();
+    },
+    load: () => _service.fetchProcurementWorkspace(storeId),
+    loadPage: (query) => _service.fetchProcurementPage(storeId, query),
+    exportDocument: (kind, record, audience) async {
+      final language = Localizations.localeOf(context).languageCode;
+      final source = await _service.procurementDocumentData(
+        storeId,
+        kind,
+        record['id'].toString(),
+        audience,
+      );
+      if (!context.mounted) return;
+      final bytes = await buildProcurementDocumentPdf(
+        source,
+        labels: {
+          for (final key in procurementDocumentLabelKeys)
+            key: procurementProcessLabel(key, language),
+        },
+        fontAsset: AppFonts.assetPath,
+      );
+      final hash = source['source_hash'].toString();
+      final fileHash = sha256.convert(bytes).toString();
+      final path =
+          '$storeId/procurement/$kind/${record['id']}/$audience/$hash/$fileHash.pdf';
+      await supabase.storage
+          .from('inventory-purchase-documents')
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(
+              contentType: 'application/pdf',
+              upsert: true,
+            ),
+          );
+      await supabase.rpc(
+        'record_procurement_document',
+        params: {
+          'p_store_id': storeId,
+          'p_kind': kind,
+          'p_record_id': record['id'],
+          'p_audience': audience,
+          'p_source_hash': hash,
+          'p_storage_path': path,
+          'p_sha256': fileHash,
+          'p_size_bytes': bytes.length,
+        },
+      );
+      await FileSaver.instance.saveFile(
+        name:
+            '${record['request_no'] ?? record['purchase_order_no']}-$audience',
+        bytes: bytes,
+        ext: 'pdf',
+        mimeType: MimeType.pdf,
+      );
+    },
+    openEvidence: (receiptId, path) async {
+      final url = await _service.inventoryReceiptStatementUrl(path);
+      if (!await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      )) {
+        throw StateError('PROCUREMENT_EVIDENCE_UNAVAILABLE');
+      }
+    },
+    execute: (action, id, version, key, payload) =>
+        _service.executeProcurementCommand(
+          storeId: storeId,
+          action: action,
+          recordId: id,
+          version: version,
+          idempotencyKey: key,
+          payload: payload,
+        ),
+  );
+
   Future<void> _openProcurement() async {
     final storeId = _isAccounting ? _selectedAccountingStoreId : _storeId;
-    if (storeId == null || !await _leaveReceipt() || !mounted) {
+    if (storeId == null || !await _leaveReceipt() || !mounted) return;
+    if (_primaryPr) {
+      _prRefresh.value++;
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProcurementWorkspacePage(
-          load: () => _service.fetchProcurementWorkspace(storeId),
-          loadPage: (query) => _service.fetchProcurementPage(storeId, query),
-          exportDocument: (kind, record, audience) async {
-            final language = Localizations.localeOf(context).languageCode;
-            final source = await _service.procurementDocumentData(
-              storeId,
-              kind,
-              record['id'].toString(),
-              audience,
-            );
-            if (!context.mounted) return;
-            final bytes = await buildProcurementDocumentPdf(
-              source,
-              labels: {
-                for (final key in [
-                  'dates',
-                  'titlePr',
-                  'titlePo',
-                  'category',
-                  'channel',
-                  'raw_material',
-                  'tools',
-                  'stationery',
-                  'other',
-                  'ordinary',
-                  'shopee',
-                  'reason',
-                  'item',
-                  'specification',
-                  'quantity',
-                  'unit',
-                  'estimate',
-                  'amount',
-                  'stock',
-                  'approveStore',
-                  'approveBrand',
-                  'approvePurchase',
-                  'notes',
-                  'expectedVat',
-                  'expectedTotal',
-                ])
-                  key: procurementProcessLabel(key, language),
-              },
-              fontAsset: AppFonts.assetPath,
-            );
-            final hash = source['source_hash'].toString();
-            final fileHash = sha256.convert(bytes).toString();
-            final path =
-                '$storeId/procurement/$kind/${record['id']}/$audience/$hash/$fileHash.pdf';
-            await supabase.storage
-                .from('inventory-purchase-documents')
-                .uploadBinary(
-                  path,
-                  bytes,
-                  fileOptions: const FileOptions(
-                    contentType: 'application/pdf',
-                    upsert: true,
-                  ),
-                );
-            await supabase.rpc(
-              'record_procurement_document',
-              params: {
-                'p_store_id': storeId,
-                'p_kind': kind,
-                'p_record_id': record['id'],
-                'p_audience': audience,
-                'p_source_hash': hash,
-                'p_storage_path': path,
-                'p_sha256': fileHash,
-                'p_size_bytes': bytes.length,
-              },
-            );
-            await FileSaver.instance.saveFile(
-              name:
-                  '${record['request_no'] ?? record['purchase_order_no']}-$audience',
-              bytes: bytes,
-              ext: 'pdf',
-              mimeType: MimeType.pdf,
-            );
-          },
-          openEvidence: (receiptId, path) async {
-            final url = await _service.inventoryReceiptStatementUrl(path);
-            if (!await launchUrl(
-              Uri.parse(url),
-              mode: LaunchMode.externalApplication,
-            )) {
-              throw StateError('PROCUREMENT_EVIDENCE_UNAVAILABLE');
-            }
-          },
-          execute: (action, id, version, key, payload) =>
-              _service.executeProcurementCommand(
-                storeId: storeId,
-                action: action,
-                recordId: id,
-                version: version,
-                idempotencyKey: key,
-                payload: payload,
-              ),
-        ),
-      ),
+      MaterialPageRoute<void>(builder: (_) => _procurementWorkspace(storeId)),
     );
     if (mounted) await _load();
   }

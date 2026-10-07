@@ -2,6 +2,8 @@ import 'procurement_metrics.dart';
 import 'procurement_catalog_dialog.dart';
 import 'procurement_process_labels.dart';
 import 'dart:convert';
+import '../../core/utils/time_utils.dart';
+import 'procurement_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -35,8 +37,16 @@ class ProcurementWorkspacePage extends StatefulWidget {
     this.loadPage,
     this.exportDocument,
     this.openEvidence,
+    this.requesterView = false,
+    this.onOpenReceiving,
+    this.onOpenLegacy,
+    this.onLogout,
+    this.refreshListenable,
   });
   final Future<void> Function(String receiptId, String path)? openEvidence;
+  final Listenable? refreshListenable;
+  final bool requesterView;
+  final VoidCallback? onOpenReceiving, onOpenLegacy, onLogout;
   final ProcurementLoad load;
   final ProcurementPageLoad? loadPage;
   final ProcurementExport? exportDocument;
@@ -51,7 +61,6 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   Map<String, dynamic> _data = {};
   final Map<String, dynamic> _query = {};
   String? _selectedOrderId;
-  String? _catalogCursor;
   String copy(String key) => procurementProcessLabel(
     key,
     Localizations.localeOf(context).languageCode,
@@ -59,8 +68,18 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
 
   Map<String, dynamic>? _pending;
   String? _selectedId, _error, _journalKey;
-  bool _loading = true, _busy = false;
+  bool _loading = true, _busy = false, _needsListRefresh = false;
   int _generation = 0;
+  String _period = 'recent';
+  String? _notice;
+  final _search = TextEditingController();
+  final _scroll = ScrollController();
+  bool get requesterView =>
+      widget.requesterView ||
+      (actor['can_create'] == true &&
+          actor['can_view_prices'] != true &&
+          actor['can_manage'] != true &&
+          actor['can_office_approve'] != true);
   String t(String ko, String en, String vi) =>
       switch (Localizations.localeOf(context).languageCode) {
         'ko' => ko,
@@ -77,10 +96,27 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   @override
   void initState() {
     super.initState();
+    _query.addAll(procurementRecentMonth());
+    _query['request_group'] = 'pending';
+    _query['request_sort'] = 'created';
+    if (widget.requesterView) _query['request_view'] = true;
+    widget.refreshListenable?.addListener(_refresh);
     _load();
   }
 
-  Future<void> _load() async {
+  void _refresh() {
+    if (!_busy && _pending == null) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshListenable?.removeListener(_refresh);
+    _search.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<bool> _load() async {
     final generation = ++_generation;
     if (mounted) setState(() => _loading = true);
     try {
@@ -97,7 +133,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       if (widget.loadPage != null) {
         final incoming = rows(data['products']);
         if (_selectedId == null && _selectedOrderId == null) {
-          _catalogCursor = incoming.lastOrNull?['id']?.toString();
+          // Catalog pagination is owned by the request editor.
         } else {
           data['products'] = {
             for (final p in [...rows(_data['products']), ...incoming])
@@ -119,14 +155,16 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
           'procurement.command.${identity['system']}.${identity['subject_id']}.${data['store_id']}';
       final raw = (await SharedPreferences.getInstance()).getString(key);
       final pending = raw == null ? null : map(jsonDecode(raw));
-      if (!mounted || generation != _generation) return;
+      if (!mounted || generation != _generation) return false;
       setState(() {
         _data = data;
         _journalKey = key;
         _pending = pending;
         _loading = false;
+        _needsListRefresh = false;
         _error = null;
       });
+      return true;
     } catch (e) {
       if (mounted && generation == _generation) {
         setState(() {
@@ -134,6 +172,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
           _error = _errorText(e);
         });
       }
+      return false;
     }
   }
 
@@ -159,12 +198,12 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     return '${t('처리하지 못했습니다. 입력과 현재 상태를 확인하세요.', 'The action could not be completed. Check the input and current status.', 'Không thể hoàn tất. Kiểm tra dữ liệu và trạng thái.')} ${code ?? ''}';
   }
 
-  Future<void> _execute(
+  Future<bool> _execute(
     String action,
     Map<String, dynamic>? record,
     Map<String, dynamic> payload,
   ) async {
-    if (_busy || _pending != null || _journalKey == null) return;
+    if (_busy || _pending != null || _journalKey == null) return false;
     final pending = {
       'action': action,
       'record_id': record?['id'],
@@ -178,11 +217,13 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       if (!await prefs.setString(_journalKey!, jsonEncode(pending))) {
         throw StateError('Could not save retry record');
       }
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _pending = pending);
       await _sendPending();
+      return true;
     } catch (e) {
       if (mounted) setState(() => _error = _errorText(e));
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -191,8 +232,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   Future<void> _sendPending() async {
     final p = _pending;
     if (p == null) return;
+    late Map<String, dynamic> result;
     try {
-      await widget.execute(
+      result = await widget.execute(
         p['action'] as String,
         p['record_id'] as String?,
         (p['version'] as num).toInt(),
@@ -223,16 +265,110 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     }
     await (await SharedPreferences.getInstance()).remove(_journalKey!);
     if (!mounted) return;
-    setState(() => _pending = null);
+    final action = p['action'];
+    setState(() {
+      _pending = null;
+      if ([
+        'create_request',
+        'save_request',
+        'submit_request',
+        'cancel_request',
+      ].contains(action)) {
+        _resetPages();
+        _selectedOrderId = null;
+        _selectedId = action == 'cancel_request'
+            ? null
+            : result['id']?.toString();
+        if (action == 'create_request') {
+          _query.remove('search');
+          _query.remove('purchase_category');
+          _search.clear();
+          _query.addAll(procurementRecentMonth());
+          _period = 'recent';
+          _query['request_group'] = 'pending';
+        }
+        if (action == 'cancel_request') _data.remove('request_detail');
+        _notice =
+            '${result['request_no'] ?? ''} · ${copy(action == 'cancel_request' ? 'deleted' : 'saved')} · ${label(result['status']?.toString() ?? 'draft')}';
+      }
+    });
+    if (!await _load() && mounted) {
+      setState(() => _needsListRefresh = true);
+    }
+    if (action == 'create_request' && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+      });
+    }
+  }
+
+  void _resetPages() {
+    _query.removeWhere(
+      (key, _) => key.contains('_before') || key == 'catalog_after',
+    );
+  }
+
+  void _filter(String key, String? value) {
+    setState(() {
+      if (value == null || value.isEmpty) {
+        _query.remove(key);
+      } else {
+        _query[key] = value;
+      }
+      _resetPages();
+      _selectedId = null;
+      _selectedOrderId = null;
+    });
+    _load();
+  }
+
+  Future<void> _choosePeriod(String? value) async {
+    if (value == 'recent') {
+      setState(() {
+        _period = 'recent';
+        _query.addAll(procurementRecentMonth());
+        _resetPages();
+        _selectedId = null;
+        _selectedOrderId = null;
+      });
+      await _load();
+      return;
+    }
+    final now = TimeUtils.nowVietnam();
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year + 5, 12, 31),
+      initialDateRange: DateTimeRange(
+        start: DateTime.parse(_query['created_from'].toString()),
+        end: DateTime.parse(_query['created_to'].toString()),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _period = 'custom';
+      _query['created_from'] = procurementDate(
+        selected.start.toIso8601String().substring(0, 10),
+      );
+      _query['created_to'] = procurementDate(
+        selected.end.toIso8601String().substring(0, 10),
+      );
+      _resetPages();
+      _selectedId = null;
+      _selectedOrderId = null;
+    });
     await _load();
   }
 
-  Future<void> _retry() async {
+  Future<bool> _retry() async {
+    if (_busy || _pending == null) return false;
     setState(() => _busy = true);
     try {
       await _sendPending();
+      return true;
     } catch (e) {
       if (mounted) setState(() => _error = _errorText(e));
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -269,7 +405,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     'sent' => t('업체 전달', 'Sent', 'Đã gửi'),
     'confirmed' => t('업체 확인', 'Confirmed', 'Đã xác nhận'),
     'save_request' => t('수정', 'Edit', 'Sửa'),
-    'submit_request' => t('제출', 'Submit', 'Gửi'),
+    'submit_request' => t('승인 요청', 'Submit for approval', 'Gửi duyệt'),
     'store_approve' => t('매장 승인', 'Approve request', 'Duyệt yêu cầu'),
     'return_request' => t('반려', 'Return', 'Trả lại'),
     'office_approve' => t('구매 승인', 'Approve purchase', 'Duyệt mua hàng'),
@@ -286,22 +422,33 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     _ => action,
   };
   Future<void> _editRequest([Map<String, dynamic>? request]) async {
-    final payload = await showDialog<Map<String, dynamic>>(
+    await showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
       builder: (c) => ProcurementRequestDialog(
         products: rows(_data['products']),
         supplierItems: rows(_data['supplier_items']),
         initial: request,
+        catalogHasMore: _data['catalog_has_more'] == true,
+        loadCatalog: widget.loadPage == null
+            ? null
+            : (query) => widget.loadPage!({
+                ...query,
+                if (request != null) 'request_id': request['id'],
+              }),
+        saveRequest: (payload) async =>
+            await _execute(
+              request == null ? 'create_request' : 'save_request',
+              request,
+              payload,
+            )
+            ? null
+            : (_error ?? copy('saveFailed')),
+        needsConfirmation: () => _pending != null,
+        retrySavedRequest: () async =>
+            await _retry() ? null : (_error ?? copy('saveFailed')),
       ),
     );
-    if (payload != null && mounted) {
-      await _execute(
-        request == null ? 'create_request' : 'save_request',
-        request,
-        payload,
-      );
-    }
   }
 
   Future<Map<String, dynamic>?> _fields(
@@ -334,39 +481,6 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     if (value != null) await _execute('save_product', null, value);
   }
 
-  void _createdDate(String key, String input) {
-    final value = input.trim();
-    final parsed = DateTime.tryParse(value);
-    final candidate = {..._query};
-    if (value.isEmpty) {
-      candidate.remove(key);
-    } else {
-      candidate[key] = value;
-    }
-    if (value.isNotEmpty &&
-            (parsed == null ||
-                !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value) ||
-                parsed.toIso8601String().substring(0, 10) != value) ||
-        candidate['created_from'] != null &&
-            candidate['created_to'] != null &&
-            candidate['created_from'].toString().compareTo(
-                  candidate['created_to'].toString(),
-                ) >
-                0) {
-      setState(() => _error = copy('dateFilterInvalid'));
-      return;
-    }
-    _query.clear();
-    _query.addAll(candidate);
-    _query.removeWhere(
-      (key, _) =>
-          key.startsWith('request_before') || key.startsWith('order_before'),
-    );
-    _selectedId = null;
-    _selectedOrderId = null;
-    _load();
-  }
-
   Widget _accountingStatus(Map<String, dynamic> order) {
     final status = map(order['accounting_status']);
     if (status.isEmpty) return const SizedBox.shrink();
@@ -386,41 +500,6 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
         'new_requests_enabled': policy['new_requests_enabled'] == false,
       },
     );
-  }
-
-  Future<void> _moreCatalog() async {
-    if (widget.loadPage == null || _catalogCursor == null || _busy) return;
-    setState(() => _busy = true);
-    try {
-      final data = await widget.loadPage!({
-        ..._query,
-        'catalog_after': _catalogCursor,
-      });
-      if (!mounted) return;
-      final incoming = rows(data['products']);
-      _catalogCursor = incoming.lastOrNull?['id']?.toString();
-      setState(
-        () => _data = {
-          ..._data,
-          'products': {
-            for (final p in [...rows(_data['products']), ...incoming])
-              p['id']: p,
-          }.values.toList(),
-          'supplier_items': {
-            for (final p in [
-              ...rows(_data['supplier_items']),
-              ...rows(data['supplier_items']),
-            ])
-              p['id']: p,
-          }.values.toList(),
-          'catalog_has_more': data['catalog_has_more'],
-        },
-      );
-    } catch (e) {
-      if (mounted) setState(() => _error = _errorText(e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _nextEvidence(String kind) async {
@@ -475,8 +554,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     final records = rows(_data[kind == 'request' ? 'requests' : 'orders']);
     if (records.isEmpty) return;
     final last = records.last;
-    _query['${kind}_before'] =
-        last[kind == 'request' ? 'updated_at' : 'created_at'];
+    _query['${kind}_before'] = last['created_at'];
     _query['${kind}_before_id'] = last['id'];
     _selectedId = null;
     _selectedOrderId = null;
@@ -505,13 +583,26 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     return copy('dates')
         .replaceAll(
           '{0}',
-          '${r['pr_created_at'] ?? terms['pr_created_at'] ?? r['created_at'] ?? '—'}',
+          procurementDate(
+            r['pr_created_at'] ?? terms['pr_created_at'] ?? r['created_at'],
+          ),
         )
         .replaceAll(
           '{1}',
-          '${r['pr_submitted_at'] ?? terms['pr_submitted_at'] ?? r['submitted_at'] ?? '—'}',
+          procurementDate(
+            r['pr_submitted_at'] ??
+                terms['pr_submitted_at'] ??
+                r['submitted_at'],
+            includeTime: true,
+          ),
         )
-        .replaceAll('{2}', '${r['issued_at'] ?? terms['issued_at'] ?? '—'}');
+        .replaceAll(
+          '{2}',
+          procurementDate(
+            r['issued_at'] ?? terms['issued_at'],
+            includeTime: true,
+          ),
+        );
   }
 
   Future<void> _action(String action, Map<String, dynamic> request) async {
@@ -544,6 +635,31 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
               },
           ],
         });
+      }
+      return;
+    }
+    if (action == 'cancel_request' &&
+        requesterView &&
+        ['draft', 'returned'].contains(request['status'])) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(copy('deleteDraft')),
+          content: Text(copy('deleteDraftMessage')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: Text(t('취소', 'Cancel', 'Hủy')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: Text(copy('deleteDraft')),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        await _execute(action, request, {'reason': 'deleted_before_submit'});
       }
       return;
     }
@@ -849,12 +965,47 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
         ? detail
         : requests.where((r) => r['id'] == _selectedId).firstOrNull;
     final unavailable = _busy || _pending != null;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          t('구매요청·발주', 'Purchase requests & orders', 'Yêu cầu và đơn mua'),
-        ),
+        title: Text(copy(widget.requesterView ? 'management' : 'historyTitle')),
         actions: [
+          if (compact &&
+              (widget.onOpenReceiving != null || widget.onOpenLegacy != null))
+            PopupMenuButton<String>(
+              enabled: !unavailable,
+              onSelected: (value) => value == 'receiving'
+                  ? widget.onOpenReceiving?.call()
+                  : widget.onOpenLegacy?.call(),
+              itemBuilder: (_) => [
+                if (widget.onOpenReceiving != null)
+                  PopupMenuItem(
+                    value: 'receiving',
+                    child: Text(copy('receiving')),
+                  ),
+                if (widget.onOpenLegacy != null)
+                  PopupMenuItem(
+                    value: 'legacy',
+                    child: Text(copy('legacyOrders')),
+                  ),
+              ],
+            ),
+          if (!compact && widget.onOpenReceiving != null)
+            TextButton(
+              onPressed: unavailable ? null : widget.onOpenReceiving,
+              child: Text(copy('receiving')),
+            ),
+          if (!compact && widget.onOpenLegacy != null)
+            TextButton(
+              onPressed: unavailable ? null : widget.onOpenLegacy,
+              child: Text(copy('legacyOrders')),
+            ),
+          if (widget.onLogout != null)
+            IconButton(
+              onPressed: unavailable ? null : widget.onLogout,
+              icon: const Icon(Icons.logout),
+              tooltip: copy('logout'),
+            ),
           IconButton(
             onPressed: _busy ? null : _load,
             icon: const Icon(Icons.refresh),
@@ -865,8 +1016,27 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
+              controller: _scroll,
               padding: const EdgeInsets.all(20),
               children: [
+                if (widget.requesterView)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(copy('requestApprovals')),
+                  ),
+                if (_notice != null || _needsListRefresh)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      _needsListRefresh ? copy('savedRefreshNeeded') : _notice!,
+                      key: const Key('procurement_command_notice'),
+                    ),
+                  ),
+                if (widget.requesterView)
+                  Text(
+                    copy('historyTitle'),
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                 if (_error != null)
                   Card(
                     child: Padding(
@@ -930,76 +1100,83 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                   runSpacing: 8,
                   children: [
                     if (widget.loadPage != null)
-                      TextButton(
-                        onPressed: unavailable
-                            ? null
-                            : () {
-                                _query.clear();
-                                _selectedId = null;
-                                _selectedOrderId = null;
-                                _load();
-                              },
-                        child: Text(copy('firstPage')),
+                      SizedBox(
+                        width: 190,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          key: ValueKey(
+                            'procurement_category:${_query['purchase_category']}',
+                          ),
+                          initialValue:
+                              _query['purchase_category']?.toString() ?? '',
+                          decoration: InputDecoration(
+                            labelText: copy('category'),
+                          ),
+                          items: [
+                            for (final category in [
+                              '',
+                              'raw_material',
+                              'tools',
+                              'beverage',
+                              'other',
+                            ])
+                              DropdownMenuItem(
+                                value: category,
+                                child: Text(
+                                  copy(category.isEmpty ? 'all' : category),
+                                ),
+                              ),
+                          ],
+                          onChanged: unavailable
+                              ? null
+                              : (value) => _filter('purchase_category', value),
+                        ),
                       ),
                     if (widget.loadPage != null)
                       SizedBox(
-                        width: 220,
+                        width: 240,
                         child: TextField(
+                          controller: _search,
                           decoration: InputDecoration(
-                            labelText: copy('searchCatalog'),
+                            labelText: copy('searchRecords'),
                           ),
-                          onSubmitted: (value) {
-                            _query['catalog_search'] = value;
-                            _query.remove('catalog_after');
-                            _load();
-                          },
+                          onSubmitted: unavailable
+                              ? null
+                              : (value) => _filter('search', value.trim()),
                         ),
                       ),
-                    if (_data['catalog_has_more'] == true)
-                      TextButton(
-                        onPressed: unavailable ? null : _moreCatalog,
-                        child: Text(copy('moreCatalog')),
+                    if (widget.loadPage != null)
+                      SizedBox(
+                        width: 190,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          key: ValueKey(
+                            'procurement_period:$_period:${_query['created_from']}:${_query['created_to']}',
+                          ),
+                          initialValue: _period,
+                          decoration: InputDecoration(
+                            labelText: copy('period'),
+                          ),
+                          items: [
+                            DropdownMenuItem(
+                              value: 'recent',
+                              child: Text(copy('recentMonth')),
+                            ),
+                            DropdownMenuItem(
+                              value: 'custom',
+                              child: Text(copy('customPeriod')),
+                            ),
+                          ],
+                          onChanged: unavailable ? null : _choosePeriod,
+                        ),
                       ),
-                    if (actor['can_office_approve'] == true)
+                    if (!requesterView && actor['can_office_approve'] == true)
                       TextButton(
                         onPressed: unavailable || !enabled
                             ? null
                             : _saveProduct,
                         child: Text(copy('catalogSetup')),
                       ),
-                    if (widget.loadPage != null)
-                      SizedBox(
-                        width: 220,
-                        child: TextField(
-                          decoration: InputDecoration(
-                            labelText: copy('searchRecords'),
-                          ),
-                          onSubmitted: (value) {
-                            _query['search'] = value;
-                            _query.remove('request_before');
-                            _query.remove('order_before');
-                            _selectedId = null;
-                            _selectedOrderId = null;
-                            _load();
-                          },
-                        ),
-                      ),
-                    if (widget.loadPage != null)
-                      for (final field in ['created_from', 'created_to'])
-                        SizedBox(
-                          width: 180,
-                          child: TextField(
-                            key: Key('procurement_$field'),
-                            decoration: InputDecoration(
-                              labelText: copy(
-                                field == 'created_from'
-                                    ? 'createdFrom'
-                                    : 'createdTo',
-                              ),
-                            ),
-                            onSubmitted: (value) => _createdDate(field, value),
-                          ),
-                        ),
                     if (actor['can_create'] == true)
                       FilledButton.icon(
                         key: const Key('procurement_create_request'),
@@ -1035,40 +1212,42 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                ExpansionTile(
-                  title: Text(copy('operatingMetrics')),
-                  onExpansionChanged: (v) {
-                    if (v && _query['include_metrics'] != true) {
-                      _query['include_metrics'] = true;
-                      _load();
-                    }
-                  },
-                  children: [
-                    ProcurementMetrics(
-                      data: map(_data['operating_metrics']),
-                      label: copy,
-                    ),
-                  ],
-                ),
-                ExpansionTile(
-                  initiallyExpanded: _query['include_evidence'] == true,
-                  onExpansionChanged: (v) {
-                    if (v && _query['include_evidence'] != true) {
-                      _query['include_evidence'] = true;
-                      _load();
-                    }
-                  },
-                  title: Text(
-                    t(
-                      '재고·수요 확인',
-                      'Stock and demand',
-                      'Kiểm tra tồn và nhu cầu',
-                    ),
+                if (!requesterView)
+                  ExpansionTile(
+                    title: Text(copy('operatingMetrics')),
+                    onExpansionChanged: (v) {
+                      if (v && _query['include_metrics'] != true) {
+                        _query['include_metrics'] = true;
+                        _load();
+                      }
+                    },
+                    children: [
+                      ProcurementMetrics(
+                        data: map(_data['operating_metrics']),
+                        label: copy,
+                      ),
+                    ],
                   ),
-                  children: [
-                    for (final d in rows(_data['demand'])) _demandCard(d),
-                  ],
-                ),
+                if (!requesterView)
+                  ExpansionTile(
+                    initiallyExpanded: _query['include_evidence'] == true,
+                    onExpansionChanged: (v) {
+                      if (v && _query['include_evidence'] != true) {
+                        _query['include_evidence'] = true;
+                        _load();
+                      }
+                    },
+                    title: Text(
+                      t(
+                        '재고·수요 확인',
+                        'Stock and demand',
+                        'Kiểm tra tồn và nhu cầu',
+                      ),
+                    ),
+                    children: [
+                      for (final d in rows(_data['demand'])) _demandCard(d),
+                    ],
+                  ),
 
                 if (widget.loadPage != null && actor['can_view_prices'] == true)
                   TextButton(
@@ -1111,6 +1290,37 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                           : null,
                     ),
                   ),
+                Text(
+                  copy('requestOverview'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (widget.loadPage != null)
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final group in ['pending', 'approved', 'cancelled'])
+                        ChoiceChip(
+                          label: Text(
+                            '${copy('group_$group')} (${map(_data['request_counts'])[group] ?? 0})',
+                          ),
+                          selected: _query['request_group'] == group,
+                          onSelected: unavailable
+                              ? null
+                              : (_) => _filter('request_group', group),
+                        ),
+                    ],
+                  ),
+                if (widget.loadPage != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      '${copy('period')}: ${_query['created_from']} ~ ${_query['created_to']}',
+                    ),
+                  ),
+                Text(
+                  copy('requestList'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 if (requests.isEmpty)
                   Text(
                     t(
@@ -1127,7 +1337,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                         '${r['request_no']} · ${label(r['status'].toString())}',
                       ),
                       subtitle: Text(
-                        '${r['reason']}\n${r['requested_delivery_date']}\n${_dates(r)}',
+                        '${copy('requestDate')} ${procurementDate(r['created_at'])} / ${copy('requiredDate')} ${procurementDate(r['requested_delivery_date'])}\n${r['reason']} · ${copy(r['purchase_category']?.toString() ?? 'raw_material')} · ${r['line_count'] ?? rows(r['lines']).length} ${copy('itemCount')}',
                       ),
                       isThreeLine: true,
                       onTap: () => _selectRequest(r['id'].toString()),
@@ -1139,7 +1349,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                     child: Text(copy('nextRequests')),
                   ),
                 if (selected != null) ...[
-                  Text(_dates(selected)),
+                  Text(
+                    '${copy('requestDate')} ${procurementDate(selected['created_at'])} / ${copy('requiredDate')} ${procurementDate(selected['requested_delivery_date'])}',
+                  ),
                   if (widget.exportDocument != null)
                     TextButton(
                       onPressed: unavailable
@@ -1158,7 +1370,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                         '${line['product_name']} · ${line['requested_quantity']} ${line['requested_unit']}',
                       ),
                       subtitle: Text(
-                        '${t('요청 당시 재고', 'Stock at request', 'Tồn kho khi yêu cầu')}: ${line['current_stock_snapshot'] ?? '—'} · ${line['stock_updated_at'] ?? '—'}\n${line['memo'] ?? ''}\n${copy('estimate')}: ${line['estimated_unit_price'] ?? '—'} / ${line['estimated_order_unit'] ?? '—'}',
+                        '${t('요청 당시 재고', 'Stock at request', 'Tồn kho khi yêu cầu')}: ${procurementNumber(line['current_stock_snapshot'], decimals: 3)}\n${line['memo'] ?? ''}\n${copy('estimate')}: ${line['estimated_unit_price'] == null ? copy('quoteNeeded') : procurementNumber(line['estimated_unit_price'])} / ${line['estimated_order_unit'] ?? '—'}',
                       ),
                     ),
                   Wrap(
@@ -1169,30 +1381,48 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                           in (selected['allowed_actions'] as List? ?? [])
                               .cast<String>())
                         if ([
-                          'save_request',
-                          'submit_request',
-                          'store_approve',
-                          'adjust_request',
-                          'brand_approve',
-                          'cancel_request',
-                          'return_request',
-                          'office_approve',
-                          'senior_approve',
-                        ].contains(action))
+                              'save_request',
+                              'submit_request',
+                              'store_approve',
+                              'adjust_request',
+                              'brand_approve',
+                              'cancel_request',
+                              'return_request',
+                              'office_approve',
+                              'senior_approve',
+                            ].contains(action) &&
+                            (![
+                                  'save_request',
+                                  'submit_request',
+                                ].contains(action) ||
+                                [
+                                  'draft',
+                                  'returned',
+                                ].contains(selected['status'])))
                           OutlinedButton(
                             onPressed: unavailable
                                 ? null
                                 : () => _action(action, selected),
-                            child: Text(label(action)),
+                            child: Text(
+                              action == 'cancel_request' &&
+                                      requesterView &&
+                                      [
+                                        'draft',
+                                        'returned',
+                                      ].contains(selected['status'])
+                                  ? copy('deleteDraft')
+                                  : label(action),
+                            ),
                           ),
                     ],
                   ),
                 ],
                 const Divider(),
-                Text(
-                  t('발주 진행', 'Purchase orders', 'Tiến độ đơn mua'),
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
+                if (!requesterView || _selectedId != null)
+                  Text(
+                    t('발주 진행', 'Purchase orders', 'Tiến độ đơn mua'),
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                 for (final order in rows(_data['orders']))
                   Card(
                     child: ListTile(
@@ -1269,7 +1499,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                     dense: true,
                     title: Text(label(e['action'].toString())),
                     subtitle: Text(
-                      '${e['created_at']} · ${map(e['actor'])['display_name'] ?? map(e['actor'])['role'] ?? map(e['actor'])['system']}\n${e['reason'] ?? ''}',
+                      '${procurementDate(e['created_at'], includeTime: true)} · ${map(e['actor'])['display_name'] ?? map(e['actor'])['role'] ?? map(e['actor'])['system']}\n${e['reason'] ?? ''}',
                     ),
                   ),
               ],
@@ -1284,7 +1514,17 @@ class ProcurementRequestDialog extends StatefulWidget {
     required this.products,
     required this.supplierItems,
     this.initial,
+    this.loadCatalog,
+    this.catalogHasMore = false,
+    this.saveRequest,
+    this.needsConfirmation,
+    this.retrySavedRequest,
   });
+  final ProcurementPageLoad? loadCatalog;
+  final bool catalogHasMore;
+  final Future<String?> Function(Map<String, dynamic>)? saveRequest;
+  final bool Function()? needsConfirmation;
+  final Future<String?> Function()? retrySavedRequest;
   final List<Map<String, dynamic>> products, supplierItems;
   final Map<String, dynamic>? initial;
   @override
@@ -1299,6 +1539,11 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
   );
 
   String _category = 'raw_material', _channel = 'ordinary';
+  late List<Map<String, dynamic>> _products, _supplierItems;
+  bool _catalogLoading = false, _saving = false, _catalogHasMore = false;
+  bool _needsConfirmation = false;
+  String? _catalogAfter, _saveError;
+  String _catalogSearch = '';
   final _form = GlobalKey<FormState>();
   late TextEditingController _reason, _date, _memo;
   late List<Map<String, dynamic>> _lines;
@@ -1312,19 +1557,26 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
   void initState() {
     super.initState();
     final r = widget.initial;
+    _products = [...widget.products];
+    _supplierItems = [...widget.supplierItems];
+    _catalogHasMore = widget.catalogHasMore;
+    _catalogAfter = _products.lastOrNull?['id']?.toString();
     _category = r?['purchase_category']?.toString() ?? 'raw_material';
     _channel = r?['purchase_channel']?.toString() ?? 'ordinary';
     _reason = TextEditingController(text: r?['reason']?.toString());
     _date = TextEditingController(
       text:
           r?['requested_delivery_date']?.toString() ??
-          DateTime.now().toIso8601String().substring(0, 10),
+          procurementDate(
+            TimeUtils.nowVietnam().toIso8601String().substring(0, 10),
+          ),
     );
     _memo = TextEditingController(text: r?['memo']?.toString());
     _lines = (r?['lines'] as List? ?? [])
         .map(
           (e) => Map<String, dynamic>.from(e as Map)
-            ..['quantity'] = e['requested_quantity']?.toString()
+            ..['quantity'] = (e['requested_quantity'] ?? e['quantity'])
+                ?.toString()
             ..['unit'] = e['requested_unit']
             ..['_key'] = const Uuid().v4(),
         )
@@ -1342,38 +1594,71 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
     super.dispose();
   }
 
+  Future<void> _loadCatalog({bool more = false}) async {
+    if (_catalogLoading || widget.loadCatalog == null) return;
+    setState(() => _catalogLoading = true);
+    try {
+      final data = await widget.loadCatalog!({
+        'catalog_search': _catalogSearch,
+        if (more && _catalogAfter != null) 'catalog_after': _catalogAfter,
+      });
+      if (!mounted) return;
+      final incoming = (data['products'] as List? ?? [])
+          .map((p) => Map<String, dynamic>.from(p as Map))
+          .toList();
+      final items = (data['supplier_items'] as List? ?? [])
+          .map((p) => Map<String, dynamic>.from(p as Map))
+          .toList();
+      setState(() {
+        final selected = _lines.map((l) => l['product_id']).toSet();
+        _products = {
+          for (final p in [
+            ..._products.where((p) => more || selected.contains(p['id'])),
+            ...incoming,
+          ])
+            p['id']: p,
+        }.values.toList();
+        final ids = _products.map((p) => p['id']).toSet();
+        _supplierItems = {
+          for (final i in [
+            ..._supplierItems.where((i) => ids.contains(i['product_id'])),
+            ...items,
+          ])
+            i['id']: i,
+        }.values.toList();
+        _catalogAfter = incoming.lastOrNull?['id']?.toString();
+        _catalogHasMore = data['catalog_has_more'] == true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _saveError = copy('saveFailed'));
+    } finally {
+      if (mounted) setState(() => _catalogLoading = false);
+    }
+  }
+
   num? _estimate(Map<String, dynamic> line) {
-    final product = widget.products
+    final product = _products
         .where((p) => p['id'] == line['product_id'])
         .firstOrNull;
-    final items =
-        widget.supplierItems
-            .where(
-              (p) =>
-                  p['product_id'] == line['product_id'] &&
-                  p['supplier_id'] == line['preferred_supplier_id'],
-            )
-            .toList()
-          ..sort((a, b) {
-            final preferred =
-                (b['is_preferred'] == true ? 1 : 0) -
-                (a['is_preferred'] == true ? 1 : 0);
-            return preferred != 0
-                ? preferred
-                : a['id'].toString().compareTo(b['id'].toString());
-          });
-    if (product == null || items.isEmpty) return null;
+    final item = procurementEstimateItem(
+      _supplierItems,
+      line['product_id'] as String?,
+      line['preferred_supplier_id'] as String?,
+    );
     num n(dynamic v) => v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
-    final i = items.first,
-        conversion = n(items.first['order_unit_quantity_base']);
-    if (conversion <= 0 || !conversion.isFinite || i['unit_price'] == null) {
+    if (product == null ||
+        item == null ||
+        item['unit_price'] == null ||
+        n(item['order_unit_quantity_base']) <= 0) {
       return null;
     }
-    return n(line['quantity']) *
+    final net =
+        n(line['quantity']) *
         (line['unit'] == product['base_unit'] ? 1 : n(product['conversion'])) /
-        conversion *
-        n(i['unit_price']) *
-        (1 + n(i['tax_rate']) / 100);
+        n(item['order_unit_quantity_base']) *
+        n(item['unit_price']);
+    return num.parse(net.toStringAsFixed(2)) +
+        num.parse((net * n(item['tax_rate']) / 100).toStringAsFixed(2));
   }
 
   @override
@@ -1382,255 +1667,309 @@ class _ProcurementRequestDialogState extends State<ProcurementRequestDialog> {
     content: SizedBox(
       width: 700,
       child: SingleChildScrollView(
-        child: Form(
-          key: _form,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${copy('expectedTotal')}: ${_lines.any((l) => _estimate(l) == null) ? '—' : _lines.fold<num>(0, (sum, l) => sum + _estimate(l)!).toStringAsFixed(2)} VND',
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: _category,
-                decoration: InputDecoration(labelText: copy('category')),
-                items: [
-                  for (final k in [
-                    'raw_material',
-                    'tools',
-                    'stationery',
-                    'other',
-                  ])
-                    DropdownMenuItem(value: k, child: Text(copy(k))),
-                ],
-                onChanged: (v) => setState(() => _category = v!),
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: _channel,
-                decoration: InputDecoration(labelText: copy('channel')),
-                items: [
-                  for (final k in ['ordinary', 'shopee'])
-                    DropdownMenuItem(value: k, child: Text(copy(k))),
-                ],
-                onChanged: (v) => setState(() => _channel = v!),
-              ),
-
-              TextFormField(
-                controller: _reason,
-                decoration: InputDecoration(
-                  labelText: t('구매 사유 *', 'Reason *', 'Lý do *'),
-                ),
-                validator: (s) => s == null || s.trim().isEmpty
-                    ? t('필수 입력', 'Required', 'Bắt buộc')
-                    : null,
-              ),
-              TextFormField(
-                controller: _date,
-                decoration: InputDecoration(
-                  labelText: t(
-                    '희망 입고일 (YYYY-MM-DD)',
-                    'Required date (YYYY-MM-DD)',
-                    'Ngày cần hàng (YYYY-MM-DD)',
+        child: ExcludeFocus(
+          excluding: _saving || _needsConfirmation,
+          child: AbsorbPointer(
+            absorbing: _saving || _needsConfirmation,
+            child: Form(
+              key: _form,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${copy('expectedTotal')}: ${_lines.any((l) => _estimate(l) == null) ? copy('quoteNeeded') : procurementNumber(_lines.fold<num>(0, (sum, l) => sum + _estimate(l)!))} VND',
                   ),
-                ),
-                validator: (s) =>
-                    s != null &&
-                        RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s) &&
-                        DateTime.tryParse(
-                              s,
-                            )?.toIso8601String().substring(0, 10) ==
-                            s
-                    ? null
-                    : t('날짜 확인', 'Check the date', 'Kiểm tra ngày'),
-              ),
-              TextFormField(
-                controller: _memo,
-                decoration: InputDecoration(
-                  labelText: t('비고', 'Notes', 'Ghi chú'),
-                ),
-              ),
-              for (final line in _lines)
-                Padding(
-                  key: ValueKey(line['_key']),
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Column(
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: line['product_id'] as String?,
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          labelText: t('품목', 'Item', 'Mặt hàng'),
-                        ),
-                        items: widget.products
-                            .map(
-                              (p) => DropdownMenuItem(
-                                value: p['id'].toString(),
-                                child: Text(
-                                  '${p['name']} · ${t('현재고', 'Stock', 'Tồn')}: ${p['current_stock'] ?? '—'} ${p['base_unit']}',
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        validator: (s) => s == null
-                            ? t('품목 선택', 'Choose item', 'Chọn mặt hàng')
-                            : null,
-                        onChanged: (id) => setState(() {
-                          line['product_id'] = id;
-                          line['unit'] = widget.products.firstWhere(
-                            (p) => p['id'] == id,
-                          )['stock_unit'];
-                          line['preferred_supplier_id'] = null;
-                        }),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _category == 'stationery'
+                        ? 'tools'
+                        : _category,
+                    decoration: InputDecoration(labelText: copy('category')),
+                    items: [
+                      for (final k in [
+                        'raw_material',
+                        'tools',
+                        'beverage',
+                        'other',
+                      ])
+                        DropdownMenuItem(value: k, child: Text(copy(k))),
+                    ],
+                    onChanged: (v) => setState(() => _category = v!),
+                  ),
+                  TextFormField(
+                    controller: _reason,
+                    decoration: InputDecoration(
+                      labelText: t('구매 사유 *', 'Reason *', 'Lý do *'),
+                    ),
+                    validator: (s) => s == null || s.trim().isEmpty
+                        ? t('필수 입력', 'Required', 'Bắt buộc')
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: _date,
+                    decoration: InputDecoration(
+                      labelText: t(
+                        '필요일 (YYYY-MM-DD)',
+                        'Required date (YYYY-MM-DD)',
+                        'Ngày cần hàng (YYYY-MM-DD)',
                       ),
-                      Row(
+                    ),
+                    validator: (s) =>
+                        s != null &&
+                            RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s) &&
+                            DateTime.tryParse(
+                                  s,
+                                )?.toIso8601String().substring(0, 10) ==
+                                s
+                        ? null
+                        : t('날짜 확인', 'Check the date', 'Kiểm tra ngày'),
+                  ),
+                  TextFormField(
+                    controller: _memo,
+                    decoration: InputDecoration(
+                      labelText: t('비고', 'Notes', 'Ghi chú'),
+                    ),
+                  ),
+                  if (widget.loadCatalog != null)
+                    TextField(
+                      decoration: InputDecoration(
+                        labelText: copy('searchCatalog'),
+                      ),
+                      onSubmitted: _saving
+                          ? null
+                          : (value) {
+                              _catalogSearch = value.trim();
+                              _loadCatalog();
+                            },
+                    ),
+                  if (_catalogLoading) const LinearProgressIndicator(),
+                  if (_catalogHasMore && widget.loadCatalog != null)
+                    TextButton(
+                      onPressed: _catalogLoading || _saving
+                          ? null
+                          : () => _loadCatalog(more: true),
+                      child: Text(copy('moreCatalog')),
+                    ),
+                  if (_saveError != null)
+                    Text(
+                      _saveError!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  if (_needsConfirmation)
+                    Text(
+                      t(
+                        '저장 여부를 확인해야 합니다. 아래 버튼으로 같은 요청을 재시도하세요.',
+                        'Saving needs confirmation. Use the button below to retry the same request.',
+                        'Cần xác nhận việc lưu. Dùng nút bên dưới để thử lại cùng yêu cầu.',
+                      ),
+                    ),
+                  for (final line in _lines)
+                    Padding(
+                      key: ValueKey(line['_key']),
+                      padding: const EdgeInsets.only(top: 16),
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: TextFormField(
-                              initialValue: line['quantity']?.toString(),
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              decoration: InputDecoration(
-                                labelText: t('필요 수량', 'Quantity', 'Số lượng'),
-                              ),
-                              onChanged: (s) =>
-                                  setState(() => line['quantity'] = s),
-                              validator: (s) =>
-                                  s != null &&
-                                      RegExp(
-                                        r'^\d+(\.\d{1,3})?$',
-                                      ).hasMatch(s) &&
-                                      (double.tryParse(s) ?? 0) > 0 &&
-                                      (double.tryParse(s)?.isFinite ?? false)
-                                  ? null
-                                  : t(
-                                      '양수·소수 3자리 이내',
-                                      'Positive, up to 3 decimals',
-                                      'Số dương, tối đa 3 số lẻ',
-                                    ),
+                          DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: line['product_id'] as String?,
+                            decoration: InputDecoration(
+                              labelText: t('품목', 'Item', 'Mặt hàng'),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              key: ValueKey(
-                                '${line['_key']}:${line['product_id']}',
-                              ),
-                              initialValue: line['unit'] as String?,
-                              decoration: InputDecoration(
-                                labelText: t('단위', 'Unit', 'Đơn vị'),
-                              ),
-                              items: widget.products
-                                  .where((p) => p['id'] == line['product_id'])
-                                  .expand(
-                                    (p) => <String>{
-                                      p['stock_unit'].toString(),
-                                      p['base_unit'].toString(),
-                                    },
-                                  )
-                                  .map(
-                                    (u) => DropdownMenuItem(
-                                      value: u,
-                                      child: Text(u),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (u) =>
-                                  setState(() => line['unit'] = u),
-                              validator: (s) => s == null
-                                  ? t('단위 선택', 'Select unit', 'Chọn đơn vị')
-                                  : null,
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _lines.length > 1
-                                ? () => setState(() => _lines.remove(line))
-                                : null,
-                            icon: const Icon(Icons.delete_outline),
-                            tooltip: t('품목 삭제', 'Remove item', 'Xóa mặt hàng'),
-                          ),
-                        ],
-                      ),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey(
-                          'supplier:${line['_key']}:${line['product_id']}',
-                        ),
-                        initialValue: line['preferred_supplier_id'] as String?,
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          labelText: t(
-                            '권장 공급업체 (선택)',
-                            'Suggested supplier (optional)',
-                            'Nhà cung cấp đề xuất (tùy chọn)',
-                          ),
-                        ),
-                        items:
-                            {
-                                  for (final s in widget.supplierItems.where(
-                                    (s) =>
-                                        s['product_id'] == line['product_id'],
-                                  ))
-                                    s['supplier_id'].toString():
-                                        '${s['supplier_name']} · ${s['unit_price'] ?? '—'} / ${s['order_unit']}',
-                                }.entries
+                            items: _products
                                 .map(
-                                  (e) => DropdownMenuItem(
-                                    value: e.key,
-                                    child: Text(e.value),
+                                  (p) => DropdownMenuItem(
+                                    value: p['id'].toString(),
+                                    child: Text(
+                                      '${p['name']} · ${t('현재고', 'Stock', 'Tồn')}: ${p['current_stock'] ?? '—'} ${p['base_unit']}',
+                                    ),
                                   ),
                                 )
                                 .toList(),
-                        onChanged: (s) =>
-                            setState(() => line['preferred_supplier_id'] = s),
-                      ),
-                      TextFormField(
-                        initialValue: line['memo']?.toString(),
-                        decoration: InputDecoration(
-                          labelText: t(
-                            '품목 비고',
-                            'Item note',
-                            'Ghi chú mặt hàng',
+                            validator: (s) => s == null
+                                ? t('품목 선택', 'Choose item', 'Chọn mặt hàng')
+                                : null,
+                            onChanged: (id) => setState(() {
+                              line['product_id'] = id;
+                              line['unit'] = _products.firstWhere(
+                                (p) => p['id'] == id,
+                              )['stock_unit'];
+                              line['preferred_supplier_id'] = null;
+                            }),
                           ),
-                        ),
-                        onChanged: (s) => line['memo'] = s,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  initialValue: line['quantity']?.toString(),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  decoration: InputDecoration(
+                                    labelText: t(
+                                      '필요 수량',
+                                      'Quantity',
+                                      'Số lượng',
+                                    ),
+                                  ),
+                                  onChanged: (s) =>
+                                      setState(() => line['quantity'] = s),
+                                  validator: (s) =>
+                                      s != null &&
+                                          RegExp(
+                                            r'^\d+(\.\d{1,3})?$',
+                                          ).hasMatch(s) &&
+                                          (double.tryParse(s) ?? 0) > 0 &&
+                                          (double.tryParse(s)?.isFinite ??
+                                              false)
+                                      ? null
+                                      : t(
+                                          '양수·소수 3자리 이내',
+                                          'Positive, up to 3 decimals',
+                                          'Số dương, tối đa 3 số lẻ',
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  key: ValueKey(
+                                    '${line['_key']}:${line['product_id']}',
+                                  ),
+                                  initialValue: line['unit'] as String?,
+                                  decoration: InputDecoration(
+                                    labelText: t('단위', 'Unit', 'Đơn vị'),
+                                  ),
+                                  items: _products
+                                      .where(
+                                        (p) => p['id'] == line['product_id'],
+                                      )
+                                      .expand(
+                                        (p) => <String>{
+                                          p['stock_unit'].toString(),
+                                          p['base_unit'].toString(),
+                                        },
+                                      )
+                                      .map(
+                                        (u) => DropdownMenuItem(
+                                          value: u,
+                                          child: Text(u),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (u) =>
+                                      setState(() => line['unit'] = u),
+                                  validator: (s) => s == null
+                                      ? t('단위 선택', 'Select unit', 'Chọn đơn vị')
+                                      : null,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: _lines.length > 1
+                                    ? () => setState(() => _lines.remove(line))
+                                    : null,
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: t(
+                                  '품목 삭제',
+                                  'Remove item',
+                                  'Xóa mặt hàng',
+                                ),
+                              ),
+                            ],
+                          ),
+                          TextFormField(
+                            initialValue: line['memo']?.toString(),
+                            decoration: InputDecoration(
+                              labelText: t(
+                                '품목 비고',
+                                'Item note',
+                                'Ghi chú mặt hàng',
+                              ),
+                            ),
+                            onChanged: (s) => line['memo'] = s,
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  TextButton.icon(
+                    onPressed: () => setState(
+                      () => _lines.add({
+                        '_key': const Uuid().v4(),
+                        'quantity': '1',
+                      }),
+                    ),
+                    icon: const Icon(Icons.add),
+                    label: Text(t('품목 추가', 'Add item', 'Thêm mặt hàng')),
                   ),
-                ),
-              TextButton.icon(
-                onPressed: () => setState(
-                  () =>
-                      _lines.add({'_key': const Uuid().v4(), 'quantity': '1'}),
-                ),
-                icon: const Icon(Icons.add),
-                label: Text(t('품목 추가', 'Add item', 'Thêm mặt hàng')),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     ),
     actions: [
       TextButton(
-        onPressed: () => Navigator.pop(context),
+        onPressed: _saving ? null : () => Navigator.pop(context),
         child: Text(t('취소', 'Cancel', 'Hủy')),
       ),
       FilledButton(
-        onPressed: () {
-          if (_form.currentState!.validate()) {
-            Navigator.pop(context, {
-              'purchase_category': _category,
-              'purchase_channel': _channel,
-              'reason': _reason.text.trim(),
-              'requested_delivery_date': _date.text,
-              'memo': _memo.text,
-              'lines': _lines
-                  .map((l) => Map<String, dynamic>.from(l)..remove('_key'))
-                  .toList(),
-            });
-          }
-        },
-        child: Text(t('저장', 'Save', 'Lưu')),
+        onPressed: _saving
+            ? null
+            : () async {
+                if (_saving) return;
+                if (!_form.currentState!.validate()) return;
+                final payload = <String, dynamic>{
+                  'purchase_category': _category,
+                  'purchase_channel': _channel,
+                  'reason': _reason.text.trim(),
+                  'requested_delivery_date': _date.text,
+                  'memo': _memo.text,
+                  'lines': _lines
+                      .map((l) => Map<String, dynamic>.from(l)..remove('_key'))
+                      .toList(),
+                };
+                if (widget.saveRequest == null) {
+                  Navigator.pop(context, payload);
+                  return;
+                }
+                setState(() {
+                  _saving = true;
+                  _saveError = null;
+                });
+                FocusScope.of(context).unfocus();
+                try {
+                  final error = _needsConfirmation
+                      ? await widget.retrySavedRequest!()
+                      : await widget.saveRequest!(payload);
+                  if (!context.mounted) return;
+                  if (error == null) {
+                    Navigator.pop(context, payload);
+                  } else {
+                    setState(() {
+                      _saveError = error;
+                      _needsConfirmation =
+                          widget.needsConfirmation?.call() == true;
+                    });
+                  }
+                } catch (_) {
+                  if (mounted) {
+                    setState(() {
+                      _saveError = copy('saveFailed');
+                      _needsConfirmation =
+                          widget.needsConfirmation?.call() == true;
+                    });
+                  }
+                } finally {
+                  if (mounted) setState(() => _saving = false);
+                }
+              },
+        child: Text(
+          _needsConfirmation
+              ? t('같은 요청 재시도', 'Retry saved request', 'Thử lại')
+              : t('저장', 'Save', 'Lưu'),
+        ),
       ),
     ],
   );

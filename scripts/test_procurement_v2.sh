@@ -101,4 +101,20 @@ run_sql "$INVENTORY_ROOT/supabase/tests/procurement_receiving_integrity.test.sql
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261006011000_procurement_account_audit_auth_actor.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_account_audit_auth_actor.test.sql"
 
+run_sql "$INVENTORY_ROOT/scripts/preflight_procurement_pr_account.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261007095000_procurement_pr_account.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_pr_account.sql" >/dev/null
+# Prove the exact pre-traffic rollback before writing any beverage fixture.
+run_sql "$INVENTORY_ROOT/scripts/rollback_procurement_pr_account.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/preflight_procurement_pr_account.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261007095000_procurement_pr_account.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_pr_account.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_pr_account.test.sql"
+# Existing Office reads, approvals and combined receiving survive the PR changes.
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_process_contract.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_paged_reads.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_combined_receiving.test.sql"
+
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_pr_rollback_safety.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_pr_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"

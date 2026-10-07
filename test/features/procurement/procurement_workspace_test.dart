@@ -291,7 +291,7 @@ void main() {
           {
             'id': 'pr-1',
             'request_no': 'PR-1',
-            'status': 'submitted',
+            'status': action == 'return_request' ? 'submitted' : 'draft',
             'reason': 'Gloves',
             'row_version': 2,
             'allowed_actions': [action],
@@ -310,9 +310,15 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('PR-1 · Store review'));
+        await tester.tap(
+          find.text(
+            action == 'return_request' ? 'PR-1 · Store review' : 'PR-1 · Draft',
+          ),
+        );
         await tester.pumpAndSettle();
-        final label = action == 'return_request' ? 'Return' : 'Submit';
+        final label = action == 'return_request'
+            ? 'Return'
+            : 'Submit for approval';
         await tester.tap(find.widgetWithText(OutlinedButton, label));
         await tester.pumpAndSettle();
         expect(calls, isEmpty);
@@ -336,4 +342,90 @@ void main() {
       },
     );
   }
+  testWidgets(
+    'draft deletion confirmation refreshes active list and selected detail',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(1440, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var deleted = false;
+      final queries = <Map<String, dynamic>>[];
+      final calls = <Map<String, dynamic>>[];
+      final draft = <String, dynamic>{
+        'id': 'draft',
+        'request_no': 'PR-DELETE',
+        'status': 'draft',
+        'row_version': 3,
+        'reason': 'Restock',
+        'created_at': '2026-10-07T00:00:00Z',
+        'requested_delivery_date': '2026-10-09',
+        'allowed_actions': ['cancel_request'],
+        'lines': [
+          {
+            'product_name': 'Eggs',
+            'requested_quantity': 1,
+            'requested_unit': 'box',
+            'current_stock_snapshot': 2,
+            'stock_updated_at': '2026-10-06T12:00:00.123456+00:00',
+          },
+        ],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProcurementWorkspacePage(
+            requesterView: true,
+            load: () async => {},
+            loadPage: (q) async {
+              queries.add({...q});
+              return {
+                ...workspace(),
+                'requests': deleted ? [] : [draft],
+                'request_counts': {
+                  'pending': deleted ? 0 : 1,
+                  'approved': 0,
+                  'cancelled': deleted ? 1 : 0,
+                },
+                if (q['request_id'] != null && !deleted)
+                  'request_detail': draft,
+              };
+            },
+            execute: (a, b, c, d, e) async {
+              calls.add({'action': a, 'id': b, 'version': c, 'payload': e});
+              deleted = true;
+              return {...draft, 'status': 'cancelled', 'row_version': 4};
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('PR-DELETE · Draft'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('2026-10-06T12:'), findsNothing);
+      final action = find.widgetWithText(OutlinedButton, 'Delete draft');
+      await tester.scrollUntilVisible(
+        action,
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(calls, isEmpty);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete draft'));
+      await tester.pumpAndSettle();
+      expect(calls.single['version'], 3);
+      expect(calls.single['payload'], {'reason': 'deleted_before_submit'});
+      expect(queries.last.containsKey('request_id'), isFalse);
+      expect(find.text('PR-DELETE · Draft'), findsNothing);
+      expect(find.textContaining('Eggs'), findsNothing);
+      expect(find.text('Drafts / pending (0)'), findsOneWidget);
+      expect(find.text('Cancelled (1)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
