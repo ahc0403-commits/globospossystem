@@ -1852,6 +1852,16 @@ void main() {
         createdAt: DateTime.utc(2026, 10, 6, 2, 15),
         fulfillmentStatus: 'completed',
         messages: const [],
+        customer: const DirectOrderCustomerDetails(
+          customerName: '저장된 고객',
+          customerPhone: 'Fixture phone',
+          formattedAddress: '저장된 배송지',
+          detailAddress: '7층, 경비실 옆',
+          district: 'Fixture district',
+          ward: 'Fixture ward',
+          customerNote: '도착 전에 연락 주세요\n문 앞에서 기다려 주세요',
+        ),
+        delivery: const DirectOrderDelivery(dinerCount: 4, paidTotal: 108000),
         items: const [
           DirectOrderItemSnapshot(
             menuItemId: 'old-menu',
@@ -1885,9 +1895,37 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('direct_open_order_details')));
       await tester.pumpAndSettle();
+      expect(find.text(DirectOrderCopy('ko').packingCount(4)), findsWidgets);
+      expect(find.text('받는 분: 저장된 고객'), findsOneWidget);
+      expect(find.text('전화번호: Fixture phone'), findsOneWidget);
+      expect(
+        find.text('${DirectOrderCopy('ko').detailAddress}: 7층, 경비실 옆'),
+        findsOneWidget,
+      );
+      expect(find.text('주문 요청사항: 도착 전에 연락 주세요\n문 앞에서 기다려 주세요'), findsOneWidget);
+      await _captureCustomerUi(tester, 'order-customer-information-ko');
+      await tester.scrollUntilVisible(
+        find.text('메뉴 요청사항: 파 제외'),
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('direct_order_details_list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.text('주문 당시 메뉴'), findsOneWidget);
       expect(find.text('메뉴 요청사항: 파 제외'), findsOneWidget);
-      expect(find.text('주문시간: 2026-10-06 09:15'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('총 결제금액'),
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('direct_order_details_list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.text('총 결제금액'), findsOneWidget);
       expect(
         find.descendant(

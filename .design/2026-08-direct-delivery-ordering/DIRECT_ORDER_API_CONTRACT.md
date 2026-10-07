@@ -14,6 +14,22 @@ application, Google Maps project configuration, or production verification.
 
 ## Common HTTP contract
 
+### 2026-10-07 stored customer details
+
+`status_v4` uses the same owning-session inputs and 60/minute public rate boundary
+as `status_v3`, calling service-only `direct_order_public_status_v4(uuid,text,uuid)`.
+It adds nullable `customer` with exactly `customer_name`, `customer_phone`,
+`formatted_address`, `detail_address`, `district`, `ward`, and `customer_note`.
+The existing `delivery.diner_count` and item `note` snapshots remain intact.
+PII is read only after v3 validates the secret and request ownership, with a second
+session/request predicate. Purged PII returns null. No customer addresses or notes
+enter the session-wide list or logs. V3 is unchanged for already loaded strict
+clients; v4 rollback keeps the action readable with `customer: null`.
+
+All customer detail fields come from persisted records for the selected order,
+never the current form or today's menu. Opening details makes no additional
+per-item or customer-information request.
+
 - Endpoint: Supabase Edge Function `direct-order-public`.
 - `OPTIONS` is accepted only for an exact configured origin and returns 204.
   All business calls are `POST`; other methods return 405

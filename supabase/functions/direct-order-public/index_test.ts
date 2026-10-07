@@ -322,6 +322,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "status",
       "status_v2",
       "status_v3",
+      "status_v4",
       "orders_v2",
       "orders_v3",
       "push_subscription",
@@ -463,7 +464,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    110,
+    111,
     "registered SQL error count",
   );
   assertEquals(
@@ -489,6 +490,15 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
     packingFailure.code,
     "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
     "packing invariant sanitized",
+  );
+  const detailPrivilegeFailure = normalizeRpcError(
+    "DIRECT_ORDER_DETAIL_PRIVILEGES_INVALID private detail",
+  );
+  assertEquals(detailPrivilegeFailure.status, 503, "detail privilege status");
+  assertEquals(
+    detailPrivilegeFailure.code,
+    "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
+    "detail privilege failure sanitized",
   );
   const conflict = normalizeRpcError(
     "duplicate: DIRECT_ORDER_OPEN_REQUEST_EXISTS detail=private",

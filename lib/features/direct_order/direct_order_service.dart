@@ -407,7 +407,7 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status_v3',
+      'action': 'status_v4',
       'session_id': session.id,
       'secret': session.secret,
       'request_id': requestId,

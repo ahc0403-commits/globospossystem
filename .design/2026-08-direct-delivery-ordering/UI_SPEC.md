@@ -192,6 +192,17 @@ The customer hero, order history, and three-step progress use **확인 대기 / 
 
 The reference line opens `DirectOrderDetailsSheet`, displaying persisted item names, quantities, unit prices, line amounts, item notes, order reference/time, quote totals, service charge, delivery fee mode, VAT, payment and refund information. Menu prices/line amounts are before tax; the quoted menu total includes tax. An unavailable snapshot is identified, not rebuilt from today's menu. Opening the sheet makes no additional item requests.
 
+The 2026-10-07 detail correction also shows delivery/pickup mode, diner count and
+utensil sets, stored recipient/phone, delivery and detailed address (plus stored
+district/ward), and whole-order instructions. Whole-order and item instructions
+are separate emphasized blocks and preserve multiline input. Staff detail reads
+the SQL item `item_note` field; customer snapshots use the public `note` field.
+Pickup contact does not invent a delivery address. Legacy missing diner counts
+require a staff check; missing/purged customer snapshots say unavailable. Empty
+instructions explicitly say none. Proof attachments and customer chat remain in
+their existing selected-order conversation, without copying secrets or attachment
+storage paths into the details panel.
+
 After adding an item, customers can edit a 300-character request below its menu card and in the cart. The request applies to every unit of that cart line; distinct unit requests require separate orders with the present cart model. Notes survive category, locale and address navigation and are submitted through the existing item `note` contract.
 
 The bell opens notification settings. Permission is requested only by the explicit enable action. When supported/configured, customer web push persists after closing the page; permission denial/configuration failure retain status/chat fallback. Pickup ready and actual driver handoff create separate, deduplicated events. Tray packing completion is ready, without pretending a driver received the order.

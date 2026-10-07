@@ -1191,6 +1191,21 @@ class DirectOrderCopy {
   String get totalPaid => _pick('총 결제금액', 'Tổng đã thanh toán', 'Total paid');
   String get itemRequest =>
       _pick('메뉴 요청사항', 'Yêu cầu cho món', 'Item instructions');
+  String get orderRequest =>
+      _pick('주문 요청사항', 'Ghi chú đơn hàng', 'Order instructions');
+  String get customerDetails =>
+      _pick('고객 입력 정보', 'Thông tin khách đã nhập', 'Customer information');
+  String get enteredAddress =>
+      _pick('입력한 주소', 'Địa chỉ đã nhập', 'Entered address');
+  String get notProvided => _pick('미입력', 'Chưa nhập', 'Not provided');
+  String get noInstructions => _pick('없음', 'Không có', 'None');
+  String get noCustomerSnapshot => _pick(
+    '저장된 고객 정보를 확인할 수 없습니다.',
+    'Không có thông tin khách đã lưu.',
+    'Stored customer information is unavailable.',
+  );
+  String get district => _pick('구', 'Quận', 'District');
+  String get ward => _pick('동', 'Phường', 'Ward');
   String get addItemRequest =>
       _pick('요청사항 추가/수정', 'Thêm / sửa yêu cầu', 'Add / edit instructions');
   String get itemRequestHint => _pick(

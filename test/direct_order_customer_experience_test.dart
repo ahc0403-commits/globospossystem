@@ -54,11 +54,63 @@ void main() {
       'quote': null,
       'fulfillment': null,
       'dispatch': null,
+      'customer': {
+        'customer_name': 'Stored fixture customer',
+        'customer_phone': 'Fixture phone',
+        'formatted_address': 'Stored fixture address',
+        'detail_address': 'Door 7',
+        'district': 'Fixture district',
+        'ward': 'Fixture ward',
+        'customer_note': '수령 전 연락\n문 앞에서 기다려 주세요',
+      },
     });
     expect(status.createdAt, DateTime.utc(2026, 10, 6, 2, 15));
     expect(status.items.single.amount, 200000);
     expect(status.items.single.note, '파 제외');
     expect(status.items.single.localizedName('ko'), '김밥');
+    expect(status.customer!.customerName, 'Stored fixture customer');
+    expect(status.customer!.detailAddress, 'Door 7');
+    expect(status.customer!.customerNote, '수령 전 연락\n문 앞에서 기다려 주세요');
+  });
+  test('customer detail accepts unavailable history and rejects extra PII', () {
+    expect(DirectOrderCustomerDetails.fromJson({}).customerName, isNull);
+    expect(
+      () => DirectOrderCustomerDetails.fromJson({'session_secret': 'fixture'}),
+      throwsFormatException,
+    );
+    expect(
+      () => DirectOrderCustomerDetails.fromJson({'customer_phone': 123}),
+      throwsFormatException,
+    );
+  });
+  test('status uses v4 in one owning-session request', () async {
+    final calls = <Map<String, dynamic>>[];
+    final service = DirectOrderService(
+      invoker: (body) async {
+        calls.add(body);
+        return {
+          'request_id': 'request',
+          'store_id': 'store',
+          'reference_code': 'DFIXTURE1',
+          'state': 'approved',
+          'created_at': '2026-10-06T02:15:00Z',
+          'items': [],
+          'messages': [],
+          'customer': null,
+        };
+      },
+    );
+    final status = await service.fetchStatus(
+      session: DirectOrderSession(
+        id: 'session',
+        secret: 'fixture-secret',
+        expiresAt: DateTime.utc(2099),
+      ),
+      requestId: 'request',
+    );
+    expect(calls.single['action'], 'status_v4');
+    expect(calls.single['request_id'], 'request');
+    expect(status.customer, isNull);
   });
   test(
     'push subscription is one session-bound request, unsubscribe excludes the token',
