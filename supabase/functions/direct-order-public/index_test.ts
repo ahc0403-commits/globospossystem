@@ -322,6 +322,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "status",
       "status_v2",
       "status_v3",
+      "status_v4",
       "orders_v2",
       "orders_v3",
       "push_subscription",

@@ -244,6 +244,16 @@ PYFEEDBACK
  run_sql "$PHOTO_ROOT/supabase/migrations/20261006030000_direct_order_customer_experience.sql" > "$PHOTO_TMP/feedback_migration.log" 2>&1 || { cat "$PHOTO_TMP/feedback_migration.log"; exit 1; }
  run_sql "$PHOTO_ROOT/scripts/verify_direct_order_customer_experience.sql" >/dev/null
  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_customer_experience_test.sql"
+ run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_detail_customer_context.sql" >/dev/null
+ detail_v3_before="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT md5(pg_get_functiondef('public.direct_order_public_status_v3(uuid,text,uuid)'::regprocedure))")"
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261007010000_direct_order_detail_customer_context.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/verify_direct_order_detail_customer_context.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_detail_customer_context_test.sql"
+ detail_v3_after="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT md5(pg_get_functiondef('public.direct_order_public_status_v3(uuid,text,uuid)'::regprocedure))")"
+ [[ "$detail_v3_before" == "$detail_v3_after" ]] || { printf 'DETAIL_V3_COMPATIBILITY_CHANGED\n'; exit 1; }
+ run_sql "$PHOTO_ROOT/scripts/rollback_direct_order_detail_customer_context.sql" >/dev/null
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN ASSERT strpos(pg_get_functiondef('public.direct_order_public_status_v4(uuid,text,uuid)'::regprocedure),'jsonb_build_object(''customer'',NULL)')>0,'DETAIL_ROLLBACK_INCOMPATIBLE'; END \$\$;" >/dev/null
+ printf 'DIRECT_ORDER_DETAIL_CUSTOMER_CONTEXT_ROLLBACK=PASS\n'
  run_sql "$PHOTO_ROOT/test/fixtures/direct_order_customer_experience_races.sql" >/dev/null
  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SET statement_timeout='8s'; SELECT feedback_race.staff_event();" > "$PHOTO_TMP/feedback_staff_race.log" 2>&1 &
  feedback_staff_pid=$!

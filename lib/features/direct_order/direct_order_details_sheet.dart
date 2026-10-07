@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'direct_order_copy.dart';
+import 'direct_order_customer_details.dart';
 import 'direct_order_models.dart';
 
 class DirectOrderDetailsSheet extends StatelessWidget {
@@ -61,6 +62,25 @@ class DirectOrderDetailsSheet extends StatelessWidget {
                   Text(
                     '${copy.orderTime}: ${status.createdAt == null ? "—" : DateFormat("yyyy-MM-dd HH:mm").format(status.createdAt!.toUtc().add(const Duration(hours: 7)))}',
                   ),
+                  Text(status.isPickup ? copy.pickup : copy.delivery),
+                  const SizedBox(height: 12),
+                  Text(
+                    copy.packingCount(delivery?.dinerCount),
+                    key: const Key('direct_details_diner_count'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const Divider(height: 28),
+                  Text(
+                    copy.customerDetails,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  DirectOrderCustomerDetailsBody(
+                    key: const Key('direct_details_customer'),
+                    customer: status.customer,
+                    languageCode: languageCode,
+                    isPickup: status.isPickup,
+                  ),
                   const Divider(height: 28),
                   if (status.items.isEmpty)
                     Text(copy.noItemSnapshot)
@@ -83,8 +103,12 @@ class DirectOrderDetailsSheet extends StatelessWidget {
                             '${money.format(item.unitPrice)} × ${item.quantity}',
                             item.amount,
                           ),
-                          if (item.note?.isNotEmpty == true)
-                            Text('${copy.itemRequest}: ${item.note}'),
+                          DirectOrderInstructions(
+                            label: copy.itemRequest,
+                            note: item.note?.trim().isNotEmpty == true
+                                ? item.note
+                                : copy.noInstructions,
+                          ),
                         ],
                       ),
                     ),

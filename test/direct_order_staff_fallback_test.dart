@@ -34,6 +34,8 @@ class _Staff extends DirectOrderStaffService {
   String? sentUrl;
   String? bankReference;
   int? sentTicketVersion;
+  String? customerNote;
+  String? itemNote;
 
   @override
   Future<List<Map<String, dynamic>>> listRequests({
@@ -55,8 +57,23 @@ class _Staff extends DirectOrderStaffService {
     required String storeId,
     required String requestId,
   }) async => {
-    'request': {'id': requestId, 'state': state, 'reference_code': 'D12345678'},
-    'items': <Map<String, dynamic>>[],
+    'request': {
+      'id': requestId,
+      'state': state,
+      'reference_code': 'D12345678',
+      'customer_note': customerNote,
+    },
+    'items': <Map<String, dynamic>>[
+      if (itemNote != null)
+        {
+          'name_ko': '김밥',
+          'name_vi': 'Kimbap',
+          'name_en': 'Kimbap',
+          'quantity': 2,
+          'unit_price': 49000,
+          'item_note': itemNote,
+        },
+    ],
     'quotes': <Map<String, dynamic>>[
       if (state == 'quoted')
         {
@@ -272,6 +289,36 @@ void main() {
     );
   });
   tearDownAll(() => Supabase.instance.dispose());
+  testWidgets(
+    'staff shows persisted item_note, whole-order note, contact and diner count',
+    (tester) async {
+      final service = _Staff()
+        ..customerNote = '수령 전에 연락\n문 앞에서 기다려 주세요'
+        ..itemNote = '파 제외\n소스 별도';
+      await _pump(tester, service, language: 'ko');
+      expect(find.text(DirectOrderCopy('ko').packingCount(3)), findsWidgets);
+      final details = find.byKey(const Key('direct_staff_detail_list'));
+      final scrollable = find
+          .descendant(of: details, matching: find.byType(Scrollable))
+          .first;
+      for (final text in [
+        '받는 분: Customer',
+        '전화번호: 0901234567',
+        '${DirectOrderCopy('ko').detailAddress}: Door 1',
+        '주문 요청사항: 수령 전에 연락\n문 앞에서 기다려 주세요',
+        '메뉴 요청사항: 파 제외\n소스 별도',
+      ]) {
+        await tester.scrollUntilVisible(
+          find.text(text),
+          150,
+          scrollable: scrollable,
+        );
+        expect(find.text(text), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   testWidgets(
     'staff corrects packing count and proposes pickup without changing method',
     (tester) async {

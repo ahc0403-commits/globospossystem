@@ -40,6 +40,7 @@ export const directOrderActionRegistry = Object.freeze(
     status: { actor: "public", rateLimit: 60 },
     status_v2: { actor: "public", rateLimit: 60 },
     status_v3: { actor: "public", rateLimit: 60 },
+    status_v4: { actor: "public", rateLimit: 60 },
     orders_v2: { actor: "public", rateLimit: 60 },
     orders_v3: { actor: "public", rateLimit: 60 },
     push_subscription: { actor: "public", rateLimit: 10 },
@@ -657,6 +658,7 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_PILOT_SAFETY_VERIFY_FAILED: internalFailure,
   DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_FAILED: internalFailure,
   DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_VERIFY_FAILED: internalFailure,
+  DIRECT_ORDER_DETAIL_PRIVILEGES_INVALID: internalFailure,
   DIRECT_ORDER_DINER_COUNT_INVALID: invalidRequest(
     "DIRECT_ORDER_DINER_COUNT_INVALID",
   ),
@@ -913,15 +915,14 @@ function productionDependencies(): DirectOrderDependencies {
         });
       }
       case "status_v2":
-      case "status_v3": {
+      case "status_v3":
+      case "status_v4": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
         return await rpc(
           service,
-          action === "status_v3"
-            ? "direct_order_public_status_v3"
-            : "direct_order_public_status_v2",
+          `direct_order_public_${action}`,
           {
             p_session_id: sessionId,
             p_secret_hash: await sha256Hex(secret),

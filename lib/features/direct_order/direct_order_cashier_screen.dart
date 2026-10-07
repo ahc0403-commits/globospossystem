@@ -14,6 +14,8 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/language_switcher.dart';
 import '../auth/auth_provider.dart';
 import 'direct_order_copy.dart';
+import 'direct_order_customer_details.dart';
+import 'direct_order_models.dart';
 import 'direct_order_stage.dart';
 import 'direct_order_chat_templates.dart';
 import 'package:flutter/services.dart';
@@ -1197,6 +1199,17 @@ class _DirectOrderCashierScreenState
     }
     final request = _map(_detail?['request']);
     final address = _map(_detail?['address']);
+    final customer = request['pii_purged_at'] == null
+        ? DirectOrderCustomerDetails.fromJson({
+            'customer_name': address['customer_name'],
+            'customer_phone': address['customer_phone'],
+            'formatted_address': address['formatted_address'],
+            'detail_address': address['detail_address'],
+            'district': address['district'],
+            'ward': address['ward'],
+            'customer_note': request['customer_note'],
+          })
+        : null;
     final items = _maps(_detail?['items']);
     final quote = _activeQuote;
     final financial = _detail?['financial'];
@@ -1236,7 +1249,10 @@ class _DirectOrderCashierScreenState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                _copy.packingCount((_delivery['diner_count'] as num?)?.toInt()),
+                _copy.packingCount(
+                  ((_delivery['diner_count'] ?? request['diner_count']) as num?)
+                      ?.toInt(),
+                ),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -1290,23 +1306,13 @@ class _DirectOrderCashierScreenState
         ),
         const SizedBox(height: 12),
         _Section(
-          title: _copy.addressAndContact,
+          title: _copy.customerDetails,
           icon: Icons.location_on_outlined,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                address['customer_name']?.toString() ?? '',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              Text(address['customer_phone']?.toString() ?? ''),
-              const SizedBox(height: 6),
-              Text(address['formatted_address']?.toString() ?? ''),
-              Text(
-                address['detail_address']?.toString() ?? '',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ],
+          child: DirectOrderCustomerDetailsBody(
+            key: const Key('direct_staff_customer_details'),
+            customer: customer,
+            languageCode: Localizations.localeOf(context).languageCode,
+            isPickup: isPickup,
           ),
         ),
         const SizedBox(height: 12),
@@ -1318,28 +1324,46 @@ class _DirectOrderCashierScreenState
               for (final item in items)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
-                        width: 42,
-                        child: Text(
-                          '${item['quantity']}x',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          localizedDirectOrderSnapshotName(
-                            item,
-                            Localizations.localeOf(context).languageCode,
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 42,
+                            child: Text(
+                              '${item['quantity']}x',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
-                        ),
+                          Expanded(
+                            child: Text(
+                              localizedDirectOrderSnapshotName(
+                                item,
+                                Localizations.localeOf(context).languageCode,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            _vnd(
+                              _number(item['unit_price']) *
+                                  _number(item['quantity']),
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        _vnd(
-                          _number(item['unit_price']) *
-                              _number(item['quantity']),
-                        ),
+                      DirectOrderInstructions(
+                        label: _copy.itemRequest,
+                        note:
+                            (item['item_note'] ?? item['note'])
+                                    ?.toString()
+                                    .trim()
+                                    .isNotEmpty ==
+                                true
+                            ? (item['item_note'] ?? item['note']).toString()
+                            : _copy.noInstructions,
                       ),
                     ],
                   ),
@@ -2160,7 +2184,12 @@ class _Section extends StatelessWidget {
             children: [
               Icon(icon, size: 20, color: PosColors.accent),
               const SizedBox(width: 8),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
