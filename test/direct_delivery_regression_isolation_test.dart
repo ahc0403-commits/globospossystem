@@ -29,8 +29,10 @@ const _frozenFiles = <String, String>{
       'd49f47b8ffc105efff63f86698274b9aea28b5a195b8b79ce85237fd50cd921c',
   'lib/features/kitchen/kitchen_screen.dart':
       '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
+  // Receipt detail eagerly includes menu requests in the existing query.
+  // Payment detail contracts cover the read; the atomic payment SQL is frozen.
   'lib/core/services/payment_service.dart':
-      '8dedccd5c59bfb01b7b3fe4089fedca2450d2f2b031f801a24cd3b4ccba20402',
+      '85442e4b0dd62d2fd540971b5b8d843c3590209299e6b4845bbfabc66032f34a',
   // Sugar VAT and mixed combo amounts are covered by beverage_sugar_vat_test.
   'lib/core/payments/payment_total_calculator.dart':
       'ee04b6d78af1b0dfed8cd7669e2e3e513d9140ca5ed4e6a3f089c946186efb9b',
@@ -41,8 +43,10 @@ const _frozenFiles = <String, String>{
   // 2026-10-06: forward the direct order reference for packing headers.
   // Runtime queue->agent bytes coverage verifies 3 sets; regular receipts
   // retain their existing financial behavior and have no utensil block.
+  // Receipt requests now reach printer bytes; wifi_printer_service_test covers
+  // the actual queued job with both global and menu notes.
   'lib/core/hardware/print_job_agent_service.dart':
-      'fb9021d76681a5e61c1ad6a08afc9f9da84b75b33e5abc8672123bfce97de22c',
+      '80a32883a6fa514271b69d6ad0239026c4d091b2aaf1e91acc590f3f85fca10c',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
       '812fdaa3f993520983fc87e4bdb2c1f28c7ccca23f0eb384d69fdf42f4101993',
   'supabase/migrations/20260722050000_kitchen_direct_completion.sql':

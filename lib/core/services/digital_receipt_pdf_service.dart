@@ -106,6 +106,13 @@ class DigitalReceiptPdfService {
               ),
             ],
             _dashedDivider(height: 15),
+            if (receipt.orderNotes != null) ...[
+              pw.Text(
+                'Ghi chú: ${receipt.orderNotes}',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              _dashedDivider(height: 15),
+            ],
             _sectionHeader('MÓN', 'THÀNH TIỀN'),
             pw.SizedBox(height: 2),
             for (var index = 0; index < billableItems.length; index++) ...[
@@ -309,6 +316,11 @@ class DigitalReceiptPdfService {
           '${item.quantity} × ${currency.format(item.unitPrice)} VND',
           style: const pw.TextStyle(fontSize: 7.4, color: PdfColors.grey700),
         ),
+        if (item.notes != null)
+          pw.Text(
+            'Ghi chú: ${item.notes}',
+            style: const pw.TextStyle(fontSize: 8),
+          ),
       ],
     ),
   );

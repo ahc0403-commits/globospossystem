@@ -291,6 +291,34 @@ $$;
 (tmp/'packing_verify.sql').write_text(setup+(root/'scripts/verify_direct_order_receipt_packing_context.sql').read_text())
 PYVERIFY
 run_sql "$PHOTO_TMP/packing_verify.sql"
+python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYRECEIPT'
+from pathlib import Path
+import sys
+root,tmp=map(Path,sys.argv[1:])
+out="ALTER TABLE public.print_jobs ADD COLUMN combined_payment_group_id uuid;\n"
+for file,name,table,trigger in [
+ ('20260722100000_vietnamese_only_printer_output.sql','force_print_job_menu_labels_vi','print_jobs','force_print_job_menu_labels_vi'),
+ ('20260815171000_digital_receipt_vietnamese.sql','digital_receipt_force_vietnamese_items','digital_receipts','digital_receipt_force_vietnamese_items_trigger')]:
+ s=(root/'supabase/migrations'/file).read_text()
+ a=s.index('CREATE OR REPLACE FUNCTION public.'+name+'(')
+ out+=s[a:s.index('$$;',a)+3]+'\n'
+ out+=f'CREATE TRIGGER {trigger} BEFORE INSERT ON public.{table} FOR EACH ROW EXECUTE FUNCTION public.{name}();\n'
+(tmp/'receipt_labels.sql').write_text(out)
+PYRECEIPT
+run_sql "$PHOTO_TMP/receipt_labels.sql" >/dev/null
+run_sql "$PHOTO_ROOT/test/sql/direct_order_receipt_requests_before.sql"
+run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_receipt_requests.sql"
+receipt_before="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT md5(string_agg(pg_get_functiondef(oid),'' ORDER BY oid)) FROM pg_proc WHERE oid IN ('public.direct_order_receipt_packing_context(uuid,uuid)'::regprocedure,'public.direct_order_enrich_print_fulfillment()'::regprocedure,'public.direct_order_enrich_digital_receipt_packing()'::regprocedure)")"
+run_sql "$PHOTO_ROOT/supabase/migrations/20261008010000_direct_order_receipt_requests.sql" >/dev/null
+run_sql "$PHOTO_ROOT/supabase/tests/direct_order_receipt_requests_contract_test.sql"
+run_sql "$PHOTO_ROOT/scripts/verify_direct_order_receipt_requests.sql"
+run_sql "$PHOTO_ROOT/scripts/rollback_direct_order_receipt_requests.sql" >/dev/null
+receipt_after="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT md5(string_agg(pg_get_functiondef(oid),'' ORDER BY oid)) FROM pg_proc WHERE oid IN ('public.direct_order_receipt_packing_context(uuid,uuid)'::regprocedure,'public.direct_order_enrich_print_fulfillment()'::regprocedure,'public.direct_order_enrich_digital_receipt_packing()'::regprocedure)")"
+[[ "$receipt_before" == "$receipt_after" ]] || { printf 'RECEIPT_REQUESTS_ROLLBACK_MISMATCH\n'; exit 1; }
+run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_receipt_requests.sql" >/dev/null
+run_sql "$PHOTO_ROOT/supabase/migrations/20261008010000_direct_order_receipt_requests.sql" >/dev/null
+run_sql "$PHOTO_ROOT/scripts/verify_direct_order_receipt_requests.sql" >/dev/null
+printf 'RECEIPT_REQUESTS_ROLLBACK_AND_REAPPLY=PASS\n'
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

@@ -331,6 +331,7 @@ class PrintJobAgentService implements PrintAgentDriver {
       dinerCount: receipt.dinerCount,
       fulfillmentMethod: receipt.fulfillmentMethod,
       directOrderReference: receipt.directOrderReference,
+      orderNotes: receipt.orderNotes,
       refundedTotal: receipt.refundedTotal,
     );
   }

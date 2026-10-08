@@ -44,6 +44,64 @@ void main() {
     'tray': ReceiptBuilder.buildTrayLabel,
     'confirmation': ReceiptBuilder.buildConfirmationSlip,
   };
+  test(
+    'queued payment receipt prints customer and per-menu requests',
+    () async {
+      final receipt = QueuedPaymentReceipt.fromPayload({
+        'order_notes': '  No steamed rice  ',
+        'total_amount': 149040,
+        'items': [
+          {
+            'label': 'Soup',
+            'quantity': 1,
+            'unit_price': 59000,
+            'notes': 'No onion',
+          },
+          {'label': 'Bibimbap', 'quantity': 1, 'unit_price': 79000},
+        ],
+      });
+      final text = String.fromCharCodes(
+        await ReceiptBuilder.buildPaymentReceipt(
+          restaurantName: 'GLOBOS',
+          tableNumber: '-',
+          items: receipt.items,
+          totalAmount: receipt.totalAmount,
+          paymentMethod: 'banktransfer',
+          paidAt: DateTime.utc(2026, 10, 8),
+          orderNotes: receipt.orderNotes,
+        ),
+      );
+      expect(text, contains('GHI CHU: No steamed rice'));
+      expect(text.indexOf('GHI CHU:'), lessThan(text.indexOf('Soup')));
+      expect(text.indexOf('No onion'), greaterThan(text.indexOf('Soup')));
+      expect(text.indexOf('No onion'), lessThan(text.indexOf('Bibimbap')));
+      expect(text, contains('149,040 VND'));
+      expect(RegExp('No steamed rice').allMatches(text), hasLength(1));
+    },
+  );
+
+  test('blank requests add no empty note block', () async {
+    final text = String.fromCharCodes(
+      await ReceiptBuilder.buildPaymentReceipt(
+        restaurantName: 'GLOBOS',
+        tableNumber: 'A1',
+        items: const [
+          ReceiptItem(
+            name: 'Complimentary tea',
+            quantity: 1,
+            unitPrice: 0,
+            notes: '  ',
+          ),
+        ],
+        totalAmount: 0,
+        paymentMethod: 'service',
+        paidAt: DateTime.utc(2026),
+        orderNotes: '  ',
+      ),
+    );
+    expect(text, isNot(contains('GHI CHU:')));
+    expect(text, contains('Complimentary tea'));
+  });
   for (final form in forms.entries) {
     for (final method in ['delivery', 'pickup', null]) {
       test(

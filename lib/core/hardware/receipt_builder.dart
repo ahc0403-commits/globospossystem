@@ -32,6 +32,7 @@ class ReceiptBuilder {
     int? dinerCount,
     String? fulfillmentMethod,
     String? directOrderReference,
+    String? orderNotes,
     double refundedTotal = 0,
   }) async {
     final profile = await CapabilityProfile.load();
@@ -161,6 +162,17 @@ class ReceiptBuilder {
       bytes.addAll(generator.hr());
     }
 
+    final request = orderNotes?.trim();
+    if (request != null && request.isNotEmpty) {
+      bytes.addAll(
+        generator.text(
+          _escText('GHI CHU: $request'),
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      bytes.addAll(generator.hr());
+    }
+
     bytes.addAll(
       generator.row([
         PosColumn(text: 'Mon', width: 5, styles: const PosStyles(bold: true)),
@@ -202,6 +214,10 @@ class ReceiptBuilder {
           ),
         ]),
       );
+      final notes = item.notes?.trim();
+      if (notes != null && notes.isNotEmpty) {
+        bytes.addAll(generator.text(_escText('  * $notes')));
+      }
     }
 
     bytes.addAll(generator.hr());
@@ -1176,6 +1192,7 @@ class QueuedPaymentReceipt {
     this.dinerCount,
     this.fulfillmentMethod,
     this.directOrderReference,
+    this.orderNotes,
     this.refundedTotal = 0,
   });
 
@@ -1202,6 +1219,7 @@ class QueuedPaymentReceipt {
   final int? dinerCount;
   final String? fulfillmentMethod;
   final String? directOrderReference;
+  final String? orderNotes;
   final double refundedTotal;
 
   factory QueuedPaymentReceipt.fromPayload(Map<String, dynamic> payload) {
@@ -1215,6 +1233,7 @@ class QueuedPaymentReceipt {
         ? payload[combinedKey] ?? payload[standardKey]
         : payload[standardKey];
     return QueuedPaymentReceipt(
+      orderNotes: payload['order_notes']?.toString(),
       directFulfillmentType: payload['direct_fulfillment_type']?.toString(),
       directDeliveryPaymentMode: payload['direct_delivery_payment_mode']
           ?.toString(),
@@ -1228,6 +1247,7 @@ class QueuedPaymentReceipt {
       items: itemRows.whereType<Map>().map((item) {
         final row = Map<String, dynamic>.from(item);
         return ReceiptItem(
+          notes: row['notes']?.toString(),
           name: row['label']?.toString() ?? 'Mon',
           quantity: switch (row['quantity'] ?? row['qty']) {
             int value => value,
@@ -1405,12 +1425,14 @@ class ReceiptItem {
     required this.quantity,
     required this.unitPrice,
     this.isServiceItem = false,
+    this.notes,
   });
 
   final String name;
   final int quantity;
   final double unitPrice;
   final bool isServiceItem;
+  final String? notes;
 }
 
 int? _packingDinerCount(Object? value) {
