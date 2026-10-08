@@ -232,6 +232,45 @@ class DirectOrderCopy {
     'Use intake pause when busy. The page cannot be disabled while orders are in progress.',
   );
   String errorMessage(String code) => switch (code) {
+    'DIRECT_ORDER_SUPPORT_CHANGED' || 'DIRECT_ORDER_CHARGE_CHANGED' => _pick(
+      '주문 정보가 변경되었습니다. 새로고침 후 다시 확인하세요.',
+      'Thông tin đơn đã thay đổi. Tải lại và kiểm tra.',
+      'Order details changed. Refresh and check again.',
+    ),
+    'DIRECT_ORDER_PAYMENT_PENDING' => _pick(
+      '배송비 확정과 모든 입금 확인을 완료해야 인계·마감할 수 있습니다.',
+      'Cần xác nhận phí giao hàng và mọi khoản tiền trước khi bàn giao hoặc hoàn tất.',
+      'Confirm the delivery fee and all receipts before handoff or completion.',
+    ),
+    'DIRECT_ORDER_AMOUNT_EXCEEDS_DUE' => _pick(
+      '입금액이 미수금을 초과합니다. 초과 입금 내역을 확인한 뒤 처리하세요.',
+      'Tiền nhận vượt số còn thiếu. Kiểm tra khoản thanh toán thừa.',
+      'The receipt exceeds the amount due. Reconcile the overpayment first.',
+    ),
+    'DIRECT_ORDER_AMOUNT_MISMATCH' ||
+    'DIRECT_ORDER_CHARGE_INVALID' ||
+    'DIRECT_ORDER_RECEIPT_INVALID' => _pick(
+      '실제 입금액, 부족금과 거래 참조를 확인하세요.',
+      'Kiểm tra tiền thực nhận, số còn thiếu và mã giao dịch.',
+      'Check the actual receipt, outstanding amount and transaction reference.',
+    ),
+    'DIRECT_ORDER_ATTACHMENT_INVALID' => _pick(
+      '5 MiB 이하의 JPG·PNG·WebP 이미지 또는 PDF를 선택하세요.',
+      'Chọn ảnh JPG, PNG, WebP hoặc PDF tối đa 5 MiB.',
+      'Choose a JPG, PNG, WebP image or PDF up to 5 MiB.',
+    ),
+    'DIRECT_ORDER_INVOICE_INVALID' => _pick(
+      '세금계산서 발행 정보를 확인하세요.',
+      'Kiểm tra thông tin xuất hóa đơn VAT.',
+      'Check the VAT invoice details.',
+    ),
+    'DIRECT_ORDER_REFUND_PENDING' ||
+    'DIRECT_ORDER_REFUND_AMOUNT_INVALID' ||
+    'DIRECT_ORDER_REFUND_NOT_ALLOWED' => _pick(
+      '환불 대상 금액과 실제 환불 내역을 확인하세요. 미환불 금액이 있으면 상담을 종료할 수 없습니다.',
+      'Kiểm tra khoản cần hoàn và giao dịch hoàn tiền. Không thể đóng hỗ trợ khi chưa hoàn đủ.',
+      'Check the amount due for refund and the actual transfer. Keep support open until it is refunded.',
+    ),
     'DIRECT_ORDER_DINER_COUNT_INVALID' => _pick(
       '식사 인원을 1~100 사이의 정수로 입력하세요.',
       'Nhập số người nguyên từ 1 đến 100.',

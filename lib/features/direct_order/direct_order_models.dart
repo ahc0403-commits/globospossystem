@@ -738,6 +738,7 @@ class DirectOrderStatus {
     this.proofReview,
     this.delivery,
     this.customer,
+    this.support = const {},
   });
 
   final String requestId;
@@ -759,6 +760,7 @@ class DirectOrderStatus {
   final DirectOrderProofReview? proofReview;
   final DirectOrderDelivery? delivery;
   final DirectOrderCustomerDetails? customer;
+  final Map<String, dynamic> support;
 
   factory DirectOrderStatus.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
@@ -776,6 +778,7 @@ class DirectOrderStatus {
       'proof_review',
       'delivery',
       'customer',
+      'support',
     });
     final quoteRaw = json['quote'];
     if (quoteRaw != null && quoteRaw is! Map) _invalidModel('quote');
@@ -831,6 +834,9 @@ class DirectOrderStatus {
       _invalidModel('proof_review');
     }
     return DirectOrderStatus(
+      support: json['support'] is Map
+          ? Map<String, dynamic>.from(json['support'] as Map)
+          : const {},
       requestId: _requiredString(json, 'request_id'),
       fulfillmentType: DirectOrderFulfillmentType.fromValue(
         json['fulfillment_type'],

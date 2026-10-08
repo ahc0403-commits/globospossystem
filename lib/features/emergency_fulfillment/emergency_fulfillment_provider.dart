@@ -156,6 +156,7 @@ class EmergencyFulfillmentDisplayItem {
     this.completedQuantity,
     this.totalQuantity,
     this.isTakeout = false,
+    this.notes,
     this.batchReceivedAt,
     this.stationStartedAt,
     this.stationCompletedAt,
@@ -173,6 +174,7 @@ class EmergencyFulfillmentDisplayItem {
   final int? completedQuantity;
   final int? totalQuantity;
   final bool isTakeout;
+  final String? notes;
   final DateTime? batchReceivedAt;
   final DateTime? stationStartedAt;
   final DateTime? stationCompletedAt;
@@ -210,6 +212,7 @@ class EmergencyFulfillmentItem {
     this.sourceKind = 'order_item',
     this.comboComponents = const [],
     this.isTakeout = false,
+    this.notes,
     this.batchReceivedAt,
     this.kitchenFirstDoneAt,
     this.kitchenLastDoneAt,
@@ -240,6 +243,7 @@ class EmergencyFulfillmentItem {
   final String sourceKind;
   final List<EmergencyComboComponent> comboComponents;
   final bool isTakeout;
+  final String? notes;
   final DateTime? batchReceivedAt;
   final DateTime? kitchenFirstDoneAt;
   final DateTime? kitchenLastDoneAt;
@@ -461,6 +465,7 @@ class EmergencyFulfillmentItem {
       lineKey: json['line_key']?.toString() ?? 'base',
       sourceKind: json['source_kind']?.toString() ?? 'order_item',
       isTakeout: json['is_takeout'] == true,
+      notes: json['notes']?.toString(),
       batchReceivedAt: _optionalDateTime(json['batch_received_at']),
       kitchenFirstDoneAt: _optionalDateTime(json['kitchen_first_done_at']),
       kitchenLastDoneAt: _optionalDateTime(json['kitchen_last_done_at']),
@@ -751,6 +756,7 @@ class EmergencyFulfillmentOrder {
             completedQuantity: progress.$1,
             totalQuantity: progress.$2,
             isTakeout: item.isTakeout,
+            notes: item.notes,
             batchReceivedAt: item.batchReceivedAt,
             stationStartedAt: item.stationStartedAt(stationType),
             stationCompletedAt: item.stationCompletedAt(stationType),
@@ -786,6 +792,7 @@ class EmergencyFulfillmentOrder {
             completedQuantity: progress.$1,
             totalQuantity: progress.$2,
             isTakeout: item.isTakeout,
+            notes: item.notes,
             batchReceivedAt: statusItem.batchReceivedAt ?? item.batchReceivedAt,
             stationStartedAt: statusItem.stationStartedAt(stationType),
             stationCompletedAt: statusItem.stationCompletedAt(stationType),
@@ -974,6 +981,7 @@ class KitchenChecketMenuGroup {
     required this.nameVi,
     required this.nameEn,
     required this.pendingQuantity,
+    this.notes,
   });
 
   final String key;
@@ -981,6 +989,7 @@ class KitchenChecketMenuGroup {
   final String nameVi;
   final String nameEn;
   final int pendingQuantity;
+  final String? notes;
 
   String localizedName(String languageCode) => localizedMenuName({
     'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
@@ -1015,6 +1024,7 @@ String kitchenChecketGroupKey(EmergencyFulfillmentItem item) => [
   item.nameKo.trim().toLowerCase(),
   item.nameVi.trim().toLowerCase(),
   item.nameEn.trim().toLowerCase(),
+  item.notes?.trim() ?? '',
 ].join('\u0000');
 
 List<KitchenChecketMenuGroup> buildKitchenChecketMenuGroups(
@@ -1033,6 +1043,7 @@ List<KitchenChecketMenuGroup> buildKitchenChecketMenuGroups(
         nameVi: item.nameVi,
         nameEn: item.nameEn,
         pendingQuantity: (current?.pendingQuantity ?? 0) + pending,
+        notes: item.notes,
       );
     }
   }
@@ -1082,6 +1093,7 @@ String _handoffMenuKey(EmergencyFulfillmentItem item) => [
   item.nameKo.trim().toLowerCase(),
   item.nameVi.trim().toLowerCase(),
   item.nameEn.trim().toLowerCase(),
+  item.notes?.trim() ?? '',
 ].join('\u0000');
 
 class TrayFloorTransitionAllocation {

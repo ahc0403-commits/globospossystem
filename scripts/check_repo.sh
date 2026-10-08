@@ -82,6 +82,7 @@ printf 'CHECK_REPO_STEP=direct_order_edge_contracts\n'
 bash test/direct_delivery_manual_addresses_sql_test.sh
 DELIVERY_HOURS_TEST=1 bash test/direct_order_photo_approval_sql_test.sh
 bash test/direct_order_customer_experience_sql_test.sh
+bash test/direct_order_support_sql_test.sh
 deno fmt --check \
   supabase/functions/direct-order-public/index.ts \
   supabase/functions/direct-order-public/index_test.ts \
@@ -121,6 +122,8 @@ printf 'CHECK_REPO_STEP=deploy_shell_syntax\n'
 bash -n scripts/deploy_pos_production.sh
 printf 'CHECK_REPO_STEP=deploy_clean_worktree_contract\n'
 bash test/pos_deploy_clean_worktree_checks_test.sh
+printf 'CHECK_REPO_STEP=deploy_no_smoke_policy_contract\n'
+bash test/pos_deploy_no_smoke_policy_test.sh
 printf 'CHECK_REPO_STEP=deliberry_retirement_deploy_contract\n'
 bash test/deliberry_retirement_deploy_contract_test.sh
 printf 'CHECK_REPO_STEP=deploy_git_history_contract\n'

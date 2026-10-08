@@ -127,11 +127,11 @@ class _KitchenChecketHandoffSheetState
                   horizontal: 18,
                   vertical: 8,
                 ),
-                color: PosColors.danger.withValues(alpha: 0.1),
+                color: Colors.deepOrange.withValues(alpha: 0.1),
                 child: Text(
                   _error!,
                   style: const TextStyle(
-                    color: PosColors.danger,
+                    color: Colors.deepOrange,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -305,11 +305,23 @@ class _KitchenChecketRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              group.localizedName(languageCode),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w800),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  group.localizedName(languageCode),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                if (group.notes?.trim().isNotEmpty == true)
+                  Text(
+                    group.notes!,
+                    key: ValueKey('kitchen_checket_note_${group.key}'),
+                    style: const TextStyle(
+                      color: Colors.deepOrange,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+              ],
             ),
           ),
           IconButton(

@@ -104,6 +104,22 @@ class _PhotoService extends DirectOrderStaffService {
   }) => throw StateError('Photo review must not call SePay');
 
   @override
+  Future<Map<String, dynamic>> recordReceipt({
+    required String storeId,
+    required String requestId,
+    required String quoteId,
+    required String proofMessageId,
+    required num amount,
+    required String bankReference,
+  }) => approve(
+    storeId: storeId,
+    requestId: requestId,
+    confirmedAmount: amount,
+    quoteId: quoteId,
+    proofMessageId: proofMessageId,
+  );
+
+  @override
   Future<Map<String, dynamic>> approve({
     required String storeId,
     required String requestId,
@@ -161,6 +177,19 @@ Future<void> _pump(WidgetTester tester, _PhotoService service) async {
       ),
     ),
   );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _fillReceipt(WidgetTester tester) async {
+  await tester.enterText(
+    find.byKey(const Key('direct_actual_received_amount')),
+    '255240',
+  );
+  await tester.enterText(
+    find.byKey(const Key('direct_bank_receipt_reference')),
+    'bank-fixture',
+  );
+  await tester.tap(find.byKey(const Key('direct_actual_receipt_verified')));
   await tester.pumpAndSettle();
 }
 
@@ -222,12 +251,13 @@ void main() {
     await tester.tap(review);
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const Key('direct_order_photo_confirmed_amount')),
+      find.byKey(const Key('direct_actual_received_amount')),
       findsOneWidget,
     );
-    expect(find.text('255.240'), findsWidgets);
+    expect(find.textContaining('255.240'), findsWidgets);
     expect(find.text('View image'), findsWidgets);
     expect(service.approvals, 0);
+    await _fillReceipt(tester);
     await tester.tap(find.byKey(const Key('direct_order_approval_confirm')));
     await tester.pumpAndSettle();
     expect(service.approvals, 1);
@@ -291,6 +321,7 @@ void main() {
     await _pump(tester, service);
     await tester.tap(find.byKey(const Key('direct_order_photo_approval')));
     await tester.pumpAndSettle();
+    await _fillReceipt(tester);
     await tester.tap(find.byKey(const Key('direct_order_approval_confirm')));
     await tester.pumpAndSettle();
     expect(service.approvals, 1);
@@ -318,6 +349,7 @@ void main() {
     service.photoId = 'replacement';
     await tester.pump(const Duration(seconds: 35));
     await tester.pumpAndSettle();
+    await _fillReceipt(tester);
     await tester.tap(find.byKey(const Key('direct_order_approval_confirm')));
     await tester.pumpAndSettle();
     expect(service.approvals, 0);
@@ -340,6 +372,7 @@ void main() {
     await _pump(tester, service);
     await tester.tap(find.byKey(const Key('direct_order_photo_approval')));
     await tester.pumpAndSettle();
+    await _fillReceipt(tester);
     await tester.tap(find.byKey(const Key('direct_order_approval_confirm')));
     await tester.pumpAndSettle();
     expect(service.approvals, 1);
@@ -371,6 +404,7 @@ void main() {
     await _pump(tester, service);
     await tester.tap(find.byKey(const Key('direct_order_photo_approval')));
     await tester.pumpAndSettle();
+    await _fillReceipt(tester);
     await tester.tap(find.byKey(const Key('direct_order_approval_confirm')));
     await tester.pumpAndSettle();
     expect(service.approvals, 1);

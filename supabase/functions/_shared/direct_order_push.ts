@@ -7,7 +7,7 @@ export interface DirectOrderPushDelivery {
   id: string;
   leaseId: string;
   eventId: string;
-  eventKind: "pickup_ready" | "driver_handoff";
+  eventKind: "pickup_ready" | "driver_handoff" | "payment_request";
   requestId: string;
   referenceCode: string;
   slug: string;
@@ -21,7 +21,9 @@ export function mapDirectOrderPush(
   row: Record<string, unknown>,
 ): DirectOrderPushDelivery {
   if (
-    !["pickup_ready", "driver_handoff"].includes(String(row.event_kind)) ||
+    !["pickup_ready", "driver_handoff", "payment_request"].includes(
+      String(row.event_kind),
+    ) ||
     !["ko", "vi", "en"].includes(String(row.locale)) ||
     !/^[a-z0-9][a-z0-9-]{2,62}$/.test(String(row.slug)) ||
     typeof row.push_token !== "string" || row.push_token.length < 16
@@ -52,7 +54,17 @@ export function buildDirectOrderFcmMessage(
     throw new Error("DIRECT_ORDER_PUSH_ORIGIN_INVALID");
   }
   const pickup = delivery.eventKind === "pickup_ready";
-  const body = delivery.locale === "ko"
+  const payment = delivery.eventKind === "payment_request";
+  const body = payment
+    ? ({
+      ko:
+        "결제 요청이 도착했습니다. 주문 화면에서 금액을 확인하고 결제해 주세요.",
+      en:
+        "A payment request is ready. Open your order to review the amount and pay.",
+      vi:
+        "Có yêu cầu thanh toán. Vui lòng mở đơn hàng để xem số tiền và thanh toán.",
+    }[delivery.locale])
+    : delivery.locale === "ko"
     ? pickup
       ? "고객님의 주문 준비가 완료되었습니다. 매장 카운터에서 수령해 주세요."
       : "고객님의 주문이 배달 기사에게 전달되었으며 현재 배송 중입니다."

@@ -25,10 +25,12 @@ const _frozenFiles = <String, String>{
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
+  // 2026-10-08: eager-load and retain item notes; menu-request behavior is
+  // covered by direct_order_support_test and operational kitchen suites.
   'lib/features/kitchen/kitchen_provider.dart':
-      'd49f47b8ffc105efff63f86698274b9aea28b5a195b8b79ce85237fd50cd921c',
+      '7f480885e9637c8d306c4135dec051235b822afd87dffdeac948f381d0c6fa16',
   'lib/features/kitchen/kitchen_screen.dart':
-      '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
+      '9c307588f5985c2bdbbc67865c7fc99204c011015e053a371b602ec1e4b50e5c',
   // Receipt detail eagerly includes menu requests in the existing query.
   // Payment detail contracts cover the read; the atomic payment SQL is frozen.
   'lib/core/services/payment_service.dart':
