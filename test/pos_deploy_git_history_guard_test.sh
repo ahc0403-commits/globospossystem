@@ -45,6 +45,7 @@ git clone --quiet "$ORIGIN_REPO" "$APPROVED_REPO"
 
 bash -c '
   source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests
   DRY_RUN=0
   SKIP_VERCEL=0
   SKIP_DB=1
@@ -54,6 +55,7 @@ bash -c '
 set +e
 stale_output="$(ALLOW_GIT_ANCESTRY_MISMATCH=1 bash -c '
   source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests
   DRY_RUN=0
   SKIP_VERCEL=0
   SKIP_DB=1
@@ -69,6 +71,7 @@ git -C "$STALE_REPO" rev-parse origin/main | grep -qx \
 set +e
 stale_dry_run_output="$(bash -c '
   source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests
   DRY_RUN=1
   REQUIRE_CLEAN_GIT=0
   SKIP_VERCEL=0
@@ -82,6 +85,7 @@ set -e
 
 bash -c '
   source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests
   DRY_RUN=0
   REQUIRE_CLEAN_GIT=1
   enforce_clean_git
@@ -91,6 +95,7 @@ printf 'dirty\n' >"$APPROVED_REPO/dirty.txt"
 set +e
 dirty_output="$(bash -c '
   source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests
   DRY_RUN=0
   REQUIRE_CLEAN_GIT=1
   enforce_clean_git
@@ -103,6 +108,7 @@ set -e
 set +e
 unsafe_exception_output="$(bash -c '
   source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests
   DRY_RUN=0
   REQUIRE_CLEAN_GIT=0
   enforce_clean_git
@@ -114,6 +120,7 @@ set -e
 
 bash -c '
   source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests
   DRY_RUN=1
   REQUIRE_CLEAN_GIT=0
   enforce_clean_git
@@ -139,6 +146,7 @@ chmod +x "$FAKE_BIN/gh"
 
 PATH="$FAKE_BIN:$PATH" GITHUB_CHECK_MODE=success bash -c '
   source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests
   enforce_required_github_check
 ' guard "$APPROVED_REPO" >/dev/null
 
@@ -146,6 +154,8 @@ for check_mode in pending api-failure; do
   set +e
   check_output="$(PATH="$FAKE_BIN:$PATH" GITHUB_CHECK_MODE="$check_mode" bash -c '
     source "$1/scripts/deploy_pos_production.sh"
+    parse_args --skip-smoke-tests
+  parse_args --skip-smoke-tests
     enforce_required_github_check
   ' guard "$APPROVED_REPO" 2>&1)"
   check_status=$?

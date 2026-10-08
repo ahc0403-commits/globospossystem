@@ -122,6 +122,8 @@ printf 'CHECK_REPO_STEP=deploy_shell_syntax\n'
 bash -n scripts/deploy_pos_production.sh
 printf 'CHECK_REPO_STEP=deploy_clean_worktree_contract\n'
 bash test/pos_deploy_clean_worktree_checks_test.sh
+printf 'CHECK_REPO_STEP=deploy_no_smoke_policy_contract\n'
+bash test/pos_deploy_no_smoke_policy_test.sh
 printf 'CHECK_REPO_STEP=deliberry_retirement_deploy_contract\n'
 bash test/deliberry_retirement_deploy_contract_test.sh
 printf 'CHECK_REPO_STEP=deploy_git_history_contract\n'

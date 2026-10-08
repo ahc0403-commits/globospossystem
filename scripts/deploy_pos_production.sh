@@ -26,6 +26,7 @@ DRY_RUN=0
 SKIP_CHECKS="${SKIP_CHECKS:-0}"
 SKIP_AUTH_CHECK="${SKIP_AUTH_CHECK:-0}"
 SKIP_LOGIN_SMOKE="${SKIP_LOGIN_SMOKE:-0}"
+SKIP_SMOKE_TESTS="${SKIP_SMOKE_TESTS:-0}"
 SKIP_DB="${SKIP_DB:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_VERCEL="${SKIP_VERCEL:-0}"
@@ -69,6 +70,9 @@ Options:
   --skip-checks      Skip dart analyze and flutter tests.
   --skip-auth-check  Skip required production operational Auth readiness check.
   --skip-login-smoke Skip post-deploy operational login smoke. Report as blocker-risk.
+  --skip-smoke-tests Skip synthetic HTTP and login probes; verify deployment
+                     metadata and the remote origin digest instead. All source,
+                     CI, Auth readiness, migration and build gates still apply.
   --skip-db          Skip Supabase migration work.
   --skip-build       In remote mode, skip the local flutter build precheck.
   --skip-vercel      Skip Vercel deployment.
@@ -297,6 +301,10 @@ parse_args() {
       --skip-auth-check)
         SKIP_AUTH_CHECK=1
         ;;
+      --skip-smoke-tests)
+        SKIP_SMOKE_TESTS=1
+        SKIP_LOGIN_SMOKE=1
+        ;;
       --skip-login-smoke)
         SKIP_LOGIN_SMOKE=1
         ;;
@@ -328,6 +336,8 @@ parse_args() {
     esac
     shift
   done
+  [[ "$SKIP_SMOKE_TESTS" == "0" || "$SKIP_SMOKE_TESTS" == "1" ]] || fail "SKIP_SMOKE_TESTS must be 0 or 1."
+  if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then SKIP_LOGIN_SMOKE=1; fi
 }
 
 validate_db_only_options() {
@@ -355,6 +365,7 @@ preflight() {
   log "Preflight"
   reject_target_overrides
   need_cmd git
+  if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then need_cmd python3; fi
   [[ "$DEPLOY_MODE" == "prebuilt" || "$DEPLOY_MODE" == "remote" ]] ||
     fail "DEPLOY_MODE must be prebuilt or remote"
 
@@ -904,6 +915,30 @@ deploy_vercel() {
     fi
   fi
 
+  if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then
+    log "Vercel production deployment metadata"
+    if [[ "$DRY_RUN" == "1" ]]; then
+      printf '+ vercel inspect <deployment> and production alias --json; require matching READY production IDs\n'
+      return 0
+    fi
+    local unique_url built_metadata alias_metadata
+    unique_url="$(grep -Eo 'https://[^[:space:]]+\.vercel\.app[^[:space:]]*' "$deploy_log" | head -1 | tr -d '\r')"
+    [[ -n "$unique_url" ]] || fail "Vercel deployment URL is unavailable for metadata verification."
+    built_metadata="$(mktemp)"; alias_metadata="$(mktemp)"
+    vercel inspect "$unique_url" --json > "$built_metadata" || { rm -f "$built_metadata" "$alias_metadata"; fail "Cannot inspect deployed build."; }
+    vercel inspect "$LIVE_URL" --json > "$alias_metadata" || { rm -f "$built_metadata" "$alias_metadata"; fail "Cannot inspect production alias."; }
+    if ! python3 - "$built_metadata" "$alias_metadata" <<'PYVERCELMETADATA'
+import json,sys
+from pathlib import Path
+built,alias=[json.loads(Path(p).read_text()) for p in sys.argv[1:]]
+assert built['id']==alias['id'], 'Production alias does not point to the deployed build'
+assert all(row.get('readyState')=='READY' and row.get('target')=='production' for row in [built,alias]), 'Production deployment is not READY'
+print('Vercel build and production alias: READY (metadata; no HTTP probe).')
+PYVERCELMETADATA
+    then rm -f "$built_metadata" "$alias_metadata"; fail "Production deployment metadata verification failed."; fi
+    rm -f "$built_metadata" "$alias_metadata"
+    return 0
+  fi
   log "Live URL check"
   run curl -fsSI -L "$LIVE_URL"
 }
@@ -936,7 +971,37 @@ deploy_pos_edge_functions() {
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
 }
 
+verify_no_smoke_edge_metadata() {
+  [[ "$SKIP_SMOKE_TESTS" == "1" ]] || return 0
+  log "POS Edge deployment and origin metadata"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '+ supabase functions/secrets list --project-ref %q --output json; verify ACTIVE handlers and exact-origin digest\n' "$POS_PROJECT_REF"
+    return 0
+  fi
+  local function_metadata secret_metadata
+  function_metadata="$(mktemp)"; secret_metadata="$(mktemp)"
+  supabase functions list --project-ref "$POS_PROJECT_REF" --output json > "$function_metadata" || { rm -f "$function_metadata" "$secret_metadata"; fail "Cannot inspect Edge deployment metadata."; }
+  supabase secrets list --project-ref "$POS_PROJECT_REF" --output json > "$secret_metadata" || { rm -f "$function_metadata" "$secret_metadata"; fail "Cannot inspect Edge origin metadata."; }
+  if ! python3 - "$function_metadata" "$secret_metadata" "$LIVE_URL" <<'PYEDGEMETADATA'
+import hashlib,json,sys
+from pathlib import Path
+functions,secrets=[json.loads(Path(p).read_text()) for p in sys.argv[1:3]]
+required={'create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement'}
+active={row.get('slug') for row in functions if row.get('status')=='ACTIVE'}
+assert required<=active, 'A required Edge deployment is not ACTIVE'
+origin=next((row for row in secrets if row.get('name')=='ALLOWED_ORIGINS'),{})
+assert origin.get('digest',origin.get('value'))==hashlib.sha256(sys.argv[3].encode()).hexdigest(), 'Remote exact-origin digest mismatch'
+print('POS Edge metadata: 12 required handlers ACTIVE; remote origin digest matches production (no endpoint probes).')
+PYEDGEMETADATA
+  then rm -f "$function_metadata" "$secret_metadata"; fail "Edge metadata verification failed."; fi
+  rm -f "$function_metadata" "$secret_metadata"
+}
+
 verify_deliberry_retirement_readiness() {
+  if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then
+    log "Retired endpoint HTTP checks skipped by no-smoke policy"
+    return 0
+  fi
   log "Deliberry retirement endpoint verification"
   local function_name status response_file
   for function_name in deliberry-webhook deliberry-dispatcher \
@@ -963,6 +1028,10 @@ verify_deliberry_retirement_readiness() {
 }
 
 verify_emergency_dispatcher_readiness() {
+  if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then
+    log "Emergency dispatcher HTTP probe skipped by no-smoke policy"
+    return 0
+  fi
   log "Emergency fulfilment dispatcher readiness"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '+ POST emergency-fulfillment-dispatcher without authorization; require HTTP 401\n'
@@ -980,6 +1049,10 @@ verify_emergency_dispatcher_readiness() {
 }
 
 verify_direct_order_dispatcher_readiness() {
+  if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then
+    log "Customer notification dispatcher HTTP probe skipped by no-smoke policy"
+    return 0
+  fi
   log "Direct order customer notification dispatcher readiness"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '+ POST direct-order-notification-dispatcher without authorization; require HTTP 401\n'
@@ -996,6 +1069,10 @@ verify_direct_order_dispatcher_readiness() {
 }
 
 verify_remote_allowed_origin() {
+  if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then
+    log "Origin OPTIONS probes skipped by no-smoke policy"
+    return 0
+  fi
   log "POS Edge production origin verification"
   local function_name headers allowed
   for function_name in \
@@ -1102,6 +1179,7 @@ main() {
   # safe against the predecessor schema; the web app is deployed only after the
   # fail-closed migration and verification succeed.
   deploy_pos_edge_functions
+  verify_no_smoke_edge_metadata
   verify_deliberry_retirement_readiness
   verify_remote_allowed_origin
   verify_emergency_dispatcher_readiness

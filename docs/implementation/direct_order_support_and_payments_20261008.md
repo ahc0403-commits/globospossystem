@@ -47,7 +47,7 @@ VAT 정보와 환불 계좌는 직원 전용 지원 응답에만 포함한다. �
 
 ## 배포·복구
 
-공식 `scripts/deploy_pos_production.sh`를 사용한다. 최신 main의 정확한 SHA, 깨끗한 Git 상태, 필수 **POS release contract** 성공을 요구한다. 먼저 지원·결제 마이그레이션을 DB-only로 적용하고, 이어 주방 메모 마이그레이션과 Edge·웹을 반영한다. 전체 배포에는 `--skip-login-smoke`를 명시한다.
+공식 `scripts/deploy_pos_production.sh`를 사용한다. 최신 main의 정확한 SHA, 깨끗한 Git 상태, 필수 **POS release contract** 성공을 요구한다. 먼저 지원·결제 마이그레이션을 DB-only로 적용하고, 이어 주방 메모 마이그레이션과 Edge·웹을 반영한다. 전체 배포에는 `--skip-smoke-tests`를 명시한다. 합성 API·OPTIONS·live HEAD·로그인 확인 요청은 실행하지 않고, 관리 API의 배포 상태와 원격 origin digest로 확인한다.
 
 변경하는 기존 SQL 함수 13개의 실제 정의를 권한이 제한된 backup 테이블에 보관한다. 최초 지원 활동 전에는 `rollback_direct_order_support_and_payments.sql`로 복원할 수 있다. 입금·환불·추가 청구·지원 활동·결제 알림이 이미 기록되면 rollback을 차단하고 후속 수정으로 해결한다. 원장과 개인정보를 삭제하는 복구는 제공하지 않는다. 주방 메모는 별도 rollback/reapply 경로를 제공한다.
 
