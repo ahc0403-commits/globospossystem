@@ -86,9 +86,10 @@ class PhotoSalesBranchSummary {
 }
 
 class PhotoSalesImportValidationException implements Exception {
-  const PhotoSalesImportValidationException(this.issues);
+  const PhotoSalesImportValidationException(this.issues, {this.decodeFailure});
 
   final List<String> issues;
+  final ExcelWorkbookDecodeException? decodeFailure;
 
   @override
   String toString() => issues.join('\n');
@@ -118,9 +119,9 @@ PhotoSalesImportWorkbook parsePhotoSalesImportWorkbook(Uint8List bytes) {
     ]);
   } catch (error) {
     if (error is PhotoSalesImportValidationException) rethrow;
-    throw const PhotoSalesImportValidationException([
-      'Excel 파일을 읽을 수 없습니다. .xlsx 또는 Moers에서 내려받은 .xls 파일인지 확인하세요.',
-    ]);
+    throw PhotoSalesImportValidationException([
+      'Excel 파일을 읽지 못했습니다. 파일을 확인한 뒤 다시 저장해 주세요.',
+    ], decodeFailure: error is ExcelWorkbookDecodeException ? error : null);
   }
 }
 

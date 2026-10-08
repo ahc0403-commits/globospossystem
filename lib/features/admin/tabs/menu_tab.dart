@@ -13,6 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/i18n/excel_import_localization.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
@@ -596,7 +597,17 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       }
     } on MenuImportValidationException catch (error) {
       if (mounted) {
-        await _showMenuImportValidationErrors(context, error.issues);
+        await _showMenuImportValidationErrors(
+          context,
+          error.decodeFailure == null
+              ? error.issues
+              : [
+                  excelWorkbookDecodeMessage(
+                    context.l10n,
+                    error.decodeFailure!,
+                  ),
+                ],
+        );
       }
     } catch (_) {
       if (mounted) {
