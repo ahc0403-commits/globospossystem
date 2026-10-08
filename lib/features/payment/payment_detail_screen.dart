@@ -879,9 +879,14 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
         dinerCount: (packing?['diner_count'] as num?)?.toInt(),
         fulfillmentMethod: packing?['fulfillment_method']?.toString(),
         directOrderReference: packing?['direct_order_reference']?.toString(),
+        orderNotes: packing?['order_notes']?.toString(),
         restaurantName: _receiptRestaurantName(order),
         tableNumber: _extractTableNumber(order),
-        items: _receiptItems(order),
+        items: _receiptItems(
+          order,
+          deliveryFeeItemId: packing?['delivery_fee_item_id']?.toString(),
+          hideDeliveryFee: packing?['fulfillment_method'] == 'pickup',
+        ),
         totalAmount: _numValue(
           payment['amount'] ??
               payment['paid_amount'] ??
@@ -1063,23 +1068,37 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     return name == null || name.isEmpty ? 'GLOBOS POS' : name;
   }
 
-  List<ReceiptItem> _receiptItems(Map<String, dynamic> order) {
+  List<ReceiptItem> _receiptItems(
+    Map<String, dynamic> order, {
+    String? deliveryFeeItemId,
+    bool hideDeliveryFee = false,
+  }) {
     final items = order['order_items'];
     if (items is! List) return const [];
 
     return items
         .map((item) => Map<String, dynamic>.from(item))
         .where((item) => item['status']?.toString() != 'cancelled')
+        .where(
+          (item) =>
+              !hideDeliveryFee ||
+              deliveryFeeItemId == null ||
+              item['id']?.toString() != deliveryFeeItemId,
+        )
         .map((item) {
           final menuItem = item['menu_items'];
           final menuNameVi = menuItem is Map
               ? menuItem['name_vi']?.toString().trim()
               : null;
           return ReceiptItem(
+            notes: item['notes']?.toString(),
             name:
-                menuNameVi != null &&
-                    menuNameVi.isNotEmpty &&
-                    !RegExp(r'[\uac00-\ud7a3]').hasMatch(menuNameVi)
+                item['id']?.toString() == deliveryFeeItemId &&
+                    deliveryFeeItemId != null
+                ? 'Phí giao hàng'
+                : menuNameVi != null &&
+                      menuNameVi.isNotEmpty &&
+                      !RegExp(r'[\uac00-\ud7a3]').hasMatch(menuNameVi)
                 ? menuNameVi
                 : 'Món',
             quantity: _intValue(item['quantity']),

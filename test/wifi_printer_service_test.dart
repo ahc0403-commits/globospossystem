@@ -785,6 +785,7 @@ void main() {
             'destination_id': 'dest-receipt',
             'payload': {
               'ticket': 'receipt',
+              'order_notes': 'No steamed rice',
               'diner_count': 3,
               'fulfillment_method': 'pickup',
               'direct_order_reference': 'D12345678',
@@ -796,6 +797,7 @@ void main() {
               'items': [
                 {
                   'label': 'Pho Bo',
+                  'notes': 'No onion',
                   'quantity': 1,
                   'unit_price': 50000,
                   'is_service_item': false,
@@ -831,6 +833,8 @@ void main() {
       expect(output, contains('D12345678'));
       expect(output, contains('TU DEN LAY'));
       expect(output, contains('PHIEU THANH TOAN'));
+      expect(output, contains('GHI CHU: No steamed rice'));
+      expect(output, contains('No onion'));
       expect(output, contains('TONG CONG'));
       expect(output, isNot(contains('PHIEU BEP')));
       expect(_hasBuzzerAlert(printer.prints.single.bytes), isFalse);

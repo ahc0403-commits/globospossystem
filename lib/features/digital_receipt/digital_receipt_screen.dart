@@ -272,6 +272,13 @@ class _ReceiptPaper extends StatelessWidget {
               ),
             ],
             const Divider(height: 28),
+            if (receipt.orderNotes != null) ...[
+              Text(
+                'Ghi chú: ${receipt.orderNotes}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const Divider(height: 28),
+            ],
             for (final item in billableItems)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 7),
@@ -279,9 +286,16 @@ class _ReceiptPaper extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Text(
-                        digitalReceiptItemLabelVi(item.label),
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            digitalReceiptItemLabelVi(item.label),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          if (item.notes != null)
+                            Text('Ghi chú: ${item.notes}'),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 10),

@@ -5,6 +5,7 @@ class DigitalReceiptItem {
     required this.unitPrice,
     required this.lineTotal,
     required this.isServiceItem,
+    this.notes,
   });
 
   final String label;
@@ -12,6 +13,7 @@ class DigitalReceiptItem {
   final double unitPrice;
   final double lineTotal;
   final bool isServiceItem;
+  final String? notes;
 
   factory DigitalReceiptItem.fromJson(Map<String, dynamic> json) =>
       DigitalReceiptItem(
@@ -20,6 +22,7 @@ class DigitalReceiptItem {
         unitPrice: _asDouble(json['unit_price']),
         lineTotal: _asDouble(json['line_total']),
         isServiceItem: json['is_service_item'] == true,
+        notes: _optionalText(json['notes']),
       );
 }
 
@@ -62,6 +65,7 @@ class DigitalReceipt {
     this.dinerCount,
     this.fulfillmentMethod,
     this.directOrderReference,
+    this.orderNotes,
   });
 
   final String id;
@@ -88,6 +92,7 @@ class DigitalReceipt {
   final int? dinerCount;
   final String? fulfillmentMethod;
   final String? directOrderReference;
+  final String? orderNotes;
   bool get isDirectOrder =>
       fulfillmentMethod != null ||
       directOrderReference != null ||
@@ -152,6 +157,7 @@ class DigitalReceipt {
       dinerCount: _optionalDinerCount(json['diner_count']),
       fulfillmentMethod: _optionalText(json['fulfillment_method']),
       directOrderReference: _optionalText(json['direct_order_reference']),
+      orderNotes: _optionalText(json['order_notes']),
     );
   }
 }

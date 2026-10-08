@@ -152,7 +152,7 @@ void main() {
     expect(screen, contains("Key('payment_detail_print_receipt')"));
     expect(screen, contains('ReceiptBuilder.buildPaymentReceipt'));
     expect(screen, contains('printerProvider'));
-    expect(screen, contains('_receiptItems(order'));
+    expect(screen, contains('items: _receiptItems('));
 
     expect(
       paymentService,
@@ -172,7 +172,7 @@ void main() {
     expect(paymentService, contains("'p_adjustment_type': adjustmentType"));
     expect(paymentService, contains("'p_reason': reason"));
     expect(paymentService, contains('restaurant_name'));
-    expect(paymentService, contains('label, unit_price, quantity'));
+    expect(paymentService, contains('label, notes, unit_price, quantity'));
     expect(einvoiceService, isNot(contains('resendInvoiceEmail')));
     expect(screen, isNot(contains('requestRedInvoice(')));
     expect(screen, isNot(contains('resendInvoiceEmail')));

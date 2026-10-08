@@ -9,6 +9,54 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'digital receipt keeps order and menu requests with unchanged totals',
+    () async {
+      final json = <String, dynamic>{
+        'restaurant_name': 'GLOBOS',
+        'total_amount': 149040,
+        'order_notes': '  No steamed rice  ',
+        'items': [
+          {
+            'label': 'Soup',
+            'quantity': 1,
+            'unit_price': 59000,
+            'line_total': 59000,
+            'notes': 'No onion',
+          },
+          {
+            'label': 'Bibimbap',
+            'quantity': 1,
+            'unit_price': 79000,
+            'line_total': 79000,
+            'notes': '  ',
+          },
+        ],
+      };
+      final withNotes = DigitalReceipt.fromJson(json);
+      final withoutNotes = DigitalReceipt.fromJson({
+        ...json,
+        'order_notes': null,
+        'items': (json['items'] as List)
+            .map((item) => {...item, 'notes': null})
+            .toList(),
+      });
+      expect(withNotes.orderNotes, 'No steamed rice');
+      expect(withNotes.items.first.notes, 'No onion');
+      expect(withNotes.items.last.notes, isNull);
+      expect(withNotes.totalAmount, withoutNotes.totalAmount);
+      double height(List<int> bytes) => double.parse(
+        RegExp(
+          r'/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]',
+        ).firstMatch(latin1.decode(bytes, allowInvalid: true))!.group(2)!,
+      );
+      expect(
+        height(await digitalReceiptPdfService.build(withNotes)),
+        greaterThan(height(await digitalReceiptPdfService.build(withoutNotes))),
+      );
+    },
+  );
+
+  test(
     'new direct snapshots preserve packing counts; older snapshots remain compatible',
     () {
       for (final count in [1, 3, 10, 100, null, 0, 101, 1.5]) {
