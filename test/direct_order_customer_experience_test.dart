@@ -108,7 +108,7 @@ void main() {
       ),
       requestId: 'request',
     );
-    expect(calls.single['action'], 'status_v4');
+    expect(calls.single['action'], 'status_v5');
     expect(calls.single['request_id'], 'request');
     expect(status.customer, isNull);
   });

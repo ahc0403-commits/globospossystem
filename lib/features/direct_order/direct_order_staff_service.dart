@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -195,7 +196,7 @@ class DirectOrderStaffService {
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_detail_v3',
+        'direct_order_staff_detail_v4',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
@@ -291,6 +292,127 @@ class DirectOrderStaffService {
     );
     if (result == null) return null;
     return _map(result);
+  }
+
+  Future<Map<String, dynamic>> recordReceipt({
+    required String storeId,
+    required String requestId,
+    required String quoteId,
+    required String proofMessageId,
+    required num amount,
+    required String bankReference,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_record_receipt',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_quote_id': quoteId,
+        'p_proof_message_id': proofMessageId,
+        'p_amount': amount,
+        'p_bank_reference': bankReference,
+      },
+    ),
+  );
+
+  Future<Map<String, dynamic>> supportAction({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String action,
+    Map<String, dynamic> payload = const {},
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_staff_support_action',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_action': action,
+        'p_payload': payload,
+      },
+    ),
+  );
+
+  Future<Map<String, dynamic>> attachmentRequest({
+    required String storeId,
+    required String requestId,
+    required String action,
+    Map<String, dynamic> payload = const {},
+  }) async {
+    try {
+      final response = await supabase.functions.invoke(
+        'direct-order-public',
+        body: {
+          ...payload,
+          'action': action,
+          'store_id': storeId,
+          'request_id': requestId,
+        },
+      );
+      if (response.status != 200) {
+        throw DirectOrderException(
+          response.data is Map
+              ? response.data['error'].toString()
+              : 'DIRECT_ORDER_ATTACHMENT_INVALID',
+        );
+      }
+      final envelope = _map(response.data);
+      if (envelope['data'] is! Map) {
+        throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+      }
+      return _map(envelope['data']);
+    } on FunctionException catch (error) {
+      throw DirectOrderException(
+        error.details is Map
+            ? error.details['error'].toString()
+            : 'DIRECT_ORDER_ATTACHMENT_INVALID',
+      );
+    }
+  }
+
+  Future<void> uploadChatAttachment({
+    required String storeId,
+    required String requestId,
+    required String path,
+    required String filename,
+    required String mimeType,
+    required Uint8List bytes,
+  }) async {
+    final payload = {'path': path, 'filename': filename, 'mime_type': mimeType};
+    // A previous upload or commit may have succeeded despite a lost response.
+    // Recover the same immutable path first; only a missing object needs upload.
+    try {
+      await attachmentRequest(
+        storeId: storeId,
+        requestId: requestId,
+        action: 'staff_attachment_commit',
+        payload: payload,
+      );
+      return;
+    } on DirectOrderException catch (error) {
+      if (error.code != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
+    }
+    final upload = await attachmentRequest(
+      storeId: storeId,
+      requestId: requestId,
+      action: 'staff_attachment_upload',
+      payload: payload,
+    );
+    await supabase.storage
+        .from('direct-order-chat')
+        .uploadBinaryToSignedUrl(
+          path,
+          upload['token'] as String,
+          bytes,
+          FileOptions(contentType: mimeType),
+        );
+    await attachmentRequest(
+      storeId: storeId,
+      requestId: requestId,
+      action: 'staff_attachment_commit',
+      payload: payload,
+    );
   }
 
   Future<Map<String, dynamic>> approve({

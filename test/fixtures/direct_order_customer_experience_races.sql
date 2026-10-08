@@ -12,8 +12,12 @@ BEGIN
  PERFORM pg_advisory_xact_lock(8675309); -- observable transaction latch
  -- Wait until the customer holds last_seen_at's session lock and is blocked
  -- on this request. This exposes the old cycle deterministically.
- WHILE NOT EXISTS(SELECT 1 FROM pg_stat_activity
-   WHERE application_name='direct-customer-session-race' AND wait_event='transactionid') LOOP
+ LOOP
+  -- pg_stat_activity snapshots are cached within a transaction. Refresh before
+  -- checking the second connection, which may start after the first read.
+  PERFORM pg_stat_clear_snapshot();
+  EXIT WHEN EXISTS(SELECT 1 FROM pg_stat_activity
+   WHERE application_name='direct-customer-session-race' AND wait_event='transactionid');
   PERFORM pg_sleep(0.05); i:=i+1;
   IF i>100 THEN RAISE EXCEPTION 'CUSTOMER_SESSION_RACE_DID_NOT_OVERLAP'; END IF;
  END LOOP;

@@ -63,6 +63,7 @@ class KitchenItem {
     this.nameKo,
     this.nameVi,
     this.nameEn,
+    this.notes,
   });
 
   final String itemId;
@@ -75,6 +76,7 @@ class KitchenItem {
   final String? nameKo;
   final String? nameVi;
   final String? nameEn;
+  final String? notes;
 
   String localizedName(String languageCode) => localizedMenuName({
     'name': label,
@@ -94,6 +96,7 @@ class KitchenItem {
     String? nameKo,
     String? nameVi,
     String? nameEn,
+    String? notes,
   }) {
     return KitchenItem(
       itemId: itemId ?? this.itemId,
@@ -106,6 +109,7 @@ class KitchenItem {
       nameKo: nameKo ?? this.nameKo,
       nameVi: nameVi ?? this.nameVi,
       nameEn: nameEn ?? this.nameEn,
+      notes: notes ?? this.notes,
     );
   }
 
@@ -135,6 +139,7 @@ class KitchenItem {
               .toList(growable: false)
         : const <KitchenComboComponent>[];
     return KitchenItem(
+      notes: json['notes']?.toString(),
       itemId: json['id'].toString(),
       label:
           json['label']?.toString() ??
@@ -475,7 +480,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   ) => _db
       .from('orders')
       .select(
-        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_ko, name_vi, name_en))',
+        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, notes, combo_components, menu_items(name, name_ko, name_vi, name_en))',
       )
       .eq('restaurant_id', storeId)
       .gte('created_at', businessDay.startIso8601)

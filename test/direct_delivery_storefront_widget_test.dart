@@ -1842,6 +1842,40 @@ void main() {
   );
 
   testWidgets(
+    'driver-paid delivery fee is unconfirmed rather than shown as zero',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: DirectOrderStatus(
+          requestId: 'fixture-request',
+          referenceCode: 'DFIXTURE1',
+          state: 'quoted',
+          messages: const [],
+          quote: DirectOrderQuote(
+            id: 'quote',
+            menuTotal: 108000,
+            serviceChargeTotal: 0,
+            deliveryFeeTotal: 0,
+            finalTotal: 108000,
+            status: 'active',
+            expiresAt: DateTime.utc(2099),
+            vatTotal: 8000,
+            deliveryPaymentMode: 'customer_direct',
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).last, const Offset(0, -500));
+      await tester.pumpAndSettle();
+      expect(find.text('배송비 미정 · 기사에게 직접 결제'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
     'completed order details use stored items and show tax and separate delivery payment',
     (tester) async {
       SharedPreferences.setMockInitialValues(const {});

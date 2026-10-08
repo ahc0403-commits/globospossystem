@@ -125,7 +125,11 @@ class DirectOrderCustomerPushService {
         final requestId = message.data['request_id'];
         final kind = message.data['event_kind'];
         if (requestId != null &&
-            const {'pickup_ready', 'driver_handoff'}.contains(kind)) {
+            const {
+              'pickup_ready',
+              'driver_handoff',
+              'payment_request',
+            }.contains(kind)) {
           onForeground?.call(requestId, kind!);
         }
       });

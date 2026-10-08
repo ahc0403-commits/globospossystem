@@ -1304,6 +1304,17 @@ class _KitchenTicketItemRow extends StatelessWidget {
               ),
             ],
           ),
+          if (item.notes?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 8),
+            Text(
+              item.notes!,
+              key: ValueKey('kitchen_menu_note_${item.itemId}'),
+              style: const TextStyle(
+                color: Colors.deepOrange,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
           if (item.comboComponents.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(

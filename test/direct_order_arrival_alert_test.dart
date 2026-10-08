@@ -30,7 +30,7 @@ const _frozenAlertFiles = <String, String>{
   'lib/features/cashier/cashier_screen.dart':
       'd59581b768a7ff2fa65328be3cdc781ae0e5cef8653dbd8f3ad89f0c0d233fc9',
   'lib/features/kitchen/kitchen_screen.dart':
-      '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
+      '9c307588f5985c2bdbbc67865c7fc99204c011015e053a371b602ec1e4b50e5c',
   // Intentional event-merge fix; behavioral regressions live in
   // scalability_live_consumer_regression_test.dart.
   'lib/core/services/bank_transfer_alert_coordinator.dart':

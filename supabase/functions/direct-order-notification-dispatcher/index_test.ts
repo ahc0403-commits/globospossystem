@@ -125,3 +125,29 @@ Deno.test("dispatcher batches once, retries failures and acknowledges only curre
     "outcomes acknowledged",
   );
 });
+
+Deno.test("payment requests tell customers to review the amount and pay in KO EN VI", () => {
+  for (
+    const [locale, phrase] of [["ko", "결제 요청"], ["en", "payment request"], [
+      "vi",
+      "yêu cầu thanh toán",
+    ]]
+  ) {
+    const payload = buildDirectOrderFcmMessage(
+      mapDirectOrderPush({ ...row, locale, event_kind: "payment_request" }),
+      "https://pos.example",
+    );
+    assert(
+      payload.message.data.body.includes(phrase),
+      "localized payment notice",
+    );
+    assert(
+      payload.message.data.event_kind === "payment_request",
+      "correct payment event",
+    );
+    assert(
+      payload.message.webpush.notification.tag === "event",
+      "one notification identity",
+    );
+  }
+});

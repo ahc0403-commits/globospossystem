@@ -82,6 +82,7 @@ printf 'CHECK_REPO_STEP=direct_order_edge_contracts\n'
 bash test/direct_delivery_manual_addresses_sql_test.sh
 DELIVERY_HOURS_TEST=1 bash test/direct_order_photo_approval_sql_test.sh
 bash test/direct_order_customer_experience_sql_test.sh
+bash test/direct_order_support_sql_test.sh
 deno fmt --check \
   supabase/functions/direct-order-public/index.ts \
   supabase/functions/direct-order-public/index_test.ts \

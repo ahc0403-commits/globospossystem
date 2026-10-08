@@ -319,6 +319,83 @@ run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_receipt_requests.sql" >/dev/
 run_sql "$PHOTO_ROOT/supabase/migrations/20261008010000_direct_order_receipt_requests.sql" >/dev/null
 run_sql "$PHOTO_ROOT/scripts/verify_direct_order_receipt_requests.sql" >/dev/null
 printf 'RECEIPT_REQUESTS_ROLLBACK_AND_REAPPLY=PASS\n'
+if [[ "${DIRECT_ORDER_SUPPORT_TEST:-0}" == "1" ]]; then
+ python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYSUPPORTRESTORE'
+from pathlib import Path
+import re,sys
+root,tmp=map(Path,sys.argv[1:])
+s=(root/'supabase/migrations/20261006030000_direct_order_customer_experience.sql').read_text()
+a=s.index('DO $kds_ready$')
+(tmp/'support_restore_kds.sql').write_text(s[a:s.index('$kds_ready$;',a)+len('$kds_ready$;')])
+# Load the actual effective retention definitions, rather than fixture stubs.
+out=''
+for name in ['direct_order_cleanup_expired_pii','direct_order_cleanup_candidates','direct_order_public_message','direct_order_staff_message']:
+ matches=[]
+ for p in sorted((root/'supabase/migrations').glob('*.sql')):
+  if p.name >= '20261008020000': continue
+  src=p.read_text();m=re.search(r'CREATE (?:OR REPLACE )?FUNCTION public\.'+name+r'\(',src)
+  if m: matches.append(src[m.start():src.index('$$;',m.start())+3].replace('CREATE FUNCTION','CREATE OR REPLACE FUNCTION',1))
+ assert matches,name
+ out+=matches[-1]+'\n'
+(tmp/'support_retention_predecessor.sql').write_text(out)
+PYSUPPORTRESTORE
+ run_sql "$PHOTO_TMP/support_restore_kds.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/rollback_direct_order_detail_customer_context.sql" >/dev/null
+ # The v4 migration is additive; extract its function to replace the rollback shim.
+ python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYSUPPORTV4'
+from pathlib import Path
+import sys
+root,tmp=map(Path,sys.argv[1:]);s=(root/'supabase/migrations/20261007010000_direct_order_detail_customer_context.sql').read_text();a=s.index('CREATE FUNCTION public.direct_order_public_status_v4(')
+(tmp/'support_status_v4.sql').write_text(s[a:s.index('$$;',a)+3].replace('CREATE FUNCTION','CREATE OR REPLACE FUNCTION',1))
+PYSUPPORTV4
+ run_sql "$PHOTO_TMP/support_status_v4.sql" >/dev/null
+ run_sql "$PHOTO_TMP/support_retention_predecessor.sql" >/dev/null
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "ALTER DATABASE codex_direct_photo SET request.jwt.claim.sub='00000000-0000-4000-8000-000000000001'" >/dev/null
+ run_sql "$PHOTO_ROOT/test/fixtures/direct_order_support_setup.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/preflight_direct_order_support_and_payments.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261008020000_direct_order_support_and_payments.sql" > "$PHOTO_TMP/support_migration.log" 2>&1 || { cat "$PHOTO_TMP/support_migration.log"; exit 1; }
+ run_sql "$PHOTO_ROOT/scripts/verify_direct_order_support_and_payments.sql"
+ # A database clone verifies restoration before any support ledger is written.
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE codex_direct_support_rollback TEMPLATE codex_direct_photo' >/dev/null
+ docker exec -i "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_support_rollback -v ON_ERROR_STOP=1 < "$PHOTO_ROOT/scripts/rollback_direct_order_support_and_payments.sql" > "$PHOTO_TMP/support_empty_rollback.log" 2>&1 || { cat "$PHOTO_TMP/support_empty_rollback.log"; exit 1; }
+ restored="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_support_rollback -Atqc "SELECT bool_and(pg_get_functiondef(object_identity::regprocedure)=definition) FROM public.direct_order_support_20261008020000_backup")"
+ [[ "$restored" == "t" ]] || { printf 'SUPPORT_ROLLBACK_PREDECESSOR_MISMATCH\n'; exit 1; }
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE codex_direct_support_rollback' >/dev/null
+ printf 'DIRECT_ORDER_SUPPORT_UNUSED_ROLLBACK=PASS definitions=13\n'
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_support_and_payments_test.sql"
+ if run_sql "$PHOTO_ROOT/scripts/rollback_direct_order_support_and_payments.sql" > "$PHOTO_TMP/support_rollback.log" 2>&1; then
+  printf 'SUPPORT_ROLLBACK_ERASED_ACTIVE_LEDGER\n'; exit 1
+ fi
+ rg -q 'DIRECT_ORDER_SUPPORT_ROLLBACK_REQUIRES_FORWARD_FIX' "$PHOTO_TMP/support_rollback.log"
+ printf 'DIRECT_ORDER_SUPPORT_GUARDED_ROLLBACK=PASS\n'
+ python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYKDS'
+from pathlib import Path
+import sys
+root,tmp=map(Path,sys.argv[1:])
+s=(root/'test/fixtures/kds_set_based_enrichment_setup.sql').read_text().split('INSERT INTO public.emergency_order_queue')[0]
+s=s.replace('CREATE TABLE public.','CREATE TABLE IF NOT EXISTS public.').replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS ')
+s="ALTER TABLE public.emergency_order_queue ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid(), ADD COLUMN IF NOT EXISTS workflow_version smallint DEFAULT 1;\nALTER TABLE public.emergency_fulfillment_items ADD COLUMN IF NOT EXISTS id uuid, ADD COLUMN IF NOT EXISTS kitchen_started_quantity integer, ADD COLUMN IF NOT EXISTS excused_quantity integer;\n"+s
+(tmp/'support_kds_setup.sql').write_text(s)
+PYKDS
+ run_sql "$PHOTO_TMP/support_kds_setup.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20260919160000_kds_set_based_enrichment.sql" >/dev/null
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "ALTER TABLE public.emergency_order_queue ADD COLUMN IF NOT EXISTS order_id uuid" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/preflight_kds_menu_requests.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261008021000_kds_menu_requests.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/verify_kds_menu_requests.sql"
+ run_sql "$PHOTO_ROOT/supabase/tests/kds_menu_requests_test.sql"
+ for notes_items in 1 100 500; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); WITH note_item AS (SELECT id,order_id FROM public.order_items WHERE notes='không hành lá' LIMIT 1), input AS (SELECT jsonb_build_array(jsonb_build_object('queue_id',q.id,'items',jsonb_agg(jsonb_build_object('id',gen_random_uuid(),'order_item_id',i.id,'ordered_quantity',1)))) orders FROM note_item i JOIN public.emergency_order_queue q ON q.order_id=i.order_id CROSS JOIN generate_series(1,$notes_items) n GROUP BY q.id LIMIT 1) SELECT jsonb_array_length(public.emergency_enrich_start_ready_orders(orders)->0->'items') FROM input; SELECT pg_stat_force_next_flush();" >/dev/null
+  notes_calls="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.emergency_enrich_start_ready_orders_pre_menu_requests(jsonb)'::regprocedure")"
+  [[ "$notes_calls" == "1" ]] || { printf 'KDS_MENU_REQUEST_N_PLUS_ONE\n'; exit 1; }
+  printf 'KDS_MENU_REQUEST_SNAPSHOT items=%s base_calls=%s\n' "$notes_items" "$notes_calls"
+ done
+ run_sql "$PHOTO_ROOT/scripts/rollback_kds_menu_requests.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/preflight_kds_menu_requests.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261008021000_kds_menu_requests.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/scripts/verify_kds_menu_requests.sql" >/dev/null
+ printf 'KDS_MENU_REQUEST_ROLLBACK_AND_REAPPLY=PASS\n'
+fi
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

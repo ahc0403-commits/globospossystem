@@ -1773,8 +1773,8 @@ class _EmergencyCardMenuList extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 item.isTakeout
-                                    ? '[${context.l10n.salesChannelTakeaway}] ${item.paperlessName}'
-                                    : item.paperlessName,
+                                    ? '[${context.l10n.salesChannelTakeaway}] ${item.paperlessName}${item.notes?.trim().isNotEmpty == true ? ' · ${item.notes}' : ''}'
+                                    : '${item.paperlessName}${item.notes?.trim().isNotEmpty == true ? ' · ${item.notes}' : ''}',
                                 key: Key('emergency_card_menu_${item.id}'),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -2333,6 +2333,17 @@ class _EmergencyMenuRow extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                if (displayItem.notes?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    displayItem.notes!,
+                    key: ValueKey('emergency_menu_note_${displayItem.id}'),
+                    style: const TextStyle(
+                      color: PosColors.warning,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
                 if (displayItem.isTakeout) ...[
                   const SizedBox(height: 3),
                   Text(

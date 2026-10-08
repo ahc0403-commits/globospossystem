@@ -19,6 +19,7 @@ import 'direct_order_copy.dart';
 import 'direct_order_stage.dart';
 import 'direct_order_details_sheet.dart';
 import 'direct_order_customer_push_service.dart';
+import 'direct_order_support.dart';
 import 'direct_order_localization.dart';
 import 'direct_order_dialog.dart';
 import 'direct_order_hours.dart';
@@ -566,9 +567,7 @@ class _DirectOrderStorefrontScreenState
   DirectOrderAddress? _composeAddress() {
     if (_nameController.text.trim().isEmpty ||
         _phoneController.text.trim().isEmpty ||
-        (!_isPickup &&
-            (_addressController.text.trim().length < 3 ||
-                _detailController.text.trim().isEmpty))) {
+        (!_isPickup && _addressController.text.trim().length < 3)) {
       return null;
     }
     return DirectOrderAddress(
@@ -707,7 +706,9 @@ class _DirectOrderStorefrontScreenState
         }
       }
       if (!mounted || revision != _statusMutationRevision) return;
-      if (!orders.any((order) => !order.isTerminal) && !_hasPendingUpdates) {
+      if (!orders.any((order) => !order.isTerminal) &&
+          !_hasPendingUpdates &&
+          _status?.support['chat_open'] == false) {
         _statusTimer?.cancel();
         _statusTimer = null;
       }
@@ -1113,6 +1114,8 @@ class _DirectOrderStorefrontScreenState
           completedAt: latest.completedAt,
           proofReview: latest.proofReview,
           delivery: latest.delivery,
+          support: latest.support,
+          customer: latest.customer,
         );
       });
     } catch (error) {
@@ -1671,7 +1674,8 @@ class _DirectOrderStorefrontScreenState
             maxLength: 300,
             decoration: InputDecoration(
               counterText: '',
-              labelText: _copy.detailAddress,
+              labelText:
+                  '${_copy.detailAddress} (${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).optional})',
               hintText: _copy.detailAddressHint,
               prefixIcon: const Icon(Icons.apartment_rounded),
             ),
@@ -1914,6 +1918,16 @@ class _DirectOrderStorefrontScreenState
             const SizedBox(height: 12),
             _quoteCard(status),
           ],
+          if (_session != null && _storefront != null)
+            DirectOrderCustomerSupportPanel(
+              key: ValueKey('customer-support:${status.requestId}'),
+              status: status,
+              session: _session!,
+              bank: _storefront!.bank,
+              storeId: _storefront!.storeId,
+              service: widget.service,
+              onChanged: _refreshStatus,
+            ),
           const SizedBox(height: 12),
           _chatCard(status),
           if (const {'awaiting_quote', 'quoted'}.contains(status.state)) ...[
@@ -2231,7 +2245,29 @@ class _DirectOrderStorefrontScreenState
                         ? _copy.storePrepaysDriver
                         : _copy.customerPaysDriver),
             ),
-            _amountRow(_copy.deliveryFee, quote.deliveryFeeTotal),
+            if (quote.deliveryPaymentMode == 'customer_direct' &&
+                !status.isPickup)
+              Text(
+                DirectOrderSupportCopy(
+                  _copy.languageCode,
+                ).text('driver_fee_pending'),
+              )
+            else if (status.support['delivery_fee_deferred'] == true &&
+                status.support['delivery_fee_finalized'] == false)
+              Text(
+                DirectOrderSupportCopy(_copy.languageCode).text('fee_pending'),
+              )
+            else if (status.support['delivery_fee_deferred'] == true &&
+                supportRows(
+                  status.support['charges'],
+                ).any((c) => c['kind'] == 'delivery' && c['status'] != 'void'))
+              Text(
+                DirectOrderSupportCopy(
+                  _copy.languageCode,
+                ).text('delivery_separate_payments'),
+              )
+            else
+              _amountRow(_copy.deliveryFee, quote.deliveryFeeTotal),
             Text(
               quote.deliveryPaymentMode == 'customer_direct' && !status.isPickup
                   ? _copy.deliveryFeeSeparate
@@ -2528,6 +2564,7 @@ class _DirectOrderStorefrontScreenState
                 Expanded(
                   child: TextField(
                     controller: _messageController,
+                    enabled: status.support['chat_open'] != false,
                     minLines: 1,
                     maxLines: 4,
                     decoration: InputDecoration(
@@ -2541,7 +2578,10 @@ class _DirectOrderStorefrontScreenState
                 const SizedBox(width: 8),
                 IconButton.filled(
                   tooltip: _copy.send,
-                  onPressed: _sendingMessage ? null : _sendMessage,
+                  onPressed:
+                      _sendingMessage || status.support['chat_open'] == false
+                      ? null
+                      : _sendMessage,
                   icon: _sendingMessage
                       ? const SizedBox.square(
                           dimension: 18,
@@ -2560,7 +2600,9 @@ class _DirectOrderStorefrontScreenState
   Widget _messageBubble(DirectOrderMessage message) {
     final mine = message.senderType == 'customer';
     final body = message.hasAttachment
-        ? _copy.paymentProof
+        ? (message.messageType == 'attachment'
+              ? message.body ?? _copy.paymentProof
+              : _copy.paymentProof)
         : localizedDirectOrderMessage(
             copy: _copy,
             messageType: message.messageType,
@@ -2597,7 +2639,20 @@ class _DirectOrderStorefrontScreenState
     );
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: grabUri == null
+      child: message.hasAttachment && _session != null
+          ? InkWell(
+              onTap: () => openDirectOrderAttachment(
+                context,
+                () => widget.service.supportRequest(
+                  session: _session!,
+                  requestId: _status!.requestId,
+                  action: 'customer_attachment_url',
+                  payload: {'message_id': message.id},
+                ),
+              ),
+              child: bubble,
+            )
+          : grabUri == null
           ? bubble
           : InkWell(
               onTap: () =>

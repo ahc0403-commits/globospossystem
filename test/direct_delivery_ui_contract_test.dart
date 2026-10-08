@@ -206,7 +206,10 @@ void main() {
         'lib/features/direct_order/direct_order_cashier_screen.dart',
       ).readAsStringSync();
       expect(cashier, contains("'DIRECT_ORDER_REJECTED_BY_STORE'"));
-      expect(cashier, contains("Key('direct_order_approval_confirm')"));
+      final support = File(
+        'lib/features/direct_order/direct_order_support.dart',
+      ).readAsStringSync();
+      expect(support, contains("Key('direct_order_approval_confirm')"));
       expect(
         cashier,
         contains("Key('direct_order_request_proof_resubmission')"),
@@ -313,10 +316,10 @@ void main() {
 
   test('snapshot names never borrow a different registered language', () {
     expect(
-      localizedDirectOrderSnapshotName(
-        const {'name': '한국어 메뉴', 'name_ko': '한국어 메뉴'},
-        'en-US',
-      ),
+      localizedDirectOrderSnapshotName(const {
+        'name': '한국어 메뉴',
+        'name_ko': '한국어 메뉴',
+      }, 'en-US'),
       '한국어 메뉴 · English name missing',
     );
   });

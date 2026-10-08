@@ -407,7 +407,7 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status_v4',
+      'action': 'status_v5',
       'session_id': session.id,
       'secret': session.secret,
       'request_id': requestId,
@@ -434,6 +434,74 @@ class DirectOrderService {
           return DirectOrderSummary.fromJson(Map<String, dynamic>.from(row));
         })
         .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> supportRequest({
+    required DirectOrderSession session,
+    required String requestId,
+    required String action,
+    Map<String, dynamic> payload = const {},
+  }) => _invoke({
+    ...payload,
+    'action': action,
+    'session_id': session.id,
+    'secret': session.secret,
+    'request_id': requestId,
+  });
+
+  Future<void> uploadSupportAttachment({
+    required DirectOrderSession session,
+    required String requestId,
+    required String chargeId,
+    required String path,
+    required String filename,
+    required String mimeType,
+    required Uint8List bytes,
+  }) async {
+    final payload = {
+      'charge_id': chargeId,
+      'path': path,
+      'filename': filename,
+      'mime_type': mimeType,
+    };
+    // A previous upload or commit may have succeeded despite a lost response.
+    // Recover the same immutable path first; only a missing object needs upload.
+    try {
+      await supportRequest(
+        session: session,
+        requestId: requestId,
+        action: 'customer_attachment_commit',
+        payload: payload,
+      );
+      return;
+    } on DirectOrderException catch (error) {
+      if (error.code != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
+    }
+    final upload = await supportRequest(
+      session: session,
+      requestId: requestId,
+      action: 'customer_attachment_upload',
+      payload: payload,
+    );
+    final injected = _proofUploader;
+    if (injected != null) {
+      await injected(path, upload['token'] as String, bytes, mimeType);
+    } else {
+      await supabase.storage
+          .from('direct-order-chat')
+          .uploadBinaryToSignedUrl(
+            path,
+            upload['token'] as String,
+            bytes,
+            FileOptions(contentType: mimeType),
+          );
+    }
+    await supportRequest(
+      session: session,
+      requestId: requestId,
+      action: 'customer_attachment_commit',
+      payload: payload,
+    );
   }
 
   Future<DirectOrderMessage> sendMessage({

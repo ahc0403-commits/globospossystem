@@ -2,6 +2,7 @@ import {
   clientAddress,
   createDirectOrderHandler,
   directOrderActionRegistry,
+  directOrderAttachmentSpec,
   type DirectOrderDependencies,
   directOrderDinerCount,
   directOrderLocale,
@@ -323,10 +324,18 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "status_v2",
       "status_v3",
       "status_v4",
+      "status_v5",
       "orders_v2",
       "orders_v3",
       "push_subscription",
       "message",
+      "charge_consent",
+      "customer_attachment_upload",
+      "customer_attachment_commit",
+      "customer_attachment_url",
+      "staff_attachment_upload",
+      "staff_attachment_commit",
+      "staff_attachment_url",
       "cancel",
       "proof_upload_url",
       "proof_upload_url_v2",
@@ -464,7 +473,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    111,
+    134,
     "registered SQL error count",
   );
   assertEquals(
@@ -704,4 +713,53 @@ Deno.test("customer push registration validates ownership arguments without forw
     }
     assertEquals(status, 400, "invalid push input rejected");
   }
+});
+
+Deno.test("chat attachments bind storage scope and permit staff PDFs only", () => {
+  const store = "11111111-1111-4111-8111-111111111111",
+    request = "22222222-2222-4222-8222-222222222222",
+    file = "33333333-3333-4333-8333-333333333333";
+  const pdf = {
+    filename: "../proof.pdf",
+    mime_type: "application/pdf",
+    path: `${store}/${request}/${file}.pdf`,
+  };
+  assertEquals(
+    directOrderAttachmentSpec(pdf, store, request, true).filename,
+    ".._proof.pdf",
+    "filename sanitized",
+  );
+  for (
+    const [body, staff] of [
+      [pdf, false],
+      [{
+        ...pdf,
+        path: `${store}/44444444-4444-4444-8444-444444444444/${file}.pdf`,
+      }, true],
+      [{ ...pdf, mime_type: "text/html" }, true],
+      [{ ...pdf, path: `${store}/${request}/../${file}.pdf` }, true],
+    ] as const
+  ) {
+    let code = "";
+    try {
+      directOrderAttachmentSpec(body, store, request, staff);
+    } catch (e) {
+      code = e instanceof SafeHttpError ? e.code : "unexpected";
+    }
+    assertEquals(
+      code,
+      "DIRECT_ORDER_ATTACHMENT_INVALID",
+      "unsafe file rejected before token issuance",
+    );
+  }
+  const jpeg = {
+    filename: "photo.jpeg",
+    mime_type: "image/jpeg",
+    path: `${store}/${request}/${file}.jpeg`,
+  };
+  assertEquals(
+    directOrderAttachmentSpec(jpeg, store, request, false).extension,
+    "jpeg",
+    "JPEG supported",
+  );
 });
