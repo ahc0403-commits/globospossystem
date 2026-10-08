@@ -155,7 +155,6 @@ for check_mode in pending api-failure; do
   check_output="$(PATH="$FAKE_BIN:$PATH" GITHUB_CHECK_MODE="$check_mode" bash -c '
     source "$1/scripts/deploy_pos_production.sh"
     parse_args --skip-smoke-tests
-  parse_args --skip-smoke-tests
     enforce_required_github_check
   ' guard "$APPROVED_REPO" 2>&1)"
   check_status=$?

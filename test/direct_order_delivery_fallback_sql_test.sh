@@ -366,7 +366,7 @@ PYSUPPORTV4
  if run_sql "$PHOTO_ROOT/scripts/rollback_direct_order_support_and_payments.sql" > "$PHOTO_TMP/support_rollback.log" 2>&1; then
   printf 'SUPPORT_ROLLBACK_ERASED_ACTIVE_LEDGER\n'; exit 1
  fi
- rg -q 'DIRECT_ORDER_SUPPORT_ROLLBACK_REQUIRES_FORWARD_FIX' "$PHOTO_TMP/support_rollback.log"
+ grep -q 'DIRECT_ORDER_SUPPORT_ROLLBACK_REQUIRES_FORWARD_FIX' "$PHOTO_TMP/support_rollback.log"
  printf 'DIRECT_ORDER_SUPPORT_GUARDED_ROLLBACK=PASS\n'
  python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYKDS'
 from pathlib import Path
