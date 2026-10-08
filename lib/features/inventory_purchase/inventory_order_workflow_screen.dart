@@ -17,6 +17,7 @@ import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/excel_import_localization.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import 'inventory_workflow_state.dart';
@@ -649,8 +650,13 @@ class _InventoryOrderWorkflowScreenState
   }
 
   Widget _buildErrorBanner(Object error) {
+    final message =
+        error is SupplierPriceImportValidationException &&
+            error.decodeFailure != null
+        ? excelWorkbookDecodeMessage(context.l10n, error.decodeFailure!)
+        : _friendlyError(error);
     return MaterialBanner(
-      content: Text(_friendlyError(error)),
+      content: Text(message),
       leading: const Icon(Icons.error_outline),
       actions: [
         if (error.toString().contains('STALE_VERSION') ||

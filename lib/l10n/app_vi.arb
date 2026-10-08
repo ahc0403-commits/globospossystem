@@ -4182,5 +4182,9 @@
   "inventorySafetyStockSaveFailed": "Không thể lưu nguyên liệu và tồn kho an toàn. Vui lòng thử lại.",
   "inventorySafetyStockLow": "Bằng hoặc dưới mức an toàn",
   "inventorySafetyStockEnough": "Trên mức an toàn",
-  "inventorySafetyStockPieces": "cái"
+  "inventorySafetyStockPieces": "cái",
+  "excelImportInvalidContainer": "Không đọc được tệp Excel. Tệp có thể bị hỏng, được mã hóa hoặc có định dạng không được hỗ trợ.",
+  "excelImportInvalidXml": "Không đọc được dữ liệu bên trong tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập.",
+  "excelImportUnsupportedNumberFormat": "Không xử lý được một số định dạng ô trong tệp. Hãy dán các giá trị vào mẫu nhập và lưu lại.",
+  "excelImportDecodeFailed": "Không xử lý được tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập."
 }

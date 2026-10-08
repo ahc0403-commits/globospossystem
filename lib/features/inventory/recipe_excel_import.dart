@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 
+import '../../core/utils/excel_workbook_decoder.dart';
+
 const recipeImportSheetName = '레시피등록';
 const recipeMenuReferenceSheetName = '메뉴목록';
 const recipeIngredientReferenceSheetName = '원재료목록';
@@ -48,9 +50,10 @@ class RecipeImportWorkbook {
 }
 
 class RecipeImportValidationException implements Exception {
-  const RecipeImportValidationException(this.issues);
+  const RecipeImportValidationException(this.issues, {this.decodeFailure});
 
   final List<String> issues;
+  final ExcelWorkbookDecodeException? decodeFailure;
 
   @override
   String toString() => issues.join('\n');
@@ -156,11 +159,11 @@ RecipeImportWorkbook parseRecipeImportWorkbook(
 
   late final Excel excel;
   try {
-    excel = Excel.decodeBytes(bytes);
-  } catch (_) {
-    throw const RecipeImportValidationException([
-      'Excel 파일을 읽을 수 없습니다. .xlsx 형식인지 확인하세요.',
-    ]);
+    excel = decodeExcelWorkbook(bytes);
+  } on ExcelWorkbookDecodeException catch (error) {
+    throw RecipeImportValidationException([
+      'Excel 파일을 읽지 못했습니다. 등록 양식에 값을 붙여넣어 다시 저장해 주세요.',
+    ], decodeFailure: error);
   }
 
   final sheet = excel.tables[recipeImportSheetName];

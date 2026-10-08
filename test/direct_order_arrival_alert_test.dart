@@ -55,15 +55,16 @@ const _frozenAlertFiles = <String, String>{
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
   // Promotion, QR takeout, non-revenue review, beverage tax, and menu analytics
   // stocktake, safety-stock, and Deliberry retirement copy are independent.
+  // Workbook import error copy is independent and has localized widget coverage.
   // Arrival behavior remains covered below.
   'lib/l10n/app_localizations.dart':
-      '5f300501b9287103e72d155d5120169697c4bbe1a0a95c2b35af037d49efabc4',
+      '4ba220d7bd9a74903bfcee3dd75a2823a19c0b853c4117020f9741605f3e225b',
   'lib/l10n/app_localizations_ko.dart':
-      '4c5390e886955b3c3b9a78ed75b70e17bbdc5bc5120e2747776a89425ae78e79',
+      '7a6982456b425489c58cdd86aeea4e241b43f8c573abbcd3d75c4049fd70bf02',
   'lib/l10n/app_localizations_vi.dart':
-      '190ac5581fc193b790b7fe284808821afe4cc3a91dca1c6af1832631acec2700',
+      'ce47b17a976e7e08a16f2464787643364132bca12cdbeb93360f2dff0f64783f',
   'lib/l10n/app_localizations_en.dart':
-      'a06e77172fbdde9247280f7401c9171e1cefbf58d00e94822b10155be7bb2aec',
+      'a6edace6ab24e83f0fedfbae8c6676bb6c5393b51ec8063c876a13a42285d670',
 };
 
 void main() {

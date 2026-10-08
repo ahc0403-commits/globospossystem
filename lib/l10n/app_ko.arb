@@ -4182,5 +4182,9 @@
   "inventorySafetyStockSaveFailed": "원재료와 안전재고를 저장하지 못했습니다. 다시 시도하세요.",
   "inventorySafetyStockLow": "안전재고 이하",
   "inventorySafetyStockEnough": "안전재고 초과",
-  "inventorySafetyStockPieces": "개"
+  "inventorySafetyStockPieces": "개",
+  "excelImportInvalidContainer": "Excel 파일을 읽지 못했습니다. 파일이 손상되었거나 암호화되어 있거나 지원되지 않는 형식일 수 있습니다.",
+  "excelImportInvalidXml": "Excel 파일의 내부 데이터를 읽지 못했습니다. 다시 저장하거나 등록 양식에 값을 붙여넣어 주세요.",
+  "excelImportUnsupportedNumberFormat": "이 파일의 일부 셀 서식을 처리하지 못했습니다. 등록 양식에 값을 붙여넣어 다시 저장해 주세요.",
+  "excelImportDecodeFailed": "Excel 파일을 처리하지 못했습니다. 다시 저장하거나 등록 양식에 값을 붙여넣어 주세요."
 }

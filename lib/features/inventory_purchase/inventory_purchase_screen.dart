@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/excel_import_localization.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
@@ -4059,7 +4060,18 @@ class _InventoryPurchaseScreenState
         );
       }
     } on IngredientImportValidationException catch (error) {
-      if (mounted) _showRecipeImportIssues(error.issues);
+      if (mounted) {
+        _showRecipeImportIssues(
+          error.decodeFailure == null
+              ? error.issues
+              : [
+                  excelWorkbookDecodeMessage(
+                    context.l10n,
+                    error.decodeFailure!,
+                  ),
+                ],
+        );
+      }
     } catch (_) {
       if (mounted) {
         _showRecipeImportIssues([
@@ -4153,7 +4165,18 @@ class _InventoryPurchaseScreenState
         );
       }
     } on RecipeImportValidationException catch (error) {
-      if (mounted) _showRecipeImportIssues(error.issues);
+      if (mounted) {
+        _showRecipeImportIssues(
+          error.decodeFailure == null
+              ? error.issues
+              : [
+                  excelWorkbookDecodeMessage(
+                    context.l10n,
+                    error.decodeFailure!,
+                  ),
+                ],
+        );
+      }
     } catch (_) {
       if (mounted) {
         _showRecipeImportIssues([

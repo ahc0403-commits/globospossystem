@@ -79,9 +79,10 @@ class MenuImportWorkbook {
 }
 
 class MenuImportValidationException implements Exception {
-  const MenuImportValidationException(this.issues);
+  const MenuImportValidationException(this.issues, {this.decodeFailure});
 
   final List<String> issues;
+  final ExcelWorkbookDecodeException? decodeFailure;
 
   @override
   String toString() => issues.join('\n');
@@ -95,10 +96,10 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
   late final Excel workbook;
   try {
     workbook = decodeExcelWorkbook(bytes);
-  } catch (_) {
-    throw const MenuImportValidationException([
-      'Excel 파일을 읽을 수 없습니다. .xlsx 형식인지 확인하세요.',
-    ]);
+  } on ExcelWorkbookDecodeException catch (error) {
+    throw MenuImportValidationException([
+      'Excel 파일을 읽지 못했습니다. 등록 양식에 값을 붙여넣어 다시 저장해 주세요.',
+    ], decodeFailure: error);
   }
 
   final sheet = workbook.tables[menuImportSheetName];

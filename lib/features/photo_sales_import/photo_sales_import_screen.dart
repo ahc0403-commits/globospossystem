@@ -1,4 +1,5 @@
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/excel_import_localization.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -641,7 +642,11 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
         _workbook = null;
         _registrationResult = null;
         _sourceFileName = sourceName.isEmpty ? 'Moers Excel' : sourceName;
-        _statusMessage = error.toString();
+        _statusMessage =
+            error is PhotoSalesImportValidationException &&
+                error.decodeFailure != null
+            ? excelWorkbookDecodeMessage(context.l10n, error.decodeFailure!)
+            : error.toString();
         _statusIsError = true;
       });
     } finally {
