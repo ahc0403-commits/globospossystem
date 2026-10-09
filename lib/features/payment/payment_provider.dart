@@ -414,6 +414,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   static const _autoRefreshInterval = Duration(seconds: 2);
   static const _fallbackPollInterval = Duration(seconds: 30);
 
+  String? _displayedOrderId;
   final _refreshQueue = CoalescedRefresh();
   int _scopeGeneration = 0;
   String? _channelStoreId;
@@ -929,6 +930,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           },
         },
       );
+      _displayedOrderId = order.orderId;
       return true;
     } catch (error) {
       state = state.copyWith(error: 'Failed to show customer display: $error');
@@ -1408,6 +1410,112 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         isProcessing: false,
         error: _mapPaymentError(error, 'Failed to cancel order'),
       );
+    }
+  }
+
+  Future<bool> cancelItemQuantity({
+    required String storeId,
+    required OrderItem item,
+    required int newQuantity,
+    required String operationId,
+  }) async {
+    return _runItemMutation(storeId, () async {
+      await orderService.cancelItemQuantity(
+        storeId: storeId,
+        itemId: item.id,
+        expectedQuantity: item.quantity,
+        newQuantity: newQuantity,
+        operationId: operationId,
+      );
+    });
+  }
+
+  Future<bool> restoreItemQuantity(String storeId, String operationId) =>
+      _runItemMutation(
+        storeId,
+        () => orderService.restoreItemQuantity(
+          storeId: storeId,
+          operationId: operationId,
+        ),
+      );
+  Future<bool> moveOrderItems({
+    required String storeId,
+    required String orderId,
+    required String targetTableId,
+    required List<Map<String, dynamic>> items,
+    required String operationId,
+  }) async {
+    String? targetOrderId;
+    final wasDisplayed = _displayedOrderId == orderId;
+    final moved = await _runItemMutation(storeId, () async {
+      final result = await orderService.moveOrderItems(
+        storeId: storeId,
+        orderId: orderId,
+        targetTableId: targetTableId,
+        items: items,
+        operationId: operationId,
+      );
+      targetOrderId = result['target_order_id'] as String;
+    });
+    if (moved) {
+      final destination = state.orders
+          .where((order) => order.orderId == targetOrderId)
+          .firstOrNull;
+      if (destination != null) {
+        selectOrder(destination);
+        if (wasDisplayed) {
+          await showOnCustomerDisplay(storeId: storeId, order: destination);
+        }
+      }
+    }
+    return moved;
+  }
+
+  Future<bool> _runItemMutation(
+    String storeId,
+    Future<void> Function() operation,
+  ) async {
+    if (state.isProcessing) return false;
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await operation();
+      await loadOrders(storeId);
+      if (state.error != null) {
+        state = state.copyWith(isProcessing: false);
+        return false;
+      }
+      if (_displayedOrderId != null &&
+          state.selectedOrder?.orderId == _displayedOrderId) {
+        await showOnCustomerDisplay(
+          storeId: storeId,
+          order: state.selectedOrder!,
+        );
+      }
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } catch (error) {
+      await loadOrders(storeId);
+      state = state.copyWith(
+        isProcessing: false,
+        error:
+            error is PostgrestException &&
+                const {
+                  'CASHIER_ITEM_CHANGED',
+                  'CASHIER_OPERATION_CHANGED',
+                  'CASHIER_MOVE_CANCELLED_SPLIT',
+                  'CASHIER_COMBO_QUANTITY_CHANGED',
+                  'CASHIER_TARGET_ORDER_AMBIGUOUS',
+                  'CASHIER_TARGET_INCOMPATIBLE',
+                  'ORDER_HAS_PAYMENTS_USE_ADJUSTMENT',
+                  'DIRECT_ORDER_FINAL_AMOUNT_LOCKED',
+                }.contains(error.message)
+            ? error.message
+            : _mapPaymentError(
+                error,
+                'Refresh the order and retry the item change',
+              ),
+      );
+      return false;
     }
   }
 

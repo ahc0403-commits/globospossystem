@@ -83,7 +83,7 @@ void main() {
       throwsFormatException,
     );
   });
-  test('status uses v4 in one owning-session request', () async {
+  test('status uses v6 in one owning-session request', () async {
     final calls = <Map<String, dynamic>>[];
     final service = DirectOrderService(
       invoker: (body) async {
@@ -108,7 +108,7 @@ void main() {
       ),
       requestId: 'request',
     );
-    expect(calls.single['action'], 'status_v5');
+    expect(calls.single['action'], 'status_v6');
     expect(calls.single['request_id'], 'request');
     expect(status.customer, isNull);
   });

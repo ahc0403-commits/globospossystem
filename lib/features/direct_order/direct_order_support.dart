@@ -83,10 +83,32 @@ class DirectOrderSupportCopy {
       'Yêu cầu thanh toán tiền món còn thiếu',
     ],
     'delivery': [
-      '배송비·차액 추가 결제 요청',
-      'Request additional delivery payment',
-      'Yêu cầu thanh toán thêm phí giao hàng',
+      '실제 배송비 정산',
+      'Reconcile actual delivery fee',
+      'Đối soát phí giao thực tế',
     ],
+    'provider': ['배송 업체', 'Delivery provider', 'Đơn vị giao hàng'],
+    'cost_reference': [
+      '배송 예약·영수증 번호',
+      'Booking / receipt reference',
+      'Mã đặt giao / biên nhận',
+    ],
+    'cost_evidence': [
+      '배송비 증빙 첨부',
+      'Delivery cost evidence',
+      'Chứng từ phí giao',
+    ],
+    'cost_difference': [
+      '배송비 차액',
+      'Delivery fee difference',
+      'Chênh lệch phí giao',
+    ],
+    'cost_refund': [
+      '배송비 차액 환불 확인',
+      'Record delivery fee refund',
+      'Xác nhận hoàn chênh lệch phí giao',
+    ],
+
     'amount': ['청구 금액', 'Amount requested', 'Số tiền yêu cầu'],
     'reason': ['청구 사유', 'Reason', 'Lý do'],
     'defer': [
@@ -183,6 +205,16 @@ class DirectOrderSupportCopy {
       'This conversation is closed.',
       'Hội thoại đã đóng.',
     ],
+    'overpayment': [
+      '미수금보다 큽니다. 실제 초과 입금 내역을 별도로 대조하세요.',
+      'Amount exceeds the balance. Reconcile the actual overpayment separately.',
+      'Số tiền vượt công nợ. Đối soát riêng khoản chuyển dư.',
+    ],
+    'legacy_cost_review': [
+      '매장에서 실제 배송비 증빙을 확인 중입니다.',
+      'The store is verifying actual delivery cost.',
+      'Cửa hàng đang xác minh phí giao thực tế.',
+    ],
     'error': [
       '처리하지 못했습니다. 최신 주문을 확인하고 다시 시도하세요.',
       'Unable to complete. Refresh the order and try again.',
@@ -247,6 +279,9 @@ Future<DirectOrderReceiptReview?> showDirectOrderReceiptReview(
                     decoration: InputDecoration(
                       labelText: copy.text('actual'),
                       suffixText: 'VND',
+                      errorText: parsed != null && parsed > due
+                          ? copy.text('overpayment')
+                          : null,
                     ),
                     onChanged: (_) => setState(() {}),
                   ),
@@ -607,6 +642,10 @@ class _DirectOrderStaffSupportPanelState
   }
 
   Future<void> _charge(String kind) async {
+    if (kind == 'delivery') {
+      await _reconcileDelivery();
+      return;
+    }
     final fields = await _form(
       _copy.text(kind),
       {
@@ -621,6 +660,154 @@ class _DirectOrderStaffSupportPanelState
         'amount': parseDirectOrderVnd(fields['amount']!),
         'reason': fields['reason'],
       });
+    }
+  }
+
+  Future<void> _reconcileDelivery() async {
+    final amount = TextEditingController(
+      text: formatDirectOrderVnd(
+        supportNumber(
+          supportMap(_support['delivery_cost'])['actual_fee'] ??
+              supportMap(widget.detail['financial'])['delivery_fee_total'],
+        ),
+      ),
+    );
+    final reference = TextEditingController();
+    String provider = 'grab';
+    String? evidence;
+    final result = await showDirectOrderDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, update) {
+          final attachments = supportRows(widget.detail['messages'])
+              .where(
+                (m) =>
+                    m['sender_type'] == 'cashier' &&
+                    m['message_type'] == 'attachment',
+              )
+              .toList();
+          final parsed = parseDirectOrderVnd(amount.text);
+          final collected = supportNumber(
+            supportMap(_support['delivery_cost'])['collected'],
+          );
+          return AlertDialog(
+            title: Text(_copy.text('delivery')),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      key: const Key('direct_actual_delivery_cost'),
+                      controller: amount,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: const [DirectOrderVndInputFormatter()],
+                      decoration: InputDecoration(
+                        labelText: _copy.text('amount'),
+                        suffixText: 'VND',
+                      ),
+                      onChanged: (_) => update(() {}),
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: provider,
+                      items: ['grab', 'be', 'other']
+                          .map(
+                            (p) => DropdownMenuItem(value: p, child: Text(p)),
+                          )
+                          .toList(),
+                      onChanged: (v) => update(() => provider = v!),
+                      decoration: InputDecoration(
+                        labelText: _copy.text('provider'),
+                      ),
+                    ),
+                    TextField(
+                      controller: reference,
+                      maxLength: 200,
+                      decoration: InputDecoration(
+                        labelText: _copy.text('cost_reference'),
+                      ),
+                      onChanged: (_) => update(() {}),
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: evidence,
+                      items: attachments
+                          .map(
+                            (m) => DropdownMenuItem(
+                              value: m['id'].toString(),
+                              child: Text(
+                                supportMap(
+                                      m['metadata'],
+                                    )['filename']?.toString() ??
+                                    m['body']?.toString() ??
+                                    _copy.text('cost_evidence'),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => update(() => evidence = v),
+                      decoration: InputDecoration(
+                        labelText: _copy.text('cost_evidence'),
+                      ),
+                    ),
+                    DirectOrderAttachmentButton(
+                      storeId: widget.storeId,
+                      requestId: widget.requestId,
+                      upload: (path, name, mime, bytes) =>
+                          widget.service.uploadChatAttachment(
+                            storeId: widget.storeId,
+                            requestId: widget.requestId,
+                            path: path,
+                            filename: name,
+                            mimeType: mime,
+                            bytes: bytes,
+                          ),
+                      onSent: () async {
+                        await widget.onChanged();
+                        update(() {});
+                      },
+                    ),
+                    if (parsed != null)
+                      Text(
+                        '${_copy.text('cost_difference')}: ${formatDirectOrderVnd(parsed - collected)} VND',
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(_copy.text('close')),
+              ),
+              FilledButton(
+                onPressed:
+                    parsed != null &&
+                        parsed >= 0 &&
+                        evidence != null &&
+                        reference.text.trim().isNotEmpty
+                    ? () => Navigator.pop(dialogContext, {
+                        'operation_id': const Uuid().v4(),
+                        'amount': parsed,
+                        'provider': provider,
+                        'reference': reference.text.trim(),
+                        'evidence_message_id': evidence,
+                      })
+                    : null,
+                child: Text(_copy.text('save')),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      amount.dispose();
+      reference.dispose();
+    });
+    if (result != null && mounted) {
+      await _action('reconcile_delivery_fee', result);
     }
   }
 
@@ -685,12 +872,6 @@ class _DirectOrderStaffSupportPanelState
       'cancelled',
     }.contains(supportMap(widget.detail['fulfillment'])['status']);
     final charges = supportRows(_support['charges']);
-    final hasOpenDelivery = charges.any(
-      (c) =>
-          c['kind'] == 'delivery' &&
-          c['status'] != 'paid' &&
-          c['status'] != 'void',
-    );
     final outstanding =
         supportNumber(_support['food_due']) +
         charges
@@ -780,24 +961,42 @@ class _DirectOrderStaffSupportPanelState
                   ),
                 if (approved &&
                     beforeHandoff &&
-                    supportMap(
-                          widget.detail['financial'],
-                        )['delivery_payment_mode'] ==
-                        'store_prepaid' &&
                     supportMap(widget.detail['delivery'])['method'] !=
                         'pickup') ...[
                   OutlinedButton(
-                    onPressed: _busy || hasOpenDelivery
-                        ? null
-                        : () => _charge('delivery'),
+                    onPressed: _busy ? null : () => _charge('delivery'),
                     child: Text(_copy.text('delivery')),
                   ),
-                  if (_support['delivery_fee_finalized'] == false)
+                  if (supportNumber(
+                        _support['delivery_adjustment_refund_due'],
+                      ) >
+                      0)
                     TextButton(
                       onPressed: _busy
                           ? null
-                          : () => _action('no_delivery_fee', {}),
-                      child: Text(_copy.text('no_fee')),
+                          : () async {
+                              final form = await _form(
+                                _copy.text('cost_refund'),
+                                {
+                                  'amount':
+                                      '${_support['delivery_adjustment_refund_due']}',
+                                  'refund_ref': '',
+                                },
+                                requiredKeys: {'amount', 'refund_ref'},
+                              );
+                              if (form != null && mounted) {
+                                await _action('refund_delivery_adjustment', {
+                                  'operation_id': const Uuid().v4(),
+                                  'amount': parseDirectOrderVnd(
+                                    form['amount']!,
+                                  ),
+                                  'reference': form['refund_ref'],
+                                });
+                              }
+                            },
+                      child: Text(
+                        '${_copy.text('cost_refund')} · ${formatDirectOrderVnd(supportNumber(_support['delivery_adjustment_refund_due']))} VND',
+                      ),
                     ),
                 ],
                 if (approved && beforeHandoff)
@@ -935,7 +1134,8 @@ class DirectOrderCustomerSupportPanel extends StatelessWidget {
     ).where((c) => c['status'] != 'void').toList();
     if (charges.isEmpty &&
         status.support['delivery_fee_finalized'] != false &&
-        supportNumber(status.support['pickup_delivery_refund_due']) <= 0) {
+        supportNumber(status.support['pickup_delivery_refund_due']) <= 0 &&
+        supportRows(status.support['delivery_cost_changes']).isEmpty) {
       return const SizedBox.shrink();
     }
     return Card(
@@ -948,6 +1148,23 @@ class DirectOrderCustomerSupportPanel extends StatelessWidget {
               copy.text('payments'),
               style: Theme.of(context).textTheme.titleMedium,
             ),
+            for (final change in supportRows(
+              status.support['delivery_cost_changes'],
+            ))
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('${change['provider']} · ${change['reference']}'),
+                subtitle: Text(
+                  '${formatDirectOrderVnd(supportNumber(change['previous_fee']))} → ${formatDirectOrderVnd(supportNumber(change['actual_fee']))} VND',
+                ),
+              ),
+            if (supportNumber(
+                  status.support['delivery_adjustment_refund_due'],
+                ) >
+                0)
+              Text(
+                '${copy.text('cost_refund')}: ${formatDirectOrderVnd(supportNumber(status.support['delivery_adjustment_refund_due']))} VND',
+              ),
             if (supportNumber(status.support['pickup_delivery_refund_due']) > 0)
               Text(copy.text('pickup_refund_pending')),
             if (status.support['delivery_fee_finalized'] == false)
@@ -993,35 +1210,6 @@ class _CustomerChargeCard extends StatefulWidget {
 }
 
 class _CustomerChargeCardState extends State<_CustomerChargeCard> {
-  bool _busy = false;
-  Future<void> _consent(bool accept) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await widget.service.supportRequest(
-        session: widget.session,
-        requestId: widget.status.requestId,
-        action: 'charge_consent',
-        payload: {'charge_id': widget.charge['id'], 'accept': accept},
-      );
-      await widget.onChanged();
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              DirectOrderSupportCopy(
-                Localizations.localeOf(context).languageCode,
-              ).text('error'),
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = widget.charge,
@@ -1053,19 +1241,7 @@ class _CustomerChargeCardState extends State<_CustomerChargeCard> {
             ),
           ),
           if (c['status'] == 'awaiting_consent')
-            Wrap(
-              spacing: 8,
-              children: [
-                FilledButton(
-                  onPressed: _busy ? null : () => _consent(true),
-                  child: Text(copy.text('accept')),
-                ),
-                TextButton(
-                  onPressed: _busy ? null : () => _consent(false),
-                  child: Text(copy.text('decline')),
-                ),
-              ],
-            ),
+            Text(copy.text('legacy_cost_review')),
           if (c['status'] == 'pending' && due > 0) ...[
             Center(child: QrImageView(data: qrData, size: 240)),
             Text(

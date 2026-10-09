@@ -398,6 +398,23 @@ PYKDS
  run_sql "$PHOTO_ROOT/scripts/verify_kds_menu_requests.sql" >/dev/null
  printf 'KDS_MENU_REQUEST_ROLLBACK_AND_REAPPLY=PASS\n'
 fi
+if [[ "${DIRECT_ORDER_INTEGRATED_TEST:-0}" == "1" ]]; then
+ python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYINTEGRATED'
+from pathlib import Path
+import sys
+root,tmp=map(Path,sys.argv[1:]); output=''
+for file,name in [('20260821130000_direct_delivery_ordering.sql','direct_order_public_commit_proof'),('20260910130000_direct_order_customer_payment_and_status.sql','direct_order_public_commit_proof_v2')]:
+ source=(root/'supabase/migrations'/file).read_text(); start=source.index('CREATE OR REPLACE FUNCTION public.'+name+'(')
+ output+=source[start:source.index('$$;',start)+3]+'\n'
+(tmp/'integrated_predecessor.sql').write_text(output)
+PYINTEGRATED
+ run_sql "$PHOTO_TMP/integrated_predecessor.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261009010000_direct_order_status_session_activity.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261009150000_direct_order_final_amount_and_access.sql" > "$PHOTO_TMP/integrated_migration.log" 2>&1 || { cat "$PHOTO_TMP/integrated_migration.log"; exit 1; }
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_final_amount_and_access_test.sql"
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261009151000_direct_order_verified_delivery_cost.sql" > "$PHOTO_TMP/cost_migration.log" 2>&1 || { cat "$PHOTO_TMP/cost_migration.log"; exit 1; }
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_verified_delivery_cost_test.sql"
+fi
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

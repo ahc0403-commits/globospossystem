@@ -294,11 +294,19 @@ class DirectOrderSession {
     required this.id,
     required this.secret,
     required this.expiresAt,
+    this.orderScoped = false,
   });
 
   final String id;
   final String secret;
   final DateTime expiresAt;
+  final bool orderScoped;
+
+  Map<String, dynamic> get credentials => {
+    'session_id': id,
+    'secret': secret,
+    if (orderScoped) 'order_scoped': true,
+  };
 
   bool get isValid =>
       id.isNotEmpty &&
@@ -309,6 +317,7 @@ class DirectOrderSession {
     'id': id,
     'secret': secret,
     'expires_at': expiresAt.toIso8601String(),
+    if (orderScoped) 'order_scoped': true,
   };
 
   factory DirectOrderSession.fromJson(Map<String, dynamic> json) {
@@ -318,6 +327,7 @@ class DirectOrderSession {
       'store_id',
       'secret',
       'expires_at',
+      'order_scoped',
     });
     final rawId = json['session_id'] ?? json['id'];
     if (rawId is! String || rawId.trim().isEmpty) {
@@ -328,6 +338,7 @@ class DirectOrderSession {
       id: rawId,
       secret: _requiredString(json, 'secret'),
       expiresAt: _requiredDateTime(json, 'expires_at'),
+      orderScoped: json['order_scoped'] == true,
     );
   }
 }
@@ -393,7 +404,9 @@ class DirectOrderAddress {
       customerName: _requiredString(json, 'customer_name'),
       customerPhone: _requiredString(json, 'customer_phone'),
       formattedAddress: _requiredString(json, 'formatted_address'),
-      detailAddress: _requiredString(json, 'detail_address'),
+      detailAddress: json['detail_address'] is String
+          ? json['detail_address'] as String
+          : _invalidModel('detail_address'),
       latitude: _optionalDouble(json, 'latitude'),
       longitude: _optionalDouble(json, 'longitude'),
       googlePlaceId: _optionalString(json, 'google_place_id'),
@@ -429,6 +442,7 @@ class DirectOrderQuote {
     this.deliveryFeeVat = 0,
     this.vatTotal = 0,
     this.deliveryPaymentMode = 'store_prepaid',
+    this.amountFinalizedAt,
   });
 
   final String id;
@@ -447,6 +461,7 @@ class DirectOrderQuote {
   final double deliveryFeeVat;
   final double vatTotal;
   final String deliveryPaymentMode;
+  final DateTime? amountFinalizedAt;
 
   factory DirectOrderQuote.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
@@ -466,6 +481,7 @@ class DirectOrderQuote {
       'delivery_fee_vat',
       'vat_total',
       'delivery_payment_mode',
+      'amount_finalized_at',
     });
     final menuVat = _optionalDouble(json, 'menu_vat') ?? 0;
     final serviceVat = _optionalDouble(json, 'service_charge_vat') ?? 0;
@@ -482,6 +498,7 @@ class DirectOrderQuote {
       finalTotal: _requiredNumber(json, 'final_total').toDouble(),
       status: _requiredString(json, 'status'),
       expiresAt: _requiredDateTime(json, 'expires_at'),
+      amountFinalizedAt: _optionalDateTime(json, 'amount_finalized_at'),
       menuPretax: _optionalDouble(json, 'menu_pretax') ?? 0,
       menuVat: menuVat,
       serviceChargePretax: _optionalDouble(json, 'service_charge_pretax') ?? 0,

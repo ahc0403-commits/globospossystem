@@ -1,5 +1,7 @@
 import '../../l10n/app_localizations.dart';
 import 'dart:async';
+import 'package:uuid/uuid.dart';
+import 'cashier_item_edit_dialogs.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -223,7 +225,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         if (mounted && error != nonRevenueAmountChangedError) {
           showErrorToast(
             context,
-            localizeRestaurantCutoffError(context.l10n, error),
+            cashierItemEditErrorText(context, error) ??
+                localizeRestaurantCutoffError(context.l10n, error),
           );
         }
       }
@@ -2068,22 +2071,70 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       );
                     }
                   },
+                  onMoveOrderItems: (initialItem) async {
+                    final source = paymentState.selectedOrder;
+                    if (storeId == null ||
+                        source == null ||
+                        !canCancelOrders ||
+                        !isOnline ||
+                        paymentState.isProcessing) {
+                      return;
+                    }
+                    final selection = await showCashierMoveItems(
+                      context,
+                      items: source.items,
+                      tables: tableState.tables,
+                      currentTableId: source.tableId,
+                      initialItem: initialItem,
+                    );
+                    if (selection == null || !context.mounted) return;
+                    final moved = await notifier.moveOrderItems(
+                      storeId: storeId,
+                      orderId: source.orderId,
+                      targetTableId: selection.tableId,
+                      items: selection.items,
+                      operationId: const Uuid().v4(),
+                    );
+                    await ref
+                        .read(waiterTableProvider.notifier)
+                        .loadTables(storeId, showLoading: false);
+                    if (moved && context.mounted) {
+                      showSuccessToast(
+                        context,
+                        cashierItemEditText(context, 'discount_review'),
+                      );
+                    }
+                  },
                   onCancelOrderItem: (item) async {
                     if (storeId == null || !canCancelOrders || !isOnline) {
                       return;
                     }
-                    final cancelled = await notifier.cancelOrderItem(
-                      item.id,
-                      storeId,
-                    );
+                    final quantity = item.quantity > 1
+                        ? await showCashierCancelQuantity(context, item)
+                        : 1;
+                    if (quantity == null || !context.mounted) {
+                      return;
+                    }
+                    final partial = quantity < item.quantity;
+                    final operation = const Uuid().v4();
+                    final cancelled = partial
+                        ? await notifier.cancelItemQuantity(
+                            storeId: storeId,
+                            item: item,
+                            newQuantity: item.quantity - quantity,
+                            operationId: operation,
+                          )
+                        : await notifier.cancelOrderItem(item.id, storeId);
                     if (cancelled && context.mounted) {
                       _showCancellationUndoSnackBar(
                         message: l10n.orderWorkspaceCancelItemAction,
                         restoredMessage: l10n.cancelledItemRestored,
-                        onUndo: () => notifier.restoreCancelledOrderItem(
-                          item.id,
-                          storeId,
-                        ),
+                        onUndo: () => partial
+                            ? notifier.restoreItemQuantity(storeId, operation)
+                            : notifier.restoreCancelledOrderItem(
+                                item.id,
+                                storeId,
+                              ),
                       );
                     }
                   },
@@ -3675,6 +3726,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.onVoidDiscount,
     required this.onToggleServiceItem,
     required this.onCancelOrderItem,
+    this.onMoveOrderItems,
     required this.onProcess,
     required this.onProcessSplit,
     required this.onCancelOrder,
@@ -3703,6 +3755,7 @@ class _SelectedOrderView extends StatelessWidget {
   final Future<void> Function() onVoidDiscount;
   final Future<void> Function(OrderItem item) onToggleServiceItem;
   final Future<void> Function(OrderItem item) onCancelOrderItem;
+  final Future<void> Function(OrderItem? item)? onMoveOrderItems;
   final Future<void> Function(String method, CashTender? cashTender) onProcess;
   final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
@@ -3763,6 +3816,7 @@ class _SelectedOrderView extends StatelessWidget {
           onOpenOrderLedger: onOpenOrderLedger,
           onToggleServiceItem: onToggleServiceItem,
           onCancelOrderItem: onCancelOrderItem,
+          onMoveOrderItems: onMoveOrderItems,
           onVoidDiscount: onVoidDiscount,
         );
         final paymentRail = _CashierPaymentRail(
@@ -3810,6 +3864,7 @@ class _SelectedOrderView extends StatelessWidget {
                       onOpenOrderLedger: onOpenOrderLedger,
                       onToggleServiceItem: onToggleServiceItem,
                       onCancelOrderItem: onCancelOrderItem,
+                      onMoveOrderItems: onMoveOrderItems,
                       onVoidDiscount: onVoidDiscount,
                     ),
                     const SizedBox(height: 12),
@@ -3930,6 +3985,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
     required this.onOpenOrderLedger,
     this.onToggleServiceItem,
     this.onCancelOrderItem,
+    this.onMoveOrderItems,
     this.onVoidDiscount,
   });
 
@@ -3943,6 +3999,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
   final Future<void> Function() onOpenOrderLedger;
   final Future<void> Function(OrderItem item)? onToggleServiceItem;
   final Future<void> Function(OrderItem item)? onCancelOrderItem;
+  final Future<void> Function(OrderItem? item)? onMoveOrderItems;
   final Future<void> Function()? onVoidDiscount;
 
   @override
@@ -3959,6 +4016,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
       isOnline: isOnline,
       onToggleServiceItem: onToggleServiceItem,
       onCancelOrderItem: onCancelOrderItem,
+      onMoveOrderItems: onMoveOrderItems,
     );
 
     return ToastWorkSurface(
@@ -4009,6 +4067,21 @@ class _CashierOrderSummarySurface extends StatelessWidget {
               ),
             ),
           ),
+          if (canCancelItems &&
+              order.paymentCount == 0 &&
+              order.tableId.isNotEmpty &&
+              onMoveOrderItems != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const Key('cashier_move_order_items'),
+                onPressed: isProcessing || !isOnline
+                    ? null
+                    : () => onMoveOrderItems!(null),
+                icon: const Icon(Icons.move_up),
+                label: Text(cashierItemEditText(context, 'move_all')),
+              ),
+            ),
           if (order.emergencyModeActive && order.unservedQuantity > 0) ...[
             Container(
               key: const Key('cashier_unserved_warning'),
@@ -4162,6 +4235,7 @@ class _CashierOrderItemsPanel extends StatelessWidget {
     this.isOnline = true,
     this.onToggleServiceItem,
     this.onCancelOrderItem,
+    this.onMoveOrderItems,
   });
 
   final CashierOrder order;
@@ -4173,6 +4247,7 @@ class _CashierOrderItemsPanel extends StatelessWidget {
   final bool isOnline;
   final Future<void> Function(OrderItem item)? onToggleServiceItem;
   final Future<void> Function(OrderItem item)? onCancelOrderItem;
+  final Future<void> Function(OrderItem? item)? onMoveOrderItems;
 
   @override
   Widget build(BuildContext context) {
@@ -4449,6 +4524,19 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                           runSpacing: 6,
                           alignment: WrapAlignment.end,
                           children: [
+                            OutlinedButton.icon(
+                              key: ValueKey(
+                                'cashier_move_order_item_${item.id}',
+                              ),
+                              onPressed:
+                                  canCancelItem &&
+                                      order.tableId.isNotEmpty &&
+                                      onMoveOrderItems != null
+                                  ? () => onMoveOrderItems!(item)
+                                  : null,
+                              icon: const Icon(Icons.move_up, size: 18),
+                              label: Text(cashierItemEditText(context, 'move')),
+                            ),
                             OutlinedButton.icon(
                               key: ValueKey(
                                 'cashier_cancel_order_item_${item.id}',

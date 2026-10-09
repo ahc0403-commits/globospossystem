@@ -143,7 +143,10 @@ class _DirectOrderCashierScreenState
         _chatController.clear();
         if (detail != null) _seedOrderInputs(detail);
       }
-      if (detail != null) _seedPickupQuoteInput(detail);
+      if (detail != null) {
+        _seedPickupQuoteInput(detail);
+        _seedVerifiedDeliveryCost(detail);
+      }
       setState(() {
         _requests = rows;
         _selectedId = selectedId;
@@ -607,7 +610,14 @@ class _DirectOrderCashierScreenState
     final mode = DirectOrderDeliveryPaymentMode.fromValue(
       (_detail?['financial'] as Map?)?['delivery_payment_mode'],
     );
-    final actual = parseDirectOrderVnd(_actualGrabFeeController.text);
+    final verifiedFee = supportMap(
+      supportMap(_detail?['support'])['delivery_cost'],
+    )['actual_fee'];
+    final actual = mode == DirectOrderDeliveryPaymentMode.customerDirect
+        ? null
+        : verifiedFee is num
+        ? verifiedFee.toInt()
+        : parseDirectOrderVnd(_actualGrabFeeController.text);
     if ((_grabUrlController.text.trim().isNotEmpty && url == null) ||
         (url == null && _driverContactController.text.trim().isEmpty) ||
         (_deliveryProvider == 'other' &&
@@ -835,6 +845,7 @@ class _DirectOrderCashierScreenState
     }
 
     _seedPickupQuoteInput(detail);
+    _seedVerifiedDeliveryCost(detail);
 
     final dispatch = detail['dispatch'];
     if (dispatch is! Map) return;
@@ -846,6 +857,14 @@ class _DirectOrderCashierScreenState
     final fee = dispatch['actual_grab_fee'];
     if (url != null && url.isNotEmpty) _grabUrlController.text = url;
     if (fee is num) _actualGrabFeeController.text = formatDirectOrderVnd(fee);
+  }
+
+  void _seedVerifiedDeliveryCost(Map<String, dynamic> detail) {
+    final support = supportMap(detail['support']);
+    final fee = supportMap(support['delivery_cost'])['actual_fee'];
+    if (fee is num) {
+      _actualGrabFeeController.text = formatDirectOrderVnd(fee);
+    }
   }
 
   Future<void> _printDriverReceipt({required bool reprint}) async {
@@ -1384,7 +1403,7 @@ class _DirectOrderCashierScreenState
                         child: Text(_copy.storePrepaysDriver),
                       ),
                     ],
-                    onChanged: (_busy || _isPickup)
+                    onChanged: (_busy || _isPickup || state == 'quoted')
                         ? null
                         : (value) {
                             if (value == null) return;
@@ -1403,6 +1422,7 @@ class _DirectOrderCashierScreenState
                     key: const Key('direct_order_delivery_fee_input'),
                     controller: _feeController,
                     enabled:
+                        state == 'awaiting_quote' &&
                         !_isPickup &&
                         _deliveryPaymentMode ==
                             DirectOrderDeliveryPaymentMode.storePrepaid,
@@ -1624,6 +1644,13 @@ class _DirectOrderCashierScreenState
                     TextField(
                       key: const Key('direct_order_actual_grab_fee_input'),
                       controller: _actualGrabFeeController,
+                      readOnly:
+                          supportMap(
+                                supportMap(
+                                  _detail?['support'],
+                                )['delivery_cost'],
+                              )['actual_fee']
+                              is num,
                       keyboardType: TextInputType.number,
                       inputFormatters: const [DirectOrderVndInputFormatter()],
                       decoration: InputDecoration(

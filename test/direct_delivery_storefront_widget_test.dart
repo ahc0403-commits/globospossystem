@@ -53,6 +53,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   int submitCalls = 0;
   int clearAddressCalls = 0;
   int clearActiveRequestCalls = 0;
+  final clearedOrderKeys = <String>[];
   var fetchStatusCalls = 0;
   var sendMessageCalls = 0;
   var ensureSessionCalls = 0;
@@ -147,6 +148,12 @@ class _StorefrontFixtureService extends DirectOrderService {
         hasOpenProofReview: status.proofReview != null,
       ),
     ];
+  }
+
+  @override
+  Future<void> clearOrderAccess(String slug, String requestId) async {
+    clearedOrderKeys.add(requestId);
+    await super.clearOrderAccess(slug, requestId);
   }
 
   @override
@@ -1106,38 +1113,40 @@ void main() {
     },
   );
 
-  testWidgets('completed order remains visible with an explicit final status', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues(const {});
-    const saved = DirectOrderAddress(
-      customerName: 'Nguyen Van A',
-      customerPhone: '+84901234567',
-      formattedAddress: 'Landmark 81, Bình Thạnh, Hồ Chí Minh',
-      detailAddress: 'Tầng 12, căn 1201',
-    );
-    const completed = DirectOrderStatus(
-      requestId: 'completed-request',
-      referenceCode: 'D87654321',
-      state: 'approved',
-      fulfillmentStatus: 'completed',
-      messages: [],
-    );
-    final service = _StorefrontFixtureService(
-      savedAddress: saved,
-      activeStatus: completed,
-    );
+  testWidgets(
+    'completed order closes its access while retaining the saved address',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      const saved = DirectOrderAddress(
+        customerName: 'Nguyen Van A',
+        customerPhone: '+84901234567',
+        formattedAddress: 'Landmark 81, Bình Thạnh, Hồ Chí Minh',
+        detailAddress: 'Tầng 12, căn 1201',
+      );
+      const completed = DirectOrderStatus(
+        requestId: 'completed-request',
+        referenceCode: 'D87654321',
+        state: 'approved',
+        fulfillmentStatus: 'completed',
+        messages: [],
+      );
+      final service = _StorefrontFixtureService(
+        savedAddress: saved,
+        activeStatus: completed,
+      );
 
-    await tester.pumpWidget(_fixtureApp(service: service));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
 
-    expect(service.clearActiveRequestCalls, 0);
-    expect(find.text('D87654321'), findsOneWidget);
-    expect(find.text('Đơn hàng đã hoàn tất'), findsWidgets);
-    expect(find.byKey(const Key('direct_order_status_title')), findsOneWidget);
-    expect(find.byKey(const Key('direct_customer_my_orders')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(service.clearActiveRequestCalls, 0);
+      expect(service.clearedOrderKeys, ['completed-request']);
+      expect(find.text('D87654321'), findsNothing);
+      expect(find.text(DirectOrderCopy('vi').orderClosed), findsOneWidget);
+      expect(await service.loadAddress('fixture-store'), saved);
+      expect(service.clearAddressCalls, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('order history shows each order with its own status', (
     tester,
@@ -1876,7 +1885,7 @@ void main() {
     },
   );
   testWidgets(
-    'completed order details use stored items and show tax and separate delivery payment',
+    'ongoing order details use stored items and show tax and separate delivery payment',
     (tester) async {
       SharedPreferences.setMockInitialValues(const {});
       final status = DirectOrderStatus(
@@ -1884,7 +1893,7 @@ void main() {
         referenceCode: 'DFIXTURE1',
         state: 'approved',
         createdAt: DateTime.utc(2026, 10, 6, 2, 15),
-        fulfillmentStatus: 'completed',
+        fulfillmentStatus: 'dispatched',
         messages: const [],
         customer: const DirectOrderCustomerDetails(
           customerName: '저장된 고객',
@@ -1973,7 +1982,7 @@ void main() {
         1,
         reason: 'Opening existing details needs no per-item API calls',
       );
-      await _captureCustomerUi(tester, 'completed-order-details-ko');
+      await _captureCustomerUi(tester, 'ongoing-order-details-ko');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

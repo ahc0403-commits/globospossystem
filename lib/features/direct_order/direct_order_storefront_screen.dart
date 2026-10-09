@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -32,6 +33,8 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
   const DirectOrderStorefrontScreen({
     super.key,
     required this.slug,
+    this.requestId,
+    this.accessKey,
     this.service = directOrderService,
     this.statusSafetyRefreshInterval = const Duration(seconds: 15),
     this.statusSafetyRefreshJitter = const Duration(seconds: 3),
@@ -42,6 +45,8 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
   });
 
   final String slug;
+  final String? requestId;
+  final String? accessKey;
   final DirectOrderService service;
   final Duration statusSafetyRefreshInterval;
   final Duration statusSafetyRefreshJitter;
@@ -103,6 +108,8 @@ class _DirectOrderStorefrontScreenState
   bool _pausedByServer = false;
   bool _paymentAlertsEnabled = true;
   String? _errorCode;
+  bool _orderClosed = false;
+  String? _accessKey;
   int _loadGeneration = 0;
   int _statusMutationRevision = 0;
   bool _isForeground = true;
@@ -123,6 +130,20 @@ class _DirectOrderStorefrontScreenState
     _pushService = widget.pushService ?? DirectOrderCustomerPushService();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void didUpdateWidget(covariant DirectOrderStorefrontScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.slug != widget.slug ||
+        oldWidget.requestId != widget.requestId ||
+        oldWidget.accessKey != widget.accessKey) {
+      _statusMutationRevision++;
+      _statusTimer?.cancel();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    }
   }
 
   @override
@@ -249,9 +270,17 @@ class _DirectOrderStorefrontScreenState
       _loading = true;
       _errorCode = null;
       _pausedByServer = false;
+      _orderClosed = false;
     });
     try {
-      final cached = await widget.service.loadCachedSession(widget.slug);
+      final cached = widget.requestId == null
+          ? await widget.service.loadRestorableSession(widget.slug)
+          : await widget.service.resumeOrder(
+              slug: widget.slug,
+              requestId: widget.requestId!,
+              accessKey: widget.accessKey ?? '',
+            );
+      _accessKey = widget.accessKey;
       DirectOrderStorefront storefront;
       try {
         storefront = await widget.service.fetchStorefront(widget.slug);
@@ -272,7 +301,7 @@ class _DirectOrderStorefrontScreenState
         widget.service.loadPaymentAlertEnabled(widget.slug),
       ]);
       final saved = values[0] as DirectOrderAddress?;
-      final savedRequestId = values[1] as String?;
+      final savedRequestId = widget.requestId ?? values[1] as String?;
       final orders = values[2] as List<DirectOrderSummary>;
       final alertsEnabled = values[3] as bool;
       final activeOrders = orders.where((order) => !order.isTerminal).toList();
@@ -281,8 +310,6 @@ class _DirectOrderStorefrontScreenState
           ? savedRequestId
           : activeOrders.isNotEmpty
           ? activeOrders.first.requestId
-          : orders.isNotEmpty
-          ? orders.first.requestId
           : null;
       DirectOrderStatus? status;
       if (selectedId != null) {
@@ -309,11 +336,20 @@ class _DirectOrderStorefrontScreenState
         _loading = false;
       });
       if (saved != null) _populateAddress(saved);
-      if (status != null) unawaited(_notifyForStatus(status));
+      if (status != null) await _publishOrderLink(status);
+      if (!mounted || generation != _loadGeneration) return;
+      if (status != null && !_orderClosed) unawaited(_notifyForStatus(status));
       if (_hasPendingUpdates) _startStatusPolling();
       _scheduleHoursRefresh();
       unawaited(_setCustomerPush(restore: true));
     } catch (error) {
+      if (!mounted || generation != _loadGeneration) return;
+      if (error is DirectOrderException &&
+          error.code == 'DIRECT_ORDER_ORDER_CLOSED' &&
+          widget.requestId != null) {
+        await widget.service.clearOrderAccess(widget.slug, widget.requestId!);
+        _closeOrderMemory(widget.requestId!);
+      }
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _loading = false;
@@ -322,6 +358,78 @@ class _DirectOrderStorefrontScreenState
             : 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE';
       });
     }
+  }
+
+  String _orderPath(String requestId, String accessKey) => Uri(
+    path: '/order/${widget.slug}/r/$requestId',
+    fragment: 'access=$accessKey',
+  ).toString();
+
+  Future<void> _publishOrderLink(
+    DirectOrderStatus status, {
+    bool force = false,
+  }) async {
+    if (status.fulfillmentStatus == 'completed' &&
+            !_hasCompletionRefund(status) ||
+        status.support['chat_open'] == false) {
+      await widget.service.clearOrderAccess(widget.slug, status.requestId);
+      if (mounted) setState(() => _closeOrderMemory(status.requestId));
+      return;
+    }
+    final session = _session;
+    final router = mounted ? GoRouter.maybeOf(context) : null;
+    if (session == null || (router == null && !force)) return;
+    try {
+      final key = await widget.service.ensureOrderAccess(
+        slug: widget.slug,
+        session: session,
+        requestId: status.requestId,
+      );
+      if (!mounted || _status?.requestId != status.requestId) return;
+      _accessKey = key;
+      if (widget.requestId != status.requestId || widget.accessKey != key) {
+        router?.replace(_orderPath(status.requestId, key));
+      }
+    } catch (error) {
+      // A rolling server upgrade must not hide an otherwise valid order.
+      if (force) _showError(error);
+    }
+  }
+
+  bool _hasCompletionRefund(DirectOrderStatus status) =>
+      status.delivery?.isPickup == true &&
+      ((status.delivery?.offer?.status == 'accepted' &&
+              (status.delivery?.offer?.refundDue ?? 0) > 0 &&
+              status.delivery?.offer?.refundRecorded == false) ||
+          supportNumber(status.support['pickup_delivery_refund_due']) > 0);
+
+  void _closeOrderMemory(String requestId) {
+    _statusTimer?.cancel();
+    _statusTimer = null;
+    _accessKey = null;
+    _proofAttempts.remove(requestId);
+    if (_status?.requestId == requestId) {
+      _status = null;
+      _messageController.clear();
+    }
+    _orders = _orders.where((order) => order.requestId != requestId).toList();
+    _orderClosed = true;
+  }
+
+  Future<void> _copyOrderLink() async {
+    final status = _status;
+    if (status == null) return;
+    await _publishOrderLink(status, force: true);
+    final key = _accessKey;
+    if (!mounted || key == null) return;
+    final path = Uri.parse(_orderPath(status.requestId, key));
+    final link = Uri.base.replace(
+      path: path.path,
+      query: '',
+      fragment: path.fragment,
+    );
+    await Clipboard.setData(ClipboardData(text: link.toString()));
+    if (mounted) _snack(_copy.orderLinkCopied);
   }
 
   void _populateAddress(DirectOrderAddress address) {
@@ -355,10 +463,18 @@ class _DirectOrderStorefrontScreenState
   }
 
   bool get _hasPendingUpdates =>
-      _orders.any((order) => !order.isTerminal) ||
-      (_status?.delivery?.offer?.status == 'accepted' &&
-          (_status?.delivery?.offer?.refundDue ?? 0) > 0 &&
-          _status?.delivery?.offer?.refundRecorded == false);
+      !_orderClosed &&
+      (_orders.any((order) => !order.isTerminal) ||
+          (_status?.support['chat_open'] == true &&
+              const {
+                'cancelled',
+                'rejected',
+                'expired',
+              }.contains(_status?.state)) ||
+          (_status?.delivery?.offer?.status == 'accepted' &&
+              (_status?.delivery?.offer?.refundDue ?? 0) > 0 &&
+              _status?.delivery?.offer?.refundRecorded == false) ||
+          (_status != null && _hasCompletionRefund(_status!)));
 
   void _changeQuantity(String itemId, int delta) {
     setState(() {
@@ -598,11 +714,18 @@ class _DirectOrderStorefrontScreenState
       _snack(_copy.invalidPhone);
       return;
     }
-    final session = _session;
+    var session = _session;
     if (session == null) return;
     unawaited(directOrderArrivalAlertSoundService.prepare());
     setState(() => _submitting = true);
     try {
+      if (session.orderScoped) {
+        session = await widget.service.ensureSession(
+          slug: widget.slug,
+          locale: _languageCode,
+        );
+        _session = session;
+      }
       final submission = await widget.service.submit(
         slug: widget.slug,
         session: session,
@@ -629,6 +752,7 @@ class _DirectOrderStorefrontScreenState
         _view = _CustomerView.status;
       });
       _startStatusPolling();
+      await _publishOrderLink(status);
     } catch (error) {
       if (error is DirectOrderException &&
           (error.code == 'DIRECT_ORDER_STOREFRONT_PAUSED' ||
@@ -688,7 +812,8 @@ class _DirectOrderStorefrontScreenState
         if (status != null) _status = status;
       });
       if (status != null) {
-        unawaited(_notifyForStatus(status));
+        await _publishOrderLink(status);
+        if (!_orderClosed) unawaited(_notifyForStatus(status));
       }
       for (final order in orders) {
         if (order.requestId == requestId) continue;
@@ -713,6 +838,13 @@ class _DirectOrderStorefrontScreenState
         _statusTimer = null;
       }
     } catch (error) {
+      if (!mounted || revision != _statusMutationRevision) return;
+      if (error is DirectOrderException &&
+          error.code == 'DIRECT_ORDER_ORDER_CLOSED' &&
+          requestId != null) {
+        await widget.service.clearOrderAccess(widget.slug, requestId);
+        if (mounted) setState(() => _closeOrderMemory(requestId));
+      }
       if (!silent) _showError(error);
     } finally {
       _refreshingStatus = false;
@@ -793,6 +925,7 @@ class _DirectOrderStorefrontScreenState
         _loading = false;
       });
       if (_hasPendingUpdates) _startStatusPolling();
+      await _publishOrderLink(status);
     } catch (error) {
       if (!mounted || revision != _statusMutationRevision) return;
       setState(() => _loading = false);
@@ -898,7 +1031,9 @@ class _DirectOrderStorefrontScreenState
     }
     return status.state == 'quoted' &&
         quote.status == 'active' &&
-        (quote.expiresAt == null || quote.expiresAt!.isAfter(widget.now()));
+        (quote.amountFinalizedAt != null ||
+            quote.expiresAt == null ||
+            quote.expiresAt!.isAfter(widget.now()));
   }
 
   DirectOrderProofAttempt? _proofAttemptFor(DirectOrderStatus status) {
@@ -1160,6 +1295,19 @@ class _DirectOrderStorefrontScreenState
   }
 
   Future<void> _startNewOrder() async {
+    if (_session?.orderScoped == true) {
+      _session = await widget.service.ensureSession(
+        slug: widget.slug,
+        locale: _languageCode,
+      );
+      _accessKey = null;
+      if (!mounted) return;
+      final router = GoRouter.maybeOf(context);
+      if (router != null) {
+        router.go('/order/${widget.slug}');
+        return;
+      }
+    }
     await _selectView(_CustomerView.menu);
     if (!mounted || (_storefront?.paused ?? true) || _pausedByServer) return;
     await widget.service.clearActiveRequest(widget.slug);
@@ -1256,6 +1404,14 @@ class _DirectOrderStorefrontScreenState
   Widget _buildBody() {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+    if (_orderClosed) {
+      return _CenteredMessage(
+        icon: Icons.check_circle_outline,
+        title: _copy.orderClosed,
+        actionLabel: _copy.menu,
+        onAction: () => GoRouter.maybeOf(context)?.go('/order/${widget.slug}'),
+      );
     }
     if (_errorCode != null || _storefront == null) {
       return _CenteredMessage(
@@ -1752,18 +1908,22 @@ class _DirectOrderStorefrontScreenState
     bool disable = false,
   }) async {
     final session = _session;
-    if (_pushBusy || session == null) return;
+    if (_pushBusy || session == null || _orderClosed) return;
     setState(() => _pushBusy = true);
     try {
       final readiness = disable
           ? await _pushService.disable(
-              slug: widget.slug,
+              slug: session.orderScoped
+                  ? "${widget.slug}:${session.id}"
+                  : widget.slug,
               session: session,
               service: widget.service,
               locale: _languageCode,
             )
           : await _pushService.enable(
-              slug: widget.slug,
+              slug: session.orderScoped
+                  ? "${widget.slug}:${session.id}"
+                  : widget.slug,
               session: session,
               service: widget.service,
               locale: _languageCode,
@@ -1904,6 +2064,15 @@ class _DirectOrderStorefrontScreenState
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           _statusHero(status),
+          if ((status.fulfillmentStatus != 'completed' ||
+                  _hasCompletionRefund(status)) &&
+              status.support['chat_open'] != false)
+            TextButton.icon(
+              key: const Key('direct_order_copy_link'),
+              onPressed: _copyOrderLink,
+              icon: const Icon(Icons.link),
+              label: Text(_copy.copyOrderLink),
+            ),
 
           if (status.delivery?.offer?.isPending == true) ...[
             const SizedBox(height: 12),

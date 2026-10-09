@@ -42,6 +42,15 @@ class DirectOrderCopy {
   String get menu => _pick('메뉴', 'Thực đơn', 'Menu');
   String get address => _pick('배송지', 'Địa chỉ', 'Address');
   String get orderStatus => _pick('주문 현황', 'Trạng thái', 'Order status');
+  String get copyOrderLink =>
+      _pick('주문 링크 복사', 'Sao chép liên kết đơn', 'Copy order link');
+  String get orderLinkCopied => _pick(
+    '이 링크로 주문과 채팅에 다시 접속할 수 있습니다.',
+    'Mở lại đơn và trò chuyện bằng liên kết này.',
+    'Use this link to return to your order and chat.',
+  );
+  String get orderClosed =>
+      _pick('종료된 주문입니다.', 'Đơn hàng đã kết thúc.', 'This order has ended.');
   String get cart => _pick('장바구니', 'Giỏ hàng', 'Cart');
   String get viewCart => _pick('장바구니 보기', 'Xem giỏ hàng', 'View cart');
   String get cartQuoteNotice => _pick(
@@ -232,6 +241,21 @@ class DirectOrderCopy {
     'Use intake pause when busy. The page cannot be disabled while orders are in progress.',
   );
   String errorMessage(String code) => switch (code) {
+    'DIRECT_ORDER_FINAL_AMOUNT_LOCKED' => _pick(
+      '최종금액은 확정되었습니다. 실제 배송비 변경은 배송비 정산에서 처리하세요.',
+      'Tổng tiền đã chốt. Đối soát phí giao thực tế tại mục phí giao.',
+      'The final amount is fixed. Reconcile actual delivery cost in the shipping panel.',
+    ),
+    'DIRECT_ORDER_DELIVERY_EVIDENCE_REQUIRED' => _pick(
+      '배송 업체, 예약 번호와 배송비 증빙이 필요합니다.',
+      'Cần đơn vị giao, mã đặt giao và chứng từ phí.',
+      'Select a delivery provider, booking reference and cost evidence.',
+    ),
+    'DIRECT_ORDER_DELIVERY_COST_CHANGED' => _pick(
+      '확인한 실제 배송비와 기사 인계 금액이 다릅니다. 정산 내용을 다시 확인하세요.',
+      'Phí bàn giao khác phí đã xác minh. Kiểm tra đối soát.',
+      'The handoff cost differs from the verified cost. Check the reconciliation.',
+    ),
     'DIRECT_ORDER_SUPPORT_CHANGED' || 'DIRECT_ORDER_CHARGE_CHANGED' => _pick(
       '주문 정보가 변경되었습니다. 새로고침 후 다시 확인하세요.',
       'Thông tin đơn đã thay đổi. Tải lại và kiểm tra.',

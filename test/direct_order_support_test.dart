@@ -211,7 +211,7 @@ void main() {
     },
   );
   testWidgets(
-    'delivery consent precedes payment QR and supplementary proof upload',
+    'verified shipping asks for payment directly and legacy demands await store review',
     (tester) async {
       final calls = <Map<String, dynamic>>[];
       final service = DirectOrderService(
@@ -231,11 +231,12 @@ void main() {
       await pumpSupport(tester, panel('awaiting_consent'));
       expect(find.byType(QrImageView), findsNothing);
       expect(find.byType(DirectOrderAttachmentButton), findsNothing);
-      await tester.tap(find.text('Agree to delivery fee'));
-      await tester.pumpAndSettle();
-      expect(calls.single['action'], 'charge_consent');
-      expect(calls.single['charge_id'], chargeId);
-      expect(calls.single['accept'], true);
+      expect(find.text('Agree to delivery fee'), findsNothing);
+      expect(calls, isEmpty);
+      expect(
+        find.text('The store is verifying actual delivery cost.'),
+        findsOneWidget,
+      );
       await pumpSupport(tester, panel('pending'));
       expect(find.byType(QrImageView), findsOneWidget);
       expect(find.byType(DirectOrderAttachmentButton), findsOneWidget);
@@ -243,7 +244,7 @@ void main() {
     },
   );
   testWidgets(
-    'cashier can request additional shipping on an already prepaid order',
+    'cashier reconciliation requires a provider reference and cost attachment',
     (tester) async {
       final service = _Staff();
       await pumpSupport(
@@ -254,6 +255,15 @@ void main() {
           service: service,
           onChanged: () async {},
           detail: {
+            'messages': [
+              {
+                'id': 'cost-evidence',
+                'sender_type': 'cashier',
+                'message_type': 'attachment',
+                'body': 'Grab booking evidence',
+                'metadata': {'filename': 'grab-cost.png'},
+              },
+            ],
             'request': {'state': 'approved'},
             'financial': {'delivery_payment_mode': 'store_prepaid'},
             'delivery': {'method': 'delivery'},
@@ -269,20 +279,36 @@ void main() {
           },
         ),
       );
-      await tester.tap(find.text('Request additional delivery payment'));
+      await tester.tap(find.text('Reconcile actual delivery fee'));
       await tester.pumpAndSettle();
       final fields = find.byType(TextField);
       await tester.enterText(fields.at(0), '15000');
-      await tester.enterText(fields.at(1), 'Actual fee higher than quote');
+      await tester.enterText(fields.at(1), 'GRAB-BOOKING-001');
       await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save'))
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(
+        find.widgetWithText(
+          DropdownButtonFormField<String>,
+          'Delivery cost evidence',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('grab-cost.png').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
-      expect(service.actions, ['charge']);
-      expect(service.payloads.single, {
-        'kind': 'delivery',
-        'amount': 15000,
-        'reason': 'Actual fee higher than quote',
-      });
+      expect(service.actions, ['reconcile_delivery_fee']);
+      final payload = service.payloads.single;
+      expect(payload['amount'], 15000);
+      expect(payload['provider'], 'grab');
+      expect(payload['reference'], 'GRAB-BOOKING-001');
+      expect(payload['evidence_message_id'], 'cost-evidence');
+      expect(payload['operation_id'], isNotEmpty);
       await tester.pump(const Duration(milliseconds: 500));
     },
   );
@@ -537,10 +563,10 @@ void main() {
     expect(
       tester
           .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, '배송비·차액 추가 결제 요청'),
+            find.widgetWithText(OutlinedButton, '실제 배송비 정산'),
           )
           .onPressed,
-      isNull,
+      isNotNull,
     );
     expect(tester.takeException(), isNull);
     if (capture) {
