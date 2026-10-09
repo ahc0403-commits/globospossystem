@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -91,6 +92,7 @@ class DirectOrderService {
   static const _addressKeyPrefix = 'direct_order_address_v1_';
   static const _requestKeyPrefix = 'direct_order_request_v1_';
   static const _pendingSubmitKeyPrefix = 'direct_order_pending_submit_v1_';
+  static const _accessKeyPrefix = 'direct_order_access_v1_';
   static const _alertEnabledKeyPrefix = 'direct_order_payment_alert_v1_';
   static const _seenAlertKeyPrefix = 'direct_order_seen_alerts_v1_';
   final DirectOrderInvoker? _invoker;
@@ -149,6 +151,113 @@ class DirectOrderService {
     return DirectOrderStorefront.fromJson(data);
   }
 
+  String _newAccessKey() {
+    final random = Random.secure();
+    return base64Url
+        .encode(List<int>.generate(32, (_) => random.nextInt(256)))
+        .replaceAll('=', '');
+  }
+
+  Future<DirectOrderSession?> loadRestorableSession(String slug) async {
+    final cached = await loadCachedSession(slug);
+    if (cached != null) return cached;
+    final requestId = await loadActiveRequestId(slug);
+    if (requestId == null) return null;
+    final preferences = await SharedPreferences.getInstance();
+    final key = preferences.getString('$_accessKeyPrefix${slug}_$requestId');
+    if (key == null) return null;
+    try {
+      return await resumeOrder(
+        slug: slug,
+        requestId: requestId,
+        accessKey: key,
+      );
+    } on DirectOrderException catch (error) {
+      if (const {
+        'DIRECT_ORDER_ORDER_CLOSED',
+        'DIRECT_ORDER_UNAVAILABLE',
+      }.contains(error.code)) {
+        await clearOrderAccess(slug, requestId);
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<DirectOrderSession> resumeOrder({
+    required String slug,
+    required String requestId,
+    required String accessKey,
+  }) async {
+    final data = await _invoke({
+      'action': 'resume_order',
+      'slug': slug,
+      'session_id': requestId,
+      'secret': accessKey,
+      'order_scoped': true,
+    });
+    final session = DirectOrderSession.fromJson(data);
+    if (!session.orderScoped || session.id != requestId) {
+      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+    }
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      '$_accessKeyPrefix${slug}_$requestId',
+      accessKey,
+    );
+    await saveSelectedRequest(slug, requestId);
+    return session;
+  }
+
+  Future<String> ensureOrderAccess({
+    required String slug,
+    required DirectOrderSession session,
+    required String requestId,
+  }) async {
+    if (session.orderScoped) {
+      if (session.id != requestId) {
+        throw const DirectOrderException('REQUEST_FORBIDDEN');
+      }
+      return session.secret;
+    }
+    final preferences = await SharedPreferences.getInstance();
+    final key = '$_accessKeyPrefix${slug}_$requestId';
+    final saved = preferences.getString(key);
+    if (saved != null) return saved;
+    final accessKey = _newAccessKey();
+    final result = await _invoke({
+      'action': 'issue_order_access',
+      ...session.credentials,
+      'request_id': requestId,
+      'access_key': accessKey,
+    });
+    if (result['request_id'] != requestId) {
+      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+    }
+    if (!await preferences.setString(key, accessKey)) {
+      throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
+    }
+    return accessKey;
+  }
+
+  Future<void> clearOrderAccess(String slug, String requestId) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove('$_accessKeyPrefix${slug}_$requestId');
+    final seenKey = '$_seenAlertKeyPrefix$slug';
+    final seen = preferences.getStringList(seenKey);
+    if (seen != null) {
+      await preferences.setStringList(
+        seenKey,
+        seen.where((event) => !event.startsWith('$requestId:')).toList(),
+      );
+    }
+    await preferences.remove('direct_order_push_device_$slug:$requestId');
+    await preferences.remove('direct_order_push_enabled_$slug:$requestId');
+    if (await loadActiveRequestId(slug) == requestId) {
+      await preferences.remove('$_requestKeyPrefix$slug');
+    }
+  }
+
   Future<DirectOrderSession?> loadCachedSession(String slug) async {
     final preferences = await SharedPreferences.getInstance();
     final raw = preferences.getString('$_sessionKeyPrefix$slug');
@@ -166,11 +275,7 @@ class DirectOrderService {
   Future<DirectOrderStorefront> resumeStorefront(
     DirectOrderSession session,
   ) async => DirectOrderStorefront.fromJson(
-    await _invoke({
-      'action': 'resume_storefront',
-      'session_id': session.id,
-      'secret': session.secret,
-    }),
+    await _invoke({'action': 'resume_storefront', ...session.credentials}),
   );
 
   Future<void> decidePickup({
@@ -182,8 +287,7 @@ class DirectOrderService {
   }) async {
     await _invoke({
       'action': 'decide_pickup',
-      'session_id': session.id,
-      'secret': session.secret,
+      ...session.credentials,
       'request_id': requestId,
       'offer_id': offerId,
       'accept': accept,
@@ -262,10 +366,18 @@ class DirectOrderService {
         throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
       }
     }
+    final pendingAccessKey = '${pendingKey}_access';
+    var accessKey = preferences.getString(pendingAccessKey);
+    if (accessKey == null) {
+      accessKey = _newAccessKey();
+      if (!await preferences.setString(pendingAccessKey, accessKey)) {
+        throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
+      }
+    }
     final data = await _invoke({
       'action': 'submit_v3',
-      'session_id': session.id,
-      'secret': session.secret,
+      ...session.credentials,
+      'access_key': accessKey,
       'client_request_id': clientRequestId,
       'payload': {
         'locale': locale,
@@ -314,7 +426,14 @@ class DirectOrderService {
     if (!requestSaved) {
       throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
     }
+    if (!await preferences.setString(
+      '$_accessKeyPrefix${slug}_${submission.requestId}',
+      accessKey,
+    )) {
+      throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
+    }
     await preferences.remove(pendingKey);
+    await preferences.remove(pendingAccessKey);
     await preferences.remove(pendingTypeKey);
     if (fulfillmentType == DirectOrderFulfillmentType.delivery) {
       if (rememberAddress) {
@@ -389,8 +508,7 @@ class DirectOrderService {
   }) async {
     final data = await _invoke({
       'action': 'push_subscription',
-      'session_id': session.id,
-      'secret': session.secret,
+      ...session.credentials,
       'device_id': deviceId,
       'locale': locale,
       'enabled': enabled,
@@ -407,9 +525,8 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status_v5',
-      'session_id': session.id,
-      'secret': session.secret,
+      'action': 'status_v6',
+      ...session.credentials,
       'request_id': requestId,
     });
     return DirectOrderStatus.fromJson(data);
@@ -420,8 +537,7 @@ class DirectOrderService {
   }) async {
     final data = await _invokeValue({
       'action': 'orders_v3',
-      'session_id': session.id,
-      'secret': session.secret,
+      ...session.credentials,
     });
     if (data is! List) {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
@@ -444,8 +560,7 @@ class DirectOrderService {
   }) => _invoke({
     ...payload,
     'action': action,
-    'session_id': session.id,
-    'secret': session.secret,
+    ...session.credentials,
     'request_id': requestId,
   });
 
@@ -511,8 +626,7 @@ class DirectOrderService {
   }) async {
     final data = await _invoke({
       'action': 'message',
-      'session_id': session.id,
-      'secret': session.secret,
+      ...session.credentials,
       'request_id': requestId,
       'message': message,
     });
@@ -534,8 +648,7 @@ class DirectOrderService {
   }) async {
     final data = await _invoke({
       'action': 'cancel',
-      'session_id': session.id,
-      'secret': session.secret,
+      ...session.credentials,
       'request_id': requestId,
     });
     _expectExactResponseFields(data, const {'request_id', 'state'});
@@ -582,8 +695,7 @@ class DirectOrderService {
       throw const DirectOrderException('INVALID_PROOF');
     }
     final identity = <String, dynamic>{
-      'session_id': session.id,
-      'secret': session.secret,
+      ...session.credentials,
       'request_id': attempt.requestId,
       'quote_id': attempt.quoteId,
       'review_request_id': attempt.reviewRequestId,

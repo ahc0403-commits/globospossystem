@@ -267,6 +267,56 @@ class OrderService {
     );
   }
 
+  Future<Map<String, dynamic>> cancelItemQuantity({
+    required String storeId,
+    required String itemId,
+    required int expectedQuantity,
+    required int newQuantity,
+    required String operationId,
+  }) async => Map<String, dynamic>.from(
+    await supabase.rpc(
+          'cashier_cancel_item_quantity',
+          params: {
+            'p_store_id': storeId,
+            'p_item_id': itemId,
+            'p_expected_quantity': expectedQuantity,
+            'p_new_quantity': newQuantity,
+            'p_operation_id': operationId,
+            'p_reason': 'customer_request',
+          },
+        )
+        as Map,
+  );
+  Future<void> restoreItemQuantity({
+    required String storeId,
+    required String operationId,
+  }) async {
+    await supabase.rpc(
+      'cashier_restore_item_quantity',
+      params: {'p_store_id': storeId, 'p_operation_id': operationId},
+    );
+  }
+
+  Future<Map<String, dynamic>> moveOrderItems({
+    required String storeId,
+    required String orderId,
+    required String targetTableId,
+    required List<Map<String, dynamic>> items,
+    required String operationId,
+  }) async => Map<String, dynamic>.from(
+    await supabase.rpc(
+          'cashier_move_order_items',
+          params: {
+            'p_store_id': storeId,
+            'p_source_order_id': orderId,
+            'p_target_table_id': targetTableId,
+            'p_items': items,
+            'p_operation_id': operationId,
+          },
+        )
+        as Map,
+  );
+
   Future<void> editOrderItemQuantity({
     required String itemId,
     required String storeId,

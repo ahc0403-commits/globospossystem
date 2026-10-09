@@ -8,7 +8,9 @@ import {
   directOrderLocale,
   directOrderPushSubscriptionArgs,
   directOrderSecretKeyName,
+  type JsonObject,
   normalizeRpcError,
+  resolveOrderScopedRequest,
   resolveProjectSecretKey,
   SafeHttpError,
   sqlDomainErrorRegistry,
@@ -319,12 +321,15 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "submit_v2",
       "submit_v3",
       "resume_storefront",
+      "resume_order",
+      "issue_order_access",
       "decide_pickup",
       "status",
       "status_v2",
       "status_v3",
       "status_v4",
       "status_v5",
+      "status_v6",
       "orders_v2",
       "orders_v3",
       "push_subscription",
@@ -473,7 +478,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    135,
+    148,
     "registered SQL error count",
   );
   assertEquals(
@@ -762,4 +767,54 @@ Deno.test("chat attachments bind storage scope and permit staff PDFs only", () =
     "jpeg",
     "JPEG supported",
   );
+});
+
+Deno.test("order links exchange credentials internally and reject broader access", async () => {
+  const order = "90000000-0000-4000-8000-000000000001";
+  const other = "90000000-0000-4000-8000-000000000002";
+  const original = "90000000-0000-4000-8000-000000000003";
+  const key = "a".repeat(43);
+  const calls: JsonObject[] = [];
+  const client = {
+    rpc: (_name: string, args: JsonObject) => {
+      calls.push(args);
+      return Promise.resolve({
+        data: {
+          session_id: original,
+          secret_hash: "b".repeat(64),
+          slug: "fixture",
+        },
+        error: null,
+      });
+    },
+  };
+  const input = {
+    order_scoped: true,
+    session_id: order,
+    secret: key,
+    request_id: order,
+  };
+  const result = await resolveOrderScopedRequest(client, "status_v3", input);
+  assertEquals(result.body.session_id, original, "internal original session");
+  assertEquals(result.requestId, order, "limited order");
+  assertEquals(result.body.secret, key, "no original secret returned");
+  assertEquals(calls[0].p_request_id, order, "order-scoped key lookup");
+  for (
+    const [action, body] of [
+      ["status_v3", { ...input, request_id: other }],
+      ["submit_v3", input],
+      ["staff_attachment_url", input],
+      ["issue_order_access", input],
+    ] as const
+  ) {
+    try {
+      await resolveOrderScopedRequest(client, action, body);
+      throw new Error("access escaped order scope");
+    } catch (error) {
+      if (!(error instanceof SafeHttpError) || error.status !== 403) {
+        throw error;
+      }
+    }
+  }
+  assertEquals(calls.length, 1, "forbidden actions never call backend");
 });

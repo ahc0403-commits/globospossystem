@@ -23,6 +23,8 @@ class _Auth extends AuthNotifier {
 
 class _Staff extends DirectOrderStaffService {
   bool pickup = false;
+  bool prepaid = false;
+  double? verifiedFee;
   bool proposed = false;
   bool refunded = false;
   int diners = 3;
@@ -94,7 +96,12 @@ class _Staff extends DirectOrderStaffService {
     'financial': {
       'final_total': 129600,
       'delivery_fee_total': 21600,
-      'delivery_payment_mode': pickup ? 'store_prepaid' : 'customer_direct',
+      'delivery_payment_mode': pickup || prepaid
+          ? 'store_prepaid'
+          : 'customer_direct',
+    },
+    'support': {
+      if (verifiedFee != null) 'delivery_cost': {'actual_fee': verifiedFee},
     },
     'fulfillment': {'id': 'ticket', 'status': ticketStatus, 'version': 3},
     'delivery': {
@@ -201,7 +208,7 @@ class _Staff extends DirectOrderStaffService {
     String? driverContact,
   }) async {
     expect(requestId, 'request');
-    expect(actualGrabFee, isNull);
+    expect(actualGrabFee, prepaid ? verifiedFee : null);
     sentProvider = provider;
     sentUrl = grabUrl;
     sentTicketVersion = expectedVersion;
@@ -443,6 +450,47 @@ void main() {
           find.byKey(const Key('direct_record_pickup_refund')),
           findsNothing,
         );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+  for (final prepaid in [false, true]) {
+    testWidgets(
+      'verified driver cost follows the payment mode: prepaid=$prepaid',
+      (tester) async {
+        final service = _Staff()
+          ..prepaid = prepaid
+          ..verifiedFee = 15000;
+        final copy = DirectOrderCopy('en');
+        await _pump(tester, service);
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('direct_driver_contact')),
+          300,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const Key('direct_staff_detail_list')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        if (prepaid) {
+          final input = tester.widget<TextField>(
+            find.byKey(const Key('direct_order_actual_grab_fee_input')),
+          );
+          expect(input.readOnly, isTrue);
+          expect(input.controller!.text, '15.000');
+        }
+        await tester.enterText(
+          find.byKey(const Key('direct_driver_contact')),
+          '0901234567',
+        );
+        await _tap(
+          tester,
+          find.widgetWithText(FilledButton, copy.handoffDriver),
+        );
+        expect(service.ticketStatus, 'dispatched');
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },

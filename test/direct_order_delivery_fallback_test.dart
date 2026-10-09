@@ -278,6 +278,12 @@ void main() {
         expect(find.text('D12345678'), findsOneWidget);
         expect(find.byKey(const Key('direct_pickup_offer')), findsNothing);
         expect(find.text(copy.pickup), findsWidgets);
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('direct_order_progress_step_2')),
+          100,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
         expect(
           find.byKey(const Key('direct_order_progress_step_2')),
           findsOneWidget,

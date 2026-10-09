@@ -24,6 +24,12 @@ class _OperationalCoverage {
 
 const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
+    source: 'lib/features/cashier/cashier_item_edit_dialogs.dart',
+    directCalls: 2,
+    test: 'test/cashier_item_edit_dialogs_test.dart',
+    markers: ['cashier_cancel_quantity_confirm', 'cashier_move_confirm'],
+  ),
+  _OperationalCoverage(
     source: 'lib/core/ui/toast/toast_primitives.dart',
     directCalls: 2,
     test: 'test/toast_confirm_dialog_test.dart',
@@ -406,7 +412,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 147 dialog and sheet entrypoints map to operational tests', () {
+  test('all 149 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -418,10 +424,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 144);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 146);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      147,
+      149,
     );
 
     final inventory = File(

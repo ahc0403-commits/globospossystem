@@ -141,6 +141,11 @@ bash test/photo_objet_sales_collection_retirement_sql_test.sh
 printf 'CHECK_REPO_STEP=photo_manual_import_contract\n'
 bash test/photo_sales_manual_import_sql_test.sh
 
+printf 'CHECK_REPO_STEP=order_links_final_amount_and_verified_delivery\n'
+bash test/direct_order_integrated_sql_test.sh
+printf 'CHECK_REPO_STEP=cashier_item_move_and_partial_cancel\n'
+bash test/cashier_item_edit_sql_test.sh
+
 printf 'CHECK_REPO_STEP=restaurant_vat_integrity\n'
 bash test/restaurant_vat_integrity_sql_test.sh
 

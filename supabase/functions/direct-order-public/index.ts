@@ -6,7 +6,7 @@ type RpcClient = {
   rpc: (
     name: string,
     payload: JsonObject,
-  ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  ) => PromiseLike<{ data: unknown; error: { message?: string } | null }>;
 };
 
 export type DirectOrderDependencies = {
@@ -36,12 +36,15 @@ export const directOrderActionRegistry = Object.freeze(
     submit_v2: { actor: "public", rateLimit: 60 },
     submit_v3: { actor: "public", rateLimit: 60 },
     resume_storefront: { actor: "public", rateLimit: 60 },
+    resume_order: { actor: "public", rateLimit: 60 },
+    issue_order_access: { actor: "public", rateLimit: 10 },
     decide_pickup: { actor: "public", rateLimit: 60 },
     status: { actor: "public", rateLimit: 60 },
     status_v2: { actor: "public", rateLimit: 60 },
     status_v3: { actor: "public", rateLimit: 60 },
     status_v4: { actor: "public", rateLimit: 60 },
     status_v5: { actor: "public", rateLimit: 60 },
+    status_v6: { actor: "public", rateLimit: 60 },
     orders_v2: { actor: "public", rateLimit: 60 },
     orders_v3: { actor: "public", rateLimit: 60 },
     push_subscription: { actor: "public", rateLimit: 10 },
@@ -509,6 +512,28 @@ const internalFailure: SqlErrorContract = {
 export const sqlDomainErrorRegistry: Readonly<
   Record<string, SqlErrorContract>
 > = Object.freeze({
+  DIRECT_ORDER_UNAVAILABLE: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_ORDER_CLOSED: {
+    status: 410,
+    publicCode: "DIRECT_ORDER_ORDER_CLOSED",
+  },
+  DIRECT_ORDER_DELIVERY_EVIDENCE_REQUIRED: conflict(
+    "DIRECT_ORDER_DELIVERY_EVIDENCE_REQUIRED",
+  ),
+  DIRECT_ORDER_DELIVERY_COST_CHANGED: conflict(
+    "DIRECT_ORDER_DELIVERY_COST_CHANGED",
+  ),
+  DIRECT_ORDER_FINAL_AMOUNT_LOCKED: conflict(
+    "DIRECT_ORDER_FINAL_AMOUNT_LOCKED",
+  ),
+  DIRECT_ORDER_FINAL_AMOUNT_PATCH_DRIFT: internalFailure,
+  DIRECT_ORDER_COST_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_COST_RETENTION_DRIFT: internalFailure,
+  DIRECT_ORDER_COST_SETTLEMENT_DRIFT: internalFailure,
+  DIRECT_ORDER_DELIVERY_COST_IMMUTABLE: internalFailure,
+  DIRECT_ORDER_PUSH_SCOPE_PATCH_DRIFT: internalFailure,
+  DIRECT_ORDER_RETENTION_PATCH_DRIFT: internalFailure,
+  DIRECT_ORDER_ACCESS_PERMISSION_DRIFT: internalFailure,
   DIRECT_ORDER_ACTOR_INPUT_REQUIRED: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_FORBIDDEN: forbidden("REQUEST_FORBIDDEN"),
   DIRECT_ORDER_RATE_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
@@ -853,6 +878,83 @@ export function directOrderSecretKeyName(
   return directOrderName?.trim() || publicReceiptName?.trim() || "";
 }
 
+// Link credentials are exchanged only inside the service backend. Never return
+// the original browser session hash or allow a link to act on another order.
+export async function resolveOrderScopedRequest(
+  client: RpcClient,
+  action: string,
+  input: JsonObject,
+): Promise<
+  { body: JsonObject; secretHash?: string; requestId?: string; slug?: string }
+> {
+  if (input.order_scoped !== true) return { body: input };
+  const permitted = new Set([
+    "resume_order",
+    "push_subscription",
+    "resume_storefront",
+    "orders_v2",
+    "orders_v3",
+    "status",
+    "status_v2",
+    "status_v3",
+    "status_v4",
+    "status_v5",
+    "status_v6",
+    "message",
+    "decide_pickup",
+    "cancel",
+    "charge_consent",
+    "proof_upload_url",
+    "proof_upload_url_v2",
+    "proof_commit",
+    "proof_commit_v2",
+    "customer_attachment_upload",
+    "customer_attachment_commit",
+    "customer_attachment_url",
+  ]);
+  if (!permitted.has(action)) throw new SafeHttpError(403, "REQUEST_FORBIDDEN");
+  const requestId = requiredUuid(input, "session_id");
+  if (
+    input.request_id != null && requiredUuid(input, "request_id") !== requestId
+  ) {
+    throw new SafeHttpError(403, "REQUEST_FORBIDDEN");
+  }
+  if (
+    ![
+      "resume_order",
+      "resume_storefront",
+      "orders_v2",
+      "orders_v3",
+      "push_subscription",
+    ]
+      .includes(action) &&
+    input.request_id == null
+  ) {
+    throw new SafeHttpError(400, "INVALID_REQUEST");
+  }
+  const secret = requiredString(input, "secret", 128, secretPattern);
+  const resolved = asObject(
+    await rpc(client, "direct_order_resolve_access", {
+      p_request_id: requestId,
+      p_key_hash: await sha256Hex(secret),
+    }),
+  );
+  const sessionId = requiredUuid(resolved, "session_id");
+  const secretHash = requiredString(
+    resolved,
+    "secret_hash",
+    64,
+    /^[a-f0-9]{64}$/,
+  );
+  const slug = requiredString(resolved, "slug", 63, slugPattern);
+  return {
+    body: { ...input, session_id: sessionId },
+    secretHash,
+    requestId,
+    slug,
+  };
+}
+
 function productionDependencies(): DirectOrderDependencies {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const keyName = directOrderSecretKeyName(
@@ -905,7 +1007,34 @@ function productionDependencies(): DirectOrderDependencies {
     body: JsonObject,
     request: Request,
   ): Promise<unknown> => {
+    const scoped = await resolveOrderScopedRequest(service, action, body);
+    body = scoped.body;
+    const hashSecret = async (secret: string) =>
+      scoped.secretHash ?? await sha256Hex(secret);
     switch (action) {
+      case "resume_order": {
+        if (!scoped.requestId || body.slug !== scoped.slug) {
+          throw new SafeHttpError(404, "DIRECT_ORDER_UNAVAILABLE");
+        }
+        return {
+          session_id: scoped.requestId,
+          secret: requiredString(body, "secret", 128, secretPattern),
+          expires_at: "2099-01-01T00:00:00Z",
+          order_scoped: true,
+        };
+      }
+      case "issue_order_access": {
+        return await rpc(service, "direct_order_issue_access", {
+          p_session_id: requiredUuid(body, "session_id"),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
+          p_request_id: requiredUuid(body, "request_id"),
+          p_key_hash: await sha256Hex(
+            requiredString(body, "access_key", 128, secretPattern),
+          ),
+        });
+      }
       case "storefront":
       case "storefront_v2": {
         const slug = requiredString(body, "slug", 63, slugPattern);
@@ -933,7 +1062,7 @@ function productionDependencies(): DirectOrderDependencies {
             "direct_order_public_create_session",
             {
               p_slug: slug,
-              p_secret_hash: await sha256Hex(secret),
+              p_secret_hash: await hashSecret(secret),
               p_locale: locale,
             },
           ),
@@ -957,16 +1086,25 @@ function productionDependencies(): DirectOrderDependencies {
         if (action === "submit_v3") directOrderDinerCount(payload.diner_count);
         return await rpc(
           service,
-          action === "submit_v3"
+          action === "submit_v3" && body.access_key != null
+            ? "direct_order_public_submit_with_access"
+            : action === "submit_v3"
             ? "direct_order_public_submit_v3"
             : action === "submit_v2"
             ? "direct_order_public_submit_v2"
             : "direct_order_public_submit",
           {
             p_session_id: sessionId,
-            p_secret_hash: await sha256Hex(secret),
+            p_secret_hash: await hashSecret(secret),
             p_client_request_id: clientRequestId,
             p_payload: payload,
+            ...(action === "submit_v3" && body.access_key != null
+              ? {
+                p_key_hash: await sha256Hex(
+                  requiredString(body, "access_key", 128, secretPattern),
+                ),
+              }
+              : {}),
           },
         );
       }
@@ -976,14 +1114,15 @@ function productionDependencies(): DirectOrderDependencies {
         const secret = requiredString(body, "secret", 128, secretPattern);
         return await rpc(service, "direct_order_public_status", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requestId,
         });
       }
       case "status_v2":
       case "status_v3":
       case "status_v4":
-      case "status_v5": {
+      case "status_v5":
+      case "status_v6": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
@@ -992,7 +1131,7 @@ function productionDependencies(): DirectOrderDependencies {
           `direct_order_public_${action}`,
           {
             p_session_id: sessionId,
-            p_secret_hash: await sha256Hex(secret),
+            p_secret_hash: await hashSecret(secret),
             p_request_id: requestId,
           },
         );
@@ -1003,7 +1142,7 @@ function productionDependencies(): DirectOrderDependencies {
         const value = asObject(
           await rpc(service, "direct_order_public_resume_storefront", {
             p_session_id: sessionId,
-            p_secret_hash: await sha256Hex(secret),
+            p_secret_hash: await hashSecret(secret),
           }),
         );
         return { ...value, google_maps_browser_key: null };
@@ -1019,7 +1158,7 @@ function productionDependencies(): DirectOrderDependencies {
         }
         return await rpc(service, "direct_order_public_decide_pickup", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requiredUuid(body, "request_id"),
           p_offer_id: requiredUuid(body, "offer_id"),
           p_accept: body.accept,
@@ -1029,14 +1168,46 @@ function productionDependencies(): DirectOrderDependencies {
       case "push_subscription": {
         return await rpc(
           service,
-          "direct_order_public_push_subscription",
-          await directOrderPushSubscriptionArgs(body),
+          "direct_order_public_push_subscription_scoped",
+          {
+            ...await directOrderPushSubscriptionArgs(body),
+            p_secret_hash: await hashSecret(body.secret as string),
+            p_request_scope_id: scoped.requestId ?? null,
+          },
         );
       }
       case "orders_v2":
       case "orders_v3": {
         const sessionId = requiredUuid(body, "session_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
+        if (scoped.requestId) {
+          const status = asObject(
+            await rpc(service, "direct_order_public_status_v6", {
+              p_session_id: sessionId,
+              p_secret_hash: await hashSecret(secret),
+              p_request_id: scoped.requestId,
+            }),
+          );
+          const fulfillment = asObject(status.fulfillment ?? {});
+          const review = asObject(status.proof_review ?? {});
+          const quote = asObject(status.quote ?? {});
+          return [{
+            request_id: status.request_id,
+            reference_code: status.reference_code,
+            state: status.state,
+            created_at: status.created_at,
+            item_count: Array.isArray(status.items)
+              ? status.items.reduce(
+                (sum, item) => sum + Number(asObject(item).quantity ?? 0),
+                0,
+              )
+              : 0,
+            final_total: quote.final_total ?? null,
+            fulfillment_status: fulfillment.status ?? null,
+            completed_at: fulfillment.completed_at ?? null,
+            has_open_proof_review: review.can_resubmit === true,
+          }];
+        }
         return await rpc(
           service,
           action === "orders_v3"
@@ -1044,7 +1215,7 @@ function productionDependencies(): DirectOrderDependencies {
             : "direct_order_public_orders_v2",
           {
             p_session_id: sessionId,
-            p_secret_hash: await sha256Hex(secret),
+            p_secret_hash: await hashSecret(secret),
             p_limit: 50,
           },
         );
@@ -1056,7 +1227,7 @@ function productionDependencies(): DirectOrderDependencies {
         const message = requiredString(body, "message", 2000);
         return await rpc(service, "direct_order_public_message", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requestId,
           p_body: message,
         });
@@ -1067,7 +1238,7 @@ function productionDependencies(): DirectOrderDependencies {
         }
         return await rpc(service, "direct_order_public_charge_consent", {
           p_session_id: requiredUuid(body, "session_id"),
-          p_secret_hash: await sha256Hex(
+          p_secret_hash: await hashSecret(
             requiredString(body, "secret", 128, secretPattern),
           ),
           p_request_id: requiredUuid(body, "request_id"),
@@ -1098,9 +1269,9 @@ function productionDependencies(): DirectOrderDependencies {
           );
         } else {
           status = asObject(
-            await rpc(service, "direct_order_public_status_v3", {
+            await rpc(service, "direct_order_public_status_v6", {
               p_session_id: requiredUuid(body, "session_id"),
-              p_secret_hash: await sha256Hex(
+              p_secret_hash: await hashSecret(
                 requiredString(body, "secret", 128, secretPattern),
               ),
               p_request_id: requestId,
@@ -1212,7 +1383,7 @@ function productionDependencies(): DirectOrderDependencies {
         const secret = requiredString(body, "secret", 128, secretPattern);
         return await rpc(service, "direct_order_public_cancel", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requestId,
         });
       }
@@ -1239,7 +1410,7 @@ function productionDependencies(): DirectOrderDependencies {
               : "direct_order_public_status",
             {
               p_session_id: sessionId,
-              p_secret_hash: await sha256Hex(secret),
+              p_secret_hash: await hashSecret(secret),
               p_request_id: requestId,
             },
           ),
@@ -1328,7 +1499,7 @@ function productionDependencies(): DirectOrderDependencies {
             : requiredUuid(body, "review_request_id");
           return await rpc(service, "direct_order_public_commit_proof_v2", {
             p_session_id: sessionId,
-            p_secret_hash: await sha256Hex(secret),
+            p_secret_hash: await hashSecret(secret),
             p_request_id: requestId,
             p_quote_id: quoteId,
             p_storage_path: path,
@@ -1337,7 +1508,7 @@ function productionDependencies(): DirectOrderDependencies {
         }
         return await rpc(service, "direct_order_public_commit_proof", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requestId,
           p_storage_path: path,
         });
