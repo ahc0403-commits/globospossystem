@@ -362,6 +362,8 @@ PYSUPPORTV4
  [[ "$restored" == "t" ]] || { printf 'SUPPORT_ROLLBACK_PREDECESSOR_MISMATCH\n'; exit 1; }
  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE codex_direct_support_rollback' >/dev/null
  printf 'DIRECT_ORDER_SUPPORT_UNUSED_ROLLBACK=PASS definitions=13\n'
+ # Exercise the real PostgREST transaction mode, which direct SQL misses.
+ bash "$PHOTO_ROOT/test/direct_order_status_rpc_test.sh" "$PHOTO_CONTAINER"
  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_support_and_payments_test.sql"
  if run_sql "$PHOTO_ROOT/scripts/rollback_direct_order_support_and_payments.sql" > "$PHOTO_TMP/support_rollback.log" 2>&1; then
   printf 'SUPPORT_ROLLBACK_ERASED_ACTIVE_LEDGER\n'; exit 1
