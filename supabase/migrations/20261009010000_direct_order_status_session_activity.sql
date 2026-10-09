@@ -16,14 +16,14 @@ BEGIN
     OR has_function_privilege('anon', before_row.oid, 'EXECUTE')
     OR has_function_privilege('authenticated', before_row.oid, 'EXECUTE')
     OR NOT has_function_privilege('service_role', before_row.oid, 'EXECUTE') THEN
-    RAISE EXCEPTION 'DIRECT_ORDER_STATUS_SESSION_ACTIVITY_ANCHOR_DRIFT';
+    RAISE EXCEPTION 'STATUS_SESSION_ACTIVITY_ANCHOR_DRIFT';
   END IF;
   ALTER FUNCTION public.direct_order_public_status_v5(uuid,text,uuid) VOLATILE;
   SELECT * INTO STRICT after_row FROM pg_proc WHERE oid = before_row.oid;
   IF after_row.provolatile <> 'v'
     OR (to_jsonb(before_row) - 'provolatile') IS DISTINCT FROM
        (to_jsonb(after_row) - 'provolatile') THEN
-    RAISE EXCEPTION 'DIRECT_ORDER_STATUS_SESSION_ACTIVITY_CHANGED_CONTRACT';
+    RAISE EXCEPTION 'STATUS_SESSION_ACTIVITY_CHANGED_CONTRACT';
   END IF;
 END;
 $fix$;

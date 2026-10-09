@@ -8,7 +8,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_proc
     WHERE oid = 'public.direct_order_public_status_v5(uuid,text,uuid)'::regprocedure
       AND md5(prosrc) = '742d56d41d4b2520149a95c5b64074b9') THEN
-    RAISE EXCEPTION 'DIRECT_ORDER_STATUS_SESSION_ACTIVITY_ROLLBACK_ANCHOR_DRIFT';
+    RAISE EXCEPTION 'STATUS_SESSION_ACTIVITY_ROLLBACK_ANCHOR_DRIFT';
   END IF;
   ALTER FUNCTION public.direct_order_public_status_v5(uuid,text,uuid) STABLE;
 END;

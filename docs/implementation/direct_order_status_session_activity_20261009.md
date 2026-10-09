@@ -32,7 +32,7 @@ volatility 외 모든 필드가 동일한지 확인한다. 주문·결제·재�
   주문 접근 차단, 동일 접수 요청 재시도의 주문 1개 유지, 기존 v3/v4 응답을 검증했다.
 - 함수 정의의 volatility 외 변경 없음, 결제·POS 주문·재고 데이터 변화 없음,
   롤백 및 재적용을 검증했다. 이 API 회귀 검사는 기존 support SQL suite에 포함된다.
-- 관련 Flutter 테스트 51개 통과. `dart analyze --fatal-infos`, shell syntax,
+- 관련 Flutter 테스트 55개 통과. `dart analyze --fatal-infos`, shell syntax,
   `git diff --check` 통과.
 
 ## 운영 반영

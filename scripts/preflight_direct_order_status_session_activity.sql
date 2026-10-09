@@ -9,7 +9,7 @@ BEGIN
     OR has_function_privilege('anon', target, 'EXECUTE')
     OR has_function_privilege('authenticated', target, 'EXECUTE')
     OR NOT has_function_privilege('service_role', target, 'EXECUTE') THEN
-    RAISE EXCEPTION 'DIRECT_ORDER_STATUS_SESSION_ACTIVITY_PREFLIGHT_FAILED';
+    RAISE EXCEPTION 'STATUS_SESSION_ACTIVITY_PREFLIGHT_FAILED';
   END IF;
 END;
 $preflight$;
