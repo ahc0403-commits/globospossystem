@@ -308,6 +308,7 @@ Widget _fixtureApp({
   double? textScale,
   Future<XFile?> Function()? pickProofImage,
   DirectOrderCustomerPushService? pushService,
+  Duration statusSafetyRefreshInterval = const Duration(seconds: 20),
 }) => ProviderScope(
   child: RepaintBoundary(
     key: const Key('direct_customer_visual_boundary'),
@@ -336,6 +337,7 @@ Widget _fixtureApp({
         now: now,
         pickProofImage: pickProofImage,
         pushService: pushService,
+        statusSafetyRefreshInterval: statusSafetyRefreshInterval,
       ),
     ),
   ),
@@ -382,6 +384,7 @@ class _CustomerPushFixture extends DirectOrderCustomerPushService {
   int disables = 0;
   Completer<DirectOrderPushReadiness>? pendingEnable;
   DirectOrderPushReadiness disableResult = DirectOrderPushReadiness.off;
+  void Function(String requestId, String kind)? foreground;
   @override
   Future<DirectOrderPushReadiness> enable({
     required String slug,
@@ -391,6 +394,7 @@ class _CustomerPushFixture extends DirectOrderCustomerPushService {
     bool restore = false,
     void Function(String requestId, String kind)? onForeground,
   }) async {
+    foreground = onForeground;
     if (restore) {
       restores++;
       return DirectOrderPushReadiness.off;
@@ -3027,6 +3031,53 @@ void main() {
         reason: 'Opening existing details needs no per-item API calls',
       );
       await _captureCustomerUi(tester, 'ongoing-order-details-ko');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'foreground cooking packing and payment notices keep distinct meanings',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final push = _CustomerPushFixture();
+      final service = _StorefrontFixtureService(
+        activeStatus: const DirectOrderStatus(
+          requestId: 'fixture-request',
+          referenceCode: 'D12345678',
+          state: 'approved',
+          messages: [],
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: service,
+          pushService: push,
+          statusSafetyRefreshInterval: const Duration(hours: 1),
+          locale: const Locale('ko'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = service.fetchStatusCalls;
+      final copy = DirectOrderCopy('ko');
+      for (final notice in {
+        'cooking_complete': copy.customerProgressLabel('customer_cooked'),
+        'packing_complete': copy.customerProgressLabel('customer_packed'),
+        'payment_request': copy.quoteArrived,
+      }.entries) {
+        push.foreground!('fixture-request', notice.key);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(SnackBar),
+            matching: find.text(notice.value),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text(copy.driverHandoffNotice), findsNothing);
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+      }
+      expect(service.fetchStatusCalls, before + 3);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

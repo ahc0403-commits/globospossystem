@@ -2248,19 +2248,32 @@ class _DirectOrderStorefrontScreenState
               locale: _languageCode,
               restore: restore,
               onForeground: (requestId, kind) async {
-                final eventKey =
-                    '$requestId:${kind == 'pickup_ready' ? 'pickup-ready' : 'driver-handoff'}';
+                final notice = switch (kind) {
+                  'pickup_ready' => ('pickup-ready', _copy.pickupReadyNotice),
+                  'driver_handoff' => (
+                    'driver-handoff',
+                    _copy.driverHandoffNotice,
+                  ),
+                  'payment_request' => ('payment-request', _copy.quoteArrived),
+                  'cooking_complete' => (
+                    'cooked',
+                    _copy.customerProgressLabel('customer_cooked'),
+                  ),
+                  'packing_complete' => (
+                    'packed',
+                    _copy.customerProgressLabel('customer_packed'),
+                  ),
+                  _ => null,
+                };
+                if (notice == null) return;
+                final eventKey = '$requestId:${notice.$1}';
                 try {
                   if (await widget.service.markAlertSeen(
                         widget.slug,
                         eventKey,
                       ) &&
                       mounted) {
-                    _snack(
-                      kind == 'pickup_ready'
-                          ? _copy.pickupReadyNotice
-                          : _copy.driverHandoffNotice,
-                    );
+                    _snack(notice.$2);
                   }
                 } catch (_) {
                   // A local alert cache failure must not stop status refresh.
