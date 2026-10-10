@@ -839,6 +839,9 @@ void main() {
             legacy.einvoiceReviewIssues.map((r) => r.detail),
           );
         },
+        // Includes seven legacy paginated reads and both bounded issue lists
+        // over 1,500 fixture rows; CI must finish before the next seed resets DB.
+        timeout: const Timeout(Duration(seconds: 90)),
       );
 
       test(
