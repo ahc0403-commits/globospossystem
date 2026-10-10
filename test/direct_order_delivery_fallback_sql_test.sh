@@ -432,6 +432,73 @@ if [[ "${DIRECT_ORDER_MONEY_TEST:-0}" == "1" ]]; then
  done
 
 fi
+if [[ "${DIRECT_ORDER_PROGRESS_TEST:-0}" == "1" ]]; then
+ run_sql "$PHOTO_ROOT/test/fixtures/direct_order_customer_progress_setup.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261010030000_direct_order_customer_progress_and_utensils.sql" > "$PHOTO_TMP/progress_migration.log" 2>&1 || { cat "$PHOTO_TMP/progress_migration.log"; exit 1; }
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_customer_progress_test.sql"
+ for progress_limit in 1 10 50; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT jsonb_array_length(public.direct_order_public_orders_v4(session_id,secret_hash,$progress_limit)) FROM progress_measurement.session_scope; SELECT pg_stat_force_next_flush();" >/dev/null
+  progress_calls="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_cooking_progress(uuid[])'::regprocedure")"
+  [[ "$progress_calls" == "1" ]] || { printf 'CUSTOMER_PROGRESS_BATCH_CALLS_FAILED count=%s\n' "$progress_calls"; exit 1; }
+  progress_details="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.direct_order_fulfillment_context(uuid)'::regprocedure,'public.direct_order_public_status_v3(uuid,text,uuid)'::regprocedure)")"
+  [[ "$progress_details" == "0" ]] || { printf 'CUSTOMER_PROGRESS_DETAIL_N_PLUS_ONE\n'; exit 1; }
+  printf 'CUSTOMER_PROGRESS_LIST limit=%s cooking_batch_calls=%s detail_calls=%s\n' "$progress_limit" "$progress_calls" "$progress_details"
+ done
+ for progress_size in 1 10 50; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT public.kds_complete_kitchen_batch_v1(request_id,allocations) FROM progress_measurement.kitchen_batches WHERE size=$progress_size; SELECT pg_stat_force_next_flush();" >/dev/null
+  progress_calls="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_cooking_progress(uuid[])'::regprocedure")"
+  [[ "$progress_calls" == "1" ]] || { printf 'KITCHEN_NOTICE_N_PLUS_ONE count=%s\n' "$progress_calls"; exit 1; }
+  progress_notices="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT count(*) FROM public.direct_order_customer_events e JOIN progress_measurement.kitchen_batches b USING(request_id) WHERE b.size=$progress_size AND e.event_kind='cooking_complete'")"
+  [[ "$progress_notices" == "1" ]] || { printf 'KITCHEN_BATCH_NOTICE_INVALID count=%s\n' "$progress_notices"; exit 1; }
+  printf 'KITCHEN_CUSTOMER_NOTICE size=%s cooking_batch_calls=%s notices=%s\n' "$progress_size" "$progress_calls" "$progress_notices"
+ done
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "UPDATE public.users SET restaurant_id='d2000000-0000-4000-8000-000000000001' WHERE auth_id=auth.uid();" >/dev/null
+ for progress_limit in 1 50 200; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT jsonb_array_length(public.direct_order_staff_list_v3('d2000000-0000-4000-8000-000000000001',NULL,$progress_limit)); SELECT jsonb_array_length(public.direct_delivery_ticket_list_v3('d2000000-0000-4000-8000-000000000001',NULL,$progress_limit)); SELECT pg_stat_force_next_flush();" >/dev/null
+  progress_details="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.direct_order_fulfillment_context(uuid)'::regprocedure,'public.direct_order_staff_detail_v3(uuid,uuid)'::regprocedure,'public.direct_order_support_context(uuid,boolean)'::regprocedure)")"
+  [[ "$progress_details" == "0" ]] || { printf 'STAFF_KITCHEN_PROGRESS_N_PLUS_ONE\n'; exit 1; }
+  printf 'STAFF_KITCHEN_PROGRESS_LIST limit=%s detail_calls=%s\n' "$progress_limit" "$progress_details"
+ done
+fi
+if [[ "${DIRECT_ORDER_REQUIREMENTS_TEST:-0}" == "1" ]]; then
+ python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYREQUIREMENTS'
+from pathlib import Path
+import re,sys
+root,tmp=map(Path,sys.argv[1:]); output=''
+for file,name in [('20260811180000_fix_public_receipt_pgcrypto_schema.sql','get_public_receipt'),('20260821130000_direct_delivery_ordering.sql','direct_order_staff_message'),('20260710002000_receipt_print_queue.sql','reprint_print_job'),('20260811170000_pos_paperless_receipts.sql','claim_print_jobs'),('20260811170000_pos_paperless_receipts.sql','emergency_hold_print_job'),('20260706014000_print_routing_v1_m1.sql','print_routing_actor_can_run')]:
+ source=(root/'supabase/migrations'/file).read_text(); match=re.search(r'CREATE (?:OR REPLACE )?FUNCTION public\.'+name+r'\(',source)
+ output+=source[match.start():source.index('$$;',match.start())+3]+'\n'
+(tmp/'requirements_predecessor.sql').write_text(output)
+PYREQUIREMENTS
+ run_sql "$PHOTO_ROOT/test/fixtures/direct_order_requirements_setup.sql" >/dev/null
+ run_sql "$PHOTO_TMP/requirements_predecessor.sql" >/dev/null
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "CREATE TRIGGER emergency_hold_print_job_trigger BEFORE INSERT ON public.print_jobs FOR EACH ROW EXECUTE FUNCTION public.emergency_hold_print_job();" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261010040000_direct_order_confirmed_requirements.sql" > "$PHOTO_TMP/requirements_migration.log" 2>&1 || { cat "$PHOTO_TMP/requirements_migration.log"; exit 1; }
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_confirmed_requirements_test.sql"
+ DIRECT_ORDER_STATUS_V9_TEST=1 bash "$PHOTO_ROOT/test/direct_order_status_rpc_test.sh" "$PHOTO_CONTAINER"
+ for requirement_size in 1 10 50; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); UPDATE public.users SET restaurant_id=s.restaurant_id FROM requirement_measurement.scopes s WHERE s.size=$requirement_size AND users.auth_id=auth.uid(); SELECT jsonb_array_length(public.direct_order_staff_detail_v5(restaurant_id,request_id)->'requirements') FROM requirement_measurement.scopes WHERE size=$requirement_size; SELECT public.direct_order_staff_list_v4(restaurant_id,NULL,200) IS NOT NULL FROM requirement_measurement.scopes WHERE size=$requirement_size; SELECT pg_stat_force_next_flush();" >/dev/null
+  requirement_calls="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_requirement_snapshot(uuid)'::regprocedure")"
+  [[ "$requirement_calls" == "1" ]] || { printf 'REQUIREMENT_DETAIL_N_PLUS_ONE calls=%s\n' "$requirement_calls"; exit 1; }
+  printf 'CUSTOMER_REQUIREMENTS size=%s snapshot_calls=%s list_detail_calls=0\n' "$requirement_size" "$requirement_calls"
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT jsonb_array_length(public.direct_order_public_status_v9(session_id,secret_hash,request_id)->'requirements') FROM requirement_measurement.scopes WHERE size=$requirement_size; SELECT pg_stat_force_next_flush();" >/dev/null
+  requirement_calls="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_requirement_snapshot(uuid)'::regprocedure")"
+  [[ "$requirement_calls" == "1" ]] || { printf 'PUBLIC_REQUIREMENT_N_PLUS_ONE\n'; exit 1; }
+  printf 'PUBLIC_CUSTOMER_REQUIREMENTS size=%s snapshot_calls=%s\n' "$requirement_size" "$requirement_calls"
+ done
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "BEGIN; SELECT id FROM public.direct_order_requests WHERE id=(SELECT request_id FROM requirement_measurement.concurrent_decision) FOR UPDATE; SELECT pg_sleep(1); COMMIT;" > "$PHOTO_TMP/requirement_lock.log" 2>&1 &
+ requirement_lock_pid=$!
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT public.direct_order_public_decide_requirement(session_id,secret_hash,request_id,requirement_id,version,reply_message_id,true)->>'request_id' FROM requirement_measurement.concurrent_decision" > "$PHOTO_TMP/requirement_race_a.log" 2>&1 &
+ requirement_a_pid=$!
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT public.direct_order_public_decide_requirement(session_id,secret_hash,request_id,requirement_id,version,reply_message_id,true)->>'request_id' FROM requirement_measurement.concurrent_decision" > "$PHOTO_TMP/requirement_race_b.log" 2>&1 &
+ requirement_b_pid=$!
+ wait "$requirement_lock_pid" || { cat "$PHOTO_TMP/requirement_lock.log"; exit 1; }
+ wait "$requirement_a_pid" || { cat "$PHOTO_TMP/requirement_race_a.log"; exit 1; }
+ wait "$requirement_b_pid" || { cat "$PHOTO_TMP/requirement_race_b.log"; exit 1; }
+ requirement_confirmations="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT count(*) FROM public.direct_order_messages m JOIN requirement_measurement.concurrent_decision s USING(request_id) WHERE m.metadata->>'requirement_accepted'='true'")"
+ [[ "$requirement_confirmations" == "1" ]] || { printf 'CONCURRENT_REQUEST_CONFIRMATION_DUPLICATED\n'; exit 1; }
+ printf 'CONCURRENT_REQUEST_CONFIRMATION=PASS confirmations=1\n'
+fi
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

@@ -63,9 +63,11 @@ class DigitalReceipt {
     this.legalName,
     this.taxCode,
     this.dinerCount,
+    this.utensilsRequested = true,
     this.fulfillmentMethod,
     this.directOrderReference,
     this.orderNotes,
+    this.requestAddenda = const [],
   });
 
   final String id;
@@ -90,16 +92,20 @@ class DigitalReceipt {
   final String paymentMethod;
   final bool isService;
   final int? dinerCount;
+  final bool utensilsRequested;
   final String? fulfillmentMethod;
   final String? directOrderReference;
   final String? orderNotes;
+  final List<String> requestAddenda;
   bool get isDirectOrder =>
       fulfillmentMethod != null ||
       directOrderReference != null ||
       dinerCount != null;
   String get packingDinerLabelVi =>
       dinerCount == null ? 'Số người: Chưa nhập' : 'Số người: $dinerCount';
-  String get packingUtensilLabelVi => dinerCount == null
+  String get packingUtensilLabelVi => !utensilsRequested
+      ? 'Dụng cụ: Không cần'
+      : dinerCount == null
       ? 'Dụng cụ: Cần nhân viên kiểm tra'
       : 'Dụng cụ: $dinerCount bộ';
 
@@ -155,9 +161,17 @@ class DigitalReceipt {
       paymentMethod: json['payment_method']?.toString() ?? 'OTHER',
       isService: json['is_service'] == true,
       dinerCount: _optionalDinerCount(json['diner_count']),
+      utensilsRequested: json['utensils_requested'] != false,
       fulfillmentMethod: _optionalText(json['fulfillment_method']),
       directOrderReference: _optionalText(json['direct_order_reference']),
       orderNotes: _optionalText(json['order_notes']),
+      requestAddenda: json['request_addenda'] is List
+          ? (json['request_addenda'] as List)
+                .whereType<Map>()
+                .map((row) => row['order_notes']?.toString() ?? '')
+                .where((text) => text.isNotEmpty)
+                .toList(growable: false)
+          : const [],
     );
   }
 }

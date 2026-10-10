@@ -1240,6 +1240,7 @@ class DirectOrderCustomerSupportPanel extends StatelessWidget {
     required this.storeId,
     required this.service,
     required this.onChanged,
+    this.showCharges = true,
   });
   final DirectOrderStatus status;
   final DirectOrderSession session;
@@ -1247,6 +1248,7 @@ class DirectOrderCustomerSupportPanel extends StatelessWidget {
   final String storeId;
   final DirectOrderService service;
   final Future<void> Function() onChanged;
+  final bool showCharges;
   @override
   Widget build(BuildContext context) {
     final copy = DirectOrderSupportCopy(
@@ -1254,7 +1256,7 @@ class DirectOrderCustomerSupportPanel extends StatelessWidget {
     );
     final charges = supportRows(
       status.support['charges'],
-    ).where((c) => c['status'] != 'void').toList();
+    ).where((c) => showCharges && c['status'] != 'void').toList();
     if (charges.isEmpty &&
         status.support['delivery_fee_finalized'] != false &&
         supportNumber(status.support['pickup_delivery_refund_due']) <= 0 &&

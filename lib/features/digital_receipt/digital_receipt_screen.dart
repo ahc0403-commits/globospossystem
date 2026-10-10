@@ -279,6 +279,14 @@ class _ReceiptPaper extends StatelessWidget {
               ),
               const Divider(height: 28),
             ],
+            for (final addendum in receipt.requestAddenda) ...[
+              const Text(
+                'Yêu cầu bổ sung đã thống nhất',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(addendum),
+              const Divider(height: 28),
+            ],
             for (final item in billableItems)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 7),

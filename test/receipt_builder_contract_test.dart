@@ -44,6 +44,66 @@ void main() {
     'tray': ReceiptBuilder.buildTrayLabel,
     'confirmation': ReceiptBuilder.buildConfirmationSlip,
   };
+  for (final form in forms.entries) {
+    test('${form.key} keeps three diners while omitting utensils', () async {
+      final ticket = PrintTicket.fromPayload({
+        'ticket': form.key,
+        'items': <dynamic>[],
+        'diner_count': 3,
+        'fulfillment_method': 'delivery',
+        'utensils_requested': false,
+      });
+      final text = String.fromCharCodes(await form.value(ticket));
+      expect(text, contains('SO NGUOI: 3'));
+      expect(text, contains('DUNG CU: KHONG CAN'));
+      expect(text, isNot(contains('DUNG CU: 3 BO')));
+    });
+  }
+  test(
+    'queued driver receipt retains diners and omits disposable utensils',
+    () async {
+      final ticket = PrintTicket.fromPayload({
+        'ticket': 'delivery_driver_receipt',
+        'diner_count': 3,
+        'utensils_requested': false,
+        'fulfillment_method': 'delivery',
+        'final_total': 108000,
+        'items': <dynamic>[],
+      });
+      final text = String.fromCharCodes(
+        await ReceiptBuilder.buildKitchenTicket(ticket),
+      );
+      expect(text, contains('SO NGUOI: 3'));
+      expect(text, contains('DUNG CU: KHONG CAN'));
+      expect(text, contains('108,000 VND'));
+    },
+  );
+  test(
+    'queued and native customer receipts omit utensils without changing totals',
+    () async {
+      final receipt = QueuedPaymentReceipt.fromPayload({
+        'diner_count': 3,
+        'utensils_requested': false,
+        'total_amount': 108000,
+        'items': <dynamic>[],
+      });
+      final text = String.fromCharCodes(
+        await ReceiptBuilder.buildPaymentReceipt(
+          restaurantName: 'GLOBOS',
+          tableNumber: '-',
+          items: receipt.items,
+          totalAmount: receipt.totalAmount,
+          paymentMethod: 'banktransfer',
+          paidAt: DateTime.utc(2026),
+          dinerCount: receipt.dinerCount,
+          utensilsRequested: receipt.utensilsRequested,
+        ),
+      );
+      expect(text, contains('SO NGUOI: 3'));
+      expect(text, contains('DUNG CU: KHONG CAN'));
+      expect(text, contains('108,000 VND'));
+    },
+  );
   test(
     'queued payment receipt prints customer and per-menu requests',
     () async {

@@ -71,13 +71,18 @@ def counts():
                "(SELECT count(*) FROM inventory_transactions))")
 
 import os
-if os.environ.get('DIRECT_ORDER_STATUS_V7_TEST') == '1':
+if os.environ.get('DIRECT_ORDER_STATUS_V7_TEST') == '1' or os.environ.get('DIRECT_ORDER_STATUS_V9_TEST') == '1':
     data=json.loads(sql("SELECT jsonb_build_object('p_session_id',r.session_id,'p_secret_hash',s.secret_hash,'p_request_id',r.id) FROM direct_order_requests r JOIN direct_order_sessions s ON s.id=r.session_id WHERE public.direct_order_access_is_open(r.id) LIMIT 1"))
     before=counts()
-    code,value=rpc('direct_order_public_status_v7',data)
-    assert code==200 and value['request_id']==data['p_request_id'],(code,value)
-    assert counts()==before
-    print('DIRECT_ORDER_STATUS_V7_POSTGREST=PASS http=200 session_touch=PASS business_writes=0')
+    versions = (8,9) if os.environ.get('DIRECT_ORDER_STATUS_V9_TEST') == '1' else (7,)
+    for version in versions:
+        sql(f"UPDATE direct_order_sessions SET last_seen_at=now()-interval '2 hours' WHERE id='{data['p_session_id']}'")
+        code,value=rpc(f'direct_order_public_status_v{version}',data)
+        assert code==200 and value['request_id']==data['p_request_id'],(code,value)
+        assert sql(f"SELECT last_seen_at>now()-interval '1 minute' FROM direct_order_sessions WHERE id='{data['p_session_id']}'")=='t'
+        assert counts()==before
+        if version==9: assert isinstance(value['requirements'],list)
+        print(f'DIRECT_ORDER_STATUS_V{version}_POSTGREST=PASS http=200 session_touch=PASS business_writes=0')
     raise SystemExit(0)
 target = "'public.direct_order_public_status_v5(uuid,text,uuid)'::regprocedure"
 original = sql(f'SELECT pg_get_functiondef({target})')

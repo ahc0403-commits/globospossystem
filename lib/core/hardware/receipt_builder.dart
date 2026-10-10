@@ -30,6 +30,7 @@ class ReceiptBuilder {
     String? directDeliveryPaymentMode,
     String? directReferenceCode,
     int? dinerCount,
+    bool utensilsRequested = true,
     String? fulfillmentMethod,
     String? directOrderReference,
     String? orderNotes,
@@ -149,6 +150,7 @@ class ReceiptBuilder {
           generator,
           dinerCount,
           fulfillmentMethod == directFulfillmentType ? null : fulfillmentMethod,
+          utensilsRequested,
         ),
       );
       if (refundedTotal > 0) {
@@ -325,8 +327,10 @@ class ReceiptBuilder {
     required DateTime printedAt,
     String deliveryPaymentMode = 'store_prepaid',
     int? dinerCount,
+    bool utensilsRequested = true,
     bool isPickup = false,
     double refundedTotal = 0,
+    String? orderNotes,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -380,6 +384,7 @@ class ReceiptBuilder {
         generator,
         dinerCount,
         isPickup ? 'pickup' : 'delivery',
+        utensilsRequested,
       ),
     );
     if (refundedTotal > 0) {
@@ -417,6 +422,12 @@ class ReceiptBuilder {
       );
     }
     bytes.addAll(generator.hr());
+    if (orderNotes?.trim().isNotEmpty == true) {
+      bytes.addAll(
+        generator.text(_escText('Yeu cau da thong nhat: $orderNotes')),
+      );
+      bytes.addAll(generator.hr());
+    }
     bytes.addAll(_amountRow(generator, 'Tien mon', menuTotal));
     bytes.addAll(_amountRow(generator, 'Phi dich vu', serviceChargeTotal));
     if (deliveryPaymentMode == 'store_prepaid') {
@@ -490,6 +501,7 @@ class ReceiptBuilder {
     Generator generator,
     int? count,
     String? method,
+    bool utensilsRequested,
   ) {
     final bytes = <int>[];
     if (method != null) {
@@ -506,7 +518,7 @@ class ReceiptBuilder {
       );
       bytes.addAll(
         generator.text(
-          'DUNG CU: CAN KIEM TRA',
+          utensilsRequested ? 'DUNG CU: CAN KIEM TRA' : 'DUNG CU: KHONG CAN',
           styles: const PosStyles(bold: true, height: PosTextSize.size2),
         ),
       );
@@ -516,7 +528,7 @@ class ReceiptBuilder {
       );
       bytes.addAll(
         generator.text(
-          'DUNG CU: $count BO',
+          utensilsRequested ? 'DUNG CU: $count BO' : 'DUNG CU: KHONG CAN',
           styles: const PosStyles(bold: true, height: PosTextSize.size2),
         ),
       );
@@ -541,7 +553,36 @@ class ReceiptBuilder {
         generator,
         ticket.dinerCount,
         ticket.fulfillmentMethod,
+        ticket.utensilsRequested,
       ),
+    ];
+  }
+
+  static Future<List<int>> buildRequestUpdate(PrintTicket ticket) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    final confirmedAt = DateTime.tryParse(ticket.printedAt);
+    return [
+      ...generator.text(
+        'YEU CAU BO SUNG DA THONG NHAT',
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+      ...generator.text(
+        _escText('Ma don: ${ticket.directOrderReference ?? ticket.ticketCode}'),
+      ),
+      if (confirmedAt != null)
+        ...generator.text(
+          _escText('Xac nhan: ${TimeUtils.formatDateTime(confirmedAt)}'),
+        ),
+      ...generator.hr(),
+      ...generator.text(
+        _escText(ticket.orderNotes ?? ''),
+        styles: const PosStyles(bold: true),
+      ),
+      ...generator.hr(),
+      ...generator.text('Phieu bo sung - khong thu tien'),
+      ...generator.feed(3),
+      ...generator.cut(),
     ];
   }
 
@@ -563,8 +604,10 @@ class ReceiptBuilder {
         printedAt: driverReceipt.printedAt,
         deliveryPaymentMode: driverReceipt.deliveryPaymentMode,
         dinerCount: driverReceipt.dinerCount,
+        utensilsRequested: driverReceipt.utensilsRequested,
         isPickup: driverReceipt.isPickup,
         refundedTotal: driverReceipt.refundedTotal,
+        orderNotes: driverReceipt.orderNotes,
       );
     }
 
@@ -1022,6 +1065,7 @@ class PrintTicket {
     required this.items,
     this.orderNotes,
     this.dinerCount,
+    this.utensilsRequested = true,
     this.fulfillmentMethod,
     this.directOrderReference,
     this.deliveryDriverReceipt,
@@ -1039,6 +1083,7 @@ class PrintTicket {
   final List<PrintTicketItem> items;
   final String? orderNotes;
   final int? dinerCount;
+  final bool utensilsRequested;
   final String? fulfillmentMethod;
   final String? directOrderReference;
   final QueuedDeliveryDriverReceipt? deliveryDriverReceipt;
@@ -1073,6 +1118,7 @@ class PrintTicket {
           .toList(),
       orderNotes: payload['order_notes']?.toString(),
       dinerCount: _packingDinerCount(payload['diner_count']),
+      utensilsRequested: payload['utensils_requested'] != false,
       fulfillmentMethod: payload['fulfillment_method']?.toString(),
       directOrderReference: payload['direct_order_reference']?.toString(),
       deliveryDriverReceipt: ticket == 'delivery_driver_receipt'
@@ -1190,6 +1236,7 @@ class QueuedPaymentReceipt {
     required this.receivedAmount,
     required this.changeAmount,
     this.dinerCount,
+    this.utensilsRequested = true,
     this.fulfillmentMethod,
     this.directOrderReference,
     this.orderNotes,
@@ -1217,6 +1264,7 @@ class QueuedPaymentReceipt {
   final double? receivedAmount;
   final double changeAmount;
   final int? dinerCount;
+  final bool utensilsRequested;
   final String? fulfillmentMethod;
   final String? directOrderReference;
   final String? orderNotes;
@@ -1239,6 +1287,7 @@ class QueuedPaymentReceipt {
           ?.toString(),
       directReferenceCode: payload['direct_reference_code']?.toString(),
       dinerCount: _packingDinerCount(payload['diner_count']),
+      utensilsRequested: payload['utensils_requested'] != false,
       fulfillmentMethod: payload['fulfillment_method']?.toString(),
       directOrderReference: payload['direct_order_reference']?.toString(),
       refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
@@ -1345,8 +1394,10 @@ class QueuedDeliveryDriverReceipt {
     required this.finalTotal,
     required this.printedAt,
     this.dinerCount,
+    this.utensilsRequested = true,
     this.isPickup = false,
     this.refundedTotal = 0,
+    this.orderNotes,
   });
 
   final String restaurantName;
@@ -1363,8 +1414,10 @@ class QueuedDeliveryDriverReceipt {
   final DateTime printedAt;
   final String deliveryPaymentMode;
   final int? dinerCount;
+  final bool utensilsRequested;
   final bool isPickup;
   final double refundedTotal;
+  final String? orderNotes;
 
   factory QueuedDeliveryDriverReceipt.fromPayload(
     Map<String, dynamic> payload,
@@ -1375,7 +1428,9 @@ class QueuedDeliveryDriverReceipt {
       deliveryPaymentMode:
           payload['direct_delivery_payment_mode']?.toString() ??
           'store_prepaid',
+      orderNotes: payload['order_notes']?.toString(),
       dinerCount: _packingDinerCount(payload['diner_count']),
+      utensilsRequested: payload['utensils_requested'] != false,
       isPickup: payload['fulfillment_method'] == 'pickup',
       refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',

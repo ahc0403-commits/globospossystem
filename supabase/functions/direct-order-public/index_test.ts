@@ -7,6 +7,7 @@ import {
   directOrderDinerCount,
   directOrderLocale,
   directOrderPushSubscriptionArgs,
+  directOrderRequirementDecisionArgs,
   directOrderSecretKeyName,
   type JsonObject,
   normalizeRpcError,
@@ -320,6 +321,9 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "submit",
       "submit_v2",
       "submit_v3",
+      "status_v8",
+      "status_v9",
+      "decide_requirement",
       "resume_storefront",
       "resume_order",
       "issue_order_access",
@@ -333,6 +337,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "status_v7",
       "orders_v2",
       "orders_v3",
+      "orders_v4",
       "push_subscription",
       "message",
       "charge_consent",
@@ -480,7 +485,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    161,
+    173,
     "registered SQL error count",
   );
   assertEquals(
@@ -829,4 +834,56 @@ Deno.test("order links exchange credentials internally and reject broader access
     }
   }
   assertEquals(calls.length, 2, "forbidden actions never call backend");
+  for (const action of ["status_v9", "decide_requirement"]) {
+    const scoped = await resolveOrderScopedRequest(client, action, input);
+    assertEquals(scoped.requestId, order, "new actions retain order scope");
+  }
+});
+
+Deno.test("request agreement binds the exact reply, version and freeform followup", () => {
+  const id = "90000000-0000-4000-8000-000000000001";
+  const body = {
+    session_id: id,
+    request_id: id,
+    requirement_id: id,
+    reply_message_id: id,
+    expected_version: 2,
+    accept: true,
+  };
+  const accepted = directOrderRequirementDecisionArgs(body);
+  assertEquals(accepted.p_expected_version, 2, "optimistic version");
+  assertEquals(accepted.p_reply_message_id, id, "linked reply");
+  assertEquals(
+    accepted.p_body,
+    null,
+    "confirmation has no invented custom reply",
+  );
+  const followup = directOrderRequirementDecisionArgs({
+    ...body,
+    accept: false,
+    message: "소스를 별도로 주세요",
+  });
+  assertEquals(
+    followup.p_body,
+    "소스를 별도로 주세요",
+    "freeform text retained",
+  );
+  for (
+    const invalid of [
+      { ...body, expected_version: 1.5 },
+      { ...body, expected_version: 0 },
+      { ...body, accept: "yes" },
+      { ...body, message: "different agreement" },
+      { ...body, accept: false, message: "" },
+    ]
+  ) {
+    try {
+      directOrderRequirementDecisionArgs(invalid);
+      throw new Error("invalid agreement accepted");
+    } catch (error) {
+      if (!(error instanceof SafeHttpError) || error.status !== 400) {
+        throw error;
+      }
+    }
+  }
 });

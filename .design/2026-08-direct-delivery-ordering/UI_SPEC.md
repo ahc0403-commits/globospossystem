@@ -227,3 +227,55 @@ immutable. The closing denomination dialog subtracts all these cash movements.
 Chat, order notes, item requests, and quote notes show available viewer-locale
 translations and an original-text toggle. Pending/failed translations preserve
 the visible original. A failed translation can be retried by the cashier.
+
+## 2026-10-10 mobile customer payment visibility
+
+The customer status surface keeps the current payment amount above the scrolling
+conversation and the message composer below it. Navigation tabs collapse while
+the phone keyboard is open. The three-step progress is compact and horizontal.
+Sending a message brings that message into view without moving the pinned amount.
+The latest quote message renders an amount card with amount-detail and transfer
+actions; earlier quote messages retain their stored amount and cannot open a
+payment action. A current quote card is still shown if its message is absent
+from the returned history. Quote sounds remain deduplicated; the persistent
+amount/card replaces the transient quote snackbar.
+
+Payment and amount details open a mobile bottom sheet. An open sheet follows
+the current order snapshot, updates its amount/QR when the quote changes, and
+removes transfer actions when payment becomes ineligible or enters review.
+Existing proof selection, preview, retries and cashier approval remain in use.
+
+Confirmed underpayments use the same chat card, pinned amount and bottom sheet.
+The amount to transfer comes from server `food_due`, with the original quote
+and confirmed `food_received` shown separately. Before a stored balance charge
+exists, the customer sees the shortage and an instructions-pending notice with
+no transfer QR. An active balance charge opens a QR for that shortage and the
+existing charge-scoped proof uploader. `review`, `paid`, `void`, exception and
+superseded balance charges cannot request another transfer. Additional delivery
+charges use the same card presentation. Opening these views adds no API calls.
+
+### 2026-10-10 customer mobile progress (supersedes three customer stages)
+
+The same order/chat screen shows a compact current fulfillment card above chat.
+Payment is a separate badge. Detailed progress and packing/provider/financial
+information expand on demand and also remain available in order details.
+The cashier's existing three filter groups stay unchanged.
+
+Customer stages: store reviewing → awaiting payment → checking transfer → food
+preparation → food cooked / packing → packed / awaiting driver → with driver /
+on the way → delivered. Pickup uses ready for pickup / collected. Cancellation,
+rejection and expiry take priority. Cooking requires complete KDS quantities;
+packing requires ready, handoff requires the existing dispatch workflow. Normal
+completion closes customer access/polling; unsettled refunds and evidence access
+remain supported, according to server `support.access_open`.
+
+HTTPS shipping links have explicit open and copy actions, plus a selectable exact
+URL. The card, legacy grab_link and URLs in ordinary chat share the component.
+Link opening failures retain copy/manual selection. Contact-only delivery has no
+invented tracking link. URLs are never translated.
+
+Diners initially show 1 (range 1..100). Disposable utensils have independent
+receive-per-diner / no-utensils choices. Food containers are always included.
+Opt-out persists after diner edits and flows to staff packing and receipts.
+Cooking and packing chat/push notices deduplicate by request/event; no new
+cashier button or extra action is introduced.

@@ -542,6 +542,7 @@ class EmergencyFulfillmentOrder {
     required this.items,
     this.salesChannel = 'dine_in',
     this.directFulfillmentType,
+    this.directOrderPacking,
     this.lastActionId,
     this.lastActionAt,
     this.stationStartedAt,
@@ -560,6 +561,7 @@ class EmergencyFulfillmentOrder {
   final List<EmergencyFulfillmentItem> items;
   final String salesChannel;
   final String? directFulfillmentType;
+  final Map<String, dynamic>? directOrderPacking;
   final String? lastActionId;
   final DateTime? lastActionAt;
   final DateTime? stationStartedAt;
@@ -866,6 +868,7 @@ class EmergencyFulfillmentOrder {
     items: items ?? this.items,
     salesChannel: salesChannel ?? this.salesChannel,
     directFulfillmentType: directFulfillmentType ?? this.directFulfillmentType,
+    directOrderPacking: directOrderPacking,
     lastActionId: clearLastAction ? null : (lastActionId ?? this.lastActionId),
     lastActionAt: clearLastAction ? null : (lastActionAt ?? this.lastActionAt),
     stationStartedAt: stationStartedAt ?? this.stationStartedAt,
@@ -908,6 +911,9 @@ class EmergencyFulfillmentOrder {
       floorLabel: json['floor_label']?.toString() ?? '1F',
       salesChannel: json['sales_channel']?.toString() ?? 'dine_in',
       directFulfillmentType: json['direct_fulfillment_type']?.toString(),
+      directOrderPacking: json['direct_order_packing'] is Map
+          ? Map<String, dynamic>.from(json['direct_order_packing'] as Map)
+          : null,
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now().toUtc(),

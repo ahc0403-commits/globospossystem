@@ -6,6 +6,19 @@ import 'package:globos_pos_system/features/digital_receipt/digital_receipt_model
 import 'package:pdf/pdf.dart';
 
 void main() {
+  test('digital receipt stores utensils separately from the diner count', () {
+    final receipt = DigitalReceipt.fromJson({
+      'diner_count': 3,
+      'utensils_requested': false,
+    });
+    expect(receipt.dinerCount, 3);
+    expect(receipt.packingUtensilLabelVi, 'Dụng cụ: Không cần');
+    expect(
+      DigitalReceipt.fromJson({'diner_count': 3}).packingUtensilLabelVi,
+      'Dụng cụ: 3 bộ',
+    );
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(

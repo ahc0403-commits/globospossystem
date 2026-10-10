@@ -1,3 +1,5 @@
+import '../direct_order/direct_order_copy.dart';
+import '../direct_order/direct_order_requirements.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -1599,6 +1601,27 @@ class _EmergencyOrderCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (order.directOrderPacking != null)
+                        Text(
+                          DirectOrderCopy(
+                            Localizations.localeOf(context).languageCode,
+                          ).packingCount(
+                            (order.directOrderPacking!['diner_count'] as num?)
+                                ?.toInt(),
+                            utensilsRequested:
+                                order
+                                    .directOrderPacking!['utensils_requested'] !=
+                                false,
+                          ),
+                          key: Key('emergency_order_packing_${order.orderId}'),
+                          maxLines: 2,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      DirectOrderConfirmedNotes(
+                        text: order.directOrderPacking?['confirmed_notes']
+                            ?.toString(),
+                      ),
                       Expanded(
                         child: _EmergencyCardMenuList(
                           items: visibleItems,
@@ -1922,6 +1945,25 @@ class _EmergencyOrderDetails extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        if (order.directOrderPacking != null)
+                          Text(
+                            DirectOrderCopy(
+                              Localizations.localeOf(context).languageCode,
+                            ).packingCount(
+                              (order.directOrderPacking!['diner_count'] as num?)
+                                  ?.toInt(),
+                              utensilsRequested:
+                                  order
+                                      .directOrderPacking!['utensils_requested'] !=
+                                  false,
+                            ),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        DirectOrderConfirmedNotes(
+                          text: order.directOrderPacking?['confirmed_notes']
+                              ?.toString(),
                         ),
                         Text(
                           order.isDelivery || order.isDirectPickup

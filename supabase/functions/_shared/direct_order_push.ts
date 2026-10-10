@@ -7,7 +7,12 @@ export interface DirectOrderPushDelivery {
   id: string;
   leaseId: string;
   eventId: string;
-  eventKind: "pickup_ready" | "driver_handoff" | "payment_request";
+  eventKind:
+    | "pickup_ready"
+    | "driver_handoff"
+    | "payment_request"
+    | "cooking_complete"
+    | "packing_complete";
   requestId: string;
   referenceCode: string;
   slug: string;
@@ -21,7 +26,13 @@ export function mapDirectOrderPush(
   row: Record<string, unknown>,
 ): DirectOrderPushDelivery {
   if (
-    !["pickup_ready", "driver_handoff", "payment_request"].includes(
+    ![
+      "pickup_ready",
+      "driver_handoff",
+      "payment_request",
+      "cooking_complete",
+      "packing_complete",
+    ].includes(
       String(row.event_kind),
     ) ||
     !["ko", "vi", "en"].includes(String(row.locale)) ||
@@ -55,7 +66,20 @@ export function buildDirectOrderFcmMessage(
   }
   const pickup = delivery.eventKind === "pickup_ready";
   const payment = delivery.eventKind === "payment_request";
-  const body = payment
+  const progress = delivery.eventKind === "cooking_complete"
+    ? {
+      ko: "음식 조리가 완료되어 포장하고 있습니다.",
+      vi: "Món đã làm xong, đang đóng gói.",
+      en: "Your food is ready and being packed.",
+    }[delivery.locale]
+    : delivery.eventKind === "packing_complete"
+    ? {
+      ko: "조리와 포장이 완료되어 기사 전달을 기다리고 있습니다.",
+      vi: "Đã đóng gói, đang chờ bàn giao tài xế.",
+      en: "Your order is packed and awaiting the driver.",
+    }[delivery.locale]
+    : null;
+  const body = progress ?? (payment
     ? ({
       ko:
         "결제 요청이 도착했습니다. 주문 화면에서 금액을 확인하고 결제해 주세요.",
@@ -74,7 +98,7 @@ export function buildDirectOrderFcmMessage(
       : "Your order has been handed to the delivery driver and is on its way."
     : pickup
     ? "Đơn hàng đã chuẩn bị xong. Vui lòng nhận tại quầy cửa hàng."
-    : "Đơn hàng đã được giao cho tài xế và đang trên đường giao.";
+    : "Đơn hàng đã được giao cho tài xế và đang trên đường giao.");
   const title = `${delivery.storeName} · #${delivery.referenceCode}`;
   const url = new URL(`/#/order/${delivery.slug}`, base).href;
   return {

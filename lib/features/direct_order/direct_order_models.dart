@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../core/i18n/menu_localization.dart';
+import 'direct_order_requirements.dart';
 
 Never _invalidModel(String field) =>
     throw FormatException('DIRECT_ORDER_RESPONSE_INVALID:$field');
@@ -573,6 +574,12 @@ class DirectOrderSummary {
     this.finalTotal,
     this.fulfillmentStatus,
     this.completedAt,
+    this.quoteId,
+    this.quoteVersion,
+    this.proofReviewId,
+    this.cookingComplete = false,
+    this.hasDispatch = false,
+    this.fulfillmentMethod = 'delivery',
   });
 
   final String requestId;
@@ -586,6 +593,34 @@ class DirectOrderSummary {
   final String? fulfillmentStatus;
   final DateTime? completedAt;
   final bool hasOpenProofReview;
+  final String? quoteId;
+  final int? quoteVersion;
+  final String? proofReviewId;
+  final bool cookingComplete;
+  final bool hasDispatch;
+  final String fulfillmentMethod;
+
+  factory DirectOrderSummary.fromStatus(DirectOrderStatus status) =>
+      DirectOrderSummary(
+        requestId: status.requestId,
+        referenceCode: status.referenceCode,
+        state: status.state,
+        createdAt: status.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+        itemCount: status.items.fold(0, (sum, item) => sum + item.quantity),
+        hasOpenProofReview: status.proofReview?.canResubmit == true,
+        finalTotal: status.quote?.finalTotal,
+        fulfillmentStatus: status.fulfillmentStatus,
+        completedAt: status.completedAt,
+        quoteId: status.quote?.id,
+        quoteVersion: status.quote?.version,
+        proofReviewId: status.proofReview?.id,
+        cookingComplete: status.delivery?.cookingComplete ?? false,
+        hasDispatch: status.hasDriverHandoff,
+        fulfillmentMethod: status.delivery?.method ?? 'delivery',
+        fulfillmentType: status.isPickup
+            ? DirectOrderFulfillmentType.pickup
+            : status.fulfillmentType,
+      );
 
   bool get isTerminal =>
       const {'completed', 'cancelled'}.contains(fulfillmentStatus) ||
@@ -603,8 +638,32 @@ class DirectOrderSummary {
       'fulfillment_status',
       'completed_at',
       'has_open_proof_review',
+      'quote_id',
+      'quote_version',
+      'proof_review_id',
+      'cooking_complete',
+      'has_dispatch',
+      'fulfillment_method',
     });
+    final quoteVersion = json['quote_version'];
+    final method = _optionalString(json, 'fulfillment_method') ?? 'delivery';
+    if (quoteVersion != null && (quoteVersion is! int || quoteVersion < 1)) {
+      _invalidModel('quote_version');
+    }
+    if (!{'delivery', 'pickup'}.contains(method)) {
+      _invalidModel('fulfillment_method');
+    }
     return DirectOrderSummary(
+      quoteId: _optionalString(json, 'quote_id'),
+      quoteVersion: quoteVersion as int?,
+      proofReviewId: _optionalString(json, 'proof_review_id'),
+      cookingComplete: json.containsKey('cooking_complete')
+          ? _requiredBool(json, 'cooking_complete')
+          : false,
+      hasDispatch: json.containsKey('has_dispatch')
+          ? _requiredBool(json, 'has_dispatch')
+          : false,
+      fulfillmentMethod: method,
       requestId: _requiredString(json, 'request_id'),
       fulfillmentType: DirectOrderFulfillmentType.fromValue(
         json['fulfillment_type'],
@@ -786,6 +845,7 @@ class DirectOrderStatus {
     this.delivery,
     this.customer,
     this.support = const {},
+    this.requirements = const [],
   });
 
   final String requestId;
@@ -808,6 +868,12 @@ class DirectOrderStatus {
   final DirectOrderDelivery? delivery;
   final DirectOrderCustomerDetails? customer;
   final Map<String, dynamic> support;
+  final List<DirectOrderRequirement> requirements;
+  bool get hasDriverHandoff =>
+      delivery?.provider != null ||
+      delivery?.trackingUrl != null ||
+      delivery?.driverContact != null ||
+      grabTrackingUrl != null;
 
   factory DirectOrderStatus.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
@@ -826,6 +892,7 @@ class DirectOrderStatus {
       'delivery',
       'customer',
       'support',
+      'requirements',
     });
     final quoteRaw = json['quote'];
     if (quoteRaw != null && quoteRaw is! Map) _invalidModel('quote');
@@ -881,6 +948,7 @@ class DirectOrderStatus {
       _invalidModel('proof_review');
     }
     return DirectOrderStatus(
+      requirements: DirectOrderRequirement.fromRows(json['requirements']),
       support: json['support'] is Map
           ? Map<String, dynamic>.from(json['support'] as Map)
           : const {},
@@ -941,6 +1009,8 @@ class DirectOrderStatus {
 class DirectOrderDelivery {
   const DirectOrderDelivery({
     this.dinerCount,
+    this.utensilsRequested = true,
+    this.cookingComplete = false,
     this.method = 'delivery',
     this.version = 1,
     this.storeName = '',
@@ -954,6 +1024,8 @@ class DirectOrderDelivery {
     this.refundedTotal = 0,
   });
   final int? dinerCount;
+  final bool utensilsRequested;
+  final bool cookingComplete;
   final String method;
   final int version;
   final String storeName;
@@ -969,6 +1041,8 @@ class DirectOrderDelivery {
   factory DirectOrderDelivery.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
       'diner_count',
+      'utensils_requested',
+      'cooking_complete',
       'method',
       'version',
       'store_name',
@@ -994,6 +1068,12 @@ class DirectOrderDelivery {
     if (offer != null && offer is! Map) _invalidModel('pickup_offer');
     return DirectOrderDelivery(
       dinerCount: count as int?,
+      utensilsRequested: json.containsKey('utensils_requested')
+          ? _requiredBool(json, 'utensils_requested')
+          : true,
+      cookingComplete: json.containsKey('cooking_complete')
+          ? _requiredBool(json, 'cooking_complete')
+          : false,
       method: method,
       version: version,
       storeName: _requiredString(json, 'store_name'),

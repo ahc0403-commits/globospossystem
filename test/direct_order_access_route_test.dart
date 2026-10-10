@@ -213,7 +213,10 @@ void main() {
     service.overpaymentDue = 0;
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
-    expect(find.text(DirectOrderCopy('en').orderClosed), findsOneWidget);
+    expect(
+      find.textContaining(DirectOrderCopy('en').orderClosed),
+      findsOneWidget,
+    );
     expect(
       preferences.getString('direct_order_access_v1_fixture_$_request'),
       isNull,
@@ -238,7 +241,10 @@ void main() {
       service.chatOpen = false;
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
-      expect(find.text(DirectOrderCopy('en').orderClosed), findsOneWidget);
+      expect(
+        find.textContaining(DirectOrderCopy('en').orderClosed),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       router.dispose();
@@ -264,7 +270,10 @@ void main() {
       service.pickupRefunded = true;
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
-      expect(find.text(DirectOrderCopy('en').orderClosed), findsOneWidget);
+      expect(
+        find.textContaining(DirectOrderCopy('en').orderClosed),
+        findsOneWidget,
+      );
       expect(
         preferences.getString('direct_order_access_v1_fixture_$_request'),
         isNull,
@@ -327,7 +336,10 @@ void main() {
       );
       await service.saveAddress('fixture', address);
       final router = await _pump(tester, service);
-      expect(find.text(DirectOrderCopy('en').orderClosed), findsOneWidget);
+      expect(
+        find.textContaining(DirectOrderCopy('en').orderClosed),
+        findsOneWidget,
+      );
       expect(
         preferences.getString('direct_order_access_v1_fixture_$_request'),
         isNull,

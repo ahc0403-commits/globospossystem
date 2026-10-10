@@ -859,6 +859,49 @@ void main() {
         expect(backend.claimedStoreId, isNull);
       },
     );
+    test(
+      'request addendum goes through the queue as a memo with one destination batch',
+      () async {
+        final backend = _FakePrintJobBackend(
+          jobs: [
+            PrintAgentJob.fromJson({
+              'id': 'addendum',
+              'destination_id': 'receipt',
+              'payload': {
+                'ticket': 'request_update',
+                'direct_order_reference': 'D12345678',
+                'order_notes': 'Để sốt riêng',
+                'items': [],
+              },
+            }),
+          ],
+          destinations: const {
+            'receipt': PrintDestination(
+              id: 'receipt',
+              name: 'Cashier',
+              ip: '127.0.0.1',
+              port: 9100,
+              purpose: 'receipt',
+            ),
+          },
+        );
+        final printer = _FakePrinterService(PrintResult.success);
+        final agent = PrintJobAgentService(
+          backend: backend,
+          printerService: printer,
+          networkCapabilityService: _availableNetwork,
+        );
+        final results = await agent.processOnce('store-1');
+        expect(results.single.result, PrintResult.success);
+        expect(backend.destinationBatchCount, 1);
+        expect(backend.singleDestinationCount, 0);
+        final text = String.fromCharCodes(printer.prints.single.bytes);
+        expect(text, contains('YEU CAU BO SUNG DA THONG NHAT'));
+        expect(text, contains('De sot rieng'));
+        expect(text, isNot(contains('TONG CONG')));
+        expect(backend.completed.single.ok, isTrue);
+      },
+    );
 
     test(
       'testPrintDestination prints directly to the selected destination',
@@ -964,6 +1007,8 @@ class _FakePrintJobBackend implements PrintJobBackend {
   String? claimedStoreId;
   String? subscribedStoreId;
   int claimCount = 0;
+  int destinationBatchCount = 0;
+  int singleDestinationCount = 0;
   int unsubscribeCount = 0;
   void Function()? _onPrintJobChanged;
 
@@ -988,7 +1033,19 @@ class _FakePrintJobBackend implements PrintJobBackend {
 
   @override
   Future<PrintDestination?> loadDestination(String destinationId) async {
+    singleDestinationCount++;
     return destinations[destinationId];
+  }
+
+  @override
+  Future<Map<String, PrintDestination>> loadDestinations(
+    List<String> destinationIds,
+  ) async {
+    destinationBatchCount++;
+    return {
+      for (final id in destinationIds)
+        if (destinations.containsKey(id)) id: destinations[id]!,
+    };
   }
 
   @override

@@ -45,10 +45,14 @@ const _frozenFiles = <String, String>{
   // 2026-10-06: forward the direct order reference for packing headers.
   // Runtime queue->agent bytes coverage verifies 3 sets; regular receipts
   // retain their existing financial behavior and have no utensil block.
-  // Receipt requests now reach printer bytes; wifi_printer_service_test covers
-  // the actual queued job with both global and menu notes.
+  // 2026-10-08: forward customer requests to the same queued receipt builder.
+  // 2026-10-10: forward the independent utensils flag; byte tests retain diners
+  // and verify opt-out across all packing forms without changing money.
+  // 2026-10-10: confirmed-request addenda render as memo slips; destinations
+  // and physical endpoints are fetched in two batch reads for 1/10/50 printers.
+  // direct_order_requirements_test + wifi_printer_service_test cover the path.
   'lib/core/hardware/print_job_agent_service.dart':
-      '80a32883a6fa514271b69d6ad0239026c4d091b2aaf1e91acc590f3f85fca10c',
+      '44c9edc1b61450bae4097b2ef01d81da2413d348ca76cc3cdb654bc0aeefb47e',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
       '812fdaa3f993520983fc87e4bdb2c1f28c7ccca23f0eb384d69fdf42f4101993',
   'supabase/migrations/20260722050000_kitchen_direct_completion.sql':
@@ -158,7 +162,7 @@ void main() {
       'supabase/functions/direct-order-public/index.ts',
     ).readAsStringSync();
     final raisedCodes = RegExp(
-      r"RAISE EXCEPTION\s+'((?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+)",
+      r"RAISE EXCEPTION\s+'+((?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+)",
       caseSensitive: false,
     ).allMatches(migration).map((match) => match.group(1)!.toUpperCase()).toSet();
     final registeredCodes = RegExp(

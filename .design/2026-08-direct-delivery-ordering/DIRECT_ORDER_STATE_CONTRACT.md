@@ -76,8 +76,9 @@ pending -> preparing -> ready -> dispatched -> completed
   Grab delivery result. The operation writes one customer-visible completion
   message and is idempotent on replay. Kitchen cannot enter `completed`.
 - `completed` and `cancelled` are terminal.
-- This is a direct-only ticket domain. Existing KDS state/providers/functions
-  are never used or modified.
+- Direct tickets remain their own state domain. Existing KDS quantities/events
+  supply cooking and packing progress; the customer notice wrapper around
+  kitchen batch completion preserves the original mutation and authorization.
 
 ## Manual approval atomic boundary
 
@@ -162,3 +163,15 @@ conversation is closed. Source/translation PII is purged through the existing
 retention run; immutable financial entries and their now-redacted evidence rows
 remain. Cash movements and cash-refund recording serialize with the store/day
 closing snapshot in Asia/Ho_Chi_Minh.
+
+### 2026-10-10 customer progress projection
+
+The three display-stage groups remain cashier filters. Customer titles now use
+actual fulfillment progress independently of payment. Complete active KDS
+quantities establish cooked/packing; ready establishes packed/pickup-ready;
+the existing dispatch workflow establishes on-the-way; cashier-confirmed
+completion establishes delivered/collected. Cancelled/rejected/expired win.
+No KDS quantities means no cooking completion claim. Normal terminal access is
+closed, while `support.access_open` retains unresolved customer money and the
+permitted refund evidence window. This adds no cashier action and no external
+driver-app completion integration.
