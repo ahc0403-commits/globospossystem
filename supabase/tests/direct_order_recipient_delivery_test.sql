@@ -2,6 +2,9 @@ DO $recipient$
 DECLARE f jsonb;r uuid;shop uuid;ticket uuid;version integer;b jsonb;op uuid:=gen_random_uuid();booking_payload jsonb;
  q uuid;o uuid;sid uuid;secret text;path text;mid uuid;v jsonb;legacy record;
 BEGIN
+ IF NOT EXISTS(SELECT 1 FROM storage.buckets WHERE id='direct-order-chat' AND NOT public
+  AND file_size_limit=5242880 AND allowed_mime_types=ARRAY['image/jpeg','image/png','image/webp','application/pdf'])
+ THEN RAISE EXCEPTION 'CHAT_BUCKET_POLICY_INVALID'; END IF;
  SELECT * INTO legacy FROM recipient_measurement.legacy;
  IF legacy.financial IS DISTINCT FROM (SELECT to_jsonb(x) FROM public.direct_order_financials x WHERE x.request_id=legacy.request_id)
  OR legacy.quote IS DISTINCT FROM (SELECT to_jsonb(x) FROM public.direct_order_quotes x WHERE x.request_id=legacy.request_id)

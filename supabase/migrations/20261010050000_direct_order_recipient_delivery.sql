@@ -4,6 +4,14 @@ BEGIN;
 SET LOCAL lock_timeout='3s';
 SET LOCAL statement_timeout='30s';
 
+-- Provision the private attachment bucket declaratively. Existing chat/evidence
+-- objects remain in place; only the bucket's access and upload limits are set.
+INSERT INTO storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+VALUES('direct-order-chat','direct-order-chat',false,5242880,
+ ARRAY['image/jpeg','image/png','image/webp','application/pdf'])
+ON CONFLICT(id) DO UPDATE SET public=false,file_size_limit=EXCLUDED.file_size_limit,
+ allowed_mime_types=EXCLUDED.allowed_mime_types;
+
 -- Existing finalized requests keep their policy. No financial rows are rewritten.
 ALTER TABLE public.direct_order_requests ADD COLUMN delivery_policy_version integer NOT NULL DEFAULT 1
  CHECK(delivery_policy_version IN (1,2));
@@ -475,6 +483,9 @@ GRANT EXECUTE ON FUNCTION public.direct_order_analytics_v4(uuid,date,date) TO au
 
 DO $verify$
 BEGIN
+ IF NOT EXISTS(SELECT 1 FROM storage.buckets WHERE id='direct-order-chat' AND NOT public
+  AND file_size_limit=5242880 AND allowed_mime_types=ARRAY['image/jpeg','image/png','image/webp','application/pdf'])
+ THEN RAISE EXCEPTION 'DIRECT_ORDER_ATTACHMENT_INVALID'; END IF;
  IF has_table_privilege('authenticated','public.direct_order_delivery_bookings','SELECT')
  OR has_function_privilege('anon','public.direct_order_booking_action(uuid,uuid,integer,uuid,text,jsonb)','EXECUTE')
  OR has_function_privilege('authenticated','public.direct_order_commit_chat_attachment(uuid,uuid,text,uuid,text,text,text)','EXECUTE')

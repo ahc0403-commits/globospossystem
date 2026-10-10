@@ -22,6 +22,9 @@ BEGIN
  OR strpos(pg_get_functiondef('public.claim_print_jobs(uuid,integer)'::regprocedure),'request_update')=0
  OR NOT EXISTS(SELECT 1 FROM public.system_config WHERE key='meinvoice_dispatch_enabled' AND value='false')
  THEN RAISE EXCEPTION 'POS_RELEASE_COMPATIBILITY_DRIFT'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM storage.buckets WHERE id='direct-order-chat' AND NOT public
+  AND file_size_limit=5242880 AND allowed_mime_types=ARRAY['image/jpeg','image/png','image/webp','application/pdf'])
+ THEN RAISE EXCEPTION 'POS_RELEASE_ATTACHMENT_STORAGE_DRIFT'; END IF;
 END; $verify$;
 SELECT 'POS_RELEASE_DB_VERIFY=PASS' AS result,
  (SELECT count(*) FROM public.direct_order_requests WHERE delivery_policy_version=2) AS recipient_policy_requests,
