@@ -20,7 +20,9 @@ print(json.dumps([{'slug':name,'status':'ACTIVE'} for name in names]))
 PY
   elif [[ "$1 $2" == 'secrets list' ]]; then
     python3 - "${POLICY_WRONG_ORIGIN:-0}" "$LIVE_URL" <<'PY'
-import hashlib,json,sys
+import hashlib,json,os,stat,sys
+if stat.S_ISREG(os.fstat(sys.stdout.fileno()).st_mode):
+    raise SystemExit('NO_SMOKE_RAW_SECRET_OUTPUT_REDIRECTED_TO_FILE')
 origin='https://incorrect.invalid' if sys.argv[1]=='1' else sys.argv[2]
 # Supabase CLI v2 serializes the digest in the `value` field.
 value=origin if sys.argv[1]=='2' else hashlib.sha256(origin.encode()).hexdigest()
@@ -45,7 +47,7 @@ vercel() {
 }
 verify_no_smoke_edge_metadata > "$POLICY_TMP/metadata"
 POLICY_WRONG_ORIGIN=2 verify_no_smoke_edge_metadata > "$POLICY_TMP/plaintext-origin"
-if rg -q 'fixture-sensitive-value-must-never-be-persisted' "$POLICY_TMP"; then
+if grep -Rq 'fixture-sensitive-value-must-never-be-persisted' "$POLICY_TMP"; then
   printf 'NO_SMOKE_PERSISTED_SECRET_VALUE\n'; exit 1
 fi
 verify_deliberry_retirement_readiness > "$POLICY_TMP/retirement"
