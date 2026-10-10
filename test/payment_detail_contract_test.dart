@@ -153,6 +153,10 @@ void main() {
     expect(screen, contains('ReceiptBuilder.buildPaymentReceipt'));
     expect(screen, contains('printerProvider'));
     expect(screen, contains('items: _receiptItems('));
+    expect(
+      screen,
+      contains("deliveryFeeItemId: packing?['delivery_fee_item_id']"),
+    );
 
     expect(
       paymentService,

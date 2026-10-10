@@ -59,7 +59,7 @@ void main() {
     expect(status.completedAt, DateTime.utc(2026, 9, 10, 10, 45));
   });
 
-  test('order history uses the V3 action and preserves each row', () async {
+  test('order history uses the V4 action and preserves each row', () async {
     Map<String, dynamic>? request;
     final service = DirectOrderService(
       invoker: (body) async {
@@ -98,7 +98,7 @@ void main() {
 
     final orders = await service.listOrders(session: session);
 
-    expect(request?['action'], 'orders_v3');
+    expect(request?['action'], 'orders_v4');
     expect(orders.map((order) => order.referenceCode), [
       'DORDERA1',
       'DORDERB2',

@@ -129,6 +129,8 @@ class DirectOrderCustomerPushService {
               'pickup_ready',
               'driver_handoff',
               'payment_request',
+              'cooking_complete',
+              'packing_complete',
             }.contains(kind)) {
           onForeground?.call(requestId, kind!);
         }

@@ -14,8 +14,10 @@ import 'package:globos_pos_system/core/payments/vietqr_payload.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_customer_push_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_requirements.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_storefront_screen.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_support.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
@@ -33,11 +35,14 @@ class _StorefrontFixtureService extends DirectOrderService {
     this.extraCategories = const [],
     this.defaultMenu = true,
     this.proofHandler,
+    this.orderScoped = false,
   });
 
+  final bool orderScoped;
   final DirectOrderAddress? savedAddress;
   DirectOrderStatus? activeStatus;
-  final List<DirectOrderSummary>? orderSummaries;
+  int? submittedDinerCount;
+  List<DirectOrderSummary>? orderSummaries;
   bool paused;
   final bool pauseOnSubmit;
   final List<DirectOrderMenuItem> extraItems;
@@ -55,6 +60,9 @@ class _StorefrontFixtureService extends DirectOrderService {
   int clearActiveRequestCalls = 0;
   final clearedOrderKeys = <String>[];
   var fetchStatusCalls = 0;
+  int requirementDecisionCalls = 0;
+  var listOrdersCalls = 0;
+  bool? submittedUtensilsRequested;
   var sendMessageCalls = 0;
   var ensureSessionCalls = 0;
   var fetchStorefrontCalls = 0;
@@ -122,6 +130,17 @@ class _StorefrontFixtureService extends DirectOrderService {
   }
 
   @override
+  Future<DirectOrderSession?> loadRestorableSession(String slug) async =>
+      orderScoped
+      ? DirectOrderSession(
+          id: activeStatus!.requestId,
+          secret: 'scoped-secret',
+          expiresAt: DateTime.utc(2099),
+          orderScoped: true,
+        )
+      : null;
+
+  @override
   Future<DirectOrderAddress?> loadAddress(String slug) async => savedAddress;
 
   @override
@@ -132,6 +151,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   Future<List<DirectOrderSummary>> listOrders({
     required DirectOrderSession session,
   }) async {
+    listOrdersCalls++;
     if (orderSummaries != null) return orderSummaries!;
     final status = activeStatus;
     if (status == null) return const [];
@@ -197,6 +217,42 @@ class _StorefrontFixtureService extends DirectOrderService {
   }
 
   @override
+  Future<DirectOrderStatus> decideRequirement({
+    required DirectOrderSession session,
+    required String requestId,
+    required DirectOrderRequirement requirement,
+    required bool accept,
+    String? message,
+  }) async {
+    requirementDecisionCalls++;
+    expect(requirement.id, 'request-note');
+    expect(requirement.version, 2);
+    expect(requirement.replyMessageId, 'reply-id');
+    final s = activeStatus!;
+    activeStatus = DirectOrderStatus(
+      requestId: s.requestId,
+      referenceCode: s.referenceCode,
+      state: s.state,
+      messages: s.messages,
+      requirements: [
+        for (final q in s.requirements)
+          q.id == requirement.id
+              ? DirectOrderRequirement(
+                  id: q.id,
+                  version: q.version,
+                  requestText: q.requestText,
+                  status: accept ? 'confirmed' : 'awaiting_reply',
+                  replyText: q.replyText,
+                  replyMessageId: q.replyMessageId,
+                  followupText: message,
+                )
+              : q,
+      ],
+    );
+    return activeStatus!;
+  }
+
+  @override
   Future<void> clearAddress(String slug) async {
     clearAddressCalls++;
   }
@@ -226,11 +282,14 @@ class _StorefrontFixtureService extends DirectOrderService {
         DirectOrderFulfillmentType.delivery,
     String? customerNote,
     int? dinerCount,
+    bool utensilsRequested = true,
   }) async {
     submitCalls++;
     submittedAddress = address;
     submittedFulfillmentType = fulfillmentType;
     submittedItemNotes = Map.of(itemNotes);
+    submittedDinerCount = dinerCount;
+    submittedUtensilsRequested = utensilsRequested;
     submittedRememberAddress = rememberAddress;
     if (pauseOnSubmit) {
       throw const DirectOrderException('DIRECT_ORDER_STOREFRONT_PAUSED');
@@ -246,12 +305,23 @@ Widget _fixtureApp({
   _StorefrontFixtureService? service,
   Locale locale = const Locale('vi'),
   DateTime Function() now = DateTime.now,
+  double? textScale,
   Future<XFile?> Function()? pickProofImage,
   DirectOrderCustomerPushService? pushService,
+  Duration statusSafetyRefreshInterval = const Duration(seconds: 15),
 }) => ProviderScope(
   child: RepaintBoundary(
     key: const Key('direct_customer_visual_boundary'),
     child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      builder: textScale == null
+          ? null
+          : (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
       theme: AppTheme.build(),
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -267,12 +337,14 @@ Widget _fixtureApp({
         now: now,
         pickProofImage: pickProofImage,
         pushService: pushService,
+        statusSafetyRefreshInterval: statusSafetyRefreshInterval,
       ),
     ),
   ),
 );
 
 Future<void> _revealSubmit(WidgetTester tester) async {
+  FocusManager.instance.primaryFocus?.unfocus();
   tester.testTextInput.hide();
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(
@@ -312,6 +384,7 @@ class _CustomerPushFixture extends DirectOrderCustomerPushService {
   int disables = 0;
   Completer<DirectOrderPushReadiness>? pendingEnable;
   DirectOrderPushReadiness disableResult = DirectOrderPushReadiness.off;
+  void Function(String requestId, String kind)? foreground;
   @override
   Future<DirectOrderPushReadiness> enable({
     required String slug,
@@ -321,6 +394,7 @@ class _CustomerPushFixture extends DirectOrderCustomerPushService {
     bool restore = false,
     void Function(String requestId, String kind)? onForeground,
   }) async {
+    foreground = onForeground;
     if (restore) {
       restores++;
       return DirectOrderPushReadiness.off;
@@ -341,19 +415,374 @@ class _CustomerPushFixture extends DirectOrderCustomerPushService {
   }
 }
 
-Future<void> _openAddress(WidgetTester tester) async {
+Future<void> _openAddress(WidgetTester tester, {bool fillDiners = true}) async {
   await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
   await tester.pump();
   await tester.tap(find.text('Địa chỉ').last);
   await tester.pumpAndSettle();
-  await tester.enterText(
-    find.byKey(const Key('direct_diner_count_input')),
-    '3',
-  );
+  if (fillDiners) {
+    await tester.enterText(
+      find.byKey(const Key('direct_diner_count_input')),
+      '3',
+    );
+  }
+  FocusManager.instance.primaryFocus?.unfocus();
   await tester.pumpAndSettle();
 }
 
 void main() {
+  testWidgets(
+    'mobile customer confirms a pinned request without another detail read',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      final service = _StorefrontFixtureService(
+        activeStatus: const DirectOrderStatus(
+          requestId: 'fixture-request',
+          referenceCode: 'D12345678',
+          state: 'awaiting_quote',
+          messages: [],
+          requirements: [
+            DirectOrderRequirement(
+              id: 'request-note',
+              version: 2,
+              sourceLocale: 'ko',
+              requestText: '덜 맵게 해주세요',
+              status: 'awaiting_customer',
+              replyMessageId: 'reply-id',
+              replyText:
+                  '소스를 줄여 준비하겠습니다. 기본 소스에도 매운맛이 조금 있습니다. 이렇게 준비해도 괜찮으실까요?',
+            ),
+            DirectOrderRequirement(
+              id: 'call-note',
+              version: 1,
+              sourceLocale: 'ko',
+              requestText: '도착 전에 전화해주세요',
+              status: 'awaiting_reply',
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('requirement_confirm_request-note')),
+      );
+      await tester.pumpAndSettle();
+      await _captureCustomerUi(tester, 'customer-request-confirmation-ko');
+      final reads = service.fetchStatusCalls;
+      await tester.tap(
+        find.byKey(const Key('requirement_confirm_request-note')),
+      );
+      await tester.pumpAndSettle();
+      expect(service.requirementDecisionCalls, 1);
+      expect(service.fetchStatusCalls, reads);
+      expect(
+        find.byKey(const Key('requirement_confirm_request-note')),
+        findsNothing,
+      );
+      expect(service.activeStatus!.requirements.first.isConfirmed, isTrue);
+      expect(service.activeStatus!.requirements.last.status, 'awaiting_reply');
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(
+        find.byKey(
+          const PageStorageKey<String>('direct_requirements_fixture-request'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(
+          const PageStorageKey<String>('direct_requirements_fixture-request'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _captureCustomerUi(tester, 'customer-request-confirmed-ko');
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  for (final locale in ['ko', 'vi', 'en']) {
+    testWidgets(
+      'utensil choice fits a 320px phone in $locale with larger text',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(const {});
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(320, 760);
+        addTearDown(tester.view.reset);
+        final service = _StorefrontFixtureService();
+        await tester.pumpWidget(
+          _fixtureApp(service: service, locale: Locale(locale), textScale: 1.5),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(DirectOrderCopy(locale).address).last);
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('direct_utensils_choice')),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(DirectOrderCopy(locale).utensilsNone), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+  testWidgets(
+    'mobile cooking completion appears above chat before packing is ready',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: DirectOrderStatus(
+          requestId: 'cooked',
+          referenceCode: 'DCOOKED01',
+          state: 'approved',
+          fulfillmentStatus: 'preparing',
+          delivery: const DirectOrderDelivery(
+            dinerCount: 3,
+            utensilsRequested: false,
+            cookingComplete: true,
+          ),
+          messages: [
+            DirectOrderMessage(
+              id: 'cooked-notice',
+              senderType: 'system',
+              messageType: 'system',
+              body: 'DIRECT_ORDER_COOKING_COMPLETE',
+              hasAttachment: false,
+              createdAt: DateTime.utc(2026),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('direct_order_status_title')))
+            .data,
+        '음식 조리 완료 · 포장 중',
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      await _captureCustomerUi(tester, 'customer-cooked-ko');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'completed delivery retains server-approved refund and evidence access',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: const DirectOrderStatus(
+          requestId: 'refund',
+          referenceCode: 'DREFUND01',
+          state: 'approved',
+          fulfillmentStatus: 'completed',
+          delivery: DirectOrderDelivery(cookingComplete: true),
+          messages: [],
+          support: {'access_open': true, 'chat_open': true},
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      expect(service.clearedOrderKeys, isEmpty);
+      expect(find.text('배달 완료'), findsOneWidget);
+      expect(find.text('음식 조리 완료 · 포장 중'), findsNothing);
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      expect(service.fetchStatusCalls, 2);
+      expect(service.clearedOrderKeys, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'three diners can opt out of utensils and edits retain the choice',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        savedAddress: const DirectOrderAddress(
+          customerName: 'Customer',
+          customerPhone: '+84901234567',
+          formattedAddress: '123 Test street',
+          detailAddress: 'Room 3',
+          addressSource: 'manual',
+          locationVerified: false,
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('vi')),
+      );
+      await tester.pumpAndSettle();
+      await _openAddress(tester, fillDiners: false);
+      final diners = find.byKey(const Key('direct_diner_count_input'));
+      expect(tester.widget<TextField>(diners).controller!.text, '1');
+      await tester.enterText(diners, '3');
+      await tester.ensureVisible(
+        find.byKey(const Key('direct_utensils_choice')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Không nhận'));
+      await tester.pumpAndSettle();
+      await tester.enterText(diners, '4');
+      await tester.enterText(diners, '3');
+      final submit = find.byKey(const Key('direct_submit_quote_request'));
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        submit,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(service.submittedDinerCount, 3);
+      expect(service.submittedUtensilsRequested, false);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final count in [1, 10, 50]) {
+    testWidgets(
+      'refresh batches alerts for $count orders without extra detail requests',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(const {});
+        final service = _StorefrontFixtureService(
+          activeStatus: const DirectOrderStatus(
+            requestId: 'selected',
+            referenceCode: 'DSELECTED',
+            state: 'approved',
+            messages: [],
+          ),
+        );
+        List<DirectOrderSummary> summaries(bool changed) => List.generate(
+          count,
+          (i) => DirectOrderSummary(
+            requestId: i == 0 ? 'selected' : 'order-$i',
+            referenceCode: 'ORDER$i',
+            state: i == 0
+                ? 'approved'
+                : changed
+                ? 'quoted'
+                : 'awaiting_quote',
+            createdAt: DateTime.utc(2026),
+            itemCount: 1,
+            hasOpenProofReview: changed && i.isEven,
+            quoteId: changed ? 'quote-$i' : null,
+            quoteVersion: changed ? 2 : null,
+            proofReviewId: changed && i.isEven ? 'review-$i' : null,
+          ),
+        );
+        service.orderSummaries = summaries(false);
+        await tester.pumpWidget(_fixtureApp(service: service));
+        await tester.pumpAndSettle();
+        final listBefore = service.listOrdersCalls;
+        final detailBefore = service.fetchStatusCalls;
+        service.orderSummaries = summaries(true);
+        await tester.pump(const Duration(seconds: 20));
+        await tester.pumpAndSettle();
+        expect(service.listOrdersCalls - listBefore, 1);
+        expect(
+          service.fetchStatusCalls - detailBefore,
+          1,
+          reason: 'changed quotes/reviews use batch identity fields',
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+  testWidgets(
+    'scoped order loads and refreshes with one status and no list request',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        orderScoped: true,
+        activeStatus: const DirectOrderStatus(
+          requestId: 'scoped',
+          referenceCode: 'DSCOPED',
+          state: 'approved',
+          messages: [],
+        ),
+      );
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
+      expect(service.fetchStatusCalls, 1);
+      expect(service.listOrdersCalls, 0);
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      expect(service.fetchStatusCalls, 2);
+      expect(service.listOrdersCalls, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'mobile delivery and ordinary chat expose exact selectable links with copy',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      const url = 'https://example.com/track?code=ABC%2F123';
+      final service = _StorefrontFixtureService(
+        activeStatus: DirectOrderStatus(
+          requestId: 'shipping',
+          referenceCode: 'DSHIPPING',
+          state: 'approved',
+          fulfillmentStatus: 'dispatched',
+          delivery: const DirectOrderDelivery(
+            dinerCount: 3,
+            utensilsRequested: false,
+            cookingComplete: true,
+            trackingUrl: url,
+          ),
+          messages: [
+            DirectOrderMessage(
+              id: 'link',
+              senderType: 'cashier',
+              messageType: 'text',
+              body: '배송 링크: $url',
+              hasAttachment: false,
+              createdAt: DateTime.utc(2026),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('direct_order_status_title')))
+            .data,
+        '기사 전달 완료 · 배송 중',
+      );
+      expect(find.text('링크 복사'), findsWidgets);
+      expect(
+        find.byWidgetPredicate((w) => w is SelectableText && w.data == url),
+        findsWidgets,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      await _captureCustomerUi(tester, 'customer-shipping-ko');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   setUpAll(() async {
     if (Platform.environment['DIRECT_ORDER_CUSTOMER_SCREENSHOTS'] == null) {
       return;
@@ -631,6 +1060,7 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const Key('direct_change_payment_proof')),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('direct_change_payment_proof')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('direct_cancel_payment_proof')));
@@ -905,8 +1335,35 @@ void main() {
           await tester.tap(find.byKey(const Key('direct_cart_close')));
           await tester.pumpAndSettle();
           // The original footer action must still open the address form directly.
+          await tester.ensureVisible(
+            find.byKey(const Key('direct_cart_continue')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('direct_cart_continue')).hitTestable(),
+            findsOneWidget,
+            reason: '${entry.key}:$size:$isPickup',
+          );
           await tester.tap(find.byKey(const Key('direct_cart_continue')));
           await tester.pumpAndSettle();
+          expect(
+            find.byType(Scrollable),
+            findsWidgets,
+            reason: '${entry.key}:$size:$isPickup',
+          );
+          // Let localized, lazily built form rows settle between scrolls.
+          final recipient = find.byKey(const Key('direct_recipient_name'));
+          for (
+            var scroll = 0;
+            scroll < 6 && recipient.evaluate().isEmpty;
+            scroll++
+          ) {
+            await tester.drag(
+              find.byType(Scrollable).first,
+              const Offset(0, -180),
+            );
+            await tester.pumpAndSettle();
+          }
           expect(
             find.byKey(const Key('direct_recipient_name')),
             findsOneWidget,
@@ -1105,7 +1562,12 @@ void main() {
         _fixtureApp(service: service, locale: const Locale('ko')),
       );
       await tester.pumpAndSettle();
-      expect(find.text('수령 준비 완료'), findsWidgets);
+      expect(
+        find.text(
+          DirectOrderCopy('ko').customerProgressLabel('customer_pickup_ready'),
+        ),
+        findsWidgets,
+      );
       expect(find.textContaining('4821'), findsWidgets);
       expect(find.text('포장 · 픽업'), findsWidgets);
       expect(tester.takeException(), isNull);
@@ -1141,7 +1603,10 @@ void main() {
       expect(service.clearActiveRequestCalls, 0);
       expect(service.clearedOrderKeys, ['completed-request']);
       expect(find.text('D87654321'), findsNothing);
-      expect(find.text(DirectOrderCopy('vi').orderClosed), findsOneWidget);
+      expect(
+        find.textContaining(DirectOrderCopy('vi').orderClosed),
+        findsOneWidget,
+      );
       expect(await service.loadAddress('fixture-store'), saved);
       expect(service.clearAddressCalls, 0);
       expect(tester.takeException(), isNull);
@@ -1171,6 +1636,7 @@ void main() {
           hasOpenProofReview: false,
           finalTotal: 200000,
           fulfillmentStatus: 'dispatched',
+          hasDispatch: true,
         ),
         DirectOrderSummary(
           requestId: 'order-b',
@@ -1205,9 +1671,9 @@ void main() {
     expect(find.text('#DAAAAAAAA'), findsOneWidget);
     expect(find.text('#DBBBBBBBB'), findsOneWidget);
     expect(find.text('#DCCCCCCCC'), findsOneWidget);
-    expect(find.text('배달 · 결제 완료 · 메뉴 2개'), findsOneWidget);
-    expect(find.text('배달 · 확인 대기 · 메뉴 1개'), findsOneWidget);
-    expect(find.text('배달 · 완료 · 메뉴 3개'), findsOneWidget);
+    expect(find.text('배달 · 기사 전달 완료 · 배송 중 · 메뉴 2개'), findsOneWidget);
+    expect(find.text('배달 · 결제 대기 · 메뉴 1개'), findsOneWidget);
+    expect(find.text('배달 · 배달 완료 · 메뉴 3개'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1283,6 +1749,536 @@ void main() {
       }
     },
   );
+
+  DirectOrderStatus mobileQuote({
+    String quoteId = 'mobile-quote',
+    double total = 325000,
+    String state = 'quoted',
+    String quoteState = 'active',
+    DateTime? expires,
+    Map<String, dynamic> support = const {},
+    bool longChat = false,
+  }) => DirectOrderStatus(
+    requestId: 'mobile-request',
+    referenceCode: 'A1024',
+    state: state,
+    support: support,
+    quote: DirectOrderQuote(
+      id: quoteId,
+      menuTotal: total - 30000,
+      serviceChargeTotal: 0,
+      deliveryFeeTotal: 30000,
+      finalTotal: total,
+      status: quoteState,
+      expiresAt: expires ?? DateTime.utc(2099),
+      vatTotal: 20000,
+    ),
+    messages: [
+      DirectOrderMessage(
+        id: 'old-quote-message',
+        senderType: 'cashier',
+        messageType: 'quote',
+        body: 'DIRECT_ORDER_QUOTE_SENT',
+        hasAttachment: false,
+        createdAt: DateTime.utc(2026, 10, 10),
+        metadata: const {'quote_id': 'previous-quote', 'final_total': 300000},
+      ),
+      DirectOrderMessage(
+        id: 'current-quote-message',
+        senderType: 'cashier',
+        messageType: 'quote',
+        body: 'DIRECT_ORDER_QUOTE_SENT',
+        hasAttachment: false,
+        createdAt: DateTime.utc(2026, 10, 10, 1),
+        metadata: {'quote_id': quoteId, 'final_total': total},
+      ),
+      if (longChat)
+        for (var i = 0; i < 20; i++)
+          DirectOrderMessage(
+            id: 'message-$i',
+            senderType: 'customer',
+            messageType: 'text',
+            body: '메시지 $i',
+            hasAttachment: false,
+            createdAt: DateTime.utc(2026, 10, 10, 2, i),
+          ),
+    ],
+  );
+  final mobileMoney = NumberFormat.currency(
+    locale: 'vi_VN',
+    symbol: '₫',
+    decimalDigits: 0,
+  );
+  Finder statusScrollable() => find
+      .descendant(
+        of: find.byKey(const PageStorageKey('direct_status_list')),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+  const balanceId = '11111111-1111-4111-8111-111111111111';
+  Map<String, dynamic> balanceSupport(
+    String state, {
+    double received = 300000,
+    double due = 25000,
+    bool charge = true,
+  }) => {
+    'chat_open': true,
+    'delivery_fee_finalized': true,
+    'food_received': received,
+    'food_due': due,
+    'charges': [
+      if (charge)
+        {
+          'id': balanceId,
+          'kind': 'food_balance',
+          'status': state,
+          'amount': 25000,
+          'received': 0,
+          'reason': '부족금 추가 입금 요청',
+        },
+    ],
+  };
+
+  for (final width in [320.0, 390.0]) {
+    for (final language in ['ko', 'vi', 'en']) {
+      testWidgets('mobile quote remains visible in $language at $width', (
+        tester,
+      ) async {
+        SharedPreferences.setMockInitialValues(const {});
+        tester.view.physicalSize = Size(width, width == 320 ? 568 : 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final service = _StorefrontFixtureService(
+          activeStatus: mobileQuote(longChat: true),
+        );
+        await tester.pumpWidget(
+          _fixtureApp(service: service, locale: Locale(language)),
+        );
+        await tester.pumpAndSettle();
+        final pinned = find.byKey(const Key('direct_customer_pinned_amount'));
+        final top = tester.getTopLeft(pinned).dy;
+        expect(pinned.hitTestable(), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('direct_open_payment_details')),
+          160,
+          scrollable: statusScrollable(),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(DirectOrderCopy(language).previousQuote),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('direct_open_payment_details')),
+          findsOneWidget,
+        );
+        expect(find.text(mobileMoney.format(325000)), findsNWidgets(2));
+        if (width == 390 && language == 'ko') {
+          await Scrollable.ensureVisible(
+            tester.element(find.byKey(const Key('direct_chat_current_quote'))),
+          );
+          await tester.pumpAndSettle();
+          await _captureCustomerUi(tester, 'mobile-quote-chat');
+        }
+        await tester.drag(
+          find.byKey(const PageStorageKey('direct_status_list')),
+          const Offset(0, -2400),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(pinned).dy, top);
+        expect(
+          find.byKey(const Key('direct_customer_chat_input')).hitTestable(),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
+        await tester.pumpAndSettle();
+        final sheet = find.byKey(const Key('direct_customer_quote_sheet'));
+        expect(
+          find.descendant(
+            of: sheet,
+            matching: find.text(mobileMoney.format(325000)),
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(QrImageView), findsOneWidget);
+        if (width == 390 && language == 'ko') {
+          await _captureCustomerUi(tester, 'mobile-quote-payment');
+        }
+        expect(
+          service.fetchStatusCalls,
+          1,
+          reason: 'Opening either card or sheet must not add requests',
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
+  testWidgets('mobile quote and composer remain usable above the keyboard', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpWidget(
+      _fixtureApp(
+        service: _StorefrontFixtureService(
+          activeStatus: mobileQuote(longChat: true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('direct_customer_chat_input')),
+      'Hello',
+    );
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('direct_customer_check_amount')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('direct_customer_chat_input')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .getBottomLeft(find.byKey(const Key('direct_customer_chat_composer')))
+          .dy,
+      lessThanOrEqualTo(268),
+    );
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+    final position = tester.state<ScrollableState>(statusScrollable()).position;
+    expect(
+      find.text('Hello'),
+      findsOneWidget,
+      reason: 'scroll=${position.pixels}/${position.maxScrollExtent}',
+    );
+    expect(
+      find.text('Hello').hitTestable(),
+      findsOneWidget,
+      reason:
+          'Sent message ${tester.getRect(find.text('Hello'))} must fit above '
+          '${tester.getRect(find.byKey(const Key('direct_customer_chat_composer')))}',
+    );
+    expect(
+      find.byKey(const Key('direct_customer_pinned_amount')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'open payment sheet follows a changed quote and removes QR after approval',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(activeStatus: mobileQuote());
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
+      await tester.pumpAndSettle();
+      service.activeStatus = mobileQuote(
+        quoteId: 'new-mobile-quote',
+        total: 345000,
+      );
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      final sheet = find.byKey(const Key('direct_customer_quote_sheet'));
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.text(mobileMoney.format(325000)),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.text(mobileMoney.format(345000)),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('direct_payment_qr:null:345000')),
+        findsOneWidget,
+      );
+      service.activeStatus = mobileQuote(
+        state: 'approved',
+        quoteState: 'locked',
+      );
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      expect(find.byType(QrImageView), findsNothing);
+      expect(
+        find.byKey(const Key('direct_payment_sheet_upload_proof')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final chargeState in ['pending', 'review', 'paid', 'none']) {
+    testWidgets(
+      'mobile underpayment uses outstanding amount and charge state $chargeState',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(const {});
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final paid = chargeState == 'paid';
+        final service = _StorefrontFixtureService(
+          activeStatus: mobileQuote(
+            state: paid ? 'approved' : 'awaiting_payment_review',
+            quoteState: 'locked',
+            support: balanceSupport(
+              chargeState,
+              received: paid ? 325000 : 300000,
+              due: paid ? 0 : 25000,
+              charge: chargeState != 'none',
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _fixtureApp(service: service, locale: const Locale('ko')),
+        );
+        await tester.pumpAndSettle();
+        final pinned = tester.widget<Text>(
+          find.byKey(const Key('direct_customer_pinned_amount')),
+        );
+        expect(pinned.data, mobileMoney.format(paid ? 325000 : 25000));
+        expect(
+          find.byKey(const Key('direct_open_payment_details')),
+          findsNothing,
+        );
+        final card = find.byKey(
+          ValueKey(
+            chargeState == 'none'
+                ? 'direct_chat_underpayment'
+                : 'direct_chat_charge:$balanceId',
+          ),
+        );
+        await tester.scrollUntilVisible(
+          card,
+          160,
+          scrollable: statusScrollable(),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: card,
+            matching: find.text(mobileMoney.format(paid ? 325000 : 300000)),
+          ),
+          findsNWidgets(paid ? 2 : 1),
+        );
+        expect(
+          find.byKey(const ValueKey('direct_charge_payment:$balanceId')),
+          chargeState == 'pending' ? findsOneWidget : findsNothing,
+        );
+        if (chargeState == 'pending') {
+          await _captureCustomerUi(tester, 'mobile-underpayment-chat');
+          await tester.tap(
+            find.byKey(const Key('direct_customer_check_amount')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(
+              const ValueKey(
+                'direct_payment_qr:11111111-1111-4111-8111-111111111111:25000',
+              ),
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('direct_charge_sheet_proof:$balanceId')),
+            findsOneWidget,
+          );
+          await _captureCustomerUi(tester, 'mobile-underpayment-payment');
+        } else if (!paid) {
+          await tester.tap(
+            find.byKey(const Key('direct_customer_check_amount')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(QrImageView), findsNothing);
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets(
+    'additional payment sheet updates the server balance and stops after proof review',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: mobileQuote(
+          state: 'awaiting_payment_review',
+          quoteState: 'locked',
+          support: balanceSupport('pending'),
+        ),
+      );
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
+      await tester.pumpAndSettle();
+      service.activeStatus = mobileQuote(
+        state: 'awaiting_payment_review',
+        quoteState: 'locked',
+        support: balanceSupport('pending', received: 320000, due: 5000),
+      );
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(
+          const ValueKey(
+            'direct_payment_qr:11111111-1111-4111-8111-111111111111:5000',
+          ),
+        ),
+        findsOneWidget,
+      );
+      service.activeStatus = mobileQuote(
+        state: 'awaiting_payment_review',
+        quoteState: 'locked',
+        support: balanceSupport('review', received: 320000, due: 5000),
+      );
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      expect(find.byType(QrImageView), findsNothing);
+      expect(
+        find.byKey(const ValueKey('direct_charge_sheet_proof:$balanceId')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'expired quote never exposes a transfer QR from the pinned amount',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: _StorefrontFixtureService(
+            activeStatus: mobileQuote(expires: DateTime.utc(2020)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('direct_open_payment_details')),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
+      await tester.pumpAndSettle();
+      expect(find.byType(QrImageView), findsNothing);
+      expect(
+        find.byKey(const Key('direct_payment_sheet_upload_proof')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'successful balance proof suppresses another transfer when refresh fails',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: mobileQuote(
+          state: 'awaiting_payment_review',
+          quoteState: 'locked',
+          support: balanceSupport('pending'),
+        ),
+      );
+      await tester.pumpWidget(_fixtureApp(service: service));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
+      await tester.pumpAndSettle();
+      final uploader = tester.widget<DirectOrderAttachmentButton>(
+        find.byKey(
+          const ValueKey(
+            'direct_charge_sheet_proof:11111111-1111-4111-8111-111111111111',
+          ),
+        ),
+      );
+      service.failStatus = true;
+      await uploader.onSent();
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('direct_customer_quote_sheet')),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
+      await tester.pumpAndSettle();
+      expect(find.byType(QrImageView), findsNothing);
+      expect(find.byType(DirectOrderAttachmentButton), findsNothing);
+      final sheet = find.byKey(const Key('direct_customer_quote_sheet'));
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.text(DirectOrderCopy('vi').additionalPaymentReview),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final language in ['ko', 'vi', 'en']) {
+    testWidgets(
+      'underpayment card and sheet fit a small phone in $language with larger text',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(const {});
+        tester.view.physicalSize = const Size(320, 568);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pumpWidget(
+          _fixtureApp(
+            service: _StorefrontFixtureService(
+              activeStatus: mobileQuote(
+                state: 'awaiting_payment_review',
+                quoteState: 'locked',
+                support: balanceSupport('pending'),
+              ),
+            ),
+            locale: Locale(language),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(
+            const ValueKey(
+              'direct_charge_payment:11111111-1111-4111-8111-111111111111',
+            ),
+          ),
+          150,
+          scrollable: statusScrollable(),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
+        await tester.pumpAndSettle();
+        expect(find.byType(QrImageView), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   testWidgets('quoted order shows VAT and complete bank transfer details', (
     tester,
@@ -1448,7 +2444,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const Key('direct_order_status_title')))
           .data,
-      '결제 완료',
+      '음식 준비 중',
     );
     expect(service.ensureSessionCalls, 1);
     expect(tester.takeException(), isNull);
@@ -1514,11 +2510,7 @@ void main() {
     await tester.pumpAndSettle();
     await _openAddress(tester);
     final submit = find.byKey(const Key('direct_submit_quote_request'));
-    await tester.scrollUntilVisible(
-      submit,
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await _revealSubmit(tester);
     await tester.tap(submit);
     await tester.pumpAndSettle();
 
@@ -1574,6 +2566,11 @@ void main() {
         'direct_recipient_name': 'Test Recipient',
         'direct_recipient_phone': '+84901234567',
       }.entries) {
+        await tester.scrollUntilVisible(
+          find.byKey(Key(entry.key)),
+          -180,
+          scrollable: find.byType(Scrollable).first,
+        );
         await tester.enterText(find.byKey(Key(entry.key)), entry.value);
       }
       await tester.ensureVisible(
@@ -1618,6 +2615,11 @@ void main() {
       'direct_recipient_name': 'Test',
       'direct_recipient_phone': 'abc',
     }.entries) {
+      await tester.scrollUntilVisible(
+        find.byKey(Key(entry.key)),
+        -180,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.enterText(find.byKey(Key(entry.key)), entry.value);
     }
     await _revealSubmit(tester);
@@ -1732,7 +2734,7 @@ void main() {
   });
 
   testWidgets(
-    'customer sees three payment and fulfillment stages in their locale',
+    'customer sees actual fulfillment with separate payment and collapsed details',
     (tester) async {
       SharedPreferences.setMockInitialValues(const {});
       const status = DirectOrderStatus(
@@ -1755,15 +2757,16 @@ void main() {
         find.byKey(const Key('direct_order_customer_progress')),
         findsOneWidget,
       );
-      expect(find.text('확인 대기'), findsOneWidget);
+      expect(find.text('음식 준비 중'), findsOneWidget);
       expect(find.text('결제 완료'), findsWidgets);
-      expect(find.text('완료'), findsOneWidget);
-      expect(find.text('조리 중'), findsOneWidget);
+      expect(find.text('배달 완료'), findsNothing);
       final statusTitle = tester.widget<Text>(
         find.byKey(const Key('direct_order_status_title')),
       );
-      expect(statusTitle.data, '결제 완료');
-      for (var index = 0; index < 3; index++) {
+      expect(statusTitle.data, '음식 준비 중');
+      await tester.tap(find.text(DirectOrderCopy('ko').orderProgress));
+      await tester.pumpAndSettle();
+      for (var index = 0; index < 5; index++) {
         expect(
           find.byKey(Key('direct_order_progress_step_$index')),
           findsOneWidget,
@@ -1773,6 +2776,42 @@ void main() {
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'driver handoff requires dispatch evidence on the customer card',
+    (tester) async {
+      for (final confirmed in [false, true]) {
+        SharedPreferences.setMockInitialValues(const {});
+        await tester.pumpWidget(
+          _fixtureApp(
+            locale: const Locale('ko'),
+            service: _StorefrontFixtureService(
+              activeStatus: DirectOrderStatus(
+                requestId: 'dispatch-evidence',
+                referenceCode: 'DVERIFY',
+                state: 'approved',
+                fulfillmentStatus: 'dispatched',
+                delivery: DirectOrderDelivery(
+                  provider: confirmed ? 'self_delivery' : null,
+                ),
+                messages: const [],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<Text>(find.byKey(const Key('direct_order_status_title')))
+              .data,
+          DirectOrderCopy('ko').customerProgressLabel(
+            confirmed ? 'customer_shipping' : 'customer_packed',
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
     },
   );
   testWidgets(
@@ -1823,6 +2862,11 @@ void main() {
         'direct_recipient_name': 'Fixture Recipient',
         'direct_recipient_phone': '+84901234567',
       }.entries) {
+        await tester.scrollUntilVisible(
+          find.byKey(Key(entry.key)),
+          -180,
+          scrollable: find.byType(Scrollable).first,
+        );
         await tester.enterText(find.byKey(Key(entry.key)), entry.value);
       }
       FocusManager.instance.primaryFocus?.unfocus();
@@ -1837,6 +2881,10 @@ void main() {
             )
             .first,
       );
+      await tester.ensureVisible(
+        find.byKey(const Key('direct_submit_quote_request')),
+      );
+      await tester.pumpAndSettle();
       await tester.ensureVisible(
         find.byKey(const Key('direct_submit_quote_request')),
       );
@@ -1983,6 +3031,53 @@ void main() {
         reason: 'Opening existing details needs no per-item API calls',
       );
       await _captureCustomerUi(tester, 'ongoing-order-details-ko');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'foreground cooking packing and payment notices keep distinct meanings',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final push = _CustomerPushFixture();
+      final service = _StorefrontFixtureService(
+        activeStatus: const DirectOrderStatus(
+          requestId: 'fixture-request',
+          referenceCode: 'D12345678',
+          state: 'approved',
+          messages: [],
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: service,
+          pushService: push,
+          statusSafetyRefreshInterval: const Duration(hours: 1),
+          locale: const Locale('ko'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = service.fetchStatusCalls;
+      final copy = DirectOrderCopy('ko');
+      for (final notice in {
+        'cooking_complete': copy.customerProgressLabel('customer_cooked'),
+        'packing_complete': copy.customerProgressLabel('customer_packed'),
+        'payment_request': copy.quoteArrived,
+      }.entries) {
+        push.foreground!('fixture-request', notice.key);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(SnackBar),
+            matching: find.text(notice.value),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text(copy.driverHandoffNotice), findsNothing);
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+      }
+      expect(service.fetchStatusCalls, before + 3);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

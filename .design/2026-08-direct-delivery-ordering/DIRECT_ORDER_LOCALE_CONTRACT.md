@@ -121,3 +121,12 @@ The default model is `gpt-4.1-mini-2025-04-14`; the server-only
 Numeric tokens must remain exact. `store:false` disables Responses history
 storage; it does not assert zero provider retention. The minute scheduler and
 existing status polling determine when translations become visible.
+
+### 2026-10-10 progress, tracking and packing labels
+
+Customer progress titles, independent utensils choices, copy/open feedback,
+and cooking/packing notices are available in Korean, Vietnamese and English.
+URLs are rendered from the original exact value and never from translated text;
+links in ordinary messages also receive selectable URL and open/copy controls.
+Printer labels remain Vietnamese (`DUNG CU: KHONG CAN` for opt-out), and digital
+receipt/PDF uses `Dụng cụ: Không cần`. Diner counts remain independent of utensils.

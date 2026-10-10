@@ -1,4 +1,5 @@
 import 'direct_order_translation.dart';
+import 'direct_order_requirements.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -357,11 +358,20 @@ class _TicketCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               child: Text(
-                copy.packingCount((delivery['diner_count'] as num?)?.toInt()),
+                copy.packingCount(
+                  (delivery['diner_count'] as num?)?.toInt(),
+                  utensilsRequested: delivery['utensils_requested'] != false,
+                ),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: DirectOrderConfirmedNotes(
+                text: ticket['confirmed_notes']?.toString(),
               ),
             ),
             const Divider(height: 1),

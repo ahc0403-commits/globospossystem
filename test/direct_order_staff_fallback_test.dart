@@ -7,6 +7,7 @@ import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_cashier_screen.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_requirements.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_staff_service.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
@@ -34,10 +35,41 @@ class _Staff extends DirectOrderStaffService {
   String? sentProvider;
   final sentMessages = <String>[];
   String? sentUrl;
+  List<Map<String, dynamic>> requirements = [];
+  DirectOrderRequirementReply? requirementReply;
   String? bankReference;
   int? sentTicketVersion;
   String? customerNote;
   String? itemNote;
+  bool failRequirementReply = false;
+  final requirementMutations = <String>[];
+
+  @override
+  Future<Map<String, dynamic>> replyRequirement({
+    required String storeId,
+    required String requestId,
+    required DirectOrderRequirement requirement,
+    required DirectOrderRequirementReply reply,
+    required String locale,
+    required String mutationId,
+  }) async {
+    requirementReply = reply;
+    requirementMutations.add(mutationId);
+    expect(requirement.id, 'note');
+    expect(requirement.version, 1);
+    expect(mutationId, isNotEmpty);
+    if (failRequirementReply) throw StateError('simulated response failure');
+    requirements = [
+      {
+        ...requirements.single,
+        'status': 'awaiting_customer',
+        'version': 2,
+        'reply_text': reply.body,
+        'reply_message_id': 'reply-id',
+      },
+    ];
+    return requestDetail(storeId: storeId, requestId: requestId);
+  }
 
   @override
   Future<List<Map<String, dynamic>>> listRequests({
@@ -59,6 +91,7 @@ class _Staff extends DirectOrderStaffService {
     required String storeId,
     required String requestId,
   }) async => {
+    'requirements': requirements,
     'request': {
       'id': requestId,
       'state': state,
@@ -327,6 +360,90 @@ void main() {
     );
   });
   tearDownAll(() => Supabase.instance.dispose());
+  testWidgets(
+    'cashier must answer each request before a quote, using custom text',
+    (tester) async {
+      final service = _Staff()
+        ..state = 'awaiting_quote'
+        ..requirements = [
+          {
+            'id': 'note',
+            'version': 1,
+            'request_text': 'Xin sốt riêng',
+            'source_locale': 'vi',
+            'status': 'awaiting_reply',
+          },
+        ];
+      await _pump(tester, service, language: 'vi');
+      expect(find.byKey(const Key('requirement_quote_gate')), findsOneWidget);
+      final button = find.widgetWithText(
+        FilledButton,
+        DirectOrderCopy('vi').sendQuote,
+      );
+      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+      await _tap(tester, find.byKey(const Key('requirement_reply_note')));
+      await tester.enterText(
+        find.byKey(const Key('requirement_reply_body')),
+        'Sẽ để sốt riêng trong hai hộp nhỏ. Bạn đồng ý không?',
+      );
+      await _tap(tester, find.byKey(const Key('requirement_reply_submit')));
+      expect(
+        service.requirementReply!.body,
+        'Sẽ để sốt riêng trong hai hộp nhỏ. Bạn đồng ý không?',
+      );
+      expect(
+        service.requirementReply!.printReplyVi,
+        service.requirementReply!.body,
+      );
+      expect(service.requirementReply!.needsConfirmation, isTrue);
+      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+      expect(find.text('Chờ khách xác nhận'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'cashier clarification retry retains freeform draft and mutation identity',
+    (tester) async {
+      final service = _Staff()
+        ..state = 'awaiting_quote'
+        ..failRequirementReply = true
+        ..requirements = [
+          {
+            'id': 'note',
+            'version': 1,
+            'request_text': 'Xin sốt riêng',
+            'followup_text': 'Chia hai hộp được không?',
+            'source_locale': 'vi',
+            'status': 'awaiting_reply',
+          },
+        ];
+      await _pump(tester, service, language: 'vi');
+      await _tap(tester, find.byKey(const Key('requirement_reply_note')));
+      const answer = 'Sẽ chia sốt thành hai hộp nhỏ.';
+      await tester.enterText(
+        find.byKey(const Key('requirement_reply_body')),
+        answer,
+      );
+      await _tap(tester, find.byKey(const Key('requirement_reply_submit')));
+      expect(service.requirementMutations, hasLength(1));
+      await _tap(tester, find.byKey(const Key('requirement_reply_note')));
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.byKey(const Key('requirement_reply_body')),
+            )
+            .controller!
+            .text,
+        answer,
+      );
+      service.failRequirementReply = false;
+      await _tap(tester, find.byKey(const Key('requirement_reply_submit')));
+      expect(service.requirementMutations, hasLength(2));
+      expect(service.requirementMutations[1], service.requirementMutations[0]);
+      expect(service.requirementReply!.body, answer);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'staff shows persisted item_note, whole-order note, contact and diner count',
     (tester) async {

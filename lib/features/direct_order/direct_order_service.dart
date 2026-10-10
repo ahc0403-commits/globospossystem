@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../main.dart';
 import 'direct_order_models.dart';
+import 'direct_order_requirements.dart';
 
 typedef DirectOrderInvoker =
     Future<Object?> Function(Map<String, dynamic> body);
@@ -340,6 +341,7 @@ class DirectOrderService {
         DirectOrderFulfillmentType.delivery,
     String? customerNote,
     int? dinerCount,
+    bool utensilsRequested = true,
   }) async {
     if (dinerCount == null || dinerCount < 1 || dinerCount > 100) {
       throw const DirectOrderException('DIRECT_ORDER_DINER_COUNT_INVALID');
@@ -383,6 +385,7 @@ class DirectOrderService {
         'locale': locale,
         'fulfillment_type': fulfillmentType.name,
         'diner_count': dinerCount,
+        'utensils_requested': utensilsRequested,
         'customer_note': customerNote,
         'items': cart.entries
             .where((entry) => entry.value > 0)
@@ -525,7 +528,7 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status_v7',
+      'action': 'status_v9',
       ...session.credentials,
       'request_id': requestId,
     });
@@ -536,7 +539,7 @@ class DirectOrderService {
     required DirectOrderSession session,
   }) async {
     final data = await _invokeValue({
-      'action': 'orders_v3',
+      'action': 'orders_v4',
       ...session.credentials,
     });
     if (data is! List) {
@@ -640,6 +643,25 @@ class DirectOrderService {
       createdAt: DateTime.parse(_requiredResponseString(data, 'created_at')),
     );
   }
+
+  Future<DirectOrderStatus> decideRequirement({
+    required DirectOrderSession session,
+    required String requestId,
+    required DirectOrderRequirement requirement,
+    required bool accept,
+    String? message,
+  }) async => DirectOrderStatus.fromJson(
+    await _invoke({
+      'action': 'decide_requirement',
+      ...session.credentials,
+      'request_id': requestId,
+      'requirement_id': requirement.id,
+      'expected_version': requirement.version,
+      'reply_message_id': requirement.replyMessageId,
+      'accept': accept,
+      'message': message,
+    }),
+  );
 
   Future<void> cancelRequest({
     required String slug,

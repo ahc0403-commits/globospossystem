@@ -139,6 +139,25 @@ Widget _app(_Service service, String language) => ProviderScope(
   ),
 );
 
+Future<void> _revealStatus(WidgetTester tester, Finder target) async {
+  final scroller = find
+      .descendant(
+        of: find.byKey(const PageStorageKey('direct_status_list')),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+  final position = tester.state<ScrollableState>(scroller).position;
+  position.jumpTo(0);
+  await tester.pumpAndSettle();
+  for (var i = 0; i < 12 && target.evaluate().isEmpty; i++) {
+    position.jumpTo((position.pixels + 180).clamp(0, position.maxScrollExtent));
+    await tester.pumpAndSettle();
+  }
+  expect(target, findsOneWidget);
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -266,6 +285,9 @@ void main() {
         final copy = DirectOrderCopy(language);
         await tester.pumpWidget(_app(service, language));
         await tester.pumpAndSettle();
+        await _revealStatus(tester, find.text(copy.orderProgress));
+        await tester.tap(find.text(copy.orderProgress));
+        await tester.pumpAndSettle();
         expect(find.text(copy.packingCount(3)), findsOneWidget);
         final accept = find.byKey(const Key('direct_accept_pickup'));
         await tester.ensureVisible(accept);
@@ -325,7 +347,7 @@ void main() {
     );
   }
   testWidgets(
-    'declining pickup keeps delivery and the three customer progress stages',
+    'declining pickup keeps delivery and the customer progress stages',
     (tester) async {
       final service = _Service();
       await tester.pumpWidget(_app(service, 'en'));
@@ -336,6 +358,11 @@ void main() {
       await tester.tap(decline);
       await tester.pumpAndSettle();
       expect(service.accepted, false);
+      await tester.ensureVisible(
+        find.text(DirectOrderCopy('en').orderProgress),
+      );
+      await tester.tap(find.text(DirectOrderCopy('en').orderProgress));
+      await tester.pumpAndSettle();
       expect(
         find.byKey(const Key('direct_order_progress_step_2')),
         findsOneWidget,
@@ -371,7 +398,14 @@ void main() {
         find.byKey(const Key('direct_order_closed_state')),
         findsOneWidget,
       );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
       await tester.tap(find.text(copy.orderStatus));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const PageStorageKey('direct_status_list')),
+        const Offset(0, 1600),
+      );
       await tester.pumpAndSettle();
       expect(
         find.byKey(const Key('direct_order_status_title')),

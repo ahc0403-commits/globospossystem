@@ -25,6 +25,7 @@ import 'direct_order_dialog.dart';
 import 'direct_order_localization.dart';
 import 'direct_order_money.dart';
 import 'direct_order_staff_service.dart';
+import 'direct_order_requirements.dart';
 
 class DirectOrderCashierScreen extends ConsumerStatefulWidget {
   const DirectOrderCashierScreen({
@@ -66,6 +67,9 @@ class _DirectOrderCashierScreenState
   String? _fulfillmentFilter;
   bool _loading = true;
   bool _busy = false;
+  final _requirementDrafts = <String, DirectOrderRequirementReply>{};
+  final _requirementMutationIds = <String, String>{};
+  final _requirementDraftSources = <String, String>{};
   int _refreshRevision = 0;
 
   DirectOrderCopy get _copy =>
@@ -295,7 +299,10 @@ class _DirectOrderCashierScreenState
         expectedVersion: (_delivery['version'] as num?)?.toInt() ?? 1,
         dinerCount: count,
       ),
-      _copy.packingCount(count),
+      _copy.packingCount(
+        count,
+        utensilsRequested: _delivery['utensils_requested'] != false,
+      ),
     );
   }
 
@@ -364,6 +371,7 @@ class _DirectOrderCashierScreenState
   );
 
   Future<void> _sendQuote() async {
+    if (_hasPendingRequirements) return;
     final fee =
         (_isPickup ||
             _deliveryPaymentMode ==
@@ -388,6 +396,90 @@ class _DirectOrderCashierScreenState
         note: _quoteNoteController.text.trim(),
       );
     }, _copy.quoteSent);
+  }
+
+  List<DirectOrderRequirement> get _requirements =>
+      DirectOrderRequirement.fromRows(_detail?['requirements']);
+  bool get _hasPendingRequirements => _requirements.any((q) => !q.isConfirmed);
+
+  Future<void> _replyRequirement(DirectOrderRequirement requirement) async {
+    final requestId = _selectedId;
+    final storeId = _storeId;
+    if (_busy || requestId == null || storeId == null) return;
+    final draftKey = '$requestId/${requirement.id}';
+    final draftSource =
+        '${requirement.version}/${requirement.requestText}/${requirement.followupText ?? ''}';
+    if (_requirementDraftSources[draftKey] != draftSource) {
+      _requirementDrafts.remove(draftKey);
+      _requirementMutationIds.remove(draftKey);
+    }
+    final previousDraft = _requirementDrafts[draftKey];
+    final reply = await showDirectOrderDialog<DirectOrderRequirementReply>(
+      context: context,
+      builder: (_) => DirectOrderRequirementReplyDialog(
+        requirement: requirement,
+        draft: _requirementDrafts[draftKey],
+      ),
+    );
+    if (reply == null || !mounted || _selectedId != requestId) return;
+    if (previousDraft?.body != reply.body ||
+        previousDraft?.printRequestVi != reply.printRequestVi ||
+        previousDraft?.printReplyVi != reply.printReplyVi ||
+        previousDraft?.needsConfirmation != reply.needsConfirmation ||
+        previousDraft?.printScope != reply.printScope) {
+      _requirementMutationIds[draftKey] = directOrderStaffService
+          .newRequirementMutationId();
+    }
+    _requirementDraftSources[draftKey] = draftSource;
+    _requirementDrafts[draftKey] = reply;
+    setState(() => _busy = true);
+    try {
+      final detail = await directOrderStaffService.replyRequirement(
+        storeId: storeId,
+        requestId: requestId,
+        requirement: requirement,
+        reply: reply,
+        locale: Localizations.localeOf(context).languageCode,
+        mutationId: _requirementMutationIds[draftKey]!,
+      );
+      if (!mounted || _selectedId != requestId) return;
+      _refreshRevision += 1;
+      _requirementDrafts.remove(draftKey);
+      _requirementMutationIds.remove(draftKey);
+      _requirementDraftSources.remove(draftKey);
+      final requirements = DirectOrderRequirement.fromRows(
+        detail['requirements'],
+      );
+      setState(() {
+        _detail = detail;
+        _requests = [
+          for (final row in _requests)
+            if (row['id'] == requestId)
+              {
+                ...row,
+                'request_reply_due': requirements
+                    .where((q) => q.status == 'awaiting_reply')
+                    .length,
+                'request_confirmation_due': requirements
+                    .where((q) => q.awaitingCustomer)
+                    .length,
+              }
+            else
+              row,
+        ];
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_copy.errorMessage(directOrderStaffErrorCode(error))),
+          ),
+        );
+        await _refresh(silent: true, allowWhileBusy: true);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<DirectOrderDriverReceiptStatus> _loadDriverReceiptStatus(
@@ -1208,7 +1300,7 @@ class _DirectOrderCashierScreenState
                     ],
                   ),
                   subtitle: Text(
-                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}${supportNumber(row['overpayment_due']) > 0 ? ' · ${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).text('surplus')}: ${_vnd(row['overpayment_due'])}' : ''}',
+                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${supportNumber(row['request_reply_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).replyDue} ${row['request_reply_due']}' : ''}${supportNumber(row['request_confirmation_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).awaiting} ${row['request_confirmation_due']}' : ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}${supportNumber(row['overpayment_due']) > 0 ? ' · ${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).text('surplus')}: ${_vnd(row['overpayment_due'])}' : ''}',
                   ),
                   trailing: row['final_total'] == null
                       ? null
@@ -1299,6 +1391,7 @@ class _DirectOrderCashierScreenState
                 _copy.packingCount(
                   ((_delivery['diner_count'] ?? request['diner_count']) as num?)
                       ?.toInt(),
+                  utensilsRequested: _delivery['utensils_requested'] != false,
                 ),
                 style: const TextStyle(
                   fontSize: 18,
@@ -1501,18 +1594,27 @@ class _DirectOrderCashierScreenState
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _busy ? null : _sendQuote,
+                    onPressed: _busy || _hasPendingRequirements
+                        ? null
+                        : _sendQuote,
                     icon: const Icon(Icons.send_outlined),
                     label: Text(_copy.sendQuote),
                   ),
                 ),
+                if (_hasPendingRequirements)
+                  Text(
+                    DirectOrderRequirementCopy(
+                      Localizations.localeOf(context).languageCode,
+                    ).pendingGate,
+                    key: const Key('requirement_quote_gate'),
+                  ),
               ],
             ),
           ),
         if (isPickup && (state == 'awaiting_quote' || state == 'quoted'))
           FilledButton.icon(
             key: const Key('direct_pickup_send_quote'),
-            onPressed: _busy ? null : _sendQuote,
+            onPressed: _busy || _hasPendingRequirements ? null : _sendQuote,
             icon: const Icon(Icons.send_outlined),
             label: Text(_copy.sendQuote),
           ),
@@ -2037,6 +2139,23 @@ class _DirectOrderCashierScreenState
             ),
           ),
           const Divider(height: 1),
+          if (_requirements.isNotEmpty)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (final requirement in _requirements)
+                      DirectOrderRequirementCard(
+                        requirement: requirement,
+                        cashier: true,
+                        busy: _busy,
+                        onReply: () => _replyRequirement(requirement),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
@@ -2091,18 +2210,34 @@ class _DirectOrderCashierScreenState
                               ],
                             ),
                           )
-                        : DirectOrderTranslatedText(
-                            translations: supportMap(
-                              supportMap(message['metadata'])['translations'],
-                            ),
-                            status: supportMap(
-                              message['metadata'],
-                            )['translation_status']?.toString(),
-                            original: localizedDirectOrderMessage(
-                              copy: _copy,
-                              messageType: type,
-                              body: message['body']?.toString(),
-                            ),
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (supportMap(
+                                    message['metadata'],
+                                  )['request_text']
+                                  is String)
+                                Text(
+                                  '↳ ${supportMap(message['metadata'])['request_text']}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              DirectOrderTranslatedText(
+                                translations: supportMap(
+                                  supportMap(
+                                    message['metadata'],
+                                  )['translations'],
+                                ),
+                                status: supportMap(
+                                  message['metadata'],
+                                )['translation_status']?.toString(),
+                                original: localizedDirectOrderMessage(
+                                  copy: _copy,
+                                  messageType: type,
+                                  body: message['body']?.toString(),
+                                ),
+                              ),
+                            ],
                           ),
                   ),
                 );

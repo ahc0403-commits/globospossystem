@@ -101,9 +101,17 @@ class PrintJobAgentService implements PrintAgentDriver {
     _isProcessing = true;
     try {
       final jobs = await _backend.claimJobs(storeId, limit: limit);
+      final destinations = await _backend.loadDestinations(
+        jobs
+            .map((job) => job.destinationId)
+            .whereType<String>()
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList(),
+      );
       final results = <PrintJobAgentResult>[];
       for (final job in jobs) {
-        results.add(await _processJob(job));
+        results.add(await _processJob(job, destinations[job.destinationId]));
       }
       return results;
     } finally {
@@ -111,7 +119,10 @@ class PrintJobAgentService implements PrintAgentDriver {
     }
   }
 
-  Future<PrintJobAgentResult> _processJob(PrintAgentJob job) async {
+  Future<PrintJobAgentResult> _processJob(
+    PrintAgentJob job,
+    PrintDestination? destination,
+  ) async {
     final destinationId = job.destinationId;
     if (destinationId == null || destinationId.isEmpty) {
       await _backend.completeJob(job.id, ok: false, error: 'NO_DESTINATION');
@@ -122,7 +133,6 @@ class PrintJobAgentService implements PrintAgentDriver {
       );
     }
 
-    final destination = await _backend.loadDestination(destinationId);
     if (destination == null) {
       await _backend.completeJob(
         job.id,
@@ -297,6 +307,7 @@ class PrintJobAgentService implements PrintAgentDriver {
 
   Future<List<int>> _buildBytes(PrintAgentJob job) {
     return switch (job.ticket.ticket) {
+      'request_update' => ReceiptBuilder.buildRequestUpdate(job.ticket),
       'receipt' => _buildPaymentReceipt(job.payload),
       'floor' => ReceiptBuilder.buildFloorTicket(job.ticket),
       'tray' => ReceiptBuilder.buildTrayLabel(job.ticket),
@@ -329,6 +340,7 @@ class PrintJobAgentService implements PrintAgentDriver {
       directDeliveryPaymentMode: receipt.directDeliveryPaymentMode,
       directReferenceCode: receipt.directReferenceCode,
       dinerCount: receipt.dinerCount,
+      utensilsRequested: receipt.utensilsRequested,
       fulfillmentMethod: receipt.fulfillmentMethod,
       directOrderReference: receipt.directOrderReference,
       orderNotes: receipt.orderNotes,
@@ -340,6 +352,9 @@ class PrintJobAgentService implements PrintAgentDriver {
 abstract class PrintJobBackend {
   Future<List<PrintAgentJob>> claimJobs(String storeId, {int limit = 10});
   Future<PrintDestination?> loadDestination(String destinationId);
+  Future<Map<String, PrintDestination>> loadDestinations(
+    List<String> destinationIds,
+  );
   Future<void> completeJob(String jobId, {required bool ok, String? error});
 
   Future<void> subscribeToJobs(
@@ -363,7 +378,7 @@ class SupabasePrintJobBackend implements PrintJobBackend {
     int limit = 10,
   }) async {
     final response = await _client.rpc(
-      'claim_print_jobs',
+      'claim_print_jobs_v2',
       params: {'p_store_id': storeId, 'p_limit': limit},
     );
     final rows = response is List ? response : const <Object?>[];
@@ -375,28 +390,46 @@ class SupabasePrintJobBackend implements PrintJobBackend {
 
   @override
   Future<PrintDestination?> loadDestination(String destinationId) async {
-    final response = await _client
+    return (await loadDestinations([destinationId]))[destinationId];
+  }
+
+  @override
+  Future<Map<String, PrintDestination>> loadDestinations(
+    List<String> destinationIds,
+  ) async {
+    if (destinationIds.isEmpty) return const {};
+    final rows = await _client
         .from('printer_destinations')
         .select('id, name, ip, port, purpose, physical_printer_id')
-        .eq('id', destinationId)
-        .maybeSingle();
-    if (response == null) {
-      return null;
-    }
-    final destination = Map<String, dynamic>.from(response);
-    final physicalPrinterId = destination['physical_printer_id']?.toString();
-    if (physicalPrinterId != null && physicalPrinterId.isNotEmpty) {
+        .inFilter('id', destinationIds);
+    final physicalIds = rows
+        .map((row) => row['physical_printer_id'])
+        .whereType<String>()
+        .toSet()
+        .toList();
+    final endpoints = <String, List<Map<String, dynamic>>>{};
+    if (physicalIds.isNotEmpty) {
       final endpointRows = await _client
           .from('printer_endpoints')
           .select(
-            'id, endpoint_type, ip, device_name, port, priority, is_active',
+            'id, physical_printer_id, endpoint_type, ip, device_name, port, priority, is_active',
           )
-          .eq('physical_printer_id', physicalPrinterId)
+          .inFilter('physical_printer_id', physicalIds)
           .eq('is_active', true)
           .order('priority');
-      destination['endpoints'] = endpointRows;
+      for (final row in endpointRows) {
+        (endpoints[row['physical_printer_id']] ??= []).add(row);
+      }
     }
-    return PrintDestination.fromJson(destination);
+    return {
+      for (final row in rows)
+        row['id'] as String: PrintDestination.fromJson({
+          ...row,
+          'endpoints':
+              endpoints[row['physical_printer_id']] ??
+              const <Map<String, dynamic>>[],
+        }),
+    };
   }
 
   @override

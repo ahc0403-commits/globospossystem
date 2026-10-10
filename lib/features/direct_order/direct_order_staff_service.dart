@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_constants.dart';
 import '../../main.dart';
 import 'direct_order_service.dart';
+import 'direct_order_requirements.dart';
+import 'package:uuid/uuid.dart';
 
 String directOrderStaffErrorCode(Object error) {
   if (error is DirectOrderException) return error.code;
@@ -179,7 +181,7 @@ class DirectOrderStaffService {
     int limit = 100,
   }) async {
     final raw = await supabase.rpc(
-      'direct_order_staff_list_v3',
+      'direct_order_staff_list_v4',
       params: {
         'p_store_id': storeId,
         'p_states': states,
@@ -196,7 +198,7 @@ class DirectOrderStaffService {
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_detail_v4',
+        'direct_order_staff_detail_v5',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
@@ -239,6 +241,34 @@ class DirectOrderStaffService {
       ),
     );
   }
+
+  Future<Map<String, dynamic>> replyRequirement({
+    required String storeId,
+    required String requestId,
+    required DirectOrderRequirement requirement,
+    required DirectOrderRequirementReply reply,
+    required String locale,
+    required String mutationId,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_staff_reply_requirement',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_requirement_id': requirement.id,
+        'p_expected_version': requirement.version,
+        'p_mutation_id': mutationId,
+        'p_body': reply.body,
+        'p_locale': locale,
+        'p_needs_confirmation': reply.needsConfirmation,
+        'p_print_request_vi': reply.printRequestVi,
+        'p_print_reply_vi': reply.printReplyVi,
+        'p_print_scope': reply.printScope,
+      },
+    ),
+  );
+
+  String newRequirementMutationId() => const Uuid().v4();
 
   Future<void> reject({
     required String storeId,

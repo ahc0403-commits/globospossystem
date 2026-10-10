@@ -21,3 +21,28 @@ DirectOrderStage directOrderStage(String state, String? fulfillmentStatus) {
   }
   return DirectOrderStage.waiting;
 }
+
+/// Customer progress is separate from the cashier's payment/filter grouping.
+/// Cooking completion comes from all active KDS quantities, never elapsed time.
+String directOrderCustomerProgress(
+  String state,
+  String? fulfillmentStatus, {
+  bool cookingComplete = false,
+  bool isPickup = false,
+  bool handoffConfirmed = false,
+}) {
+  if (fulfillmentStatus == 'cancelled') return 'cancelled';
+  if (const {'rejected', 'cancelled', 'expired'}.contains(state)) return state;
+  if (state != 'approved') return state;
+  return switch (fulfillmentStatus) {
+    'completed' => isPickup ? 'customer_collected' : 'customer_delivered',
+    'dispatched' =>
+      isPickup
+          ? 'customer_pickup_ready'
+          : handoffConfirmed
+          ? 'customer_shipping'
+          : 'customer_packed',
+    'ready' => isPickup ? 'customer_pickup_ready' : 'customer_packed',
+    _ => cookingComplete ? 'customer_cooked' : 'customer_preparing',
+  };
+}

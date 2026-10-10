@@ -151,3 +151,28 @@ Deno.test("payment requests tell customers to review the amount and pay in KO EN
     );
   }
 });
+
+Deno.test("cooking and packing notices describe preparation without claiming handoff", () => {
+  for (const locale of ["ko", "vi", "en"]) {
+    for (const event_kind of ["cooking_complete", "packing_complete"]) {
+      const payload = buildDirectOrderFcmMessage(
+        mapDirectOrderPush({ ...row, locale, event_kind }),
+        "https://pos.example",
+      );
+      assert(
+        payload.message.data.event_kind === event_kind,
+        "progress identity",
+      );
+      if (locale === "ko") {
+        assert(
+          payload.message.data.body.includes(
+            event_kind === "cooking_complete"
+              ? "포장하고"
+              : "기사 전달을 기다리고",
+          ),
+          "verified progress",
+        );
+      }
+    }
+  }
+});

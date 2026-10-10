@@ -438,3 +438,60 @@ approval, and is source-only until separately applied through the release gate.
   optionally include `cashier_note`. Existing responses remain accepted by the
   additive Dart parsers. System codes, attachments, accounts, and amounts are
   never translated as separate structured fields.
+
+### 2026-10-10 customer progress and utensil choice (source implementation)
+
+`status_v8` / `direct_order_public_status_v8` retain v7 authorization, money,
+message and proof IDs. Delivery adds `utensils_requested` (boolean, legacy true)
+and `cooking_complete` (boolean, all noncancelled KDS items/components at their
+required quantities, no unresolved review). No KDS quantities means false.
+Support adds `access_open`, the canonical post-completion refund/evidence access
+predicate. Fulfillment completion remains the existing cashier confirmation.
+
+`orders_v4` / `direct_order_public_orders_v4` add `quote_id`, `quote_version`,
+`proof_review_id`, `fulfillment_method`, `has_dispatch`, and `cooking_complete`
+to each summary. `has_dispatch` comes from the existing dispatch record; legacy
+KDS `dispatched` alone does not establish a driver handoff.
+Selected-page item/review/quote/progress aggregation uses set operations. Existing v2/v3 keys remain compatible; only v4 exposes the new summary fields. Customer multi-order refresh makes one list and one selected
+status request; changed alerts make zero detail requests. Scoped links derive
+summaries locally from one status request, bypassing the list endpoint.
+
+Cooking/packing notices use statement transition tables. The existing atomic
+`kds_complete_kitchen_batch_v1` retains its authorization and mutation response;
+its new wrapper defers customer aggregation during individual quantity events
+and aggregates affected requests once after successful completion.
+
+`submit_v3` accepts optional boolean `payload.utensils_requested`, default true.
+Diners remain 1..100; false means omit disposable cutlery, never food containers.
+Replay retains the original choice. Staff diner edits preserve it. Staff detail,
+kitchen list, entire KDS kitchen/tray snapshot, compatible native/queued/driver paper prints,
+and digital receipt/PDF carry the same value. Saved print/receipt snapshots are
+not rewritten. Payment items and the process_payment anchor are unchanged.
+
+Versioned reads require the additive migration and Edge update before clients
+using the new versions are released. This section describes source behavior;
+DB application and production deployment require separate evidence.
+
+
+### 2026-10-10 confirmed customer requirements
+
+`status_v9` wraps v8 and adds scoped `requirements`; `direct_order_staff_detail_v5`
+wraps the existing v4 detail and adds the same request list. Both owning-session
+status wrappers are VOLATILE because the existing status renews session activity.
+The four-argument `direct_order_staff_list_v4` adds set-based pending counts and
+preserves native/converted pickup filtering before LIMIT.
+
+Cashier `direct_order_staff_reply_requirement` requires an exact source version,
+mutation UUID, custom reply, reviewed Vietnamese print wording, confirmation flag
+and preparation/delivery/both scope. Public `decide_requirement` requires the
+owning session, request, requirement version and exact reply message. Confirmation
+and retries are atomic; general chat never resolves requests. Source edits or a
+linked customer clarification reopen only that requirement. The quote RPC and
+cashier controls both block unresolved requirements.
+
+Confirmed wording enters new immutable receipt snapshots. Later confirmations
+create separate `request_update` addenda without changing payments or original
+receipts. Paperless preparation memos remain digital; receipt memos can print.
+Reprints retain their original routing and paperless context. `claim_print_jobs_v2`
+is required by compatible native stations; old claims leave memos and utensil
+opt-out jobs pending so old software cannot print an incorrect packing slip.

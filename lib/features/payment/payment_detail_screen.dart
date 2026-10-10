@@ -877,6 +877,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
       );
       final bytes = await ReceiptBuilder.buildPaymentReceipt(
         dinerCount: (packing?['diner_count'] as num?)?.toInt(),
+        utensilsRequested: packing?['utensils_requested'] != false,
         fulfillmentMethod: packing?['fulfillment_method']?.toString(),
         directOrderReference: packing?['direct_order_reference']?.toString(),
         orderNotes: packing?['order_notes']?.toString(),
@@ -886,6 +887,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
           order,
           deliveryFeeItemId: packing?['delivery_fee_item_id']?.toString(),
           hideDeliveryFee: packing?['fulfillment_method'] == 'pickup',
+          hideRawNotes: packing != null,
         ),
         totalAmount: _numValue(
           payment['amount'] ??
@@ -1072,6 +1074,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     Map<String, dynamic> order, {
     String? deliveryFeeItemId,
     bool hideDeliveryFee = false,
+    bool hideRawNotes = false,
   }) {
     final items = order['order_items'];
     if (items is! List) return const [];
@@ -1091,7 +1094,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
               ? menuItem['name_vi']?.toString().trim()
               : null;
           return ReceiptItem(
-            notes: item['notes']?.toString(),
+            notes: hideRawNotes ? null : item['notes']?.toString(),
             name:
                 item['id']?.toString() == deliveryFeeItemId &&
                     deliveryFeeItemId != null

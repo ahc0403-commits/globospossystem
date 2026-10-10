@@ -38,6 +38,12 @@ String localizedDirectOrderMessage({
     'DIRECT_ORDER_PICKUP_REFUNDED' => copy.refundRecorded,
     'DIRECT_ORDER_PICKUP_COMPLETED' => copy.pickupCompleted,
     'DIRECT_ORDER_DRIVER_HANDOFF' => copy.driverHandoffNotice,
+    'DIRECT_ORDER_COOKING_COMPLETE' => copy.customerProgressLabel(
+      'customer_cooked',
+    ),
+    'DIRECT_ORDER_PACKING_COMPLETE' => copy.customerProgressLabel(
+      'customer_packed',
+    ),
     'DIRECT_ORDER_PICKUP_READY' => copy.pickupReadyNotice,
     'DIRECT_ORDER_REJECTED_BY_STORE' => copy.rejectedByStore,
     'DIRECT_ORDER_CANCELLED_BY_CUSTOMER' => copy.cancelled,

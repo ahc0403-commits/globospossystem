@@ -113,6 +113,14 @@ class DigitalReceiptPdfService {
               ),
               _dashedDivider(height: 15),
             ],
+            for (final addendum in receipt.requestAddenda) ...[
+              pw.Text(
+                'Yêu cầu bổ sung đã thống nhất',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text(addendum),
+              _dashedDivider(height: 15),
+            ],
             _sectionHeader('MÓN', 'THÀNH TIỀN'),
             pw.SizedBox(height: 2),
             for (var index = 0; index < billableItems.length; index++) ...[

@@ -65,7 +65,10 @@ class DirectOrderDetailsSheet extends StatelessWidget {
                   Text(status.isPickup ? copy.pickup : copy.delivery),
                   const SizedBox(height: 12),
                   Text(
-                    copy.packingCount(delivery?.dinerCount),
+                    copy.packingCount(
+                      delivery?.dinerCount,
+                      utensilsRequested: delivery?.utensilsRequested ?? true,
+                    ),
                     key: const Key('direct_details_diner_count'),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),

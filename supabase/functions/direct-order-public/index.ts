@@ -35,6 +35,9 @@ export const directOrderActionRegistry = Object.freeze(
     submit: { actor: "public", rateLimit: 60 },
     submit_v2: { actor: "public", rateLimit: 60 },
     submit_v3: { actor: "public", rateLimit: 60 },
+    status_v8: { actor: "public", rateLimit: 60 },
+    status_v9: { actor: "public", rateLimit: 60 },
+    decide_requirement: { actor: "public", rateLimit: 30 },
     resume_storefront: { actor: "public", rateLimit: 60 },
     resume_order: { actor: "public", rateLimit: 60 },
     issue_order_access: { actor: "public", rateLimit: 10 },
@@ -48,6 +51,7 @@ export const directOrderActionRegistry = Object.freeze(
     status_v7: { actor: "public", rateLimit: 60 },
     orders_v2: { actor: "public", rateLimit: 60 },
     orders_v3: { actor: "public", rateLimit: 60 },
+    orders_v4: { actor: "public", rateLimit: 60 },
     push_subscription: { actor: "public", rateLimit: 10 },
     message: { actor: "public", rateLimit: 60 },
     charge_consent: { actor: "public", rateLimit: 30 },
@@ -514,6 +518,20 @@ const internalFailure: SqlErrorContract = {
 export const sqlDomainErrorRegistry: Readonly<
   Record<string, SqlErrorContract>
 > = Object.freeze({
+  DIRECT_ORDER_REQUIREMENT_NOT_FOUND: unavailable(
+    "DIRECT_ORDER_REQUIREMENT_NOT_FOUND",
+  ),
+  DIRECT_ORDER_REQUIREMENT_REPLY_INVALID: invalidRequest(
+    "DIRECT_ORDER_REQUIREMENT_REPLY_INVALID",
+  ),
+  DIRECT_ORDER_REQUIREMENT_VERSION_CONFLICT: conflict(
+    "DIRECT_ORDER_REQUIREMENT_VERSION_CONFLICT",
+  ),
+  DIRECT_ORDER_REQUIREMENTS_PENDING: conflict(
+    "DIRECT_ORDER_REQUIREMENTS_PENDING",
+  ),
+  DIRECT_ORDER_REQUIREMENT_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_REQUIREMENT_PRINT_DRIFT: internalFailure,
   DIRECT_ORDER_UNAVAILABLE: unavailable("DIRECT_ORDER_UNAVAILABLE"),
   DIRECT_ORDER_ORDER_CLOSED: {
     status: 410,
@@ -596,6 +614,14 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_PROOF_PATH_INVALID: invalidRequest("INVALID_PROOF"),
   DIRECT_ORDER_LIMIT_INVALID: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_FULFILLMENT_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_UTENSILS_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_KITCHEN_DRIFT: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_PACKING_DRIFT: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_PRINT_DRIFT: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_PROGRESS_SUBMIT_DRIFT: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_PROGRESS_VERIFICATION_FAILED: unavailable(
+    "DIRECT_ORDER_UNAVAILABLE",
+  ),
   DIRECT_ORDER_PUSH_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_PUSH_DEVICE_LIMIT: conflict("DIRECT_ORDER_PUSH_DEVICE_LIMIT"),
   DIRECT_ORDER_KDS_READY_ANCHOR_DRIFT: internalFailure,
@@ -896,6 +922,29 @@ export function directOrderAttachmentSpec(
   return { filename, mime, path, extension: pathExtension };
 }
 
+export function directOrderRequirementDecisionArgs(
+  body: JsonObject,
+): JsonObject {
+  if (
+    typeof body.accept !== "boolean" ||
+    !Number.isSafeInteger(body.expected_version) ||
+    Number(body.expected_version) < 1 ||
+    Number(body.expected_version) > 2147483647 ||
+    (body.accept && body.message != null)
+  ) {
+    throw new SafeHttpError(400, "DIRECT_ORDER_REQUIREMENT_REPLY_INVALID");
+  }
+  return {
+    p_session_id: requiredUuid(body, "session_id"),
+    p_request_id: requiredUuid(body, "request_id"),
+    p_requirement_id: requiredUuid(body, "requirement_id"),
+    p_expected_version: body.expected_version,
+    p_reply_message_id: requiredUuid(body, "reply_message_id"),
+    p_accept: body.accept,
+    p_body: body.accept ? null : requiredString(body, "message", 2000),
+  };
+}
+
 export function directOrderSecretKeyName(
   directOrderName: string | undefined,
   publicReceiptName: string | undefined,
@@ -919,6 +968,7 @@ export async function resolveOrderScopedRequest(
     "resume_storefront",
     "orders_v2",
     "orders_v3",
+    "orders_v4",
     "status",
     "status_v2",
     "status_v3",
@@ -926,6 +976,9 @@ export async function resolveOrderScopedRequest(
     "status_v5",
     "status_v6",
     "status_v7",
+    "status_v8",
+    "status_v9",
+    "decide_requirement",
     "message",
     "decide_pickup",
     "cancel",
@@ -952,6 +1005,7 @@ export async function resolveOrderScopedRequest(
       "resume_storefront",
       "orders_v2",
       "orders_v3",
+      "orders_v4",
       "push_subscription",
     ]
       .includes(action) &&
@@ -1111,6 +1165,12 @@ function productionDependencies(): DirectOrderDependencies {
         const payload = body.payload as JsonObject;
         directOrderLocale(payload.locale);
         if (action === "submit_v3") directOrderDinerCount(payload.diner_count);
+        if (
+          "utensils_requested" in payload &&
+          typeof payload.utensils_requested !== "boolean"
+        ) {
+          throw new SafeHttpError(400, "INVALID_REQUEST");
+        }
         return await rpc(
           service,
           action === "submit_v3" && body.access_key != null
@@ -1150,7 +1210,9 @@ function productionDependencies(): DirectOrderDependencies {
       case "status_v4":
       case "status_v5":
       case "status_v6":
-      case "status_v7": {
+      case "status_v7":
+      case "status_v8":
+      case "status_v9": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
@@ -1205,21 +1267,50 @@ function productionDependencies(): DirectOrderDependencies {
         );
       }
       case "orders_v2":
-      case "orders_v3": {
+      case "orders_v3":
+      case "orders_v4": {
         const sessionId = requiredUuid(body, "session_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
         if (scoped.requestId) {
           const status = asObject(
-            await rpc(service, "direct_order_public_status_v6", {
-              p_session_id: sessionId,
-              p_secret_hash: await hashSecret(secret),
-              p_request_id: scoped.requestId,
-            }),
+            await rpc(
+              service,
+              action === "orders_v4"
+                ? "direct_order_public_status_v9"
+                : "direct_order_public_status_v6",
+              {
+                p_session_id: sessionId,
+                p_secret_hash: await hashSecret(secret),
+                p_request_id: scoped.requestId,
+              },
+            ),
           );
           const fulfillment = asObject(status.fulfillment ?? {});
           const review = asObject(status.proof_review ?? {});
           const quote = asObject(status.quote ?? {});
           return [{
+            ...(action === "orders_v4"
+              ? {
+                quote_id: quote.id ?? null,
+                quote_version: quote.version ?? null,
+                proof_review_id: review.id ?? null,
+                has_dispatch:
+                  Object.keys(asObject(status.dispatch ?? {})).length > 0 ||
+                  asObject(status.delivery ?? {}).provider != null,
+                fulfillment_method: asObject(status.delivery ?? {}).method ??
+                  "delivery",
+                cooking_complete:
+                  asObject(status.delivery ?? {}).cooking_complete === true,
+              }
+              : {}),
+            ...(action !== "orders_v2"
+              ? {
+                fulfillment_type:
+                  asObject(status.delivery ?? {}).method === "pickup"
+                    ? "pickup"
+                    : status.fulfillment_type ?? "delivery",
+              }
+              : {}),
             request_id: status.request_id,
             reference_code: status.reference_code,
             state: status.state,
@@ -1238,7 +1329,9 @@ function productionDependencies(): DirectOrderDependencies {
         }
         return await rpc(
           service,
-          action === "orders_v3"
+          action === "orders_v4"
+            ? "direct_order_public_orders_v4"
+            : action === "orders_v3"
             ? "direct_order_public_orders_v3"
             : "direct_order_public_orders_v2",
           {
@@ -1247,6 +1340,14 @@ function productionDependencies(): DirectOrderDependencies {
             p_limit: 50,
           },
         );
+      }
+      case "decide_requirement": {
+        return await rpc(service, "direct_order_public_decide_requirement", {
+          ...directOrderRequirementDecisionArgs(body),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
+        });
       }
       case "message": {
         const sessionId = requiredUuid(body, "session_id");
@@ -1307,13 +1408,17 @@ function productionDependencies(): DirectOrderDependencies {
           );
         } else {
           status = asObject(
-            await rpc(service, "direct_order_public_status_v6", {
-              p_session_id: requiredUuid(body, "session_id"),
-              p_secret_hash: await hashSecret(
-                requiredString(body, "secret", 128, secretPattern),
-              ),
-              p_request_id: requestId,
-            }),
+            await rpc(
+              service,
+              "direct_order_public_status_v6",
+              {
+                p_session_id: requiredUuid(body, "session_id"),
+                p_secret_hash: await hashSecret(
+                  requiredString(body, "secret", 128, secretPattern),
+                ),
+                p_request_id: requestId,
+              },
+            ),
           );
           storeId = String(status.store_id);
         }
