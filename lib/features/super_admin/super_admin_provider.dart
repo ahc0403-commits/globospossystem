@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../auth/auth_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/store_revenue_summary_service.dart';
@@ -344,25 +345,24 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   String? get lastError => state.error;
 
   final _catalogLoads = <String, Future<void>>{};
+  final _catalogRefreshQueues = <String, CoalescedRefresh>{};
 
   Future<void> _catalogLoad(
     String key,
     Future<void> Function() read, {
     bool force = false,
-  }) async {
+  }) {
+    if (!mounted) return Future.value();
     final existing = _catalogLoads[key];
-    if (existing != null) {
-      if (!force) return existing;
-      await existing;
-    }
-    if (!mounted) return;
-    final future = read();
+    if (existing != null && !force) return existing;
+    final queue = _catalogRefreshQueues.putIfAbsent(key, CoalescedRefresh.new);
+    final future = queue.run(() async {
+      if (mounted) await read();
+    });
     _catalogLoads[key] = future;
-    try {
-      await future;
-    } finally {
+    return future.whenComplete(() {
       if (identical(_catalogLoads[key], future)) _catalogLoads.remove(key);
-    }
+    });
   }
 
   Future<void> loadAllRestaurants({
@@ -724,12 +724,19 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   final _pendingReportStores = <String>{};
   bool _fullReportRefresh = false;
 
-  Future<void> refreshReportsForStore(String? storeId) {
+  Future<void> refreshReportsForStore(String? storeId) =>
+      refreshReportsForStores(storeId == null ? null : {storeId});
+
+  Future<void> refreshReportsForStores(Set<String>? storeIds) {
     if (!mounted) return Future.value();
-    if (storeId == null) {
+    if (storeIds == null) {
       _fullReportRefresh = true;
     } else {
-      _pendingReportStores.add(storeId);
+      _pendingReportStores.addAll(storeIds);
+      if (_pendingReportStores.length > 500) {
+        _pendingReportStores.clear();
+        _fullReportRefresh = true;
+      }
     }
     return _liveReportQueue.run(() async {
       if (!mounted) return;
@@ -799,6 +806,10 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   void dispose() {
     _reportRequestId++;
     _liveReportQueue.dispose();
+    for (final queue in _catalogRefreshQueues.values) {
+      queue.dispose();
+    }
+    _catalogLoads.clear();
     super.dispose();
   }
 
@@ -883,6 +894,16 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
 }
 
 final superAdminProvider =
-    StateNotifierProvider<SuperAdminNotifier, SuperAdminState>(
-      (ref) => SuperAdminNotifier(),
-    );
+    StateNotifierProvider<SuperAdminNotifier, SuperAdminState>((ref) {
+      ref.watch(
+        authProvider.select(
+          (a) => (
+            a.user?.id,
+            a.role,
+            a.storeId,
+            a.accessibleStores.map((s) => s.id).join(','),
+          ),
+        ),
+      );
+      return SuperAdminNotifier();
+    });

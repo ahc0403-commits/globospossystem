@@ -1,3 +1,4 @@
+import '../../core/hardware/receipt_delivery_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -271,6 +272,14 @@ class _ReceiptPaper extends StatelessWidget {
                 ),
               ),
             ],
+            if (recipientPaysDelivery(
+              receipt.deliveryPaymentMode,
+              receipt.fulfillmentMethod,
+            ))
+              const Text(
+                recipientDeliveryNoticeVi,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             const Divider(height: 28),
             if (receipt.orderNotes != null) ...[
               Text(

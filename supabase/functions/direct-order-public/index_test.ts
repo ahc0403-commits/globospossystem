@@ -15,6 +15,7 @@ import {
   resolveProjectSecretKey,
   SafeHttpError,
   sqlDomainErrorRegistry,
+  validateChatAttachmentBytes,
   validateProofImage,
   validProofObjectPath,
   validProofPath,
@@ -323,6 +324,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "submit_v3",
       "status_v8",
       "status_v9",
+      "status_v10",
       "decide_requirement",
       "resume_storefront",
       "resume_order",
@@ -338,6 +340,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "orders_v2",
       "orders_v3",
       "orders_v4",
+      "orders_v5",
       "push_subscription",
       "message",
       "charge_consent",
@@ -345,6 +348,10 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "customer_attachment_upload",
       "customer_attachment_commit",
       "customer_attachment_url",
+      "customer_chat_attachment_upload",
+      "customer_chat_attachment_commit",
+      "staff_chat_attachment_upload",
+      "staff_chat_attachment_commit",
       "staff_attachment_upload",
       "staff_attachment_commit",
       "staff_attachment_url",
@@ -485,7 +492,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    173,
+    185,
     "registered SQL error count",
   );
   assertEquals(
@@ -886,4 +893,63 @@ Deno.test("request agreement binds the exact reply, version and freeform followu
       }
     }
   }
+});
+
+Deno.test("general customer PDFs have an explicit contract independent of payment proof", () => {
+  const store = "11111111-1111-4111-8111-111111111111",
+    order = "22222222-2222-4222-8222-222222222222";
+  const spec = directOrderAttachmentSpec(
+    {
+      filename: "address.pdf",
+      mime_type: "application/pdf",
+      path: `${store}/${order}/33333333-3333-4333-8333-333333333333.pdf`,
+    },
+    store,
+    order,
+    false,
+    true,
+  );
+  assertEquals(spec.mime, "application/pdf", "general PDF accepted");
+  const jpeg = new Uint8Array([
+    0xff,
+    0xd8,
+    0xff,
+    0xc0,
+    0,
+    8,
+    8,
+    0,
+    2,
+    0,
+    3,
+    0,
+    0xff,
+    0xd9,
+  ]);
+  assertEquals(
+    validateProofImage(jpeg, "jpeg"),
+    true,
+    "JPEG alias accepts a valid frame",
+  );
+  assertEquals(
+    validateChatAttachmentBytes(
+      new TextEncoder().encode("%PDF-1.7\n1 0 obj endobj\n%%EOF\n"),
+      "pdf",
+    ),
+    true,
+    "PDF bytes accepted",
+  );
+  assertEquals(
+    validateChatAttachmentBytes(
+      new TextEncoder().encode("%PDF-1.7<script>unsafe</script>"),
+      "pdf",
+    ),
+    false,
+    "truncated fake PDF rejected",
+  );
+  assertEquals(
+    normalizeRpcError("DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED").status,
+    409,
+    "recipient guard is recoverable",
+  );
 });

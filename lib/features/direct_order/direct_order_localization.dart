@@ -37,6 +37,8 @@ String localizedDirectOrderMessage({
     'DIRECT_ORDER_REFUND_RECORDED' => copy.refundRecorded,
     'DIRECT_ORDER_PICKUP_REFUNDED' => copy.refundRecorded,
     'DIRECT_ORDER_PICKUP_COMPLETED' => copy.pickupCompleted,
+    'DIRECT_ORDER_DRIVER_BOOKED' => copy.driverBooked,
+    'DIRECT_ORDER_BOOKING_RETRY' => copy.bookingRetry,
     'DIRECT_ORDER_DRIVER_HANDOFF' => copy.driverHandoffNotice,
     'DIRECT_ORDER_COOKING_COMPLETE' => copy.customerProgressLabel(
       'customer_cooked',

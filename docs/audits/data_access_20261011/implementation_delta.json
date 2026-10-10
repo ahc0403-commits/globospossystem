@@ -1,0 +1,492 @@
+[
+  {
+    "path": "docs/plans/data_access_performance_improvement_plan_20261010.md",
+    "before_sha256": "1bf000f813754b14f7149fdcab575738c07b30bb7d2e9af9fc4ddd6317ff391f",
+    "after_sha256": "99d5722132d036cc70aa644fb5ace9da20489fa2bd11f7174ae3986430c360b3"
+  },
+  {
+    "path": "lib/core/services/attendance_service.dart",
+    "before_sha256": "20f6fa67a2868da70efece19370d195a5d30957a6ce1ca02704898aa9a611f04",
+    "after_sha256": "c7cbbeecf0ac471cac871426a99d9b798596e99cf3dfd7ec54ced4ad848648dc"
+  },
+  {
+    "path": "lib/core/services/financial_input_service.dart",
+    "before_sha256": "b1c08b616c2d470ad2a9716c9cc4de80a860ab4035cab8d39936f0c305809698",
+    "after_sha256": "0c032b305018d9ad27da6f52446931317159ca91bff2a44d6cf254228310db44"
+  },
+  {
+    "path": "lib/core/services/inventory_service.dart",
+    "before_sha256": "9a3f1942e21bbc68fcab736954d32eba73d509d424e051c6c9bbe3e48d942fbf",
+    "after_sha256": "9d61b4067f42793ea548dd1f5f2bd23db103e2bf3050327889ca9f210dcdf3a1"
+  },
+  {
+    "path": "lib/core/services/live_refresh_service.dart",
+    "before_sha256": "d035d72703dd53e4ed2fe81c029f781af25b769a5ae766c791f0c77503457b95",
+    "after_sha256": "37cd956fe9daa162f54b021a6dbf8e84e3a351b406c417063e2208629fd70edc"
+  },
+  {
+    "path": "lib/core/services/payment_proof_service.dart",
+    "before_sha256": "44a8312d8129aea020cdfa9642c199a4816bde5a0fb3d48be50113665c7fee5f",
+    "after_sha256": "9b8b19419aedb00ee21e7a6e916c1d2c3544e7e98cbfaaa3d2399b14255fc4e7"
+  },
+  {
+    "path": "lib/core/services/payroll_service.dart",
+    "before_sha256": "ea8ed0a40a48a44ff20c765b207bdb1420243444a68a30feebce5789e06805f7",
+    "after_sha256": "02022ae210c6704b40d376ec610b73eeb36a77a9a96a3b594cd7e00dc89fb104"
+  },
+  {
+    "path": "lib/core/services/store_revenue_summary_service.dart",
+    "before_sha256": "d40aeefe2b5012d0dbdc63383e57217195805d428b7b53d22320573188fd0b4c",
+    "after_sha256": "4af1dae995f43264868d2977aa9738ab6930672c758fe56f1f0a78d8479c874c"
+  },
+  {
+    "path": "lib/core/utils/bounded_xlsx.dart",
+    "before_sha256": null,
+    "after_sha256": "1e98f42622494a71be80bf5d6cd35692cbb7f909e655c5ad5a843fb05fa929ff"
+  },
+  {
+    "path": "lib/core/utils/deadline_http_client.dart",
+    "before_sha256": null,
+    "after_sha256": "c68a99bb134534b1f86ad17f9b5ce81a71ffec59d9bbd3efd5ab12e9410af412"
+  },
+  {
+    "path": "lib/core/utils/excel_workbook_decoder.dart",
+    "before_sha256": "6929fde578dd66340ea6acf2623fd3365ae7af493096966db1af2403fac5b77f",
+    "after_sha256": "1bfe5f6658836e70dc21bbf5ce7c7ce3a3ba665fe29446be893604de042a67b3"
+  },
+  {
+    "path": "lib/core/utils/streaming_xlsx_writer.dart",
+    "before_sha256": null,
+    "after_sha256": "2fa778a0bfdf831281f6f21c1fac68aa014b2167b9e73d1047da6816c5f91b06"
+  },
+  {
+    "path": "lib/core/utils/xlsx_rows.dart",
+    "before_sha256": null,
+    "after_sha256": "f8cdae55b6753680c0527b803fd54a92eaff4c8dd5066c9a18235c0fea109b8f"
+  },
+  {
+    "path": "lib/features/admin/tabs/reports_tab.dart",
+    "before_sha256": "c4dda924951f44392b1ed7e12392b17548867f749f0b5f4a8e9cb95183a922dc",
+    "after_sha256": "16e0825ca5d55dec155d36b0eba87896eb329192080e2c5ddd394bd2e34c0c27"
+  },
+  {
+    "path": "lib/features/cashier/cashier_screen.dart",
+    "before_sha256": "c0c86873cf48960c44955f308ebdb414bff8e91ff89a6ee28d65650fb719012b",
+    "after_sha256": "259689c608784c1785bdc9fc0676d1a20c38a7f215249cb7ff49b1e2e73ca5bf"
+  },
+  {
+    "path": "lib/features/inventory/ingredient_excel_import.dart",
+    "before_sha256": "1b784637ecba5f16f025c4bff9421299c598c7347c33b27927247dff721a14ac",
+    "after_sha256": "cfd4ba74f8813bdc0f501af8be8114f518e472f7cc1f371ebc4c5e6a9830a529"
+  },
+  {
+    "path": "lib/features/inventory/inventory_provider.dart",
+    "before_sha256": "fff6e229e86bef6465bbcd83d313f05f70a3525200b4fb69a0ad23cfb77c46c0",
+    "after_sha256": "5ea995c6a749753cdd4757edd250dbbba8dab96cf4100d68fa52e98afbba37d2"
+  },
+  {
+    "path": "lib/features/inventory/recipe_excel_import.dart",
+    "before_sha256": "d2bdc086e94daf60fad148f78d8b56cf4008d38a8e6bba2b57bf33212d9fad69",
+    "after_sha256": "7c561bec487cd8cf815bd1bf7302f63ef92c3a8e8eb15936abbc438451448255"
+  },
+  {
+    "path": "lib/features/inventory_purchase/inventory_purchase_screen.dart",
+    "before_sha256": "bfbe6d2bd2dfaf3947bb8aa248d9f272cf361d9e548368dd5980a6bac7da2bbf",
+    "after_sha256": "3f7d05f50d650dd670eded9d0edf873929ae7b4d5c266a3e00235e8b29244dbb"
+  },
+  {
+    "path": "lib/features/kitchen/kitchen_provider.dart",
+    "before_sha256": "7f480885e9637c8d306c4135dec051235b822afd87dffdeac948f381d0c6fa16",
+    "after_sha256": "a78480eec8f93ba946dbef688ad5745930c5b469b7941d3a49b5a88a0e436cc8"
+  },
+  {
+    "path": "lib/features/kitchen/kitchen_screen.dart",
+    "before_sha256": "9c307588f5985c2bdbbc67865c7fc99204c011015e053a371b602ec1e4b50e5c",
+    "after_sha256": "6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c"
+  },
+  {
+    "path": "lib/features/photo_sales_import/photo_sales_import.dart",
+    "before_sha256": "f97bf7d1b5b711f43f9069bde54f4820ac663604552e416e95d15b01164702f6",
+    "after_sha256": "b0688937c6c7c439a35e9b004b3a8b8314e22eae06884174b6d03fe005c20690"
+  },
+  {
+    "path": "lib/features/photo_sales_import/photo_sales_import_screen.dart",
+    "before_sha256": "c3bdac51efd85ad4474e0c29cda295cca0a17460e9bc1b9465289376be90e928",
+    "after_sha256": "35d6844b7e0e8f0783d99b1da03e21fafdd9f76a8c081a71a3fa7de2bd3cc3a1"
+  },
+  {
+    "path": "lib/features/photo_sales_import/photo_sales_import_worker.dart",
+    "before_sha256": null,
+    "after_sha256": "6e32f057a2af1bd28b3cc7ed99903402be2914af9d8eb8bcdda7a1aac15c0e36"
+  },
+  {
+    "path": "lib/features/photo_sales_import/photo_sales_import_worker_native.dart",
+    "before_sha256": null,
+    "after_sha256": "d7e628356d6a1685c20e9144de037bd00ed843de4af8506630710d7702c6423c"
+  },
+  {
+    "path": "lib/features/photo_sales_import/photo_sales_import_worker_web.dart",
+    "before_sha256": null,
+    "after_sha256": "f3081653961b7d50ed2d5de2c3bf3f48597a188a1af84da570ea1dcd6ce87f48"
+  },
+  {
+    "path": "lib/features/receipt_ledger/receipt_ledger_screen.dart",
+    "before_sha256": "e2507e1d81c74237ec1edf5e7609efdfd1c8ae4af5c1ef446e09e7722fbc86bd",
+    "after_sha256": "c51ff711dc8e2544290505bf1207437398b1c9bc9e941d9fbd07d598b87d0f0d"
+  },
+  {
+    "path": "lib/features/receipt_ledger/receipt_ledger_service.dart",
+    "before_sha256": "70639bc1b52fb7b7341dd6db103153f9b7331b04e935ee2ed23b6e0ab6fea81a",
+    "after_sha256": "47f1f0a94661d33efe5137e58315150b5773942717b607739b288ab6d9b9b452"
+  },
+  {
+    "path": "lib/features/report/report_provider.dart",
+    "before_sha256": "dd2d2e3ac50b1961c5fe3d99e17de6f585e84bf48aab137d79bef6f28f9a757a",
+    "after_sha256": "8ba89ba7b6937baecb78dd5bde9b9751ed160634b7d2ba536909b9ab0cba0548"
+  },
+  {
+    "path": "lib/features/report/revenue_history_provider.dart",
+    "before_sha256": "083c6cb1e8079b60d7ebf5ec40251076de0e34e5c8182bfd54f1e32abe502ddb",
+    "after_sha256": "bbb643b24428c580558150ec91b5d522fd0dba6d6c0733b57898761b923be96a"
+  },
+  {
+    "path": "lib/features/super_admin/super_admin_provider.dart",
+    "before_sha256": "882a04518057336754f1e06b422320b5509f922413102de341c998b2991eefe5",
+    "after_sha256": "53c3d4ed3cfc5cb79d0ebb0ccde17cdc22fcddab395ef99f9fed57bf4b9e2f64"
+  },
+  {
+    "path": "lib/features/super_admin/super_admin_screen.dart",
+    "before_sha256": "9cc6b67344a42b537985b4a6370aaeef002772633f942844abb5b201f6aadd4a",
+    "after_sha256": "96f29642ef2d9f5d26797e21cca6e7669de47c98afe986687271844f7050f352"
+  },
+  {
+    "path": "lib/features/table/table_provider.dart",
+    "before_sha256": "644d0250284ec8a4ddd1cf43db09b17d00b4bf45f0ae139beaff512bc4eb72be",
+    "after_sha256": "8818f9c45b2571471cbbd3d584a9a479e5bf75136fd6a146b10fadf59191d5e3"
+  },
+  {
+    "path": "scripts/build_photo_import_worker.sh",
+    "before_sha256": null,
+    "after_sha256": "0fc1ff680d81f9a1128c191a1e1cfed9792cf69e0caf226361543a273055ef3b"
+  },
+  {
+    "path": "scripts/build_web.sh",
+    "before_sha256": "bc1928e3f0a6275012a796eed839fa7ff93cc8d160b6ad5ab25e16748ebadb3c",
+    "after_sha256": "ba8e0807a64edb4dfd422edbafc91d904c47dea9303eb036c1291d3d3fa9449d"
+  },
+  {
+    "path": "scripts/check_repo.sh",
+    "before_sha256": "63e967751755326c9340f7ef5c2c025e7693bab890de5a224249bb79c2b3bde2",
+    "after_sha256": "ee1f5fce669cfccd96f62290f3aac69902df91b9db9a62baabc6834e91c9cb1c"
+  },
+  {
+    "path": "scripts/deploy_pos_production.sh",
+    "before_sha256": "dec05a5d36c774e94c29db1e4deae19612e35c88b2934eaebd9245cba8be004d",
+    "after_sha256": "81b8b8a098b922634e62264f921e11374b21f234f20dc25134eeeddea13408ee"
+  },
+  {
+    "path": "scripts/fixtures/fixed_auth_lookup_owned.sql",
+    "before_sha256": null,
+    "after_sha256": "9fb066532835d85f3fd4a75de9497599c5a884a8585b6dc6d102a0bb3c10f977"
+  },
+  {
+    "path": "scripts/test_financial_inputs_postgrest.sh",
+    "before_sha256": "3d8ce9ea87b6dfc17533a4feaffe464f591c99675b9b781ce76e47d23102dbf2",
+    "after_sha256": "819d3bfed5afc60f1fe68c68d34d3e7eea303ecc4a254f195adad711cc1eef54"
+  },
+  {
+    "path": "scripts/test_menu_localization.sh",
+    "before_sha256": "1f08e9082a07be648efc1e08f3df3165b8190e4720bdfd780551f500b9514987",
+    "after_sha256": "daa9fe4c8ee2508af4d7ae7bb0aa005237bf26717d1a514f627f120d00ecb30f"
+  },
+  {
+    "path": "scripts/tests/data_access/browser/export_probe.dart",
+    "before_sha256": null,
+    "after_sha256": "5497f58b6b793bae11db1240c626290ba474505a3ba4fd33651fb341d8309cd5"
+  },
+  {
+    "path": "scripts/tests/data_access/browser/photo_before.dart",
+    "before_sha256": null,
+    "after_sha256": "eb933b3ce6aa648952f2c912921c0d77fc1460d13028fd0521c966bf789356c0"
+  },
+  {
+    "path": "scripts/tests/data_access/browser/recipe_export_probe.dart",
+    "before_sha256": null,
+    "after_sha256": "f3d155f92528163301af3b9ec09d4ce98a83541a5de0396c2fb990b8974d3f78"
+  },
+  {
+    "path": "scripts/tests/data_access/edge/import_map.json",
+    "before_sha256": null,
+    "after_sha256": "a0a15cf7c24ac0a3b131889ed2734aca30d4d0b9dd74a00d65ad50f5d25afb57"
+  },
+  {
+    "path": "scripts/tests/data_access/edge/probe.ts",
+    "before_sha256": null,
+    "after_sha256": "41722807924812f1f8ae5221d0f1986bad0ef892f2dc7206685eb88dd7ad0d59"
+  },
+  {
+    "path": "scripts/tests/data_access/edge/push_auth_stub.ts",
+    "before_sha256": null,
+    "after_sha256": "102a18b678fa6b1ad567ed98c4eac480dfee880b49ab1f6a6d24a708b7f99718"
+  },
+  {
+    "path": "scripts/tests/data_access/edge/sepay_probe.ts",
+    "before_sha256": null,
+    "after_sha256": "0cf1ad0a67ce6d9f1f328f6134e733a523c7afa97dcdeda3276bca554c6c3a5d"
+  },
+  {
+    "path": "scripts/tests/data_access/edge/server_stub.ts",
+    "before_sha256": null,
+    "after_sha256": "10a15689704b364256288a356b420364ca105f1c77454ff1ce0ebe5713e2cae6"
+  },
+  {
+    "path": "scripts/tests/data_access/edge/supabase_stub.ts",
+    "before_sha256": null,
+    "after_sha256": "7374ce5cdd52de58e2d26523eddd01883ab1477f2b903cd4cdefbc730ebbd1c9"
+  },
+  {
+    "path": "scripts/tests/data_access/verify_bounded_reads.py",
+    "before_sha256": null,
+    "after_sha256": "fe95d0d2a80c15e16c33bc6f29e4f3f4185c95820eb183db419f1443d1833878"
+  },
+  {
+    "path": "scripts/tests/data_access/verify_dispatch_claims.py",
+    "before_sha256": null,
+    "after_sha256": "2ced48dd24d77abf4aa814e72bd86d276021aa06146aa76a7930f801ce003df0"
+  },
+  {
+    "path": "scripts/vercel_build_web.sh",
+    "before_sha256": "a1a2b95329c8e74c5473d47c0611c6166f0fee49b142f06670383431c02c1b14",
+    "after_sha256": "b46be42cf62546552f40f518acd829de65b3f4b548e5be7ad4fefc89411955b5"
+  },
+  {
+    "path": "supabase/functions/_shared/emergency_push.ts",
+    "before_sha256": "3045736f30a67ba8772b3419177dd5cd7f691fd667f68fb6143562928fd24501",
+    "after_sha256": "ba327814af33df36cf244e0db3ffdfa433aa6339fe281fe28f7acce2be4a2476"
+  },
+  {
+    "path": "supabase/functions/_shared/meinvoice.ts",
+    "before_sha256": "00153d8ec1a99500e72526908b5917472e5b1a6637216bc1b9fe0edc6723dcb4",
+    "after_sha256": "a4a62a9706f70ea23154d4484641bf9d144a78701903036d1c66e89b510fcc35"
+  },
+  {
+    "path": "supabase/functions/emergency-fulfillment-dispatcher/index.ts",
+    "before_sha256": "f3f5c2904a384e2dded176b564ac193502df9d9891c2dc6de50bf0072d89664d",
+    "after_sha256": "29628fa322867c230c6323fe3c20aea978e6264a9600d28956009a9449f46fca"
+  },
+  {
+    "path": "supabase/functions/meinvoice-dispatcher/index.ts",
+    "before_sha256": "3d3ca57a69c4b28bcb291e30f65d9236b98e1378c72bfeee8cf99d0745c282ab",
+    "after_sha256": "254d3dea4f32e5e39e67ad3443981c2bf8df63bb8f6a793881ec702cff68e9cc"
+  },
+  {
+    "path": "supabase/functions/provision-fixed-pos-account/index.ts",
+    "before_sha256": "4dedd5ca67757d8361ad602788fd255c67287ff89dd8064fd7c3b65d4ad9e24d",
+    "after_sha256": "2b4e59b4bb633c00e52d92872c3ee3454f7b45391fd6dccb01a4c834dd88195c"
+  },
+  {
+    "path": "supabase/functions/sepay-webhook/index.ts",
+    "before_sha256": "5788f458d1ad1b21e04cd4b8e88b64c7577058332d475dfdb1f286bdc0783f81",
+    "after_sha256": "8add7ada51c543fcfbe0e534dda5c9776cf711de1e61e84fbe924392fb149cf1"
+  },
+  {
+    "path": "supabase/migrations/20261011010000_bounded_data_reads.sql",
+    "before_sha256": null,
+    "after_sha256": "68c963ee4cf1f673e30f38e3b86daf75f3f31cc3e6d1f41d75e62def9159b295"
+  },
+  {
+    "path": "supabase/migrations/20261011020000_employee_scoped_payroll.sql",
+    "before_sha256": null,
+    "after_sha256": "37bda1f404faa74e8d6a0990ff4c7fbee2fca06a3b01e801aa2f574170a85320"
+  },
+  {
+    "path": "supabase/migrations/20261011030000_fixed_account_exact_lookup.sql",
+    "before_sha256": null,
+    "after_sha256": "2d83430545b9871119afdf3b31175e3480340e81d4038891e4fb4efa83031419"
+  },
+  {
+    "path": "supabase/migrations/20261011040000_report_summary_and_issue_pages.sql",
+    "before_sha256": null,
+    "after_sha256": "46fc7d12c42a84d04605ee4aacde3fc98db16730ff679ab7675534916ffaae9d"
+  },
+  {
+    "path": "supabase/migrations/20261011050000_receipt_page_item_reads.sql",
+    "before_sha256": null,
+    "after_sha256": "c1a7245330a6a6f7e599b61b6ccbbf19aeabba6f75c431165a9495597f70f555"
+  },
+  {
+    "path": "supabase/migrations/20261011060000_emergency_push_batch_lease.sql",
+    "before_sha256": null,
+    "after_sha256": "7467bfcb26eb625b23784af22138beadb8fc9d14387630113298abc9696f06a7"
+  },
+  {
+    "path": "supabase/migrations/20261011070000_inventory_dashboard_shared_stock.sql",
+    "before_sha256": null,
+    "after_sha256": "1d56f86fe2656b2e5dbc200885e64f7b380c2c3ca33fb23da74cd1facecf9263"
+  },
+  {
+    "path": "supabase/migrations/20261011080000_meinvoice_owned_batches.sql",
+    "before_sha256": null,
+    "after_sha256": "bffe59d32d2f6f38250a305b433bbb0721130eaf97a58aa8b8d38507bd3d3623"
+  },
+  {
+    "path": "supabase/migrations/20261011090000_sepay_delivery_provider_scope.sql",
+    "before_sha256": null,
+    "after_sha256": "e863b28cd4632966d0a1fc90ec6fd075033cb06906ecc785bd22d385c6206ab7"
+  },
+  {
+    "path": "supabase/migrations/20261011100000_inventory_catalog_pages.sql",
+    "before_sha256": null,
+    "after_sha256": "f6216eaf55040a45738e7cb2e11ce0f9a35207bdf811fb498b6c093f111a1869"
+  },
+  {
+    "path": "supabase/migrations/20261011110000_table_preview_delta.sql",
+    "before_sha256": null,
+    "after_sha256": "41aa8b0eff07c48055894698dfd2f20bd962e4efba92393c933d7ccf3fd1c5a5"
+  },
+  {
+    "path": "supabase/migrations/20261011120000_recipe_export_pages.sql",
+    "before_sha256": null,
+    "after_sha256": "d866c6d7b17e502f3edcfda3353d0de39fd4d9868611753f1a4936b33995352b"
+  },
+  {
+    "path": "test/admin_core_overlay_operational_test.dart",
+    "before_sha256": "1a07c3108872511d2328b0b7c4b181723b2df17a3aef567b668c80c362b9e22d",
+    "after_sha256": "12c25f23f18a92690d87c7c2d611294e3fc1afad540dec6da7d340318deb6099"
+  },
+  {
+    "path": "test/cancellation_restore_live_sales_contract_test.dart",
+    "before_sha256": "d9c38b3eab5e4c10578c811f2a9b483105830bc4aa45e8183dba3ef2b42c801c",
+    "after_sha256": "274ae7dafa419a226d7d94d2ccd6815fbb6d8192a02800a4d390257a20f0472c"
+  },
+  {
+    "path": "test/cashier_item_edit_sql_test.sh",
+    "before_sha256": "c03dd8c9ebe58a708055d35ee2ac5cdca75b30ddd3cf0646380f5f1e21b3539c",
+    "after_sha256": "befdbe44172cbe4e4944881fd8eb7a5967d32c4ec864f0232b8dcd6579a3a3e9"
+  },
+  {
+    "path": "test/data_access/catalog_refresh_probe_test.dart",
+    "before_sha256": null,
+    "after_sha256": "ed8baff50806b39e2969c70d4fe27f307a6e8792aa5f5d99b8b3768f5037c7d1"
+  },
+  {
+    "path": "test/data_access/deadline_transport_test.dart",
+    "before_sha256": null,
+    "after_sha256": "2fb94662f10755b813acad08202c76b7eeefa19a864f97b86b9831ca789b9865"
+  },
+  {
+    "path": "test/data_access/inventory_history_probe_test.dart",
+    "before_sha256": null,
+    "after_sha256": "606d81f468e70fad21d7fe049ae57d3afa5ec351b757ec31da3541d5572b9764"
+  },
+  {
+    "path": "test/data_access/inventory_stock_share_test.dart",
+    "before_sha256": null,
+    "after_sha256": "892f5a834dfd9c4e0029cbe22171d6c6bd20a6f2598cacc11ba0838171e6fb40"
+  },
+  {
+    "path": "test/data_access/proof_retry_probe_test.dart",
+    "before_sha256": null,
+    "after_sha256": "b0fb174be27a2663fc5f3fa66b5dcf6446c270f68e91fb664edb5b31a8f725e2"
+  },
+  {
+    "path": "test/data_access/receipt_freshness_test.dart",
+    "before_sha256": null,
+    "after_sha256": "bc2843c7b89f06d88fc096b38c95e009df0d96ea93309ccddd9956fb0f897815"
+  },
+  {
+    "path": "test/data_access/refresh_lifecycle_test.dart",
+    "before_sha256": null,
+    "after_sha256": "26c638072805c1c3b53587860a334c35f0131a1ffcea45d88d44a4abd1d87839"
+  },
+  {
+    "path": "test/data_access/refresh_probe_test.dart",
+    "before_sha256": null,
+    "after_sha256": "1e5bf81f1b3d3e7d0e9fdc73cc3c6a1dbe30b57bc8dcae28e30478e630901092"
+  },
+  {
+    "path": "test/data_access/streaming_export_test.dart",
+    "before_sha256": null,
+    "after_sha256": "2b83633d46a1e9672d95d451f409859e78e32b449dab6dddab05192a238e5d02"
+  },
+  {
+    "path": "test/data_access/xlsx_limits_test.dart",
+    "before_sha256": null,
+    "after_sha256": "f4bc82d14b80de54004947e66ac7824c33eb9a4ee50dcd8e14dabe21be6b88fd"
+  },
+  {
+    "path": "test/deliberry_retirement_sql_test.sh",
+    "before_sha256": "7766a977e2b781af2c56e0363a72a2bc551289660e3f12afd397a6ec3891e947",
+    "after_sha256": "908946091cafd60fe5ec6fb1e6f3a9394265c9d48cf76360da01f64b03b24ad7"
+  },
+  {
+    "path": "test/direct_delivery_regression_isolation_test.dart",
+    "before_sha256": "3f3b51a4173bb19b8d7980b5848d92c0689bf4090fbcd6ed340c9b125b6b4aed",
+    "after_sha256": "22148dcc551b7b0a5cad80f95dedf015366879d57f3f3710c4f8c0c804d1e2c0"
+  },
+  {
+    "path": "test/direct_order_arrival_alert_test.dart",
+    "before_sha256": "e64c3ea294c0961aa3a7e87e55ad9ed3abef219115b0652ddbb9983eedd0dc8b",
+    "after_sha256": "216edb5f1816b1a34986b793a1dd14e959dfbd215724ad8a934dab00de4fda62"
+  },
+  {
+    "path": "test/financial_inputs_postgrest_test.dart",
+    "before_sha256": "2eb9e7afec3e1d259ecfcb649e45a8718caaf0b7844b96c44ed1468e2a0c3913",
+    "after_sha256": "86941a7891a6d9834fb8416a1c070dec50ce1f43c1e1040004a58fd1f05ca0c1"
+  },
+  {
+    "path": "test/inventory_purchase_readonly_overview_contract_test.dart",
+    "before_sha256": "338846b5bb2dfd86a1ac9a417e19ca80a3138f28f717f0627c13fa46d22c2f12",
+    "after_sha256": "4053eb09b3a7592327b4af121bcf2c7e0bb8a1616b370af894a57ec8822ce7bc"
+  },
+  {
+    "path": "test/manual_attendance_payroll_export_contract_test.dart",
+    "before_sha256": "8e317c86d716e3b0fced29bb12eb73e6560b0a7afbd66d632a8322a154a07a53",
+    "after_sha256": "30bd968c54d6b7904a08dda715ded86f002094c83eb1052b57d4007f5148557e"
+  },
+  {
+    "path": "test/meinvoice_dispatcher_contract_test.dart",
+    "before_sha256": "0a221938690abf7d054c49d584d4cfdb2baa1eed5c397972618ee747d3feed90",
+    "after_sha256": "c7eba83651c30aaae4c8d2ca088a8686622046b6a2d5dd0794c0f06b1181750f"
+  },
+  {
+    "path": "test/payroll_calculation_integrity_test.dart",
+    "before_sha256": "158bc84429a9f2daa88fbf33f1310dc6d2eca8a9e3d3652b6090170738383291",
+    "after_sha256": "767680bcf28f1429dcfe76a7ca01365e6b8eb3c80eb4076f10d8b54fb29e8983"
+  },
+  {
+    "path": "test/photo_sales_import_test.dart",
+    "before_sha256": "89b3724d179f43fbfc3314cb8d833a3626e36300c30ed636935abade8f4d86a3",
+    "after_sha256": "8ec70ad40541a3bb4e81ed9b2e3841f779445f6626187c527bde60ee657e92ca"
+  },
+  {
+    "path": "test/qr_menu_category_auto_sync_sql_test.sh",
+    "before_sha256": "f3351d3cf4cf5c865e2cad2a5d01e7abd72e9fd220d087137b8981f5b34926f7",
+    "after_sha256": "732c936b3202b582b5292ee254e7ba6fadf33576443e056214075c10dfbafadc"
+  },
+  {
+    "path": "test/receipt_ledger_contract_test.dart",
+    "before_sha256": "2ad8e75deeec3a4a4dbddd83a95c9b7e8ade64bd849a68f57ff81f58e52ecf0e",
+    "after_sha256": "2d8652fdff6442708dd89008cc0d4b05f5d0021c78c64c26c30f170a0a4b9093"
+  },
+  {
+    "path": "test/revenue_history_test.dart",
+    "before_sha256": "604b35c53f6381d8bf233d3826821ffc112799dc1be2de380d6b09b0be0cc357",
+    "after_sha256": "e160eb553ff6d00f13864ab7badd3983c0fea7e77db29627503c01bc3c494d5e"
+  },
+  {
+    "path": "test/route_operational_state_coverage_contract_test.dart",
+    "before_sha256": "9d1c11fa230a6b649436fa5253e9d2c9a4585990bc2703bc8dee0fb915f28165",
+    "after_sha256": "0d879172a09facf85ecda806adbb9de064165798733379f1150894ac37d0046b"
+  },
+  {
+    "path": "test/security_remediation_contract_test.dart",
+    "before_sha256": "70d07ef19982224d54aa5a05f9685671a380790c17f918df23ef705b381389eb",
+    "after_sha256": "27804510b27c634f9d3ba6cb99771559cdf4d232cc5ddc7de5382052e90da121"
+  },
+  {
+    "path": "test/waiter_floor_layout_contract_test.dart",
+    "before_sha256": "2599ee0b90a910ca48e45f8a08729538cf25b3ee33663d916a0b3e5b095402d4",
+    "after_sha256": "ee0a5743dcdafadd646e740414abcff7e6bd310d954cbcb60ad66939b5827b5a"
+  }
+]

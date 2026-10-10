@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart';
 
 import '../../core/utils/excel_workbook_decoder.dart';
+import '../../core/utils/streaming_xlsx_writer.dart';
 
 const ingredientImportSheetName = '원재료등록';
 const ingredientSupplierReferenceSheetName = '거래처목록';
@@ -455,3 +456,70 @@ double? _parseNumber(String value) =>
     double.tryParse(value.replaceAll(',', '').replaceAll(' ', ''));
 int? _parseInteger(String value) =>
     int.tryParse(value.replaceAll(',', '').replaceAll(' ', ''));
+
+/// Bounded row working set: each batch is encoded and released before the next.
+/// The final compressed bytes are retained for the browser/native download API.
+Future<Uint8List> buildIngredientTemplateFromBatches({
+  required Stream<List<Map<String, dynamic>>> batches,
+  required List<Map<String, dynamic>> suppliers,
+}) async {
+  final writer = StreamingXlsxWriter([
+    ingredientImportSheetName,
+    ingredientSupplierReferenceSheetName,
+  ]);
+  writer.beginSheet(
+    columnWidths: [38, 18, 28, 18, 18, 14, 22, 18, 18, 18, 28, 18],
+  );
+  writer.addRow(ingredientImportHeaders);
+  var count = 0;
+  await for (final batch in batches) {
+    if (batch.length > 500) {
+      throw const FormatException('INVENTORY_EXPORT_BATCH_INVALID');
+    }
+    for (final p in batch) {
+      final link = p['export_supplier'] as Map?;
+      writer.addRow([
+        p['id'],
+        p['product_code'],
+        p['name'],
+        p['category'],
+        p['stock_unit'],
+        p['base_unit'],
+        p['base_unit_factor'] ?? 1,
+        p['storage_type'],
+        p['shelf_life_days'],
+        p['is_orderable'] == false ? 'N' : 'Y',
+        link?['supplier_name'] ?? '',
+        link?['unit_price'] ?? '',
+      ]);
+      count++;
+    }
+    await Future<void>.delayed(Duration.zero);
+  }
+  if (count == 0) {
+    writer.addRow([
+      '',
+      'ING-001',
+      '예: 떡',
+      '식재료',
+      'kg',
+      'g',
+      1000,
+      '냉장',
+      7,
+      'Y',
+      '기존 거래처명 또는 신규 거래처명',
+      100000,
+    ]);
+  }
+  writer.endSheet();
+  writer.beginSheet();
+  writer.addRow(['거래처명']);
+  for (final supplier in suppliers) {
+    if (supplier['status'] == null || supplier['status'] == 'active') {
+      writer.addRow([supplier['supplier_name']]);
+    }
+  }
+  writer.endSheet();
+  return writer.finish();
+}

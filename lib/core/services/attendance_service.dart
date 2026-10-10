@@ -168,6 +168,7 @@ class AttendanceService {
     required String storeId,
     required DateTime from,
     required DateTime to,
+    String? employeeId,
   }) async {
     final rows = <Map<String, dynamic>>[];
     final seenIds = <String>{};
@@ -177,9 +178,12 @@ class AttendanceService {
     int? totalCount;
     while (true) {
       final result = await (_client ?? supabase).rpc(
-        'get_payroll_attendance_page',
+        employeeId == null
+            ? 'get_payroll_attendance_page'
+            : 'get_payroll_employee_attendance_page',
         params: {
           'p_store_id': storeId,
+          if (employeeId != null) 'p_employee_id': employeeId,
           'p_from': from.toUtc().toIso8601String(),
           'p_to': to.toUtc().toIso8601String(),
           'p_page_size': 500,
@@ -218,6 +222,9 @@ class AttendanceService {
             id.isEmpty ||
             at == null ||
             row['restaurant_id']?.toString() != storeId ||
+            (employeeId != null &&
+                (row['employee_id'] ?? row['user_id'])?.toString() !=
+                    employeeId) ||
             at.isBefore(from.toUtc()) ||
             !at.isBefore(to.toUtc()) ||
             !seenIds.add(id) ||
@@ -246,10 +253,15 @@ class AttendanceService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
-    final result = await FinancialInputService(
-      _client ?? supabase,
-    ).fetch(source: FinancialInputSource.staff, storeIds: [storeId]);
+  Future<List<Map<String, dynamic>>> fetchStaffList(
+    String storeId, {
+    String? employeeId,
+  }) async {
+    final result = await FinancialInputService(_client ?? supabase).fetch(
+      source: FinancialInputSource.staff,
+      storeIds: [storeId],
+      employeeId: employeeId,
+    );
     result.sort(
       (a, b) => (a['employee_number'] as String).compareTo(
         b['employee_number'] as String,
@@ -408,10 +420,12 @@ class AttendanceService {
     required String storeId,
     required DateTime from,
     required DateTime to,
+    String? employeeId,
   }) async {
     final result = await FinancialInputService(_client ?? supabase).fetch(
       source: FinancialInputSource.allowances,
       storeIds: [storeId],
+      employeeId: employeeId,
       fromDate: _dateOnly(from),
       toDate: _dateOnly(to),
     );

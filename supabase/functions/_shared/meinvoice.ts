@@ -152,6 +152,14 @@ export async function loadSellerConfig(
     throw new Error(`MEINVOICE_CONFIG_NOT_FOUND:${taxEntityId}`);
   }
 
+  return sellerConfigFromRows(taxEntityId, entity, config);
+}
+
+export function sellerConfigFromRows(
+  taxEntityId: string,
+  entity: JsonRecord,
+  config: JsonRecord,
+): SellerConfig {
   return {
     taxEntityId,
     taxCode: String(entity.tax_code),
@@ -193,17 +201,23 @@ export async function getMeInvoiceToken(
   supabase: any,
   seller: SellerConfig,
   refreshSkewMinutes: number,
+  cachedOverride?: { current_token?: string; token_expires_at?: string } | null,
+  fetcher: typeof fetch = fetch,
 ): Promise<string> {
   assertDispatchReady(seller);
 
   const now = new Date();
   const refreshAfter = new Date(now.getTime() + refreshSkewMinutes * 60_000);
-  const { data: cached, error: cacheError } = await supabase
-    .from("meinvoice_token_cache")
-    .select("current_token,token_expires_at")
-    .eq("tax_entity_id", seller.taxEntityId)
-    .maybeSingle();
-  if (cacheError) throw cacheError;
+  let cached = cachedOverride;
+  if (cachedOverride === undefined) {
+    const { data, error } = await supabase.from("meinvoice_token_cache")
+      .select("current_token,token_expires_at").eq(
+        "tax_entity_id",
+        seller.taxEntityId,
+      ).maybeSingle();
+    if (error) throw error;
+    cached = data;
+  }
 
   const expiresAt = cached?.token_expires_at
     ? new Date(cached.token_expires_at)
@@ -218,7 +232,7 @@ export async function getMeInvoiceToken(
     throw new Error("MEINVOICE_CREDENTIAL_NOT_CONFIGURED");
   }
 
-  const tokenResponse = await fetch(`${seller.authBaseUrl}/auth/token`, {
+  const tokenResponse = await fetcher(`${seller.authBaseUrl}/auth/token`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -605,7 +619,11 @@ export function validateCashRegisterInvoicePayload(
         "TaxRateInfo.AmountWithoutVATOC",
         taxRate.AmountWithoutVATOC,
       );
-      requireFiniteNumber(missing, "TaxRateInfo.VATAmountOC", taxRate.VATAmountOC);
+      requireFiniteNumber(
+        missing,
+        "TaxRateInfo.VATAmountOC",
+        taxRate.VATAmountOC,
+      );
     }
 
     const options = invoice.OptionUserDefined as JsonRecord | undefined;
@@ -621,7 +639,9 @@ export function validateCashRegisterInvoicePayload(
           "UnitPriceDecimalDigits",
         ]
       ) {
-        if (!asString(options[field])) missing.add(`OptionUserDefined.${field}`);
+        if (!asString(options[field])) {
+          missing.add(`OptionUserDefined.${field}`);
+        }
       }
     }
   }
@@ -634,8 +654,9 @@ export async function publishCashRegisterInvoice(
   seller: SellerConfig,
   token: string,
   payload: JsonRecord,
+  fetcher: typeof fetch = fetch,
 ) {
-  const response = await fetch(
+  const response = await fetcher(
     seller.apiBaseUrl,
     {
       method: "POST",
@@ -649,7 +670,8 @@ export async function publishCashRegisterInvoice(
   return {
     ok: response.ok,
     status: response.status,
-    body: await response.json().catch(() => null),
+    // A lost/malformed acknowledgement is an unknown publish outcome.
+    body: await response.json(),
   };
 }
 

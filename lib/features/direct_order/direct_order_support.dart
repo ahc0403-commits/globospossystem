@@ -1,3 +1,4 @@
+import '../red_invoice_intake/buyer_information_form.dart';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -376,6 +377,7 @@ class DirectOrderAttachmentButton extends StatefulWidget {
     required this.onSent,
     this.proofOnly = false,
     this.enabled = true,
+    this.compact = false,
   });
   final String storeId, requestId;
   final Future<void> Function(
@@ -386,7 +388,7 @@ class DirectOrderAttachmentButton extends StatefulWidget {
   )
   upload;
   final Future<void> Function() onSent;
-  final bool proofOnly, enabled;
+  final bool proofOnly, enabled, compact;
   @override
   State<DirectOrderAttachmentButton> createState() =>
       _DirectOrderAttachmentButtonState();
@@ -398,8 +400,33 @@ class _DirectOrderAttachmentButtonState
   Uint8List? _bytes;
   bool _busy = false;
   bool _uploaded = false;
+  int _scopeRevision = 0;
+
+  void _clearDraft() {
+    _path = null;
+    _filename = null;
+    _mime = null;
+    _bytes = null;
+    _uploaded = false;
+  }
+
+  @override
+  void didUpdateWidget(covariant DirectOrderAttachmentButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.storeId != widget.storeId ||
+        oldWidget.requestId != widget.requestId ||
+        oldWidget.proofOnly != widget.proofOnly) {
+      _scopeRevision++;
+      _clearDraft();
+      _busy = false;
+    }
+  }
+
   Future<void> _send() async {
     if (_busy) return;
+    final revision = _scopeRevision;
+    final storeId = widget.storeId, requestId = widget.requestId;
+    final upload = widget.upload, onSent = widget.onSent;
     setState(() => _busy = true);
     final copy = DirectOrderSupportCopy(
       Localizations.localeOf(context).languageCode,
@@ -420,9 +447,9 @@ class _DirectOrderAttachmentButtonState
             ),
           ],
         );
-        if (file == null || !mounted) return;
+        if (file == null || !mounted || revision != _scopeRevision) return;
         final bytes = await file.readAsBytes();
-        if (!mounted) return;
+        if (!mounted || revision != _scopeRevision) return;
         final extension = file.name.split('.').last.toLowerCase();
         final mime = {
           'jpg': 'image/jpeg',
@@ -461,27 +488,36 @@ class _DirectOrderAttachmentButtonState
             ],
           ),
         );
-        if (confirmed != true || !mounted) return;
+        if (confirmed != true || !mounted || revision != _scopeRevision) return;
         _bytes = bytes;
         _filename = file.name;
         _mime = mime;
         _path =
-            '${widget.storeId}/${widget.requestId}/${const Uuid().v4()}.${extension == 'jpeg' ? 'jpg' : extension}';
+            '$storeId/$requestId/${const Uuid().v4()}.${extension == 'jpeg' ? 'jpg' : extension}';
       }
-      if (!_uploaded) await widget.upload(_path!, _filename!, _mime!, _bytes!);
+      if (!_uploaded) await upload(_path!, _filename!, _mime!, _bytes!);
+      if (!mounted || revision != _scopeRevision) return;
       _uploaded = true;
-      await widget.onSent();
-      _path = null;
-      _bytes = null;
-      _uploaded = false;
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(copy.text('error'))));
+      await onSent();
+      if (!mounted || revision != _scopeRevision) return;
+      _clearDraft();
+    } catch (error) {
+      if (mounted && revision == _scopeRevision) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              copy.text(
+                error is DirectOrderException &&
+                        error.code == 'DIRECT_ORDER_ATTACHMENT_INVALID'
+                    ? 'file_limit'
+                    : 'error',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && revision == _scopeRevision) setState(() => _busy = false);
     }
   }
 
@@ -490,20 +526,55 @@ class _DirectOrderAttachmentButtonState
     final copy = DirectOrderSupportCopy(
       Localizations.localeOf(context).languageCode,
     );
-    return OutlinedButton.icon(
-      onPressed: _busy || !widget.enabled ? null : _send,
-      icon: Icon(_busy ? Icons.hourglass_top : Icons.attach_file),
-      label: Text(
-        copy.text(
+    final label = copy.text(
+      _busy
+          ? 'sending'
+          : _bytes != null
+          ? 'retry'
+          : widget.proofOnly
+          ? 'proof'
+          : 'attach',
+    );
+    Widget action;
+    if (widget.compact) {
+      action = IconButton.outlined(
+        tooltip: label,
+        onPressed: _busy || !widget.enabled ? null : _send,
+        icon: Icon(
           _busy
-              ? 'sending'
+              ? Icons.hourglass_top
               : _bytes != null
-              ? 'retry'
-              : widget.proofOnly
-              ? 'proof'
-              : 'attach',
+              ? Icons.refresh
+              : Icons.attach_file,
         ),
-      ),
+      );
+    } else {
+      action = OutlinedButton.icon(
+        onPressed: _busy || !widget.enabled ? null : _send,
+        icon: Icon(_busy ? Icons.hourglass_top : Icons.attach_file),
+        label: Text(
+          copy.text(
+            _busy
+                ? 'sending'
+                : _bytes != null
+                ? 'retry'
+                : widget.proofOnly
+                ? 'proof'
+                : 'attach',
+          ),
+        ),
+      );
+    }
+    if (_bytes == null) return action;
+    return Wrap(
+      children: [
+        action,
+        IconButton(
+          tooltip: copy.text('close'),
+          onPressed: _busy ? null : () => setState(_clearDraft),
+          icon: const Icon(Icons.close),
+        ),
+      ],
     );
   }
 }
@@ -532,6 +603,8 @@ class _DirectOrderStaffSupportPanelState
     extends State<DirectOrderStaffSupportPanel> {
   bool _busy = false;
   Map<String, dynamic> get _support => supportMap(widget.detail['support']);
+  bool get _recipientPolicy =>
+      supportMap(widget.detail['request'])['delivery_policy_version'] == 2;
   DirectOrderSupportCopy get _copy =>
       DirectOrderSupportCopy(Localizations.localeOf(context).languageCode);
   Future<void> _act(Future<void> Function() action) async {
@@ -656,21 +729,34 @@ class _DirectOrderStaffSupportPanelState
 
   Future<void> _invoice() async {
     final current = supportMap(_support['invoice']);
-    final fields = await _form(_copy.text('invoice'), {
-      for (final key in ['tax', 'legal', 'address', 'email', 'phone'])
-        key:
-            '${current[{'tax': 'tax_code', 'legal': 'legal_name'}[key] ?? key] ?? ''}',
-    });
-    if (fields != null && mounted) {
-      await _action('invoice', {
-        'requested': true,
-        'tax_code': fields['tax'],
-        'legal_name': fields['legal'],
-        'address': fields['address'],
-        'email': fields['email'],
-        'phone': fields['phone'],
-      });
-    }
+    final saved = await showBuyerInformationDialog(
+      context,
+      storeId: widget.storeId,
+      initial: {
+        'buyer_number_type': current['number_type'] ?? 'vn_tax',
+        'buyer_number_value':
+            current['number_value'] ?? current['tax_code'] ?? '',
+        for (final key in [
+          'legal_name',
+          'full_name',
+          'address',
+          'email',
+          'email_cc',
+          'phone',
+          'unit_code',
+          'buyer_id',
+        ])
+          key == 'buyer_id' ? key : 'buyer_$key': current[key] ?? '',
+        'source_note': current['source_note'] ?? '',
+      },
+      onSave: (patch) => widget.service.saveBuyerInformation(
+        storeId: widget.storeId,
+        requestId: widget.requestId,
+        expectedVersion: (_support['version'] as num?)?.toInt() ?? 1,
+        patch: patch,
+      ),
+    );
+    if (saved != null && mounted) await widget.onChanged();
   }
 
   Future<void> _charge(String kind) async {
@@ -1034,7 +1120,8 @@ class _DirectOrderStaffSupportPanelState
                   Text(
                     supportMap(_support['refund_account']).values.join(' · '),
                   ),
-                if (supportMap(_support['driver_cash']).isNotEmpty) ...[
+                if (!_recipientPolicy &&
+                    supportMap(_support['driver_cash']).isNotEmpty) ...[
                   Text(
                     '${_copy.text('driver_paid')}: ${formatDirectOrderVnd(supportNumber(supportMap(_support['driver_cash'])['paid']))} VND',
                   ),
@@ -1042,7 +1129,8 @@ class _DirectOrderStaffSupportPanelState
                     '${_copy.text('driver_recovered')}: ${formatDirectOrderVnd(supportNumber(supportMap(_support['driver_cash'])['recovered_cash']))} VND',
                   ),
                 ],
-                if (widget.canAdjustDriverCash &&
+                if (!_recipientPolicy &&
+                    widget.canAdjustDriverCash &&
                     supportRows(
                       supportMap(_support['driver_cash'])['movements'],
                     ).isNotEmpty) ...[
@@ -1080,7 +1168,8 @@ class _DirectOrderStaffSupportPanelState
                       ),
                     ),
                 ],
-                if (request['state'] == 'awaiting_quote' &&
+                if (!_recipientPolicy &&
+                    request['state'] == 'awaiting_quote' &&
                     supportMap(widget.detail['delivery'])['method'] != 'pickup')
                   SwitchListTile(
                     key: const Key('direct_deferred_delivery_fee'),
@@ -1114,7 +1203,8 @@ class _DirectOrderStaffSupportPanelState
                     onPressed: _busy ? null : () => _charge('food_balance'),
                     child: Text(_copy.text('food_balance')),
                   ),
-                if (approved &&
+                if (!_recipientPolicy &&
+                    approved &&
                     beforeHandoff &&
                     supportMap(widget.detail['delivery'])['method'] !=
                         'pickup') ...[
@@ -1145,7 +1235,8 @@ class _DirectOrderStaffSupportPanelState
                     onPressed: _busy ? null : () => _action('cancel_order', {}),
                     child: Text(_copy.text('cancel_order')),
                   ),
-                if (approved &&
+                if (!_recipientPolicy &&
+                    approved &&
                     supportNumber(_support['pickup_delivery_refund_due']) > 0)
                   OutlinedButton(
                     onPressed: _busy

@@ -1,0 +1,8 @@
+{
+  "source": "real CompanyTaxLookupService with synthetic transport; not live provider load",
+  "callers": 100,
+  "requests": 1,
+  "warmRequests": 0,
+  "elapsedMicroseconds": 5431,
+  "focusedFlutterTestsPassed": 24
+}

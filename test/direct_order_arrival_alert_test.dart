@@ -28,9 +28,9 @@ const _frozenAlertFiles = <String, String>{
   // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   // Scheduled delivery closure has cashier overlay coverage; alert paths stay unchanged.
   'lib/features/cashier/cashier_screen.dart':
-      '08b70ea23cae05029882564124fd00060fcdb66eb6c9cda72a0c8ee9c8647317',
+      'bc2c4ef5f9ae85a1357ad8dd8b9b173ba1dfb1c332573677af9651ee7b32b7a0',
   'lib/features/kitchen/kitchen_screen.dart':
-      '9c307588f5985c2bdbbc67865c7fc99204c011015e053a371b602ec1e4b50e5c',
+      '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
   // Intentional event-merge fix; behavioral regressions live in
   // scalability_live_consumer_regression_test.dart.
   'lib/core/services/bank_transfer_alert_coordinator.dart':

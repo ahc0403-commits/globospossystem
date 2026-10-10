@@ -286,7 +286,7 @@ class _KitchenOperationalScreenState
         next,
       ) {
         next.whenData((event) {
-          if (event.affects({'orders', 'print', 'settings'})) {
+          if (event.isFallback || event.affects({'print', 'settings'})) {
             Future.microtask(
               () => ref
                   .read(kitchenProvider.notifier)

@@ -695,7 +695,10 @@ class _AttendanceService extends AttendanceService {
   String? lastManualManagerPin;
 
   @override
-  Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async => [
+  Future<List<Map<String, dynamic>>> fetchStaffList(
+    String storeId, {
+    String? employeeId,
+  }) async => [
     {
       'user_id': 'attendance-staff-1',
       'employee_number': 'BT1',

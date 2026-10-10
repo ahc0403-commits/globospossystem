@@ -98,7 +98,7 @@ void main() {
 
     final orders = await service.listOrders(session: session);
 
-    expect(request?['action'], 'orders_v4');
+    expect(request?['action'], 'orders_v5');
     expect(orders.map((order) => order.referenceCode), [
       'DORDERA1',
       'DORDERB2',

@@ -30,7 +30,7 @@ void main() {
     final output = String.fromCharCodes(
       await ReceiptBuilder.buildKitchenTicket(ticket),
     );
-    expect(output, contains('Khach tra phi Grab truc tiep tai xe'));
+    expect(output, contains('CHI THU PHI GIAO HANG TU NGUOI NHAN'));
     expect(output, contains('KHONG THU LAI TIEN MON'));
     expect(output, isNot(contains('Khach can tra: 0 VND')));
     expect(output, isNot(contains('Phi giao hang Grab')));

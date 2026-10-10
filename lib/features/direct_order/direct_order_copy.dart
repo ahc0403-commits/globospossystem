@@ -206,6 +206,11 @@ class DirectOrderCopy {
       'Đã làm xong · Đang đóng gói',
       'Food ready · Packing',
     ),
+    'customer_driver_booked' => _pick(
+      '기사 배정 · 포장 중',
+      'Đã đặt tài xế · Đang đóng gói',
+      'Driver booked · Packing',
+    ),
     'customer_packed' => _pick(
       '조리·포장 완료 · 기사 전달 대기',
       'Đã đóng gói · Chờ bàn giao tài xế',
@@ -312,6 +317,28 @@ class DirectOrderCopy {
     'Use intake pause when busy. The page cannot be disabled while orders are in progress.',
   );
   String errorMessage(String code) => switch (code) {
+    'DIRECT_ORDER_COOKING_NOT_COMPLETE' => _pick(
+      '조리 완료 후 기사를 호출할 수 있습니다.',
+      'Chỉ đặt tài xế sau khi làm xong món.',
+      'Book a driver after cooking is complete.',
+    ),
+    'DIRECT_ORDER_COOKING_USE_KDS' => _pick(
+      '주방 화면에서 조리를 완료해주세요.',
+      'Hoàn tất món trên màn hình bếp.',
+      'Complete cooking in the kitchen screen.',
+    ),
+    'DIRECT_ORDER_BOOKING_CHANGED' => _pick(
+      '배차 또는 주문 상태가 변경되었습니다. 새로고침 후 확인해주세요.',
+      'Thông tin đặt xe đã thay đổi. Tải lại để kiểm tra.',
+      'Booking or order changed. Refresh and check.',
+    ),
+    'DIRECT_ORDER_BOOKING_REQUIRED' => _pick(
+      '기사를 배정한 뒤 인계해주세요.',
+      'Đặt tài xế trước khi bàn giao.',
+      'Book a driver before handoff.',
+    ),
+    'DIRECT_ORDER_BOOKING_INPUT_INVALID' => bookingInputRequired,
+    'DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED' => customerPaysDriverHelp,
     'DIRECT_ORDER_FINAL_AMOUNT_LOCKED' => _pick(
       '최종금액은 확정되었습니다. 실제 배송비 변경은 배송비 정산에서 처리하세요.',
       'Tổng tiền đã chốt. Đối soát phí giao thực tế tại mục phí giao.',
@@ -926,7 +953,8 @@ class DirectOrderCopy {
     'Không có đơn đang chờ.',
     'No orders are waiting.',
   );
-  String get quoteNeeded => _pick('배송비 견적 필요', 'Cần báo phí', 'Quote needed');
+  String get quoteNeeded =>
+      _pick('주문 금액 확정 필요', 'Cần xác nhận tiền món', 'Order amount needed');
   String get paymentReview =>
       _pick('입금 확인 필요', 'Cần xác nhận tiền', 'Payment review');
   String get addressAndContact =>
@@ -947,10 +975,70 @@ class DirectOrderCopy {
     'Phí Grab trả khi nhận · Khách trả tài xế',
     'Grab fee on arrival · Customer pays driver',
   );
+  String get finalOrderAmount =>
+      _pick('주문 결제 금액 확정', 'Xác nhận tiền món', 'Confirm order amount');
+  String get bookingFailures => _pick(
+    '배차 실패 / 재시도',
+    'Đặt xe thất bại / Thử lại',
+    'Booking failures / retries',
+  );
+  String get waitingForBooking =>
+      _pick('기사 호출 필요', 'Cần đặt tài xế', 'Awaiting booking');
+  String get cookingToBooking => _pick(
+    '조리 완료 → 배차 (분)',
+    'Làm xong → Đặt xe (phút)',
+    'Cooking → Booking (min)',
+  );
+  String get cookingToHandoff => _pick(
+    '조리 완료 → 인계 (분)',
+    'Làm xong → Bàn giao (phút)',
+    'Cooking → Handoff (min)',
+  );
+  String get driverBooking => _pick('기사 배차 예약', 'Đặt tài xế', 'Driver booking');
+  String get callDriver => _pick(
+    '조리 완료 · 기사 호출 필요',
+    'Đã làm xong · Cần gọi tài xế',
+    'Food cooked · Call a driver',
+  );
+  String get driverBooked => _pick(
+    '기사 배정 완료 · 포장/인계 대기',
+    'Đã có tài xế · Chờ đóng gói/bàn giao',
+    'Driver booked · Awaiting packing/handoff',
+  );
+  String get bookingRetry =>
+      _pick('배차 재시도 필요', 'Cần thử đặt lại', 'Retry driver booking');
+  String get bookingReference => _pick(
+    '예약 참조 (선택)',
+    'Mã đặt xe (tùy chọn)',
+    'Booking reference (optional)',
+  );
+  String get recipientFeeReference => _pick(
+    '기사 안내 요금 · 고객 별도 지급 (선택)',
+    'Phí tài xế báo · Khách trả riêng (tùy chọn)',
+    'Driver fare · Customer pays separately (optional)',
+  );
+  String get saveBooking =>
+      _pick('배차 정보 저장', 'Lưu thông tin tài xế', 'Save booking');
+  String get cancelBooking =>
+      _pick('예약 취소 기록', 'Ghi nhận hủy đặt xe', 'Record booking cancellation');
+  String get recordBookingFailure =>
+      _pick('배차 실패 기록', 'Ghi nhận đặt xe thất bại', 'Record booking failure');
+  String get bookingFailureReason => _pick(
+    '배차 실패/취소 사유',
+    'Lý do thất bại/hủy đặt xe',
+    'Booking failure/cancellation reason',
+  );
+  String get bookingInputRequired => _pick(
+    '기사 연락처 또는 유효한 추적 링크를 입력해주세요.',
+    'Nhập liên hệ tài xế hoặc liên kết theo dõi hợp lệ.',
+    'Enter driver contact or a valid tracking link.',
+  );
+  String get markCooked =>
+      _pick('조리 완료 기록', 'Ghi nhận món đã làm xong', 'Mark cooking complete');
   String get customerPaysDriverHelp => _pick(
-    '배송비는 매장 결제 금액과 Bill에 포함되지 않습니다.',
-    'Phí giao hàng không nằm trong số tiền trả cho cửa hàng hoặc hóa đơn.',
-    'The delivery fee is excluded from the store payment and bill.',
+    '배달비는 주문 금액에 포함되지 않습니다. 음식 수령 시 기사님께 직접 결제해주세요.',
+    'Phí giao hàng không bao gồm trong tiền trả cửa hàng. Trả trực tiếp cho tài xế khi nhận món.',
+    'Delivery is excluded from the store payment. Pay the driver directly when receiving your food.',
   );
   String get storePrepaysDriver => _pick(
     '그랩비 선결제 · 매장이 기사비 대납',
@@ -1122,9 +1210,9 @@ class DirectOrderCopy {
         _ => _pick('출력 요청 없음', 'Chưa yêu cầu in', 'Not queued'),
       };
   String get driverReceiptHelp => _pick(
-    '배송지와 고객 청구 배송비가 포함된 결제 완료 전표입니다.',
-    'Phiếu đã thanh toán gồm địa chỉ giao hàng và phí giao hàng thu của khách.',
-    'A paid handoff slip with the delivery address and customer-charged delivery fee.',
+    '음식값 결제 완료와 배달비 지급 주체를 구분한 기사 전달표입니다.',
+    'Phiếu bàn giao phân biệt tiền món đã thanh toán và bên trả phí giao hàng.',
+    'A handoff slip separating paid food from the party paying delivery.',
   );
   String get printDriverReceipt =>
       _pick('기사용 영수증 출력', 'In phiếu cho tài xế', 'Print driver receipt');

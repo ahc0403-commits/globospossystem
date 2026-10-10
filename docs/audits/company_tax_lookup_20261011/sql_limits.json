@@ -1,0 +1,29 @@
+{
+  "test": "company_tax_lookup_sql",
+  "permissions": "pass",
+  "quota": "10 per 60s",
+  "expiredAndOwnedLease": "pass",
+  "concurrency": [
+    {
+      "sessions": 1,
+      "claimed": 1,
+      "limited": 0,
+      "slotRows": 2,
+      "elapsedMs": 182.35
+    },
+    {
+      "sessions": 2,
+      "claimed": 2,
+      "limited": 0,
+      "slotRows": 2,
+      "elapsedMs": 245.25
+    },
+    {
+      "sessions": 8,
+      "claimed": 2,
+      "limited": 6,
+      "slotRows": 2,
+      "elapsedMs": 299.31
+    }
+  ]
+}

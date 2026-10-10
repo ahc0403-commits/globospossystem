@@ -25,6 +25,10 @@ class DirectOrderDetailsSheet extends StatelessWidget {
     );
     final quote = status.quote;
     final delivery = status.delivery;
+    final recipientPaysDriver =
+        delivery?.isPickup != true &&
+        (status.support['delivery_policy_version'] == 2 ||
+            quote?.deliveryPaymentMode == 'customer_direct');
     final paid = status.state == 'approved';
     Widget amount(String label, num value, {bool strong = false}) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -119,13 +123,12 @@ class DirectOrderDetailsSheet extends StatelessWidget {
                   if (quote != null) ...[
                     amount(copy.menuTotal, quote.menuTotal),
                     amount(copy.serviceCharge, quote.serviceChargeTotal),
-                    amount(copy.deliveryFee, quote.deliveryFeeTotal),
-                    Text(
-                      quote.deliveryPaymentMode == 'customer_direct' &&
-                              !status.isPickup
-                          ? copy.deliveryFeeSeparate
-                          : copy.deliveryFeeIncluded,
-                    ),
+                    if (recipientPaysDriver)
+                      Text(copy.customerPaysDriverHelp)
+                    else if (delivery?.isPickup != true) ...[
+                      amount(copy.deliveryFee, quote.deliveryFeeTotal),
+                      Text(copy.deliveryFeeIncluded),
+                    ],
                     const Divider(height: 24),
                     amount(
                       paid ? copy.totalPaid : copy.finalTotal,
@@ -136,7 +139,10 @@ class DirectOrderDetailsSheet extends StatelessWidget {
                     ),
                     amount(copy.includedVat, quote.vatTotal),
                   ] else ...[
-                    Text(copy.deliveryFeePending),
+                    if (recipientPaysDriver)
+                      Text(copy.customerPaysDriverHelp)
+                    else if (delivery?.isPickup != true)
+                      Text(copy.deliveryFeePending),
                     if (paid && delivery?.paidTotal != null)
                       amount(copy.totalPaid, delivery!.paidTotal!, strong: true)
                     else

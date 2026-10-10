@@ -1,3 +1,5 @@
+import '../../core/services/inventory_service.dart';
+import '../../core/utils/coalesced_refresh.dart';
 import '../../core/i18n/menu_localization.dart';
 import 'dart:async';
 import 'dart:typed_data';
@@ -63,12 +65,21 @@ class _InventoryPurchaseScreenState
   bool _isExportingIngredientTemplate = false;
   bool _isImportingIngredients = false;
   bool _isWorkingStockAuditFile = false;
-  bool _liveRefreshInFlight = false;
+  final _liveRefreshQueue = CoalescedRefresh();
+  String _catalogQuery = '';
+  final _productCursors = <String?>[null];
+  final _itemCursors = <String?>[null];
 
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialSectionIndex.clamp(0, 10);
+  }
+
+  @override
+  void dispose() {
+    _liveRefreshQueue.dispose();
+    super.dispose();
   }
 
   List<_InventoryPurchaseSection> _sections(BuildContext context) {
@@ -173,7 +184,7 @@ class _InventoryPurchaseScreenState
     return LayoutBuilder(
       builder: (context, viewport) {
         final compact = viewport.maxWidth < 1080;
-        final content = _buildSelectedPage(
+        final selectedContent = _buildSelectedPage(
           storeId: storeId,
           overview: overview,
           stockStatus: stockStatus,
@@ -191,6 +202,86 @@ class _InventoryPurchaseScreenState
           adjustmentState: adjustmentState,
           creationState: creationState,
         );
+
+        final content = (_selectedIndex == 4 || _selectedIndex == 5)
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const Key('inventory_catalog_search'),
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.search),
+                              hintText: context.l10n.search,
+                            ),
+                            onSubmitted: (value) {
+                              _catalogQuery = value.trim();
+                              _productCursors
+                                ..clear()
+                                ..add(null);
+                              _itemCursors
+                                ..clear()
+                                ..add(null);
+                              _loadCatalogPage(storeId!);
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: MaterialLocalizations.of(
+                            context,
+                          ).previousPageTooltip,
+                          onPressed:
+                              (_selectedIndex == 5
+                                          ? _productCursors
+                                          : _itemCursors)
+                                      .length <=
+                                  1
+                              ? null
+                              : () {
+                                  (_selectedIndex == 5
+                                          ? _productCursors
+                                          : _itemCursors)
+                                      .removeLast();
+                                  _loadCatalogPage(storeId!);
+                                },
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        IconButton(
+                          tooltip: MaterialLocalizations.of(
+                            context,
+                          ).nextPageTooltip,
+                          onPressed:
+                              (_selectedIndex == 5
+                                  ? productCatalog.hasMore
+                                  : supplierCatalog.hasMore)
+                              ? () {
+                                  final rows = _selectedIndex == 5
+                                      ? productCatalog.products
+                                      : supplierCatalog.supplierItems;
+                                  if (rows.isEmpty) return;
+                                  (_selectedIndex == 5
+                                          ? _productCursors
+                                          : _itemCursors)
+                                      .add(rows.last['id'] as String);
+                                  _loadCatalogPage(storeId!);
+                                }
+                              : null,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (compact)
+                    selectedContent
+                  else
+                    Expanded(child: selectedContent),
+                ],
+              )
+            : selectedContent;
 
         if (compact) {
           return ToastResponsiveScrollBody(
@@ -235,32 +326,98 @@ class _InventoryPurchaseScreenState
 
   Future<void> _reloadStoreScope(String storeId) async {
     ref.read(inventoryPurchaseStockAuditProvider.notifier).selectStore(storeId);
-    await Future.wait([
-      ref.read(inventoryPurchaseOverviewProvider.notifier).load(storeId),
-      ref.read(inventoryPurchaseStockStatusProvider.notifier).load(storeId),
-      ref.read(inventoryPurchaseSupplierCatalogProvider.notifier).load(storeId),
-      ref.read(inventoryPurchaseProductCatalogProvider.notifier).load(storeId),
-      ref.read(recipeProvider.notifier).loadAll(storeId),
-      ref
+    final section = _selectedIndex;
+    if (section == 0) {
+      await Future.wait([
+        ref.read(inventoryPurchaseOverviewProvider.notifier).load(storeId),
+        ref.read(inventoryPurchaseStockStatusProvider.notifier).load(storeId),
+      ]);
+    } else {
+      if (section == 8) {
+        await ref
+            .read(inventoryPurchaseOverviewProvider.notifier)
+            .load(storeId);
+      }
+      if ({1, 7, 9}.contains(section)) {
+        await ref
+            .read(inventoryPurchaseStockStatusProvider.notifier)
+            .load(storeId);
+      }
+    }
+    if ({2, 4, 5}.contains(section)) {
+      await ref
+          .read(inventoryPurchaseSupplierCatalogProvider.notifier)
+          .load(storeId);
+    }
+    if ({4, 5, 6, 10}.contains(section)) {
+      await ref
+          .read(inventoryPurchaseProductCatalogProvider.notifier)
+          .load(storeId, complete: section == 6 || section == 10);
+    }
+    if ({6, 10}.contains(section)) {
+      await ref.read(recipeProvider.notifier).loadAll(storeId);
+    }
+    if (section == 10) {
+      await ref
           .read(inventoryPurchaseNewMenuProvider.notifier)
-          .loadCategories(storeId),
-      ref.read(inventoryPurchaseCostAnalysisProvider.notifier).load(storeId),
-      ref
+          .loadCategories(storeId);
+    }
+    if ({7, 8}.contains(section)) {
+      await ref
+          .read(inventoryPurchaseCostAnalysisProvider.notifier)
+          .load(storeId);
+    }
+    if ({0, 2}.contains(section)) {
+      await ref
           .read(inventoryPurchaseRecommendationSnapshotProvider.notifier)
-          .loadLatest(storeId),
-      ref.read(inventoryPurchaseOrderSummaryProvider.notifier).load(storeId),
-    ]);
-  }
-
-  Future<void> _refreshStoreScopeInPlace(String storeId) async {
-    if (_liveRefreshInFlight) return;
-    _liveRefreshInFlight = true;
-    try {
-      await _reloadStoreScope(storeId);
-    } finally {
-      _liveRefreshInFlight = false;
+          .loadLatest(storeId);
+    }
+    if ({0, 2, 3}.contains(section)) {
+      await ref
+          .read(inventoryPurchaseOrderSummaryProvider.notifier)
+          .load(storeId);
     }
   }
+
+  Future<void> _loadCatalogPage(String storeId) async {
+    if (_selectedIndex == 5) {
+      await ref
+          .read(inventoryPurchaseProductCatalogProvider.notifier)
+          .load(storeId, query: _catalogQuery, afterId: _productCursors.last);
+    } else {
+      await ref
+          .read(inventoryPurchaseSupplierCatalogProvider.notifier)
+          .loadItems(
+            storeId,
+            supplierId: _selectedSupplierId,
+            query: _catalogQuery,
+            afterId: _itemCursors.last,
+          );
+    }
+  }
+
+  void _selectSection(int index) {
+    setState(() {
+      _selectedIndex = index;
+      _catalogQuery = '';
+      _productCursors
+        ..clear()
+        ..add(null);
+      _itemCursors
+        ..clear()
+        ..add(null);
+    });
+    final storeId = _loadedStoreId;
+    if (widget.autoLoad && storeId != null) {
+      unawaited(_reloadStoreScope(storeId));
+    }
+  }
+
+  Future<void> _refreshStoreScopeInPlace(String storeId) =>
+      _liveRefreshQueue.run(() async {
+        if (!mounted || _loadedStoreId != storeId) return;
+        await _reloadStoreScope(storeId);
+      });
 
   Widget _buildSectionRail({bool horizontal = false}) {
     final sections = _sections(context);
@@ -270,7 +427,7 @@ class _InventoryPurchaseScreenState
           key: Key('inventory_section_$index'),
           section: sections[index],
           selected: index == _selectedIndex,
-          onTap: () => setState(() => _selectedIndex = index),
+          onTap: () => _selectSection(index),
         ),
       _SectionRailItem(
         key: const Key('inventory_order_workflow_link'),
@@ -518,10 +675,10 @@ class _InventoryPurchaseScreenState
         ),
         const SizedBox(height: ToastSpacingTokens.md),
         _QuickActionBand(
-          onSelectStock: () => setState(() => _selectedIndex = 1),
-          onSelectPurchase: () => setState(() => _selectedIndex = 2),
-          onSelectPrint: () => setState(() => _selectedIndex = 3),
-          onSelectAudit: () => setState(() => _selectedIndex = 9),
+          onSelectStock: () => _selectSection(1),
+          onSelectPurchase: () => _selectSection(2),
+          onSelectPrint: () => _selectSection(3),
+          onSelectAudit: () => _selectSection(9),
         ),
       ],
     );
@@ -1741,9 +1898,19 @@ class _InventoryPurchaseScreenState
                 suppliers: suppliers,
                 selectedSupplierId: _selectedSupplierId,
                 saving: supplierCatalog.isSaving,
-                onSelect: (supplier) => setState(
-                  () => _selectedSupplierId = supplier['id']?.toString(),
-                ),
+                onSelect: (supplier) {
+                  setState(
+                    () => _selectedSupplierId = supplier['id']?.toString(),
+                  );
+                  _itemCursors
+                    ..clear()
+                    ..add(null);
+                  if (widget.autoLoad) {
+                    ref
+                        .read(inventoryPurchaseSupplierCatalogProvider.notifier)
+                        .loadItems(storeId, supplierId: _selectedSupplierId);
+                  }
+                },
                 onEdit: (supplier) =>
                     _showSupplierDialog(storeId: storeId, supplier: supplier),
                 onToggleStatus: (supplier) =>
@@ -1793,12 +1960,15 @@ class _InventoryPurchaseScreenState
   }) {
     final l10n = context.l10n;
     final products = productCatalog.products;
-    final activeProducts = products
-        .where((product) => product['is_active'] == true)
-        .length;
-    final orderableProducts = products
-        .where((product) => product['is_orderable'] == true)
-        .length;
+    final totalProducts =
+        (productCatalog.pageStats?['total'] as num?)?.toInt() ??
+        products.length;
+    final activeProducts =
+        (productCatalog.pageStats?['active'] as num?)?.toInt() ??
+        products.where((product) => product['is_active'] == true).length;
+    final orderableProducts =
+        (productCatalog.pageStats?['orderable'] as num?)?.toInt() ??
+        products.where((product) => product['is_orderable'] == true).length;
     final selectedProduct = _firstWhereOrNull(
       products,
       (row) => row['id']?.toString() == _selectedProductId,
@@ -1888,7 +2058,7 @@ class _InventoryPurchaseScreenState
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseTotalProducts,
-              value: l10n.inventoryPurchaseCountItems(products.length),
+              value: l10n.inventoryPurchaseCountItems(totalProducts),
             ),
             ToastMetric(
               label: l10n.inventoryPurchaseActiveProducts,
@@ -1902,7 +2072,9 @@ class _InventoryPurchaseScreenState
             ToastMetric(
               label: l10n.inventoryPurchaseSupplierLinks,
               value: l10n.inventoryPurchaseCountOrders(
-                supplierCatalog.supplierItems.length,
+                (productCatalog.pageStats?['supplier_links'] as num?)
+                        ?.toInt() ??
+                    supplierCatalog.supplierItems.length,
               ),
               tone: ToastColorTokens.accent,
             ),
@@ -1925,9 +2097,19 @@ class _InventoryPurchaseScreenState
                 supplierItems: supplierCatalog.supplierItems,
                 selectedProductId: _selectedProductId,
                 saving: productCatalog.isSaving,
-                onSelect: (product) => setState(
-                  () => _selectedProductId = product['id']?.toString(),
-                ),
+                onSelect: (product) {
+                  setState(() {
+                    _selectedProductId = product['id']?.toString();
+                    _itemCursors
+                      ..clear()
+                      ..add(null);
+                  });
+                  if (widget.autoLoad) {
+                    ref
+                        .read(inventoryPurchaseSupplierCatalogProvider.notifier)
+                        .loadItems(storeId, productId: _selectedProductId);
+                  }
+                },
                 onEdit: (product) =>
                     _showProductDialog(storeId: storeId, product: product),
                 onSetSafetyStock: (product) =>
@@ -1948,6 +2130,52 @@ class _InventoryPurchaseScreenState
         const SizedBox(height: ToastSpacingTokens.md),
         _DataCard(
           title: l10n.inventoryPurchaseProductSupplierCosts,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).previousPageTooltip,
+                icon: const Icon(Icons.chevron_left),
+                onPressed: _itemCursors.length > 1 && !supplierCatalog.isLoading
+                    ? () {
+                        _itemCursors.removeLast();
+                        ref
+                            .read(
+                              inventoryPurchaseSupplierCatalogProvider.notifier,
+                            )
+                            .loadItems(
+                              storeId,
+                              productId: _selectedProductId,
+                              afterId: _itemCursors.last,
+                            );
+                      }
+                    : null,
+              ),
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).nextPageTooltip,
+                icon: const Icon(Icons.chevron_right),
+                onPressed:
+                    supplierCatalog.hasMore &&
+                        !supplierCatalog.isLoading &&
+                        supplierCatalog.supplierItems.isNotEmpty
+                    ? () {
+                        _itemCursors.add(
+                          supplierCatalog.supplierItems.last['id'] as String,
+                        );
+                        ref
+                            .read(
+                              inventoryPurchaseSupplierCatalogProvider.notifier,
+                            )
+                            .loadItems(
+                              storeId,
+                              productId: _selectedProductId,
+                              afterId: _itemCursors.last,
+                            );
+                      }
+                    : null,
+              ),
+            ],
+          ),
           child: _SupplierItemList(
             supplierItems: supplierItems,
             saving: supplierCatalog.isSaving,
@@ -3891,25 +4119,31 @@ class _InventoryPurchaseScreenState
   Future<void> _downloadRecipeTemplate({required String storeId}) async {
     setState(() => _isExportingRecipeTemplate = true);
     try {
-      if (widget.autoLoad) {
-        await Future.wait([
-          ref
-              .read(inventoryPurchaseProductCatalogProvider.notifier)
-              .load(storeId),
-          ref.read(recipeProvider.notifier).loadAll(storeId),
-        ]);
-      }
-      final products = ref
-          .read(inventoryPurchaseProductCatalogProvider)
-          .products;
       final recipeState = ref.read(recipeProvider);
-      final bytes = Uint8List.fromList(
-        buildRecipeImportTemplate(
-          menuItems: recipeState.menuItems,
-          products: products,
-          recipes: recipeState.allRecipes,
-        ),
-      );
+      final bytes = widget.autoLoad
+          ? await buildRecipeTemplateFromBatches(
+              recipes: inventoryService.recipeExportBatches(
+                storeId: storeId,
+                source: 'recipes',
+              ),
+              menuItems: inventoryService.recipeExportBatches(
+                storeId: storeId,
+                source: 'menus',
+              ),
+              ingredients: inventoryService.recipeExportBatches(
+                storeId: storeId,
+                source: 'ingredients',
+              ),
+            )
+          : Uint8List.fromList(
+              buildRecipeImportTemplate(
+                menuItems: recipeState.menuItems,
+                products: ref
+                    .read(inventoryPurchaseProductCatalogProvider)
+                    .products,
+                recipes: recipeState.allRecipes,
+              ),
+            );
       final now = DateTime.now();
       final stamp =
           '${now.year.toString().padLeft(4, '0')}'
@@ -3946,13 +4180,22 @@ class _InventoryPurchaseScreenState
   }) async {
     setState(() => _isExportingIngredientTemplate = true);
     try {
-      final bytes = Uint8List.fromList(
-        buildIngredientImportTemplate(
-          products: products,
-          suppliers: suppliers,
-          supplierItems: supplierItems,
-        ),
-      );
+      final storeId = ref.read(adminScopedStoreIdProvider);
+      final bytes = widget.autoLoad && storeId != null
+          ? await buildIngredientTemplateFromBatches(
+              batches: inventoryService.inventoryCatalogBatches(
+                storeId: storeId,
+                source: 'ingredient_export',
+              ),
+              suppliers: suppliers,
+            )
+          : Uint8List.fromList(
+              buildIngredientImportTemplate(
+                products: products,
+                suppliers: suppliers,
+                supplierItems: supplierItems,
+              ),
+            );
       final now = DateTime.now();
       final stamp =
           '${now.year.toString().padLeft(4, '0')}'

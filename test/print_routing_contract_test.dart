@@ -53,7 +53,7 @@ void main() {
         "WHERE order_id = p_order_id\r\n"
         "    AND status IN ('pending', 'failed')\r\n"
         "rpc(\r\n"
-        "      'claim_print_jobs_v2'\r\n";
+        "      'claim_print_jobs_v3'\r\n";
 
     expect(
       normalizeLineEndings(windowsSource),
@@ -64,7 +64,7 @@ void main() {
     );
     expect(
       normalizeLineEndings(windowsSource),
-      contains("rpc(\n      'claim_print_jobs_v2'"),
+      contains("rpc(\n      'claim_print_jobs_v3'"),
     );
   });
 
@@ -473,7 +473,7 @@ void main() {
     expect(receiptBuilder, contains('buildTrayLabel'));
     expect(receiptBuilder, contains('PrintTicket.fromPayload'));
     expect(agentService, contains('bool get isSupported => !kIsWeb'));
-    expect(agentService, contains("rpc(\n      'claim_print_jobs_v2'"));
+    expect(agentService, matches(RegExp(r"rpc\(\s*'claim_print_jobs_v3'")));
     expect(agentService, contains("rpc(\n      'complete_print_job'"));
     expect(agentService, contains('_printerService.printReceipt'));
     expect(agentService, contains('startPolling'));

@@ -879,6 +879,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
         dinerCount: (packing?['diner_count'] as num?)?.toInt(),
         utensilsRequested: packing?['utensils_requested'] != false,
         fulfillmentMethod: packing?['fulfillment_method']?.toString(),
+        deliveryPaymentMode: packing?['delivery_payment_mode']?.toString(),
         directOrderReference: packing?['direct_order_reference']?.toString(),
         orderNotes: packing?['order_notes']?.toString(),
         restaurantName: _receiptRestaurantName(order),

@@ -21,16 +21,16 @@ const _frozenFiles = <String, String>{
   // Scheduled delivery closure disables reopen; cashier_overlay_operational_test
   // covers the CLOSED hours label while preserving existing checkout behavior.
   'lib/features/cashier/cashier_screen.dart':
-      '08b70ea23cae05029882564124fd00060fcdb66eb6c9cda72a0c8ee9c8647317',
+      'bc2c4ef5f9ae85a1357ad8dd8b9b173ba1dfb1c332573677af9651ee7b32b7a0',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
   // 2026-10-08: eager-load and retain item notes; menu-request behavior is
   // covered by direct_order_support_test and operational kitchen suites.
   'lib/features/kitchen/kitchen_provider.dart':
-      '7f480885e9637c8d306c4135dec051235b822afd87dffdeac948f381d0c6fa16',
+      'a78480eec8f93ba946dbef688ad5745930c5b469b7941d3a49b5a88a0e436cc8',
   'lib/features/kitchen/kitchen_screen.dart':
-      '9c307588f5985c2bdbbc67865c7fc99204c011015e053a371b602ec1e4b50e5c',
+      '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
   // Receipt detail eagerly includes menu requests in the existing query.
   // Payment detail contracts cover the read; the atomic payment SQL is frozen.
   'lib/core/services/payment_service.dart':
@@ -41,7 +41,7 @@ const _frozenFiles = <String, String>{
   // Phase 4D moves the reconciled sales report to a server aggregate.
   // Real SQL/API and Excel coverage lives in financial_inputs_postgrest_test.dart.
   'lib/features/report/report_provider.dart':
-      'dd2d2e3ac50b1961c5fe3d99e17de6f585e84bf48aab137d79bef6f28f9a757a',
+      '8ba89ba7b6937baecb78dd5bde9b9751ed160634b7d2ba536909b9ab0cba0548',
   // 2026-10-06: forward the direct order reference for packing headers.
   // Runtime queue->agent bytes coverage verifies 3 sets; regular receipts
   // retain their existing financial behavior and have no utensil block.
@@ -52,7 +52,7 @@ const _frozenFiles = <String, String>{
   // and physical endpoints are fetched in two batch reads for 1/10/50 printers.
   // direct_order_requirements_test + wifi_printer_service_test cover the path.
   'lib/core/hardware/print_job_agent_service.dart':
-      '44c9edc1b61450bae4097b2ef01d81da2413d348ca76cc3cdb654bc0aeefb47e',
+      '287464ae95bdee00f2d4e12e651f6fd644bc7bf3deae0b0f20f481b27b89698a',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
       '812fdaa3f993520983fc87e4bdb2c1f28c7ccca23f0eb384d69fdf42f4101993',
   'supabase/migrations/20260722050000_kitchen_direct_completion.sql':
@@ -162,7 +162,7 @@ void main() {
       'supabase/functions/direct-order-public/index.ts',
     ).readAsStringSync();
     final raisedCodes = RegExp(
-      r"RAISE EXCEPTION\s+'+((?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+)",
+      r"RAISE EXCEPTION\s+'{1,2}((?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+)",
       caseSensitive: false,
     ).allMatches(migration).map((match) => match.group(1)!.toUpperCase()).toSet();
     final registeredCodes = RegExp(

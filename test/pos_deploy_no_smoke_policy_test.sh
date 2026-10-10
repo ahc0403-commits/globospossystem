@@ -14,7 +14,7 @@ supabase() {
   if [[ "$1 $2" == 'functions list' ]]; then
     python3 - "${POLICY_MISSING_HANDLER:-0}" <<'PY'
 import json,sys
-names=['create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','direct-order-translation-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement']
+names=['company-tax-lookup','meinvoice-dispatcher','create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','direct-order-translation-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement']
 if sys.argv[1]=='1': names.remove('direct-order-public')
 print(json.dumps([{'slug':name,'status':'ACTIVE'} for name in names]))
 PY

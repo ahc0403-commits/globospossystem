@@ -142,18 +142,55 @@ class _DirectOrderAnalyticsScreenState
                           value: '${_number(summary['order_count']).toInt()}',
                           icon: Icons.receipt_long_outlined,
                         ),
+                        if (_number(summary['legacy_delivery_order_count']) >
+                            0) ...[
+                          _Kpi(
+                            width: width,
+                            label: _copy.deliveryFeeSales,
+                            value: _vnd(summary['delivery_fee_sales']),
+                            icon: Icons.delivery_dining_outlined,
+                          ),
+                          _Kpi(
+                            width: width,
+                            label: '${_copy.grabCost} / ${_copy.feeVariance}',
+                            value:
+                                '${_vnd(summary['delivery_cost'] ?? summary['grab_cost'])} / ${_vnd(summary['delivery_fee_variance'])}',
+                            icon: Icons.balance_outlined,
+                          ),
+                        ],
                         _Kpi(
                           width: width,
-                          label: _copy.deliveryFeeSales,
-                          value: _vnd(summary['delivery_fee_sales']),
-                          icon: Icons.delivery_dining_outlined,
+                          label: _copy.waitingForBooking,
+                          value:
+                              '${_number(summary['awaiting_booking']).toInt()}',
+                          icon: Icons.person_search,
                         ),
                         _Kpi(
                           width: width,
-                          label: '${_copy.grabCost} / ${_copy.feeVariance}',
+                          label: _copy.bookingFailures,
                           value:
-                              '${_vnd(summary['delivery_cost'] ?? summary['grab_cost'])} / ${_vnd(summary['delivery_fee_variance'])}',
-                          icon: Icons.balance_outlined,
+                              '${_number(summary['booking_failures']).toInt()} / ${_number(summary['booking_retries']).toInt()}',
+                          icon: Icons.refresh,
+                        ),
+                        _Kpi(
+                          width: width,
+                          label: _copy.cookingToBooking,
+                          value: summary['cooking_to_booking_minutes'] == null
+                              ? '—'
+                              : _number(
+                                  summary['cooking_to_booking_minutes'],
+                                ).toStringAsFixed(1),
+                          icon: Icons.timer_outlined,
+                        ),
+                        _Kpi(
+                          width: width,
+                          label: _copy.cookingToHandoff,
+                          value: summary['cooking_to_handoff_minutes'] == null
+                              ? '—'
+                              : _number(
+                                  summary['cooking_to_handoff_minutes'],
+                                ).toStringAsFixed(1),
+                          icon: Icons.timer_outlined,
                         ),
                         _Kpi(
                           width: width,

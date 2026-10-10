@@ -36,79 +36,164 @@ serve(async (req) => {
     return json({ success: false, error: "AUTH_REQUIRED" }, 401);
   }
 
-  let serviceAccount;
-  let accessToken;
-  try {
-    serviceAccount = parseFirebaseServiceAccount(serviceAccountRaw);
-    accessToken = await getFirebaseAccessToken(serviceAccount);
-  } catch (error) {
-    return json({
-      success: false,
-      error: error instanceof Error ? error.message : "FIREBASE_AUTH_FAILED",
-    }, 503);
-  }
-
+  const deadline = Date.now() + 45_000;
+  const boundedFetch: typeof fetch = (input, init) =>
+    fetch(input, {
+      ...init,
+      signal: AbortSignal.timeout(
+        Math.max(1, Math.min(10_000, deadline - Date.now())),
+      ),
+    });
   const client = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: boundedFetch },
   });
-  let claimed = 0;
-  let accepted = 0;
-  let failed = 0;
-  for (let batch = 0; batch < 10; batch += 1) {
-    const { data, error } = await client.rpc(
-      "claim_emergency_push_deliveries",
-      { p_limit: 100 },
-    );
+  let serviceAccount:
+    | ReturnType<typeof parseFirebaseServiceAccount>
+    | undefined;
+  let accessToken: string | undefined;
+  let claimed = 0, accepted = 0, failed = 0;
+  for (let batch = 0; batch < 20 && Date.now() < deadline - 12_000; batch++) {
+    const claimId = crypto.randomUUID();
+    const { data, error } = await client.rpc("claim_emergency_push_batch", {
+      p_claim_id: claimId,
+      p_limit: 50,
+    });
     if (error) {
-      return json({ success: false, error: "EMERGENCY_PUSH_CLAIM_FAILED" }, 500);
+      return json(
+        { success: false, error: "EMERGENCY_PUSH_CLAIM_FAILED" },
+        500,
+      );
     }
-    const rows = data ?? [];
+    if (
+      !data || !Array.isArray(data.rows) || typeof data.has_more !== "boolean"
+    ) {
+      return json(
+        { success: false, error: "EMERGENCY_PUSH_BATCH_INVALID" },
+        500,
+      );
+    }
+    const rows = data.rows;
+    if (rows.length === 0) break;
+    if (rows.length > 50) {
+      return json(
+        { success: false, error: "EMERGENCY_PUSH_BATCH_INVALID" },
+        500,
+      );
+    }
     claimed += rows.length;
-    for (const raw of rows) {
-      const delivery = mapEmergencyPushDelivery(
-        raw as Record<string, unknown>,
-      );
-      let providerMessageId: string | null = null;
-      let failure: string | null = null;
+    if (!serviceAccount) {
       try {
-        const response = await fetch(
-          `https://fcm.googleapis.com/v1/projects/${serviceAccount.projectId}/messages:send`,
-          {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${accessToken}`,
-              "content-type": "application/json",
-            },
-            body: JSON.stringify(buildEmergencyFcmMessage(delivery)),
-          },
+        serviceAccount = parseFirebaseServiceAccount(serviceAccountRaw);
+        accessToken = await getFirebaseAccessToken(
+          serviceAccount,
+          boundedFetch,
         );
-        const body = await response.json().catch(() => ({})) as Record<
-          string,
-          unknown
-        >;
-        if (!response.ok) throw new Error(`FCM_SEND_FAILED_${response.status}`);
-        providerMessageId = String(body.name ?? "") || null;
-      } catch (error) {
-        failure = error instanceof Error ? error.message : "FCM_SEND_FAILED";
+      } catch {
+        // Owned leases expire; no permanent failure is inferred from OAuth.
+        return json({ success: false, error: "FIREBASE_AUTH_FAILED" }, 503);
       }
-      const retrySeconds = Math.min(
-        3600,
-        30 * (2 ** Math.max(0, delivery.attemptCount - 1)),
-      );
-      const { error: completionError } = await client.rpc(
-        "complete_emergency_push_delivery",
-        {
-          p_delivery_id: delivery.id,
-          p_accepted: failure == null,
-          p_provider_message_id: providerMessageId,
-          p_error: failure,
-          p_retry_after_seconds: retrySeconds,
-        },
-      );
-      if (completionError || failure) failed += 1;
-      else accepted += 1;
     }
-    if (rows.length < 100) break;
+    const results: Record<string, unknown>[] = [];
+    let next = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(4, rows.length) }, async () => {
+        while (next < rows.length) {
+          const raw = rows[next++];
+          if (Date.now() >= deadline - 12_000) {
+            results.push({ id: raw.id, deferred: true, retry_seconds: 30 });
+            continue;
+          }
+          let providerMessageId: string | null = null;
+          let failure: string | null = null;
+          let permanent = false;
+          let retryAfter = 0;
+          try {
+            const delivery = mapEmergencyPushDelivery(
+              raw as Record<string, unknown>,
+            );
+            const response = await fetch(
+              `https://fcm.googleapis.com/v1/projects/${
+                serviceAccount!.projectId
+              }/messages:send`,
+              {
+                method: "POST",
+                headers: {
+                  authorization: `Bearer ${accessToken}`,
+                  "content-type": "application/json",
+                },
+                body: JSON.stringify(buildEmergencyFcmMessage(delivery)),
+                signal: AbortSignal.timeout(
+                  Math.min(10_000, deadline - Date.now() - 1_000),
+                ),
+              },
+            );
+            const body = await response.json().catch(() => ({})) as Record<
+              string,
+              unknown
+            >;
+            if (!response.ok) {
+              const error = body.error as {
+                status?: string;
+                details?: { errorCode?: string }[];
+              } | undefined;
+              const code = error?.details?.find((detail) =>
+                detail.errorCode
+              )?.errorCode ?? error?.status;
+              permanent = code === "UNREGISTERED" ||
+                (response.status >= 400 && response.status < 500 &&
+                  response.status !== 429);
+              failure = code === "UNREGISTERED"
+                ? "FCM_UNREGISTERED"
+                : `FCM_SEND_FAILED_${response.status}`;
+              const retry = response.headers.get("retry-after");
+              retryAfter = retry
+                ? Number(retry) ||
+                  Math.max(0, (Date.parse(retry) - Date.now()) / 1000)
+                : 0;
+            } else providerMessageId = String(body.name ?? "") || null;
+          } catch (error) {
+            failure = error instanceof Error
+              ? error.message
+              : "FCM_SEND_FAILED";
+            permanent = failure === "EMERGENCY_PUSH_STATION_INVALID" ||
+              failure === "EMERGENCY_PUSH_TOKEN_INVALID";
+          }
+          const retrySeconds = Math.min(
+            3600,
+            Math.max(
+              retryAfter,
+              30 * 2 ** Math.max(0, Number(raw.attempt_count ?? 1) - 1) +
+                Math.floor(Math.random() * 15),
+            ),
+          );
+          results.push({
+            id: raw.id,
+            accepted: failure == null,
+            permanent,
+            provider_message_id: providerMessageId,
+            error: failure,
+            retry_seconds: Math.ceil(retrySeconds),
+          });
+        }
+      }),
+    );
+    const { data: completed, error: completionError } = await client.rpc(
+      "complete_emergency_push_batch",
+      { p_claim_id: claimId, p_results: results },
+    );
+    if (completionError || completed !== results.length) {
+      return json({
+        success: false,
+        error: "EMERGENCY_PUSH_COMPLETION_FAILED",
+        claimed,
+        accepted,
+        failed,
+      }, 500);
+    }
+    accepted += results.filter((r) => r.accepted).length;
+    failed += results.filter((r) => !r.accepted && !r.deferred).length;
+    if (!data.has_more || results.some((r) => r.deferred)) break;
   }
   return json({ success: true, claimed, accepted, failed });
 });

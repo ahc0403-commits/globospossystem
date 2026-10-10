@@ -328,6 +328,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   Future<void> refreshOrdersById(String storeId, Iterable<String> orderIds) {
     if (!mounted || _restaurantId != storeId) return Future.value();
     _dirtyOrderIds.addAll(orderIds);
+    _boundDirtyOrders();
     return _refreshQueue.run(_refreshOrders);
   }
 
@@ -672,8 +673,16 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       _fullRefreshRequested = true;
     } else {
       _dirtyOrderIds.add(id);
+      _boundDirtyOrders();
     }
     _scheduleEventRefresh();
+  }
+
+  void _boundDirtyOrders() {
+    if (_dirtyOrderIds.length > 500) {
+      _dirtyOrderIds.clear();
+      _fullRefreshRequested = true;
+    }
   }
 
   void _scheduleEventRefresh() {

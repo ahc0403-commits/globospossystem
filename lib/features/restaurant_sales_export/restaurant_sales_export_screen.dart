@@ -12,6 +12,8 @@ import '../../widgets/app_nav_bar.dart';
 import '../photo_sales_import/photo_sales_import_service.dart';
 import '../photo_sales_import/photo_sales_registered_export.dart';
 import 'combined_sales_export.dart';
+import 'pos_receipt_ledger.dart';
+import 'pos_receipt_ledger_service.dart';
 import 'restaurant_sales_export.dart';
 import 'restaurant_sales_export_service.dart';
 
@@ -28,6 +30,7 @@ class RestaurantSalesExportScreen extends StatefulWidget {
     this.saveFile,
     this.embedded = false,
     this.todayOverride,
+    this.ledgerService,
   });
 
   /// Optional deterministic loader for operational-state widget tests.
@@ -38,6 +41,7 @@ class RestaurantSalesExportScreen extends StatefulWidget {
   final CombinedMisaFileSaver? saveFile;
   final bool embedded;
   final DateTime? todayOverride;
+  final PosReceiptLedgerService? ledgerService;
 
   @override
   State<RestaurantSalesExportScreen> createState() =>
@@ -277,8 +281,32 @@ class _RestaurantSalesExportScreenState
           '${currency.format(export.photoGrossSales)} ₫',
           key: const Key('restaurant_sales_export_photo_total'),
         ),
-        _metric(_generalLabel(context), '${export.generalReceiptCount}'),
-        _metric(_redLabel(context), '${export.redInvoiceCount}'),
+        _metric(
+          _generalLabel(context),
+          '${export.generalReceiptCount}',
+          key: const Key('pos_general_ledger_card'),
+          onTap: export.restaurant == null
+              ? null
+              : () => showPosReceiptLedger(
+                  context,
+                  export: export.restaurant!,
+                  red: false,
+                  service: widget.ledgerService,
+                ),
+        ),
+        _metric(
+          _redLabel(context),
+          '${export.redInvoiceCount}',
+          key: const Key('pos_red_ledger_card'),
+          onTap: export.restaurant == null
+              ? null
+              : () => showPosReceiptLedger(
+                  context,
+                  export: export.restaurant!,
+                  red: true,
+                  service: widget.ledgerService,
+                ),
+        ),
         _metric(
           _supplyLabel(context),
           '${currency.format(export.supplyAmount)} ₫',
@@ -329,37 +357,40 @@ class _RestaurantSalesExportScreenState
     );
   }
 
-  Widget _metric(String label, String value, {Key? key}) {
-    return Container(
+  Widget _metric(String label, String value, {Key? key, VoidCallback? onTap}) {
+    return InkWell(
       key: key,
-      constraints: const BoxConstraints(minWidth: 150),
-      padding: const EdgeInsets.all(ToastSpacingTokens.md),
-      decoration: BoxDecoration(
-        color: ToastColorTokens.mutedSurface,
-        borderRadius: ToastRadiusTokens.sm,
-        border: Border.all(color: ToastColorTokens.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: AppFonts.system(
-              color: ToastColorTokens.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 150),
+        padding: const EdgeInsets.all(ToastSpacingTokens.md),
+        decoration: BoxDecoration(
+          color: ToastColorTokens.mutedSurface,
+          borderRadius: ToastRadiusTokens.sm,
+          border: Border.all(color: ToastColorTokens.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: AppFonts.system(
+                color: ToastColorTokens.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: AppFonts.system(
-              color: ToastColorTokens.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: AppFonts.system(
+                color: ToastColorTokens.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

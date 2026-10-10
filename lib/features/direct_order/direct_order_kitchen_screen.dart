@@ -97,12 +97,20 @@ class _DirectOrderKitchenScreenState
     if (storeId == null || id.isEmpty || _busyTickets.contains(id)) return;
     setState(() => _busyTickets.add(id));
     try {
-      await directOrderStaffService.transitionTicket(
-        storeId: storeId,
-        ticketId: id,
-        expectedVersion: (ticket['version'] as num?)?.toInt() ?? 0,
-        nextStatus: next,
-      );
+      if (next == 'cooked') {
+        await directOrderStaffService.markCooked(
+          storeId: storeId,
+          ticketId: id,
+          expectedVersion: (ticket['version'] as num?)?.toInt() ?? 0,
+        );
+      } else {
+        await directOrderStaffService.transitionTicket(
+          storeId: storeId,
+          ticketId: id,
+          expectedVersion: (ticket['version'] as num?)?.toInt() ?? 0,
+          nextStatus: next,
+        );
+      }
       await _load(silent: true);
     } catch (_) {
       if (mounted) {
@@ -279,11 +287,17 @@ class _TicketCard extends StatelessWidget {
               .clamp(0, 999);
     final next = switch (status) {
       'pending' => 'preparing',
-      'preparing' => 'ready',
+      'preparing' =>
+        ticket['delivery_policy_version'] == 2 &&
+                ticket['cooking_complete'] != true &&
+                ticket['manual_cooking_available'] == true
+            ? 'cooked'
+            : 'ready',
       _ => null,
     };
     final actionLabel = switch (next) {
       'preparing' => copy.startPreparing,
+      'cooked' => copy.markCooked,
       'ready' => copy.markReady,
       _ =>
         isPickup
@@ -435,7 +449,13 @@ class _TicketCard extends StatelessWidget {
               child: next == null
                   ? OutlinedButton(onPressed: null, child: Text(actionLabel))
                   : FilledButton(
-                      onPressed: busy ? null : () => onTransition(next),
+                      onPressed:
+                          busy ||
+                              (next == 'ready' &&
+                                  ticket['delivery_policy_version'] == 2 &&
+                                  ticket['cooking_complete'] != true)
+                          ? null
+                          : () => onTransition(next),
                       child: Text(actionLabel),
                     ),
             ),

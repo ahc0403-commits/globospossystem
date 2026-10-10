@@ -164,7 +164,7 @@ void main() {
     expect(screen, contains("Key('receipt_ledger_business_date_picker')"));
     expect(screen, contains('showDatePicker('));
     expect(screen, contains('lastDate: lastDate'));
-    expect(service, contains("'get_receipt_ledger'"));
+    expect(service, contains("'get_receipt_ledger_page'"));
     expect(service, contains("'p_business_date': businessDate"));
     expect(sql, contains('p_business_date date'));
     expect(sql, contains('v_business_date date := p_business_date'));

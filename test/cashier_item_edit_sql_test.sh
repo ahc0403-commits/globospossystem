@@ -55,7 +55,7 @@ s+=function('20260428000002_vat_pricing_mode.sql','compute_order_item_tax_amount
 PY
 docker run --detach --rm --name "$EDIT_CONTAINER" --env POSTGRES_HOST_AUTH_METHOD=trust postgres:15 >/dev/null
 for ((attempt=0;attempt<60;attempt++)); do
- if docker exec "$EDIT_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then break; fi
+ if docker exec "$EDIT_CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then break; fi
  sleep 1
 done
 run_sql() { docker exec -i "$EDIT_CONTAINER" psql -X -U postgres -v ON_ERROR_STOP=1 < "$1"; }

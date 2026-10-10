@@ -19,6 +19,7 @@ fi
 : "${SUPABASE_URL:?Missing SUPABASE_URL for Flutter web build}"
 : "${SUPABASE_ANON_KEY:?Missing SUPABASE_ANON_KEY for Flutter web build}"
 
+bash "$ROOT_DIR/scripts/build_photo_import_worker.sh"
 flutter build web --release \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \

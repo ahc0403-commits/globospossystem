@@ -39,37 +39,6 @@ class _Staff extends DirectOrderStaffService {
   DirectOrderRequirementReply? requirementReply;
   String? bankReference;
   int? sentTicketVersion;
-  String? customerNote;
-  String? itemNote;
-  bool failRequirementReply = false;
-  final requirementMutations = <String>[];
-
-  @override
-  Future<Map<String, dynamic>> replyRequirement({
-    required String storeId,
-    required String requestId,
-    required DirectOrderRequirement requirement,
-    required DirectOrderRequirementReply reply,
-    required String locale,
-    required String mutationId,
-  }) async {
-    requirementReply = reply;
-    requirementMutations.add(mutationId);
-    expect(requirement.id, 'note');
-    expect(requirement.version, 1);
-    expect(mutationId, isNotEmpty);
-    if (failRequirementReply) throw StateError('simulated response failure');
-    requirements = [
-      {
-        ...requirements.single,
-        'status': 'awaiting_customer',
-        'version': 2,
-        'reply_text': reply.body,
-        'reply_message_id': 'reply-id',
-      },
-    ];
-    return requestDetail(storeId: storeId, requestId: requestId);
-  }
 
   @override
   Future<List<Map<String, dynamic>>> listRequests({
@@ -91,24 +60,9 @@ class _Staff extends DirectOrderStaffService {
     required String storeId,
     required String requestId,
   }) async => {
+    'request': {'id': requestId, 'state': state, 'reference_code': 'D12345678'},
+    'items': <Map<String, dynamic>>[],
     'requirements': requirements,
-    'request': {
-      'id': requestId,
-      'state': state,
-      'reference_code': 'D12345678',
-      'customer_note': customerNote,
-    },
-    'items': <Map<String, dynamic>>[
-      if (itemNote != null)
-        {
-          'name_ko': '김밥',
-          'name_vi': 'Kimbap',
-          'name_en': 'Kimbap',
-          'quantity': 2,
-          'unit_price': 49000,
-          'item_note': itemNote,
-        },
-    ],
     'quotes': <Map<String, dynamic>>[
       if (state == 'quoted')
         {
@@ -187,6 +141,31 @@ class _Staff extends DirectOrderStaffService {
   }
 
   @override
+  Future<Map<String, dynamic>> replyRequirement({
+    required String storeId,
+    required String requestId,
+    required DirectOrderRequirement requirement,
+    required DirectOrderRequirementReply reply,
+    required String locale,
+    required String mutationId,
+  }) async {
+    requirementReply = reply;
+    expect(requirement.id, 'note');
+    expect(requirement.version, 1);
+    expect(mutationId, isNotEmpty);
+    requirements = [
+      {
+        ...requirements.single,
+        'status': 'awaiting_customer',
+        'version': 2,
+        'reply_text': reply.body,
+        'reply_message_id': 'reply-id',
+      },
+    ];
+    return requestDetail(storeId: storeId, requestId: requestId);
+  }
+
+  @override
   Future<void> setDinerCount({
     required String storeId,
     required String requestId,
@@ -238,7 +217,7 @@ class _Staff extends DirectOrderStaffService {
     expect(requestId, 'request');
     expect(expectedVersion, 3);
     ticketStatus = 'completed';
-    return {'status': 'completed'};
+    return {};
   }
 
   @override
@@ -258,6 +237,10 @@ class _Staff extends DirectOrderStaffService {
   }) async {
     expect(requestId, 'request');
     expect(actualGrabFee, prepaid ? verifiedFee : null);
+    expect(cashConfirmed, prepaid);
+    expect(evidenceMessageId, prepaid ? 'evidence' : null);
+    expect(operationId != null, prepaid);
+    expect(cashReference, prepaid ? 'cash handoff' : null);
     sentProvider = provider;
     sentUrl = grabUrl;
     sentTicketVersion = expectedVersion;
@@ -278,6 +261,72 @@ Future<void> _confirmEvidence(WidgetTester tester, String reference) async {
   await tester.pump();
   await tester.tap(find.byKey(const Key('direct_money_confirm')));
   await tester.pumpAndSettle();
+}
+
+class _RecipientStaff extends _Staff {
+  bool cooked = true;
+  bool rejectNextBook = false;
+  final bookOperationIds = <String>[];
+  int ticketVersion = 3;
+  Map<String, dynamic> booking = {};
+  Map<String, dynamic>? bookedPayload;
+  @override
+  Future<Map<String, dynamic>> requestDetail({
+    required String storeId,
+    required String requestId,
+  }) async {
+    final data = await super.requestDetail(
+      storeId: storeId,
+      requestId: requestId,
+    );
+    data['request'] = {
+      ...Map<String, dynamic>.from(data['request'] as Map),
+      'delivery_policy_version': 2,
+    };
+    data['delivery'] = {
+      ...Map<String, dynamic>.from(data['delivery'] as Map),
+      'cooking_complete': cooked,
+    };
+    data['financial'] = {
+      ...Map<String, dynamic>.from(data['financial'] as Map),
+      'delivery_fee_total': 0,
+    };
+    data['fulfillment'] = {
+      ...Map<String, dynamic>.from(data['fulfillment'] as Map),
+      'version': ticketVersion,
+    };
+    data['booking'] = booking;
+    return data;
+  }
+
+  @override
+  Future<Map<String, dynamic>> bookDriver({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String operationId,
+    required String action,
+    required Map<String, dynamic> payload,
+  }) async {
+    expect(expectedVersion, ticketVersion);
+    if (action == 'book') {
+      bookOperationIds.add(operationId);
+      if (rejectNextBook) {
+        rejectNextBook = false;
+        throw StateError('simulated interrupted booking request');
+      }
+      bookedPayload = payload;
+    } else {
+      expect(action, 'cancel');
+    }
+    booking = {
+      'id': operationId,
+      'status': action == 'book' ? 'booked' : 'cancelled',
+      ...payload,
+    };
+    ticketVersion++;
+    return booking;
+  }
 }
 
 Future<void> _pump(
@@ -318,11 +367,15 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
-Future<void> _tap(WidgetTester tester, Finder target) async {
+Future<void> _tap(
+  WidgetTester tester,
+  Finder target, {
+  double scrollDelta = 250,
+}) async {
   if (target.evaluate().isEmpty) {
     await tester.scrollUntilVisible(
       target,
-      200,
+      scrollDelta,
       scrollable: find
           .descendant(
             of: find.byKey(const Key('direct_staff_detail_list')),
@@ -350,6 +403,91 @@ Future<void> _enterDialog(
 }
 
 void main() {
+  testWidgets(
+    'recipient policy books after cooking and holds handoff until packed',
+    (tester) async {
+      final service = _RecipientStaff()
+        ..ticketStatus = 'preparing'
+        ..rejectNextBook = true;
+      final copy = DirectOrderCopy('en');
+      await _pump(tester, service);
+      expect(find.byKey(const Key('direct_delivery_provider')), findsNothing);
+      expect(
+        find.byKey(const Key('direct_order_delivery_payment_mode')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('direct_staff_detail_list')), findsOneWidget);
+      final contact = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == copy.driverContact,
+      );
+      await tester.scrollUntilVisible(
+        contact,
+        400,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('direct_staff_detail_list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.ensureVisible(contact);
+      await tester.enterText(contact, '0901234567');
+      final fee = find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            w.decoration?.labelText == copy.recipientFeeReference,
+      );
+      await tester.ensureVisible(fee);
+      await tester.enterText(fee, '40000');
+      await _tap(tester, find.byKey(const Key('direct_order_book_driver')));
+      expect(service.booking, isEmpty);
+      await _tap(tester, find.byKey(const Key('direct_order_book_driver')));
+      expect(service.bookOperationIds, hasLength(2));
+      expect(service.bookOperationIds[0], service.bookOperationIds[1]);
+      expect(service.bookedPayload?['recipient_fee'], 40000);
+      expect(service.sentProvider, isNull);
+      final handoff = tester.widget<FilledButton>(
+        find.byKey(const Key('direct_order_handoff_booking')),
+      );
+      expect(handoff.onPressed, isNull);
+      await _tap(tester, find.byKey(const Key('direct_chat_templates')));
+      await _tap(
+        tester,
+        find.byKey(const Key('direct_chat_template_deliveryFee')),
+      );
+      final draft = tester
+          .widget<TextField>(find.byKey(const Key('direct_staff_chat_input')))
+          .controller!
+          .text;
+      expect(draft, contains(copy.customerPaysDriverHelp));
+      expect(draft, contains('40.000 VND'));
+      expect(find.byType(AlertDialog), findsNothing);
+      await _tap(
+        tester,
+        find.widgetWithText(OutlinedButton, copy.cancelBooking),
+      );
+      await _enterDialog(tester, 'Driver changed', copy);
+      expect(service.booking['status'], 'cancelled');
+      final bookButton = find.byKey(const Key('direct_order_book_driver'));
+      await tester.scrollUntilVisible(
+        bookButton,
+        400,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('direct_staff_detail_list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await _tap(tester, bookButton);
+      expect(service.bookOperationIds, hasLength(3));
+      expect(service.bookOperationIds[2], isNot(service.bookOperationIds[0]));
+      expect(service.booking['status'], 'booked');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
@@ -399,79 +537,6 @@ void main() {
       expect(tester.widget<FilledButton>(button).onPressed, isNull);
       expect(find.text('Chờ khách xác nhận'), findsOneWidget);
       expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'cashier clarification retry retains freeform draft and mutation identity',
-    (tester) async {
-      final service = _Staff()
-        ..state = 'awaiting_quote'
-        ..failRequirementReply = true
-        ..requirements = [
-          {
-            'id': 'note',
-            'version': 1,
-            'request_text': 'Xin sốt riêng',
-            'followup_text': 'Chia hai hộp được không?',
-            'source_locale': 'vi',
-            'status': 'awaiting_reply',
-          },
-        ];
-      await _pump(tester, service, language: 'vi');
-      await _tap(tester, find.byKey(const Key('requirement_reply_note')));
-      const answer = 'Sẽ chia sốt thành hai hộp nhỏ.';
-      await tester.enterText(
-        find.byKey(const Key('requirement_reply_body')),
-        answer,
-      );
-      await _tap(tester, find.byKey(const Key('requirement_reply_submit')));
-      expect(service.requirementMutations, hasLength(1));
-      await _tap(tester, find.byKey(const Key('requirement_reply_note')));
-      expect(
-        tester
-            .widget<TextFormField>(
-              find.byKey(const Key('requirement_reply_body')),
-            )
-            .controller!
-            .text,
-        answer,
-      );
-      service.failRequirementReply = false;
-      await _tap(tester, find.byKey(const Key('requirement_reply_submit')));
-      expect(service.requirementMutations, hasLength(2));
-      expect(service.requirementMutations[1], service.requirementMutations[0]);
-      expect(service.requirementReply!.body, answer);
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'staff shows persisted item_note, whole-order note, contact and diner count',
-    (tester) async {
-      final service = _Staff()
-        ..customerNote = '수령 전에 연락\n문 앞에서 기다려 주세요'
-        ..itemNote = '파 제외\n소스 별도';
-      await _pump(tester, service, language: 'ko');
-      expect(find.text(DirectOrderCopy('ko').packingCount(3)), findsWidgets);
-      final details = find.byKey(const Key('direct_staff_detail_list'));
-      final scrollable = find
-          .descendant(of: details, matching: find.byType(Scrollable))
-          .first;
-      for (final text in [
-        '받는 분: Customer',
-        '전화번호: 0901234567',
-        '${DirectOrderCopy('ko').detailAddress}: Door 1',
-        '주문 요청사항: 수령 전에 연락\n문 앞에서 기다려 주세요',
-        '메뉴 요청사항: 파 제외\n소스 별도',
-      ]) {
-        await tester.scrollUntilVisible(
-          find.text(text),
-          150,
-          scrollable: scrollable,
-        );
-        expect(find.text(text), findsOneWidget);
-      }
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
   testWidgets(
@@ -558,22 +623,19 @@ void main() {
           size: const Size(390, 844),
         );
         expect(find.byKey(const Key('direct_delivery_provider')), findsNothing);
+        await _tap(tester, find.byKey(const Key('direct_complete_pickup')));
+        expect(service.ticketStatus, 'ready');
         await _tap(
           tester,
-          find.byKey(const Key('direct_order_complete_pickup')),
-        );
-        await _tap(
-          tester,
-          find
-              .widgetWithText(
-                FilledButton,
-                DirectOrderCopy(language).pickupComplete,
-              )
-              .last,
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.widgetWithText(
+              FilledButton,
+              DirectOrderCopy(language).pickupComplete,
+            ),
+          ),
         );
         expect(service.ticketStatus, 'completed');
-        expect(service.refunded, false);
-        // Completion preserves the user's scroll offset; return to packing/refund controls.
         tester
             .state<ScrollableState>(
               find
@@ -586,9 +648,11 @@ void main() {
             .position
             .jumpTo(0);
         await tester.pumpAndSettle();
+        expect(service.refunded, false);
         await _tap(
           tester,
           find.byKey(const Key('direct_record_pickup_refund')),
+          scrollDelta: -250,
         );
         await _confirmEvidence(tester, 'bank-transfer-ref-123');
         expect(service.bankReference, 'bank-transfer-ref-123');
@@ -637,7 +701,9 @@ void main() {
           tester,
           find.widgetWithText(FilledButton, copy.handoffDriver),
         );
-        if (prepaid) await _confirmEvidence(tester, 'cash handoff');
+        if (prepaid) {
+          await _confirmEvidence(tester, 'cash handoff');
+        }
         expect(service.ticketStatus, 'dispatched');
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());

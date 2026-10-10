@@ -24,6 +24,10 @@ deno fmt --check \
   supabase/functions/generate_delivery_settlement/index.ts
 deno test --no-config supabase/functions/_shared/retired_deliberry_test.ts
 
+printf 'CHECK_REPO_STEP=atomic_release_bundle_contract\n'
+python3 scripts/build_pos_recipient_release.py --check
+printf 'CHECK_REPO_STEP=pos_receipt_ledger_sql\n'
+bash test/pos_receipt_ledger_sql_test.sh
 printf 'CHECK_REPO_STEP=migration_version_uniqueness\n'
 bash test/migration_version_uniqueness_test.sh
 
@@ -54,6 +58,7 @@ bash scripts/test_kds_tray_floor_partial_batch.sh
 
 printf 'CHECK_REPO_STEP=beverage_sugar_vat_sql\n'
 bash test/beverage_sugar_vat_sql_test.sh
+
 
 printf 'CHECK_REPO_STEP=qr_menu_category_auto_sync_sql\n'
 bash test/qr_menu_category_auto_sync_sql_test.sh
@@ -111,10 +116,28 @@ deno test --config supabase/functions/direct-order-notification-dispatcher/deno.
   supabase/functions/direct-order-notification-dispatcher/index_test.ts
 
 printf 'CHECK_REPO_STEP=fixed_procurement_account_authority\n'
+printf 'CHECK_REPO_STEP=company_tax_lookup\n'
+deno fmt --check supabase/functions/company-tax-lookup
+deno lint --config supabase/functions/company-tax-lookup/deno.json supabase/functions/company-tax-lookup
+deno check --config supabase/functions/company-tax-lookup/deno.json supabase/functions/company-tax-lookup/index.ts
+deno test --config supabase/functions/company-tax-lookup/deno.json supabase/functions/company-tax-lookup/handler_test.ts
+python3 scripts/tests/company_tax_lookup_sql.py
 deno fmt --check supabase/functions/provision-fixed-pos-account/policy.ts supabase/functions/provision-fixed-pos-account/policy_test.ts
 deno lint supabase/functions/provision-fixed-pos-account/policy.ts supabase/functions/provision-fixed-pos-account/policy_test.ts
 deno check supabase/functions/provision-fixed-pos-account/index.ts
 deno test supabase/functions/provision-fixed-pos-account/policy_test.ts
+printf 'CHECK_REPO_STEP=bounded_data_access_sql_and_dispatch_ownership\n'
+bounded_data_evidence="${TMPDIR:-/tmp}/pos-bounded-check-$$"
+python3 scripts/tests/data_access/verify_bounded_reads.py "$bounded_data_evidence/reads"
+python3 scripts/tests/data_access/verify_dispatch_claims.py "$bounded_data_evidence/claims"
+deno check supabase/functions/meinvoice-dispatcher/index.ts \
+  supabase/functions/emergency-fulfillment-dispatcher/index.ts \
+  supabase/functions/provision-fixed-pos-account/index.ts \
+  supabase/functions/sepay-webhook/index.ts
+deno run --no-config --import-map=scripts/tests/data_access/edge/import_map.json \
+  --allow-env --allow-read scripts/tests/data_access/edge/probe.ts > "$bounded_data_evidence/edge-results.json"
+deno run --no-config --import-map=scripts/tests/data_access/edge/import_map.json \
+  --allow-env --allow-read scripts/tests/data_access/edge/sepay_probe.ts > "$bounded_data_evidence/sepay-results.json"
 printf 'CHECK_REPO_STEP=node_contracts\n'
 (
   cd scripts
@@ -156,6 +179,7 @@ printf 'CHECK_REPO_STEP=restaurant_vat_integrity\n'
 bash test/restaurant_vat_integrity_sql_test.sh
 
 printf 'CHECK_REPO_STEP=flutter_web_release_build\n'
+bash scripts/build_photo_import_worker.sh
 flutter build web --release
 printf 'CHECK_REPO_STEP=git_whitespace_contract\n'
 git diff --check

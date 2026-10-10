@@ -78,3 +78,8 @@ assets/fonts/SourceHanSerif-VF.otf.ttc
 lib/l10n/app_localizations*.dart
 .vercel
 .env*.local
+
+# Generated bounded Photo Excel worker.
+web/photo_import_worker.js
+web/photo_import_worker.js.deps
+web/photo_import_worker.js.map

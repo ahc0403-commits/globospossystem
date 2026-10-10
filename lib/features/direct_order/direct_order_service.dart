@@ -528,7 +528,7 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status_v9',
+      'action': 'status_v10',
       ...session.credentials,
       'request_id': requestId,
     });
@@ -539,7 +539,7 @@ class DirectOrderService {
     required DirectOrderSession session,
   }) async {
     final data = await _invokeValue({
-      'action': 'orders_v4',
+      'action': 'orders_v5',
       ...session.credentials,
     });
     if (data is! List) {
@@ -570,14 +570,14 @@ class DirectOrderService {
   Future<void> uploadSupportAttachment({
     required DirectOrderSession session,
     required String requestId,
-    required String chargeId,
+    String? chargeId,
     required String path,
     required String filename,
     required String mimeType,
     required Uint8List bytes,
   }) async {
     final payload = {
-      'charge_id': chargeId,
+      if (chargeId != null) 'charge_id': chargeId,
       'path': path,
       'filename': filename,
       'mime_type': mimeType,
@@ -588,7 +588,9 @@ class DirectOrderService {
       await supportRequest(
         session: session,
         requestId: requestId,
-        action: 'customer_attachment_commit',
+        action: chargeId == null
+            ? 'customer_chat_attachment_commit'
+            : 'customer_attachment_commit',
         payload: payload,
       );
       return;
@@ -598,7 +600,9 @@ class DirectOrderService {
     final upload = await supportRequest(
       session: session,
       requestId: requestId,
-      action: 'customer_attachment_upload',
+      action: chargeId == null
+          ? 'customer_chat_attachment_upload'
+          : 'customer_attachment_upload',
       payload: payload,
     );
     final injected = _proofUploader;
@@ -617,7 +621,9 @@ class DirectOrderService {
     await supportRequest(
       session: session,
       requestId: requestId,
-      action: 'customer_attachment_commit',
+      action: chargeId == null
+          ? 'customer_chat_attachment_commit'
+          : 'customer_attachment_commit',
       payload: payload,
     );
   }

@@ -60,18 +60,21 @@ serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
-  const { data, error } = await supabase.rpc("ingest_sepay_transaction", {
-    p_sepay_transaction_id: transaction.id,
-    p_gateway: transaction.gateway,
-    p_account_number: transaction.accountNumber,
-    p_sub_account: transaction.subAccount,
-    p_transfer_type: transaction.transferType,
-    p_transfer_amount: transaction.transferAmount,
-    p_payment_code: transaction.paymentCode,
-    p_reference_code: transaction.referenceCode,
-    p_transaction_at: transaction.transactionAt,
-    p_raw_payload: transaction.rawPayload,
-  });
+  const { data, error } = await supabase.rpc(
+    "ingest_sepay_transaction_with_delivery_scope",
+    {
+      p_sepay_transaction_id: transaction.id,
+      p_gateway: transaction.gateway,
+      p_account_number: transaction.accountNumber,
+      p_sub_account: transaction.subAccount,
+      p_transfer_type: transaction.transferType,
+      p_transfer_amount: transaction.transferAmount,
+      p_payment_code: transaction.paymentCode,
+      p_reference_code: transaction.referenceCode,
+      p_transaction_at: transaction.transactionAt,
+      p_raw_payload: transaction.rawPayload,
+    },
+  );
 
   if (error) {
     return json({
@@ -82,7 +85,10 @@ serve(async (req) => {
   }
 
   const ingest = data as Record<string, unknown> | null;
-  if (ingest?.status === "accepted" && ingest.resolution_status === "matched") {
+  if (
+    ingest?.status === "accepted" && ingest.resolution_status === "matched" &&
+    ingest.push_dispatch_required === true
+  ) {
     const dispatch = fetch(
       `${supabaseUrl}/functions/v1/sepay-alert-dispatcher`,
       {

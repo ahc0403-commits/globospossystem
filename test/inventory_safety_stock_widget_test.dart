@@ -16,6 +16,7 @@ import 'package:globos_pos_system/l10n/app_localizations.dart';
 const _store = 'store-a';
 final _product = <String, dynamic>{
   'id': 'oil',
+  'restaurant_id': _store,
   'inventory_item_id': 'oil-item',
   'product_code': 'WR017',
   'name': 'Oil',
@@ -104,6 +105,14 @@ void main() {
             'reorder_point': body['p_safety_stock_base'],
           };
           result = {'product': _product, 'supplier_item': _link};
+        } else if (path.endsWith('get_inventory_catalog_page')) {
+          final body = jsonDecode(request.body) as Map;
+          result = {
+            'version': 1,
+            'rows': body['p_source'] == 'products' ? [_product] : [_link],
+            'has_more': false,
+            'stats': {},
+          };
         } else if (path.endsWith('inventory_products')) {
           result = [_product];
         } else if (path.endsWith('inventory_suppliers')) {

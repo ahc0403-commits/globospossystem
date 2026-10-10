@@ -342,6 +342,7 @@ class PrintJobAgentService implements PrintAgentDriver {
       dinerCount: receipt.dinerCount,
       utensilsRequested: receipt.utensilsRequested,
       fulfillmentMethod: receipt.fulfillmentMethod,
+      deliveryPaymentMode: receipt.deliveryPaymentMode,
       directOrderReference: receipt.directOrderReference,
       orderNotes: receipt.orderNotes,
       refundedTotal: receipt.refundedTotal,
@@ -377,10 +378,16 @@ class SupabasePrintJobBackend implements PrintJobBackend {
     String storeId, {
     int limit = 10,
   }) async {
-    final response = await _client.rpc(
-      'claim_print_jobs_v2',
-      params: {'p_store_id': storeId, 'p_limit': limit},
-    );
+    final params = {'p_store_id': storeId, 'p_limit': limit};
+    dynamic response;
+    try {
+      response = await _client.rpc('claim_print_jobs_v3', params: params);
+    } on PostgrestException catch (error) {
+      // Install upgraded stations before the DB rollout. Only an absent RPC
+      // permits the predecessor claim; auth, routing and network errors stop.
+      if (error.code != 'PGRST202') rethrow;
+      response = await _client.rpc('claim_print_jobs_v2', params: params);
+    }
     final rows = response is List ? response : const <Object?>[];
     return rows
         .whereType<Map>()

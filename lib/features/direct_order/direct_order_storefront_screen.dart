@@ -1082,7 +1082,7 @@ class _DirectOrderStorefrontScreenState
                         ),
                         title: Text('#${order.referenceCode}'),
                         subtitle: Text(
-                          '${order.isPickup ? _copy.pickup : _copy.delivery} · ${_copy.customerProgressLabel(directOrderCustomerProgress(order.state, order.fulfillmentStatus, cookingComplete: order.cookingComplete, isPickup: order.fulfillmentMethod == 'pickup', handoffConfirmed: order.hasDispatch))} · '
+                          '${order.isPickup ? _copy.pickup : _copy.delivery} · ${_copy.customerProgressLabel(directOrderCustomerProgress(order.state, order.fulfillmentStatus, cookingComplete: order.cookingComplete, isPickup: order.fulfillmentMethod == 'pickup', handoffConfirmed: order.hasDispatch, driverBooked: order.bookingStatus == 'booked'))} · '
                           '${_copy.itemsCount(order.itemCount)}',
                         ),
                         trailing: Text(
@@ -1262,7 +1262,7 @@ class _DirectOrderStorefrontScreenState
       }
     }
     return status.quote?.deliveryPaymentMode == 'customer_direct'
-        ? supportCopy.text('driver_fee_pending')
+        ? _copy.customerPaysDriverHelp
         : _copy.deliveryVatIncluded;
   }
 
@@ -1872,6 +1872,11 @@ class _DirectOrderStorefrontScreenState
                 child: Text(
                   '${_storefront!.storeAddress}\n${_copy.pickupHelp}',
                 ),
+              ),
+            if (!_isPickup)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(_copy.customerPaysDriverHelp),
               ),
             if (_menuCategories.isEmpty) ...[
               Text(_copy.emptyMenu),
@@ -2607,11 +2612,18 @@ class _DirectOrderStorefrontScreenState
       cookingComplete: status.delivery?.cookingComplete == true,
       isPickup: status.isPickup,
       handoffConfirmed: status.hasDriverHandoff,
+      driverBooked: status.delivery?.hasBooking == true,
     );
     final exception =
         directOrderStage(status.state, status.fulfillmentStatus) ==
         DirectOrderStage.exception;
-    final url = status.delivery?.trackingUrl ?? status.grabTrackingUrl;
+    final booking = status.delivery?.hasBooking == true
+        ? status.delivery!.booking
+        : <String, dynamic>{};
+    final url =
+        status.delivery?.trackingUrl ??
+        status.grabTrackingUrl ??
+        booking['tracking_url'] as String?;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -2665,8 +2677,20 @@ class _DirectOrderStorefrontScreenState
                 key: const Key('direct_delivery_tracking'),
                 url: url,
               ),
-            if (status.delivery?.driverContact != null)
-              SelectableText(status.delivery!.driverContact!),
+            if (status.delivery?.isPickup != true &&
+                (status.support['delivery_policy_version'] == 2 ||
+                    status.quote?.deliveryPaymentMode == 'customer_direct'))
+              Text(_copy.customerPaysDriverHelp),
+            if (booking['recipient_fee'] is num)
+              Text(
+                '${_copy.recipientFeeReference}: ${_money.format((booking['recipient_fee'] as num).toDouble())}',
+              ),
+            if (status.delivery?.driverContact != null ||
+                booking['driver_contact'] != null)
+              SelectableText(
+                status.delivery?.driverContact ??
+                    booking['driver_contact'] as String,
+              ),
             if (status.delivery?.offer?.status == 'accepted' &&
                 (status.delivery?.offer?.refundDue ?? 0) > 0)
               Text(
@@ -3524,6 +3548,26 @@ class _DirectOrderStorefrontScreenState
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        if (_session != null && _storefront != null) ...[
+          DirectOrderAttachmentButton(
+            key: ValueKey('customer_chat_attachment:${status.requestId}'),
+            storeId: _storefront!.storeId,
+            requestId: status.requestId,
+            compact: true,
+            enabled: status.support['chat_open'] != false,
+            upload: (path, filename, mime, bytes) =>
+                widget.service.uploadSupportAttachment(
+                  session: _session!,
+                  requestId: status.requestId,
+                  path: path,
+                  filename: filename,
+                  mimeType: mime,
+                  bytes: bytes,
+                ),
+            onSent: () => _refreshStatus(silent: true),
+          ),
+          const SizedBox(width: 8),
+        ],
         Expanded(
           child: TextField(
             key: const Key('direct_customer_chat_input'),
@@ -3589,7 +3633,12 @@ class _DirectOrderStorefrontScreenState
         mainAxisSize: MainAxisSize.min,
         children: [
           if (message.hasAttachment) ...[
-            const Icon(Icons.image_outlined, size: 18),
+            Icon(
+              message.metadata['mime_type'] == 'application/pdf'
+                  ? Icons.picture_as_pdf_outlined
+                  : Icons.image_outlined,
+              size: 18,
+            ),
             const SizedBox(width: 6),
           ] else if (grabUri != null) ...[
             const Icon(Icons.delivery_dining_outlined, size: 18),

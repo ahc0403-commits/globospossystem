@@ -1,4 +1,5 @@
 import 'direct_order_money.dart';
+import 'direct_order_copy.dart';
 
 enum DirectOrderChatTemplate { received, quote, address, deliveryFee }
 
@@ -13,6 +14,7 @@ String directOrderChatDraft({
   required String address,
   required bool pickup,
   required bool customerPaysDriver,
+  bool recipientDeliveryPolicy = false,
   int? deliveryFee,
 }) {
   String pick(String ko, String vi, String en) => switch (locale) {
@@ -35,6 +37,9 @@ String directOrderChatDraft({
           '$storeName has sent the quote for pickup order #$referenceCode. There is no delivery fee. Please review and pay. Preparation starts after the store confirms payment.',
         );
       }
+      if (recipientDeliveryPolicy) {
+        return '${pick('$storeName에서 주문 #$referenceCode의 음식 대금을 안내드립니다. 금액을 확인하신 후 결제해 주세요. 매장에서 입금을 확인한 뒤 조리를 시작합니다.', '$storeName gửi tiền món cho đơn #$referenceCode. Vui lòng kiểm tra và thanh toán. Cửa hàng chuẩn bị sau khi xác nhận thanh toán.', '$storeName has sent the food amount for order #$referenceCode. Please review and pay. Preparation starts after payment confirmation.')}\n${DirectOrderCopy(locale).customerPaysDriverHelp}';
+      }
       return customerPaysDriver
           ? pick(
               '$storeName에서 주문 #$referenceCode의 금액을 안내드립니다. 매장 결제금액에는 배송비가 포함되어 있지 않으며, 배송비는 기사에게 별도로 지급합니다. 견적을 확인하신 후 결제해 주세요. 매장에서 입금을 확인한 뒤 조리를 시작합니다.',
@@ -53,6 +58,11 @@ String directOrderChatDraft({
         '$storeName would like to confirm your delivery details.\nOrder: #$referenceCode\nName: $customerName\nPhone: $phone\nAddress: $address\nPlease confirm these details. Thank you.',
       );
     case DirectOrderChatTemplate.deliveryFee:
+      if (recipientDeliveryPolicy && !pickup) {
+        final copy = DirectOrderCopy(locale);
+        return '$storeName · #$referenceCode\n${copy.customerPaysDriverHelp}'
+            '${deliveryFee == null ? '' : '\n${copy.recipientFeeReference}: ${formatDirectOrderVnd(deliveryFee)} VND'}';
+      }
       if (deliveryFee == null || deliveryFee < 0) {
         throw ArgumentError('A confirmed delivery fee is required');
       }

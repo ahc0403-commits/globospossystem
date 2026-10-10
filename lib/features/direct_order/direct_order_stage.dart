@@ -30,6 +30,7 @@ String directOrderCustomerProgress(
   bool cookingComplete = false,
   bool isPickup = false,
   bool handoffConfirmed = false,
+  bool driverBooked = false,
 }) {
   if (fulfillmentStatus == 'cancelled') return 'cancelled';
   if (const {'rejected', 'cancelled', 'expired'}.contains(state)) return state;
@@ -43,6 +44,11 @@ String directOrderCustomerProgress(
           ? 'customer_shipping'
           : 'customer_packed',
     'ready' => isPickup ? 'customer_pickup_ready' : 'customer_packed',
-    _ => cookingComplete ? 'customer_cooked' : 'customer_preparing',
+    _ =>
+      driverBooked && !isPickup
+          ? 'customer_driver_booked'
+          : cookingComplete
+          ? 'customer_cooked'
+          : 'customer_preparing',
   };
 }
