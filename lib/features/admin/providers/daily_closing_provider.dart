@@ -27,6 +27,9 @@ class DailyClosingRecord {
     required this.serviceTotal,
     required this.lowStockCount,
     required this.closeSource,
+    this.directOrderCashRefunds = 0,
+    this.deliveryCashPaid = 0,
+    this.deliveryCashRecovered = 0,
     this.snapshotPaymentsTotal = 0,
     this.ledgerPaymentsCount = 0,
     this.ledgerPaymentsTotal = 0,
@@ -54,6 +57,9 @@ class DailyClosingRecord {
   final double paymentsPay;
   final double paymentsBankTransfer;
   final double deliveryCashPayout;
+  final double directOrderCashRefunds;
+  final double deliveryCashPaid;
+  final double deliveryCashRecovered;
   final double openingCashAmount;
   final double expectedCashAmount;
   final double countedCashAmount;
@@ -90,6 +96,11 @@ class DailyClosingRecord {
       paymentsPay: _toDouble(json['payments_pay']),
       paymentsBankTransfer: _toDouble(json['payments_bank_transfer']),
       deliveryCashPayout: _toDouble(json['delivery_cash_payout']),
+      directOrderCashRefunds: _toDouble(json['direct_order_cash_refunds']),
+      deliveryCashPaid: _toDouble(
+        json['delivery_cash_paid'] ?? json['delivery_cash_payout'],
+      ),
+      deliveryCashRecovered: _toDouble(json['delivery_cash_recovered']),
       openingCashAmount: _toDouble(json['opening_cash_amount']),
       expectedCashAmount: _toDouble(json['expected_cash_amount']),
       countedCashAmount: _toDouble(json['counted_cash_amount']),

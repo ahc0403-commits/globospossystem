@@ -33,6 +33,12 @@ bash scripts/test_office_store_batch_reads.sh
 printf 'CHECK_REPO_STEP=daily_table_operational_reset_sql\n'
 bash scripts/test_daily_table_operational_reset.sh
 
+printf 'CHECK_REPO_STEP=direct_order_translation\n'
+deno fmt --check supabase/functions/direct-order-translation-dispatcher
+deno lint supabase/functions/direct-order-translation-dispatcher
+deno check --config supabase/functions/direct-order-translation-dispatcher/deno.json supabase/functions/direct-order-translation-dispatcher/index.ts
+deno test --config supabase/functions/direct-order-translation-dispatcher/deno.json supabase/functions/direct-order-translation-dispatcher/index_test.ts
+
 printf 'CHECK_REPO_STEP=menu_localization_sql\n'
 bash scripts/test_menu_localization.sh
 printf 'CHECK_REPO_STEP=bunsik_receipt_ledger_names_sql\n'

@@ -22,7 +22,7 @@ role, route, session, or order payload is allowed to overwrite it.
 
 `direct_order_sessions.locale` and `direct_order_requests.locale` record the
 customer locale used at session/request time. They support customer recovery
-and audit only. They are never passed to cashier, kitchen, admin menu/message,
+and the target language for cashier free-text translation. They are never passed to cashier, kitchen, admin menu/message,
 or alert rendering.
 
 ## Server boundary
@@ -32,9 +32,10 @@ or alert rendering.
 - `submit.payload.locale` is required and rejects every other value before any
   request write. Session and request database CHECK constraints independently
   enforce the same set.
-- Customer and staff text messages preserve the exact author-entered body and
-  do not send viewer locale to a translation service. Chat transport is
-  independent from the current UI locale.
+- Customer and staff text messages preserve the exact author-entered body.
+  A server queue translates customer text into Vietnamese and cashier text into
+  the customer request locale through OpenAI Responses. UI locale remains
+  device-owned; translations are additive and do not block chat transport.
 - Google autocomplete, details, and reverse-geocode calls receive the current
   customer viewer locale. An invalid supplied locale is a fixed
   `INVALID_REQUEST`; it is never silently coerced.
@@ -62,16 +63,19 @@ Fixed database codes are data, not display copy. Recognized direct system
 message codes are localized at render time with `DirectOrderCopy` and therefore
 change immediately when that viewer changes locale.
 
-Customer and cashier free-text chat preserves and displays the exact original
-`body` for every viewer locale. Changing the UI locale changes labels, fixed
-system messages, status, and errors but does not alter author-written chat.
+Customer and cashier free-text chat preserves the exact original `body`.
+The UI shows an available translation for its current locale and offers an
+original-text toggle. Pending or failed translations show the original and a
+localized status. Customer notes, item requests, and cashier quote notes follow
+the same rule. Fixed codes and menu-name snapshots retain their existing
+localization paths.
 
 These values remain exact and are not machine-translated:
 
 - cashier rejection reason unless it is a recognized fixed code;
 - Google/provider place names and formatted address returned for the selected
   customer locale;
-- customer name, phone, detailed address, item note, and customer note;
+- customer name, phone, detailed address, structured refund account;
 - Grab tracking URL and bank/audit identifiers.
 
 The isolated new-delivery cashier alert follows the same receiver rule: its
@@ -102,6 +106,18 @@ Vietnamese receipt policy (`Số người`, `Dụng cụ`), including 100 sets.
 
 ## Customer experience locale additions — 2026-10-06
 
-The three display stages, details, item request controls and notification settings use the current customer viewer locale. Cashier templates use that cashier viewer's locale and preserve customer-entered names, address and notes verbatim. The edited draft can be copied for manual Google Translate; no external translation call or automatic message send is added.
+The three display stages, details, item request controls and notification settings use the current customer viewer locale. Cashier templates use that cashier viewer's locale and preserve customer-entered names, address and notes verbatim. The edited draft can be copied manually. Sending free text enqueues automatic translation; original text, monetary values, names, and negations are preserved. Attachments and structured financial fields are not sent to the translation service.
 
 Push-device locale is registered from the customer's current selection and refreshed on page resume or locale change without prompting for permission. Background notification copy comes from that device locale, not the staff device or order locale. `DIRECT_ORDER_PICKUP_READY` and `DIRECT_ORDER_DRIVER_HANDOFF` system messages render via the current viewer locale in chat. Supported codes remain exactly `ko`, `vi`, `en`.
+
+## 2026-10-10 asynchronous translation
+
+`direct-order-translation-dispatcher` claims up to 10 texts in one lease and sends
+one strict-schema Responses request. `OPENAI_API_KEY` is an Edge secret, never a
+Flutter define. Missing key configuration leaves jobs pending without consuming
+retries. Transient failures retry up to five times; staff can retry failed jobs.
+The default model is `gpt-4.1-mini-2025-04-14`; the server-only
+`DIRECT_ORDER_TRANSLATION_MODEL` secret can select another compatible model.
+Numeric tokens must remain exact. `store:false` disables Responses history
+storage; it does not assert zero provider retention. The minute scheduler and
+existing status polling determine when translations become visible.

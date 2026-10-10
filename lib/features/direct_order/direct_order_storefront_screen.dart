@@ -1,3 +1,4 @@
+import 'direct_order_translation.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -397,11 +398,14 @@ class _DirectOrderStorefrontScreenState
   }
 
   bool _hasCompletionRefund(DirectOrderStatus status) =>
-      status.delivery?.isPickup == true &&
-      ((status.delivery?.offer?.status == 'accepted' &&
+      status.support['refund_evidence_available'] == true ||
+      supportNumber(status.support['overpayment_due']) > 0 ||
+      supportNumber(status.support['delivery_adjustment_refund_due']) > 0 ||
+      supportNumber(status.support['pickup_delivery_refund_due']) > 0 ||
+      (status.delivery?.isPickup == true &&
+          (status.delivery?.offer?.status == 'accepted' &&
               (status.delivery?.offer?.refundDue ?? 0) > 0 &&
-              status.delivery?.offer?.refundRecorded == false) ||
-          supportNumber(status.support['pickup_delivery_refund_due']) > 0);
+              status.delivery?.offer?.refundRecorded == false));
 
   void _closeOrderMemory(String requestId) {
     _statusTimer?.cancel();
@@ -2780,6 +2784,10 @@ class _DirectOrderStorefrontScreenState
     final grabUri = message.messageType == 'grab_link'
         ? Uri.tryParse(message.body ?? '')
         : null;
+    final quote = _status?.quote;
+    final quoteNote = message.messageType == 'quote'
+        ? quote?.cashierNote
+        : null;
     final bubble = Container(
       constraints: const BoxConstraints(maxWidth: 560),
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -2798,7 +2806,25 @@ class _DirectOrderStorefrontScreenState
             const Icon(Icons.delivery_dining_outlined, size: 18),
             const SizedBox(width: 6),
           ],
-          Flexible(child: Text(body)),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DirectOrderTranslatedText(
+                  original: body,
+                  translations: supportMap(message.metadata['translations']),
+                  status: message.metadata['translation_status']?.toString(),
+                ),
+                if (quoteNote != null && quoteNote.isNotEmpty)
+                  DirectOrderTranslatedText(
+                    original: quoteNote,
+                    translations: quote!.noteTranslations,
+                    status: quote.translationStatus,
+                  ),
+              ],
+            ),
+          ),
           if (grabUri != null) ...[
             const SizedBox(width: 6),
             const Icon(Icons.open_in_new_rounded, size: 16),

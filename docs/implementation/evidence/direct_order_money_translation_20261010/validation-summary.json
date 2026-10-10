@@ -1,0 +1,43 @@
+{
+  "focused_flutter": {
+    "passed": 42
+  },
+  "translation_edge": {
+    "passed": 4,
+    "live_api": true,
+    "live_final_samples": 3,
+    "live_api_requests": 3,
+    "final_prompt_checks_passed": true
+  },
+  "public_edge": {
+    "passed": 24
+  },
+  "sql_integration": "PASS_disposable_database",
+  "list_sizes": [
+    1,
+    50,
+    100,
+    200
+  ],
+  "per_row_detail_calls": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "scoped_analysis": "PASS",
+  "web_release_build": "PASS",
+  "full_flutter": {
+    "passed": 1808,
+    "skipped": 94,
+    "failed": 2,
+    "failures": "existing generated locale hash and Admin test title mismatch"
+  },
+  "check_repo": "STOPPED_existing_audit_static_analysis_4_issues",
+  "production_migration": false,
+  "production_deployment": false,
+  "openai_key_created": true,
+  "key_blocker": null,
+  "openai_key_storage": "Supabase server secret only: ynriuoomotxuwhuxxmhj / OPENAI_API_KEY",
+  "openai_key_local_env_entry_present": false
+}

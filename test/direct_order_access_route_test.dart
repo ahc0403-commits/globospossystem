@@ -40,6 +40,10 @@ class _LinkService extends DirectOrderService {
 
   bool closed = false;
   bool completedPickup = false;
+  bool completedDelivery = false;
+  double overpaymentDue = 0;
+  bool refundEvidenceAvailable = false;
+  bool chatOpen = true;
   bool pickupRefunded = false;
   int restored = 0;
   final List<DirectOrderMessage> messages = [];
@@ -124,9 +128,15 @@ class _LinkService extends DirectOrderService {
       requestId: _request,
       referenceCode: 'DLINK0001',
       state: 'approved',
-      fulfillmentStatus: completedPickup ? 'completed' : 'ready',
+      fulfillmentStatus: completedPickup || completedDelivery
+          ? 'completed'
+          : 'ready',
       messages: List.of(messages),
-      support: const {'chat_open': true},
+      support: {
+        'chat_open': chatOpen,
+        'overpayment_due': overpaymentDue,
+        'refund_evidence_available': refundEvidenceAvailable,
+      },
       delivery: completedPickup
           ? DirectOrderDelivery(
               dinerCount: 1,
@@ -185,6 +195,55 @@ Future<GoRouter> _pump(WidgetTester tester, _LinkService service) async {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('completed delivery keeps excess refund access and polling', (
+    tester,
+  ) async {
+    final service = _LinkService()
+      ..completedDelivery = true
+      ..overpaymentDue = 12000;
+    final router = await _pump(tester, service);
+    expect(find.text('DLINK0001'), findsOneWidget);
+    expect(find.byKey(const Key('direct_order_copy_link')), findsOneWidget);
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      preferences.getString('direct_order_access_v1_fixture_$_request'),
+      _key,
+    );
+    service.overpaymentDue = 0;
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text(DirectOrderCopy('en').orderClosed), findsOneWidget);
+    expect(
+      preferences.getString('direct_order_access_v1_fixture_$_request'),
+      isNull,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    router.dispose();
+  });
+
+  testWidgets(
+    'completed delivery retains recent refund evidence until closed',
+    (tester) async {
+      final service = _LinkService()
+        ..completedDelivery = true
+        ..refundEvidenceAvailable = true;
+      final router = await _pump(tester, service);
+      expect(find.text('DLINK0001'), findsOneWidget);
+      expect(find.byKey(const Key('direct_order_copy_link')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.text('DLINK0001'), findsOneWidget);
+      service.chatOpen = false;
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(find.text(DirectOrderCopy('en').orderClosed), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      router.dispose();
+    },
+  );
 
   testWidgets(
     'a completed pickup keeps its order and chat until the delivery refund is recorded',

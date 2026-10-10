@@ -1,3 +1,4 @@
+import 'direct_order_translation.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -58,7 +59,7 @@ class _DirectOrderCashierScreenState
   DirectOrderDriverReceiptStatus _customerReceiptStatus =
       const DirectOrderDriverReceiptStatus.empty();
   DirectOrderDeliveryPaymentMode _deliveryPaymentMode =
-      DirectOrderDeliveryPaymentMode.customerDirect;
+      DirectOrderDeliveryPaymentMode.storePrepaid;
   String? _selectedId;
   String? _error;
   String? _stateFilter;
@@ -248,7 +249,7 @@ class _DirectOrderCashierScreenState
   void _seedPickupQuoteInput(Map<String, dynamic> detail) {
     if (_map(detail['delivery'])['method'] == 'pickup' &&
         _map(detail['request'])['state'] == 'awaiting_quote') {
-      _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.customerDirect;
+      _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.storePrepaid;
       _feeController.text = '0';
     }
   }
@@ -318,26 +319,49 @@ class _DirectOrderCashierScreenState
   }
 
   Future<void> _recordPickupRefund() async {
-    final reference = await _inputDialog(
-      _copy.refundReference,
-      help: _copy.refundConfirmHelp,
-    );
-    if (reference == null ||
-        !mounted ||
-        _storeId == null ||
-        _selectedId == null) {
-      return;
-    }
+    if (_storeId == null || _selectedId == null) return;
+    final due = supportNumber(_map(_delivery['pickup_offer'])['refund_due']);
+    final payload = await _moneyEvidence(_copy.refundReference, due);
+    if (payload == null || !mounted) return;
     await _act(
-      () => directOrderStaffService.recordPickupRefund(
+      () => directOrderStaffService.supportAction(
         storeId: _storeId!,
         requestId: _selectedId!,
-        offerId: _map(_delivery['pickup_offer'])['id'].toString(),
-        reference: reference,
+        expectedVersion:
+            (supportMap(_detail?['support'])['version'] as num?)?.toInt() ?? 1,
+        action: 'refund_original_pickup',
+        payload: {
+          ...payload,
+          'offer_id': _map(_delivery['pickup_offer'])['id'],
+        },
       ),
       _copy.refundRecorded,
     );
   }
+
+  Future<Map<String, dynamic>?> _moneyEvidence(
+    String title,
+    num amount, {
+    bool cashOnly = false,
+  }) => showDirectOrderMoneyEvidence(
+    context,
+    title: title,
+    amount: amount,
+    cashOnly: cashOnly,
+    storeId: _storeId!,
+    requestId: _selectedId!,
+    messages: () => _maps(_detail?['messages']),
+    upload: (path, name, mime, bytes) =>
+        directOrderStaffService.uploadChatAttachment(
+          storeId: _storeId!,
+          requestId: _selectedId!,
+          path: path,
+          filename: name,
+          mimeType: mime,
+          bytes: bytes,
+        ),
+    onChanged: () => _refresh(silent: true),
+  );
 
   Future<void> _sendQuote() async {
     final fee =
@@ -635,6 +659,17 @@ class _DirectOrderCashierScreenState
     if (_storeId == null || _selectedId == null) {
       return;
     }
+    Map<String, dynamic>? cash;
+    if (actual != null && actual > 0) {
+      cash = await _moneyEvidence(
+        DirectOrderSupportCopy(
+          Localizations.localeOf(context).languageCode,
+        ).text('driver_paid'),
+        actual,
+        cashOnly: true,
+      );
+      if (cash == null || !mounted) return;
+    }
     await _act(
       () => directOrderStaffService.setDispatch(
         storeId: _storeId!,
@@ -650,6 +685,10 @@ class _DirectOrderCashierScreenState
         expectedVersion: (_map(_detail?['fulfillment'])['version'] as num?)
             ?.toInt(),
         actualGrabFee: actual?.toDouble(),
+        cashConfirmed: cash != null,
+        evidenceMessageId: cash?['evidence_message_id'] as String?,
+        operationId: cash?['operation_id'] as String?,
+        cashReference: cash?['reference'] as String?,
       ),
       _copy.grabLinkSent,
     );
@@ -826,7 +865,7 @@ class _DirectOrderCashierScreenState
     _providerNameController.clear();
     _driverContactController.clear();
     _deliveryProvider = 'grab';
-    _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.customerDirect;
+    _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.storePrepaid;
 
     final quotes = _maps(detail['quotes']);
     final activeQuote = quotes.cast<Map<String, dynamic>?>().firstWhere(
@@ -1169,7 +1208,7 @@ class _DirectOrderCashierScreenState
                     ],
                   ),
                   subtitle: Text(
-                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}',
+                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}${supportNumber(row['overpayment_due']) > 0 ? ' · ${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).text('surplus')}: ${_vnd(row['overpayment_due'])}' : ''}',
                   ),
                   trailing: row['final_total'] == null
                       ? null
@@ -1218,6 +1257,12 @@ class _DirectOrderCashierScreenState
       children: [
         DirectOrderStaffSupportPanel(
           key: ValueKey('support:${_selectedId ?? ''}'),
+          canAdjustDriverCash: const {
+            'admin',
+            'store_admin',
+            'brand_admin',
+            'super_admin',
+          }.contains(ref.read(authProvider).role),
           storeId: _storeId!,
           requestId: _selectedId!,
           detail: _detail!,
@@ -1313,6 +1358,8 @@ class _DirectOrderCashierScreenState
           child: DirectOrderCustomerDetailsBody(
             key: const Key('direct_staff_customer_details'),
             customer: customer,
+            noteTranslations: supportMap(request['note_translations']),
+            noteTranslationStatus: request['translation_status']?.toString(),
             languageCode: Localizations.localeOf(context).languageCode,
             isPickup: isPickup,
           ),
@@ -1358,6 +1405,8 @@ class _DirectOrderCashierScreenState
                       ),
                       DirectOrderInstructions(
                         label: _copy.itemRequest,
+                        translations: supportMap(item['note_translations']),
+                        status: item['translation_status']?.toString(),
                         note:
                             (item['item_note'] ?? item['note'])
                                     ?.toString()
@@ -2042,8 +2091,14 @@ class _DirectOrderCashierScreenState
                               ],
                             ),
                           )
-                        : Text(
-                            localizedDirectOrderMessage(
+                        : DirectOrderTranslatedText(
+                            translations: supportMap(
+                              supportMap(message['metadata'])['translations'],
+                            ),
+                            status: supportMap(
+                              message['metadata'],
+                            )['translation_status']?.toString(),
+                            original: localizedDirectOrderMessage(
                               copy: _copy,
                               messageType: type,
                               body: message['body']?.toString(),
@@ -2054,6 +2109,32 @@ class _DirectOrderCashierScreenState
               },
             ),
           ),
+          if (_maps(_detail?['messages']).any(
+                (m) =>
+                    supportMap(m['metadata'])['translation_status'] == 'failed',
+              ) ||
+              supportMap(_detail?['request'])['translation_status'] ==
+                  'failed' ||
+              [
+                ..._maps(_detail?['items']),
+                ..._maps(_detail?['quotes']),
+              ].any((n) => n['translation_status'] == 'failed'))
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => _act(
+                      () => directOrderStaffService.retryTranslation(
+                        storeId: _storeId!,
+                        requestId: _selectedId!,
+                      ),
+                      _copy.systemUpdate,
+                    ),
+              child: Text(
+                DirectOrderSupportCopy(
+                  Localizations.localeOf(context).languageCode,
+                ).text('retry_translation'),
+              ),
+            ),
           if (_storeId != null &&
               _selectedId != null &&
               supportMap(_detail?['support'])['chat_open'] != false)

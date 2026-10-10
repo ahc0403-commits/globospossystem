@@ -45,11 +45,13 @@ export const directOrderActionRegistry = Object.freeze(
     status_v4: { actor: "public", rateLimit: 60 },
     status_v5: { actor: "public", rateLimit: 60 },
     status_v6: { actor: "public", rateLimit: 60 },
+    status_v7: { actor: "public", rateLimit: 60 },
     orders_v2: { actor: "public", rateLimit: 60 },
     orders_v3: { actor: "public", rateLimit: 60 },
     push_subscription: { actor: "public", rateLimit: 10 },
     message: { actor: "public", rateLimit: 60 },
     charge_consent: { actor: "public", rateLimit: 30 },
+    refund_details: { actor: "public", rateLimit: 20 },
     customer_attachment_upload: { actor: "public", rateLimit: 10 },
     customer_attachment_commit: { actor: "public", rateLimit: 30 },
     customer_attachment_url: { actor: "public", rateLimit: 60 },
@@ -743,6 +745,29 @@ export const sqlDomainErrorRegistry: Readonly<
     "DIRECT_ORDER_REFUND_AMOUNT_INVALID",
   ),
   DIRECT_ORDER_REFUND_PENDING: conflict("DIRECT_ORDER_REFUND_PENDING"),
+  DIRECT_ORDER_CASH_MOVEMENT_INVALID: conflict(
+    "DIRECT_ORDER_CASH_MOVEMENT_INVALID",
+  ),
+  DIRECT_ORDER_CASH_PAYOUT_CONFIRMATION_REQUIRED: conflict(
+    "DIRECT_ORDER_CASH_PAYOUT_CONFIRMATION_REQUIRED",
+  ),
+  DIRECT_ORDER_CHARGE_AMOUNT_INVALID: conflict(
+    "DIRECT_ORDER_CHARGE_AMOUNT_INVALID",
+  ),
+  DIRECT_ORDER_CLOSING_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_CLOSING_HISTORY_DRIFT: internalFailure,
+  DIRECT_ORDER_MONEY_IMMUTABLE: conflict("DIRECT_ORDER_MONEY_IMMUTABLE"),
+  DIRECT_ORDER_RECONCILIATION_PERMISSIONS: internalFailure,
+  DIRECT_ORDER_REFUND_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_REFUND_EVIDENCE_REQUIRED: conflict(
+    "DIRECT_ORDER_REFUND_EVIDENCE_REQUIRED",
+  ),
+  DIRECT_ORDER_TRANSLATION_DETAIL_DRIFT: internalFailure,
+  DIRECT_ORDER_TRANSLATION_INVALID: conflict(
+    "DIRECT_ORDER_TRANSLATION_INVALID",
+  ),
+  DIRECT_ORDER_TRANSLATION_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_TRANSLATION_RETENTION_DRIFT: internalFailure,
   DIRECT_ORDER_PHOTO_APPROVAL_ANCHOR_DRIFT: internalFailure,
   DIRECT_ORDER_PHOTO_APPROVAL_VERIFICATION_FAILED: internalFailure,
 });
@@ -900,6 +925,7 @@ export async function resolveOrderScopedRequest(
     "status_v4",
     "status_v5",
     "status_v6",
+    "status_v7",
     "message",
     "decide_pickup",
     "cancel",
@@ -908,6 +934,7 @@ export async function resolveOrderScopedRequest(
     "proof_upload_url_v2",
     "proof_commit",
     "proof_commit_v2",
+    "refund_details",
     "customer_attachment_upload",
     "customer_attachment_commit",
     "customer_attachment_url",
@@ -1122,7 +1149,8 @@ function productionDependencies(): DirectOrderDependencies {
       case "status_v3":
       case "status_v4":
       case "status_v5":
-      case "status_v6": {
+      case "status_v6":
+      case "status_v7": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
@@ -1232,6 +1260,16 @@ function productionDependencies(): DirectOrderDependencies {
           p_body: message,
         });
       }
+      case "refund_details": {
+        return await rpc(service, "direct_order_public_refund_details", {
+          p_session_id: requiredUuid(body, "session_id"),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
+          p_request_id: requiredUuid(body, "request_id"),
+          p_payload: asObject(body.refund_details),
+        });
+      }
       case "charge_consent": {
         if (typeof body.accept !== "boolean") {
           throw new SafeHttpError(400, "INVALID_REQUEST");
@@ -1305,7 +1343,9 @@ function productionDependencies(): DirectOrderDependencies {
           }
           return { signed_url: signed.data.signedUrl, expires_in: 300 };
         }
-        const chargeId = staff ? null : requiredUuid(body, "charge_id");
+        const chargeId = staff || body.charge_id == null
+          ? null
+          : requiredUuid(body, "charge_id");
         const { filename, path, extension } = directOrderAttachmentSpec(
           body,
           storeId,
@@ -1339,6 +1379,7 @@ function productionDependencies(): DirectOrderDependencies {
         }
         if (
           !staff &&
+          !(chargeId == null && status.state === "approved") &&
           !(Array.isArray(support.charges) && support.charges.some((raw) => {
             const c = asObject(raw);
             return c.id === chargeId &&

@@ -197,7 +197,8 @@ void main() {
         '109000',
       );
       await tester.pump();
-      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+      expect(find.textContaining('Overpayment to refund'), findsOneWidget);
       await tester.enterText(
         find.byKey(const Key('direct_actual_received_amount')),
         '100000',
@@ -492,6 +493,15 @@ void main() {
           onChanged: () async {},
           detail: const {
             'request': {'state': 'approved'},
+            'messages': [
+              {
+                'id': 'evidence',
+                'sender_type': 'cashier',
+                'message_type': 'attachment',
+                'body': 'refund.jpg',
+                'metadata': {'filename': 'refund.jpg'},
+              },
+            ],
             'delivery': {'method': 'pickup'},
             'support': {'version': 2, 'pickup_delivery_refund_due': 20000},
           },
@@ -502,18 +512,27 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.widgetWithText(TextField, 'Amount requested'),
-        '20000',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Refund transfer reference'),
+        find.byKey(const Key('direct_money_reference')),
         'pickup-refund-fixture',
       );
+      await tester.tap(find.byKey(const Key('direct_money_evidence')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('refund.jpg').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('direct_money_confirm')))
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.byKey(const Key('direct_money_paid_confirmed')));
       await tester.pump();
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(staff.actions, ['refund_delivery_complete']);
       expect(staff.payloads.single['amount'], 20000);
+      expect(staff.payloads.single['evidence_message_id'], 'evidence');
+      expect(staff.payloads.single['method'], 'BANKTRANSFER');
       expect(staff.payloads.single['reference'], 'pickup-refund-fixture');
       await tester.pump(const Duration(milliseconds: 500));
     },
@@ -540,6 +559,19 @@ void main() {
               'version': 1,
               'food_received': 138000,
               'food_due': 0,
+              'actual_received': 155000,
+              'overpayment_due': 17000,
+              'refund_account': {
+                'bank': 'Fixture Bank',
+                'account': 'fixture-account',
+                'holder': 'Fixture Customer',
+              },
+              'driver_cash': {
+                'paid': 15000,
+                'recovered_cash': 0,
+                'recovered_bank': 0,
+                'movements': <Map<String, dynamic>>[],
+              },
               'delivery_received': 0,
               'delivery_fee_finalized': true,
               'invoice': {'requested': true, 'legal_name': '샘플 회사'},

@@ -3,12 +3,21 @@ import 'package:flutter/material.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import 'direct_order_copy.dart';
 import 'direct_order_models.dart';
+import 'direct_order_translation.dart';
 
 class DirectOrderInstructions extends StatelessWidget {
-  const DirectOrderInstructions({super.key, required this.label, this.note});
+  const DirectOrderInstructions({
+    super.key,
+    required this.label,
+    this.note,
+    this.translations = const {},
+    this.status,
+  });
 
   final String label;
   final String? note;
+  final Map<String, dynamic> translations;
+  final String? status;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -19,10 +28,22 @@ class DirectOrderInstructions extends StatelessWidget {
       color: PosColors.warningMuted,
       borderRadius: BorderRadius.circular(8),
     ),
-    child: Text(
-      '$label: $note',
-      style: const TextStyle(fontWeight: FontWeight.w700),
-    ),
+    child: translations.isEmpty && (status == null || status == 'original')
+        ? Text(
+            '$label: $note',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+              DirectOrderTranslatedText(
+                original: note ?? '',
+                translations: translations,
+                status: status,
+              ),
+            ],
+          ),
   );
 }
 
@@ -32,11 +53,15 @@ class DirectOrderCustomerDetailsBody extends StatelessWidget {
     required this.customer,
     required this.languageCode,
     required this.isPickup,
+    this.noteTranslations = const {},
+    this.noteTranslationStatus,
   });
 
   final DirectOrderCustomerDetails? customer;
   final String languageCode;
   final bool isPickup;
+  final Map<String, dynamic> noteTranslations;
+  final String? noteTranslationStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +93,8 @@ class DirectOrderCustomerDetailsBody extends StatelessWidget {
         ],
         DirectOrderInstructions(
           label: copy.orderRequest,
+          translations: noteTranslations,
+          status: noteTranslationStatus,
           note: details.customerNote?.trim().isNotEmpty == true
               ? details.customerNote
               : copy.noInstructions,

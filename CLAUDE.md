@@ -97,7 +97,7 @@ This means:
   alert, or Photo-specific release gate. Historical tables and migrations are
   retained as provenance. Current Photo sales data may enter POS only through
   the explicit Super Admin Excel import.
-- The current login surface defines 12 roles and the repository contains 18
+- The current login surface defines 12 roles and the repository contains 19
   Supabase Edge Functions. Recount from source whenever this changes.
 
 ## 7. Critical invariants

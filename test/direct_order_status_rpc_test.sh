@@ -70,6 +70,15 @@ def counts():
                "(SELECT count(*) FROM direct_order_financials),"
                "(SELECT count(*) FROM inventory_transactions))")
 
+import os
+if os.environ.get('DIRECT_ORDER_STATUS_V7_TEST') == '1':
+    data=json.loads(sql("SELECT jsonb_build_object('p_session_id',r.session_id,'p_secret_hash',s.secret_hash,'p_request_id',r.id) FROM direct_order_requests r JOIN direct_order_sessions s ON s.id=r.session_id WHERE public.direct_order_access_is_open(r.id) LIMIT 1"))
+    before=counts()
+    code,value=rpc('direct_order_public_status_v7',data)
+    assert code==200 and value['request_id']==data['p_request_id'],(code,value)
+    assert counts()==before
+    print('DIRECT_ORDER_STATUS_V7_POSTGREST=PASS http=200 session_touch=PASS business_writes=0')
+    raise SystemExit(0)
 target = "'public.direct_order_public_status_v5(uuid,text,uuid)'::regprocedure"
 original = sql(f'SELECT pg_get_functiondef({target})')
 assert sql(f'SELECT provolatile FROM pg_proc WHERE oid={target}') == 's'

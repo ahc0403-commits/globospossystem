@@ -19,3 +19,6 @@ verify_jwt = false
 
 [functions.direct-order-notification-dispatcher]
 verify_jwt = false
+
+[functions.direct-order-translation-dispatcher]
+verify_jwt = false

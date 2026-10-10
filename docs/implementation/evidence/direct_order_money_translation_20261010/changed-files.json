@@ -1,0 +1,191 @@
+{
+  "scope": "delivery under/overpayment, translation, driver cash closing",
+  "files": [
+    {
+      "path": "lib/features/direct_order/direct_order_support.dart",
+      "sha256": "ccd021144f9d85828ad0c4a74273b08939d65925ecc8f798b30b1728582f6945",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "lib/features/direct_order/direct_order_cashier_screen.dart",
+      "sha256": "bdd2769482fc822710356b9be940ea3e7393bd4cfccc649dd0d742238e0fb0c2",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "lib/features/direct_order/direct_order_localization.dart",
+      "sha256": "dfe68c036ebdb793b3b1a3f65dc15f0871f7c5d19b2b46d819cd8ee8804e70dd",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "lib/features/direct_order/direct_order_models.dart",
+      "sha256": "2205118d9519d3eb00bbff47161f5ca7fb4409d5ce5f7f23999722966be519bb",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "lib/features/direct_order/direct_order_staff_service.dart",
+      "sha256": "761a27ab457a155bf211a632d098b013956b109d82ba9fa3195c8981901baf03",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "lib/features/direct_order/direct_order_storefront_screen.dart",
+      "sha256": "e4be71ed1a6e9f172992155807e3cef0f83af18bf97adf7f678fa64dffdd807d",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "lib/features/direct_order/direct_order_kitchen_screen.dart",
+      "sha256": "b62e696f00ffb3552076b44d816e3f8666eaae377fee9e88524ca70a0ca80929",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "lib/features/admin/tabs/reports_tab.dart",
+      "sha256": "c4dda924951f44392b1ed7e12392b17548867f749f0b5f4a8e9cb95183a922dc",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "lib/features/admin/providers/daily_closing_provider.dart",
+      "sha256": "50c7f5d9a4e8dcf12b2859550e29f447891143d46b23bfaeec48ef2779b3eb18",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "supabase/functions/direct-order-public/index.ts",
+      "sha256": "b368adce9514bbcd7f7d4bc6f6d23725e5fdcd1b09aff98a4c4bbaebb1a75ea4",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "supabase/config.toml",
+      "sha256": "d1fb481678cfcc699e32be3066fffb5b05eb0d181e3878567c2608c68436b503",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "scripts/check_repo.sh",
+      "sha256": "63e967751755326c9340f7ef5c2c025e7693bab890de5a224249bb79c2b3bde2",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "scripts/deploy_pos_production.sh",
+      "sha256": "dec05a5d36c774e94c29db1e4deae19612e35c88b2934eaebd9245cba8be004d",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "test/direct_order_delivery_fallback_sql_test.sh",
+      "sha256": "5534bb6c78470a288523e2960e9248a6057f62a060e348a1c80048a84ed951e4",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": ".design/2026-08-direct-delivery-ordering/DIRECT_ORDER_LOCALE_CONTRACT.md",
+      "sha256": "85f98577c8215e7e80771d454691db85d271749327e59d39ece6392d3de5d098",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": ".design/2026-08-direct-delivery-ordering/DIRECT_ORDER_API_CONTRACT.md",
+      "sha256": "003f66b79e68965ec1ada0e28dd7efc84d2c27af6ef7d2b257fbd364488ef06a",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": ".design/2026-08-direct-delivery-ordering/DIRECT_ORDER_STATE_CONTRACT.md",
+      "sha256": "06617b2e93a714110dc6e4b47af26a9acdf2678f593a936962e68ba48bd53a18",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": ".design/2026-08-direct-delivery-ordering/UI_SPEC.md",
+      "sha256": "36a33f48693397126c5c44211758c94f9eb259f87ceda05182bf3a576a2d309a",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "1f9248f2b52df06bd0060be625b62d716e5097a87ac04e4bb361910c6b34b99f",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "docs/plans/direct_order_and_cashier_integrated_improvement_20261009.md",
+      "sha256": "e181fa0898b79dd3f927800cacdcb75b8971f2599d014e65d0963221b9d1272f",
+      "patch_basis": "task_start_snapshot"
+    },
+    {
+      "path": "supabase/migrations/20261010010000_direct_order_money_reconciliation.sql",
+      "sha256": "9e3498196d1e05eb11c2285d3187ba94cfc0e6b3495ee30c8d1c817ccdd540c0",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "supabase/migrations/20261010020000_direct_order_automatic_translation.sql",
+      "sha256": "890c9227ca56646727d91ac6dc0f637a61b6add0e068e438127b516f1ba57401",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "supabase/functions/direct-order-translation-dispatcher/deno.json",
+      "sha256": "e25d642ae6664c59bf11cea4e1eda8e61cefff19636c26dc2c8c62e51c916b5d",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "supabase/functions/direct-order-translation-dispatcher/index.ts",
+      "sha256": "9cdc6737b777377438ba42417ec32fe898910b073b5c17a063ce0d3a1c9a5819",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "supabase/functions/direct-order-translation-dispatcher/index_test.ts",
+      "sha256": "0055ab1df50d0b2ce46f52b4bdb437be77e9e570f834f5686d07fa11c9436db7",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "lib/features/direct_order/direct_order_translation.dart",
+      "sha256": "e0522212020b218b41e66a238887e4fabf766befea25d40477545636fc306e68",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "supabase/tests/direct_order_money_reconciliation_test.sql",
+      "sha256": "5f67948399a6737c3884641c334685164141aa2716075a5eb4f666aa9fa9057c",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "supabase/tests/direct_order_automatic_translation_test.sql",
+      "sha256": "f6fcb61d4f85e16c9110fab56e859cf3ea96c23622f91c844de8570d1fdf8334",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "test/fixtures/direct_order_money_predecessor.py",
+      "sha256": "1a6d28036f0100f2f5c984d4af72cf216f0a1d6b4aba1696c064ad2b90e3858a",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "test/direct_order_translation_test.dart",
+      "sha256": "fe3cf19ee7e06d3679c5360e435cc073ab1354586d6509ef3c6c7a5d6ea58ce0",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "docs/implementation/direct_order_money_translation_cash_20261010.md",
+      "sha256": "96889cba5658c8d7f85befc374bc6299495716bc4d26910a8fe33b846715c0d3",
+      "patch_basis": "new_task_file"
+    },
+    {
+      "path": "supabase/functions/direct-order-public/index_test.ts",
+      "sha256": "c328a21b16ade4083c76cba1b87b36975c58169a40cf2e86a495f042e3eac636",
+      "patch_basis": null,
+      "reason": "Existing user file, no task-start snapshot; omitted from task-only patch"
+    },
+    {
+      "path": "test/direct_order_support_test.dart",
+      "sha256": "b09e5f71ba53dd92058756a97bc10802348cc2edbe5d17a2c843d3836bfac94c",
+      "patch_basis": null,
+      "reason": "Existing user file, no task-start snapshot; omitted from task-only patch"
+    },
+    {
+      "path": "test/direct_order_staff_fallback_test.dart",
+      "sha256": "2005f072c4edcc9f65287942d60112b15037b7996081618ca96ae2a4a808cecc",
+      "patch_basis": null,
+      "reason": "Existing user file, no task-start snapshot; omitted from task-only patch"
+    },
+    {
+      "path": "test/direct_order_integrated_sql_test.sh",
+      "sha256": "a626c33287fe6751b7c51d790650271164acc3963f2d0040c153c666419a8ffd",
+      "patch_basis": null,
+      "reason": "Existing user file, no task-start snapshot; omitted from task-only patch"
+    },
+    {
+      "path": "test/pos_deploy_clean_worktree_checks_test.sh",
+      "sha256": "dd18028c9032ac20ee2c7b739f669cbb59c263e235daef12df6f68a4bef5e12d",
+      "patch_basis": null,
+      "reason": "Existing user file, no task-start snapshot; omitted from task-only patch"
+    }
+  ],
+  "baseline_note": "Plan snapshot was taken immediately before the additive 2026-10-10 section; other existing snapshots at task start. Unrelated user changes preserved."
+}

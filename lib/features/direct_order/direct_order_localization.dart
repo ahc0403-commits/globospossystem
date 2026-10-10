@@ -34,6 +34,7 @@ String localizedDirectOrderMessage({
     'DIRECT_ORDER_PICKUP_OFFERED' => copy.pickupQuestion,
     'DIRECT_ORDER_PICKUP_ACCEPTED' => copy.pickup,
     'DIRECT_ORDER_PICKUP_DECLINED' => copy.keepDelivery,
+    'DIRECT_ORDER_REFUND_RECORDED' => copy.refundRecorded,
     'DIRECT_ORDER_PICKUP_REFUNDED' => copy.refundRecorded,
     'DIRECT_ORDER_PICKUP_COMPLETED' => copy.pickupCompleted,
     'DIRECT_ORDER_DRIVER_HANDOFF' => copy.driverHandoffNotice,
