@@ -308,7 +308,7 @@ Widget _fixtureApp({
   double? textScale,
   Future<XFile?> Function()? pickProofImage,
   DirectOrderCustomerPushService? pushService,
-  Duration statusSafetyRefreshInterval = const Duration(seconds: 20),
+  Duration statusSafetyRefreshInterval = const Duration(seconds: 15),
 }) => ProviderScope(
   child: RepaintBoundary(
     key: const Key('direct_customer_visual_boundary'),
