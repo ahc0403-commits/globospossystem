@@ -330,11 +330,13 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "status_v4",
       "status_v5",
       "status_v6",
+      "status_v7",
       "orders_v2",
       "orders_v3",
       "push_subscription",
       "message",
       "charge_consent",
+      "refund_details",
       "customer_attachment_upload",
       "customer_attachment_commit",
       "customer_attachment_url",
@@ -478,7 +480,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    148,
+    161,
     "registered SQL error count",
   );
   assertEquals(
@@ -799,6 +801,16 @@ Deno.test("order links exchange credentials internally and reject broader access
   assertEquals(result.requestId, order, "limited order");
   assertEquals(result.body.secret, key, "no original secret returned");
   assertEquals(calls[0].p_request_id, order, "order-scoped key lookup");
+  const translatedStatus = await resolveOrderScopedRequest(
+    client,
+    "status_v7",
+    { order_scoped: true, session_id: order, request_id: order, secret: key },
+  );
+  assertEquals(
+    translatedStatus.requestId,
+    order,
+    "translated status retains the order link boundary",
+  );
   for (
     const [action, body] of [
       ["status_v3", { ...input, request_id: other }],
@@ -816,5 +828,5 @@ Deno.test("order links exchange credentials internally and reject broader access
       }
     }
   }
-  assertEquals(calls.length, 1, "forbidden actions never call backend");
+  assertEquals(calls.length, 2, "forbidden actions never call backend");
 });

@@ -525,7 +525,7 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status_v6',
+      'action': 'status_v7',
       ...session.credentials,
       'request_id': requestId,
     });

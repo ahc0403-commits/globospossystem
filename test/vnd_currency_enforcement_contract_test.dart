@@ -97,7 +97,7 @@ void main() {
     expect(runtimeTest, contains('ROLLBACK;'));
   });
 
-  test('runtime currency outputs contain no KRW USD or won symbol', () {
+  test('accounting currency outputs contain no KRW USD or won symbol', () {
     final files = <File>[];
     for (final root in ['lib', 'supabase/functions']) {
       files.addAll(
@@ -108,7 +108,14 @@ void main() {
               (file) =>
                   file.path.endsWith('.dart') ||
                   file.path.endsWith('.arb') ||
-                  file.path.endsWith('.ts'),
+                  (file.path.endsWith('.ts') &&
+                      !file.path.endsWith('_test.ts') &&
+                      // Translation validates currency literals in customer
+                      // messages; it does not produce accounting amounts.
+                      // Its executable tests reject changed currency tokens.
+                      !file.path.contains(
+                        '/direct-order-translation-dispatcher/',
+                      )),
             ),
       );
     }

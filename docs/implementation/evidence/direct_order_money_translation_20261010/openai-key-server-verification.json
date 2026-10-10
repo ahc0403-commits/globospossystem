@@ -1,0 +1,145 @@
+{
+  "key_name": "globos-pos-translation",
+  "organization_name": "Personal",
+  "openai_project_name": "Default project",
+  "permissions": {
+    "mode": "Restricted",
+    "responses": "Write"
+  },
+  "expiration": "Never",
+  "storage": {
+    "supabase_project": "ynriuoomotxuwhuxxmhj",
+    "env_name": "OPENAI_API_KEY",
+    "registered": true,
+    "value_match": true,
+    "local_env_entry_present": false,
+    "api_key_written_to_local_file": false,
+    "api_key_written_to_git": false,
+    "temporary_transfer_files_deleted": true
+  },
+  "validation": {
+    "final_sample_count": 3,
+    "final_sample_pass": true,
+    "directions": [
+      "ko_to_vi",
+      "en_to_vi",
+      "vi_to_ko"
+    ],
+    "numbers_and_currency_preserved": true,
+    "requests": [
+      {
+        "stage": "initial",
+        "api": {
+          "live_api_pass": true,
+          "http_status": 200,
+          "model": "gpt-4.1-mini-2025-04-14",
+          "translations": [
+            {
+              "id": "customer_ko",
+              "translated_text": "Xin đừng làm cay. Phí giao hàng là 15,000 VND."
+            },
+            {
+              "id": "customer_en",
+              "translated_text": "Vui lòng để đơn hàng tại quầy tiếp tân. Tổng cộng: 120,000 VND."
+            },
+            {
+              "id": "cashier_vi",
+              "translated_text": "20,000 VND đã được nhận thêm. 저희가 10,000 VND를 환불해 드리겠습니다."
+            }
+          ],
+          "usage": {
+            "input_tokens": 249,
+            "input_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0
+            },
+            "output_tokens": 103,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 352
+          }
+        },
+        "language_quality_pass": false,
+        "issue": "Cashier Korean output contained a Vietnamese sentence"
+      },
+      {
+        "stage": "intermediate",
+        "api": {
+          "live_api_pass": false,
+          "http_status": 200,
+          "model": "gpt-4.1-mini-2025-04-14",
+          "translations": [
+            {
+              "id": "customer_ko",
+              "translated_text": "Xin đừng làm cay. Phí giao hàng là 15,000 VND."
+            },
+            {
+              "id": "customer_en",
+              "translated_text": "Vui lòng để đơn hàng tại quầy lễ tân. Tổng cộng: 120,000 VND."
+            },
+            {
+              "id": "cashier_vi",
+              "translated_text": "2만 동을 더 받았습니다. 1만 동을 환불해 드리겠습니다."
+            }
+          ],
+          "usage": {
+            "input_tokens": 309,
+            "input_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0
+            },
+            "output_tokens": 96,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 405
+          }
+        },
+        "numeric_validation_pass": false,
+        "issue": "20,000 and 10,000 converted to Korean large-number notation"
+      },
+      {
+        "stage": "final_source_prompt",
+        "api": {
+          "live_api_pass": true,
+          "http_status": 200,
+          "model": "gpt-4.1-mini-2025-04-14",
+          "translations": [
+            {
+              "id": "customer_ko",
+              "translated_text": "Xin đừng làm cay. Phí giao hàng là 15,000 VND."
+            },
+            {
+              "id": "customer_en",
+              "translated_text": "Vui lòng để đơn hàng ở quầy tiếp tân. Tổng cộng: 120,000 VND."
+            },
+            {
+              "id": "cashier_vi",
+              "translated_text": "18,500 VND를 받았습니다. 7,500 VND를 더 보내 주세요."
+            }
+          ],
+          "usage": {
+            "input_tokens": 364,
+            "input_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0
+            },
+            "output_tokens": 96,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 460
+          }
+        },
+        "language_quality_pass": true,
+        "numeric_validation_pass": true,
+        "currency_preserved": true
+      }
+    ],
+    "total_tokens": 1217,
+    "limitation": "Synthetic direct API samples only; production Edge, cron, customer chat and onsite operations not verified"
+  },
+  "production_migrations_applied": false,
+  "production_edge_and_web_deployed": false
+}

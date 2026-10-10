@@ -14,16 +14,19 @@ supabase() {
   if [[ "$1 $2" == 'functions list' ]]; then
     python3 - "${POLICY_MISSING_HANDLER:-0}" <<'PY'
 import json,sys
-names=['create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement']
+names=['create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','direct-order-translation-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement']
 if sys.argv[1]=='1': names.remove('direct-order-public')
 print(json.dumps([{'slug':name,'status':'ACTIVE'} for name in names]))
 PY
   elif [[ "$1 $2" == 'secrets list' ]]; then
     python3 - "${POLICY_WRONG_ORIGIN:-0}" "$LIVE_URL" <<'PY'
-import hashlib,json,sys
+import hashlib,json,os,stat,sys
+if stat.S_ISREG(os.fstat(sys.stdout.fileno()).st_mode):
+    raise SystemExit('NO_SMOKE_RAW_SECRET_OUTPUT_REDIRECTED_TO_FILE')
 origin='https://incorrect.invalid' if sys.argv[1]=='1' else sys.argv[2]
 # Supabase CLI v2 serializes the digest in the `value` field.
-print(json.dumps([{'name':'ALLOWED_ORIGINS','value':hashlib.sha256(origin.encode()).hexdigest()}]))
+value=origin if sys.argv[1]=='2' else hashlib.sha256(origin.encode()).hexdigest()
+print(json.dumps([{'name':'ALLOWED_ORIGINS','value':value},{'name':'OPENAI_API_KEY','value':'fixture-sensitive-value-must-never-be-persisted'}]))
 PY
   else return 96; fi
 }
@@ -43,6 +46,10 @@ vercel() {
   esac
 }
 verify_no_smoke_edge_metadata > "$POLICY_TMP/metadata"
+POLICY_WRONG_ORIGIN=2 verify_no_smoke_edge_metadata > "$POLICY_TMP/plaintext-origin"
+if grep -Rq 'fixture-sensitive-value-must-never-be-persisted' "$POLICY_TMP"; then
+  printf 'NO_SMOKE_PERSISTED_SECRET_VALUE\n'; exit 1
+fi
 verify_deliberry_retirement_readiness > "$POLICY_TMP/retirement"
 verify_remote_allowed_origin > "$POLICY_TMP/origin"
 verify_emergency_dispatcher_readiness > "$POLICY_TMP/emergency"

@@ -443,8 +443,14 @@ class DirectOrderQuote {
     this.vatTotal = 0,
     this.deliveryPaymentMode = 'store_prepaid',
     this.amountFinalizedAt,
+    this.cashierNote,
+    this.noteTranslations = const {},
+    this.translationStatus,
   });
 
+  final String? cashierNote;
+  final Map<String, dynamic> noteTranslations;
+  final String? translationStatus;
   final String id;
   final double menuTotal;
   final double serviceChargeTotal;
@@ -482,11 +488,19 @@ class DirectOrderQuote {
       'vat_total',
       'delivery_payment_mode',
       'amount_finalized_at',
+      'cashier_note',
+      'note_translations',
+      'translation_status',
     });
     final menuVat = _optionalDouble(json, 'menu_vat') ?? 0;
     final serviceVat = _optionalDouble(json, 'service_charge_vat') ?? 0;
     final deliveryVat = _optionalDouble(json, 'delivery_fee_vat') ?? 0;
     return DirectOrderQuote(
+      cashierNote: _optionalString(json, 'cashier_note'),
+      noteTranslations: json['note_translations'] is Map
+          ? Map<String, dynamic>.from(json['note_translations'] as Map)
+          : const {},
+      translationStatus: _optionalString(json, 'translation_status'),
       id: _requiredString(json, 'id'),
       version: _requiredNumber(json, 'version').toInt(),
       menuTotal: _requiredNumber(json, 'menu_total').toDouble(),
@@ -615,8 +629,10 @@ class DirectOrderMessage {
     required this.body,
     required this.hasAttachment,
     required this.createdAt,
+    this.metadata = const {},
   });
 
+  final Map<String, dynamic> metadata;
   final String id;
   final String senderType;
   final String messageType;
@@ -632,8 +648,12 @@ class DirectOrderMessage {
       'body',
       'has_attachment',
       'created_at',
+      'metadata',
     });
     return DirectOrderMessage(
+      metadata: json['metadata'] is Map
+          ? Map<String, dynamic>.from(json['metadata'] as Map)
+          : const {},
       id: _requiredString(json, 'id'),
       senderType: _requiredString(json, 'sender_type'),
       messageType: _requiredString(json, 'message_type'),
@@ -653,6 +673,8 @@ class DirectOrderItemSnapshot {
     required this.unitPrice,
     required this.quantity,
     this.note,
+    this.noteTranslations = const {},
+    this.translationStatus,
   });
 
   final String menuItemId;
@@ -662,6 +684,8 @@ class DirectOrderItemSnapshot {
   final double unitPrice;
   final int quantity;
   final String? note;
+  final Map<String, dynamic> noteTranslations;
+  final String? translationStatus;
   double get amount => unitPrice * quantity;
   String localizedName(String locale) => switch (locale) {
     'ko' => nameKo,
@@ -678,6 +702,8 @@ class DirectOrderItemSnapshot {
       'unit_price',
       'quantity',
       'note',
+      'note_translations',
+      'translation_status',
     });
     final quantity = _requiredNumber(json, 'quantity');
     final price = _requiredNumber(json, 'unit_price');
@@ -692,6 +718,10 @@ class DirectOrderItemSnapshot {
       unitPrice: price.toDouble(),
       quantity: quantity.toInt(),
       note: _optionalString(json, 'note'),
+      noteTranslations: json['note_translations'] is Map
+          ? Map<String, dynamic>.from(json['note_translations'] as Map)
+          : const {},
+      translationStatus: _optionalString(json, 'translation_status'),
     );
   }
 }

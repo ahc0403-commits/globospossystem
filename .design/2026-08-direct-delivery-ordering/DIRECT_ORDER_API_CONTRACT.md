@@ -177,7 +177,7 @@ staff viewer's current app locale. See `DIRECT_ORDER_LOCALE_CONTRACT.md`.
 - Input: session ID, secret, request UUID, trimmed message 1–2,000.
 - Output exactly `message_id`, `created_at`.
 - Side effect/idempotency: one SQL write stores the exact author-entered body;
-  non-idempotent. No machine translation is performed.
+  non-idempotent. Free text is enqueued for asynchronous translation without changing the original body.
 - Errors: invalid text, unavailable ownership, terminal-state conflict.
 
 ### `cancel`
@@ -362,7 +362,7 @@ codes use the same localized unavailable fallback and are never shown raw.
   corrupt or old cache is deleted instead of being submitted.
 - User-entered address/note and chat remain exact original data. UI labels,
   fixed system codes, status, and errors still render in the current viewer's
-  selected KO/VI/EN locale; free-text chat is not machine-translated.
+  selected KO/VI/EN locale. Optional `metadata.translations` and `translation_status` render translated free text while preserving the original.
 - Cashier detail returns request-time `name_ko/name_vi/name_en`; direct ticket
   list returns approval-time `name_ko/name_vi/name_en`. Staff Flutter selects
   among these using its current viewer locale and never request locale.
@@ -406,3 +406,35 @@ approval, and is source-only until separately applied through the release gate.
 - Existing public status `created_at` and `items` are now retained in the Dart model for details; no extra public item endpoint is added. Existing submit item `note` persists menu requests.
 - Internal `direct-order-notification-dispatcher`: POST authenticated by CRON_SECRET or service role; claims at most 50 deliveries once, runs at most eight FCM workers, and acknowledges each lease. Claims/acknowledgements and all three push tables are unavailable to anonymous/authenticated clients. No customer address, phone, bank data or session secret appears in the FCM payload.
 - Migration `20261006030000_direct_order_customer_experience.sql` adds tables/RPCs/triggers and schedules the dispatcher every minute with the existing Vault cron secret when pg_cron/pg_net are available. Existing Firebase browser build definitions/VAPID and FIREBASE_SERVICE_ACCOUNT_JSON are reused. Cron availability and physical device receipt must be checked during release.
+
+## 2026-10-10 reconciliation and translation additions
+
+- `refund_details` (owning session, rate 20) accepts request ID and
+  `refund_details:{bank,account,holder}`; the server rejects other fields, foreign
+  orders, and orders without an eligible refund. Public support returns only
+  this owner's account, refund amount/method, and scoped evidence message ID.
+  `refund_evidence_available` keeps completed-order links/polling open for the
+  server-controlled seven-day refund-photo window, unless support is closed or
+  personal data was purged. `status_v7` exposes translations while v3–v6 retain
+  their previous response contracts.
+- `direct_order_record_receipt` keeps `actual_amount` separate from applied
+  `amount`. Excess becomes `overpayment_due`, never order revenue. Food-balance
+  charges must equal the server-calculated balance. Receipt proof and bank
+  reference retries cannot duplicate a receipt.
+- Refund support actions require operation UUID, eligible amount, method
+  `CASH|BANKTRANSFER`, reference, and a store-uploaded image message ID.
+  `refund_overpayment` reverses unallocated money without reversing POS revenue.
+  Customer evidence URLs retain the existing scoped, private signed URL flow.
+- `direct_order_set_dispatch_v4` requires positive store cash payouts to include
+  `p_cash_confirmed`, `p_evidence_message_id`, `p_operation_id`, and
+  `p_cash_reference`. Immutable
+  movement history preserves payout time; administrator correction/recovery
+  references its original payout. Bank recovery does not change store cash.
+- Closing preview/history separately expose `delivery_cash_paid`,
+  `delivery_cash_recovered`, and `direct_order_cash_refunds`.
+  Expected cash = opening cash + cash sales - paid + cash recovered - cash refunds.
+- `status_v7` messages optionally include `metadata`; item and quote notes
+  optionally include `note_translations` and `translation_status`. Quote notes
+  optionally include `cashier_note`. Existing responses remain accepted by the
+  additive Dart parsers. System codes, attachments, accounts, and amounts are
+  never translated as separate structured fields.

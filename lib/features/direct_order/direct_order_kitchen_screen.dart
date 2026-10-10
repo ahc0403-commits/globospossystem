@@ -1,3 +1,4 @@
+import 'direct_order_translation.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -399,8 +400,14 @@ class _TicketCard extends StatelessWidget {
                               ),
                             ),
                             if ((item['note']?.toString() ?? '').isNotEmpty)
-                              Text(
-                                item['note'].toString(),
+                              DirectOrderTranslatedText(
+                                original: item['note'].toString(),
+                                translations: item['note_translations'] is Map
+                                    ? Map<String, dynamic>.from(
+                                        item['note_translations'] as Map,
+                                      )
+                                    : const {},
+                                status: item['translation_status']?.toString(),
                                 style: const TextStyle(
                                   color: PosColors.textSecondary,
                                 ),

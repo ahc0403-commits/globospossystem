@@ -436,6 +436,40 @@ class DirectOrderStaffService {
     );
   }
 
+  Future<Map<String, dynamic>> driverCashAction({
+    required String storeId,
+    required String requestId,
+    required String kind,
+    required Map<String, dynamic> payload,
+    String? parentId,
+  }) async {
+    final result = await supabase.rpc(
+      'direct_order_staff_driver_cash_action',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_operation_id': payload['operation_id'],
+        'p_kind': kind,
+        'p_amount': payload['amount'],
+        'p_reference': payload['reference'],
+        'p_evidence_message_id': payload['evidence_message_id'],
+        'p_parent_id': parentId,
+        'p_method': payload['method'],
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<void> retryTranslation({
+    required String storeId,
+    required String requestId,
+  }) async {
+    await supabase.rpc(
+      'direct_order_retry_translation',
+      params: {'p_store_id': storeId, 'p_request_id': requestId},
+    );
+  }
+
   Future<void> setDispatch({
     required String storeId,
     required String requestId,
@@ -445,9 +479,13 @@ class DirectOrderStaffService {
     String provider = 'grab',
     String? providerName,
     String? driverContact,
+    bool cashConfirmed = false,
+    String? evidenceMessageId,
+    String? operationId,
+    String? cashReference,
   }) async {
     await supabase.rpc(
-      'direct_order_set_dispatch_v3',
+      'direct_order_set_dispatch_v4',
       params: {
         'p_store_id': storeId,
         'p_request_id': requestId,
@@ -457,6 +495,10 @@ class DirectOrderStaffService {
         'p_provider': provider,
         'p_provider_name': providerName,
         'p_driver_contact': driverContact,
+        'p_cash_confirmed': cashConfirmed,
+        'p_evidence_message_id': evidenceMessageId,
+        'p_operation_id': operationId,
+        'p_cash_reference': cashReference,
       },
     );
   }

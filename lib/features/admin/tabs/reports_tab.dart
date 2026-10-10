@@ -1,3 +1,5 @@
+import '../../direct_order/direct_order_support.dart'
+    show DirectOrderSupportCopy;
 // ignore_for_file: unused_element
 
 import 'dart:math' as math;
@@ -3141,6 +3143,11 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
       builder: (_) => _DailyClosingCashDialog(
         cashSales: _reportDouble(preview['payments_cash']),
         deliveryCashPayout: _reportDouble(preview['delivery_cash_payout']),
+        cashRefunds: _reportDouble(preview['direct_order_cash_refunds']),
+        cashRecovered: _reportDouble(preview['delivery_cash_recovered']),
+        cashPaid: _reportDouble(
+          preview['delivery_cash_paid'] ?? preview['delivery_cash_payout'],
+        ),
       ),
     );
 
@@ -3533,9 +3540,24 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
                         ),
                         _DailyClosingMetric(
                           label: context.l10n.reportsDeliveryCashPayout,
+                          value: _formatVnd(currency, -record.deliveryCashPaid),
+                        ),
+                        _DailyClosingMetric(
+                          label: DirectOrderSupportCopy(
+                            Localizations.localeOf(context).languageCode,
+                          ).text('driver_recovered'),
                           value: _formatVnd(
                             currency,
-                            -record.deliveryCashPayout,
+                            record.deliveryCashRecovered,
+                          ),
+                        ),
+                        _DailyClosingMetric(
+                          label: DirectOrderSupportCopy(
+                            Localizations.localeOf(context).languageCode,
+                          ).text('cash_refunds'),
+                          value: _formatVnd(
+                            currency,
+                            -record.directOrderCashRefunds,
                           ),
                         ),
                         _DailyClosingMetric(
@@ -3804,10 +3826,14 @@ class _DailyClosingCashDialog extends StatefulWidget {
   const _DailyClosingCashDialog({
     required this.cashSales,
     required this.deliveryCashPayout,
+    this.cashRefunds = 0,
+    this.cashRecovered = 0,
+    this.cashPaid = 0,
   });
 
   final double cashSales;
   final double deliveryCashPayout;
+  final double cashRefunds, cashRecovered, cashPaid;
 
   @override
   State<_DailyClosingCashDialog> createState() =>
@@ -3855,7 +3881,10 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
   );
 
   double get _expectedCash =>
-      _defaultOpeningCash + widget.cashSales - widget.deliveryCashPayout;
+      _defaultOpeningCash +
+      widget.cashSales -
+      widget.deliveryCashPayout -
+      widget.cashRefunds;
 
   @override
   void dispose() {
@@ -3897,7 +3926,21 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
                   ),
                   _ClosingCashSummary(
                     label: l10n.reportsDeliveryCashPayout,
-                    value: -widget.deliveryCashPayout,
+                    value: -widget.cashPaid,
+                    currency: _currency,
+                  ),
+                  _ClosingCashSummary(
+                    label: DirectOrderSupportCopy(
+                      Localizations.localeOf(context).languageCode,
+                    ).text('driver_recovered'),
+                    value: widget.cashRecovered,
+                    currency: _currency,
+                  ),
+                  _ClosingCashSummary(
+                    label: DirectOrderSupportCopy(
+                      Localizations.localeOf(context).languageCode,
+                    ).text('cash_refunds'),
+                    value: -widget.cashRefunds,
                     currency: _currency,
                   ),
                   _ClosingCashSummary(

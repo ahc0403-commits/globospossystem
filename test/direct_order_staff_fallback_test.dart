@@ -86,7 +86,15 @@ class _Staff extends DirectOrderStaffService {
           'delivery_payment_mode': 'store_prepaid',
         },
     ],
-    'messages': <Map<String, dynamic>>[],
+    'messages': <Map<String, dynamic>>[
+      {
+        'id': 'evidence',
+        'sender_type': 'cashier',
+        'message_type': 'attachment',
+        'body': 'evidence.jpg',
+        'metadata': {'filename': 'evidence.jpg'},
+      },
+    ],
     'address': {
       'customer_name': 'Customer',
       'customer_phone': '0901234567',
@@ -172,16 +180,20 @@ class _Staff extends DirectOrderStaffService {
   }
 
   @override
-  Future<void> recordPickupRefund({
+  Future<Map<String, dynamic>> supportAction({
     required String storeId,
     required String requestId,
-    required String offerId,
-    required String reference,
+    required int expectedVersion,
+    required String action,
+    Map<String, dynamic> payload = const {},
   }) async {
-    expect(requestId, 'request');
-    expect(offerId, 'offer');
-    bankReference = reference;
+    expect(action, 'refund_original_pickup');
+    expect(payload['amount'], 21600);
+    expect(payload['method'], 'BANKTRANSFER');
+    expect(payload['evidence_message_id'], 'evidence');
     refunded = true;
+    bankReference = payload['reference'] as String;
+    return {};
   }
 
   @override
@@ -206,6 +218,10 @@ class _Staff extends DirectOrderStaffService {
     String provider = 'grab',
     String? providerName,
     String? driverContact,
+    bool cashConfirmed = false,
+    String? evidenceMessageId,
+    String? operationId,
+    String? cashReference,
   }) async {
     expect(requestId, 'request');
     expect(actualGrabFee, prepaid ? verifiedFee : null);
@@ -214,6 +230,21 @@ class _Staff extends DirectOrderStaffService {
     sentTicketVersion = expectedVersion;
     ticketStatus = 'dispatched';
   }
+}
+
+Future<void> _confirmEvidence(WidgetTester tester, String reference) async {
+  await tester.enterText(
+    find.byKey(const Key('direct_money_reference')),
+    reference,
+  );
+  await tester.tap(find.byKey(const Key('direct_money_evidence')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('evidence.jpg').last);
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('direct_money_paid_confirmed')));
+  await tester.pump();
+  await tester.tap(find.byKey(const Key('direct_money_confirm')));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pump(
@@ -403,7 +434,6 @@ void main() {
       'pickup completion and bank refund stay separate in $language on mobile',
       (tester) async {
         final service = _Staff()..pickup = true;
-        final copy = DirectOrderCopy(language);
         await _pump(
           tester,
           service,
@@ -443,7 +473,7 @@ void main() {
           tester,
           find.byKey(const Key('direct_record_pickup_refund')),
         );
-        await _enterDialog(tester, 'bank-transfer-ref-123', copy);
+        await _confirmEvidence(tester, 'bank-transfer-ref-123');
         expect(service.bankReference, 'bank-transfer-ref-123');
         expect(service.refunded, true);
         expect(
@@ -490,6 +520,7 @@ void main() {
           tester,
           find.widgetWithText(FilledButton, copy.handoffDriver),
         );
+        if (prepaid) await _confirmEvidence(tester, 'cash handoff');
         expect(service.ticketStatus, 'dispatched');
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());

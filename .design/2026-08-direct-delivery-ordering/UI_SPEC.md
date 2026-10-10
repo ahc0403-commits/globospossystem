@@ -208,3 +208,22 @@ After adding an item, customers can edit a 300-character request below its menu 
 The bell opens notification settings. Permission is requested only by the explicit enable action. When supported/configured, customer web push persists after closing the page; permission denial/configuration failure retain status/chat fallback. Pickup ready and actual driver handoff create separate, deduplicated events. Tray packing completion is ready, without pretending a driver received the order.
 
 Cashier default filters are all/waiting/paid/completed, with detailed filters in an expandable section and visible refund exceptions. Chat templates populate an editable draft, never send automatically, and capture the selected order. Quote templates require a stored quote; the fee draft requires staff to confirm the current amount. Copying the draft supports the requested manual Google Translate workflow.
+
+## 2026-10-10 cashier reconciliation and translation
+
+The receipt dialog accepts the actual bank receipt, displays any excess as a
+refund amount, and requires a bank reference and explicit receipt comparison.
+The payment panel requests the server-calculated food balance. Excess refund,
+cancellation refund, and pickup/delivery refund use a shared photo evidence and
+actual-payment confirmation dialog. Customers enter their refund bank/account/
+holder and open the resulting transfer proof from their order's support card.
+
+Store-prepaid delivery is the default for new delivery quotes. Positive driver
+cash handoff uses the same evidence/confirmation control. Cashier detail and
+closing show driver payout, cash recovery, and customer cash refund separately.
+Administrators can append extra payouts or recovery; stored payout amounts stay
+immutable. The closing denomination dialog subtracts all these cash movements.
+
+Chat, order notes, item requests, and quote notes show available viewer-locale
+translations and an original-text toggle. Pending/failed translations preserve
+the visible original. A failed translation can be retried by the cashier.

@@ -415,6 +415,8 @@ preflight() {
       fail "Missing direct-order-public Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/index.ts" ]] ||
       fail "Missing direct-order-notification-dispatcher Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/index.ts" ]] ||
+      fail "Missing direct-order-translation-dispatcher Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -545,6 +547,10 @@ run_checks() {
   run deno test --config \
     "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/deno.json" \
     "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/index_test.ts"
+  run deno fmt --check "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher"
+  run deno lint "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher"
+  run deno check --config "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/deno.json" "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/index.ts"
+  run deno test --config "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/deno.json" "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/index_test.ts"
 
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
@@ -605,7 +611,9 @@ verify_direct_order_secrets() {
   for required_secret in \
     SUPABASE_SECRET_KEYS \
     DIRECT_ORDER_RATE_LIMIT_SECRET \
-    DIRECT_ORDER_CLEANUP_SECRET; do
+    DIRECT_ORDER_CLEANUP_SECRET \
+    OPENAI_API_KEY \
+    DIRECT_ORDER_TRANSLATION_CRON_SECRET; do
     grep -Fxq "$required_secret" <<<"$secret_names" ||
       fail "Missing required direct-order Edge secret: $required_secret"
   done
@@ -960,6 +968,8 @@ deploy_pos_edge_functions() {
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy direct-order-notification-dispatcher \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy direct-order-translation-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   # Retired endpoints must replace any previously deployed active handlers.
   run supabase functions deploy deliberry-webhook \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
@@ -981,17 +991,27 @@ verify_no_smoke_edge_metadata() {
   local function_metadata secret_metadata
   function_metadata="$(mktemp)"; secret_metadata="$(mktemp)"
   supabase functions list --project-ref "$POS_PROJECT_REF" --output json > "$function_metadata" || { rm -f "$function_metadata" "$secret_metadata"; fail "Cannot inspect Edge deployment metadata."; }
-  supabase secrets list --project-ref "$POS_PROJECT_REF" --output json > "$secret_metadata" || { rm -f "$function_metadata" "$secret_metadata"; fail "Cannot inspect Edge origin metadata."; }
+  # Some CLI versions include plaintext values. Persist only the selected
+  # origin digest; never write API keys or other secret values to a local file.
+  if ! supabase secrets list --project-ref "$POS_PROJECT_REF" --output json | python3 -c '
+import hashlib,json,re,sys
+rows=json.load(sys.stdin)
+origin=next((row for row in rows if row.get("name")=="ALLOWED_ORIGINS"),{})
+value=origin.get("value","")
+digest=origin.get("digest") or (value if re.fullmatch(r"[0-9a-f]{64}",value) else hashlib.sha256(value.encode()).hexdigest())
+print(json.dumps({"name":"ALLOWED_ORIGINS","digest":digest}))
+' > "$secret_metadata"; then
+    rm -f "$function_metadata" "$secret_metadata"; fail "Cannot inspect Edge origin metadata."
+  fi
   if ! python3 - "$function_metadata" "$secret_metadata" "$LIVE_URL" <<'PYEDGEMETADATA'
 import hashlib,json,sys
 from pathlib import Path
-functions,secrets=[json.loads(Path(p).read_text()) for p in sys.argv[1:3]]
-required={'create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement'}
+functions,origin=[json.loads(Path(p).read_text()) for p in sys.argv[1:3]]
+required={'create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','direct-order-translation-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement'}
 active={row.get('slug') for row in functions if row.get('status')=='ACTIVE'}
 assert required<=active, 'A required Edge deployment is not ACTIVE'
-origin=next((row for row in secrets if row.get('name')=='ALLOWED_ORIGINS'),{})
-assert origin.get('digest',origin.get('value'))==hashlib.sha256(sys.argv[3].encode()).hexdigest(), 'Remote exact-origin digest mismatch'
-print('POS Edge metadata: 12 required handlers ACTIVE; remote origin digest matches production (no endpoint probes).')
+assert origin.get('digest')==hashlib.sha256(sys.argv[3].encode()).hexdigest(), 'Remote exact-origin digest mismatch'
+print('POS Edge metadata: 13 required handlers ACTIVE; remote origin digest matches production (no endpoint probes).')
 PYEDGEMETADATA
   then rm -f "$function_metadata" "$secret_metadata"; fail "Edge metadata verification failed."; fi
   rm -f "$function_metadata" "$secret_metadata"
@@ -1173,6 +1193,7 @@ main() {
   run_auth_check
   run_checks
   verify_sepay_alert_secrets
+  run python3 "$ROOT_DIR/scripts/sync_direct_order_translation_schedule_secret.py"
   verify_direct_order_secrets
   # Deploy the compatibility-capable self-service endpoint before replacing the
   # predecessor password trigger. If the DB gate fails, the endpoint remains

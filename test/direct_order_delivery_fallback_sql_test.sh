@@ -415,6 +415,23 @@ PYINTEGRATED
  run_sql "$PHOTO_ROOT/supabase/migrations/20261009151000_direct_order_verified_delivery_cost.sql" > "$PHOTO_TMP/cost_migration.log" 2>&1 || { cat "$PHOTO_TMP/cost_migration.log"; exit 1; }
  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_verified_delivery_cost_test.sql"
 fi
+if [[ "${DIRECT_ORDER_MONEY_TEST:-0}" == "1" ]]; then
+ python3 "$PHOTO_ROOT/test/fixtures/direct_order_money_predecessor.py" "$PHOTO_ROOT" "$PHOTO_TMP/money_predecessor.sql"
+ run_sql "$PHOTO_TMP/money_predecessor.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261010010000_direct_order_money_reconciliation.sql" > "$PHOTO_TMP/money_migration.log" 2>&1 || { cat "$PHOTO_TMP/money_migration.log"; exit 1; }
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_money_reconciliation_test.sql"
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261010020000_direct_order_automatic_translation.sql"
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_automatic_translation_test.sql"
+ DIRECT_ORDER_STATUS_V7_TEST=1 bash "$PHOTO_ROOT/test/direct_order_status_rpc_test.sh" "$PHOTO_CONTAINER"
+ docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "UPDATE public.users SET restaurant_id='d2000000-0000-4000-8000-000000000001' WHERE auth_id=auth.uid();" >/dev/null
+ for reconciliation_limit in 1 50 100 200; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT jsonb_array_length(public.direct_order_staff_list_v3('d2000000-0000-4000-8000-000000000001',NULL,$reconciliation_limit)); SELECT jsonb_array_length(public.direct_delivery_ticket_list_v3('d2000000-0000-4000-8000-000000000001',NULL,$reconciliation_limit)); SELECT pg_stat_force_next_flush();" >/dev/null
+  reconciliation_calls="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.direct_order_staff_detail_v3(uuid,uuid)'::regprocedure,'public.direct_order_support_context(uuid,boolean)'::regprocedure,'public.direct_order_enrich_translations(jsonb,uuid)'::regprocedure)")"
+  [[ "$reconciliation_calls" == "0" ]] || { printf 'RECONCILIATION_LIST_N_PLUS_ONE\n'; exit 1; }
+  printf 'DIRECT_ORDER_RECONCILIATION_TRANSLATION_LIST limit=%s detail_calls=%s\n' "$reconciliation_limit" "$reconciliation_calls"
+ done
+
+fi
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

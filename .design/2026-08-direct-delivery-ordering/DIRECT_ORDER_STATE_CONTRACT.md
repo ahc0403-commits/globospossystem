@@ -141,3 +141,24 @@ graph.
 KDS kitchen completion still starts preparation; complete tray packing sets `ready` once and does not set `dispatched_at`. `direct_order_dispatches` insertion is the driver-handoff notification anchor. Ready pickup tickets and an already-ready order's accepted pickup conversion emit `pickup_ready`. Unique `(request_id,event_kind)` events create one system pickup-ready chat notice and a batched delivery queue for subscribed, valid customer sessions.
 
 Push queue leases last two minutes, use `SKIP LOCKED`, and allow five attempts with backoff. Current lease identity must match acknowledgement. Invalid tokens disable only the same registered token hash. Expired/revoked sessions, disabled devices, terminal orders and events older than one day are skipped. Provider acceptance is not proof of customer receipt; retries after a lost provider response can redisplay the same OS notification tag. Payment/MISA/financial anchors are unchanged.
+
+## 2026-10-10 money reconciliation
+
+Actual receipts are immutable and can exceed the remaining invoice balance.
+Only the applied portion enters the existing payment graph; excess is a refund
+liability. Partial receipts leave the order pending until its calculated balance
+is paid. Evidence-backed refunds are idempotent by operation ID and preserve
+both the payment method and original POS amount. A cancellation returns excess
+before reversing order revenue.
+
+Dispatch with a positive store-prepaid fee requires confirmed cash handoff and
+evidence. One immutable handoff movement is created with its own time. Later
+administrator recovery/correction appends a movement without rewriting the
+dispatch or a completed closing. A recovery cannot exceed its parent payout.
+
+Unresolved excess refunds preserve order access and evidence after delivery.
+Recorded refund evidence remains accessible for seven days unless the support
+conversation is closed. Source/translation PII is purged through the existing
+retention run; immutable financial entries and their now-redacted evidence rows
+remain. Cash movements and cash-refund recording serialize with the store/day
+closing snapshot in Asia/Ho_Chi_Minh.
