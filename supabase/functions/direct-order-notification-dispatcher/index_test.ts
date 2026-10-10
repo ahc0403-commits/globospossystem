@@ -37,7 +37,7 @@ Deno.test("fulfillment push uses customer locale, safe link and one event tag", 
       );
       assert(
         payload.message.webpush.fcm_options.link ===
-          "https://pos.example/order/fixture-store",
+          "https://pos.example/#/order/fixture-store",
         "customer route",
       );
       assert(

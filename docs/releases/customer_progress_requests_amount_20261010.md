@@ -26,8 +26,10 @@ proof switches to confirmation pending and hides the QR.
    the POS release contract GitHub Action on the exact pushed SHA.
 2. Merge and use clean, freshly fetched exact origin/main. Require its Action.
 3. Use deploy_pos_production.sh to update Edge before applying progress migration
-   20261010030000, with Vercel skipped. Apply requirements migration
-   20261010040000 through its DB-only gate. Release web only after both exist.
+   20261010030000, with Vercel skipped. A second full invocation applies
+   requirements migration 20261010040000 immediately before web build/deploy.
+   Release web only after both exist. Existing cashier browsers must reload; if
+   web deployment fails after 400, retry the official flow with --skip-db.
 4. Verify exact production deployment SHA, Edge metadata, both migration history
    entries, scoped status/list reads and unchanged legacy/payment functions.
 
