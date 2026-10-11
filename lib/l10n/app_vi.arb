@@ -4186,5 +4186,6 @@
   "excelImportInvalidContainer": "Không đọc được tệp Excel. Tệp có thể bị hỏng, được mã hóa hoặc có định dạng không được hỗ trợ.",
   "excelImportInvalidXml": "Không đọc được dữ liệu bên trong tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập.",
   "excelImportUnsupportedNumberFormat": "Không xử lý được một số định dạng ô trong tệp. Hãy dán các giá trị vào mẫu nhập và lưu lại.",
-  "excelImportDecodeFailed": "Không xử lý được tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập."
+  "excelImportDecodeFailed": "Không xử lý được tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập.",
+  "collectionBankUnavailable": "Không thể xác nhận tài khoản thu tiền của công ty. Vui lòng liên hệ quản trị viên."
 }

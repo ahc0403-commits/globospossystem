@@ -25,8 +25,8 @@ void main() {
     final rows = workbook.tables['Hóa đơn GTGT']!.rows;
     expect(rows, hasLength(10));
     expect(_cell(rows[8], 0), '1');
-    expect(_cell(rows[8], 10), 'Dịch vụ ăn uống');
-    expect(_cell(rows[8], 11), 'Lần');
+    expect(_cell(rows[8], 10), 'Food');
+    expect(_cell(rows[8], 11), 'Phần');
     expect(_cell(rows[8], 14), '100000');
     expect(_cell(rows[8], 16), '8000');
     expect(_cell(rows[9], 0), '2');
@@ -58,7 +58,7 @@ void main() {
     expect(_cell(rows[8], 2), 'BUYER COMPANY');
     expect(_cell(rows[8], 3), '0312345678');
     expect(_cell(rows[8], 5), isEmpty);
-    expect(_cell(rows[8], 11), 'Lần');
+    expect(_cell(rows[8], 11), 'Phần');
     expect(_cell(rows[8], 15), '8');
   });
 
@@ -245,6 +245,10 @@ RestaurantSalesReceipt _restaurantReceipt({
   buyerPhone: buyerPhone,
   lineItems: const [
     RestaurantSalesLineItem(
+      orderItemId: 'food-line',
+      menuItemId: 'food-sku',
+      invoiceName: 'Food',
+      unitName: 'Phần',
       name: 'Food',
       quantity: 1,
       unitPrice: 100000,

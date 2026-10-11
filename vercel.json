@@ -1,9 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
-    "deploymentEnabled": {
-      "main": false
-    }
+    "deploymentEnabled": false
   },
   "installCommand": "bash scripts/vercel_install_flutter.sh",
   "buildCommand": "bash scripts/vercel_build_web.sh",

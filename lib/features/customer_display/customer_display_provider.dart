@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/digital_receipt_service.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
+import '../../core/payments/collection_bank.dart';
 
 class CustomerDisplayItem {
   const CustomerDisplayItem({
@@ -41,6 +42,7 @@ class CustomerDisplaySnapshot {
     required this.vat,
     required this.total,
     this.phase = 'payment',
+    this.bank,
     this.displayRevision,
     this.receiptId,
     this.receiptUrl,
@@ -56,6 +58,7 @@ class CustomerDisplaySnapshot {
   final double vat;
   final double total;
   final String phase;
+  final CollectionBank? bank;
   final String? displayRevision;
   final String? receiptId;
   final String? receiptUrl;
@@ -74,6 +77,7 @@ class CustomerDisplaySnapshot {
         vat: vat,
         total: total,
         phase: phase,
+        bank: bank,
         displayRevision: displayRevision,
         receiptId: receiptId,
         receiptUrl: receiptUrl ?? this.receiptUrl,
@@ -83,6 +87,11 @@ class CustomerDisplaySnapshot {
     final rawItems = json['items'];
     return CustomerDisplaySnapshot(
       orderId: json['order_id']?.toString() ?? '',
+      bank: json['bank'] is Map
+          ? CollectionBank.fromJson(
+              Map<String, dynamic>.from(json['bank'] as Map),
+            )
+          : null,
       localeCode: switch (json['locale_code']?.toString()) {
         'vi' => 'vi',
         'en' => 'en',

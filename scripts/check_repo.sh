@@ -83,6 +83,14 @@ bash scripts/test_financial_inputs_postgrest.sh
 printf 'CHECK_REPO_STEP=restaurant_report_ready_sql\n'
 bash test/restaurant_sales_report_ready_sql_test.sh
 
+printf 'CHECK_REPO_STEP=corporate_sales_ledger_sql\n'
+python3 scripts/build_pos_corporate_sales_release.py --check
+bash test/corporate_sales_export_sql_test.sh
+CORPORATE_RELEASE_ATOMIC=1 bash test/corporate_sales_export_sql_test.sh
+deno fmt --check supabase/functions/_shared/meinvoice.ts \
+  supabase/functions/_shared/meinvoice_ledger_test.ts
+deno test supabase/functions/_shared/meinvoice_ledger_test.ts
+
 printf 'CHECK_REPO_STEP=promotion_sync_sql\n'
 bash scripts/test_promotion_sync_sql.sh
 

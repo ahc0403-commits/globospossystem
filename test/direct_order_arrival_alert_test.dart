@@ -25,10 +25,11 @@ final _time0 = DateTime.utc(2026, 8, 21, 12);
 const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
+  // Corporate collection account has cashier/customer display coverage.
   // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   // Scheduled delivery closure has cashier overlay coverage; alert paths stay unchanged.
   'lib/features/cashier/cashier_screen.dart':
-      'bc2c4ef5f9ae85a1357ad8dd8b9b173ba1dfb1c332573677af9651ee7b32b7a0',
+      '4053eeee83aa4a862b9411ca49c4121ea0f539812a6f8011c4ca089cad0112a9',
   'lib/features/kitchen/kitchen_screen.dart':
       '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
   // Intentional event-merge fix; behavioral regressions live in
@@ -56,15 +57,16 @@ const _frozenAlertFiles = <String, String>{
   // Promotion, QR takeout, non-revenue review, beverage tax, and menu analytics
   // stocktake, safety-stock, and Deliberry retirement copy are independent.
   // Workbook import error copy is independent and has localized widget coverage.
+  // Corporate account unavailable copy has payment widget coverage.
   // Arrival behavior remains covered below.
   'lib/l10n/app_localizations.dart':
-      '4ba220d7bd9a74903bfcee3dd75a2823a19c0b853c4117020f9741605f3e225b',
+      'be14fc065af8ee0e81ca1e2a43b0dbae809fdf8b4fa89a375d644266407257a3',
   'lib/l10n/app_localizations_ko.dart':
-      '7a6982456b425489c58cdd86aeea4e241b43f8c573abbcd3d75c4049fd70bf02',
+      'c33f5b9317b8a3e877e075de1409cd878353dca2de3a039fdc52ffa81c4e89b7',
   'lib/l10n/app_localizations_vi.dart':
-      'ce47b17a976e7e08a16f2464787643364132bca12cdbeb93360f2dff0f64783f',
+      'a4e0136245aba2cb4a50116aed30a22d3ccb7e5331b8f0d581df3392ff17b066',
   'lib/l10n/app_localizations_en.dart':
-      'a6edace6ab24e83f0fedfbae8c6676bb6c5393b51ec8063c876a13a42285d670',
+      '69ddc7bd0d9e2ea1449b47ebffbf88c19ec51c5ed4c3b95f2f4bdd44cef14e3e',
 };
 
 void main() {

@@ -3,7 +3,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export.dart';
 
 void main() {
-  test('builds exactly one MISA row per general or Red receipt', () {
+  for (final contact in [
+    {'email': 'fixture@example.com', 'phone': '0123456789'},
+    {'email': 'fixture@example.com', 'phone': ''},
+    {'email': '', 'phone': '0123456789'},
+    {'email': '', 'phone': ''},
+  ]) {
+    test('ordinary receipt preserves optional contacts $contact', () {
+      final payload = _validPayload();
+      final general =
+          (payload['receipts'] as List).first as Map<String, Object?>;
+      general['buyer_email'] = contact['email'];
+      general['buyer_phone'] = contact['phone'];
+      final export = createRestaurantSalesExport(payload);
+      expect(export.isReadyForDownload, isTrue);
+      final job = buildRestaurantMisaJob(export.receipts.first);
+      final buyer = job['buyer_snapshot'] as Map;
+      expect(buyer['email'], contact['email']);
+      expect(buyer['phone'], contact['phone']);
+      final rows = Excel.decodeBytes(
+        buildRestaurantSalesWorkbook(export),
+      ).tables['Hóa đơn GTGT']!.rows;
+      for (final row in rows.skip(8).take(2)) {
+        expect(row[6]?.value.toString() ?? '', contact['email']);
+        expect(row[7]?.value.toString() ?? '', contact['phone']);
+        expect(row[7]?.value, isA<TextCellValue>());
+      }
+    });
+  }
+  test('preserves every approved menu line under its receipt number', () {
     final export = createRestaurantSalesExport(_validPayload());
 
     expect(export.businessDate, '2026-08-16');
@@ -21,9 +49,9 @@ void main() {
     expect(export.isReadyForDownload, isTrue);
 
     final workbook = Excel.decodeBytes(buildRestaurantSalesWorkbook(export));
-    expect(workbook.tables.keys, ['Hóa đơn GTGT']);
+    expect(workbook.tables.keys, ['Hóa đơn GTGT', 'POS Ledger']);
     final rows = workbook.tables['Hóa đơn GTGT']!.rows;
-    expect(rows, hasLength(10));
+    expect(rows, hasLength(11));
     expect(rows[7][0]!.value.toString(), 'Số thứ tự hóa đơn (*)');
     expect(rows[7][16]!.value.toString(), 'Tiền thuế GTGT');
 
@@ -34,33 +62,33 @@ void main() {
     expect(rows[8][3]!.value.toString(), '');
     expect(rows[8][5]!.value.toString(), 'Bán cho người tiêu dùng');
     expect(rows[8][9]!.value.toString(), 'TM');
-    expect(rows[8][10]!.value.toString(), 'Dịch vụ ăn uống');
-    expect(rows[8][11]!.value.toString(), 'Lần');
+    expect(rows[8][10]!.value.toString(), 'Kimbap');
+    expect(rows[8][11]!.value.toString(), 'Phần');
     expect(rows[8][12]!.value.toString(), '1');
-    expect(rows[8][13]!.value.toString(), '100000');
-    expect(rows[8][14]!.value.toString(), '100000');
+    expect(rows[8][13]!.value.toString(), '60000');
+    expect(rows[8][14]!.value.toString(), '60000');
     expect(rows[8][15]!.value.toString(), '8');
-    expect(rows[8][16]!.value.toString(), '8000');
+    expect(rows[8][16]!.value.toString(), '4800');
 
-    // The Red Invoice is the next row even though the first receipt has two items.
-    expect(rows[9][0]!.value.toString(), '2');
-    expect(rows[9][2]!.value.toString(), 'Công ty ABC');
-    expect(rows[9][3]!.value.toString(), '0312345678');
-    expect(rows[9][4]!.value.toString(), '1 Nguyễn Huệ, Quận 1');
-    expect(rows[9][5]!.value.toString(), '');
-    expect(rows[9][6]!.value.toString(), 'invoice@abc.vn');
-    expect(rows[9][7]!.value.toString(), '0901234567');
-    expect(rows[9][8]!.value.toString(), '');
-    expect(rows[9][9]!.value.toString(), 'CK');
-    expect(rows[9][10]!.value.toString(), 'Dịch vụ ăn uống');
-    expect(rows[9][13]!.value.toString(), '100000');
+    // Both ordinary menu lines precede the next invoice.
+    expect(rows[10][0]!.value.toString(), '2');
+    expect(rows[10][2]!.value.toString(), 'Công ty ABC');
+    expect(rows[10][3]!.value.toString(), '0312345678');
+    expect(rows[10][4]!.value.toString(), '1 Nguyễn Huệ, Quận 1');
+    expect(rows[10][5]!.value.toString(), '');
+    expect(rows[10][6]!.value.toString(), 'invoice@abc.vn');
+    expect(rows[10][7]!.value.toString(), '0901234567');
+    expect(rows[10][8]!.value.toString(), '');
+    expect(rows[10][9]!.value.toString(), 'Thẻ quốc tế');
+    expect(rows[10][10]!.value.toString(), 'Set menu');
+    expect(rows[10][13]!.value.toString(), '100000');
 
     final exportedText = rows
         .expand((row) => row)
         .map((cell) => cell?.value.toString() ?? '')
         .join('\n');
-    expect(exportedText, isNot(contains('Kimbap')));
-    expect(exportedText, isNot(contains('Ramen')));
+    expect(exportedText, contains('Kimbap'));
+    expect(exportedText, contains('Ramen'));
   });
 
   test('refuses pending and integrity-failed finalizations', () {
@@ -210,7 +238,7 @@ void main() {
     final workbook = Excel.decodeBytes(buildRestaurantSalesWorkbook(export));
     final rows = workbook.tables['Hóa đơn GTGT']!.rows;
     expect(rows, hasLength(11));
-    expect(rows[8][10]!.value.toString(), 'Dịch vụ ăn uống');
+    expect(rows[8][10]!.value.toString(), 'Kimbap');
     expect(rows[8][14]!.value.toString(), '60000');
     expect(rows[8][15]!.value.toString(), '8');
     expect(rows[8][16]!.value.toString(), '4800');
@@ -282,6 +310,10 @@ Map<String, dynamic> _validPayload() => {
       'buyer_address': '',
       'line_items': [
         {
+          'order_item_id': 'item-Kimbap',
+          'menu_item_id': 'sku-Kimbap',
+          'invoice_name_vi': 'Kimbap',
+          'misa_unit_name': 'Phần',
           'display_name': 'Kimbap',
           'quantity': 1,
           'unit_price': 60000,
@@ -290,6 +322,10 @@ Map<String, dynamic> _validPayload() => {
           'vat_amount': 4800,
         },
         {
+          'order_item_id': 'item-Ramen',
+          'menu_item_id': 'sku-Ramen',
+          'invoice_name_vi': 'Ramen',
+          'misa_unit_name': 'Phần',
           'display_name': 'Ramen',
           'quantity': 1,
           'unit_price': 40000,
@@ -318,6 +354,10 @@ Map<String, dynamic> _validPayload() => {
       'buyer_phone': '0901234567',
       'line_items': [
         {
+          'order_item_id': 'item-Set menu',
+          'menu_item_id': 'sku-Set menu',
+          'invoice_name_vi': 'Set menu',
+          'misa_unit_name': 'Phần',
           'display_name': 'Set menu',
           'quantity': 1,
           // Inclusive menu pricing is normalized to the MISA pre-tax unit price.

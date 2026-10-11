@@ -76,7 +76,7 @@ void main() {
       ),
     );
 
-    expect(output.tables.keys, ['Hóa đơn GTGT']);
+    expect(output.tables.keys, ['Hóa đơn GTGT', 'POS Ledger']);
     final rows = output.tables['Hóa đơn GTGT']!.rows;
     expect(rows, hasLength(10));
     expect(rows[7].map(_cellText).toList(), const [

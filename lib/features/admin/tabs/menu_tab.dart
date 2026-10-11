@@ -1,3 +1,5 @@
+import '../../auth/auth_provider.dart';
+import '../widgets/invoice_profile_editor.dart';
 import '../../../core/payments/beverage_tax.dart';
 import '../widgets/beverage_tax_editor.dart';
 import '../../../core/i18n/menu_localization.dart';
@@ -1416,6 +1418,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     decoration: InputDecoration(labelText: l10n.menuPrice),
                   ),
                   const SizedBox(height: 16),
+                  if (ref.read(authProvider).role == 'super_admin') ...[
+                    InvoiceProfileEditor(
+                      item: item,
+                      onSaved: menuNotifier.fetchAll,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   BeverageTaxEditor(
                     value: beverageTax,
                     vatCategory: item['vat_category']?.toString(),

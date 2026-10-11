@@ -34,6 +34,7 @@ void main() {
 
   test('customer display snapshot parses fixed payment payload', () {
     final snapshot = CustomerDisplaySnapshot.fromJson({
+      'bank': _corporateBank,
       'order_id': 'order-1',
       'locale_code': 'vi',
       'table_number': '12',
@@ -109,6 +110,7 @@ void main() {
         'payload': {
           'phase': 'receipt',
           'display_revision': revision,
+          'bank': _corporateBank,
           'order_id': 'order-1',
           'table_number': '12',
           'total': 99000,
@@ -215,6 +217,7 @@ void main() {
 
     for (final localeCode in localeCodes) {
       final snapshot = CustomerDisplaySnapshot.fromJson({
+        'bank': _corporateBank,
         'order_id': 'order-$localeCode',
         'locale_code': localeCode,
         'table_number': '12',
@@ -255,6 +258,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final snapshot = CustomerDisplaySnapshot.fromJson({
+      'bank': _corporateBank,
       'order_id': 'order-1',
       'locale_code': 'vi',
       'table_number': '12',
@@ -346,3 +350,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 }
+
+const _corporateBank = {
+  'bin': '970426',
+  'label': 'MSB',
+  'account_number': '80002014298',
+  'account_holder': 'AKJ INTERNATIONAL CO., LTD',
+};

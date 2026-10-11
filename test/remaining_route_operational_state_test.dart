@@ -793,6 +793,10 @@ void main() {
                 buyerPhone: '',
                 lineItems: const [
                   RestaurantSalesLineItem(
+                    orderItemId: 'approved-line',
+                    menuItemId: 'approved-menu',
+                    invoiceName: 'Món ăn',
+                    unitName: 'Phần',
                     name: 'Món ăn',
                     quantity: 1,
                     unitPrice: 100000,

@@ -16,6 +16,8 @@ import '../../core/models/pos_table.dart';
 import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/payments/vietqr_payload.dart';
+import '../../core/payments/collection_bank.dart';
+import '../../core/services/collection_bank_service.dart';
 import '../../core/services/bank_transfer_alert_service.dart';
 import '../../core/services/bank_transfer_alert_sound.dart';
 import '../../core/services/bank_transfer_alert_coordinator.dart';
@@ -114,6 +116,7 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.bankTransferAlertSoundServiceOverride,
     this.menuServiceOverride,
     this.digitalReceiptServiceOverride,
+    this.collectionBankServiceOverride,
     this.directOrderStaffServiceOverride,
     this.orderServiceOverride,
     this.bankTransferAlertPollInterval = const Duration(seconds: 30),
@@ -128,6 +131,7 @@ class CashierScreen extends ConsumerStatefulWidget {
   final BankTransferAlertSoundService? bankTransferAlertSoundServiceOverride;
   final MenuService? menuServiceOverride;
   final DigitalReceiptService? digitalReceiptServiceOverride;
+  final CollectionBankService? collectionBankServiceOverride;
   final DirectOrderStaffService? directOrderStaffServiceOverride;
   final OrderService? orderServiceOverride;
   final Duration bankTransferAlertPollInterval;
@@ -174,6 +178,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       widget.paymentProofServiceOverride ?? paymentProofService;
   PaymentService get _paymentService =>
       widget.paymentServiceOverride ?? paymentService;
+  CollectionBankService get _collectionBankService =>
+      widget.collectionBankServiceOverride ?? collectionBankService;
+
   DigitalReceiptService get _digitalReceiptService =>
       widget.digitalReceiptServiceOverride ?? digitalReceiptService;
   RestaurantCutoffService get _restaurantCutoffService =>
@@ -994,7 +1001,18 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
 
     CashTender? cashTender;
-    if (method == paymentMethodOther || method == paymentMethodBankTransfer) {
+    if (method == paymentMethodBankTransfer) {
+      CollectionBank bank;
+      try {
+        bank = await _collectionBankService.load(
+          storeId,
+          orderId: paymentOrders.first.orderId,
+        );
+      } catch (_) {
+        if (mounted) showErrorToast(context, l10n.collectionBankUnavailable);
+        return;
+      }
+      if (!mounted) return;
       final qrConfirmed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -1002,6 +1020,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
           key: const Key('cashier_combined_qr_payment_dialog'),
           orders: paymentOrders,
           totalAmount: combinedTotal,
+          bank: bank,
         ),
       );
       if (qrConfirmed != true || !mounted) {
@@ -1942,16 +1961,30 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         storeId == null) {
                       return;
                     }
-                    unawaited(
-                      notifier.showOnCustomerDisplay(
-                        storeId: storeId,
-                        order: order,
-                      ),
+                    await notifier.showOnCustomerDisplay(
+                      storeId: storeId,
+                      order: order,
                     );
-                    await showDialog<void>(
-                      context: context,
-                      builder: (_) => _BankTransferQrDialog(order: order),
-                    );
+                    if (!mounted || !context.mounted) return;
+                    try {
+                      final bank = await _collectionBankService.load(
+                        storeId,
+                        orderId: order.orderId,
+                      );
+                      if (!mounted || !context.mounted) return;
+                      await showDialog<void>(
+                        context: context,
+                        builder: (_) =>
+                            _BankTransferQrDialog(order: order, bank: bank),
+                      );
+                    } catch (_) {
+                      if (context.mounted) {
+                        showErrorToast(
+                          context,
+                          context.l10n.collectionBankUnavailable,
+                        );
+                      }
+                    }
                   },
                   onApplyDiscount: () async {
                     final selectedOrder = paymentState.selectedOrder;
@@ -6701,9 +6734,10 @@ class _CombinedTablePaymentDialogState
 }
 
 class _BankTransferQrDialog extends StatelessWidget {
-  const _BankTransferQrDialog({required this.order});
+  const _BankTransferQrDialog({required this.order, required this.bank});
 
   final CashierOrder order;
+  final CollectionBank bank;
 
   @override
   Widget build(BuildContext context) {
@@ -6725,8 +6759,8 @@ class _BankTransferQrDialog extends StatelessWidget {
                 child: QrImageView(
                   key: const Key('cashier_bank_transfer_qr_image'),
                   data: VietQrPayload.bankTransfer(
-                    bankBin: '970457',
-                    accountNumber: '100202042976',
+                    bankBin: bank.bin,
+                    accountNumber: bank.accountNumber,
                     amount: order.remainingDue.round(),
                     purpose: VietQrPayload.paymentPurpose(order.orderId),
                   ),
@@ -6740,8 +6774,8 @@ class _BankTransferQrDialog extends StatelessWidget {
                 '₫${currency.format(order.remainingDue)}',
                 style: PosNumericText.amountHero,
               ),
-              const Text(
-                'WOORI BANK · 100202042976 · AHN HYOCHANG',
+              Text(
+                '${bank.label} · ${bank.accountNumber} · ${bank.accountHolder}',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -6764,10 +6798,10 @@ class _CombinedQrPaymentDialog extends StatelessWidget {
     super.key,
     required this.orders,
     required this.totalAmount,
+    required this.bank,
   });
 
-  static const _wooriBankBin = '970457';
-  static const _wooriAccountNumber = '100202042976';
+  final CollectionBank bank;
 
   final List<CashierOrder> orders;
   final double totalAmount;
@@ -6779,8 +6813,8 @@ class _CombinedQrPaymentDialog extends StatelessWidget {
     final tableNumbers = orders.map((order) => order.tableNumber).join(', ');
     final reference = 'CB${orders.length}${orders.first.orderId}';
     final qrPayload = VietQrPayload.bankTransfer(
-      bankBin: _wooriBankBin,
-      accountNumber: _wooriAccountNumber,
+      bankBin: bank.bin,
+      accountNumber: bank.accountNumber,
       amount: totalAmount.round(),
       purpose: VietQrPayload.paymentPurpose(reference),
     );
@@ -6829,8 +6863,8 @@ class _CombinedQrPaymentDialog extends StatelessWidget {
               key: const Key('cashier_combined_qr_total'),
               style: PosNumericText.amountHero,
             ),
-            const Text(
-              'WOORI BANK · 100202042976 · AHN HYOCHANG',
+            Text(
+              '${bank.label} · ${bank.accountNumber} · ${bank.accountHolder}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: PosColors.textSecondary,
