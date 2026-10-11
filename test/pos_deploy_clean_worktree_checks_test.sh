@@ -118,6 +118,10 @@ printf 'deno test --allow-env=ALLOWED_ORIGINS %s/supabase/functions/complete-ini
   "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'deno test %s/supabase/functions/sepay-webhook/index_test.ts\n' \
   "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno check %s/supabase/functions/meinvoice-dispatcher/index.ts\n' \
+  "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno test %s/supabase/functions/_shared/meinvoice_ledger_test.ts\n' \
+  "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'deno test %s/supabase/functions/emergency-fulfillment-dispatcher/index_test.ts\n' \
   "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'deno test --config %s/supabase/functions/public-receipt/deno.json %s/supabase/functions/public-receipt/index_test.ts\n' \

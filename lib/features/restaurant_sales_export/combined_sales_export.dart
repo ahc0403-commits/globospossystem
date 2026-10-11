@@ -95,7 +95,12 @@ List<int> buildCombinedSalesWorkbook(CombinedSalesExport export) {
   }
   final jobs = <Map<String, dynamic>>[
     if (export.restaurant case final restaurant?)
-      ...restaurant.receipts.map(buildRestaurantMisaJob),
+      ...restaurant.receipts.map(
+        (receipt) => {
+          ...buildRestaurantMisaJob(receipt),
+          'tax_entity_id': export.taxEntityId,
+        },
+      ),
     if (export.photo case final photo?)
       ...buildPhotoSalesRegisteredMisaJobs(photo),
   ];

@@ -30,6 +30,7 @@ class _DirectOrderSettingsScreenState
   final _minimum = TextEditingController(text: '0');
   final _latitude = TextEditingController();
   final _longitude = TextEditingController();
+  bool _collectionBankManaged = false;
   bool _enabled = false;
   bool _paused = false;
   bool _accountingApproved = false;
@@ -80,6 +81,7 @@ class _DirectOrderSettingsScreenState
       _latitude.text = _textNumber(data['default_latitude']);
       _longitude.text = _textNumber(data['default_longitude']);
       setState(() {
+        _collectionBankManaged = data['collection_bank_managed'] == true;
         _enabled = data['is_enabled'] == true;
         _paused = data['is_paused'] == true;
         _accountingApproved = data['accounting_approved'] == true;
@@ -313,6 +315,17 @@ class _DirectOrderSettingsScreenState
                                   _copy.publicSlug,
                                   onChanged: (_) => setState(() {}),
                                 ),
+                                if (_collectionBankManaged)
+                                  Text(switch (Localizations.localeOf(
+                                    context,
+                                  ).languageCode) {
+                                    'vi' =>
+                                      'Tài khoản thu tiền của công ty. SuperAdmin sửa tại báo cáo doanh thu.',
+                                    'en' =>
+                                      'Company collection account. SuperAdmin can change it in sales reporting.',
+                                    _ =>
+                                      '법인 수금 계좌입니다. 변경은 SuperAdmin 매출신고에서 관리합니다.',
+                                  }),
                                 _field(
                                   _bankBin,
                                   _copy.bankBin,
@@ -456,6 +469,14 @@ class _DirectOrderSettingsScreenState
     padding: const EdgeInsets.only(bottom: 12),
     child: TextFormField(
       controller: controller,
+      readOnly:
+          _collectionBankManaged &&
+          [
+            _bankBin,
+            _bankAccount,
+            _bankHolder,
+            _bankLabel,
+          ].contains(controller),
       keyboardType: keyboard,
       onChanged: onChanged,
       decoration: InputDecoration(labelText: label, suffixText: suffix),

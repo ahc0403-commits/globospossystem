@@ -95,26 +95,19 @@ void main() {
       );
       expect(() => build(export), throwsFormatException);
     });
-    test('repairs the reported arithmetic mismatch, combined=$combined', () {
+    test('blocks inconsistent historical VAT, combined=$combined', () {
       final line = _line(299000, 8)..['vat_amount'] = 23600;
       final export = _export([line]);
       expect(export.receipts.single.issues, contains('VAT_AMOUNT_MISMATCH'));
-      expect(export.isReadyForDownload, isTrue);
-      final row = Excel.decodeBytes(build(export)).tables.values.single.rows[8];
-      expect(_value(row, 12), 1);
-      expect(_value(row, 13), _value(row, 14));
-      expect(_value(row, 14) + _value(row, 16), 322600);
-      expect(isMisaVatConsistent(_value(row, 14), 8, _value(row, 16)), isTrue);
+      expect(export.isReadyForDownload, isFalse);
+      expect(() => build(export), throwsFormatException);
+      expect(export.receipts.single.lineItems.single.vatAmount, 23600);
     });
-    test('reconciles line totals to the paid receipt, combined=$combined', () {
+    test('blocks a paid amount mismatch, combined=$combined', () {
       final export = _export([_line(100, 8)], paidGross: 110);
       expect(export.receipts.single.issues, contains('AMOUNT_MISMATCH'));
-      expect(export.isReadyForDownload, isTrue);
-      final row = Excel.decodeBytes(build(export)).tables.values.single.rows[8];
-      expect(_value(row, 12), 1);
-      expect(_value(row, 13), _value(row, 14));
-      expect(_value(row, 14) + _value(row, 16), 110);
-      expect(isMisaVatConsistent(_value(row, 14), 8, _value(row, 16)), isTrue);
+      expect(export.isReadyForDownload, isFalse);
+      expect(() => build(export), throwsFormatException);
     });
     test(
       'retains actual rates and net discounted bases, combined=$combined',
@@ -127,8 +120,8 @@ void main() {
         ]);
         final rows = Excel.decodeBytes(
           build(export),
-        ).tables.values.single.rows.skip(8).toList();
-        expect(rows, hasLength(2));
+        ).tables['Hóa đơn GTGT']!.rows.skip(8).toList();
+        expect(rows, hasLength(3));
         expect(rows.map((r) => _value(r, 0)).toSet(), {1});
         expect(rows.map((r) => _value(r, 15)).toSet(), {8, 10});
         expect(rows.fold<double>(0, (sum, r) => sum + _value(r, 14)), 134000);
@@ -138,42 +131,26 @@ void main() {
         }
       },
     );
-    test(
-      'reconciles same-rate VAT totals before export, combined=$combined',
-      () {
-        final export = _export(
-          List.generate(4, (_) => _line(10, 8)..['vat_amount'] = 1.3),
-        );
-        expect(export.isReadyForDownload, isTrue);
-        final rows = Excel.decodeBytes(
-          build(export),
-        ).tables.values.single.rows.skip(8).toList();
-        expect(rows, hasLength(1));
-        expect(_value(rows.single, 14) + _value(rows.single, 16), 45.2);
-        expect(
-          isMisaVatConsistent(
-            _value(rows.single, 14),
-            8,
-            _value(rows.single, 16),
-          ),
-          isTrue,
-        );
-      },
-    );
+    test('blocks inconsistent same-rate VAT totals, combined=$combined', () {
+      final export = _export(
+        List.generate(4, (_) => _line(10, 8)..['vat_amount'] = 1.3),
+      );
+      expect(export.isReadyForDownload, isFalse);
+      expect(export.receipts.single.issues, contains('VAT_SUMMARY_MISMATCH'));
+      expect(() => build(export), throwsFormatException);
+    });
   }
-  test('pending workbook independently reconciles invalid arithmetic', () {
-    final row = Excel.decodeBytes(
-      buildMisaPendingInvoiceWorkbook([
+  test('pending workbook blocks invalid original arithmetic', () {
+    expect(
+      () => buildMisaPendingInvoiceWorkbook([
         {
           'source_system': 'restaurant_pos',
+          'payment_method_snapshot': 'TM',
           'line_items_snapshot': [_line(299000, 8)..['vat_amount'] = 23600],
         },
       ]),
-    ).tables.values.single.rows[8];
-    expect(_value(row, 12), 1);
-    expect(_value(row, 13), _value(row, 14));
-    expect(_value(row, 14) + _value(row, 16), 322600);
-    expect(isMisaVatConsistent(_value(row, 14), 8, _value(row, 16)), isTrue);
+      throwsFormatException,
+    );
   });
 }
 
@@ -184,6 +161,10 @@ Map<String, dynamic> _line(
   double rate, {
   String type = 'menu_item',
 }) => {
+  'order_item_id': 'line',
+  'menu_item_id': 'menu',
+  'invoice_name_vi': 'Food',
+  'misa_unit_name': 'Phần',
   'display_name': 'Food',
   'item_type': type,
   'quantity': 1,

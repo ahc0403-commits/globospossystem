@@ -4187,5 +4187,6 @@
   "excelImportInvalidContainer": "The Excel file could not be read. It may be damaged, encrypted, or in an unsupported format.",
   "excelImportInvalidXml": "The Excel file contains unreadable workbook data. Save it again or paste its values into the import template.",
   "excelImportUnsupportedNumberFormat": "Some cell formats in this file could not be processed. Paste the values into the import template and save it again.",
-  "excelImportDecodeFailed": "The Excel file could not be processed. Save it again or paste its values into the import template."
+  "excelImportDecodeFailed": "The Excel file could not be processed. Save it again or paste its values into the import template.",
+  "collectionBankUnavailable": "The company collection account is unavailable. Please contact an administrator."
 }

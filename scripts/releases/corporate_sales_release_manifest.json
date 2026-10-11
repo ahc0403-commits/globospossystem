@@ -1,0 +1,27 @@
+{
+  "base_sha": "c998d7e89712293caae50340ccc9063bed6288c1",
+  "branch": "codex/corporate-sales-release-prep-20261011",
+  "production_project_ref": "ynriuoomotxuwhuxxmhj",
+  "production_migration_version": "20261011204000",
+  "deployment_authorized": false,
+  "pos_files": {
+    "supabase/migrations/20261011200000_corporate_collection_accounts.sql": "94fb2c39bdd2405e8209638c4a64537a78a5d46e6c2eb99ba4ca510b5613958b",
+    "supabase/migrations/20261011201000_invoice_ledger_export_contract.sql": "0a13c6783eab548bd1cb49a55ea3ed27c1cb9d5dc221dc69ddd2248260dc391d",
+    "supabase/migrations/20261011202000_sales_reporting_pages.sql": "c2142da8d216317016537ff939c2b32fbfcc62f5ee7286886d3f72175bf66092",
+    "supabase/migrations/20261011203000_invoice_contacts_payment_methods.sql": "31d169d7c9c08a4a4a40edecb52d96a12309494f103a416339d15217f4bd56cd",
+    "scripts/releases/20261011204000_corporate_sales_invoice_contacts_release.sql": "7048a8a84a9490b36bb7b9d105f55e022ce1eadf4f7497f32bfa28dc636cc132",
+    "scripts/preflight_corporate_sales_invoice_contacts_release.sql": "048d1ea4188f2b826956d5794d8376213558b5aafc88f5c5d91db416299705f2",
+    "test/fixtures/invoice_payment_contract.json": "f79a0fc22232350e1ace0f4f480a24f3036a3462f953fd38392e57f6cc968aa8"
+  },
+  "automation_source_root": "/Users/andreahn/Documents/Codex/2026-09-12/files-pasted-by-the-user-full-2/outputs/akj-automation",
+  "automation_files": {
+    "akj/data.py": "145f06c5b93778e966c3396a91e4c53b3e3d1c13f1f434161dcde134a25411e6",
+    "akj/globos.py": "27c2eb39f1c80328e8fa92d8f8146e9ef30fbabdbcd2eaabc98be03f6bad9138",
+    "akj/source_manifest.py": "576c31e8a9a4cf115e45ec408d85b5b0d780f939cb0a35d922c2de4dc1224283",
+    "akj/pos_reporting_contract.py": "fc2b08f6ca0a118e59b3de8e52c97c393038158b781f18e30c3cfb6b9da499d8",
+    "akj/invoice_payment_contract.py": "a0a7775ac4d1443493549f6d92db441cbf673dd6aa75225ecf410251ac9f4382",
+    "tests/fixtures/invoice_payment_contract.json": "f79a0fc22232350e1ace0f4f480a24f3036a3462f953fd38392e57f6cc968aa8",
+    "tests/test_pos_reporting_contract.py": "3d7ece342ce9b5650c2c120b044c63ae84f39d2a9e16250a4cafc2da3061ca37",
+    "tests/test_invoice_contacts_payment_methods.py": "4f3caf87f37c3a14f3314a4d55980d4eccc7645933ec9893916821a498d8dbe0"
+  }
+}

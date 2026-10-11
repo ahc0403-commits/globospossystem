@@ -1,3 +1,4 @@
+import '../../widgets/error_toast.dart';
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
@@ -12,6 +13,10 @@ import '../../widgets/app_nav_bar.dart';
 import '../photo_sales_import/photo_sales_import_service.dart';
 import '../photo_sales_import/photo_sales_registered_export.dart';
 import 'combined_sales_export.dart';
+import 'daily_sales_summary.dart';
+import 'daily_sales_report_service.dart';
+import '../../core/payments/collection_bank.dart';
+import '../../main.dart';
 import 'pos_receipt_ledger.dart';
 import 'pos_receipt_ledger_service.dart';
 import 'restaurant_sales_export.dart';
@@ -31,6 +36,8 @@ class RestaurantSalesExportScreen extends StatefulWidget {
     this.embedded = false,
     this.todayOverride,
     this.ledgerService,
+    this.reportService,
+    this.saveCollectionBank,
   });
 
   /// Optional deterministic loader for operational-state widget tests.
@@ -42,6 +49,8 @@ class RestaurantSalesExportScreen extends StatefulWidget {
   final bool embedded;
   final DateTime? todayOverride;
   final PosReceiptLedgerService? ledgerService;
+  final DailySalesReportService? reportService;
+  final Future<void> Function(Map<String, dynamic>)? saveCollectionBank;
 
   @override
   State<RestaurantSalesExportScreen> createState() =>
@@ -52,6 +61,16 @@ class _RestaurantSalesExportScreenState
     extends State<RestaurantSalesExportScreen> {
   late String _businessDate;
   List<CombinedSalesExport> _exports = const [];
+  List<DailySalesSummary> _summaries = const [];
+  DailySalesReportService get _reportService =>
+      widget.reportService ?? dailySalesReportService;
+  DailySalesSummary? get _selectedSummary {
+    for (final summary in _summaries) {
+      if (summary.taxEntityId == _selectedTaxEntityId) return summary;
+    }
+    return null;
+  }
+
   String? _selectedTaxEntityId;
   bool _isLoading = false;
   bool _isDownloading = false;
@@ -118,6 +137,10 @@ class _RestaurantSalesExportScreenState
                   key: Key('restaurant_sales_export_loading'),
                 ),
               ],
+              if (_selectedSummary case final summary?) ...[
+                const SizedBox(height: ToastSpacingTokens.lg),
+                _summaryPanel(context, summary),
+              ],
               if (_selectedExport case final export?) ...[
                 const SizedBox(height: ToastSpacingTokens.lg),
                 _entitySelector(context, export),
@@ -154,7 +177,8 @@ class _RestaurantSalesExportScreenState
                 onPressed:
                     _isLoading ||
                         _isDownloading ||
-                        _selectedExport?.isReadyForDownload != true
+                        !(_selectedExport?.isReadyForDownload == true ||
+                            (_selectedSummary?.receiptCount ?? 0) > 0)
                     ? null
                     : _download,
                 icon: _isDownloading
@@ -261,6 +285,325 @@ class _RestaurantSalesExportScreenState
         ],
       ),
     );
+  }
+
+  String _copy(String ko, String vi, String en) =>
+      switch (Localizations.localeOf(context).languageCode) {
+        'vi' => vi,
+        'en' => en,
+        _ => ko,
+      };
+
+  Widget _summaryPanel(BuildContext context, DailySalesSummary summary) {
+    final currency = NumberFormat('#,##0', 'vi_VN');
+    String money(num n) => '${currency.format(n)} ₫';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          key: const Key('restaurant_sales_export_tax_entity_selector'),
+          initialValue: summary.taxEntityId,
+          isExpanded: true,
+          items: _summaries
+              .map(
+                (r) => DropdownMenuItem(
+                  value: r.taxEntityId,
+                  child: Text('${r.sellerLegalName} · ${r.sellerTaxCode}'),
+                ),
+              )
+              .toList(),
+          onChanged: _isDownloading
+              ? null
+              : (id) => setState(() => _selectedTaxEntityId = id),
+        ),
+        TextButton(
+          onPressed:
+              _isDownloading ||
+                  _isLoading ||
+                  summary.restaurantReceiptCount == 0
+              ? null
+              : () async {
+                  setState(() => _isDownloading = true);
+                  try {
+                    final count = await _reportService.refreshPendingSnapshots(
+                      summary,
+                    );
+                    if (mounted && context.mounted) {
+                      showSuccessToast(
+                        context,
+                        '${_copy('미발행 작업 재검증', 'Kiểm tra lại hóa đơn chưa phát hành', 'Unissued jobs revalidated')}: $count',
+                      );
+                    }
+                  } catch (_) {
+                    if (mounted && context.mounted) {
+                      showErrorToast(
+                        context,
+                        _copy(
+                          '재검증하지 못했습니다. 품목 승인과 작업 상태를 확인하세요.',
+                          'Không thể kiểm tra lại. Kiểm tra phê duyệt và trạng thái.',
+                          'Revalidation failed. Check approvals and job status.',
+                        ),
+                      );
+                    }
+                  } finally {
+                    if (mounted) setState(() => _isDownloading = false);
+                  }
+                },
+          child: Text(
+            _copy(
+              '미발행 작업 재검증',
+              'Kiểm tra lại hóa đơn chưa phát hành',
+              'Revalidate unissued jobs',
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _metric(_receiptLabel(context), '${summary.receiptCount}'),
+            _metric(
+              _restaurantSalesLabel(context),
+              money(summary.restaurantGross),
+            ),
+            _metric(_photoSalesLabel(context), money(summary.photoGross)),
+            _metric(
+              _generalLabel(context),
+              '${summary.generalCount}',
+              onTap: summary.generalCount == 0
+                  ? null
+                  : () => _openSummaryLedger(summary, false),
+            ),
+            _metric(
+              _redLabel(context),
+              '${summary.redCount}',
+              onTap: summary.redCount == 0
+                  ? null
+                  : () => _openSummaryLedger(summary, true),
+            ),
+            _metric(_supplyLabel(context), money(summary.supply)),
+            _metric(_vatLabel(context), money(summary.vat)),
+            _metric(_grossLabel(context), money(summary.gross)),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Container(
+          key: const Key('sales_next_day_deposit'),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: ToastColorTokens.infoMuted,
+            borderRadius: ToastRadiusTokens.sm,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _copy(
+                  '익일 매출 입금 예정액',
+                  'Số tiền doanh thu dự kiến nộp ngày hôm sau',
+                  'Next-day sales deposit',
+                ),
+                style: AppFonts.system(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                '${summary.depositDate} · ${summary.depositConfirmed ? _copy('확정', 'Đã chốt', 'Confirmed') : _copy('잠정', 'Tạm tính', 'Provisional')}',
+              ),
+              Text(
+                summary.nextDeposit == null
+                    ? _copy(
+                        '포토 매출 등록 확인 필요',
+                        'Cần xác nhận nhập doanh thu Photo',
+                        'Photo import needs confirmation',
+                      )
+                    : money(summary.nextDeposit!),
+                key: const Key('sales_next_day_deposit_amount'),
+                style: AppFonts.system(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                '${_copy('포토 매출', 'Doanh thu Photo', 'Photo sales')}: ${money(summary.photoGross)} + ${_copy('레스토랑 현금 매출', 'Doanh thu tiền mặt nhà hàng', 'Restaurant cash sales')}: ${money(summary.restaurantCash)}',
+              ),
+              Text(
+                '${_copy('레스토랑 계좌이체 매출', 'Chuyển khoản nhà hàng', 'Restaurant bank transfers')}: ${money(summary.restaurantBankTransfer)}',
+              ),
+              if (summary.bank case final bank?)
+                SelectableText(
+                  '${bank.label} · ${bank.accountNumber} · ${bank.accountHolder}',
+                )
+              else
+                Text(
+                  _copy(
+                    '법인 수금 계좌 설정 필요',
+                    'Cần thiết lập tài khoản pháp nhân',
+                    'Configure the legal entity collection account',
+                  ),
+                ),
+              TextButton(
+                onPressed: _isDownloading
+                    ? null
+                    : () => _editCollectionBank(summary),
+                child: Text(
+                  _copy(
+                    '법인 수금 계좌 설정',
+                    'Thiết lập tài khoản pháp nhân',
+                    'Collection account settings',
+                  ),
+                ),
+              ),
+              if (summary.closingDeposit != null)
+                Text(
+                  '${_copy('레스토랑 마감 실사 입금액', 'Tiền nộp theo kiểm đếm nhà hàng', 'Restaurant counted deposit')}: ${money(summary.closingDeposit!)}',
+                ),
+              Text(
+                '${_copy('현금 환불 / 배달비 지급 / 회수 / 과부족', 'Hoàn tiền mặt / chi giao hàng / thu hồi / chênh lệch', 'Cash refunds / delivery payouts / recoveries / variance')}: ${money(summary.cashRefunds)} / ${money(summary.deliveryCashPaid)} / ${money(summary.deliveryCashRecovered)} / ${money(summary.cashVariance)}',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openSummaryLedger(DailySalesSummary summary, bool red) async {
+    if (_isLoading || _isDownloading) return;
+    setState(() => _isLoading = true);
+    try {
+      final export = await _reportService.loadExport(summary);
+      if (!mounted || export.restaurant == null) return;
+      await showPosReceiptLedger(
+        context,
+        export: export.restaurant!,
+        red: red,
+        service: widget.ledgerService,
+      );
+    } catch (error) {
+      if (mounted) setState(() => _statusMessage = _localizedError(error));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _editCollectionBank(DailySalesSummary summary) async {
+    final bank = summary.bank;
+    final bin = TextEditingController(text: bank?.bin),
+        label = TextEditingController(text: bank?.label),
+        account = TextEditingController(text: bank?.accountNumber),
+        holder = TextEditingController(text: bank?.accountHolder);
+    String? error;
+    bool saving = false;
+    Future<dynamic>? closeAnimation;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          closeAnimation = ModalRoute.of<void>(dialogContext)?.completed;
+          return StatefulBuilder(
+            builder: (context, update) => AlertDialog(
+              key: const Key('sales_collection_bank_dialog'),
+              title: Text(
+                _copy(
+                  '법인 수금 계좌',
+                  'Tài khoản pháp nhân',
+                  'Legal entity collection account',
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(summary.sellerLegalName),
+                    for (final entry in [
+                      (bin, _copy('은행 코드', 'BIN ngân hàng', 'Bank BIN')),
+                      (label, _copy('은행명', 'Tên ngân hàng', 'Bank name')),
+                      (
+                        account,
+                        _copy('계좌번호', 'Số tài khoản', 'Account number'),
+                      ),
+                      (
+                        holder,
+                        _copy('예금주', 'Tên chủ tài khoản', 'Account holder'),
+                      ),
+                    ])
+                      TextField(
+                        controller: entry.$1,
+                        decoration: InputDecoration(labelText: entry.$2),
+                      ),
+                    if (error != null) Text(error!),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                  child: Text(context.l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          update(() => saving = true);
+                          try {
+                            CollectionBank.fromJson({
+                              'bin': bin.text.trim(),
+                              'label': label.text.trim(),
+                              'account_number': account.text.trim(),
+                              'account_holder': holder.text.trim(),
+                            });
+                            final params = {
+                              'p_tax_entity_id': summary.taxEntityId,
+                              'p_bin': bin.text.trim(),
+                              'p_label': label.text.trim(),
+                              'p_account': account.text.trim(),
+                              'p_holder': holder.text.trim(),
+                            };
+                            if (widget.saveCollectionBank case final save?) {
+                              await save(params);
+                            } else {
+                              await supabase.rpc(
+                                'set_tax_entity_collection_bank',
+                                params: params,
+                              );
+                            }
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext);
+                            }
+                            await _load();
+                          } catch (_) {
+                            if (dialogContext.mounted) {
+                              update(
+                                () => error = _copy(
+                                  '계좌 정보를 확인해 주세요.',
+                                  'Vui lòng kiểm tra tài khoản.',
+                                  'Check the account details.',
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (dialogContext.mounted) {
+                              update(() => saving = false);
+                            }
+                          }
+                        },
+                  child: Text(context.l10n.save),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } finally {
+      if (closeAnimation != null) await closeAnimation;
+      bin.dispose();
+      label.dispose();
+      account.dispose();
+      holder.dispose();
+    }
   }
 
   Widget _metrics(BuildContext context, CombinedSalesExport export) {
@@ -443,6 +786,7 @@ class _RestaurantSalesExportScreenState
     setState(() {
       _businessDate = DateFormat('yyyy-MM-dd').format(selected);
       _exports = const [];
+      _summaries = const [];
       _selectedTaxEntityId = null;
       _statusMessage = null;
     });
@@ -455,6 +799,20 @@ class _RestaurantSalesExportScreenState
       _statusIsError = false;
     });
     try {
+      if (widget.loader == null) {
+        final summaries = await _reportService.summaries(_businessDate);
+        if (!mounted) return;
+        setState(() {
+          _summaries = summaries;
+          _exports = const [];
+          _selectedTaxEntityId =
+              summaries.any((r) => r.taxEntityId == _selectedTaxEntityId)
+              ? _selectedTaxEntityId
+              : summaries.firstOrNull?.taxEntityId;
+          if (summaries.isEmpty) _statusMessage = _noSalesMessage(context);
+        });
+        return;
+      }
       final restaurantFuture =
           widget.loader?.call(_businessDate) ??
           restaurantSalesExportService.load(_businessDate);
@@ -503,14 +861,19 @@ class _RestaurantSalesExportScreenState
   }
 
   Future<void> _download() async {
-    final export = _selectedExport;
-    if (export == null || !export.isReadyForDownload) return;
+    var export = _selectedExport;
+    final summary = _selectedSummary;
+    if (export == null && summary == null) return;
     setState(() {
       _isDownloading = true;
       _statusMessage = null;
       _statusIsError = false;
     });
     try {
+      export ??= await _reportService.loadExport(summary!);
+      if (!export.isReadyForDownload) {
+        throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
+      }
       final bytes = Uint8List.fromList(buildCombinedSalesWorkbook(export));
       final taxCode = export.sellerTaxCode.replaceAll(
         RegExp(r'[^A-Za-z0-9_-]'),
@@ -554,6 +917,17 @@ class _RestaurantSalesExportScreenState
     return switch (code) {
       'RESTAURANT_EXPORT_NOT_READY' =>
         context.l10n.restaurantSalesExportNotReady,
+      'RESTAURANT_EXPORT_BLOCKING_ISSUES' ||
+      'MISA_APPROVED_ITEM_METADATA_REQUIRED' => _copy(
+        '메뉴 계산서 명칭·단위, 영수증 금액과 고객 정보를 확인해 주세요.',
+        'Kiểm tra tên, đơn vị hóa đơn, số tiền và thông tin khách hàng.',
+        'Check approved invoice descriptions, units, receipt amounts and buyer information.',
+      ),
+      'SALES_REPORT_CHANGED_REFRESH_REQUIRED' => _copy(
+        '조회 후 매출이 변경되었습니다. 다시 조회해 주세요.',
+        'Doanh thu đã thay đổi. Vui lòng tra cứu lại.',
+        'Sales changed after the query. Please refresh.',
+      ),
       'RESTAURANT_EXPORT_DATA_INTEGRITY_FAILED' =>
         context.l10n.restaurantSalesExportIntegrityFailed,
       _ => context.l10n.restaurantSalesExportFailed('$error'),

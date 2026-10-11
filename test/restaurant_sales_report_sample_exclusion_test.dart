@@ -102,6 +102,10 @@ RestaurantSalesExport _export({required bool sample}) => RestaurantSalesExport(
       buyerPhone: '',
       lineItems: [
         RestaurantSalesLineItem(
+          orderItemId: sample ? 'sample-line' : 'production-line',
+          menuItemId: 'food-menu',
+          invoiceName: 'Món ăn',
+          unitName: 'Phần',
           name: 'Food',
           quantity: 1,
           unitPrice: sample ? 175000 : 100000,

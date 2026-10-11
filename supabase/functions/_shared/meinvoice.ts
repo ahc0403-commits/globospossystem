@@ -289,7 +289,7 @@ function lineItemsForJob(job: JsonRecord): JsonRecord[] {
     ? job.line_items_snapshot as JsonRecord[]
     : [];
   return source.map((item, index) => {
-    const quantity = Math.max(asNumber(item.quantity, 1), 1);
+    const quantity = asNumber(item.quantity, 0);
     const unitPrice = asNumber(item.unit_price, 0);
     const amountWithoutVat = roundMoney(
       asNumber(item.total_amount_ex_tax, unitPrice * quantity),
@@ -304,9 +304,11 @@ function lineItemsForJob(job: JsonRecord): JsonRecord[] {
       LineNumber: index + 1,
       SortOrder: index + 1,
       ItemCode: asString(item.order_item_id) ?? `pos-line-${index + 1}`,
-      ItemName: asString(item.display_name) ?? asString(item.label) ??
+      ItemName: asString(item.invoice_name_vi) ?? asString(item.display_name) ??
+        asString(item.label) ??
         "POS sale",
-      UnitName: "item",
+      UnitName: asString(item.misa_unit_name) ??
+        (job.source_system === "photo_objet_moers" ? "Lần" : ""),
       Quantity: quantity,
       UnitPrice: roundMoney(amountWithoutVat / quantity),
       DiscountRate: 0,
@@ -574,6 +576,9 @@ export function validateCashRegisterInvoicePayload(
     for (const detail of details) {
       if (!asString(detail.ItemName)) {
         missing.add("OriginalInvoiceDetail.ItemName");
+      }
+      if (!asString(detail.UnitName)) {
+        missing.add("OriginalInvoiceDetail.UnitName");
       }
       if (detail.ItemType !== 1) {
         missing.add("OriginalInvoiceDetail.ItemType");

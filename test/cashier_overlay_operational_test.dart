@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:globos_pos_system/core/services/collection_bank_service.dart';
+import 'package:globos_pos_system/core/payments/collection_bank.dart';
+
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:flutter/material.dart';
@@ -1319,7 +1322,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.text('WOORI BANK · 100202042976 · AHN HYOCHANG'),
+      find.text('MSB · 80002014298 · AKJ INTERNATIONAL CO., LTD'),
       findsOneWidget,
     );
     expect(harness.notifier.processedMethod, isNull);
@@ -1610,7 +1613,7 @@ void main() {
 
   for (final qrMethod in [paymentMethodOther, paymentMethodBankTransfer]) {
     testWidgets(
-      'combined $qrMethod shows one QR for the combined total before payment',
+      'combined $qrMethod preserves its payment-specific confirmation',
       (tester) async {
         await _pumpCashier(
           tester,
@@ -1639,6 +1642,18 @@ void main() {
         await tester.tap(find.byKey(Key('cashier_method_dialog_$qrMethod')));
         await tester.pumpAndSettle();
 
+        if (qrMethod == paymentMethodOther) {
+          expect(
+            find.byKey(const Key('cashier_combined_qr_payment_dialog')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const Key('cashier_combined_payment_proof_dialog')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          return;
+        }
         expect(
           find.byKey(const Key('cashier_combined_qr_payment_dialog')),
           findsOneWidget,
@@ -2089,6 +2104,7 @@ Future<_CashierHarness> _pumpCashier(
       GoRoute(
         path: '/cashier',
         builder: (_, __) => CashierScreen(
+          collectionBankServiceOverride: _CollectionBankService(),
           orderServiceOverride: orderService,
           paymentProofServiceOverride: proofService,
           paymentServiceOverride: paymentService,
@@ -2295,4 +2311,15 @@ class _RecordingBankTransferAlertSoundService
     playCount += 1;
     amounts.add(amount);
   }
+}
+
+class _CollectionBankService extends CollectionBankService {
+  @override
+  Future<CollectionBank> load(String storeId, {String? orderId}) async =>
+      const CollectionBank(
+        bin: '970426',
+        accountNumber: '80002014298',
+        accountHolder: 'AKJ INTERNATIONAL CO., LTD',
+        label: 'MSB',
+      );
 }

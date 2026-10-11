@@ -419,6 +419,8 @@ preflight() {
       fail "Missing direct-order-notification-dispatcher Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/index.ts" ]] ||
       fail "Missing direct-order-translation-dispatcher Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/meinvoice-dispatcher/index.ts" ]] ||
+      fail "Missing meinvoice-dispatcher Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -512,6 +514,10 @@ run_checks() {
   log "SePay webhook Edge tests"
   run deno test \
     "$ROOT_DIR/supabase/functions/sepay-webhook/index_test.ts"
+
+  log "MISA item ledger and VAT snapshot tests"
+  run deno check "$ROOT_DIR/supabase/functions/meinvoice-dispatcher/index.ts"
+  run deno test "$ROOT_DIR/supabase/functions/_shared/meinvoice_ledger_test.ts"
 
   log "Emergency fulfilment Edge tests"
   run deno test \
