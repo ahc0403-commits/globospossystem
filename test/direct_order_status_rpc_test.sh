@@ -71,6 +71,109 @@ def counts():
                "(SELECT count(*) FROM inventory_transactions))")
 
 import os
+if os.environ.get('DIRECT_ORDER_RECIPIENT_RPC_TEST') == '1':
+    migration = 'supabase/migrations/20261011140000_direct_order_public_rpc_session_activity.sql'
+    rollback = 'scripts/rollback_direct_order_public_rpc_session_activity.sql'
+    signatures = {
+        'direct_order_public_orders_v5': 'uuid,text,integer',
+        'direct_order_public_status_v10': 'uuid,text,uuid',
+    }
+    originals = {}
+    for name, arguments in signatures.items():
+        target = f"'public.{name}({arguments})'::regprocedure"
+        originals[name] = sql(f'SELECT pg_get_functiondef({target})')
+        assert sql(f'SELECT provolatile FROM pg_proc WHERE oid={target}') == 's'
+    pickup = json.loads(sql("SELECT photo_test.create_request(false,'not_applicable','pickup')"))
+    delivery = json.loads(sql("SELECT photo_test.create_request(false,'customer_direct','delivery')"))
+    def credentials(request_id):
+        return json.loads(sql(
+            "SELECT jsonb_build_object('p_session_id',s.id,'p_secret_hash',s.secret_hash,"
+            "'p_request_id',r.id) FROM direct_order_requests r JOIN direct_order_sessions s "
+            f"ON s.id=r.session_id WHERE r.id='{request_id}'"))
+    delivery_body = credentials(delivery['request_id'])
+    pickup_body = credentials(pickup['request_id'])
+    secret = uuid.uuid4().hex * 2  # Unique disposable fixture hash only.
+    code, empty = rpc('direct_order_public_create_session', {
+        'p_slug': 'photo-test', 'p_secret_hash': secret, 'p_locale': 'ko',
+    })
+    assert code == 200, (code, empty)
+    empty_body = {'p_session_id': empty['session_id'], 'p_secret_hash': secret, 'p_limit': 50}
+    page_body = json.loads(sql(
+        "SELECT jsonb_build_object('p_session_id',session_id,'p_secret_hash',secret_hash) "
+        "FROM progress_measurement.session_scope"))
+    business_before = counts()
+    probes = [('direct_order_public_orders_v5', empty_body),
+              ('direct_order_public_status_v10', delivery_body)]
+    for name, body in probes:
+        code, failed = rpc(name, body)
+        assert code == 405 and failed['code'] == '25006', (name, code, failed)
+        assert failed['message'] == 'cannot execute UPDATE in a read-only transaction'
+    assert counts() == business_before
+    print('DIRECT_ORDER_RECIPIENT_RPC_BEFORE=PASS list=405 status=405 sql_state=25006')
+    apply(migration)
+    for name, body in probes:
+        for attempt in range(30):
+            code, value = rpc(name, body)
+            if code == 200:
+                break
+            assert code == 405 and value['code'] == '25006', (name, code, value)
+            time.sleep(0.1)
+        assert code == 200, 'PostgREST schema cache did not reload'
+    code, value = rpc('direct_order_public_orders_v5', empty_body)
+    assert code == 200 and value == [], (code, value)
+    for status_body in (delivery_body, pickup_body):
+        sql(f"UPDATE direct_order_sessions SET last_seen_at=now()-interval '2 hours' WHERE id='{status_body['p_session_id']}'")
+        code, value = rpc('direct_order_public_status_v10', status_body)
+        assert code == 200 and value['request_id'] == status_body['p_request_id'], (code, value)
+        assert 'booking' in value['delivery'] and 'delivery_policy_version' in value['support']
+        assert sql(f"SELECT last_seen_at>now()-interval '1 minute' FROM direct_order_sessions WHERE id='{status_body['p_session_id']}'") == 't'
+        code, listed = rpc('direct_order_public_orders_v5', {
+            'p_session_id': status_body['p_session_id'],
+            'p_secret_hash': status_body['p_secret_hash'], 'p_limit': 50,
+        })
+        assert code == 200 and any(row['request_id'] == status_body['p_request_id'] for row in listed), (code, listed)
+        assert all('booking_status' in row for row in listed)
+    for limit in (1, 10, 50):
+        sql('SELECT pg_stat_reset()')
+        started = time.monotonic()
+        code, value = rpc('direct_order_public_orders_v5', dict(page_body, p_limit=limit))
+        elapsed = time.monotonic() - started
+        assert code == 200 and len(value) == limit, (code, len(value), limit)
+        # PostgREST's idle pooled connection flushes function stats after the call.
+        for attempt in range(30):
+            batch_calls = int(sql("SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_cooking_progress(uuid[])'::regprocedure"))
+            if batch_calls == 1:
+                break
+            time.sleep(0.1)
+        assert batch_calls == 1, batch_calls
+        detail_calls = int(sql("SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.direct_order_booking_snapshot(uuid)'::regprocedure,'public.direct_order_public_status_v10(uuid,text,uuid)'::regprocedure,'public.direct_order_support_context(uuid,boolean)'::regprocedure)"))
+        assert detail_calls == 0, detail_calls
+        print(f'DIRECT_ORDER_RECIPIENT_RPC_LIST limit={limit} rows={len(value)} bytes={len(json.dumps(value).encode())} seconds={elapsed:.3f} cooking_batch_calls={batch_calls} detail_calls={detail_calls}')
+    denied_probes = [
+        ('direct_order_public_orders_v5', dict(empty_body, p_secret_hash='d' * 64)),
+        ('direct_order_public_orders_v5', dict(empty_body, p_limit=51)),
+        ('direct_order_public_status_v10', dict(delivery_body, p_secret_hash='d' * 64)),
+        ('direct_order_public_status_v10', dict(delivery_body, p_request_id=str(uuid.uuid4()))),
+        ('direct_order_public_status_v10', dict(pickup_body, p_request_id=delivery_body['p_request_id'])),
+    ]
+    for name, body in denied_probes:
+        code, denied = rpc(name, body)
+        assert code >= 400 and denied['code'] == 'P0001', (name, code, denied)
+    sql(f"UPDATE direct_order_sessions SET revoked_at=now() WHERE id='{empty['session_id']}'")
+    code, denied = rpc('direct_order_public_orders_v5', empty_body)
+    assert code >= 400 and denied['code'] == 'P0001', (code, denied)
+    for name, arguments in signatures.items():
+        target = f"'public.{name}({arguments})'::regprocedure"
+        fixed = sql(f'SELECT pg_get_functiondef({target})')
+        assert originals[name].replace(' STABLE SECURITY DEFINER', ' SECURITY DEFINER') == fixed
+    assert counts() == business_before, 'Public reads changed payment or inventory data'
+    apply(rollback)
+    for name, arguments in signatures.items():
+        assert sql(f"SELECT pg_get_functiondef('public.{name}({arguments})'::regprocedure)") == originals[name]
+    apply(migration)
+    apply(migration)  # Reapplying is safe and preserves the existing function contract.
+    print('DIRECT_ORDER_RECIPIENT_RPC_AFTER=PASS empty_list=200 delivery=200 pickup=200 ownership=PASS revoked=PASS bounds=PASS session_touch=PASS business_writes=0 rollback_reapply=PASS')
+    raise SystemExit(0)
 if os.environ.get('DIRECT_ORDER_STATUS_V7_TEST') == '1' or os.environ.get('DIRECT_ORDER_STATUS_V9_TEST') == '1':
     data=json.loads(sql("SELECT jsonb_build_object('p_session_id',r.session_id,'p_secret_hash',s.secret_hash,'p_request_id',r.id) FROM direct_order_requests r JOIN direct_order_sessions s ON s.id=r.session_id WHERE public.direct_order_access_is_open(r.id) LIMIT 1"))
     before=counts()
