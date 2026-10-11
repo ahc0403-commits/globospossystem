@@ -9,7 +9,6 @@ CREATE TEMP TABLE pos_release_anchors ON COMMIT DROP AS
  SELECT md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure)) AS payment,
  (SELECT md5(COALESCE(string_agg(to_jsonb(f)::text,'' ORDER BY f.request_id),'')) FROM public.direct_order_financials f) AS financials,
  (SELECT md5(COALESCE(string_agg(snapshot::text,'' ORDER BY id),'')) FROM public.digital_receipts) AS issued_receipts;
-
 -- COMPONENT 20261010050000_direct_order_recipient_delivery.sql SHA256 eb37e66e002881ce22f5b4fe314bd2bc1097a81bcf0ce54c5d7d2dfb5ae5de34
 -- Recipient pays the courier; booking is separate from physical handoff.
 -- production-gate: self-verifying
