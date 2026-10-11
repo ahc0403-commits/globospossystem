@@ -115,7 +115,7 @@ void main() {
     expect(screenSource, contains('restaurant_sales_export_preview'));
     expect(screenSource, contains('restaurant_sales_export_button'));
     expect(screenSource, contains('MISA_sales_'));
-    expect(screenSource, contains('buildCombinedSalesWorkbook'));
+    expect(screenSource, contains('buildCombinedSalesArtifact'));
     expect(screenSource, contains('restaurant_sales_export_photo_total'));
     expect(screenSource, contains("ext: 'xlsx'"));
     expect(redScreen, isNot(contains('red_invoice_export_button')));

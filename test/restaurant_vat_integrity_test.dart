@@ -1,4 +1,5 @@
 import 'package:excel/excel.dart';
+import 'fixtures/sales_invoice_fixture.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/payments/payment_total_calculator.dart';
 import 'package:globos_pos_system/features/admin/einvoice_misa_workbook.dart';
@@ -156,15 +157,16 @@ void main() {
 
 double _value(List<Data?> row, int column) =>
     double.parse(row[column]!.value.toString());
+var _fixtureLineNo = 0;
 Map<String, dynamic> _line(
   double supply,
   double rate, {
   String type = 'menu_item',
 }) => {
-  'order_item_id': 'line',
-  'menu_item_id': 'menu',
+  'order_item_id': 'line-${_fixtureLineNo++}',
+  'menu_item_id': type == 'wet_tissue_charge' ? null : 'menu',
   'invoice_name_vi': 'Food',
-  'misa_unit_name': 'Phần',
+  'misa_unit_name': type == 'wet_tissue_charge' ? 'Cái' : 'Phần',
   'display_name': 'Food',
   'item_type': type,
   'quantity': 1,
@@ -201,7 +203,9 @@ RestaurantSalesExport _export(
         'gross_sales': gross,
         'sold_at': '2026-09-05T20:00:00+07:00',
         'payment_method': 'CASH',
-        'line_items': lines,
+        'line_items': [
+          for (final l in lines) approvedSalesFixtureLine(l, storeId: 'store'),
+        ],
       },
     ],
   });

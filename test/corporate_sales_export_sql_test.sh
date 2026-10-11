@@ -88,4 +88,28 @@ for method,fields in methods.items():
     print('INSERT INTO fixture_invoice_payment_expectations VALUES('+','.join("'"+v.replace("'","''")+"'" for v in values)+');')
 PY
 run_sql < test/sql/invoice_contacts_payment_methods_test.sql
+run_sql <<'SQL' >/dev/null
+ALTER TABLE public.meinvoice_jobs ADD COLUMN IF NOT EXISTS source_snapshot jsonb DEFAULT '{}';
+SQL
+run_sql < supabase/migrations/20261012010000_sales_invoice_mapping_contract.sql
+run_sql < supabase/migrations/20261012020000_sales_export_page_contract.sql
+run_sql < test/sql/sales_invoice_mapping_contract_test.sql
+run_sql < test/sql/sales_export_scale_test.sql
+# Rehearse the exact initial mapping payload against synthetic store/menu rows.
+python3 - <<'PYINITIAL' | run_sql >/dev/null
+import json
+from pathlib import Path
+payload=json.loads(Path('docs/pos/invoice_mapping_initial_20261011.json').read_text())
+print("CREATE TABLE public.users(auth_id uuid,role text,is_active boolean);")
+print("INSERT INTO public.users VALUES('00000000-0000-0000-0000-000000000001','super_admin',true);")
+print("INSERT INTO public.restaurants(id,name,tax_entity_id) VALUES('80000000-0000-0000-0000-000000000001','BunsikClub Binh Thanh','"+payload['tax_entity_id']+"');")
+for r in payload['rows']:
+    if r['approval_type']=='menu_item':
+        print("INSERT INTO public.menu_items(id,restaurant_id,name,vat_rate) VALUES('"+r['menu_item_id']+"','80000000-0000-0000-0000-000000000001','Synthetic initial menu',8);")
+PYINITIAL
+run_sql < supabase/migrations/20261012030000_sales_invoice_initial_mapping.sql
+run_sql < supabase/migrations/20261012030000_sales_invoice_initial_mapping.sql
+run_sql <<'SQL'
+SELECT fixture_assert((SELECT count(*)=74 FROM invoice_approved_profiles WHERE mapping_version='AKJ-MANUAL-20261011-v1'),'initial one-day data migration is idempotent with exactly 74 approvals');
+SQL
 printf 'CORPORATE_SALES_SQL_TEST=PASS\n'

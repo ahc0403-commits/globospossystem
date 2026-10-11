@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'fixtures/sales_invoice_fixture.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/daily_sales_report_service.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/daily_sales_summary.dart';
 
@@ -130,7 +131,7 @@ Map<String, dynamic> row() => {
   'delivery_cash_recovered': 0,
 };
 Map<String, dynamic> receipt(int i) => {
-  'receipt_id': '$i',
+  'receipt_id': i.toString().padLeft(4, '0'),
   'receipt_source': 'pos_payment',
   'source_system': 'restaurant_pos',
   'store_id': 'store',
@@ -139,7 +140,7 @@ Map<String, dynamic> receipt(int i) => {
   'gross_sales': 10800,
   'payment_method': 'TM',
   'line_items': [
-    {
+    approvedSalesFixtureLine({
       'order_item_id': 'line-$i',
       'menu_item_id': 'menu',
       'invoice_name_vi': 'Food',
@@ -150,6 +151,6 @@ Map<String, dynamic> receipt(int i) => {
       'total_amount_ex_tax': 10000,
       'vat_rate': 8,
       'vat_amount': 800,
-    },
+    }, storeId: 'store'),
   ],
 };

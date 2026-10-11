@@ -1,0 +1,52 @@
+{
+  "flutter_tests_passed": 82,
+  "dart_analyze": "No issues found",
+  "sql_harness": "PASS",
+  "private_comparison": {
+    "receipts": 569,
+    "lines": 1034,
+    "continuation_blank_rows": 465,
+    "numeric_M_Q_match": true,
+    "source_gross": "71213724.81",
+    "rounded_line_gross": "71213723",
+    "rounding_difference": "1.81"
+  },
+  "xlsx": [
+    {
+      "receipts": 569,
+      "lines": 1034,
+      "elapsed_ms": 622,
+      "bytes": 297983,
+      "encode_max_rss": 362692608,
+      "decode_max_rss": 362692608
+    },
+    {
+      "receipts": 5690,
+      "lines": 10340,
+      "elapsed_ms": 5096,
+      "bytes": 2892892,
+      "encode_max_rss": 1131659264,
+      "decode_max_rss": 1131659264
+    }
+  ],
+  "sql": [
+    {
+      "receipts": 569,
+      "lines": 1034,
+      "calls": 8,
+      "bytes": 726157,
+      "elapsed_ms": 143.59,
+      "max_page_ms": 44.25
+    },
+    {
+      "receipts": 5690,
+      "lines": 10340,
+      "calls": 59,
+      "bytes": 7248109,
+      "elapsed_ms": 6589.06,
+      "max_page_ms": 433.46
+    }
+  ],
+  "external_misa_validation": "excluded",
+  "production_applied": false
+}

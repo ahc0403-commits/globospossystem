@@ -1,4 +1,5 @@
 import 'package:excel/excel.dart';
+import 'fixtures/sales_invoice_fixture.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export.dart';
 
@@ -15,7 +16,7 @@ void main() {
           (payload['receipts'] as List).first as Map<String, Object?>;
       general['buyer_email'] = contact['email'];
       general['buyer_phone'] = contact['phone'];
-      final export = createRestaurantSalesExport(payload);
+      final export = _fixtureExport(payload);
       expect(export.isReadyForDownload, isTrue);
       final job = buildRestaurantMisaJob(export.receipts.first);
       final buyer = job['buyer_snapshot'] as Map;
@@ -24,15 +25,16 @@ void main() {
       final rows = Excel.decodeBytes(
         buildRestaurantSalesWorkbook(export),
       ).tables['Hóa đơn GTGT']!.rows;
-      for (final row in rows.skip(8).take(2)) {
+      for (final row in rows.skip(8).take(1)) {
         expect(row[6]?.value.toString() ?? '', contact['email']);
         expect(row[7]?.value.toString() ?? '', contact['phone']);
         expect(row[7]?.value, isA<TextCellValue>());
       }
+      expect(rows[9].sublist(1, 10).every((c) => c?.value == null), isTrue);
     });
   }
   test('preserves every approved menu line under its receipt number', () {
-    final export = createRestaurantSalesExport(_validPayload());
+    final export = _fixtureExport(_validPayload());
 
     expect(export.businessDate, '2026-08-16');
     expect(export.taxEntityId, 'entity-production');
@@ -49,7 +51,12 @@ void main() {
     expect(export.isReadyForDownload, isTrue);
 
     final workbook = Excel.decodeBytes(buildRestaurantSalesWorkbook(export));
-    expect(workbook.tables.keys, ['Hóa đơn GTGT', 'POS Ledger']);
+    expect(workbook.tables.keys, [
+      'Hóa đơn GTGT',
+      'POS Ledger',
+      'Invoice Mapping',
+      'Export Contract',
+    ]);
     final rows = workbook.tables['Hóa đơn GTGT']!.rows;
     expect(rows, hasLength(11));
     expect(rows[7][0]!.value.toString(), 'Số thứ tự hóa đơn (*)');
@@ -93,7 +100,7 @@ void main() {
 
   test('refuses pending and integrity-failed finalizations', () {
     expect(
-      () => createRestaurantSalesExport({
+      () => _fixtureExport({
         'business_date': '2026-08-16',
         'status': 'pending',
         'receipts': const [],
@@ -107,7 +114,7 @@ void main() {
       ),
     );
     expect(
-      () => createRestaurantSalesExport({
+      () => _fixtureExport({
         'business_date': '2026-08-16',
         'status': 'data_integrity_failed',
         'receipts': const [],
@@ -128,7 +135,7 @@ void main() {
       ..['report_ready_at'] = '2026-08-16T00:00:00+07:00'
       ..remove('finalized_at');
 
-    final export = createRestaurantSalesExport(payload);
+    final export = _fixtureExport(payload);
     final grouped = createRestaurantSalesExportsByTaxEntity({
       'business_date': '2026-08-16',
       'status': 'ready',
@@ -157,7 +164,7 @@ void main() {
     final photoReceipts = photo['receipts']! as List<Map<String, Object?>>;
     photoReceipts.first['source_system'] = 'photo_objet_moers';
     expect(
-      () => createRestaurantSalesExport(photo),
+      () => _fixtureExport(photo),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -169,7 +176,7 @@ void main() {
 
     final altered = _validPayload()..['receipt_count'] = 3;
     expect(
-      () => createRestaurantSalesExport(altered),
+      () => _fixtureExport(altered),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -185,7 +192,7 @@ void main() {
     final receipts = payload['receipts']! as List<Map<String, Object?>>;
     receipts.last['buyer_address'] = '';
 
-    final export = createRestaurantSalesExport(payload);
+    final export = _fixtureExport(payload);
     expect(export.isReadyForDownload, isFalse);
     expect(export.blockingIssueCount, 1);
     expect(export.receipts.last.issues, ['MISSING_BUYER_ADDRESS']);
@@ -195,7 +202,7 @@ void main() {
         isA<FormatException>().having(
           (error) => error.message,
           'message',
-          'RESTAURANT_EXPORT_BLOCKING_ISSUES',
+          'MISSING_BUYER_ADDRESS',
         ),
       ),
     );
@@ -204,7 +211,7 @@ void main() {
     final awaitingReceipts =
         awaitingPayload['receipts']! as List<Map<String, Object?>>;
     awaitingReceipts.last['red_invoice_status'] = 'awaiting_information';
-    final awaiting = createRestaurantSalesExport(awaitingPayload);
+    final awaiting = _fixtureExport(awaitingPayload);
     expect(awaiting.isReadyForDownload, isFalse);
     expect(awaiting.receipts.last.issues, ['RED_INVOICE_NOT_READY']);
   });
@@ -215,7 +222,7 @@ void main() {
     receipts.last['buyer_email'] = '';
     receipts.last['buyer_phone'] = '';
 
-    final export = createRestaurantSalesExport(payload);
+    final export = _fixtureExport(payload);
     expect(export.isReadyForDownload, isFalse);
     expect(export.receipts.last.issues, [
       'MISSING_BUYER_EMAIL',
@@ -232,7 +239,7 @@ void main() {
     receipts.first['gross_sales'] = 104800;
     payload['gross_sales'] = 212800;
 
-    final export = createRestaurantSalesExport(payload);
+    final export = _fixtureExport(payload);
     expect(export.receipts.first.issues, isEmpty);
 
     final workbook = Excel.decodeBytes(buildRestaurantSalesWorkbook(export));
@@ -370,3 +377,6 @@ Map<String, dynamic> _validPayload() => {
     },
   ],
 };
+
+RestaurantSalesExport _fixtureExport(Map<String, dynamic> p) =>
+    createRestaurantSalesExport(approvedSalesFixturePayload(p));
