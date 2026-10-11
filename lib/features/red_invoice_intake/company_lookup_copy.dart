@@ -23,11 +23,15 @@ class CompanyLookupCopy extends BuyerNumberCopy {
       pick('고객 제공명', 'Tên khách cung cấp', 'Customer-provided name');
   String get found =>
       pick('조회 회사명', 'Tên công ty tra cứu', 'Company name from lookup');
-  String get source => pick(
-    'ESGOO 조회 결과 · 최신 등록 정보와 다를 수 있습니다.',
-    'Kết quả ESGOO · Có thể khác thông tin đăng ký mới nhất.',
-    'ESGOO result · May differ from the latest registered information.',
-  );
+  String source(String provider) {
+    final label = provider == 'vietqr' ? 'VietQR.io' : 'ESGOO';
+    return pick(
+      '$label 조회 결과 · 최신 등록 정보와 다를 수 있습니다.',
+      'Kết quả $label · Có thể khác thông tin đăng ký mới nhất.',
+      '$label result · May differ from the latest registered information.',
+    );
+  }
+
   String failure(CompanyLookupOutcome outcome) => switch (outcome) {
     CompanyLookupOutcome.disabled => pick(
       '이 매장은 회사명 자동 조회가 꺼져 있습니다. 직접 입력해 주세요.',

@@ -3,7 +3,7 @@ import {
   type ProviderFetch,
 } from "../../supabase/functions/company-tax-lookup/handler.ts";
 const records = [];
-for (const code of ["0316956049", "0316794479", "0316794479-001"]) {
+for (const code of ["0318453298", "0316956049", "0316794479-001"]) {
   let calls = 0, bytes = 0;
   const tracked: ProviderFetch = async (input, init) => {
     calls++;
@@ -19,13 +19,14 @@ for (const code of ["0316956049", "0316794479", "0316794479-001"]) {
     return new Response(body, { status: res.status, headers: res.headers });
   };
   const start = performance.now();
-  const name = await fetchCompany(code, tracked);
+  const company = await fetchCompany(code, tracked);
   records.push({
     taxCode: code,
-    outcome: name ? "success" : "unavailable",
+    outcome: company ? "success" : "unavailable",
     calls,
     upstreamBytes: bytes,
-    companyNameCharacters: name?.length ?? 0,
+    companyNameCharacters: company?.name.length ?? 0,
+    source: company?.source ?? null,
     elapsedMs: Math.round(performance.now() - start),
   });
 }

@@ -83,6 +83,52 @@ void main() {
       }
     },
   );
+  test('both known provider sources retain provenance', () {
+    for (final source in ['esgoo', 'vietqr']) {
+      final result = CompanyLookupResult.parse({
+        ...success(code),
+        'source': source,
+      }, code);
+      expect(result.outcome, CompanyLookupOutcome.success);
+      expect(result.source, source);
+    }
+  });
+  testWidgets(
+    'reported AKJ code fills name from fallback and labels actual source',
+    (tester) async {
+      const reportedCode = '0318453298';
+      const reportedName = 'CÔNG TY TNHH AKJ INTERNATIONAL';
+      var calls = 0;
+      final service = CompanyTaxLookupService(
+        transport: (_, number) async {
+          calls++;
+          return {...success(number, reportedName), 'source': 'vietqr'};
+        },
+        sessionScope: () => 'sample-session',
+      );
+      final c = BuyerInformationController({
+        'buyer_number_value': reportedCode,
+        'buyer_address': 'Keep address',
+      });
+      await tester.pumpWidget(app(c, service, locale: 'ko'));
+      await tester.tap(find.byKey(const Key('pos_company_lookup')));
+      await tester.pumpAndSettle();
+      expect(c.fields['buyer_legal_name']!.text, reportedName);
+      expect(c.fields['buyer_address']!.text, 'Keep address');
+      expect(
+        find.text(CompanyLookupCopy('ko').source('vietqr')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('ESGOO'), findsNothing);
+      await tester.tap(find.byKey(const Key('pos_company_lookup')));
+      await tester.pumpAndSettle();
+      expect(calls, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+      service.dispose();
+    },
+  );
   test(
     '100 same-code callers share one request; cache hit makes zero requests',
     () async {

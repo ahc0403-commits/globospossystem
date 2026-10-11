@@ -274,7 +274,10 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
           ),
         ],
         if (success)
-          Text(copy.source, style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            copy.source(result!.source!),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
       ],
     );
   }

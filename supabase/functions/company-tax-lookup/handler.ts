@@ -56,15 +56,21 @@ async function readBounded(
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 }
 
-export async function fetchCompany(
+export type CompanyMatch = { name: string; source: "esgoo" | "vietqr" };
+
+async function fetchProvider(
   taxCode: string,
+  source: CompanyMatch["source"],
   fetcher: ProviderFetch,
-  timeoutMs = 5000,
-): Promise<string | null> {
+  timeoutMs: number,
+): Promise<CompanyMatch | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const url = source === "esgoo"
+    ? `https://esgoo.net/api-mst/${taxCode}.htm`
+    : `https://api.vietqr.io/v2/business/${taxCode}`;
   try {
-    const result = await fetcher(`https://esgoo.net/api-mst/${taxCode}.htm`, {
+    const result = await fetcher(url, {
       signal: controller.signal,
       redirect: "error",
       headers: { Accept: "application/json" },
@@ -74,16 +80,18 @@ export async function fetchCompany(
       return null;
     }
     const value = JSON.parse(await readBounded(result, 64 * 1024));
-    if (
-      value?.error !== 0 || value.data?.mst !== taxCode ||
-      typeof value.data?.ten !== "string"
-    ) return null;
-    const name = (value.data.ten as string).trim();
+    if (controller.signal.aborted) return null;
+    const valid = source === "esgoo"
+      ? value?.error === 0 && value.data?.mst === taxCode
+      : value?.code === "00" && value.data?.id === taxCode;
+    const rawName = source === "esgoo" ? value?.data?.ten : value?.data?.name;
+    if (!valid || typeof rawName !== "string") return null;
+    const name = rawName.trim();
     return name.length > 0 && Array.from(name).length <= 300 &&
         Array.from(name).every((ch) =>
           ch.codePointAt(0)! >= 32 && ch.codePointAt(0)! !== 127
         )
-      ? name
+      ? { name, source }
       : null;
   } catch (_) {
     // Provider failures do not prove that a company/tax code is unregistered.
@@ -92,6 +100,23 @@ export async function fetchCompany(
     clearTimeout(timer);
     controller.abort();
   }
+}
+
+/** At most two sequential providers, sharing one five-second deadline. No retries. */
+export async function fetchCompany(
+  taxCode: string,
+  fetcher: ProviderFetch,
+  timeoutMs = 5000,
+): Promise<CompanyMatch | null> {
+  if (!validTaxCode(taxCode) || timeoutMs <= 0) return null;
+  const deadline = performance.now() + timeoutMs;
+  // Reserve half the budget so an unresponsive primary cannot starve fallback.
+  const primary = await fetchProvider(taxCode, "esgoo", fetcher, timeoutMs / 2);
+  if (primary) return primary;
+  const remaining = deadline - performance.now();
+  return remaining > 0
+    ? await fetchProvider(taxCode, "vietqr", fetcher, remaining)
+    : null;
 }
 
 export function createLookupHandler(deps: LookupDependencies) {
@@ -150,12 +175,12 @@ export function createLookupHandler(deps: LookupDependencies) {
         return reply(status, claim.outcome);
       }
       claimed = true;
-      const name = await fetchCompany(taxCode, deps.fetch);
-      if (!name) return reply(200, "unavailable");
+      const company = await fetchCompany(taxCode, deps.fetch);
+      if (!company) return reply(200, "unavailable");
       return reply(200, "success", {
         tax_code: taxCode,
-        company_name: name,
-        source: "esgoo",
+        company_name: company.name,
+        source: company.source,
         fetched_at: (deps.now?.() ?? new Date()).toISOString(),
       });
     } catch (_) {
