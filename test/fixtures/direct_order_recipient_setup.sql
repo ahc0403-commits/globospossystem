@@ -54,4 +54,3 @@ ALTER TABLE public.direct_order_financials DROP CONSTRAINT direct_order_financia
 ALTER TABLE public.direct_order_financials ADD CONSTRAINT direct_order_financials_delivery_payment_mode_check
  CHECK(delivery_payment_mode IN ('customer_direct','store_prepaid','not_applicable'));
 ALTER TABLE public.direct_order_financials ADD CONSTRAINT direct_order_pickup_financial_zero_fee CHECK(delivery_payment_mode<>'not_applicable' OR delivery_fee_total=0);
-

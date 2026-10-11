@@ -76,4 +76,4 @@ rg -q '^50\|' "$ledger_tmp/two.log"
 ledger_total="$(docker exec "$db_name" psql -X -U postgres -d report_ready_test -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcname='pos_receipt_ledger_batch';")"
 [[ "$ledger_total" == "3" ]] || { printf 'POS_LEDGER_CONCURRENT_CALL_COUNT=%s\n' "$ledger_total"; exit 1; }
 printf 'POS_LEDGER_CONCURRENT_READS=PASS sessions=2 rows_per_response=50 rpc_per_session=1\n'
-printf 'POS_LEDGER_SQL_TEST=PASS\n' 
+printf 'POS_LEDGER_SQL_TEST=PASS\n'
