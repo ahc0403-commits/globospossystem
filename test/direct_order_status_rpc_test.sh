@@ -72,7 +72,7 @@ def counts():
 
 import os
 if os.environ.get('DIRECT_ORDER_RECIPIENT_RPC_TEST') == '1':
-    migration = 'supabase/migrations/20261011140000_direct_order_public_rpc_session_activity.sql'
+    migration = 'supabase/migrations/20261011183000_direct_order_public_rpc_session_activity.sql'
     rollback = 'scripts/rollback_direct_order_public_rpc_session_activity.sql'
     signatures = {
         'direct_order_public_orders_v5': 'uuid,text,integer',

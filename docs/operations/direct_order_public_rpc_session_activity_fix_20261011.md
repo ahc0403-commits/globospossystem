@@ -8,7 +8,7 @@
 경로에서 `last_seen_at`을 UPDATE하려다 SQLSTATE `25006` / HTTP 405가 발생했다.
 Edge Function은 이를 일반적인 일시 오류 HTTP 503으로 변환했다.
 
-신규 마이그레이션 `20261011140000_direct_order_public_rpc_session_activity.sql`은
+신규 마이그레이션 `20261011183000_direct_order_public_rpc_session_activity.sql`은
 목록 `orders_v5`와 같은 세션 검증을 호출하는 상태 `status_v10`을 `VOLATILE`로
 변경한다. 두 함수의 기존 본문 해시, SECURITY DEFINER, search_path와 실행 권한을
 확인하고, 변경 뒤 `pg_proc`의 다른 속성이 보존되었는지 같은 트랜잭션에서 검사한다.
@@ -44,7 +44,9 @@ flutter test test/direct_order_customer_payment_status_test.dart \
 ## 운영 반영
 
 DB만 변경하므로 정식 `scripts/deploy_pos_production.sh --db-only --migration`
-경로를 사용한다. PR의 필수 CI 통과와 병합 뒤 정확한 main SHA의
+경로를 사용한다. 기존 운영 이력의 `20261011140000`은 다른 배포
+`pos_recipient_buyer_lookup_bounded_release`에 이미 사용되어 새 번호
+`20261011183000`을 사용한다. PR의 필수 CI 통과와 병합 뒤 정확한 main SHA의
 `POS release contract` 성공을 확인한 다음, 깨끗한 작업 사본에서 dry-run과
 운영 적용을 실행한다. 기존 웹·Edge Function 버전은 그대로 사용한다.
 
