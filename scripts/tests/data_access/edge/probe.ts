@@ -34,11 +34,16 @@ function invoice(i: number, entity: string) {
   return {
     id: `00000000-0000-7000-8000-${String(i).padStart(12, "0")}`,
     tax_entity_id: entity,
+    source_system: "restaurant_pos",
+    snapshot_version: 2,
     status: "pending",
     dispatch_attempts: 0,
     created_at: "2026-10-10T01:00:00Z",
     payment_method_snapshot: "Tien mat",
     line_items_snapshot: [{
+      order_item_id: `fixture-line-${i}`,
+      invoice_name_vi: "Món ăn thử nghiệm",
+      misa_unit_name: "Phần",
       quantity: 1,
       unit_price_ex_tax: 100000,
       total_amount_ex_tax: 100000,
