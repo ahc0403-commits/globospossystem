@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../auth/auth_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/inventory_service.dart';
@@ -637,6 +638,8 @@ final inventoryReportProvider =
 class InventoryPurchaseSupplierCatalogState {
   final List<Map<String, dynamic>> suppliers;
   final List<Map<String, dynamic>> supplierItems;
+  final bool hasMore;
+  final Map<String, dynamic>? pageStats;
   final bool isLoading;
   final bool isSaving;
   final String? error;
@@ -644,6 +647,8 @@ class InventoryPurchaseSupplierCatalogState {
   const InventoryPurchaseSupplierCatalogState({
     this.suppliers = const [],
     this.supplierItems = const [],
+    this.hasMore = false,
+    this.pageStats,
     this.isLoading = false,
     this.isSaving = false,
     this.error,
@@ -652,6 +657,8 @@ class InventoryPurchaseSupplierCatalogState {
   InventoryPurchaseSupplierCatalogState copyWith({
     List<Map<String, dynamic>>? suppliers,
     List<Map<String, dynamic>>? supplierItems,
+    bool? hasMore,
+    Map<String, dynamic>? pageStats,
     bool? isLoading,
     bool? isSaving,
     String? error,
@@ -659,6 +666,8 @@ class InventoryPurchaseSupplierCatalogState {
   }) => InventoryPurchaseSupplierCatalogState(
     suppliers: suppliers ?? this.suppliers,
     supplierItems: supplierItems ?? this.supplierItems,
+    hasMore: hasMore ?? this.hasMore,
+    pageStats: pageStats ?? this.pageStats,
     isLoading: isLoading ?? this.isLoading,
     isSaving: isSaving ?? this.isSaving,
     error: clearError ? null : (error ?? this.error),
@@ -670,25 +679,81 @@ class InventoryPurchaseSupplierCatalogNotifier
   InventoryPurchaseSupplierCatalogNotifier()
     : super(const InventoryPurchaseSupplierCatalogState());
 
+  int _readGeneration = 0;
+  String? _storeId;
   Future<void> load(String storeId) async {
+    if (_storeId != storeId) {
+      state = const InventoryPurchaseSupplierCatalogState();
+    }
+    _storeId = storeId;
+    final generation = ++_readGeneration;
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final suppliers = await inventoryService.fetchInventorySuppliers(
         storeId: storeId,
       );
-      final supplierItems = await inventoryService.fetchInventorySupplierItems(
+      final page = await inventoryService.fetchInventoryCatalogPage(
         storeId: storeId,
+        source: 'supplier_items',
       );
+      if (!mounted || generation != _readGeneration) return;
       state = state.copyWith(
         suppliers: suppliers,
-        supplierItems: supplierItems,
+        supplierItems: List<Map<String, dynamic>>.from(page['rows'] as List),
+        hasMore: page['has_more'] as bool,
+        pageStats: Map<String, dynamic>.from(page['stats'] as Map),
         isLoading: false,
       );
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: _mapSupplierCatalogError(e, 'Failed to load suppliers.'),
+      if (mounted && generation == _readGeneration) {
+        state = state.copyWith(
+          isLoading: false,
+          error: _mapSupplierCatalogError(e, 'Failed to load suppliers.'),
+        );
+      }
+    }
+  }
+
+  Future<void> loadItems(
+    String storeId, {
+    String? supplierId,
+    String? productId,
+    String? query,
+    String? afterId,
+  }) async {
+    if (_storeId != storeId) {
+      state = const InventoryPurchaseSupplierCatalogState();
+    }
+    _storeId = storeId;
+    final generation = ++_readGeneration;
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final page = await inventoryService.fetchInventoryCatalogPage(
+        storeId: storeId,
+        source: 'supplier_items',
+        supplierId: supplierId,
+        productId: productId,
+        query: query,
+        afterId: afterId,
       );
+      if (!mounted || generation != _readGeneration || _storeId != storeId) {
+        return;
+      }
+      state = state.copyWith(
+        supplierItems: List<Map<String, dynamic>>.from(page['rows'] as List),
+        hasMore: page['has_more'] as bool,
+        pageStats: page['stats'] == null
+            ? null
+            : Map<String, dynamic>.from(page['stats'] as Map),
+        isLoading: false,
+      );
+    } catch (e) {
+      if (mounted && generation == _readGeneration) {
+        state = state.copyWith(
+          isLoading: false,
+          error: _mapSupplierCatalogError(e, 'Failed to load supplier items.'),
+        );
+      }
     }
   }
 
@@ -886,16 +951,32 @@ final inventoryPurchaseSupplierCatalogProvider =
     StateNotifierProvider<
       InventoryPurchaseSupplierCatalogNotifier,
       InventoryPurchaseSupplierCatalogState
-    >((ref) => InventoryPurchaseSupplierCatalogNotifier());
+    >((ref) {
+      ref.watch(
+        authProvider.select(
+          (a) => (
+            a.user?.id,
+            a.role,
+            a.storeId,
+            a.accessibleStores.map((s) => s.id).join(','),
+          ),
+        ),
+      );
+      return InventoryPurchaseSupplierCatalogNotifier();
+    });
 
 class InventoryPurchaseProductCatalogState {
   final List<Map<String, dynamic>> products;
+  final bool hasMore;
+  final Map<String, dynamic>? pageStats;
   final bool isLoading;
   final bool isSaving;
   final String? error;
 
   const InventoryPurchaseProductCatalogState({
     this.products = const [],
+    this.hasMore = false,
+    this.pageStats,
     this.isLoading = false,
     this.isSaving = false,
     this.error,
@@ -903,12 +984,16 @@ class InventoryPurchaseProductCatalogState {
 
   InventoryPurchaseProductCatalogState copyWith({
     List<Map<String, dynamic>>? products,
+    bool? hasMore,
+    Map<String, dynamic>? pageStats,
     bool? isLoading,
     bool? isSaving,
     String? error,
     bool clearError = false,
   }) => InventoryPurchaseProductCatalogState(
     products: products ?? this.products,
+    hasMore: hasMore ?? this.hasMore,
+    pageStats: pageStats ?? this.pageStats,
     isLoading: isLoading ?? this.isLoading,
     isSaving: isSaving ?? this.isSaving,
     error: clearError ? null : (error ?? this.error),
@@ -920,18 +1005,55 @@ class InventoryPurchaseProductCatalogNotifier
   InventoryPurchaseProductCatalogNotifier()
     : super(const InventoryPurchaseProductCatalogState());
 
-  Future<void> load(String storeId) async {
+  int _readGeneration = 0;
+  String? _storeId;
+  Future<void> load(
+    String storeId, {
+    String? query,
+    String? afterId,
+    bool complete = false,
+  }) async {
+    if (_storeId != storeId) {
+      state = const InventoryPurchaseProductCatalogState();
+    }
+    _storeId = storeId;
+    final generation = ++_readGeneration;
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final products = await inventoryService.fetchInventoryProducts(
-        storeId: storeId,
-      );
-      state = state.copyWith(products: products, isLoading: false);
+      if (complete) {
+        final products = await inventoryService.fetchInventoryProducts(
+          storeId: storeId,
+        );
+        if (!mounted || generation != _readGeneration) return;
+        state = state.copyWith(
+          products: products,
+          hasMore: false,
+          isLoading: false,
+        );
+      } else {
+        final page = await inventoryService.fetchInventoryCatalogPage(
+          storeId: storeId,
+          source: 'products',
+          query: query,
+          afterId: afterId,
+        );
+        if (!mounted || generation != _readGeneration) return;
+        state = state.copyWith(
+          products: List<Map<String, dynamic>>.from(page['rows'] as List),
+          hasMore: page['has_more'] as bool,
+          pageStats: page['stats'] == null
+              ? null
+              : Map<String, dynamic>.from(page['stats'] as Map),
+          isLoading: false,
+        );
+      }
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: _mapProductCatalogError(e, 'Failed to load products.'),
-      );
+      if (mounted && generation == _readGeneration) {
+        state = state.copyWith(
+          isLoading: false,
+          error: _mapProductCatalogError(e, 'Failed to load products.'),
+        );
+      }
     }
   }
 
@@ -1152,7 +1274,19 @@ final inventoryPurchaseProductCatalogProvider =
     StateNotifierProvider<
       InventoryPurchaseProductCatalogNotifier,
       InventoryPurchaseProductCatalogState
-    >((ref) => InventoryPurchaseProductCatalogNotifier());
+    >((ref) {
+      ref.watch(
+        authProvider.select(
+          (a) => (
+            a.user?.id,
+            a.role,
+            a.storeId,
+            a.accessibleStores.map((s) => s.id).join(','),
+          ),
+        ),
+      );
+      return InventoryPurchaseProductCatalogNotifier();
+    });
 
 class InventoryPurchaseOverviewState {
   final Map<String, dynamic>? dashboard;

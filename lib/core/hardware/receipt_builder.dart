@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import '../utils/floor_label.dart';
 import '../utils/time_utils.dart';
+import 'receipt_delivery_policy.dart';
 
 class ReceiptBuilder {
   static const bankTransferQrAsset = 'assets/images/woori_bank_account_qr.jpg';
@@ -32,6 +33,7 @@ class ReceiptBuilder {
     int? dinerCount,
     bool utensilsRequested = true,
     String? fulfillmentMethod,
+    String? deliveryPaymentMode,
     String? directOrderReference,
     String? orderNotes,
     double refundedTotal = 0,
@@ -140,6 +142,15 @@ class ReceiptBuilder {
     if (directOrderReference != null &&
         directOrderReference != directReferenceCode) {
       bytes.addAll(generator.text('Ma don: ${_escText(directOrderReference)}'));
+    }
+    if (recipientPaysDelivery(deliveryPaymentMode, fulfillmentMethod)) {
+      bytes.addAll(
+        generator.text(
+          _escText(recipientDeliveryNoticeVi),
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      bytes.addAll(generator.hr());
     }
     if (fulfillmentMethod != null ||
         directFulfillmentType != null ||
@@ -354,7 +365,12 @@ class ReceiptBuilder {
     );
     bytes.addAll(
       generator.text(
-        'DA THANH TOAN',
+        recipientPaysDelivery(
+              deliveryPaymentMode,
+              isPickup ? 'pickup' : 'delivery',
+            )
+            ? driverFoodPaidVi
+            : 'DA THANH TOAN',
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
@@ -430,7 +446,10 @@ class ReceiptBuilder {
     }
     bytes.addAll(_amountRow(generator, 'Tien mon', menuTotal));
     bytes.addAll(_amountRow(generator, 'Phi dich vu', serviceChargeTotal));
-    if (deliveryPaymentMode == 'store_prepaid') {
+    if (!recipientPaysDelivery(
+      deliveryPaymentMode,
+      isPickup ? 'pickup' : 'delivery',
+    )) {
       bytes.addAll(
         _amountRow(generator, 'Phi giao hang Grab', deliveryFeeTotal),
       );
@@ -452,16 +471,22 @@ class ReceiptBuilder {
     bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
-        deliveryPaymentMode == 'customer_direct'
-            ? 'Khach tra phi Grab truc tiep tai xe'
+        recipientPaysDelivery(
+              deliveryPaymentMode,
+              isPickup ? 'pickup' : 'delivery',
+            )
+            ? driverDoNotCollectFoodVi
             : 'Khach can tra: ${_formatVnd(0)}',
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
     bytes.addAll(
       generator.text(
-        deliveryPaymentMode == 'customer_direct'
-            ? 'KHONG THU LAI TIEN MON'
+        recipientPaysDelivery(
+              deliveryPaymentMode,
+              isPickup ? 'pickup' : 'delivery',
+            )
+            ? driverCollectDeliveryVi
             : 'KHONG THU THEM TIEN CUA KHACH',
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
@@ -1238,6 +1263,7 @@ class QueuedPaymentReceipt {
     this.dinerCount,
     this.utensilsRequested = true,
     this.fulfillmentMethod,
+    this.deliveryPaymentMode,
     this.directOrderReference,
     this.orderNotes,
     this.refundedTotal = 0,
@@ -1266,6 +1292,7 @@ class QueuedPaymentReceipt {
   final int? dinerCount;
   final bool utensilsRequested;
   final String? fulfillmentMethod;
+  final String? deliveryPaymentMode;
   final String? directOrderReference;
   final String? orderNotes;
   final double refundedTotal;
@@ -1289,6 +1316,7 @@ class QueuedPaymentReceipt {
       dinerCount: _packingDinerCount(payload['diner_count']),
       utensilsRequested: payload['utensils_requested'] != false,
       fulfillmentMethod: payload['fulfillment_method']?.toString(),
+      deliveryPaymentMode: payload['delivery_payment_mode']?.toString(),
       directOrderReference: payload['direct_order_reference']?.toString(),
       refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
@@ -1427,6 +1455,7 @@ class QueuedDeliveryDriverReceipt {
     return QueuedDeliveryDriverReceipt(
       deliveryPaymentMode:
           payload['direct_delivery_payment_mode']?.toString() ??
+          payload['delivery_payment_mode']?.toString() ??
           'store_prepaid',
       orderNotes: payload['order_notes']?.toString(),
       dinerCount: _packingDinerCount(payload['diner_count']),

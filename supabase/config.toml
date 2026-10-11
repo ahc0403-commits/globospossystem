@@ -22,3 +22,7 @@ verify_jwt = false
 
 [functions.direct-order-translation-dispatcher]
 verify_jwt = false
+
+# Handler verifies the bearer token through Auth before any lookup claim.
+[functions.company-tax-lookup]
+verify_jwt = false

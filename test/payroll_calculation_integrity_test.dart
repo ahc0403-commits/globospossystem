@@ -33,6 +33,7 @@ class _AttendanceServiceFake extends AttendanceService {
 
   @override
   Future<List<Map<String, dynamic>>> fetchPayrollLogs({
+    String? employeeId,
     required String storeId,
     required DateTime from,
     required DateTime to,
@@ -43,7 +44,10 @@ class _AttendanceServiceFake extends AttendanceService {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
+  Future<List<Map<String, dynamic>>> fetchStaffList(
+    String storeId, {
+    String? employeeId,
+  }) async {
     final staffById = <String, Map<String, dynamic>>{};
     for (final log in logs) {
       final id = log['user_id']?.toString() ?? '';
@@ -89,6 +93,7 @@ class _AttendanceServiceFake extends AttendanceService {
 
   @override
   Future<List<Map<String, dynamic>>> fetchDailyAllowances({
+    String? employeeId,
     required String storeId,
     required DateTime from,
     required DateTime to,

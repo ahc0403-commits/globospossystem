@@ -181,7 +181,7 @@ class DirectOrderStaffService {
     int limit = 100,
   }) async {
     final raw = await supabase.rpc(
-      'direct_order_staff_list_v4',
+      'direct_order_staff_list_v5',
       params: {
         'p_store_id': storeId,
         'p_states': states,
@@ -198,7 +198,7 @@ class DirectOrderStaffService {
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_detail_v5',
+        'direct_order_staff_detail_v6',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
@@ -224,6 +224,61 @@ class DirectOrderStaffService {
       ),
     );
   }
+
+  Future<Map<String, dynamic>> bookDriver({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String operationId,
+    required String action,
+    required Map<String, dynamic> payload,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_booking_action',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_operation_id': operationId,
+        'p_action': action,
+        'p_payload': payload,
+      },
+    ),
+  );
+
+  Future<void> handoffBooking({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String bookingId,
+  }) async {
+    await supabase.rpc(
+      'direct_order_handoff_booking',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_booking_id': bookingId,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> markCooked({
+    required String storeId,
+    required String ticketId,
+    required int expectedVersion,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_mark_cooked',
+      params: {
+        'p_store_id': storeId,
+        'p_ticket_id': ticketId,
+        'p_expected_version': expectedVersion,
+      },
+    ),
+  );
+
+  String newDeliveryOperationId() => const Uuid().v4();
 
   Future<Map<String, dynamic>> sendMessage({
     required String storeId,
@@ -345,6 +400,23 @@ class DirectOrderStaffService {
     ),
   );
 
+  Future<Map<String, dynamic>> saveBuyerInformation({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required Map<String, dynamic> patch,
+  }) async => _map(
+    await supabase.rpc(
+      'pos_direct_order_save_buyer',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_patch': patch,
+      },
+    ),
+  );
+
   Future<Map<String, dynamic>> supportAction({
     required String storeId,
     required String requestId,
@@ -416,7 +488,7 @@ class DirectOrderStaffService {
       await attachmentRequest(
         storeId: storeId,
         requestId: requestId,
-        action: 'staff_attachment_commit',
+        action: 'staff_chat_attachment_commit',
         payload: payload,
       );
       return;
@@ -426,7 +498,7 @@ class DirectOrderStaffService {
     final upload = await attachmentRequest(
       storeId: storeId,
       requestId: requestId,
-      action: 'staff_attachment_upload',
+      action: 'staff_chat_attachment_upload',
       payload: payload,
     );
     await supabase.storage
@@ -440,7 +512,7 @@ class DirectOrderStaffService {
     await attachmentRequest(
       storeId: storeId,
       requestId: requestId,
-      action: 'staff_attachment_commit',
+      action: 'staff_chat_attachment_commit',
       payload: payload,
     );
   }
@@ -681,7 +753,7 @@ class DirectOrderStaffService {
   }) async {
     return _list(
       await supabase.rpc(
-        'direct_delivery_ticket_list_v3',
+        'direct_delivery_ticket_list_v4',
         params: {'p_store_id': storeId, 'p_statuses': statuses, 'p_limit': 200},
       ),
     );
@@ -793,7 +865,7 @@ class DirectOrderStaffService {
         '${value.day.toString().padLeft(2, '0')}';
     return _map(
       await supabase.rpc(
-        'direct_order_analytics_v3',
+        'direct_order_analytics_v4',
         params: {
           'p_store_id': storeId,
           'p_from_date': date(from),

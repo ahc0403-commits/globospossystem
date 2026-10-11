@@ -175,6 +175,7 @@ class PayrollService {
       storeId: storeId,
       from: periodStartUtc,
       to: periodEndExclusiveUtc,
+      employeeId: employeeId,
     );
     final holidays = await _attendanceService.fetchVietnamPublicHolidays(
       from: normalizedPeriodStart,
@@ -184,8 +185,12 @@ class PayrollService {
       storeId: storeId,
       from: normalizedPeriodStart,
       to: periodEnd,
+      employeeId: employeeId,
     );
-    final staff = await _attendanceService.fetchStaffList(storeId);
+    final staff = await _attendanceService.fetchStaffList(
+      storeId,
+      employeeId: employeeId,
+    );
     final allowanceByEmployeeDate = <String, Map<String, dynamic>>{
       for (final allowance in allowances)
         '${allowance['employee_id']}|${allowance['work_date']}': allowance,

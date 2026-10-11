@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-11",
+  "arch": "macos_arm64",
+  "macos": "26.6.2",
+  "logical_cpus": 11,
+  "host_memory_bytes": 19327352832,
+  "dart": "3.11.4",
+  "flutter": "3.41.6",
+  "deno": "2.7.13",
+  "chrome": "154.0.8037.98",
+  "sql_timing": "postgres:15, 2 CPU/1 GiB; history/RLS 2GiB",
+  "financial_integration": "Supabase PostgreSQL 17.6.1.104; PostgREST v14.5, row cap 100",
+  "native_samples": "20 fresh AOT processes per input/mode, interleaved; warm OS filesystem cache, not a 20-run warmed process",
+  "sql_samples": "20 warm server EXPLAIN samples; separate first inner-query EXPLAIN included, not cold disk-cache measurements",
+  "background": "One shared desktop; repository checks and disposable fixtures may share CPU. Structural bounds and raw timing distributions are reported separately."
+}

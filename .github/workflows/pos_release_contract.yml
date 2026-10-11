@@ -12,7 +12,7 @@ jobs:
   contract:
     name: POS release contract
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -36,10 +36,11 @@ jobs:
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: 'v2.7.13'
-      - name: Install PostgreSQL client
+      - name: Install PostgreSQL client and ripgrep
         run: |
-          if command -v psql >/dev/null 2>&1; then
+          if command -v psql >/dev/null 2>&1 && command -v rg >/dev/null 2>&1; then
             psql --version
+            rg --version
             exit 0
           fi
 
@@ -55,7 +56,7 @@ jobs:
           sudo timeout 3m apt-get "${apt_options[@]}" update
           for attempt in 1 2; do
             if sudo timeout 3m apt-get "${apt_options[@]}" install \
-              --yes --fix-missing postgresql-client; then
+              --yes --fix-missing postgresql-client ripgrep; then
               break
             fi
             if [[ "${attempt}" -eq 2 ]]; then
@@ -64,6 +65,7 @@ jobs:
             sudo apt-get clean
           done
           psql --version
+          rg --version
       - name: Prime SQL test images from Docker Hub
         run: |
           docker pull supabase/postgres:17.6.1.104

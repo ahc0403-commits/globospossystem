@@ -5,6 +5,8 @@ import 'package:archive/archive.dart';
 import 'package:excel/excel.dart';
 import 'package:xml/xml.dart';
 
+import 'bounded_xlsx.dart';
+
 enum ExcelWorkbookDecodeFailure {
   invalidContainer,
   invalidXml,
@@ -35,11 +37,12 @@ class ExcelWorkbookDecodeException implements Exception {
 Excel decodeExcelWorkbook(Uint8List bytes) {
   final Archive archive;
   try {
-    archive = ZipDecoder().decodeBytes(bytes, verify: true);
+    archive = readBoundedXlsxArchive(bytes);
     if (archive.findFile('xl/workbook.xml') == null) {
       throw const FormatException('Missing XLSX workbook');
     }
   } catch (error, stack) {
+    if (error is ExcelInputLimitException) rethrow;
     throw ExcelWorkbookDecodeException(
       ExcelWorkbookDecodeFailure.invalidContainer,
       cause: error,
@@ -218,4 +221,9 @@ bool _normalizeNumberFormats(XmlDocument xml) {
       causeStackTrace: stack,
     );
   }
+}
+
+void validateExcelArchiveFormats(Archive archive) {
+  final styles = archive.findFile('xl/styles.xml');
+  if (styles != null) _normalizeNumberFormats(_readXml(styles));
 }

@@ -8,6 +8,7 @@ import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import 'photo_sales_import.dart';
+import 'photo_sales_import_worker.dart';
 import 'photo_sales_import_service.dart';
 
 typedef PhotoSalesImportFilePicker = Future<XFile?> Function();
@@ -615,7 +616,12 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
       _statusIsError = false;
     });
     try {
-      final workbook = parsePhotoSalesImportWorkbook(await file.readAsBytes());
+      if (await file.length() > 10 * 1024 * 1024) {
+        throw const PhotoSalesImportValidationException([
+          'Excel 파일은 최대 10 MiB까지 읽을 수 있습니다.',
+        ]);
+      }
+      final workbook = await parsePhotoSalesOffThread(await file.readAsBytes());
       if (!mounted) return;
       final fileDate = _saleDateFromFileName(sourceName);
       final today = widget.todayOverride ?? DateTime.now();

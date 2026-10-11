@@ -56,6 +56,7 @@ void main() {
       final requests = <String, int>{};
       final requestedScopes = <String, List<List<dynamic>>>{};
       final returnedRows = <String, int>{};
+      var wireCalls = 0, wireBytes = 0, wireRows = 0;
       Future<void> Function(String source, int page)? beforePage;
       Map<String, dynamic> Function(
         String source,
@@ -141,10 +142,42 @@ void main() {
         toDate: '2029-12-31',
       );
 
+      Future<List<Map<String, dynamic>>> issuePages(String type) async {
+        final result = <Map<String, dynamic>>[];
+        String? cursorId, cursorAt;
+        do {
+          final page = Map<String, dynamic>.from(
+            await client.rpc(
+                  'get_store_report_issue_page',
+                  params: {
+                    'p_store_id': _store,
+                    'p_from_date': '2024-01-01',
+                    'p_to_date': '2029-12-31',
+                    'p_kind': type,
+                    'p_limit': 50,
+                    'p_after_at': cursorAt,
+                    'p_after_id': cursorId,
+                  },
+                )
+                as Map,
+          );
+          final rows = List<Map<String, dynamic>>.from(page['rows'] as List);
+          expect(rows.length, lessThanOrEqualTo(50));
+          result.addAll(rows);
+          if (page['has_more'] == false) break;
+          expect(rows, isNotEmpty);
+          cursorId = rows.last['id'] as String;
+          cursorAt = rows.last['created_at'] as String;
+        } while (true);
+        expect(result.map((r) => r['id']).toSet().length, result.length);
+        return result;
+      }
+
       setUpAll(() async {
         transport = HttpClient();
         proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         proxy.listen((request) async {
+          wireCalls++;
           try {
             final body = await utf8.decoder.bind(request).join();
             final isPage = request.uri.path.endsWith(
@@ -157,7 +190,7 @@ void main() {
               '/get_store_revenue_summary',
             );
             final isReport = request.uri.path.endsWith(
-              '/get_store_report_summary',
+              '/get_store_report_summary_v2',
             );
             final source = isReport
                 ? 'storeReport'
@@ -206,6 +239,13 @@ void main() {
             request.response.statusCode = response.statusCode;
             request.response.headers.contentType = ContentType.json;
             final data = await utf8.decoder.bind(response).join();
+            wireBytes += utf8.encode(data).length;
+            if (response.statusCode == 200) {
+              final payload = jsonDecode(data);
+              if (payload is Map && payload['rows'] is List) {
+                wireRows += (payload['rows'] as List).length;
+              }
+            }
             if ((isPage || isSummary || isRules || isReport) &&
                 response.statusCode == 200) {
               final payload = jsonDecode(data) as Map;
@@ -253,6 +293,7 @@ void main() {
         requests.clear();
         requestedScopes.clear();
         returnedRows.clear();
+        wireCalls = wireBytes = wireRows = 0;
         beforePage = null;
         overridePage = null;
         await sql(
@@ -493,6 +534,132 @@ void main() {
       );
 
       test(
+        'employee-scoped input is independent of 1000 other employees',
+        () async {
+          await seed(1001);
+          final staff = await AttendanceService(
+            client: client,
+          ).fetchStaffList(_store, employeeId: _employee);
+          final allowances = await AttendanceService(client: client)
+              .fetchDailyAllowances(
+                storeId: _store,
+                from: DateTime.utc(2024),
+                to: DateTime.utc(2029, 12, 31),
+                employeeId: _employee,
+              );
+          expect(staff, hasLength(1));
+          expect(allowances, hasLength(1));
+          await sql(
+            "INSERT INTO attendance_logs(id,restaurant_id,employee_id,type,logged_at) SELECT md5(id::text||'log')::uuid,store_id,id,'check_in','2026-07-27 02:00:00+00' FROM store_employees",
+          );
+          final logs = await AttendanceService(client: client).fetchPayrollLogs(
+            storeId: _store,
+            employeeId: _employee,
+            from: DateTime.utc(2024),
+            to: DateTime.utc(2030),
+          );
+          expect(logs, hasLength(1));
+          expect(logs.single['employee_id'], _employee);
+          actor = '20000000-0000-0000-0000-000000000002';
+          expect(
+            await AttendanceService(
+              client: client,
+            ).fetchStaffList(_store, employeeId: _employee),
+            isEmpty,
+          );
+          await expectLater(
+            AttendanceService(client: client).fetchPayrollLogs(
+              storeId: _store,
+              employeeId: _employee,
+              from: DateTime.utc(2024),
+              to: DateTime.utc(2030),
+            ),
+            throwsA(isA<PostgrestException>()),
+          );
+        },
+      );
+
+      test('measures complete-period versus employee-scoped wire costs', () async {
+        await seed(1001);
+        await sql(
+          "INSERT INTO attendance_logs(id,restaurant_id,employee_id,type,logged_at) SELECT md5(id::text||'log')::uuid,store_id,id,'check_in','2026-07-27 02:00:00+00' FROM store_employees",
+        );
+        final attendance = AttendanceService(client: client);
+        for (var sample = 0; sample < 21; sample++) {
+          for (final scoped in [false, true]) {
+            wireCalls = wireBytes = wireRows = 0;
+            final timer = Stopwatch()..start();
+            final staff = await attendance.fetchStaffList(
+              _store,
+              employeeId: scoped ? _employee : null,
+            );
+            final allowances = await attendance.fetchDailyAllowances(
+              storeId: _store,
+              from: DateTime.utc(2024),
+              to: DateTime.utc(2029, 12, 31),
+              employeeId: scoped ? _employee : null,
+            );
+            final logs = await attendance.fetchPayrollLogs(
+              storeId: _store,
+              from: DateTime.utc(2024),
+              to: DateTime.utc(2030),
+              employeeId: scoped ? _employee : null,
+            );
+            timer.stop();
+            expect(staff.length, scoped ? 1 : 1001);
+            expect(allowances.length, scoped ? 1 : 1001);
+            expect(logs.length, scoped ? 1 : 1001);
+            stdout.writeln(
+              'BOUNDED_FINANCIAL_MEASUREMENT ${jsonEncode({'case': 'employee', 'mode': scoped ? 'after' : 'before', 'sample': sample, 'temperature': sample == 0 ? 'first' : 'warm', 'store_employees': 1001, 'http_calls': wireCalls, 'returned_rows': wireRows, 'response_bytes': wireBytes, 'elapsed_ms': timer.elapsedMicroseconds / 1000})}',
+            );
+          }
+        }
+      });
+
+      test('measures report projection with exact exception counts', () async {
+        await seed(501);
+        for (var sample = 0; sample < 21; sample++) {
+          Map<String, dynamic>? baseline;
+          for (final mode in ['before', 'after']) {
+            wireCalls = wireBytes = wireRows = 0;
+            final timer = Stopwatch()..start();
+            final payload = Map<String, dynamic>.from(
+              await client.rpc(
+                    mode == 'before'
+                        ? 'get_store_report_summary'
+                        : 'get_store_report_summary_v2',
+                    params: {
+                      'p_store_id': _store,
+                      'p_from_date': '2026-07-27',
+                      'p_to_date': '2026-07-27',
+                    },
+                  )
+                  as Map,
+            );
+            timer.stop();
+            if (mode == 'before') {
+              baseline = payload;
+            } else {
+              final comparable = Map<String, dynamic>.from(baseline!)
+                ..remove('version')
+                ..remove('missing_proof')
+                ..remove('einvoice_issues');
+              final actual = Map<String, dynamic>.from(payload)
+                ..remove('version')
+                ..remove('missing_proof')
+                ..remove('einvoice_issues');
+              expect(actual, comparable);
+            }
+            expect(payload['missing_proof_count'], 501);
+            expect(payload['failed_einvoice_count'], 501);
+            stdout.writeln(
+              'BOUNDED_FINANCIAL_MEASUREMENT ${jsonEncode({'case': 'report', 'mode': mode, 'sample': sample, 'temperature': sample == 0 ? 'first' : 'warm', 'exceptions_per_kind': 501, 'http_calls': wireCalls, 'response_bytes': wireBytes, 'daily_rows': (payload['daily'] as List).length, 'detail_rows': (payload['missing_proof'] as List).length + (payload['einvoice_issues'] as List).length, 'elapsed_ms': timer.elapsedMicroseconds / 1000})}',
+            );
+          }
+        }
+      });
+
+      test(
         'report keeps sales, received cash, service, issues and counts complete',
         () async {
           await seed(501);
@@ -519,7 +686,10 @@ void main() {
           expect(summary.cancelledAmount, 7);
           expect(summary.missingProofPhotosCount, 501);
           expect(summary.failedEinvoiceJobsCount, 501);
-          expect(summary.einvoiceReviewIssues, hasLength(501));
+          expect(summary.einvoiceReviewIssues, isEmpty);
+          expect(summary.issuesPaged, isTrue);
+          expect(await issuePages('einvoice'), hasLength(501));
+          expect(await issuePages('missing_proof'), hasLength(501));
           expect(
             summary.dailyBreakdown.fold<double>(
               0,
@@ -638,27 +808,40 @@ void main() {
             expect(a.totalAmount, closeTo(b.totalAmount, 0.00001));
             expect(a.proofCompletePct, closeTo(b.proofCompletePct, 0.00001));
           }
+          expect(actual.missingProofIssues, isEmpty);
+          expect(actual.einvoiceReviewIssues, isEmpty);
+          final proofRows = await issuePages('missing_proof');
           expect(
-            actual.missingProofIssues.map((r) => r.paymentId),
+            proofRows.map((r) => r['id']),
             legacy.missingProofIssues.map((r) => r.paymentId),
           );
           expect(
-            actual.missingProofIssues.map(
-              (r) => [r.method, r.amount, r.createdAt],
+            proofRows.map(
+              (r) => [
+                r['method'],
+                r['amount'],
+                DateTime.parse(
+                  r['created_at'] as String,
+                ).toUtc().add(const Duration(hours: 7)),
+              ],
             ),
             legacy.missingProofIssues.map(
               (r) => [r.method, r.amount, r.createdAt],
             ),
           );
+          final jobRows = await issuePages('einvoice');
           expect(
-            actual.einvoiceReviewIssues.map((r) => r.paymentId),
+            jobRows.map((r) => r['payment_id']),
             legacy.einvoiceReviewIssues.map((r) => r.paymentId),
           );
           expect(
-            actual.einvoiceReviewIssues.map((r) => r.detail),
+            jobRows.map((r) => r['detail']),
             legacy.einvoiceReviewIssues.map((r) => r.detail),
           );
         },
+        // Includes seven legacy paginated reads and both bounded issue lists
+        // over 1,500 fixture rows; CI must finish before the next seed resets DB.
+        timeout: const Timeout(Duration(seconds: 90)),
       );
 
       test(
@@ -770,7 +953,7 @@ void main() {
               totals.values.every((v) => v.dineIn == 0 && v.delivery == 0),
               isTrue,
             );
-            expect(requests, {'storeRevenueSummary': 1});
+            expect(requests, {'storeRevenueSummary': (count + 99) ~/ 100});
             expect(returnedRows, {'storeRevenueSummary': count});
           },
         );

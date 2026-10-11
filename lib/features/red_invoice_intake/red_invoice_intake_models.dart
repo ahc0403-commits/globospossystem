@@ -64,6 +64,9 @@ class RedInvoiceIntake {
     required this.exportBatchId,
     required this.lineItems,
     required this.meInvoiceStatus,
+    this.buyerNumberType = 'vn_tax',
+    this.buyerNumberValue = '',
+    this.buyerVersion = 1,
   });
 
   factory RedInvoiceIntake.fromJson(Map<String, dynamic> json) {
@@ -78,6 +81,12 @@ class RedInvoiceIntake {
       throw const FormatException('RED_INVOICE_INTAKE_INVALID_DATE');
     }
     return RedInvoiceIntake(
+      buyerNumberType: json['buyer_number_type']?.toString() ?? 'vn_tax',
+      buyerNumberValue:
+          json['buyer_number_value']?.toString() ??
+          json['buyer_tax_code']?.toString() ??
+          '',
+      buyerVersion: (json['buyer_version'] as num?)?.toInt() ?? 1,
       id: _requiredText(json['id'], 'RED_INVOICE_INTAKE_INVALID_ID'),
       orderId: _requiredText(
         json['order_id'],
@@ -127,6 +136,25 @@ class RedInvoiceIntake {
     );
   }
 
+  final String buyerNumberType;
+  final String buyerNumberValue;
+  final int buyerVersion;
+  Map<String, dynamic> get buyerInformation => {
+    'buyer_number_type': buyerNumberType,
+    'buyer_number_value': buyerNumberValue.isEmpty
+        ? buyerTaxCode
+        : buyerNumberValue,
+    'buyer_legal_name': buyerLegalName,
+    'buyer_full_name': buyerFullName,
+    'buyer_address': buyerAddress,
+    'buyer_email': buyerEmail,
+    'buyer_email_cc': buyerEmailCc,
+    'buyer_phone': buyerPhone,
+    'buyer_unit_code': buyerUnitCode,
+    'buyer_id': buyerId,
+    'source_note': sourceNote,
+  };
+
   final String id;
   final String orderId;
   final String storeId;
@@ -154,6 +182,39 @@ class RedInvoiceIntake {
   final String? exportBatchId;
   final List<RedInvoiceLineItem> lineItems;
   final String? meInvoiceStatus;
+
+  RedInvoiceIntake withEvidence(String url) => RedInvoiceIntake(
+    id: id,
+    orderId: orderId,
+    storeId: storeId,
+    storeName: storeName,
+    meInvoiceJobId: meInvoiceJobId,
+    invoiceSeries: invoiceSeries,
+    receiptIds: receiptIds,
+    saleAt: saleAt,
+    grossAmount: grossAmount,
+    paymentMethod: paymentMethod,
+    source: source,
+    status: status,
+    buyerTaxCode: buyerTaxCode,
+    buyerUnitCode: buyerUnitCode,
+    buyerLegalName: buyerLegalName,
+    buyerFullName: buyerFullName,
+    buyerAddress: buyerAddress,
+    buyerEmail: buyerEmail,
+    buyerEmailCc: buyerEmailCc,
+    buyerPhone: buyerPhone,
+    buyerId: buyerId,
+    sourceNote: sourceNote,
+    attachmentUrls: [...attachmentUrls, url],
+    requestedAt: requestedAt,
+    exportBatchId: exportBatchId,
+    lineItems: lineItems,
+    meInvoiceStatus: meInvoiceStatus,
+    buyerNumberType: buyerNumberType,
+    buyerNumberValue: buyerNumberValue,
+    buyerVersion: buyerVersion + 1,
+  );
 
   DateTime get saleAtHcm => saleAt.toUtc().add(const Duration(hours: 7));
 

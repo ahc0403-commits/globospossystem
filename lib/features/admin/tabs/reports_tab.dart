@@ -1017,7 +1017,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 top: Radius.circular(20),
               ),
               clipBehavior: Clip.antiAlias,
-              child: _ReportIssueDetailsView(
+              child: _ReportIssuePagedView(
+                storeId:
+                    widget.overrideStoreId ?? ref.read(authProvider).storeId,
                 kind: kind,
                 summary: summary,
                 startDate: startDate,
@@ -1234,6 +1236,190 @@ class _ReportIssueActionRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ReportIssuePagedView extends StatefulWidget {
+  const _ReportIssuePagedView({
+    required this.storeId,
+    required this.kind,
+    required this.summary,
+    required this.startDate,
+    required this.endDate,
+    required this.onOpenPayment,
+  });
+  final String? storeId;
+  final _ReportIssueKind kind;
+  final ReportSummary summary;
+  final DateTime startDate, endDate;
+  final ValueChanged<String> onOpenPayment;
+  @override
+  State<_ReportIssuePagedView> createState() => _ReportIssuePagedViewState();
+}
+
+class _ReportIssuePagedViewState extends State<_ReportIssuePagedView> {
+  List<Map<String, dynamic>> _rows = [];
+  final _cursors = <Map<String, dynamic>?>[null];
+  bool _loading = true, _more = false;
+  String? _error;
+  int _generation = 0;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.summary.issuesPaged) {
+      _load();
+    } else {
+      _loading = false;
+    }
+  }
+
+  Future<void> _load() async {
+    final generation = ++_generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final cursor = _cursors.last;
+      final response = await supabase.rpc(
+        'get_store_report_issue_page',
+        params: {
+          'p_store_id': widget.storeId,
+          'p_from_date': DateFormat('yyyy-MM-dd').format(widget.startDate),
+          'p_to_date': DateFormat('yyyy-MM-dd').format(widget.endDate),
+          'p_kind': widget.kind == _ReportIssueKind.missingProof
+              ? 'missing_proof'
+              : 'einvoice',
+          'p_after_at': cursor?['created_at'],
+          'p_after_id': cursor?['id'],
+          'p_limit': 50,
+        },
+      );
+      if (response is! Map ||
+          response['version'] != 1 ||
+          response['rows'] is! List ||
+          response['has_more'] is! bool ||
+          (response['rows'] as List).length > 50) {
+        throw const FormatException('STORE_REPORT_ISSUE_PAGE_INVALID');
+      }
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _rows = List<Map<String, dynamic>>.from(response['rows'] as List);
+        _more = response['has_more'] as bool;
+        _loading = false;
+      });
+    } catch (error) {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _error = error.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_error!),
+            TextButton(onPressed: _load, child: Text(context.l10n.refresh)),
+          ],
+        ),
+      );
+    }
+    final paged = widget.summary.issuesPaged;
+    final summary = !paged
+        ? widget.summary
+        : ReportSummary(
+            dineInRevenue: 0,
+            deliveryRevenue: 0,
+            serviceTotal: 0,
+            totalRevenue: 0,
+            totalOrders: 0,
+            completedOrders: 0,
+            paidOrders: 0,
+            openOrders: 0,
+            dailyBreakdown: const [],
+            missingProofIssues: widget.kind != _ReportIssueKind.missingProof
+                ? const []
+                : _rows
+                      .map(
+                        (r) => MissingProofIssue(
+                          paymentId: r['id'] as String,
+                          orderId: r['order_id']?.toString() ?? '',
+                          amount: (r['amount'] as num?)?.toDouble() ?? 0,
+                          method: r['method'] as String,
+                          createdAt: toHoChiMinhBusinessTime(
+                            DateTime.parse(r['created_at'] as String),
+                          ),
+                        ),
+                      )
+                      .toList(),
+            einvoiceReviewIssues: widget.kind != _ReportIssueKind.einvoice
+                ? const []
+                : _rows
+                      .map(
+                        (r) => EinvoiceReviewIssue(
+                          jobId: r['id'] as String,
+                          orderId: r['order_id']?.toString() ?? '',
+                          paymentId: r['payment_id'] as String?,
+                          status: r['status'] as String,
+                          detail: r['detail'] as String,
+                          createdAt: toHoChiMinhBusinessTime(
+                            DateTime.parse(r['created_at'] as String),
+                          ),
+                        ),
+                      )
+                      .toList(),
+          );
+    return Column(
+      children: [
+        Expanded(
+          child: _ReportIssueDetailsView(
+            kind: widget.kind,
+            summary: summary,
+            startDate: widget.startDate,
+            endDate: widget.endDate,
+            onOpenPayment: widget.onOpenPayment,
+          ),
+        ),
+        if (paged)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).previousPageTooltip,
+                onPressed: _cursors.length <= 1
+                    ? null
+                    : () {
+                        _cursors.removeLast();
+                        _load();
+                      },
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text('${_cursors.length}'),
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).nextPageTooltip,
+                onPressed: !_more || _rows.isEmpty
+                    ? null
+                    : () {
+                        _cursors.add({
+                          'id': _rows.last['id'],
+                          'created_at': _rows.last['created_at'],
+                        });
+                        _load();
+                      },
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+      ],
     );
   }
 }

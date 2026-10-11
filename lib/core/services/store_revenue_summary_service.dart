@@ -25,6 +25,19 @@ class StoreRevenueSummaryService {
         to.compareTo(from) < 0) {
       throw ArgumentError('STORE_REVENUE_QUERY_INVALID');
     }
+    if (scope.length > 100) {
+      final result = <String, StoreRevenueTotals>{};
+      for (var offset = 0; offset < storeIds.length; offset += 100) {
+        result.addAll(
+          await fetch(
+            storeIds: storeIds.skip(offset).take(100).toList(),
+            fromDate: fromDate,
+            toDate: toDate,
+          ),
+        );
+      }
+      return Map.unmodifiable(result);
+    }
     final response = await client.rpc(
       'get_store_revenue_summary',
       params: {

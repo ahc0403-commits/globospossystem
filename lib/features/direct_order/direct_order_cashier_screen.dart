@@ -1,5 +1,6 @@
 import 'direct_order_translation.dart';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,6 +27,7 @@ import 'direct_order_localization.dart';
 import 'direct_order_money.dart';
 import 'direct_order_staff_service.dart';
 import 'direct_order_requirements.dart';
+import 'direct_order_tracking_link.dart';
 
 class DirectOrderCashierScreen extends ConsumerStatefulWidget {
   const DirectOrderCashierScreen({
@@ -50,6 +52,8 @@ class _DirectOrderCashierScreenState
   final _actualGrabFeeController = TextEditingController();
   final _providerNameController = TextEditingController();
   final _driverContactController = TextEditingController();
+  final _bookingReferenceController = TextEditingController();
+  final _bookingOperationIds = <String, String>{};
   String _deliveryProvider = 'grab';
   Timer? _timer;
   Timer? _chatRefreshTimer;
@@ -60,7 +64,7 @@ class _DirectOrderCashierScreenState
   DirectOrderDriverReceiptStatus _customerReceiptStatus =
       const DirectOrderDriverReceiptStatus.empty();
   DirectOrderDeliveryPaymentMode _deliveryPaymentMode =
-      DirectOrderDeliveryPaymentMode.storePrepaid;
+      DirectOrderDeliveryPaymentMode.customerDirect;
   String? _selectedId;
   String? _error;
   String? _stateFilter;
@@ -104,6 +108,7 @@ class _DirectOrderCashierScreenState
     _actualGrabFeeController.dispose();
     _providerNameController.dispose();
     _driverContactController.dispose();
+    _bookingReferenceController.dispose();
     super.dispose();
   }
 
@@ -245,6 +250,14 @@ class _DirectOrderCashierScreenState
   bool get _isPickup =>
       _delivery['method'] == 'pickup' ||
       _map(_detail?['request'])['fulfillment_type'] == 'pickup';
+  bool get _recipientPolicy {
+    final policy = _map(_detail?['request'])['delivery_policy_version'];
+    return policy == 2 ||
+        (policy == null &&
+            _activeQuote == null &&
+            _map(_detail?['financial']).isEmpty);
+  }
+
   bool get _pickupOriginalPaymentPending =>
       _isPickup &&
       _map(_detail?['request'])['state'] == 'quoted' &&
@@ -373,7 +386,8 @@ class _DirectOrderCashierScreenState
   Future<void> _sendQuote() async {
     if (_hasPendingRequirements) return;
     final fee =
-        (_isPickup ||
+        (_recipientPolicy ||
+            _isPickup ||
             _deliveryPaymentMode ==
                 DirectOrderDeliveryPaymentMode.customerDirect)
         ? 0
@@ -390,6 +404,8 @@ class _DirectOrderCashierScreenState
             ? (_map(_detail?['request'])['fulfillment_type'] == 'pickup'
                   ? DirectOrderDeliveryPaymentMode.notApplicable
                   : DirectOrderDeliveryPaymentMode.customerDirect)
+            : _recipientPolicy
+            ? DirectOrderDeliveryPaymentMode.customerDirect
             : supportMap(_detail?['support'])['delivery_fee_deferred'] == true
             ? DirectOrderDeliveryPaymentMode.storePrepaid
             : _deliveryPaymentMode,
@@ -786,6 +802,227 @@ class _DirectOrderCashierScreenState
     );
   }
 
+  Future<void> _bookingAction(String action) async {
+    final storeId = _storeId, requestId = _selectedId;
+    if (_busy || storeId == null || requestId == null) return;
+    final url = normalizeDeliveryTrackingUrl(_grabUrlController.text);
+    final feeText = _actualGrabFeeController.text.trim();
+    final fee = feeText.isEmpty ? null : parseDirectOrderVnd(feeText);
+    Map<String, dynamic> payload;
+    if (action == 'book') {
+      if ((_grabUrlController.text.trim().isNotEmpty && url == null) ||
+          (url == null && _driverContactController.text.trim().isEmpty) ||
+          (feeText.isNotEmpty && fee == null) ||
+          (_deliveryProvider == 'other' &&
+              _providerNameController.text.trim().isEmpty)) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_copy.bookingInputRequired)));
+        return;
+      }
+      payload = {
+        'provider': _deliveryProvider,
+        'provider_name': _providerNameController.text.trim(),
+        'reference': _bookingReferenceController.text.trim(),
+        'driver_contact': _driverContactController.text.trim(),
+        'tracking_url': url,
+        'recipient_fee': fee,
+      };
+    } else {
+      final reason = await _inputDialog(_copy.bookingFailureReason);
+      if (reason == null ||
+          reason.trim().isEmpty ||
+          !mounted ||
+          _selectedId != requestId) {
+        return;
+      }
+      payload = {'reason': reason.trim()};
+    }
+    // Keep retries within the same booking attempt, but give a new booking
+    // after cancellation/failure its own operation even if the details match.
+    final bookingContext = _map(_detail?['booking'])['id'] ?? 'initial';
+    final operationKey =
+        '$requestId/$bookingContext/$action/${jsonEncode(payload)}';
+    final operationId = _bookingOperationIds.putIfAbsent(
+      operationKey,
+      directOrderStaffService.newDeliveryOperationId,
+    );
+    await _act(() async {
+      await directOrderStaffService.bookDriver(
+        storeId: storeId,
+        requestId: requestId,
+        expectedVersion:
+            (_map(_detail?['fulfillment'])['version'] as num?)?.toInt() ?? 0,
+        operationId: operationId,
+        action: action,
+        payload: payload,
+      );
+    }, action == 'book' ? _copy.driverBooked : _copy.bookingRetry);
+  }
+
+  Future<void> _handoffBooking() async {
+    final storeId = _storeId, requestId = _selectedId;
+    final bookingId = _map(_detail?['booking'])['id']?.toString();
+    if (storeId == null || requestId == null || bookingId == null) return;
+    await _act(
+      () => directOrderStaffService.handoffBooking(
+        storeId: storeId,
+        requestId: requestId,
+        expectedVersion:
+            (_map(_detail?['fulfillment'])['version'] as num?)?.toInt() ?? 0,
+        bookingId: bookingId,
+      ),
+      _copy.driverHandoffNotice,
+    );
+  }
+
+  String _workLabel(Map<String, dynamic> row) {
+    if (row['state'] == 'awaiting_quote') return _copy.quoteNeeded;
+    if (row['state'] != 'approved') {
+      return _copy.stateLabel(row['state']?.toString() ?? '');
+    }
+    final status = row['fulfillment_status']?.toString();
+    if (status == 'completed') {
+      return _copy.customerProgressLabel('customer_completed');
+    }
+    if (status == 'cancelled') return _copy.stateLabel('cancelled');
+    if (status == 'dispatched') return _copy.driverHandoffNotice;
+    if (status == 'ready') {
+      return _copy.customerProgressLabel(
+        row['fulfillment_method'] == 'pickup'
+            ? 'customer_pickup_ready'
+            : 'customer_packed',
+      );
+    }
+    if (row['booking_status'] == 'booked') return _copy.driverBooked;
+    if (row['cooking_complete'] == true &&
+        row['fulfillment_method'] != 'pickup') {
+      return _copy.callDriver;
+    }
+    return _copy.customerProgressLabel('customer_preparing');
+  }
+
+  Widget _buildRecipientBooking() {
+    final booking = _map(_detail?['booking']);
+    final cooked = _delivery['cooking_complete'] == true;
+    final booked = booking['status'] == 'booked';
+    final ready = _map(_detail?['fulfillment'])['status'] == 'ready';
+    final pickupPending =
+        _map(_delivery['pickup_offer'])['status'] == 'proposed';
+    return _Section(
+      title: _copy.driverBooking,
+      icon: Icons.delivery_dining,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(_copy.customerPaysDriverHelp),
+          const SizedBox(height: 8),
+          Text(
+            booked
+                ? _copy.driverBooked
+                : cooked
+                ? _copy.callDriver
+                : _copy.customerProgressLabel('customer_preparing'),
+          ),
+          if (booking['reason'] != null) Text(booking['reason'].toString()),
+          if (booked) ...[
+            Text(
+              '${booking['provider_name'] ?? booking['provider'] ?? ''} · ${booking['reference'] ?? ''}',
+            ),
+            if (booking['driver_contact'] != null)
+              Text(booking['driver_contact'].toString()),
+            if (booking['tracking_url'] != null)
+              DirectOrderTrackingLink(url: booking['tracking_url'].toString()),
+            if (booking['recipient_fee'] != null)
+              Text(
+                '${_copy.recipientFeeReference}: ${_vnd(booking['recipient_fee'])}',
+              ),
+            FilledButton.icon(
+              key: const Key('direct_order_handoff_booking'),
+              onPressed: _busy || !ready || pickupPending
+                  ? null
+                  : _handoffBooking,
+              icon: const Icon(Icons.local_shipping_outlined),
+              label: Text(_copy.handoffDriver),
+            ),
+            OutlinedButton(
+              onPressed: _busy || pickupPending
+                  ? null
+                  : () => _bookingAction('cancel'),
+              child: Text(_copy.cancelBooking),
+            ),
+          ] else ...[
+            DropdownButtonFormField<String>(
+              key: const Key('direct_booking_provider'),
+              initialValue: _deliveryProvider,
+              decoration: InputDecoration(labelText: _copy.deliveryProvider),
+              items: [
+                for (final provider in ['grab', 'be', 'other'])
+                  DropdownMenuItem(
+                    value: provider,
+                    child: Text(
+                      provider == 'grab'
+                          ? _copy.grabProvider
+                          : provider == 'be'
+                          ? _copy.beProvider
+                          : _copy.otherProvider,
+                    ),
+                  ),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) =>
+                        setState(() => _deliveryProvider = value ?? 'grab'),
+            ),
+            if (_deliveryProvider == 'other')
+              TextField(
+                controller: _providerNameController,
+                maxLength: 100,
+                decoration: InputDecoration(labelText: _copy.providerName),
+              ),
+            TextField(
+              controller: _bookingReferenceController,
+              maxLength: 200,
+              decoration: InputDecoration(labelText: _copy.bookingReference),
+            ),
+            TextField(
+              controller: _driverContactController,
+              maxLength: 200,
+              decoration: InputDecoration(labelText: _copy.driverContact),
+            ),
+            TextField(
+              controller: _grabUrlController,
+              decoration: InputDecoration(labelText: _copy.grabTrackingUrl),
+            ),
+            TextField(
+              controller: _actualGrabFeeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [DirectOrderVndInputFormatter()],
+              decoration: InputDecoration(
+                labelText: _copy.recipientFeeReference,
+                suffixText: 'VND',
+              ),
+            ),
+            FilledButton.icon(
+              key: const Key('direct_order_book_driver'),
+              onPressed: _busy || !cooked || pickupPending
+                  ? null
+                  : () => _bookingAction('book'),
+              icon: const Icon(Icons.person_pin_circle_outlined),
+              label: Text(_copy.saveBooking),
+            ),
+            TextButton(
+              onPressed: _busy || !cooked || pickupPending
+                  ? null
+                  : () => _bookingAction('fail'),
+              child: Text(_copy.recordBookingFailure),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Future<void> _requestProofResubmission(String targetMessageId) async {
     var reasonCode = 'blurry';
     final note = TextEditingController();
@@ -956,8 +1193,9 @@ class _DirectOrderCashierScreenState
     _actualGrabFeeController.clear();
     _providerNameController.clear();
     _driverContactController.clear();
+    _bookingReferenceController.clear();
     _deliveryProvider = 'grab';
-    _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.storePrepaid;
+    _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.customerDirect;
 
     final quotes = _maps(detail['quotes']);
     final activeQuote = quotes.cast<Map<String, dynamic>?>().firstWhere(
@@ -1275,10 +1513,6 @@ class _DirectOrderCashierScreenState
                 final row = _requests[index];
                 final id = row['id']?.toString() ?? '';
                 final requestState = row['state']?.toString() ?? '';
-                final state =
-                    row['fulfillment_status']?.toString().isNotEmpty == true
-                    ? row['fulfillment_status'].toString()
-                    : requestState;
                 return ListTile(
                   selected: id == _selectedId,
                   selectedTileColor: PosColors.selectedRow,
@@ -1300,7 +1534,7 @@ class _DirectOrderCashierScreenState
                     ],
                   ),
                   subtitle: Text(
-                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${supportNumber(row['request_reply_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).replyDue} ${row['request_reply_due']}' : ''}${supportNumber(row['request_confirmation_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).awaiting} ${row['request_confirmation_due']}' : ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}${supportNumber(row['overpayment_due']) > 0 ? ' · ${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).text('surplus')}: ${_vnd(row['overpayment_due'])}' : ''}',
+                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_workLabel(row)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${supportNumber(row['request_reply_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).replyDue} ${row['request_reply_due']}' : ''}${supportNumber(row['request_confirmation_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).awaiting} ${row['request_confirmation_due']}' : ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}${supportNumber(row['overpayment_due']) > 0 ? ' · ${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).text('surplus')}: ${_vnd(row['overpayment_due'])}' : ''}',
                   ),
                   trailing: row['final_total'] == null
                       ? null
@@ -1523,12 +1757,17 @@ class _DirectOrderCashierScreenState
         if ((state == 'awaiting_quote' || state == 'quoted') &&
             !_pickupOriginalPaymentPending)
           _Section(
-            title: _copy.enterGrabFee,
+            title: _recipientPolicy
+                ? _copy.finalOrderAmount
+                : _copy.enterGrabFee,
             icon: Icons.delivery_dining_outlined,
             child: Column(
               children: [
-                if (supportMap(_detail?['support'])['delivery_fee_deferred'] !=
-                    true) ...[
+                if (_recipientPolicy && !_isPickup)
+                  Text(_copy.customerPaysDriverHelp),
+                if (!_recipientPolicy &&
+                    supportMap(_detail?['support'])['delivery_fee_deferred'] !=
+                        true) ...[
                   DropdownButtonFormField<DirectOrderDeliveryPaymentMode>(
                     key: const Key('direct_order_delivery_payment_mode'),
                     initialValue: _deliveryPaymentMode,
@@ -1618,10 +1857,14 @@ class _DirectOrderCashierScreenState
             icon: const Icon(Icons.send_outlined),
             label: Text(_copy.sendQuote),
           ),
-        if (isPickup && fulfillmentStatus == 'ready') ...[
+        if (_isPickup && fulfillmentStatus == 'ready') ...[
           Text('${_copy.pickupCode}: ${fulfillment['pickup_code'] ?? ''}'),
           FilledButton.icon(
-            key: const Key('direct_order_complete_pickup'),
+            key: Key(
+              request['fulfillment_type'] == 'pickup'
+                  ? 'direct_order_complete_pickup'
+                  : 'direct_complete_pickup',
+            ),
             onPressed: _busy ? null : _completePickup,
             icon: const Icon(Icons.check_circle_outline),
             label: Text(_copy.pickupComplete),
@@ -1642,7 +1885,7 @@ class _DirectOrderCashierScreenState
                   label: _copy.serviceCharge,
                   value: _vnd(quote['service_charge_total']),
                 ),
-                if (!isPickup &&
+                if (!_isPickup &&
                     DirectOrderDeliveryPaymentMode.fromValue(
                           quote['delivery_payment_mode'] ?? 'store_prepaid',
                         ) ==
@@ -1651,7 +1894,7 @@ class _DirectOrderCashierScreenState
                     label: _copy.storeCollectedDeliveryFee,
                     value: _vnd(quote['delivery_fee_total']),
                   )
-                else if (!isPickup)
+                else if (!_isPickup)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.delivery_dining_outlined),
@@ -1732,7 +1975,12 @@ class _DirectOrderCashierScreenState
           const SizedBox(height: 12),
           if (!isPickup) _buildDriverReceiptSection(),
           const SizedBox(height: 12),
-          if (!_isPickup &&
+          if (_recipientPolicy &&
+              !_isPickup &&
+              {'pending', 'preparing', 'ready'}.contains(fulfillmentStatus))
+            _buildRecipientBooking(),
+          if (!_recipientPolicy &&
+              !_isPickup &&
               fulfillmentStatus == 'ready' &&
               _map(_delivery['pickup_offer'])['status'] != 'proposed')
             _Section(
@@ -2066,7 +2314,9 @@ class _DirectOrderCashierScreenState
     final delivery = _map(detail['delivery']);
     final address = _map(detail['address']);
     int? fee;
-    if (template == DirectOrderChatTemplate.deliveryFee) {
+    if (template == DirectOrderChatTemplate.deliveryFee && _recipientPolicy) {
+      fee = (_map(detail['booking'])['recipient_fee'] as num?)?.toInt();
+    } else if (template == DirectOrderChatTemplate.deliveryFee) {
       // Always ask staff to confirm the current fare rather than assume a quote
       // of zero means free delivery or reuse an old dispatch fare.
       final value = await _inputDialog(_copy.feeTemplate, number: true);
@@ -2105,6 +2355,7 @@ class _DirectOrderCashierScreenState
         address['detail_address'],
       ].where((part) => part != null && part.toString().isNotEmpty).join(' '),
       pickup: delivery['method'] == 'pickup',
+      recipientDeliveryPolicy: _recipientPolicy,
       customerPaysDriver:
           DirectOrderDeliveryPaymentMode.fromValue(
             _map(detail['active_quote'])['delivery_payment_mode']?.toString() ??

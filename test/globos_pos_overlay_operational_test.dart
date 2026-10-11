@@ -181,11 +181,12 @@ Future<void> _exerciseOverlay(
     case _OverlayKind.redInvoice:
       await tester.tap(find.text(l10n.redInvoiceIssueInvoice));
       await tester.pump();
-      expect(find.text(l10n.redInvoiceTaxCode), findsOneWidget);
+      expect(find.byKey(const Key('pos_buyer_number_type')), findsOneWidget);
+      expect(find.byKey(const Key('pos_buyer_number_value')), findsOneWidget);
       expect(find.text(l10n.redInvoiceCompanyName), findsOneWidget);
       expect(find.text(l10n.address), findsOneWidget);
       expect(find.text(l10n.redInvoiceEmailRequiredLabel), findsOneWidget);
-      expect(find.text('${l10n.redInvoicePhone} *'), findsOneWidget);
+      expect(find.byKey(const Key('pos_buyer_phone')), findsOneWidget);
       await tester.tap(find.text(l10n.back));
       await tester.pump();
       await tester.tap(find.text(l10n.no));

@@ -36,6 +36,18 @@ class _Staff extends DirectOrderStaffService {
   final actions = <String>[];
   final payloads = <Map<String, dynamic>>[];
   @override
+  Future<Map<String, dynamic>> saveBuyerInformation({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required Map<String, dynamic> patch,
+  }) async {
+    actions.add('pos_buyer');
+    payloads.add(patch);
+    return {'version': expectedVersion + 1};
+  }
+
+  @override
   Future<Map<String, dynamic>> supportAction({
     required String storeId,
     required String requestId,
@@ -108,7 +120,7 @@ void main() {
         requests.add(request);
         if (request.url.path.contains('/functions/')) {
           final body = jsonDecode(request.body) as Map;
-          if (body['action'] == 'staff_attachment_commit') {
+          if (body['action'] == 'staff_chat_attachment_commit') {
             commits++;
             return http.Response(
               saved
@@ -338,18 +350,22 @@ void main() {
       find.widgetWithText(OutlinedButton, 'Request VAT invoice'),
     );
     await tester.pumpAndSettle();
-    final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), 'TAX-FIXTURE');
-    await tester.enterText(fields.at(1), 'Company fixture');
-    await tester.enterText(fields.at(2), 'Billing address');
-    await tester.enterText(fields.at(3), 'fixture@example.test');
-    await tester.enterText(fields.at(4), '0900000000');
+    for (final field in {
+      'buyer_number_value': '0012345678',
+      'buyer_legal_name': 'Company fixture',
+      'buyer_address': 'Billing address',
+      'buyer_email': 'fixture@example.test',
+      'buyer_phone': '0900000000',
+    }.entries) {
+      await tester.ensureVisible(find.byKey(Key('pos_${field.key}')));
+      await tester.enterText(find.byKey(Key('pos_${field.key}')), field.value);
+    }
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
-    expect(service.actions, ['invoice']);
-    expect(service.payloads.single['requested'], true);
-    expect(service.payloads.single['tax_code'], 'TAX-FIXTURE');
+    expect(service.actions, ['pos_buyer']);
+    expect(service.payloads.single['buyer_number_type'], 'vn_tax');
+    expect(service.payloads.single['buyer_number_value'], '0012345678');
     await tester.pump(const Duration(milliseconds: 500));
   });
   testWidgets('unrefunded cancellation keeps close-conversation disabled', (

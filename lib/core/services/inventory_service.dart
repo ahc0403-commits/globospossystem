@@ -250,6 +250,46 @@ class InventoryService {
         params: {'p_store_id': storeId, 'p_menu_item_id': null},
       );
 
+  Stream<List<Map<String, dynamic>>> recipeExportBatches({
+    required String storeId,
+    required String source,
+  }) async* {
+    String? cursor;
+    while (true) {
+      final response = await _rpcMap(
+        'get_inventory_recipe_export_page',
+        params: {
+          'p_store_id': storeId,
+          'p_source': source,
+          'p_after_id': cursor,
+          'p_limit': 500,
+        },
+      );
+      if (response['version'] != 1 ||
+          response['rows'] is! List ||
+          response['has_more'] is! bool ||
+          (response['rows'] as List).length > 500) {
+        throw const FormatException('INVENTORY_RECIPE_EXPORT_RESPONSE_INVALID');
+      }
+      final page = List<Map<String, dynamic>>.from(response['rows'] as List);
+      if (page.any((row) => row['restaurant_id'] != storeId)) {
+        throw const FormatException('INVENTORY_RECIPE_EXPORT_SCOPE_INVALID');
+      }
+      if (page.isNotEmpty) {
+        final next = page.last['id'] as String;
+        if (cursor != null && next.compareTo(cursor) <= 0) {
+          throw const FormatException('INVENTORY_RECIPE_EXPORT_CURSOR_STALLED');
+        }
+        cursor = next;
+      }
+      yield page;
+      if (response['has_more'] == false) break;
+      if (page.isEmpty) {
+        throw const FormatException('INVENTORY_RECIPE_EXPORT_CURSOR_STALLED');
+      }
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchRecipesForMenu(
     String storeId,
     String menuItemId,
@@ -366,26 +406,41 @@ class InventoryService {
   Future<Map<String, dynamic>> fetchInventoryPurchaseDashboard({
     required String storeId,
   }) async {
-    final result = await supabase.rpc(
-      'get_inventory_purchase_dashboard',
-      params: {'p_store_id': storeId, 'p_brand_id': null},
-    );
-    return Map<String, dynamic>.from(result as Map);
+    final results = await Future.wait<dynamic>([
+      supabase.rpc(
+        'get_inventory_purchase_dashboard_v2',
+        params: {'p_store_id': storeId, 'p_brand_id': null},
+      ),
+      fetchInventoryStockStatus(storeId: storeId),
+    ]);
+    final dashboard = Map<String, dynamic>.from(results[0] as Map);
+    dashboard['low_stock_count'] = (results[1] as List<Map<String, dynamic>>)
+        .where((row) => {'danger', 'warning'}.contains(row['risk_status']))
+        .length;
+    return dashboard;
   }
 
+  final _stockReads = <String, Future<List<Map<String, dynamic>>>>{};
   Future<List<Map<String, dynamic>>> fetchInventoryStockStatus({
     required String storeId,
     DateTime? asOfDate,
-  }) => _rpcList(
-    'get_inventory_stock_status',
-    params: {
-      'p_store_id': storeId,
-      'p_as_of_date': (asOfDate ?? DateTime.now())
-          .toIso8601String()
-          .split('T')
-          .first,
-    },
-  );
+  }) {
+    final date = (asOfDate ?? DateTime.now())
+        .toIso8601String()
+        .split('T')
+        .first;
+    final key = '${supabase.auth.currentUser?.id}|$storeId|$date';
+    final existing = _stockReads[key];
+    if (existing != null) return existing;
+    final read = _rpcList(
+      'get_inventory_stock_status',
+      params: {'p_store_id': storeId, 'p_as_of_date': date},
+    );
+    _stockReads[key] = read;
+    return read.whenComplete(() {
+      if (identical(_stockReads[key], read)) _stockReads.remove(key);
+    });
+  }
 
   Future<List<Map<String, dynamic>>> fetchInventoryCostAnalysis({
     required String storeId,
@@ -641,17 +696,84 @@ class InventoryService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> fetchInventoryCatalogPage({
+    required String storeId,
+    required String source,
+    String? query,
+    String? supplierId,
+    String? productId,
+    String? afterId,
+    int limit = 50,
+  }) async {
+    final response = await supabase.rpc(
+      'get_inventory_catalog_page',
+      params: {
+        'p_store_id': storeId,
+        'p_source': source,
+        'p_query': query,
+        'p_supplier_id': supplierId,
+        'p_product_id': productId,
+        'p_after_id': afterId,
+        'p_limit': limit,
+      },
+    );
+    if (response is! Map ||
+        response['version'] != 1 ||
+        response['rows'] is! List ||
+        response['has_more'] is! bool ||
+        (response['rows'] as List).length > limit) {
+      throw const FormatException('INVENTORY_CATALOG_RESPONSE_INVALID');
+    }
+    final rows = List<Map<String, dynamic>>.from(response['rows'] as List);
+    if (rows.any(
+      (r) => source == 'products' || source == 'ingredient_export'
+          ? r['restaurant_id'] != storeId
+          : (r['product'] as Map?)?['restaurant_id'] != storeId,
+    )) {
+      throw const FormatException('INVENTORY_CATALOG_SCOPE_INVALID');
+    }
+    return Map<String, dynamic>.from(response);
+  }
+
+  Stream<List<Map<String, dynamic>>> inventoryCatalogBatches({
+    required String storeId,
+    required String source,
+  }) async* {
+    String? cursor;
+    while (true) {
+      final response = await fetchInventoryCatalogPage(
+        storeId: storeId,
+        source: source,
+        afterId: cursor,
+        limit: 500,
+      );
+      final page = List<Map<String, dynamic>>.from(response['rows'] as List);
+      if (page.isNotEmpty) {
+        final next = page.last['id'] as String;
+        if (cursor != null && next.compareTo(cursor) <= 0) {
+          throw const FormatException('INVENTORY_CATALOG_CURSOR_STALLED');
+        }
+        cursor = next;
+      }
+      yield page;
+      if (response['has_more'] == false) break;
+      if (page.isEmpty) {
+        throw const FormatException('INVENTORY_CATALOG_CURSOR_STALLED');
+      }
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchInventoryProducts({
     required String storeId,
   }) async {
-    final result = await supabase
-        .from('inventory_products')
-        .select(
-          'id, restaurant_id, brand_id, inventory_item_id, product_code, name, category, stock_unit, base_unit, base_unit_factor, image_url, storage_type, shelf_life_days, is_orderable, is_active, created_at, updated_at, inventory_item:inventory_items(current_stock, reorder_point, cost_per_unit, supplier_name)',
-        )
-        .eq('restaurant_id', storeId)
-        .order('name');
-    return List<Map<String, dynamic>>.from(result as List);
+    final rows = <Map<String, dynamic>>[];
+    await for (final batch in inventoryCatalogBatches(
+      storeId: storeId,
+      source: 'products',
+    )) {
+      rows.addAll(batch);
+    }
+    return rows;
   }
 
   Future<Map<String, dynamic>> upsertInventoryProduct({
@@ -788,35 +910,32 @@ class InventoryService {
       throw StateError('INVENTORY_PURCHASE_CATALOG_FORBIDDEN');
     }
 
-    const pageSize = 500;
     final rows = <Map<String, dynamic>>[];
-    for (var offset = 0; ; offset += pageSize) {
-      dynamic query = supabase
-          .from('inventory_supplier_items')
-          .select(
-            'id, supplier_id, product_id, supplier_sku, order_unit, order_unit_quantity_base, min_order_quantity, unit_price, tax_rate, lead_time_days, is_preferred, is_active, created_at, updated_at, supplier:inventory_suppliers!inner(id, supplier_name, status), product:inventory_products!inner(id, restaurant_id, name, product_code, category, stock_unit, base_unit, base_unit_factor, is_orderable, is_active)',
-          );
-      query = query.eq('product.restaurant_id', storeId);
-      if (supplierId != null && supplierId.isNotEmpty) {
-        query = query.eq('supplier_id', supplierId);
+    String? cursor;
+    while (true) {
+      final response = await fetchInventoryCatalogPage(
+        storeId: storeId,
+        source: 'supplier_items',
+        supplierId: supplierId,
+        afterId: cursor,
+        limit: 500,
+      );
+      final page = List<Map<String, dynamic>>.from(response['rows'] as List);
+      rows.addAll(
+        page.where(
+          (r) =>
+              !orderableOnly ||
+              (r['is_active'] == true &&
+                  (r['supplier'] as Map)['status'] == 'active' &&
+                  (r['product'] as Map)['is_active'] == true &&
+                  (r['product'] as Map)['is_orderable'] == true),
+        ),
+      );
+      if (!response['has_more']) break;
+      if (page.isEmpty || page.last['id'] == cursor) {
+        throw const FormatException('INVENTORY_CATALOG_CURSOR_STALLED');
       }
-      if (orderableOnly) {
-        query = query
-            .eq('is_active', true)
-            .eq('supplier.status', 'active')
-            .eq('product.is_active', true)
-            .eq('product.is_orderable', true);
-      }
-
-      final result = await query
-          .order('updated_at', ascending: false)
-          .order('id')
-          .range(offset, offset + pageSize - 1);
-      final page = List<Map<String, dynamic>>.from(
-        result as List,
-      ).map(Map<String, dynamic>.from).toList();
-      rows.addAll(page);
-      if (page.length < pageSize) break;
+      cursor = page.last['id'] as String;
     }
     return rows;
   }
@@ -1556,127 +1675,43 @@ class InventoryService {
         .toSet()
         .toList();
 
-    final supplierHistoryLines = supplierItemIds.isEmpty
-        ? <Map<String, dynamic>>[]
-        : List<Map<String, dynamic>>.from(
-            await supabase
-                    .from('inventory_purchase_order_lines')
-                    .select(
-                      'id, purchase_order_id, supplier_item_id, ordered_quantity_base, ordered_quantity_unit, order_unit, unit_price, created_at, product:inventory_products(name), purchase_order:inventory_purchase_orders!inner(id, purchase_order_no, status, created_at)',
-                    )
-                    .inFilter('supplier_item_id', supplierItemIds)
-                    .neq('purchase_order_id', purchaseOrderId)
-                    .order('created_at', ascending: false)
-                as List,
-          );
-
-    final supplierHistoryLineIds = supplierHistoryLines
-        .map((line) => line['id']?.toString())
-        .whereType<String>()
-        .where((id) => id.isNotEmpty)
-        .toList();
-
-    final supplierHistoryReceiptLines = supplierHistoryLineIds.isEmpty
-        ? <Map<String, dynamic>>[]
-        : List<Map<String, dynamic>>.from(
-            await supabase
-                    .from('inventory_receipt_lines')
-                    .select(
-                      'purchase_order_line_id, received_quantity_base, accepted_quantity_base, rejected_quantity_base, receipt:inventory_receipts!inner(status, received_at, created_at)',
-                    )
-                    .inFilter('purchase_order_line_id', supplierHistoryLineIds)
-                as List,
-          );
-
-    final supplierHistoryReceiptByLineId = <String, Map<String, dynamic>>{};
-    for (final receiptLine in supplierHistoryReceiptLines) {
-      final lineId = receiptLine['purchase_order_line_id']?.toString();
-      if (lineId == null || lineId.isEmpty) continue;
-      final summary = supplierHistoryReceiptByLineId.putIfAbsent(
-        lineId,
-        () => <String, dynamic>{
-          'received_quantity_base': 0.0,
-          'accepted_quantity_base': 0.0,
-          'rejected_quantity_base': 0.0,
-          'last_receipt_status': null,
-          'last_receipt_at': null,
-        },
-      );
-      summary['received_quantity_base'] =
-          (summary['received_quantity_base'] as double) +
-          ((receiptLine['received_quantity_base'] as num?)?.toDouble() ?? 0);
-      summary['accepted_quantity_base'] =
-          (summary['accepted_quantity_base'] as double) +
-          ((receiptLine['accepted_quantity_base'] as num?)?.toDouble() ?? 0);
-      summary['rejected_quantity_base'] =
-          (summary['rejected_quantity_base'] as double) +
-          ((receiptLine['rejected_quantity_base'] as num?)?.toDouble() ?? 0);
-
-      final receiptMap = receiptLine['receipt'] as Map<String, dynamic>?;
-      final receiptStatus = receiptMap?['status']?.toString();
-      final receiptAt =
-          receiptMap?['received_at']?.toString() ??
-          receiptMap?['created_at']?.toString();
-      final currentLast = summary['last_receipt_at']?.toString();
-      if (currentLast == null ||
-          (receiptAt != null && receiptAt.compareTo(currentLast) > 0)) {
-        summary['last_receipt_at'] = receiptAt;
-        summary['last_receipt_status'] = receiptStatus;
-      }
-    }
-
     final supplierHistoryBySupplierItemId =
         <String, List<Map<String, dynamic>>>{};
-    for (final historyLine in supplierHistoryLines) {
-      final supplierItemId = historyLine['supplier_item_id']?.toString();
-      final historyLineId = historyLine['id']?.toString();
-      if (supplierItemId == null ||
-          supplierItemId.isEmpty ||
-          historyLineId == null ||
-          historyLineId.isEmpty) {
-        continue;
-      }
-
-      final productMap = historyLine['product'] as Map<String, dynamic>?;
-      final purchaseOrderMap =
-          historyLine['purchase_order'] as Map<String, dynamic>?;
-      final receiptSummary = supplierHistoryReceiptByLineId[historyLineId];
-      final entry = <String, dynamic>{
-        'purchase_order_id': purchaseOrderMap?['id']?.toString(),
-        'purchase_order_no': purchaseOrderMap?['purchase_order_no']?.toString(),
-        'order_status': purchaseOrderMap?['status']?.toString() ?? 'submitted',
-        'ordered_at':
-            purchaseOrderMap?['created_at']?.toString() ??
-            historyLine['created_at']?.toString(),
-        'product_name':
-            productMap?['name']?.toString() ??
-            historyLine['product_id']?.toString() ??
-            '-',
-        'ordered_quantity_base':
-            (historyLine['ordered_quantity_base'] as num?)?.toDouble() ?? 0,
-        'ordered_quantity_unit':
-            (historyLine['ordered_quantity_unit'] as num?)?.toDouble() ?? 0,
-        'order_unit': historyLine['order_unit']?.toString() ?? 'unit',
-        'unit_price': (historyLine['unit_price'] as num?)?.toDouble() ?? 0,
-        'received_quantity_base':
-            (receiptSummary?['received_quantity_base'] as num?)?.toDouble() ??
-            0,
-        'accepted_quantity_base':
-            (receiptSummary?['accepted_quantity_base'] as num?)?.toDouble() ??
-            0,
-        'rejected_quantity_base':
-            (receiptSummary?['rejected_quantity_base'] as num?)?.toDouble() ??
-            0,
-        'last_receipt_status': receiptSummary?['last_receipt_status']
-            ?.toString(),
-        'last_receipt_at': receiptSummary?['last_receipt_at']?.toString(),
-      };
-      final bucket = supplierHistoryBySupplierItemId.putIfAbsent(
-        supplierItemId,
-        () => [],
+    for (var offset = 0; offset < supplierItemIds.length; offset += 100) {
+      final batch = supplierItemIds
+          .skip(offset)
+          .take(100)
+          .toList(growable: false);
+      final response = await supabase.rpc(
+        'get_inventory_supplier_history_batch',
+        params: {
+          'p_purchase_order_id': purchaseOrderId,
+          'p_supplier_item_ids': batch,
+        },
       );
-      if (bucket.length < 3) {
-        bucket.add(entry);
+      if (response is! Map ||
+          response['version'] != 1 ||
+          response['rows'] is! List) {
+        throw const FormatException('INVENTORY_HISTORY_RESPONSE_INVALID');
+      }
+      final history = List<Map<String, dynamic>>.from(response['rows'] as List);
+      if (history.length > batch.length * 3) {
+        throw const FormatException('INVENTORY_HISTORY_RESPONSE_INVALID');
+      }
+      for (final row in history) {
+        final id = row['supplier_item_id']?.toString();
+        if (!batch.contains(id) ||
+            row['purchase_order_id'] == purchaseOrderId) {
+          throw const FormatException('INVENTORY_HISTORY_SCOPE_INVALID');
+        }
+        final bucket = supplierHistoryBySupplierItemId.putIfAbsent(
+          id!,
+          () => [],
+        );
+        if (bucket.length >= 3) {
+          throw const FormatException('INVENTORY_HISTORY_RESPONSE_INVALID');
+        }
+        bucket.add(row);
       }
     }
 

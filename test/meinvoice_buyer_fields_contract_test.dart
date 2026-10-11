@@ -62,16 +62,31 @@ void main() {
         'lib/features/cashier/red_invoice_modal.dart',
       );
 
-      expect(source, contains('_taxCodeCtrl'));
-      expect(source, contains('_companyCtrl'));
-      expect(source, contains('_addressCtrl'));
+      expect(source, contains('BuyerInformationFields('));
+      expect(source, contains('controller: _buyer'));
+      expect(source, contains('storeId: widget.storeId'));
       expect(source, isNot(contains('_unitCodeCtrl')));
       expect(source, isNot(contains('_buyerFullNameCtrl')));
-      expect(source, contains('_phoneCtrl'));
       expect(source, isNot(contains('_buyerIdCtrl')));
-      expect(source, contains('_emailCtrl'));
-      expect(source, contains('TextInputType.emailAddress'));
-      expect(source, contains('TextInputType.phone'));
+      final fields = readRepoFile(
+        'lib/features/red_invoice_intake/buyer_information_form.dart',
+      );
+      for (final key in [
+        'buyer_number_value',
+        'buyer_legal_name',
+        'buyer_address',
+        'buyer_phone',
+        'buyer_email',
+      ]) {
+        expect(fields, contains(key));
+      }
+      expect(fields, contains('TextInputType.emailAddress'));
+      expect(fields, contains('TextInputType.phone'));
+      expect(source, contains('saveBuyerInformation'));
+      expect(fields, contains('buyer_unit_code'));
+      expect(fields, contains('buyer_full_name'));
+      expect(fields, contains('buyer_email_cc'));
+      expect(fields, contains('buyer_id'));
       expect(source, contains('SingleChildScrollView'));
       expect(source, isNot(contains('lookupCompanyByTaxCode')));
       expect(source, isNot(contains('_BuyerLookupState.wt09Hit')));

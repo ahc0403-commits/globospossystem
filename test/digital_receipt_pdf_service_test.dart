@@ -22,6 +22,38 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    '80mm PDF prints the saved courier payer without adding its fare',
+    () async {
+      final base = {
+        'restaurant_name': 'GLOBOS',
+        'direct_order_reference': 'DTEST1234',
+        'fulfillment_method': 'delivery',
+        'diner_count': 3,
+        'total_amount': 108000,
+        'items': <dynamic>[],
+      };
+      final direct = DigitalReceipt.fromJson({
+        ...base,
+        'delivery_payment_mode': 'customer_direct',
+      });
+      final prepaid = DigitalReceipt.fromJson({
+        ...base,
+        'delivery_payment_mode': 'store_prepaid',
+      });
+      double height(List<int> bytes) => double.parse(
+        RegExp(
+          r'/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]',
+        ).firstMatch(latin1.decode(bytes, allowInvalid: true))!.group(2)!,
+      );
+      expect(direct.totalAmount, prepaid.totalAmount);
+      expect(
+        height(await digitalReceiptPdfService.build(direct)),
+        greaterThan(height(await digitalReceiptPdfService.build(prepaid))),
+      );
+    },
+  );
+
+  test(
     'digital receipt keeps order and menu requests with unchanged totals',
     () async {
       final json = <String, dynamic>{

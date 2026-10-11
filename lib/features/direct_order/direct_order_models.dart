@@ -580,6 +580,7 @@ class DirectOrderSummary {
     this.cookingComplete = false,
     this.hasDispatch = false,
     this.fulfillmentMethod = 'delivery',
+    this.bookingStatus,
   });
 
   final String requestId;
@@ -599,6 +600,7 @@ class DirectOrderSummary {
   final bool cookingComplete;
   final bool hasDispatch;
   final String fulfillmentMethod;
+  final String? bookingStatus;
 
   factory DirectOrderSummary.fromStatus(DirectOrderStatus status) =>
       DirectOrderSummary(
@@ -620,6 +622,7 @@ class DirectOrderSummary {
         fulfillmentType: status.isPickup
             ? DirectOrderFulfillmentType.pickup
             : status.fulfillmentType,
+        bookingStatus: status.delivery?.booking['status'] as String?,
       );
 
   bool get isTerminal =>
@@ -644,6 +647,7 @@ class DirectOrderSummary {
       'cooking_complete',
       'has_dispatch',
       'fulfillment_method',
+      'booking_status',
     });
     final quoteVersion = json['quote_version'];
     final method = _optionalString(json, 'fulfillment_method') ?? 'delivery';
@@ -664,6 +668,7 @@ class DirectOrderSummary {
           ? _requiredBool(json, 'has_dispatch')
           : false,
       fulfillmentMethod: method,
+      bookingStatus: _optionalString(json, 'booking_status'),
       requestId: _requiredString(json, 'request_id'),
       fulfillmentType: DirectOrderFulfillmentType.fromValue(
         json['fulfillment_type'],
@@ -1022,6 +1027,7 @@ class DirectOrderDelivery {
     this.offer,
     this.paidTotal,
     this.refundedTotal = 0,
+    this.booking = const {},
   });
   final int? dinerCount;
   final bool utensilsRequested;
@@ -1037,6 +1043,8 @@ class DirectOrderDelivery {
   final DirectOrderPickupOffer? offer;
   final double? paidTotal;
   final double refundedTotal;
+  final Map<String, dynamic> booking;
+  bool get hasBooking => booking['status'] == 'booked';
   bool get isPickup => method == 'pickup';
   factory DirectOrderDelivery.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
@@ -1054,6 +1062,7 @@ class DirectOrderDelivery {
       'pickup_offer',
       'paid_total',
       'refunded_total',
+      'booking',
     });
     final count = json['diner_count'];
     final version = _requiredNumber(json, 'version');
@@ -1067,6 +1076,9 @@ class DirectOrderDelivery {
     final offer = json['pickup_offer'];
     if (offer != null && offer is! Map) _invalidModel('pickup_offer');
     return DirectOrderDelivery(
+      booking: json['booking'] is Map
+          ? Map<String, dynamic>.from(json['booking'] as Map)
+          : const {},
       dinerCount: count as int?,
       utensilsRequested: json.containsKey('utensils_requested')
           ? _requiredBool(json, 'utensils_requested')

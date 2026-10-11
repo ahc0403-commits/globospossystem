@@ -226,9 +226,17 @@ void main() {
 
     final picker = find.byKey(const Key('photo_sales_import_file_picker'));
     await tester.ensureVisible(picker);
-    await tester.tap(picker);
+    await tester.runAsync(() async {
+      await tester.tap(picker);
+      for (
+        var attempt = 0;
+        attempt < 100 && registeredWorkbook == null;
+        attempt++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byKey(const Key('photo_sales_import_preview')), findsOneWidget);
     expect(find.byKey(const Key('photo_sales_branch_BH')), findsOneWidget);

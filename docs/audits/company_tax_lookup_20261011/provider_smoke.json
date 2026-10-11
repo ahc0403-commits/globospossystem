@@ -1,0 +1,29 @@
+{
+  "measuredAt": "2026-10-10T18:43:13.820Z",
+  "records": [
+    {
+      "taxCode": "0316956049",
+      "outcome": "success",
+      "calls": 1,
+      "upstreamBytes": 581,
+      "companyNameCharacters": 31,
+      "elapsedMs": 338
+    },
+    {
+      "taxCode": "0316794479",
+      "outcome": "success",
+      "calls": 1,
+      "upstreamBytes": 734,
+      "companyNameCharacters": 18,
+      "elapsedMs": 95
+    },
+    {
+      "taxCode": "0316794479-001",
+      "outcome": "success",
+      "calls": 1,
+      "upstreamBytes": 398,
+      "companyNameCharacters": 37,
+      "elapsedMs": 78
+    }
+  ]
+}

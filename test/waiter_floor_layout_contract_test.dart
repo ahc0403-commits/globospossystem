@@ -65,7 +65,10 @@ void main() {
     expect(tableProvider, contains('_ensureAutoRefresh(storeId)'));
     expect(tableProvider, contains('jitteredPollDelay(_fallbackPollInterval)'));
     expect(tableProvider, contains('loadTables(storeId, showLoading: false)'));
-    expect(tableProvider, contains('_refreshTablesFromRealtime(storeId)'));
+    expect(
+      tableProvider,
+      contains('_refreshTablesFromRealtime(storeId, payload, false)'),
+    );
     expect(
       tableProvider,
       contains('status == RealtimeSubscribeStatus.subscribed'),

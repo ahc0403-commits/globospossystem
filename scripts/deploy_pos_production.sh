@@ -403,6 +403,8 @@ preflight() {
       fail "Missing create_staff_user Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/provision-fixed-pos-account/index.ts" ]] ||
       fail "Missing provision-fixed-pos-account Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/company-tax-lookup/index.ts" ]] ||
+      fail "Missing company-tax-lookup Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/complete-initial-password-change/index.ts" ]] ||
       fail "Missing complete-initial-password-change Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/sepay-webhook/index.ts" ]] ||
@@ -865,6 +867,7 @@ local_flutter_build() {
 
   log "Local Flutter web build precheck"
   ensure_flutter_env
+  run_masked "Build bounded Photo Excel worker" bash scripts/build_photo_import_worker.sh
   run_masked \
     "flutter build web --release --dart-define=SUPABASE_URL=<set> --dart-define=SUPABASE_ANON_KEY=<set> --dart-define=FIREBASE_*=<optional> --no-wasm-dry-run" \
     flutter build web --release \
@@ -956,6 +959,10 @@ deploy_pos_edge_functions() {
   run supabase functions deploy create_staff_user --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy provision-fixed-pos-account \
     --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy meinvoice-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy company-tax-lookup \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy complete-initial-password-change \
     --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy sepay-webhook --no-verify-jwt \
@@ -1007,11 +1014,11 @@ print(json.dumps({"name":"ALLOWED_ORIGINS","digest":digest}))
 import hashlib,json,sys
 from pathlib import Path
 functions,origin=[json.loads(Path(p).read_text()) for p in sys.argv[1:3]]
-required={'create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','direct-order-translation-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement'}
+required={'company-tax-lookup','meinvoice-dispatcher','create_staff_user','provision-fixed-pos-account','complete-initial-password-change','sepay-webhook','emergency-fulfillment-dispatcher','public-receipt','direct-order-public','direct-order-notification-dispatcher','direct-order-translation-dispatcher','deliberry-webhook','deliberry-dispatcher','generate-settlement','generate_delivery_settlement'}
 active={row.get('slug') for row in functions if row.get('status')=='ACTIVE'}
 assert required<=active, 'A required Edge deployment is not ACTIVE'
 assert origin.get('digest')==hashlib.sha256(sys.argv[3].encode()).hexdigest(), 'Remote exact-origin digest mismatch'
-print('POS Edge metadata: 13 required handlers ACTIVE; remote origin digest matches production (no endpoint probes).')
+print('POS Edge metadata: 15 required handlers ACTIVE; remote origin digest matches production (no endpoint probes).')
 PYEDGEMETADATA
   then rm -f "$function_metadata" "$secret_metadata"; fail "Edge metadata verification failed."; fi
   rm -f "$function_metadata" "$secret_metadata"
@@ -1097,6 +1104,7 @@ verify_remote_allowed_origin() {
   local function_name headers allowed
   for function_name in \
     provision-fixed-pos-account \
+    company-tax-lookup \
     complete-initial-password-change \
     public-receipt \
     direct-order-public; do

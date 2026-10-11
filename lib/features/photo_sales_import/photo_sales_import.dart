@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../core/utils/excel_workbook_decoder.dart';
+import '../../core/utils/bounded_xlsx.dart';
+import '../../core/utils/xlsx_rows.dart';
 import '../admin/einvoice_misa_workbook.dart';
 
 const photoSalesImportMaxRows = 10000;
@@ -47,6 +49,45 @@ class PhotoSalesImportWorkbook {
   final List<PhotoSalesImportRow> rows;
   final String sourceSheetName;
   final int skippedZeroAmountCount;
+
+  Map<String, dynamic> toJson() => {
+    'source_sheet_name': sourceSheetName,
+    'skipped_zero': skippedZeroAmountCount,
+    'rows': rows
+        .map(
+          (r) => {
+            'source_row': r.sourceRow,
+            'branch_code': r.branchCode,
+            'store_name': r.storeName,
+            'device_name': r.deviceName,
+            'device_id': r.deviceId,
+            'sale_time': r.saleTime,
+            'amount': r.amount,
+            'type': r.type,
+          },
+        )
+        .toList(growable: false),
+  };
+  factory PhotoSalesImportWorkbook.fromJson(Map<String, dynamic> json) =>
+      PhotoSalesImportWorkbook(
+        sourceSheetName: json['source_sheet_name'] as String,
+        skippedZeroAmountCount: json['skipped_zero'] as int,
+        rows: (json['rows'] as List)
+            .map((raw) {
+              final r = raw as Map;
+              return PhotoSalesImportRow(
+                sourceRow: r['source_row'] as int,
+                branchCode: r['branch_code'] as String,
+                storeName: r['store_name'] as String,
+                deviceName: r['device_name'] as String,
+                deviceId: r['device_id'] as String,
+                saleTime: r['sale_time'] as String,
+                amount: r['amount'] as int,
+                type: r['type'] as String,
+              );
+            })
+            .toList(growable: false),
+      );
 
   int get receiptCount => rows.length;
   int get totalAmount => rows.fold(0, (total, row) => total + row.amount);
@@ -96,6 +137,11 @@ class PhotoSalesImportValidationException implements Exception {
 }
 
 PhotoSalesImportWorkbook parsePhotoSalesImportWorkbook(Uint8List bytes) {
+  if (bytes.length > excelMaxCompressedBytes) {
+    throw const PhotoSalesImportValidationException([
+      'Excel 파일은 최대 10 MiB까지 읽을 수 있습니다.',
+    ]);
+  }
   if (bytes.isEmpty) {
     throw const PhotoSalesImportValidationException(['선택한 파일이 비어 있습니다.']);
   }
@@ -106,17 +152,11 @@ PhotoSalesImportWorkbook parsePhotoSalesImportWorkbook(Uint8List bytes) {
   }
 
   try {
-    final workbook = decodeExcelWorkbook(bytes);
-    return _parseMatrices([
-      for (final entry in workbook.tables.entries)
-        _SourceMatrix(
-          name: entry.key,
-          rows: [
-            for (final row in entry.value.rows)
-              [for (final cell in row) cell?.value],
-          ],
-        ),
-    ]);
+    return _parseMatrices(
+      readXlsxRows(
+        bytes,
+      ).map((sheet) => _SourceMatrix(name: sheet.name, rows: sheet.rows)),
+    );
   } catch (error) {
     if (error is PhotoSalesImportValidationException) rethrow;
     throw PhotoSalesImportValidationException([
@@ -202,16 +242,21 @@ class _SourceMatrix {
   const _SourceMatrix({required this.name, required this.rows});
 
   final String name;
-  final List<List<Object?>> rows;
+  final Iterable<List<Object?>> rows;
 }
 
-PhotoSalesImportWorkbook _parseMatrices(List<_SourceMatrix> matrices) {
+PhotoSalesImportWorkbook _parseMatrices(Iterable<_SourceMatrix> matrices) {
   for (final matrix in matrices) {
-    final headerIndex = matrix.rows.indexWhere(
-      (row) => row.any((cell) => _canonicalHeader(_cellText(cell)) == 'device'),
-    );
-    if (headerIndex < 0) continue;
-    return _parseTable(matrix, headerIndex);
+    final iterator = matrix.rows.iterator;
+    var index = -1;
+    while (iterator.moveNext()) {
+      index++;
+      if (iterator.current.any(
+        (cell) => _canonicalHeader(_cellText(cell)) == 'device',
+      )) {
+        return _parseTable(matrix.name, iterator.current, iterator, index);
+      }
+    }
   }
 
   throw const PhotoSalesImportValidationException([
@@ -219,8 +264,12 @@ PhotoSalesImportWorkbook _parseMatrices(List<_SourceMatrix> matrices) {
   ]);
 }
 
-PhotoSalesImportWorkbook _parseTable(_SourceMatrix matrix, int headerIndex) {
-  final headerCells = matrix.rows[headerIndex];
+PhotoSalesImportWorkbook _parseTable(
+  String sourceName,
+  List<Object?> headerCells,
+  Iterator<List<Object?>> remaining,
+  int headerIndex,
+) {
   final indexes = <String, int>{};
   for (var index = 0; index < headerCells.length; index += 1) {
     final canonical = _canonicalHeader(_cellText(headerCells[index]));
@@ -243,12 +292,10 @@ PhotoSalesImportWorkbook _parseTable(_SourceMatrix matrix, int headerIndex) {
   final issues = <String>[];
   var skippedZeroAmountCount = 0;
 
-  for (
-    var rowIndex = headerIndex + 1;
-    rowIndex < matrix.rows.length;
-    rowIndex++
-  ) {
-    final cells = matrix.rows[rowIndex];
+  var rowIndex = headerIndex;
+  while (remaining.moveNext()) {
+    rowIndex++;
+    final cells = remaining.current;
     final sourceRow = rowIndex + 1;
     Object? value(String key) {
       final index = indexes[key];
@@ -292,6 +339,11 @@ PhotoSalesImportWorkbook _parseTable(_SourceMatrix matrix, int headerIndex) {
       continue;
     }
 
+    if (rows.length >= photoSalesImportMaxRows) {
+      throw const PhotoSalesImportValidationException([
+        '한 번에 최대 $photoSalesImportMaxRows건의 매출만 변환할 수 있습니다.',
+      ]);
+    }
     rows.add(
       PhotoSalesImportRow(
         sourceRow: sourceRow,
@@ -318,7 +370,7 @@ PhotoSalesImportWorkbook _parseTable(_SourceMatrix matrix, int headerIndex) {
 
   return PhotoSalesImportWorkbook(
     rows: List.unmodifiable(rows),
-    sourceSheetName: matrix.name,
+    sourceSheetName: sourceName,
     skippedZeroAmountCount: skippedZeroAmountCount,
   );
 }

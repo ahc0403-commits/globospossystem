@@ -17,6 +17,7 @@ class PosLiveEvent {
     this.restaurantId,
     this.isFallback = false,
     this.affectedDomains,
+    this.affectedRestaurantIds,
   }) : _changes = null;
 
   const PosLiveEvent._merged({
@@ -26,6 +27,7 @@ class PosLiveEvent {
     required this.restaurantId,
     required this.isFallback,
     required this.affectedDomains,
+    required this.affectedRestaurantIds,
     required Set<_LiveChange> changes,
   }) : _changes = changes;
 
@@ -36,6 +38,7 @@ class PosLiveEvent {
       restaurantId = null,
       isFallback = true,
       affectedDomains = null,
+      affectedRestaurantIds = null,
       _changes = null;
 
   final String domain;
@@ -44,6 +47,13 @@ class PosLiveEvent {
   final String? restaurantId;
   final bool isFallback;
   final Set<String>? affectedDomains;
+  final Set<String>? affectedRestaurantIds;
+
+  /// Null denotes a global/recovery signal; multiple stores retain their scope.
+  Set<String>? get restaurantIds => isFallback
+      ? null
+      : affectedRestaurantIds ??
+            (restaurantId == null ? null : {restaurantId!});
   final Set<_LiveChange>? _changes;
 
   Set<_LiveChange> get _changeKinds =>
@@ -80,6 +90,12 @@ class PosLiveEvent {
       ...?other.affectedDomains,
       if (other.affectedDomains == null) other.domain,
     }),
+    affectedRestaurantIds:
+        restaurantIds == null ||
+            other.restaurantIds == null ||
+            {...restaurantIds!, ...other.restaurantIds!}.length > 500
+        ? null
+        : Set.unmodifiable({...restaurantIds!, ...other.restaurantIds!}),
     changes: Set.unmodifiable({..._changeKinds, ...other._changeKinds}),
   );
 

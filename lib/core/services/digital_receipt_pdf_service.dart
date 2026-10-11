@@ -1,3 +1,4 @@
+import '../hardware/receipt_delivery_policy.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -105,6 +106,14 @@ class DigitalReceiptPdfService {
                 ),
               ),
             ],
+            if (recipientPaysDelivery(
+              receipt.deliveryPaymentMode,
+              receipt.fulfillmentMethod,
+            ))
+              pw.Text(
+                recipientDeliveryNoticeVi,
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
             _dashedDivider(height: 15),
             if (receipt.orderNotes != null) ...[
               pw.Text(

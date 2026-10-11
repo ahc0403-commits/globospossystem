@@ -29,6 +29,9 @@ docker exec --env PGPASSWORD=payroll-fixture "$db_name" psql -X -v ON_ERROR_STOP
   -c 'ALTER DATABASE payroll_test OWNER TO postgres' >/dev/null
 docker exec -i --env PGPASSWORD=payroll-fixture "$db_name" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d payroll_test \
   < scripts/fixtures/payroll_attendance.sql >/dev/null
+# Auth's managed table and existing index are owned by supabase_auth_admin.
+docker exec -i --env PGPASSWORD=payroll-fixture "$db_name" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d payroll_test \
+  < scripts/fixtures/fixed_auth_lookup_owned.sql >/dev/null
 for sql_file in \
   scripts/fixtures/financial_inputs.sql \
   supabase/migrations/20260724025456_attendance_logs_with_names.sql \
@@ -52,10 +55,17 @@ for sql_file in \
   supabase/migrations/20260905060000_store_report_summary.sql \
   scripts/verify_store_report_summary.sql \
   supabase/migrations/20260905060000_store_report_summary.sql \
-  scripts/verify_store_report_summary.sql; do
+  scripts/verify_store_report_summary.sql \
+  supabase/migrations/20261011020000_employee_scoped_payroll.sql \
+  supabase/migrations/20261011030000_fixed_account_exact_lookup.sql \
+  supabase/migrations/20261011040000_report_summary_and_issue_pages.sql; do
   printf 'FINANCIAL_API_TEST_SQL=%s\n' "$sql_file"
   docker exec -i "$db_name" psql -X -v ON_ERROR_STOP=1 -U postgres -d payroll_test < "$sql_file" >/dev/null
 done
+docker exec -i "$db_name" psql -X -v ON_ERROR_STOP=1 -U postgres -d payroll_test <<'SQL'
+SET request.jwt.claim.role='service_role';
+DO $$ BEGIN IF find_fixed_account_auth_user(' owned@example.invalid ')->>'email' IS DISTINCT FROM 'OWNED@EXAMPLE.INVALID' THEN RAISE EXCEPTION 'FIXED_AUTH_LOOKUP_MISMATCH'; END IF; END $$;
+SQL
 printf 'FINANCIAL_API_TEST_STEP=postgrest_start\n'
 docker run --detach --rm --name "$rest_name" --network "$run_name" \
   --publish 127.0.0.1::3000 \

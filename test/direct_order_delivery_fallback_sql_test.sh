@@ -499,6 +499,58 @@ PYREQUIREMENTS
  [[ "$requirement_confirmations" == "1" ]] || { printf 'CONCURRENT_REQUEST_CONFIRMATION_DUPLICATED\n'; exit 1; }
  printf 'CONCURRENT_REQUEST_CONFIRMATION=PASS confirmations=1\n'
 fi
+if [[ "${DIRECT_ORDER_RECIPIENT_TEST:-0}" == "1" ]]; then
+ python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYRECIPIENT'
+from pathlib import Path
+import re,sys
+root,tmp=map(Path,sys.argv[1:]); output=''
+for file,names in [('20260630000000_wetax_shutdown_meinvoice_foundation.sql',['meinvoice_tax_entity_config','meinvoice_jobs']),('20260721040000_red_invoice_intake_export.sql',['red_invoice_intakes'])]:
+ source=(root/'supabase/migrations'/file).read_text()
+ for name in names:
+  match=re.search(r'CREATE TABLE (?:IF NOT EXISTS )?public\.'+name+r' \(',source)
+  if not match: raise RuntimeError(name)
+  output+=source[match.start():source.index('\n);',match.start())+4]+'\n'
+(tmp/'recipient_invoice_tables.sql').write_text(output)
+PYRECIPIENT
+ run_sql "$PHOTO_ROOT/test/fixtures/direct_order_recipient_setup.sql" >/dev/null
+ run_sql "$PHOTO_TMP/recipient_invoice_tables.sql" > "$PHOTO_TMP/recipient_fixture.log" 2>&1 || { cat "$PHOTO_TMP/recipient_fixture.log"; exit 1; }
+ if [[ -n "${DIRECT_ORDER_RECIPIENT_BASELINE_DUMP:-}" ]]; then
+  docker exec "$PHOTO_CONTAINER" pg_dump -U postgres -d codex_direct_photo > "$DIRECT_ORDER_RECIPIENT_BASELINE_DUMP"
+ fi
+ for recipient_migration in 20261010050000_direct_order_recipient_delivery.sql 20261010051000_direct_order_recipient_receipts.sql 20261010052000_direct_order_batch_refund_invoice.sql; do
+  run_sql "$PHOTO_ROOT/supabase/migrations/$recipient_migration" > "$PHOTO_TMP/recipient_migration.log" 2>&1 || { cat "$PHOTO_TMP/recipient_migration.log"; exit 1; }
+ done
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_recipient_delivery_test.sql"
+ for recipient_size in 1 10 50; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT public.direct_order_staff_support_action(s.restaurant_id,s.request_id,r.support_version,'invoice',r.invoice_details) IS NOT NULL FROM recipient_measurement.money_scopes s JOIN public.direct_order_requests r ON r.id=s.request_id WHERE s.size=$recipient_size; SELECT public.direct_order_staff_support_action(s.restaurant_id,s.request_id,r.support_version,'cancel_order','{}'::jsonb) IS NOT NULL FROM recipient_measurement.money_scopes s JOIN public.direct_order_requests r ON r.id=s.request_id WHERE s.size=$recipient_size; SELECT public.direct_order_staff_support_action(s.restaurant_id,s.request_id,r.support_version,'refund_complete',jsonb_build_object('operation_id',s.operation_id,'amount',s.expected,'reference','batch test','evidence_message_id',s.evidence_id,'method','BANKTRANSFER')) IS NOT NULL FROM recipient_measurement.money_scopes s JOIN public.direct_order_requests r ON r.id=s.request_id WHERE s.size=$recipient_size; SELECT pg_stat_force_next_flush();" > "$PHOTO_TMP/recipient_batch.log" 2>&1 || { cat "$PHOTO_TMP/recipient_batch.log"; exit 1; }
+  recipient_calls="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.record_payment_adjustment(uuid,text,numeric,text)'::regprocedure,'public.direct_order_sync_invoice(uuid,uuid,uuid)'::regprocedure,'public.upsert_red_invoice_intake_minimal(uuid,uuid,text,text,text,text,text,text,text,text)'::regprocedure)")"
+  [[ "$recipient_calls" == "0" ]] || { printf 'RECIPIENT_MONEY_N_PLUS_ONE calls=%s\n' "$recipient_calls"; exit 1; }
+  recipient_batches="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT (SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_refund_payment_batch(uuid,uuid,text,numeric,text)'::regprocedure)||'/'||(SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_sync_invoice_batch(uuid,uuid,uuid[])'::regprocedure)")"
+  [[ "$recipient_batches" == "1/1" ]] || { printf 'RECIPIENT_MONEY_BATCH_WRONG calls=%s\n' "$recipient_batches"; exit 1; }
+  printf 'RECIPIENT_MONEY_BATCH supplemental_payments=%s per_payment_calls=%s refund_invoice_batches=%s\n' "$recipient_size" "$recipient_calls" "$recipient_batches"
+ done
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_recipient_batch_assert.sql"
+ bash "$PHOTO_ROOT/test/direct_order_recipient_concurrency.sh" "$PHOTO_CONTAINER" "$PHOTO_TMP"
+ for recipient_limit in 1 50 100 200; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); UPDATE public.users SET restaurant_id='d2000000-0000-4000-8000-000000000001' WHERE auth_id=auth.uid(); SELECT jsonb_array_length(public.direct_order_staff_list_v5('d2000000-0000-4000-8000-000000000001',NULL,$recipient_limit)); SELECT jsonb_array_length(public.direct_delivery_ticket_list_v4('d2000000-0000-4000-8000-000000000001',NULL,$recipient_limit)); SELECT pg_stat_force_next_flush();" >/dev/null
+  recipient_details="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.direct_order_booking_snapshot(uuid)'::regprocedure,'public.direct_order_staff_detail_v6(uuid,uuid)'::regprocedure,'public.direct_order_support_context(uuid,boolean)'::regprocedure)")"
+  [[ "$recipient_details" == "0" ]] || { printf 'RECIPIENT_STAFF_N_PLUS_ONE\n'; exit 1; }
+  printf 'RECIPIENT_STAFF_KITCHEN_LIST limit=%s per_order_calls=%s\n' "$recipient_limit" "$recipient_details"
+ done
+ for recipient_limit in 1 10 50; do
+  docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -v ON_ERROR_STOP=1 -c "SELECT pg_stat_reset(); SELECT jsonb_array_length(public.direct_order_public_orders_v5(session_id,secret_hash,$recipient_limit)) FROM progress_measurement.session_scope; SELECT pg_stat_force_next_flush();" >/dev/null
+  recipient_details="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.direct_order_booking_snapshot(uuid)'::regprocedure,'public.direct_order_public_status_v10(uuid,text,uuid)'::regprocedure,'public.direct_order_support_context(uuid,boolean)'::regprocedure)")"
+  [[ "$recipient_details" == "0" ]] || { printf 'RECIPIENT_CUSTOMER_N_PLUS_ONE\n'; exit 1; }
+  printf 'RECIPIENT_CUSTOMER_LIST limit=%s per_order_calls=%s\n' "$recipient_limit" "$recipient_details"
+ done
+ if [[ "${DIRECT_ORDER_POS_BUYER_TEST:-0}" == "1" ]]; then
+  run_sql "$PHOTO_ROOT/test/fixtures/pos_buyer_legacy_setup.sql" >/dev/null
+  run_sql "$PHOTO_ROOT/supabase/migrations/20261010053000_pos_buyer_information.sql" > "$PHOTO_TMP/buyer_migration.log" 2>&1 || { cat "$PHOTO_TMP/buyer_migration.log"; exit 1; }
+  run_sql "$PHOTO_ROOT/supabase/tests/pos_buyer_information_test.sql"
+  bash "$PHOTO_ROOT/test/pos_buyer_information_concurrency.sh" "$PHOTO_CONTAINER" "$PHOTO_TMP"
+ fi
+
+fi
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

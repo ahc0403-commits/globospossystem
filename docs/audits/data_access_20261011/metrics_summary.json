@@ -1,0 +1,1050 @@
+[
+  {
+    "source": "photo/results-final.json",
+    "input": "photo_100.xlsx",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 13.256,
+        "p95": 15.396,
+        "min": 11.626,
+        "max": 22.744
+      },
+      "max_rss_bytes": {
+        "p50": 22577152.0,
+        "p95": 23085056,
+        "min": 22396928,
+        "max": 23101440
+      }
+    }
+  },
+  {
+    "source": "photo/results-final.json",
+    "input": "photo_100.xlsx",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 9.861,
+        "p95": 10.855,
+        "min": 8.352,
+        "max": 12.589
+      },
+      "max_rss_bytes": {
+        "p50": 19791872.0,
+        "p95": 20365312,
+        "min": 19742720,
+        "max": 20365312
+      }
+    }
+  },
+  {
+    "source": "photo/results-final.json",
+    "input": "photo_1000.xlsx",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 48.5985,
+        "p95": 52.954,
+        "min": 45.199,
+        "max": 62.787
+      },
+      "max_rss_bytes": {
+        "p50": 57344000.0,
+        "p95": 57425920,
+        "min": 57180160,
+        "max": 57442304
+      }
+    }
+  },
+  {
+    "source": "photo/results-final.json",
+    "input": "photo_1000.xlsx",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 28.274,
+        "p95": 33.875,
+        "min": 26.195,
+        "max": 44.92
+      },
+      "max_rss_bytes": {
+        "p50": 27082752.0,
+        "p95": 27131904,
+        "min": 26492928,
+        "max": 27181056
+      }
+    }
+  },
+  {
+    "source": "photo/results-final.json",
+    "input": "photo_10000.xlsx",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 441.08,
+        "p95": 504.416,
+        "min": 394.601,
+        "max": 516.763
+      },
+      "max_rss_bytes": {
+        "p50": 123150336.0,
+        "p95": 123420672,
+        "min": 122290176,
+        "max": 123486208
+      }
+    }
+  },
+  {
+    "source": "photo/results-final.json",
+    "input": "photo_10000.xlsx",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 226.111,
+        "p95": 258.769,
+        "min": 194.626,
+        "max": 297.517
+      },
+      "max_rss_bytes": {
+        "p50": 38240256.0,
+        "p95": 38420480,
+        "min": 37781504,
+        "max": 38436864
+      }
+    }
+  },
+  {
+    "source": "photo/results-final.json",
+    "input": "photo_10001.xlsx",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 445.855,
+        "p95": 715.805,
+        "min": 394.709,
+        "max": 719.903
+      },
+      "max_rss_bytes": {
+        "p50": 123215872.0,
+        "p95": 123699200,
+        "min": 122306560,
+        "max": 123748352
+      }
+    }
+  },
+  {
+    "source": "photo/results-final.json",
+    "input": "photo_10001.xlsx",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 238.4185,
+        "p95": 336.908,
+        "min": 202.595,
+        "max": 403.97
+      },
+      "max_rss_bytes": {
+        "p50": 38322176.0,
+        "p95": 38469632,
+        "min": 37814272,
+        "max": 38846464
+      }
+    }
+  },
+  {
+    "source": "export-results.json",
+    "input": "100",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 38.085499999999996,
+        "p95": 65.238,
+        "min": 25.3,
+        "max": 71.394
+      },
+      "max_rss_bytes": {
+        "p50": 33144832.0,
+        "p95": 33603584,
+        "min": 32948224,
+        "max": 33603584
+      },
+      "output_bytes": {
+        "p50": 11845.0,
+        "p95": 11845,
+        "min": 11845,
+        "max": 11845
+      }
+    }
+  },
+  {
+    "source": "export-results.json",
+    "input": "100",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 4.787,
+        "p95": 8.182,
+        "min": 2.966,
+        "max": 8.505
+      },
+      "max_rss_bytes": {
+        "p50": 18644992.0,
+        "p95": 19202048,
+        "min": 18595840,
+        "max": 19218432
+      },
+      "output_bytes": {
+        "p50": 7371.0,
+        "p95": 7371,
+        "min": 7371,
+        "max": 7371
+      }
+    }
+  },
+  {
+    "source": "export-results.json",
+    "input": "1000",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 276.943,
+        "p95": 1434.348,
+        "min": 168.134,
+        "max": 1498.986
+      },
+      "max_rss_bytes": {
+        "p50": 75104256.0,
+        "p95": 75235328,
+        "min": 71401472,
+        "max": 75563008
+      },
+      "output_bytes": {
+        "p50": 68034.0,
+        "p95": 68034,
+        "min": 68034,
+        "max": 68034
+      }
+    }
+  },
+  {
+    "source": "export-results.json",
+    "input": "1000",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 54.730000000000004,
+        "p95": 139.701,
+        "min": 36.033,
+        "max": 382.207
+      },
+      "max_rss_bytes": {
+        "p50": 25501696.0,
+        "p95": 25935872,
+        "min": 25378816,
+        "max": 26017792
+      },
+      "output_bytes": {
+        "p50": 48122.0,
+        "p95": 48122,
+        "min": 48122,
+        "max": 48122
+      }
+    }
+  },
+  {
+    "source": "export-results.json",
+    "input": "10000",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 1831.2285,
+        "p95": 2279.484,
+        "min": 1216.829,
+        "max": 2997.835
+      },
+      "max_rss_bytes": {
+        "p50": 281493504.0,
+        "p95": 283967488,
+        "min": 278593536,
+        "max": 284639232
+      },
+      "output_bytes": {
+        "p50": 634585.0,
+        "p95": 634585,
+        "min": 634585,
+        "max": 634585
+      }
+    }
+  },
+  {
+    "source": "export-results.json",
+    "input": "10000",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 342.539,
+        "p95": 462.741,
+        "min": 259.819,
+        "max": 474.636
+      },
+      "max_rss_bytes": {
+        "p50": 29114368.0,
+        "p95": 29212672,
+        "min": 28639232,
+        "max": 29229056
+      },
+      "output_bytes": {
+        "p50": 459832.0,
+        "p95": 459832,
+        "min": 459832,
+        "max": 459832
+      }
+    }
+  },
+  {
+    "source": "photo/browser-results-final.json",
+    "input": "100",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "ms": {
+        "p50": 25.05000000447035,
+        "p95": 33.400000005960464,
+        "min": 23.299999997019768,
+        "max": 76.20000000298023
+      },
+      "max_frame_gap_ms": {
+        "p50": 16.699999999999818,
+        "p95": 33.30000000000018,
+        "min": 16.59999999999991,
+        "max": 83.30000000000007
+      }
+    }
+  },
+  {
+    "source": "photo/browser-results-final.json",
+    "input": "100",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "ms": {
+        "p50": 61.399999998509884,
+        "p95": 76,
+        "min": 46.5,
+        "max": 76.40000000596046
+      },
+      "max_frame_gap_ms": {
+        "p50": 16.700000000000273,
+        "p95": 16.800000000000182,
+        "min": 16.699999999999818,
+        "max": 16.800000000000182
+      }
+    }
+  },
+  {
+    "source": "photo/browser-results-final.json",
+    "input": "1000",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "ms": {
+        "p50": 137.19999999552965,
+        "p95": 156.70000000298023,
+        "min": 126.59999999403954,
+        "max": 170.29999999701977
+      },
+      "max_frame_gap_ms": {
+        "p50": 133.29999999999927,
+        "p95": 150,
+        "min": 116.59999999999945,
+        "max": 166.69999999999982
+      }
+    }
+  },
+  {
+    "source": "photo/browser-results-final.json",
+    "input": "1000",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "ms": {
+        "p50": 153.94999999552965,
+        "p95": 177.79999999701977,
+        "min": 115.20000000298023,
+        "max": 197.5
+      },
+      "max_frame_gap_ms": {
+        "p50": 16.799999999999727,
+        "p95": 16.800000000000182,
+        "min": 16.699999999999818,
+        "max": 16.80000000000109
+      }
+    }
+  },
+  {
+    "source": "photo/browser-results-final.json",
+    "input": "10000",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "ms": {
+        "p50": 1084.8000000044703,
+        "p95": 1368.5999999940395,
+        "min": 1058.5,
+        "max": 1390.2999999970198
+      },
+      "max_frame_gap_ms": {
+        "p50": 1074.9999999999982,
+        "p95": 1366.6000000000004,
+        "min": 1049.8999999999978,
+        "max": 1383.2000000000007
+      }
+    }
+  },
+  {
+    "source": "photo/browser-results-final.json",
+    "input": "10000",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "ms": {
+        "p50": 629.6500000059605,
+        "p95": 922.8000000119209,
+        "min": 594.4000000059605,
+        "max": 1293.5
+      },
+      "max_frame_gap_ms": {
+        "p50": 16.799999999999272,
+        "p95": 16.80000000000291,
+        "min": 16.700000000004366,
+        "max": 16.80000000000291
+      }
+    }
+  },
+  {
+    "source": "photo/browser-results-final.json",
+    "input": "10001",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "ms": {
+        "p50": 1062.8500000014901,
+        "p95": 1103.5,
+        "min": 1043,
+        "max": 1137.3999999910593
+      },
+      "max_frame_gap_ms": {
+        "p50": 1050.0,
+        "p95": 1099.9000000000015,
+        "min": 1033.300000000003,
+        "max": 1133.2999999999956
+      }
+    }
+  },
+  {
+    "source": "photo/browser-results-final.json",
+    "input": "10001",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "ms": {
+        "p50": 586.5500000044703,
+        "p95": 647.6999999880791,
+        "min": 558.5,
+        "max": 774.1999999880791
+      },
+      "max_frame_gap_ms": {
+        "p50": 16.80000000000291,
+        "p95": 16.80000000000291,
+        "min": 16.700000000004366,
+        "max": 16.80000000000291
+      }
+    }
+  },
+  {
+    "source": "recipe-export-results.json",
+    "input": 100,
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 14.341999999999999,
+        "p95": 16.62,
+        "min": 13.444,
+        "max": 16.869
+      },
+      "max_rss_bytes": {
+        "p50": 26959872.0,
+        "p95": 27066368,
+        "min": 26886144,
+        "max": 27082752
+      },
+      "output_bytes": {
+        "p50": 10352.0,
+        "p95": 10352,
+        "min": 10352,
+        "max": 10352
+      },
+      "batches": {
+        "p50": 0.0,
+        "p95": 0,
+        "min": 0,
+        "max": 0
+      }
+    }
+  },
+  {
+    "source": "recipe-export-results.json",
+    "input": 100,
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 2.7735000000000003,
+        "p95": 5.63,
+        "min": 2.429,
+        "max": 6.053
+      },
+      "max_rss_bytes": {
+        "p50": 19177472.0,
+        "p95": 19546112,
+        "min": 18595840,
+        "max": 19628032
+      },
+      "output_bytes": {
+        "p50": 6532.0,
+        "p95": 6532,
+        "min": 6532,
+        "max": 6532
+      },
+      "batches": {
+        "p50": 3.0,
+        "p95": 3,
+        "min": 3,
+        "max": 3
+      }
+    }
+  },
+  {
+    "source": "recipe-export-results.json",
+    "input": 1000,
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 70.207,
+        "p95": 75.147,
+        "min": 66.626,
+        "max": 87.446
+      },
+      "max_rss_bytes": {
+        "p50": 67117056.0,
+        "p95": 67649536,
+        "min": 66797568,
+        "max": 67698688
+      },
+      "output_bytes": {
+        "p50": 50304.0,
+        "p95": 50304,
+        "min": 50304,
+        "max": 50304
+      },
+      "batches": {
+        "p50": 0.0,
+        "p95": 0,
+        "min": 0,
+        "max": 0
+      }
+    }
+  },
+  {
+    "source": "recipe-export-results.json",
+    "input": 1000,
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 18.8335,
+        "p95": 19.857,
+        "min": 17.464,
+        "max": 21.674
+      },
+      "max_rss_bytes": {
+        "p50": 25894912.0,
+        "p95": 26034176,
+        "min": 25575424,
+        "max": 26034176
+      },
+      "output_bytes": {
+        "p50": 39838.0,
+        "p95": 39838,
+        "min": 39838,
+        "max": 39838
+      },
+      "batches": {
+        "p50": 6.0,
+        "p95": 6,
+        "min": 6,
+        "max": 6
+      }
+    }
+  },
+  {
+    "source": "recipe-export-results.json",
+    "input": 10000,
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 694.215,
+        "p95": 788.862,
+        "min": 659.254,
+        "max": 896.877
+      },
+      "max_rss_bytes": {
+        "p50": 206553088.0,
+        "p95": 206766080,
+        "min": 206012416,
+        "max": 207192064
+      },
+      "output_bytes": {
+        "p50": 436173.0,
+        "p95": 436173,
+        "min": 436173,
+        "max": 436173
+      },
+      "batches": {
+        "p50": 0.0,
+        "p95": 0,
+        "min": 0,
+        "max": 0
+      }
+    }
+  },
+  {
+    "source": "recipe-export-results.json",
+    "input": 10000,
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 175.43900000000002,
+        "p95": 191.365,
+        "min": 172.009,
+        "max": 195.634
+      },
+      "max_rss_bytes": {
+        "p50": 28475392.0,
+        "p95": 28573696,
+        "min": 28147712,
+        "max": 28606464
+      },
+      "output_bytes": {
+        "p50": 371048.0,
+        "p95": 371048,
+        "min": 371048,
+        "max": 371048
+      },
+      "batches": {
+        "p50": 60.0,
+        "p95": 60,
+        "min": 60,
+        "max": 60
+      }
+    }
+  },
+  {
+    "source": "financial-results.json",
+    "input": "employee",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 189.34199999999998,
+        "p95": 200.819,
+        "min": 173.536,
+        "max": 222.953
+      },
+      "http_calls": {
+        "p50": 9.0,
+        "p95": 9,
+        "min": 9,
+        "max": 9
+      },
+      "response_bytes": {
+        "p50": 918581.0,
+        "p95": 918581,
+        "min": 918581,
+        "max": 918581
+      },
+      "returned_rows": {
+        "p50": 3003.0,
+        "p95": 3003,
+        "min": 3003,
+        "max": 3003
+      }
+    }
+  },
+  {
+    "source": "financial-results.json",
+    "input": "employee",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 8.030000000000001,
+        "p95": 9.698,
+        "min": 7.124,
+        "max": 10.11
+      },
+      "http_calls": {
+        "p50": 3.0,
+        "p95": 3,
+        "min": 3,
+        "max": 3
+      },
+      "response_bytes": {
+        "p50": 1198.0,
+        "p95": 1198,
+        "min": 1198,
+        "max": 1198
+      },
+      "returned_rows": {
+        "p50": 3.0,
+        "p95": 3,
+        "min": 3,
+        "max": 3
+      }
+    }
+  },
+  {
+    "source": "financial-results.json",
+    "input": "report",
+    "mode": "before",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 83.20750000000001,
+        "p95": 98.497,
+        "min": 69.133,
+        "max": 99.49
+      },
+      "http_calls": {
+        "p50": 1.0,
+        "p95": 1,
+        "min": 1,
+        "max": 1
+      },
+      "response_bytes": {
+        "p50": 211241.0,
+        "p95": 211241,
+        "min": 211241,
+        "max": 211241
+      },
+      "detail_rows": {
+        "p50": 1002.0,
+        "p95": 1002,
+        "min": 1002,
+        "max": 1002
+      },
+      "daily_rows": {
+        "p50": 1.0,
+        "p95": 1,
+        "min": 1,
+        "max": 1
+      }
+    }
+  },
+  {
+    "source": "financial-results.json",
+    "input": "report",
+    "mode": "after",
+    "samples": 20,
+    "metrics": {
+      "elapsed_ms": {
+        "p50": 82.167,
+        "p95": 86.65,
+        "min": 59.058,
+        "max": 86.759
+      },
+      "http_calls": {
+        "p50": 1.0,
+        "p95": 1,
+        "min": 1,
+        "max": 1
+      },
+      "response_bytes": {
+        "p50": 825.0,
+        "p95": 825,
+        "min": 825,
+        "max": 825
+      },
+      "detail_rows": {
+        "p50": 0.0,
+        "p95": 0,
+        "min": 0,
+        "max": 0
+      },
+      "daily_rows": {
+        "p50": 1.0,
+        "p95": 1,
+        "min": 1,
+        "max": 1
+      }
+    }
+  },
+  {
+    "source": "sql-menu-before/results.json",
+    "input": 100,
+    "mode": "before",
+    "samples": 20,
+    "response_bytes": 37287,
+    "metrics": {
+      "server_ms": {
+        "p50": 6.202,
+        "p95": 8.424,
+        "min": 5.205,
+        "max": 10.29
+      }
+    }
+  },
+  {
+    "source": "sql-menu-before/results.json",
+    "input": 1000,
+    "mode": "before",
+    "samples": 20,
+    "response_bytes": 37287,
+    "metrics": {
+      "server_ms": {
+        "p50": 7.1899999999999995,
+        "p95": 14.29,
+        "min": 5.584,
+        "max": 14.493
+      }
+    }
+  },
+  {
+    "source": "sql-menu-before/results.json",
+    "input": 10000,
+    "mode": "before",
+    "samples": 20,
+    "response_bytes": 37287,
+    "metrics": {
+      "server_ms": {
+        "p50": 11.716999999999999,
+        "p95": 20.351,
+        "min": 8.884,
+        "max": 22.288
+      }
+    }
+  },
+  {
+    "source": "sql-menu-before/results.json",
+    "input": 100000,
+    "mode": "before",
+    "samples": 20,
+    "response_bytes": 37287,
+    "metrics": {
+      "server_ms": {
+        "p50": 116.67500000000001,
+        "p95": 200.597,
+        "min": 95.91,
+        "max": 242.913
+      }
+    }
+  },
+  {
+    "source": "sql-menu-after/results.json",
+    "input": 100,
+    "mode": "after",
+    "samples": 20,
+    "response_bytes": 37287,
+    "metrics": {
+      "server_ms": {
+        "p50": 8.308,
+        "p95": 22.889,
+        "min": 5.52,
+        "max": 92.615
+      }
+    }
+  },
+  {
+    "source": "sql-menu-after/results.json",
+    "input": 1000,
+    "mode": "after",
+    "samples": 20,
+    "response_bytes": 37287,
+    "metrics": {
+      "server_ms": {
+        "p50": 6.6175,
+        "p95": 11.911,
+        "min": 5.659,
+        "max": 16.261
+      }
+    }
+  },
+  {
+    "source": "sql-menu-after/results.json",
+    "input": 10000,
+    "mode": "after",
+    "samples": 20,
+    "response_bytes": 37287,
+    "metrics": {
+      "server_ms": {
+        "p50": 7.4305,
+        "p95": 12.098,
+        "min": 5.493,
+        "max": 15.621
+      }
+    }
+  },
+  {
+    "source": "sql-menu-after/results.json",
+    "input": 100000,
+    "mode": "after",
+    "samples": 20,
+    "response_bytes": 37287,
+    "metrics": {
+      "server_ms": {
+        "p50": 7.031,
+        "p95": 12.65,
+        "min": 5.891,
+        "max": 22.368
+      }
+    }
+  },
+  {
+    "source": "sql-cost-before/inventory_cost_results.json",
+    "input": 100,
+    "mode": "before",
+    "samples": 20,
+    "response_bytes": 25092,
+    "metrics": {
+      "server_ms": {
+        "p50": 2.7800000000000002,
+        "p95": 11.709,
+        "min": 2.182,
+        "max": 20.463
+      }
+    }
+  },
+  {
+    "source": "sql-cost-before/inventory_cost_results.json",
+    "input": 1000,
+    "mode": "before",
+    "samples": 20,
+    "response_bytes": 25092,
+    "metrics": {
+      "server_ms": {
+        "p50": 2.931,
+        "p95": 6.5,
+        "min": 2.471,
+        "max": 9.553
+      }
+    }
+  },
+  {
+    "source": "sql-cost-before/inventory_cost_results.json",
+    "input": 10000,
+    "mode": "before",
+    "samples": 20,
+    "response_bytes": 25092,
+    "metrics": {
+      "server_ms": {
+        "p50": 7.0145,
+        "p95": 12.029,
+        "min": 5.902,
+        "max": 12.301
+      }
+    }
+  },
+  {
+    "source": "sql-cost-before/inventory_cost_results.json",
+    "input": 100000,
+    "mode": "before",
+    "samples": 20,
+    "response_bytes": 25092,
+    "metrics": {
+      "server_ms": {
+        "p50": 49.007,
+        "p95": 66.685,
+        "min": 44.783,
+        "max": 78.713
+      }
+    }
+  },
+  {
+    "source": "sql-cost-after/inventory_cost_results.json",
+    "input": 100,
+    "mode": "after",
+    "samples": 20,
+    "response_bytes": 25092,
+    "metrics": {
+      "server_ms": {
+        "p50": 2.7195,
+        "p95": 4.375,
+        "min": 2.223,
+        "max": 4.986
+      }
+    }
+  },
+  {
+    "source": "sql-cost-after/inventory_cost_results.json",
+    "input": 1000,
+    "mode": "after",
+    "samples": 20,
+    "response_bytes": 25092,
+    "metrics": {
+      "server_ms": {
+        "p50": 3.1414999999999997,
+        "p95": 5.386,
+        "min": 2.359,
+        "max": 5.535
+      }
+    }
+  },
+  {
+    "source": "sql-cost-after/inventory_cost_results.json",
+    "input": 10000,
+    "mode": "after",
+    "samples": 20,
+    "response_bytes": 25092,
+    "metrics": {
+      "server_ms": {
+        "p50": 3.835,
+        "p95": 4.524,
+        "min": 3.145,
+        "max": 5.245
+      }
+    }
+  },
+  {
+    "source": "sql-cost-after/inventory_cost_results.json",
+    "input": 100000,
+    "mode": "after",
+    "samples": 20,
+    "response_bytes": 25092,
+    "metrics": {
+      "server_ms": {
+        "p50": 3.266,
+        "p95": 10.349,
+        "min": 2.356,
+        "max": 11.021
+      }
+    }
+  }
+]

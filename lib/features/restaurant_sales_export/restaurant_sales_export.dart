@@ -46,11 +46,15 @@ class RestaurantSalesReceipt {
     required this.buyerPhone,
     required this.lineItems,
     required this.issues,
+    this.receiptNumber = '',
   });
 
   final String storeId;
   final String storeName;
   final String receiptId;
+  final String receiptNumber;
+  String get displayReceiptNumber =>
+      receiptNumber.isEmpty ? receiptId : receiptNumber;
   final String receiptSource;
   final String salesChannel;
   final double grossSales;
@@ -332,6 +336,7 @@ RestaurantSalesExport createRestaurantSalesExport(
             'RESTAURANT_EXPORT_INVALID_STORE_NAME:$receiptId',
           ),
           receiptId: receiptId,
+          receiptNumber: row['receipt_number']?.toString() ?? '',
           receiptSource: receiptSource,
           salesChannel: row['sales_channel']?.toString() ?? '',
           grossSales: receiptGross,

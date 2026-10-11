@@ -156,26 +156,29 @@ void main() {
     expect(source, contains('dry_run'));
     expect(source, contains('meinvoice_dispatch_disabled'));
     expect(source, contains('.from("meinvoice_jobs")'));
-    expect(source, contains('.eq("status", "pending")'));
-    expect(source, contains('loadSellerConfig'));
+    expect(source, contains('claim_meinvoice_jobs'));
+    expect(source, contains('sellerConfigFromRows'));
     expect(source, contains('buildCashRegisterInvoicePayload'));
     expect(source, contains('validateCashRegisterInvoicePayload'));
     expect(source, contains('summarizePublishResponse'));
-    expect(source, contains('metadata: publishMetadata'));
+    expect(source, contains('metadata,'));
     expect(source, contains('getMeInvoiceToken'));
     expect(source, contains('publishCashRegisterInvoice'));
     expect(source, contains('status: "valid_invoice"'));
-    expect(source, contains('status: "dispatch_paused"'));
-    expect(source, contains('logMeInvoiceEvent'));
+    expect(source, contains('"dispatch_paused"'));
+    expect(source, contains('complete_meinvoice_batch'));
     expect(shared, contains('meinvoice_job_events'));
     final validationCall = source.indexOf(
       'const payload = validateCashRegisterInvoicePayload(',
     );
     expect(validationCall, greaterThan(-1));
-    expect(validationCall, lessThan(source.indexOf('if (dryRun)')));
     expect(
       validationCall,
-      lessThan(source.indexOf('const token = await getMeInvoiceToken')),
+      lessThan(source.indexOf('if (dryRun)', validationCall)),
+    );
+    expect(
+      validationCall,
+      lessThan(source.indexOf('const token = await tokenLoad')),
     );
     expect(source, isNot(contains('.from("einvoice_jobs")')));
     expect(source, isNot(contains('wetax')));

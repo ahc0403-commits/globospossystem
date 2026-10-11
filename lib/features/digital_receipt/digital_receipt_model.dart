@@ -65,6 +65,7 @@ class DigitalReceipt {
     this.dinerCount,
     this.utensilsRequested = true,
     this.fulfillmentMethod,
+    this.deliveryPaymentMode,
     this.directOrderReference,
     this.orderNotes,
     this.requestAddenda = const [],
@@ -94,6 +95,7 @@ class DigitalReceipt {
   final int? dinerCount;
   final bool utensilsRequested;
   final String? fulfillmentMethod;
+  final String? deliveryPaymentMode;
   final String? directOrderReference;
   final String? orderNotes;
   final List<String> requestAddenda;
@@ -163,6 +165,7 @@ class DigitalReceipt {
       dinerCount: _optionalDinerCount(json['diner_count']),
       utensilsRequested: json['utensils_requested'] != false,
       fulfillmentMethod: _optionalText(json['fulfillment_method']),
+      deliveryPaymentMode: _optionalText(json['delivery_payment_mode']),
       directOrderReference: _optionalText(json['direct_order_reference']),
       orderNotes: _optionalText(json['order_notes']),
       requestAddenda: json['request_addenda'] is List

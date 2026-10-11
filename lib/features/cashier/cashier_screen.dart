@@ -169,6 +169,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   late final ProviderSubscription<PaymentState> _paymentSub;
   late final PrintJobAgentService _printJobAgent;
 
+  int _proofActionsPending = 0;
   PaymentProofService get _paymentProofService =>
       widget.paymentProofServiceOverride ?? paymentProofService;
   PaymentService get _paymentService =>
@@ -259,6 +260,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     _isFlushingProofQueue = true;
     try {
       final uploaded = await _paymentProofService.flushPendingUploads();
+      final storeId = _initializedRestaurantId;
+      if (storeId != null) {
+        final count = await _paymentProofService.pendingActionCount(storeId);
+        if (mounted && storeId == _initializedRestaurantId) {
+          setState(() => _proofActionsPending = count);
+        }
+      }
       if (mounted && uploaded > 0) {
         showSuccessToast(
           context,
@@ -308,10 +316,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
     Future.microtask(() {
-      ref.read(paymentProvider.notifier).loadOrders(storeId);
-      ref
-          .read(waiterTableProvider.notifier)
-          .loadTables(storeId, showLoading: false);
+      if (event.isFallback ||
+          event.affects({'settings', 'einvoice', 'print'})) {
+        ref.read(paymentProvider.notifier).loadOrders(storeId);
+      }
+      if (event.isFallback) {
+        ref
+            .read(waiterTableProvider.notifier)
+            .loadTables(storeId, showLoading: false);
+      }
       ref.invalidate(einvoiceJobStatusProvider);
     });
   }
@@ -1561,6 +1574,22 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
             ),
           ),
+          if (_proofActionsPending > 0)
+            TextButton.icon(
+              key: const Key('cashier_retry_queued_proof'),
+              icon: const Icon(Icons.sync),
+              label: Text(
+                '${l10n.paymentProofTitle} · ${l10n.refresh} ($_proofActionsPending)',
+              ),
+              onPressed: isOnline && !_isFlushingProofQueue && storeId != null
+                  ? () async {
+                      await _paymentProofService.resumePendingUploads(
+                        storeId: storeId,
+                      );
+                      await _flushProofQueueIfNeeded(isOnline);
+                    }
+                  : null,
+            ),
           const SizedBox(height: 10),
           _CashierOrderSearchToolbar(
             controller: _orderSearchController,

@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/live_refresh_service.dart';
+import '../../core/utils/coalesced_refresh.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
@@ -23,7 +26,10 @@ class ReceiptLedgerScreen extends ConsumerStatefulWidget {
 }
 
 class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
-  static const _pageSize = 100;
+  static const _pageSize = 50;
+  int _readGeneration = 0;
+  final _liveRefresh = CoalescedRefresh();
+  final _cursors = <(DateTime?, String?)>[(null, null)];
   final _searchController = TextEditingController();
   ReceiptLedgerPage? _page;
   bool _loading = true;
@@ -43,8 +49,19 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
 
   @override
   void dispose() {
+    _readGeneration++;
+    _liveRefresh.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ReceiptLedgerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.overrideStoreId != widget.overrideStoreId) {
+      _page = null;
+      unawaited(_reload());
+    }
   }
 
   String? get _storeId {
@@ -53,7 +70,20 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
     return auth.role == 'super_admin' ? null : auth.storeId;
   }
 
-  Future<void> _reload() async {
+  Future<void> _reload({bool reset = true}) {
+    final generation = ++_readGeneration;
+    return _liveRefresh.run(
+      () => _readPage(reset: reset, generation: generation),
+    );
+  }
+
+  Future<void> _readPage({required bool reset, required int generation}) async {
+    if (!mounted) return;
+    if (reset) {
+      _cursors
+        ..clear()
+        ..add((null, null));
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -65,45 +95,42 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
         query: _searchController.text.trim(),
         status: _status,
         limit: _pageSize,
+        afterAt: _cursors.last.$1,
+        afterId: _cursors.last.$2,
+        knownSummary: reset ? null : _page?.summary,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _readGeneration) return;
       setState(() => _page = page);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _readGeneration) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _readGeneration) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _loadMore() async {
     final current = _page;
-    if (current == null || !current.hasMore || _loadingMore) return;
-    setState(() => _loadingMore = true);
-    try {
-      final next = await receiptLedgerService.load(
-        businessDate: _businessDate,
-        storeId: _storeId,
-        query: _searchController.text.trim(),
-        status: _status,
-        limit: _pageSize,
-        offset: current.receipts.length,
-      );
-      if (!mounted) return;
-      setState(() {
-        _page = ReceiptLedgerPage(
-          businessDate: next.businessDate,
-          generatedAt: next.generatedAt,
-          summary: next.summary,
-          receipts: [...current.receipts, ...next.receipts],
-          hasMore: next.hasMore,
-        );
-      });
-    } catch (error) {
-      if (mounted) showErrorToast(context, error.toString());
-    } finally {
-      if (mounted) setState(() => _loadingMore = false);
+    if (current == null ||
+        !current.hasMore ||
+        _loading ||
+        _loadingMore ||
+        current.receipts.isEmpty) {
+      return;
     }
+    final last = current.receipts.last;
+    _cursors.add((last.soldAt, last.receiptId));
+    setState(() => _loadingMore = true);
+    await _reload(reset: false);
+    if (mounted) setState(() => _loadingMore = false);
+  }
+
+  Future<void> _previousPage() async {
+    if (_cursors.length <= 1 || _loading) return;
+    _cursors.removeLast();
+    await _reload(reset: false);
   }
 
   Future<void> _chooseBusinessDate() async {
@@ -171,6 +198,24 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authProvider.select((a) => (a.user?.id, a.role, a.storeId)), (
+      previous,
+      next,
+    ) {
+      setState(() {
+        _page = null;
+        _loading = true;
+      });
+      unawaited(_reload());
+    });
+    ref.listen<AsyncValue<PosLiveEvent>>(
+      posLiveEventsProvider(_storeId ?? '*'),
+      (_, next) => next.whenData((event) {
+        if (event.affects({'payments', 'einvoice', 'orders', 'reports'})) {
+          unawaited(_reload());
+        }
+      }),
+    );
     final copy = _ReceiptLedgerCopy(context);
     final page = _page;
     return Scaffold(
@@ -380,6 +425,14 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
                   ),
                   const Divider(height: 1),
                 ],
+                if (_cursors.length > 1)
+                  TextButton.icon(
+                    onPressed: _loading ? null : _previousPage,
+                    icon: const Icon(Icons.chevron_left),
+                    label: Text(
+                      MaterialLocalizations.of(context).previousPageTooltip,
+                    ),
+                  ),
                 if (page?.hasMore == true)
                   Padding(
                     padding: const EdgeInsets.only(top: 14),
@@ -392,7 +445,9 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.expand_more_rounded),
-                      label: Text(copy.loadMore),
+                      label: Text(
+                        MaterialLocalizations.of(context).nextPageTooltip,
+                      ),
                     ),
                   ),
               ],

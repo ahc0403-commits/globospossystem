@@ -29,6 +29,7 @@ class FinancialInputService {
     DateTime? toExclusive,
     String? fromDate,
     String? toDate,
+    String? employeeId,
   }) async {
     final scope = List<String>.unmodifiable(storeIds);
     final params = <String, dynamic>{
@@ -48,9 +49,12 @@ class FinancialInputService {
 
     while (true) {
       final response = await client.rpc(
-        'get_financial_input_page',
+        employeeId == null
+            ? 'get_financial_input_page'
+            : 'get_employee_financial_input_page',
         params: {
           ...params,
+          if (employeeId != null) 'p_employee_id': employeeId,
           'p_cursor': cursor,
           'p_expected_revision': revision,
         },

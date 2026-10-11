@@ -516,6 +516,10 @@ void main() {
           _fixtureApp(service: service, locale: Locale(locale), textScale: 1.5),
         );
         await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const Key('direct_add_tteokbokki')),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
         await tester.pumpAndSettle();
         await tester.tap(find.text(DirectOrderCopy(locale).address).last);
@@ -523,7 +527,7 @@ void main() {
         await tester.scrollUntilVisible(
           find.byKey(const Key('direct_utensils_choice')),
           200,
-          scrollable: find.byType(Scrollable).first,
+          scrollable: find.byType(Scrollable).last,
         );
         await tester.pumpAndSettle();
         expect(find.text(DirectOrderCopy(locale).utensilsNone), findsOneWidget);
@@ -1739,7 +1743,9 @@ void main() {
         expect(actual!.buffer.asUint8List(), expected!.buffer.asUint8List());
         expect(
           find.textContaining(
-            prepaid ? '기사에게 추가로 지급하지 마세요' : '매장 결제 금액과 Bill에 포함되지 않습니다',
+            prepaid
+                ? '기사에게 추가로 지급하지 마세요'
+                : DirectOrderCopy('ko').customerPaysDriverHelp,
           ),
           findsWidgets,
         );
@@ -2223,7 +2229,10 @@ void main() {
       await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
       await tester.pumpAndSettle();
       expect(find.byType(QrImageView), findsNothing);
-      expect(find.byType(DirectOrderAttachmentButton), findsNothing);
+      expect(
+        find.byKey(const Key('direct_payment_sheet_upload_proof')),
+        findsNothing,
+      );
       final sheet = find.byKey(const Key('direct_customer_quote_sheet'));
       expect(
         find.descendant(
@@ -2927,7 +2936,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.drag(find.byType(ListView).last, const Offset(0, -500));
       await tester.pumpAndSettle();
-      expect(find.text('배송비 미정 · 기사에게 직접 결제'), findsOneWidget);
+      expect(
+        find.text(DirectOrderCopy('ko').customerPaysDriverHelp),
+        findsWidgets,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -3021,7 +3033,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const Key('direct_order_details_list')),
-          matching: find.text('기사에게 별도 지급 · 매장 결제에 미포함'),
+          matching: find.text(DirectOrderCopy('ko').customerPaysDriverHelp),
         ),
         findsOneWidget,
       );

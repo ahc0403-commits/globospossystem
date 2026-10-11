@@ -1,139 +1,80 @@
 # CLAUDE.md — GLOBOSVN POS System
 
-> Inherits global behavioral guidelines from `~/.claude/CLAUDE.md`.
-> Project-specific rules below override or supplement those.
+Read `/Users/andreahn/.claude/CLAUDE.md` first and apply its shared rules,
+including N+1 prevention and performance verification. This file adds
+project-specific rules under platform instruction precedence; explicit user
+requests and higher-priority instructions take precedence.
 
-## 1. Behavioral guidelines
+## Project and sources
 
-See `~/.claude/CLAUDE.md`. Four principles:
-1. Think before coding — surface assumptions, ask when uncertain
-2. Simplicity first — minimum code, no speculative features
-3. Surgical changes — touch only what's needed, don't improve adjacent code
-4. Goal-driven execution — verifiable success criteria, loop until verified
+- GLOBOSVN POS is a multi-tenant F&B POS for Vietnam, built with Flutter and
+  Supabase (Postgres, RLS, Edge Functions, Storage, and pg_cron).
+- Confirm current behavior from `lib/`, `supabase/`, `scripts/`,
+  `.github/workflows/`, and `test/`. When documentation and implementation differ,
+  identify the discrepancy and use the user request and business invariants to
+  determine intended behavior; existing code may contain bugs.
+- The system map is `00_HOME.md` in
+  `~/Documents/restaurant-ops-vault/GLOBOSVN POS/`. `99_ARCHIVE/` is historical
+  provenance, not an active specification.
+- Keep source implementation, applied migrations, production deployment, and
+  operational verification distinct. Source evidence proves only implementation.
 
-## 2. Project context
+## Data and Office compatibility
 
-GLOBOSVN POS is a multi-tenant F&B point-of-sale product for Vietnam.
-Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
+- Preserve the physical `restaurants` table and its `id`, `name`, `address`,
+  and `is_active` columns: the Office app reads them directly. `stores` is the
+  compatibility view; preserve physical `restaurant_id` foreign-key columns
+  even when views expose `store_id` aliases.
+- The Office app is `~/Documents/restaurant_office_app`. Modify it only when
+  explicitly requested; POS schema changes must preserve its read contract.
+- Brand, legal-entity, and store access uses `user_accessible_stores` and related
+  RPCs. Preserve tenant and store access boundaries when changing data access.
+- Authentication users and workforce employees are separate concepts;
+  preserve their explicit mappings where required.
 
-- **Codebase**: `~/globos_pos_system`
-- **Obsidian vault**: `~/Documents/restaurant-ops-vault/GLOBOSVN POS/`
-- **Authoritative system truth**: the checked-out implementation under `lib/`,
-  `supabase/`, `scripts/`, `.github/workflows/`, and `test/`
-- **Canonical system map**: `00_HOME.md` in the Obsidian vault
-- **E-invoice authority**: the implemented MISA/meInvoice contract
-- **Historical vendor docs**: `docs/vendor/` (WeTax API, reference only)
-- **Sample API responses**: `docs/vendor/samples/`
+## Payments and operating times
 
-## 3. Authority and scope rules
+- `process_payment` is the atomic single-order payment entry point. Determine
+  its effective definition by migration order, not a fixed historical filename.
+- `einvoice_jobs.ref_id` must be UUIDv7 with version 7 and proper variant bits.
+- Payment completion must never depend on MISA availability; dispatch is async.
+  MISA/meInvoice is the active e-invoice contract. Its portal handles invoice
+  history, corrections, cancellations, and PDFs; POS opens `lookup_url`.
+  Do not duplicate these portal features in POS.
+  WeTax material in `docs/vendor/` and `docs/vendor/samples/` is historical.
+- Supabase bytea values use `\x...` hex. Use `decodeByteaToString()` in Edge
+  Functions, not `atob()`; see the vault's
+  `90_REFERENCE/04_DECISIONS_AND_INVARIANTS.md` for the contract.
+- General daily cash close is 23:00 Asia/Ho_Chi_Minh. Restaurant order cutoff
+  is 21:30, grace ends at 21:45, and finalization is 22:20; these are separate
+  operating contracts.
 
-- **The current implementation is authoritative.** When older Obsidian scope,
-  phase, ADR, or vendor notes conflict with the checked-out code, migrations,
-  tests, or workflows, follow the implementation and update the documentation.
-- The active vault starts at `00_HOME.md`. Content under `99_ARCHIVE/` is
-  provenance only and must not be used as an active specification.
-- Keep four states separate: implemented in source, migration applied,
-  deployed to production, and operationally verified. Source evidence alone
-  proves only the first state.
-- MISA/meInvoice is the active e-invoice path. WeTax artifacts remain only for
-  compatibility and history unless the implementation is explicitly changed.
-- **bytea decode:** Supabase returns bytea as `\x313233...` hex — use
-  `decodeByteaToString()` helper in edge functions, not `atob()`.
-  See `90_REFERENCE/04_DECISIONS_AND_INVARIANTS.md` in the vault.
+## Retired integrations
 
-## 4. Hard constraints (binding)
-
-- **Claude Code prompts must be English only.** Chat with Hyochang can
-  be Korean, but prompts to Claude Code are strictly English.
-- **All Claude Code commands follow the harness skill format**
-  (`/mnt/skills/user/harness/SKILL.md`):
-  Load Design Documents → Load Code Structure → Run Checks by Category
-  → Generate Harness Report with severity classification (CRITICAL /
-  HIGH / MEDIUM / LOW / CONFIRMED) and Priority Fix List.
-- **Do not rebuild what the vendor already provides.** The MISA portal
-  handles red invoice history, corrections, cancellations, PDF
-  downloads. POS opens `lookup_url` — does not duplicate.
-- **Payment completion must never depend on MISA availability.**
-  MISA dispatch is always async. The implemented MISA contract is
-  authoritative; WeTax remains historical only.
-- **Deliberry is retired by the owner's 2026-10-05 decision.**
-  Do not accept, dispatch, reprocess, or generate new Deliberry settlements.
-  Preserve historical sales/settlement records and their read contracts.
-  Both `generate-settlement` and `generate_delivery_settlement` currently
-  produce Deliberry settlements; retain their endpoints as HTTP 410 responses.
+- **Deliberry is retired by the owner's 2026-10-05 decision.** Do not accept,
+  dispatch, reprocess, or generate new Deliberry settlements. Preserve historical
+  sales/settlement records and their read contracts. `generate-settlement` and
+  `generate_delivery_settlement` return HTTP 410; retain those endpoints.
   Reactivation requires a new explicit owner decision and migration.
-
-## 5. Office app coupling (do not break)
-
-The Office Supabase project (`raghsbaxcwrxlsacaoau`,
-`~/Documents/restaurant_office_app`) connects to POS Supabase
-(`ynriuoomotxuwhuxxmhj`) directly via service_role key. The single
-hard coupling point is:
-
-```
-restaurant_office_app/lib/features/master_admin/data/master_admin_repository.dart:48
-    .from('restaurants').select('id, name, address, is_active')
-```
-
-This means:
-- POS `restaurants` table name MUST stay (cannot rename to `stores` physically).
-- POS `restaurants.id`, `name`, `address`, `is_active` columns MUST stay.
-- `stores` exists as a view on top of `restaurants` (Expand stage).
-- `restaurant_id` FK columns on POS side may be aliased via views to
-  `store_id` but the physical column name is preserved.
-- Office app must NOT be modified to follow POS renames unless
-  explicitly instructed.
-
-## 6. Current structural state
-
-- `restaurants` remains the physical table and `stores` the compatibility view.
-- Brand/legal-entity/store hierarchy and multi-store access are implemented;
-  effective access is represented by `user_accessible_stores` and related RPCs.
-- Authentication users and workforce employees are separate concepts connected
-  by explicit mappings where required.
-- Fulfillment has both standard POS/print flows and paperless emergency/KDS flows.
-- **Photo Objet automatic sales collection is permanently retired.** There is
-  no active schedule, backfill, recovery, slot-health monitor, collection
-  alert, or Photo-specific release gate. Historical tables and migrations are
-  retained as provenance. Current Photo sales data may enter POS only through
-  the explicit Super Admin Excel import.
-- The current login surface defines 12 roles and the repository contains 19
-  Supabase Edge Functions. Recount from source whenever this changes.
-
-## 7. Critical invariants
-
-- `einvoice_jobs.ref_id` must be UUIDv7 (version nibble 7, proper variant bits)
-- `process_payment(order, store, amount, method)` is the atomic single-order
-  payment anchor. Its latest effective definition is currently in
-  `supabase/migrations/20260707010000_service_item_exclusion_v1.sql`; determine
-  effective SQL by migration order rather than relying on an older phase file.
-- General daily cash close runs at 23:00 Asia/Ho_Chi_Minh. Restaurant order
-  cutoff/finalization is a separate contract: 21:30 cutoff, 21:45 grace end,
-  and 22:20 finalization.
-- **Never re-enable or describe Photo Objet automatic sales collection as an
-  active contract.** Reintroduction requires an explicit new user decision,
-  a new migration that removes the database retirement guard, and a new ADR.
+- **Photo Objet automatic sales collection is permanently retired.** No active
+  collection schedule, backfill, recovery, slot-health monitor, collection alert,
+  or Photo-specific release gate is permitted. Preserve historical data and
+  migrations; current Photo sales enter only through Super Admin Excel import.
   Missing historical Photo collection slots are not release failures and must
-  not create alerts or block POS deployment.
-- MISA portal handles red invoice lifecycle. POS does not duplicate.
+  not create alerts or block POS deployment. Reintroduction requires an explicit
+  new user decision, a migration removing the retirement guard, and a new ADR.
 
-## 8. Workflow
+## Verification and release
 
-Hyochang runs Claude Code, Claude (the assistant) designs and reviews.
-The assistant writes English Claude Code commands in harness format,
-Hyochang executes them in his environment, shares results, the
-assistant reviews and responds.
-
-For release work, local validation and an independent Judge are preflight
-evidence only. Do not report the release gate as PASS until the required
-GitHub Actions checks succeed on the exact pushed head SHA. Cross-platform
-shell fixtures must explicitly create every required Git state and must not
-depend on Bash-version-specific `errexit` behavior.
-
-## 9. Common verification commands
-
-- Full repository verification: `bash scripts/check_repo.sh`
-- Static analysis: `flutter analyze`
-- Full Flutter tests: `flutter test`
-- Format changed Dart files: `dart format <files>`
-- Production release: use `scripts/deploy_pos_production.sh`; do not bypass it.
+- Run checks relevant to the change and its risk. Documentation-only edits need
+  document and diff validation; a full app build is not required.
+- Full repository verification: `bash scripts/check_repo.sh`.
+- Static analysis used by that script: `dart analyze --fatal-infos`.
+- Flutter tests: `flutter test` (or the relevant test files for focused checks).
+- Format changed Dart files: `dart format <files>`.
+- Production release must use `scripts/deploy_pos_production.sh`; do not bypass
+  it. Local checks and reviews are preflight evidence. The release gate passes
+  only when required GitHub Actions checks succeed on the exact pushed head SHA.
+- Deployment procedure: `docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md`.
+- For a requested Claude Code handoff, write the prompt in English with the goal,
+  relevant files, and verification steps. Apply a requested harness when available.

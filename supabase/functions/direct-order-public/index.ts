@@ -37,6 +37,7 @@ export const directOrderActionRegistry = Object.freeze(
     submit_v3: { actor: "public", rateLimit: 60 },
     status_v8: { actor: "public", rateLimit: 60 },
     status_v9: { actor: "public", rateLimit: 60 },
+    status_v10: { actor: "public", rateLimit: 60 },
     decide_requirement: { actor: "public", rateLimit: 30 },
     resume_storefront: { actor: "public", rateLimit: 60 },
     resume_order: { actor: "public", rateLimit: 60 },
@@ -52,6 +53,7 @@ export const directOrderActionRegistry = Object.freeze(
     orders_v2: { actor: "public", rateLimit: 60 },
     orders_v3: { actor: "public", rateLimit: 60 },
     orders_v4: { actor: "public", rateLimit: 60 },
+    orders_v5: { actor: "public", rateLimit: 60 },
     push_subscription: { actor: "public", rateLimit: 10 },
     message: { actor: "public", rateLimit: 60 },
     charge_consent: { actor: "public", rateLimit: 30 },
@@ -59,6 +61,10 @@ export const directOrderActionRegistry = Object.freeze(
     customer_attachment_upload: { actor: "public", rateLimit: 10 },
     customer_attachment_commit: { actor: "public", rateLimit: 30 },
     customer_attachment_url: { actor: "public", rateLimit: 60 },
+    customer_chat_attachment_upload: { actor: "public", rateLimit: 10 },
+    customer_chat_attachment_commit: { actor: "public", rateLimit: 30 },
+    staff_chat_attachment_upload: { actor: "staff", rateLimit: null },
+    staff_chat_attachment_commit: { actor: "staff", rateLimit: null },
     staff_attachment_upload: { actor: "staff", rateLimit: null },
     staff_attachment_commit: { actor: "staff", rateLimit: null },
     staff_attachment_url: { actor: "staff", rateLimit: null },
@@ -187,11 +193,27 @@ export function validateProofImage(
   extension: string,
 ): boolean {
   if (bytes.length < 12 || bytes.length > 5242880) return false;
-  const dimensions = proofDimensions(bytes, extension);
+  const dimensions = proofDimensions(
+    bytes,
+    extension === "jpeg" ? "jpg" : extension,
+  );
   if (!dimensions) return false;
   const { width, height } = dimensions;
   return width > 0 && height > 0 && width <= 12000 && height <= 12000 &&
     width * height <= 25000000;
+}
+
+export function validateChatAttachmentBytes(
+  bytes: Uint8Array,
+  extension: string,
+): boolean {
+  if (extension !== "pdf") return validateProofImage(bytes, extension);
+  if (bytes.length < 20 || bytes.length > 5242880) return false;
+  const decoder = new TextDecoder();
+  return /^%PDF-[12]\.[0-9]/.test(decoder.decode(bytes.subarray(0, 8))) &&
+    /%%EOF\s*$/.test(
+      decoder.decode(bytes.subarray(Math.max(0, bytes.length - 1024))),
+    );
 }
 
 export function resolveProjectSecretKey(
@@ -518,6 +540,27 @@ const internalFailure: SqlErrorContract = {
 export const sqlDomainErrorRegistry: Readonly<
   Record<string, SqlErrorContract>
 > = Object.freeze({
+  DIRECT_ORDER_NATIVE_PICKUP_QUOTE_PREDECESSOR_DRIFT: internalFailure,
+  DIRECT_ORDER_RECIPIENT_RECEIPT_DRIFT: internalFailure,
+  DIRECT_ORDER_RECIPIENT_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_BATCH_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_BATCH_PATCH_DRIFT: internalFailure,
+  DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED: conflict(
+    "DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED",
+  ),
+  DIRECT_ORDER_BOOKING_REQUIRED: conflict("DIRECT_ORDER_BOOKING_REQUIRED"),
+  DIRECT_ORDER_BOOKING_CHANGED: conflict("DIRECT_ORDER_BOOKING_CHANGED"),
+  DIRECT_ORDER_COOKING_NOT_COMPLETE: conflict(
+    "DIRECT_ORDER_COOKING_NOT_COMPLETE",
+  ),
+  DIRECT_ORDER_COOKING_USE_KDS: conflict("DIRECT_ORDER_COOKING_USE_KDS"),
+  DIRECT_ORDER_DELIVERY_POLICY_LOCKED: conflict(
+    "DIRECT_ORDER_DELIVERY_POLICY_LOCKED",
+  ),
+  DIRECT_ORDER_BOOKING_INPUT_INVALID: invalidRequest(
+    "DIRECT_ORDER_BOOKING_INPUT_INVALID",
+  ),
+
   DIRECT_ORDER_REQUIREMENT_NOT_FOUND: unavailable(
     "DIRECT_ORDER_REQUIREMENT_NOT_FOUND",
   ),
@@ -844,6 +887,14 @@ export function validProofObjectPath(path: string): boolean {
     fileMatch !== null && uuidPattern.test(fileMatch[1]);
 }
 
+export function validChatObjectPath(path: string): boolean {
+  const [store, order, file, extra] = path.split("/");
+  const match = /^([0-9a-f-]{36})[.](jpg|jpeg|png|webp|pdf)$/.exec(file ?? "");
+  return extra === undefined && uuidPattern.test(store ?? "") &&
+    uuidPattern.test(order ?? "") && match !== null &&
+    uuidPattern.test(match[1]);
+}
+
 export function validProofPath(path: string, requestId: string): boolean {
   return validProofObjectPath(path) && path.split("/")[1] === requestId;
 }
@@ -898,6 +949,7 @@ export function directOrderAttachmentSpec(
   storeId: string,
   requestId: string,
   staff: boolean,
+  generalChat = false,
 ) {
   const filename = requiredString(body, "filename", 255).replace(
     // deno-lint-ignore no-control-regex -- strip filename control characters
@@ -906,7 +958,7 @@ export function directOrderAttachmentSpec(
   );
   const mime = requiredString(body, "mime_type", 100);
   const extension = allowedProofTypes.get(mime) ??
-    (staff && mime === "application/pdf" ? "pdf" : null);
+    ((staff || generalChat) && mime === "application/pdf" ? "pdf" : null);
   const path = requiredString(body, "path", 200);
   const pathExtension = path.split(".").pop() ?? "";
   const expectedExtension = extension === "jpg" ? "(?:jpg|jpeg)" : extension;
@@ -969,6 +1021,7 @@ export async function resolveOrderScopedRequest(
     "orders_v2",
     "orders_v3",
     "orders_v4",
+    "orders_v5",
     "status",
     "status_v2",
     "status_v3",
@@ -978,6 +1031,7 @@ export async function resolveOrderScopedRequest(
     "status_v7",
     "status_v8",
     "status_v9",
+    "status_v10",
     "decide_requirement",
     "message",
     "decide_pickup",
@@ -991,6 +1045,8 @@ export async function resolveOrderScopedRequest(
     "customer_attachment_upload",
     "customer_attachment_commit",
     "customer_attachment_url",
+    "customer_chat_attachment_upload",
+    "customer_chat_attachment_commit",
   ]);
   if (!permitted.has(action)) throw new SafeHttpError(403, "REQUEST_FORBIDDEN");
   const requestId = requiredUuid(input, "session_id");
@@ -1006,6 +1062,7 @@ export async function resolveOrderScopedRequest(
       "orders_v2",
       "orders_v3",
       "orders_v4",
+      "orders_v5",
       "push_subscription",
     ]
       .includes(action) &&
@@ -1212,7 +1269,8 @@ function productionDependencies(): DirectOrderDependencies {
       case "status_v6":
       case "status_v7":
       case "status_v8":
-      case "status_v9": {
+      case "status_v9":
+      case "status_v10": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
@@ -1268,15 +1326,18 @@ function productionDependencies(): DirectOrderDependencies {
       }
       case "orders_v2":
       case "orders_v3":
-      case "orders_v4": {
+      case "orders_v4":
+      case "orders_v5": {
         const sessionId = requiredUuid(body, "session_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
         if (scoped.requestId) {
           const status = asObject(
             await rpc(
               service,
-              action === "orders_v4"
-                ? "direct_order_public_status_v9"
+              (action === "orders_v4" || action === "orders_v5")
+                ? (action === "orders_v5"
+                  ? "direct_order_public_status_v10"
+                  : "direct_order_public_status_v9")
                 : "direct_order_public_status_v6",
               {
                 p_session_id: sessionId,
@@ -1289,7 +1350,15 @@ function productionDependencies(): DirectOrderDependencies {
           const review = asObject(status.proof_review ?? {});
           const quote = asObject(status.quote ?? {});
           return [{
-            ...(action === "orders_v4"
+            ...((action === "orders_v4" || action === "orders_v5")
+              ? {
+                booking_status:
+                  asObject(asObject(status.delivery ?? {}).booking ?? {})
+                    .status ?? null,
+              }
+              : {}),
+            ...(action === "orders_v3" ||
+                (action === "orders_v4" || action === "orders_v5")
               ? {
                 quote_id: quote.id ?? null,
                 quote_version: quote.version ?? null,
@@ -1329,7 +1398,9 @@ function productionDependencies(): DirectOrderDependencies {
         }
         return await rpc(
           service,
-          action === "orders_v4"
+          action === "orders_v5"
+            ? "direct_order_public_orders_v5"
+            : action === "orders_v4"
             ? "direct_order_public_orders_v4"
             : action === "orders_v3"
             ? "direct_order_public_orders_v3"
@@ -1388,10 +1459,15 @@ function productionDependencies(): DirectOrderDependencies {
       case "customer_attachment_upload":
       case "customer_attachment_commit":
       case "customer_attachment_url":
+      case "customer_chat_attachment_upload":
+      case "customer_chat_attachment_commit":
+      case "staff_chat_attachment_upload":
+      case "staff_chat_attachment_commit":
       case "staff_attachment_upload":
       case "staff_attachment_commit":
       case "staff_attachment_url": {
         const staff = action.startsWith("staff_");
+        const generalChat = action.includes("_chat_attachment_");
         const requestId = requiredUuid(body, "request_id");
         let storeId: string;
         let actorId: string | null = null;
@@ -1448,18 +1524,24 @@ function productionDependencies(): DirectOrderDependencies {
           }
           return { signed_url: signed.data.signedUrl, expires_in: 300 };
         }
-        const chargeId = staff || body.charge_id == null
+        if (generalChat && body.charge_id != null) {
+          throw new SafeHttpError(400, "DIRECT_ORDER_ATTACHMENT_INVALID");
+        }
+        const chargeId = staff || generalChat || body.charge_id == null
           ? null
           : requiredUuid(body, "charge_id");
-        const { filename, path, extension } = directOrderAttachmentSpec(
+        const { filename, mime, path, extension } = directOrderAttachmentSpec(
           body,
           storeId,
           requestId,
           staff,
+          generalChat,
         );
         if (action.endsWith("_commit")) {
           const existing = await service.from("direct_order_messages")
-            .select("id,created_at,sender_type,metadata")
+            .select(
+              "id,created_at,sender_type,sender_auth_id,message_type,body,metadata",
+            )
             .eq("restaurant_id", storeId).eq("request_id", requestId)
             .eq("attachment_storage_path", path).maybeSingle();
           if (existing.error) {
@@ -1468,7 +1550,14 @@ function productionDependencies(): DirectOrderDependencies {
           if (existing.data) {
             if (
               existing.data.sender_type !== (staff ? "cashier" : "customer") ||
-              (existing.data.metadata?.charge_id ?? null) !== chargeId
+              (existing.data.metadata?.charge_id ?? null) !== chargeId ||
+              (generalChat && (existing.data.message_type !== "attachment" ||
+                existing.data.metadata?.attachment_kind !== "chat" ||
+                existing.data.metadata?.mime_type !== mime ||
+                existing.data.body !== filename ||
+                existing.data.sender_auth_id !== actorId)) ||
+              (!generalChat &&
+                existing.data.metadata?.attachment_kind === "chat")
             ) {
               throw new SafeHttpError(409, "DIRECT_ORDER_ATTACHMENT_INVALID");
             }
@@ -1483,7 +1572,7 @@ function productionDependencies(): DirectOrderDependencies {
           throw new SafeHttpError(409, "DIRECT_ORDER_REQUEST_NOT_CHATABLE");
         }
         if (
-          !staff &&
+          !staff && !generalChat &&
           !(chargeId == null && status.state === "approved") &&
           !(Array.isArray(support.charges) && support.charges.some((raw) => {
             const c = asObject(raw);
@@ -1505,13 +1594,26 @@ function productionDependencies(): DirectOrderDependencies {
           throw new SafeHttpError(409, "PROOF_UPLOAD_INCOMPLETE");
         }
         const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
-        const valid = bytes.length > 0 && bytes.length <= 5242880 &&
-          (extension === "pdf"
-            ? bytes.length >= 8 &&
-              new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-"
-            : validateProofImage(bytes, extension));
+        const valid = generalChat
+          ? validateChatAttachmentBytes(bytes, extension)
+          : bytes.length > 0 && bytes.length <= 5242880 &&
+            (extension === "pdf"
+              ? bytes.length >= 8 &&
+                new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-"
+              : validateProofImage(bytes, extension));
         if (!valid) {
           throw new SafeHttpError(400, "DIRECT_ORDER_ATTACHMENT_INVALID");
+        }
+        if (generalChat) {
+          return await rpc(service, "direct_order_commit_chat_attachment", {
+            p_request_id: requestId,
+            p_store_id: storeId,
+            p_sender: staff ? "cashier" : "customer",
+            p_actor: actorId,
+            p_path: path,
+            p_filename: filename,
+            p_mime: mime,
+          });
         }
         return await rpc(service, "direct_order_commit_attachment", {
           p_request_id: requestId,
@@ -1711,7 +1813,18 @@ function productionDependencies(): DirectOrderDependencies {
         const rows = Array.isArray(candidates) ? candidates : [];
         const requestIds: string[] = [];
         const paths = new Set<string>(orphanPaths);
-        const chatPaths = new Set<string>();
+        const orphanChats = await rpc(
+          service,
+          "direct_order_orphan_chat_candidates",
+          { p_limit: 100 },
+        );
+        const chatPaths = new Set<string>(
+          Array.isArray(orphanChats)
+            ? orphanChats.filter((p): p is string =>
+              typeof p === "string" && validChatObjectPath(p)
+            )
+            : [],
+        );
         for (const raw of rows) {
           if (!raw || typeof raw !== "object") continue;
           const row = raw as JsonObject;
