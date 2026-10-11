@@ -24,6 +24,11 @@ class DailySalesSummary {
       cashRefunds = _amount(row['cash_refunds']),
       deliveryCashPaid = _amount(row['delivery_cash_paid']),
       deliveryCashRecovered = _amount(row['delivery_cash_recovered']),
+      sourceRevision = row['source_revision'] as String?,
+      mappingRevision = (row['mapping_revision'] as num?)?.toInt(),
+      sourceItemCount = (row['source_item_count'] as num?)?.toInt(),
+      exportLineCount = (row['export_line_count'] as num?)?.toInt(),
+      externallyReported = row['externally_reported'] == true,
       bank = row['bank'] is Map
           ? CollectionBank.fromJson(
               Map<String, dynamic>.from(row['bank'] as Map),
@@ -44,6 +49,9 @@ class DailySalesSummary {
       deliveryCashPaid,
       deliveryCashRecovered;
   final CollectionBank? bank;
+  final int? mappingRevision, sourceItemCount, exportLineCount;
+  final bool externallyReported;
+  final String? sourceRevision;
   int get receiptCount => restaurantReceiptCount + photoReceiptCount;
   double get gross => restaurantGross + photoGross;
   double? get nextDeposit => photoComplete ? photoGross + restaurantCash : null;

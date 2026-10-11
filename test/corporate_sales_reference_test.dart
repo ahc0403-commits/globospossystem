@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'fixtures/sales_invoice_fixture.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export.dart';
@@ -59,19 +60,32 @@ void main() {
         'buyer_email': contact['email'],
         'buyer_phone': contact['phone'],
       });
-      final export = createRestaurantSalesExport(payload);
+      final export = _fixtureExport(payload);
       expect(export.isReadyForDownload, isTrue, reason: group.toString());
       final bytes = buildRestaurantSalesWorkbook(export);
       final book = Excel.decodeBytes(bytes);
       final rows = book.tables['Hóa đơn GTGT']!.rows.skip(8).toList();
       expect(rows.length, 9);
-      expect(rows.every((r) => r[9]!.value.toString() == label), isTrue);
       expect(
-        rows.every((r) => (r[6]?.value.toString() ?? '') == contact['email']),
+        rows
+            .skip(1)
+            .every((r) => r.sublist(1, 10).every((c) => c?.value == null)),
         isTrue,
       );
       expect(
-        rows.every((r) => (r[7]?.value.toString() ?? '') == contact['phone']),
+        rows.take(1).every((r) => r[9]!.value.toString() == label),
+        isTrue,
+      );
+      expect(
+        rows
+            .take(1)
+            .every((r) => (r[6]?.value.toString() ?? '') == contact['email']),
+        isTrue,
+      );
+      expect(
+        rows
+            .take(1)
+            .every((r) => (r[7]?.value.toString() ?? '') == contact['phone']),
         isTrue,
       );
       expect(rows[0][15]!.value.toString(), '10');
@@ -94,7 +108,7 @@ void main() {
   test(
     'BC-20261008-023320 retains 9 lines, 10 units, all amounts and beverage VAT',
     () {
-      final export = createRestaurantSalesExport(
+      final export = _fixtureExport(
         jsonDecode(
               File(
                 'test/fixtures/corporate_sales_reference.json',
@@ -110,10 +124,16 @@ void main() {
       final rows = book.tables['Hóa đơn GTGT']!.rows.skip(8).toList();
       num n(int r, int c) => num.parse(rows[r][c]!.value.toString());
       expect(rows.length, 9);
+      expect(
+        rows
+            .skip(1)
+            .every((r) => r.sublist(1, 10).every((c) => c?.value == null)),
+        isTrue,
+      );
       expect(List.generate(9, (i) => n(i, 12)).reduce((a, b) => a + b), 10);
       expect(List.generate(9, (i) => n(i, 14)).reduce((a, b) => a + b), 406000);
       expect(List.generate(9, (i) => n(i, 16)).reduce((a, b) => a + b), 33560);
-      expect(rows.every((r) => r[9]!.value.toString() == 'CK'), isTrue);
+      expect(rows.take(1).every((r) => r[9]!.value.toString() == 'CK'), isTrue);
       expect(n(0, 15), 10);
       expect(n(1, 15), 8);
       final ledger = book.tables['POS Ledger']!.rows;
@@ -126,3 +146,6 @@ void main() {
     },
   );
 }
+
+RestaurantSalesExport _fixtureExport(Map<String, dynamic> p) =>
+    createRestaurantSalesExport(approvedSalesFixturePayload(p));

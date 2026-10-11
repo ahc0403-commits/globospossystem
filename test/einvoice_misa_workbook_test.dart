@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'fixtures/sales_invoice_fixture.dart';
 
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,7 +53,7 @@ void main() {
     },
   );
   test('exports the exact 17-column MISA desktop upload layout', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
+    final bytes = _fixtureWorkbook([
       {
         'id': 'restaurant-job',
         'source_system': 'globos_pos',
@@ -92,7 +93,12 @@ void main() {
     ]);
 
     final workbook = Excel.decodeBytes(bytes);
-    expect(workbook.tables.keys, ['Hóa đơn GTGT', 'POS Ledger']);
+    expect(workbook.tables.keys, [
+      'Hóa đơn GTGT',
+      'POS Ledger',
+      'Invoice Mapping',
+      'Export Contract',
+    ]);
     final sheet = workbook.tables['Hóa đơn GTGT']!;
 
     expect(sheet.rows[7].map(_text).toList(), const [
@@ -142,7 +148,7 @@ void main() {
   });
 
   test('preserves equal-rate menu lines and stable IDs', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
+    final bytes = _fixtureWorkbook([
       {
         'source_system': 'globos_pos',
         'payment_method_snapshot': 'TM',
@@ -181,7 +187,7 @@ void main() {
   });
 
   test('keeps the reported 290000 VND Photo receipt arithmetically exact', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
+    final bytes = _fixtureWorkbook([
       {
         'source_system': 'photo_objet_moers',
         'created_at': '2026-09-11T13:54:59Z',
@@ -209,7 +215,7 @@ void main() {
   });
 
   test('matches every MISA arithmetic check used by the Photo workbook', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
+    final bytes = _fixtureWorkbook([
       for (final gross in [70000, 200000, 290000, 340000])
         {
           'source_system': 'photo_objet_moers',
@@ -257,7 +263,7 @@ void main() {
     'blocks invalid source VAT rather than recalculating historical amounts',
     () {
       expect(
-        () => buildMisaPendingInvoiceWorkbook([
+        () => _fixtureWorkbook([
           {
             'source_system': 'restaurant_pos',
             'payment_method_snapshot': 'TM',
@@ -300,7 +306,7 @@ void main() {
 
   test('refuses an empty pending queue export', () {
     expect(
-      () => buildMisaPendingInvoiceWorkbook(const []),
+      () => _fixtureWorkbook(const []),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -315,3 +321,6 @@ void main() {
 String _text(Data? cell) => cell?.value.toString() ?? '';
 
 num _number(Data? cell) => num.parse(_text(cell));
+
+List<int> _fixtureWorkbook(List<Map<String, dynamic>> jobs) =>
+    buildMisaPendingInvoiceWorkbook(approvedSalesFixtureJobs(jobs));

@@ -1,5 +1,8 @@
 import '../../widgets/error_toast.dart';
 import 'dart:typed_data';
+import 'dart:convert';
+import '../admin/einvoice_misa_workbook.dart';
+import '../admin/widgets/invoice_mapping_import_dialog.dart';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
@@ -75,6 +78,8 @@ class _RestaurantSalesExportScreenState
   bool _isLoading = false;
   bool _isDownloading = false;
   String? _statusMessage;
+  SalesExportArtifact? _lastArtifact;
+  String? _lastArtifactName;
   bool _statusIsError = false;
 
   CombinedSalesExport? get _selectedExport {
@@ -171,6 +176,35 @@ class _RestaurantSalesExportScreenState
                   key: const Key('restaurant_sales_export_status'),
                 ),
               ],
+              if (_lastArtifact != null)
+                TextButton(
+                  key: const Key('sales_export_manifest_button'),
+                  onPressed: () async {
+                    final manifestBytes = Uint8List.fromList(
+                      utf8.encode(_lastArtifact!.manifestJson),
+                    );
+                    if (widget.saveFile != null) {
+                      await widget.saveFile!(
+                        '$_lastArtifactName.manifest.json',
+                        manifestBytes,
+                      );
+                    } else {
+                      await FileSaver.instance.saveFile(
+                        name: '$_lastArtifactName.manifest',
+                        bytes: manifestBytes,
+                        ext: 'json',
+                        mimeType: MimeType.json,
+                      );
+                    }
+                  },
+                  child: Text(
+                    _copy(
+                      '원장 연결·파일 해시 명세 다운로드',
+                      'Tải bản liên kết và mã băm file',
+                      'Download ledger linkage and file hash manifest',
+                    ),
+                  ),
+                ),
               const SizedBox(height: ToastSpacingTokens.lg),
               FilledButton.icon(
                 key: const Key('restaurant_sales_export_button'),
@@ -317,6 +351,36 @@ class _RestaurantSalesExportScreenState
               : (id) => setState(() => _selectedTaxEntityId = id),
         ),
         TextButton(
+          onPressed: _isDownloading
+              ? null
+              : () async {
+                  final n = await showDialog<int>(
+                    context: context,
+                    builder: (context) => InvoiceMappingImportDialog(
+                      taxEntityId: summary.taxEntityId,
+                    ),
+                  );
+                  if (n != null && mounted) await _load();
+                },
+          child: Text(
+            _copy(
+              '계산서 매핑 일괄 승인',
+              'Duyệt ánh xạ hóa đơn',
+              'Approve invoice mappings',
+            ),
+          ),
+        ),
+        if (summary.exportLineCount != null)
+          Text(
+            '${_copy('영수증', 'Hóa đơn', 'Receipts')} ${summary.receiptCount} · ${_copy('출력 품목', 'Dòng hàng', 'Export lines')} ${summary.exportLineCount} · ${_copy('원품목', 'Mặt hàng gốc', 'Source items')} ${summary.sourceItemCount}',
+          ),
+        if (summary.externallyReported)
+          Text(
+            _localizedError(
+              const FormatException('SALES_EXPORT_EXTERNALLY_REPORTED'),
+            ),
+          ),
+        TextButton(
           onPressed:
               _isDownloading ||
                   _isLoading ||
@@ -325,13 +389,12 @@ class _RestaurantSalesExportScreenState
               : () async {
                   setState(() => _isDownloading = true);
                   try {
-                    final count = await _reportService.refreshPendingSnapshots(
-                      summary,
-                    );
+                    final result = await _reportService
+                        .revalidatePendingSnapshots(summary);
                     if (mounted && context.mounted) {
                       showSuccessToast(
                         context,
-                        '${_copy('미발행 작업 재검증', 'Kiểm tra lại hóa đơn chưa phát hành', 'Unissued jobs revalidated')}: $count',
+                        '${_copy('미발행 작업 재검증', 'Kiểm tra lại hóa đơn chưa phát hành', 'Unissued jobs revalidated')}: ${result['updated_count']} · ${_copy('보호', 'Bảo vệ', 'Protected')} ${result['protected_count']} · ${_copy('오류', 'Lỗi', 'Errors')} ${result['error_count']}',
                       );
                     }
                   } catch (_) {
@@ -870,11 +933,18 @@ class _RestaurantSalesExportScreenState
       _statusIsError = false;
     });
     try {
+      if (summary?.externallyReported == true) {
+        throw const FormatException('SALES_EXPORT_EXTERNALLY_REPORTED');
+      }
       export ??= await _reportService.loadExport(summary!);
       if (!export.isReadyForDownload) {
+        if (export.restaurant != null) {
+          throw restaurantExportValidationException(export.restaurant!);
+        }
         throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
       }
-      final bytes = Uint8List.fromList(buildCombinedSalesWorkbook(export));
+      final artifact = buildCombinedSalesArtifact(export);
+      final bytes = Uint8List.fromList(artifact.bytes);
       final taxCode = export.sellerTaxCode.replaceAll(
         RegExp(r'[^A-Za-z0-9_-]'),
         '_',
@@ -892,12 +962,17 @@ class _RestaurantSalesExportScreenState
         );
       }
       if (!mounted) return;
-      final amount = NumberFormat('#,##0', 'vi_VN').format(export.grossSales);
-      final message = context.l10n.restaurantSalesExportSaved(
-        export.receiptCount,
-        amount,
-      );
-      setState(() => _statusMessage = message);
+      final amount = NumberFormat(
+        '#,##0.00',
+        'vi_VN',
+      ).format(export.grossSales);
+      final message =
+          '${context.l10n.restaurantSalesExportSaved(export.receiptCount, amount)} · ${_copy('출력 품목', 'Dòng hàng', 'Export lines')} ${export.lineCount} · ${_copy('원품목', 'Mặt hàng gốc', 'Source items')} ${export.sourceItemCount} · ${_copy('품목별 반올림 예상액', 'Tổng làm tròn từng dòng', 'Line rounding total')} ${export.roundedLineGross} VND · Δ ${export.roundingDifference.toStringAsFixed(2)} VND';
+      setState(() {
+        _statusMessage = message;
+        _lastArtifact = artifact;
+        _lastArtifactName = fileName;
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -906,15 +981,72 @@ class _RestaurantSalesExportScreenState
       setState(() {
         _statusMessage = _localizedError(error);
         _statusIsError = true;
+        _isDownloading = false;
       });
+      if (error is SalesExportValidationException) await _showIssues(error);
     } finally {
       if (mounted) setState(() => _isDownloading = false);
     }
   }
 
+  Future<void> _showIssues(SalesExportValidationException error) async {
+    var page = 0;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final rows = error.issues.skip(page * 100).take(100).toList();
+          return AlertDialog(
+            title: Text(
+              '${_copy('오류 영수증', 'Hóa đơn lỗi', 'Receipts with errors')} ${error.receiptCount} / ${_copy('오류 품목', 'Mặt hàng lỗi', 'Items with errors')} ${error.itemCount}',
+            ),
+            content: SizedBox(
+              width: 700,
+              height: 420,
+              child: ListView(
+                children: rows
+                    .map(
+                      (e) => ListTile(
+                        title: Text('${e.receiptNumber} / ${e.itemName}'),
+                        subtitle: Text(
+                          '${e.itemId.isEmpty && e.lineNumber > 0 ? '#${e.lineNumber}' : e.itemId} · ${e.field}\n${e.code}\n${e.soldAt} · ${e.mappingVersion} · ${e.resolution}',
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            actions: [
+              if (page > 0)
+                TextButton(
+                  onPressed: () => setDialogState(() => page--),
+                  child: const Icon(Icons.chevron_left),
+                ),
+              Text('${page + 1}/${(error.issues.length / 100).ceil()}'),
+              if ((page + 1) * 100 < error.issues.length)
+                TextButton(
+                  onPressed: () => setDialogState(() => page++),
+                  child: const Icon(Icons.chevron_right),
+                ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(_copy('닫기', 'Đóng', 'Close')),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   String _localizedError(Object error) {
     final code = error is FormatException ? error.message.toString() : '';
     return switch (code) {
+      'SALES_EXPORT_EXTERNALLY_REPORTED' => _copy(
+        '이미 외부 신고 완료로 보고된 범위입니다. 재처리에서 보호됩니다.',
+        'Phạm vi đã được báo cáo hoàn tất. Không xử lý lại.',
+        'This scope was reported as completed and is protected from reprocessing.',
+      ),
       'RESTAURANT_EXPORT_NOT_READY' =>
         context.l10n.restaurantSalesExportNotReady,
       'RESTAURANT_EXPORT_BLOCKING_ISSUES' ||

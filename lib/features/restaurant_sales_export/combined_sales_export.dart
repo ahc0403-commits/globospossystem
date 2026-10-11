@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 import '../admin/einvoice_misa_workbook.dart';
 import '../photo_sales_import/photo_sales_registered_export.dart';
 import 'restaurant_sales_export.dart';
@@ -23,6 +26,17 @@ class CombinedSalesExport {
   int get restaurantReceiptCount => restaurant?.receiptCount ?? 0;
   int get photoReceiptCount => photo?.receiptCount ?? 0;
   int get receiptCount => restaurantReceiptCount + photoReceiptCount;
+  int get lineCount => (restaurant?.lineCount ?? 0) + photoReceiptCount;
+  int get sourceItemCount =>
+      (restaurant?.sourceItemCount ?? 0) + photoReceiptCount;
+  int get roundedLineGross =>
+      (restaurant?.roundedLineGross ?? 0) +
+      (photo?.receipts.fold<int>(0, (n, r) {
+            final split = splitMisaGrossAmount(r.amount.toDouble(), 8);
+            return n + split.supplyAmount.round() + split.vatAmount.round();
+          }) ??
+          0);
+  double get roundingDifference => grossSales - roundedLineGross;
   int get generalReceiptCount => restaurant?.generalReceiptCount ?? 0;
   int get redInvoiceCount => restaurant?.redInvoiceCount ?? 0;
   double get restaurantGrossSales => restaurant?.grossSales ?? 0;
@@ -89,8 +103,14 @@ List<CombinedSalesExport> combineSalesExportsByTaxEntity({
   });
 }
 
-List<int> buildCombinedSalesWorkbook(CombinedSalesExport export) {
+List<int> buildCombinedSalesWorkbook(
+  CombinedSalesExport export, {
+  String? generationId,
+}) {
   if (!export.isReadyForDownload) {
+    if (export.restaurant != null) {
+      throw restaurantExportValidationException(export.restaurant!);
+    }
     throw const FormatException('COMBINED_SALES_EXPORT_BLOCKING_ISSUES');
   }
   final jobs = <Map<String, dynamic>>[
@@ -104,5 +124,33 @@ List<int> buildCombinedSalesWorkbook(CombinedSalesExport export) {
     if (export.photo case final photo?)
       ...buildPhotoSalesRegisteredMisaJobs(photo),
   ];
-  return buildMisaPendingInvoiceWorkbook(jobs);
+  return buildMisaPendingInvoiceWorkbook(jobs, generationId: generationId);
+}
+
+class SalesExportArtifact {
+  const SalesExportArtifact(this.bytes, this.manifest);
+  final List<int> bytes;
+  final Map<String, dynamic> manifest;
+  String get manifestJson =>
+      const JsonEncoder.withIndent('  ').convert(manifest);
+}
+
+SalesExportArtifact buildCombinedSalesArtifact(CombinedSalesExport export) {
+  final id = const Uuid().v4();
+  final bytes = buildCombinedSalesWorkbook(export, generationId: id);
+  return SalesExportArtifact(bytes, {
+    'format_version': 'pos-sales-xlsx-v3',
+    'ledger_version': 2,
+    'generation_id': id,
+    'business_date': export.businessDate,
+    'tax_entity_id': export.taxEntityId,
+    'file_sha256': sha256.convert(bytes).toString(),
+    'file_size': bytes.length,
+    'receipt_count': export.receiptCount,
+    'source_item_count': export.sourceItemCount,
+    'export_line_count': export.lineCount,
+    'source_gross': export.grossSales.toStringAsFixed(2),
+    'rounded_line_gross': export.roundedLineGross,
+    'rounding_difference': export.roundingDifference.toStringAsFixed(2),
+  });
 }

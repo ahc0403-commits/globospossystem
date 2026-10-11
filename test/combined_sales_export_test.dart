@@ -245,6 +245,16 @@ RestaurantSalesReceipt _restaurantReceipt({
   buyerPhone: buyerPhone,
   lineItems: const [
     RestaurantSalesLineItem(
+      approval: {
+        'invoice_profile_id': 'fixture-profile',
+        'invoice_approval_type': 'menu_item',
+        'invoice_mapping_version': 'fixture-v1',
+        'invoice_source_reference': 'synthetic fixture',
+        'invoice_store_id': 'restaurant-store',
+        'invoice_effective_from': '2020-01-01T00:00:00+07:00',
+      },
+      invoiceUnitPrice: 100000,
+      discountAmount: 0,
       orderItemId: 'food-line',
       menuItemId: 'food-sku',
       invoiceName: 'Food',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../../../main.dart';
 
 /// Approval changes descriptions and units; monetary and VAT snapshots stay intact.
@@ -21,7 +22,11 @@ class _InvoiceProfileEditorState extends State<InvoiceProfileEditor> {
   late final _unit = TextEditingController(
     text: widget.item['invoice_unit_name']?.toString() ?? '',
   );
-  DateTime? _effectiveDate;
+  DateTime? _effectiveDate, _effectiveTo;
+  final _reference = TextEditingController(
+    text: 'Menu management operator approval',
+  );
+  String? _approvedVersion;
   bool _saving = false;
   String? _error;
   String _copy(String ko, String vi, String en) =>
@@ -34,28 +39,40 @@ class _InvoiceProfileEditorState extends State<InvoiceProfileEditor> {
   void dispose() {
     _name.dispose();
     _unit.dispose();
+    _reference.dispose();
     super.dispose();
   }
 
   Future<void> _approve() async {
-    if (_name.text.trim().isEmpty || _unit.text.trim().isEmpty) return;
+    if (_name.text.trim().isEmpty ||
+        _unit.text.trim().isEmpty ||
+        _reference.text.trim().isEmpty) {
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
+      final version = 'POS-menu-${const Uuid().v4()}';
       await supabase.rpc(
-        'approve_menu_invoice_profile',
+        'approve_menu_invoice_profile_v3',
         params: {
           'p_menu_item_id': widget.item['id'],
           'p_name': _name.text.trim(),
           'p_unit': _unit.text.trim(),
-          if (_effectiveDate != null)
-            'p_effective_from':
-                '${_effectiveDate!.toIso8601String().substring(0, 10)}T00:00:00+07:00',
+          'p_effective_from': _effectiveDate == null
+              ? DateTime.now().toUtc().toIso8601String()
+              : '${_effectiveDate!.toIso8601String().substring(0, 10)}T00:00:00+07:00',
+          'p_effective_to': _effectiveTo == null
+              ? null
+              : '${_effectiveTo!.toIso8601String().substring(0, 10)}T00:00:00+07:00',
+          'p_mapping_version': version,
+          'p_source_reference': _reference.text.trim(),
         },
       );
       if (!mounted) return;
+      setState(() => _approvedVersion = version);
       widget.onSaved();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -145,6 +162,51 @@ class _InvoiceProfileEditorState extends State<InvoiceProfileEditor> {
               : '${_copy('적용일', 'Ngày áp dụng', 'Effective date')}: ${_effectiveDate!.toIso8601String().substring(0, 10)}',
         ),
       ),
+      TextField(
+        controller: _reference,
+        maxLength: 500,
+        decoration: InputDecoration(
+          labelText: _copy(
+            '승인 근거·수정 이유',
+            'Căn cứ phê duyệt',
+            'Approval source / reason',
+          ),
+        ),
+      ),
+      TextButton(
+        onPressed: _saving
+            ? null
+            : () async {
+                final now = DateTime.now().toUtc().add(
+                  const Duration(hours: 7),
+                );
+                final day = await showDatePicker(
+                  context: context,
+                  initialDate: _effectiveTo ?? now.add(const Duration(days: 1)),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(now.year + 5),
+                );
+                if (day != null && mounted) setState(() => _effectiveTo = day);
+              },
+        child: Text(
+          _effectiveTo == null
+              ? _copy(
+                  '종료일: 제한 없음',
+                  'Ngày kết thúc: không giới hạn',
+                  'Valid until: open ended',
+                )
+              : '${_copy('종료일 (미포함)', 'Ngày kết thúc (không gồm)', 'Valid until (exclusive)')}: ${_effectiveTo!.toIso8601String().substring(0, 10)}',
+        ),
+      ),
+      if (_effectiveTo != null)
+        TextButton(
+          onPressed: _saving ? null : () => setState(() => _effectiveTo = null),
+          child: Text(_copy('종료일 해제', 'Bỏ ngày kết thúc', 'Clear end date')),
+        ),
+      if (_approvedVersion != null)
+        Text(
+          '${_copy('승인 버전', 'Phiên bản phê duyệt', 'Approval version')}: $_approvedVersion',
+        ),
       FilledButton(
         key: const Key('invoice_profile_approve'),
         onPressed: _saving ? null : _approve,

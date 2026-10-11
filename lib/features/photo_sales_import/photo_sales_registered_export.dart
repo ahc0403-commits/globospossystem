@@ -202,13 +202,26 @@ List<Map<String, dynamic>> buildPhotoSalesRegisteredMisaJobs(
     .map(
       (receipt) => <String, dynamic>{
         'source_system': 'photo_objet_moers',
+        'tax_entity_id': export.taxEntityId,
+        'receipt_id': receipt.sourceHash,
+        'snapshot_version': 2,
+        'receipt_number': receipt.sourceHash,
+        'source_hash': receipt.sourceHash,
+        'payment_methods': const ['CASH'],
         'source_snapshot': {'sale_date': receipt.soldAt.toIso8601String()},
         'created_at': receipt.soldAt.toIso8601String(),
         'payment_method_snapshot': 'CASH',
         'buyer_snapshot': const <String, dynamic>{},
         'line_items_snapshot': [
           {
+            'order_item_id': receipt.sourceHash,
+            'source_order_item_id': receipt.sourceHash,
+            'invoice_approval_type': 'source_contract',
+            'invoice_mapping_version': 'photo-service-v1',
+            'invoice_source_reference':
+                'POS manual Photo import / 8% service contract',
             'display_name': 'Dịch vụ chụp ảnh',
+            'misa_unit_name': 'Lần',
             'quantity': 1,
             'paying_amount_inc_tax': receipt.amount,
           },

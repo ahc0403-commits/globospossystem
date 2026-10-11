@@ -2,6 +2,10 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:excel/excel.dart';
+import 'package:archive/archive.dart';
+import 'package:uuid/uuid.dart';
+import 'sales_export_validation.dart';
+export 'sales_export_validation.dart';
 
 // MISA's discrepancy warning compares VND amounts after rounding to whole dong.
 bool isMisaVatConsistent(double supply, double rate, double vat) =>
@@ -83,23 +87,51 @@ bool isMisaLineTotalConsistent(
 ///
 /// Restaurant rows retain the sold item, quantity and tax snapshot.
 /// The separate POS Ledger sheet links these rows to their source identities.
-List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
+List<int> buildMisaPendingInvoiceWorkbook(
+  List<Map<String, dynamic>> jobs, {
+  String? generationId,
+}) {
   if (jobs.isEmpty) {
     throw const FormatException('MISA_PENDING_EXPORT_EMPTY');
   }
 
+  final issues = validateSalesExportJobs(jobs);
+  if (issues.isNotEmpty) throw SalesExportValidationException(issues);
   final ordered = [...jobs]
     ..sort((a, b) {
       final time = _saleDate(a).compareTo(_saleDate(b));
       return time != 0
           ? time
-          : _text(a['receipt_id']).compareTo(_text(b['receipt_id']));
+          : '${a['source_system']}:${a['receipt_id'] ?? a['id']}'.compareTo(
+              '${b['source_system']}:${b['receipt_id'] ?? b['id']}',
+            );
     });
   final workbook = Excel.createExcel();
   workbook.rename('Sheet1', 'Hóa đơn GTGT');
   workbook.setDefaultSheet('Hóa đơn GTGT');
   final sheet = workbook['Hóa đơn GTGT'];
   final ledger = workbook['POS Ledger'];
+  final mapping = workbook['Invoice Mapping'];
+  mapping.appendRow(
+    const [
+      'invoice_sequence',
+      'excel_row',
+      'source_order_item_id',
+      'invoice_profile_id',
+      'invoice_approval_type',
+      'invoice_mapping_version',
+      'invoice_effective_from',
+      'invoice_effective_to',
+      'invoice_store_id',
+      'invoice_source_reference',
+      'source_unit_price',
+      'misa_unit_price',
+      'misa_discount_amount',
+    ].map(TextCellValue.new).toList(),
+  );
+  double sourceTotal = 0;
+  var roundedTotal = 0;
+  final sourceItems = <String>{};
   ledger.appendRow(
     const [
       'version',
@@ -157,26 +189,30 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
     )) {
       throw const FormatException('MISA_EXPORT_SOURCE_VAT_SUMMARY_MISMATCH');
     }
-    for (final prepared in preparedLines) {
+    for (var lineIndex = 0; lineIndex < preparedLines.length; lineIndex++) {
+      final prepared = preparedLines[lineIndex];
       final line = prepared.line;
       final amounts = prepared.amounts;
       sheet.appendRow([
-        IntCellValue(invoiceIndex + 1),
-        TextCellValue(_invoiceDate(_saleDate(job))),
-        TextCellValue(legalName),
-        TextCellValue(
-          _firstText([buyer['tax_code'], buyer['tin_cic_household_head_id']]),
-        ),
-        TextCellValue(_text(buyer['address'])),
-        TextCellValue(buyerName),
-        TextCellValue(_text(buyer['email'])),
-        TextCellValue(_text(buyer['phone'])),
-        TextCellValue(_text(buyer['buyer_id'])),
-        TextCellValue(
-          misaPaymentCode(
-            job['payment_method_snapshot'] ?? (isPhoto ? 'CASH' : null),
+        TextCellValue((invoiceIndex + 1).toString()),
+        if (lineIndex == 0) ...[
+          TextCellValue(_invoiceDate(_saleDate(job))),
+          TextCellValue(legalName),
+          TextCellValue(
+            _firstText([buyer['tax_code'], buyer['tin_cic_household_head_id']]),
           ),
-        ),
+          TextCellValue(_text(buyer['address'])),
+          TextCellValue(buyerName),
+          TextCellValue(_text(buyer['email'])),
+          TextCellValue(_text(buyer['phone'])),
+          TextCellValue(_text(buyer['buyer_id'])),
+          TextCellValue(
+            misaPaymentCode(
+              job['payment_method_snapshot'] ?? (isPhoto ? 'CASH' : null),
+            ),
+          ),
+        ] else
+          ...List<CellValue?>.filled(9, null),
         TextCellValue(
           _firstText([
             line['invoice_name_vi'],
@@ -200,6 +236,34 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
         job['source_hash'],
         sha256.convert(utf8.encode(jsonEncode(job))).toString(),
       ]);
+      final sourceItem = _firstText([
+        line['source_order_item_id'],
+        _text(line['order_item_id']).split(':').first,
+      ]);
+      sourceItems.add(
+        '${job['source_system']}:${job['receipt_id']}:$sourceItem',
+      );
+      sourceTotal += amounts.supplyAmount + amounts.vatAmount;
+      roundedTotal += amounts.supplyAmount.round() + amounts.vatAmount.round();
+      mapping.appendRow([
+        TextCellValue((invoiceIndex + 1).toString()),
+        IntCellValue(rowNumber),
+        TextCellValue(sourceItem),
+        ...[
+          'invoice_profile_id',
+          'invoice_approval_type',
+          'invoice_mapping_version',
+          'invoice_effective_from',
+          'invoice_effective_to',
+          'invoice_store_id',
+          'invoice_source_reference',
+        ].map((k) => TextCellValue(_text(line[k]))),
+        DoubleCellValue(_number(line['unit_price'])),
+        DoubleCellValue(
+          _number(line['misa_unit_price'], fallback: amounts.unitPrice),
+        ),
+        DoubleCellValue(_number(line['misa_discount_amount'])),
+      ]);
       ledger.appendRow([
         IntCellValue(2),
         TextCellValue(
@@ -211,7 +275,7 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
         ),
         TextCellValue(_text(job['tax_entity_id'])),
         TextCellValue(_text(job['source_system'])),
-        TextCellValue(_text(job['receipt_id'])),
+        TextCellValue(_text(job['receipt_id'] ?? job['id'])),
         TextCellValue(_text(job['receipt_number'])),
         TextCellValue(_text(line['order_item_id'])),
         TextCellValue(_text(line['menu_item_id'])),
@@ -225,13 +289,66 @@ List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
     }
   }
 
+  final contract = workbook['Export Contract'];
+  for (final entry in {
+    'format_version': 'pos-sales-xlsx-v3',
+    'ledger_version': '2',
+    'generation_id': generationId ?? const Uuid().v4(),
+    'content_sha256': sha256
+        .convert(utf8.encode(jsonEncode(ordered)))
+        .toString(),
+    'receipt_count': ordered.length.toString(),
+    'source_item_count': sourceItems.length.toString(),
+    'export_line_count': (sheet.maxRows - 8).toString(),
+    'source_gross': sourceTotal.toStringAsFixed(2),
+    'rounded_line_gross': roundedTotal.toString(),
+    'rounding_difference': (sourceTotal - roundedTotal).toStringAsFixed(2),
+    'rounding_rule': 'positive HALF_UP per supply and VAT line',
+    'continuation_rule': 'A text; B:J first line only; inherit in consumer',
+  }.entries) {
+    contract.appendRow([TextCellValue(entry.key), TextCellValue(entry.value)]);
+  }
   for (var index = 0; index < _headers.length; index++) {
     sheet.setColumnWidth(index, switch (index) {
       2 || 4 || 5 || 10 => 28,
       _ => 18,
     });
   }
-  return workbook.encode()!;
+  // excel 4 writes the template's A1 dimension unchanged. Read-only consumers
+  // trust that bound and would otherwise see only one row. Set actual bounds.
+  final archive = ZipDecoder().decodeBytes(workbook.encode()!);
+  final fixed = Archive();
+  for (final file in archive.files) {
+    if (!file.name.startsWith('xl/worksheets/sheet') ||
+        !file.name.endsWith('.xml')) {
+      fixed.addFile(file);
+      continue;
+    }
+    var xml = utf8.decode(file.content as List<int>);
+    var maxColumn = 1, maxRow = 1;
+    for (final cell in RegExp(
+      r'<c\b[^>]*\br="([A-Z]+)([0-9]+)"',
+    ).allMatches(xml)) {
+      var col = 0;
+      for (final c in cell.group(1)!.codeUnits) {
+        col = col * 26 + c - 64;
+      }
+      if (col > maxColumn) maxColumn = col;
+      final row = int.parse(cell.group(2)!);
+      if (row > maxRow) maxRow = row;
+    }
+    var colName = '';
+    for (var c = maxColumn; c > 0; c = (c - 1) ~/ 26) {
+      colName = String.fromCharCode(65 + (c - 1) % 26) + colName;
+    }
+    xml = xml.replaceFirst(
+      RegExp(r'<dimension\b[^>]*/>'),
+      '<dimension ref="A1:$colName$maxRow"/>',
+    );
+    final bytes = utf8.encode(xml);
+    fixed.addFile(ArchiveFile(file.name, bytes.length, bytes));
+  }
+  return ZipEncoder().encode(fixed)!;
 }
 
 List<
@@ -252,8 +369,8 @@ _prepareMisaLines(List<Map<String, dynamic>> lines, {required bool isPhoto}) {
                 _text(line['order_item_id']).isEmpty)) {
           throw const FormatException('MISA_APPROVED_ITEM_METADATA_REQUIRED');
         }
-        final quantity = _number(line['quantity'], fallback: 1);
-        final rate = isPhoto ? 8.0 : _restaurantVatRate(line);
+        final quantity = salesExportNumber(line['quantity'])!;
+        final rate = isPhoto ? 8.0 : salesExportNumber(line['vat_rate'])!;
         if (!quantity.isFinite ||
             quantity <= 0 ||
             !rate.isFinite ||
@@ -262,7 +379,10 @@ _prepareMisaLines(List<Map<String, dynamic>> lines, {required bool isPhoto}) {
           throw const FormatException('MISA_EXPORT_INVALID_LINE');
         }
         final photoSplit = isPhoto
-            ? splitMisaGrossAmount(_lineGross(line, rate, isPhoto: true), rate)
+            ? splitMisaGrossAmount(
+                salesExportNumber(line['paying_amount_inc_tax'])!,
+                rate,
+              )
             : null;
         final supply =
             photoSplit?.supplyAmount ?? _number(line['total_amount_ex_tax']);
@@ -273,7 +393,15 @@ _prepareMisaLines(List<Map<String, dynamic>> lines, {required bool isPhoto}) {
           throw const FormatException('MISA_EXPORT_SOURCE_AMOUNT_MISMATCH');
         }
         return (
-          line: line,
+          line: isPhoto
+              ? {
+                  ...line,
+                  'invoice_approval_type': 'source_contract',
+                  'invoice_mapping_version': 'photo-service-v1',
+                  'invoice_source_reference':
+                      'POS manual Photo import / 8% service contract',
+                }
+              : line,
           quantity: quantity,
           amounts: (
             unitPrice: unitPrice,
@@ -314,42 +442,6 @@ const _headers = <String>[
   'Thuế suất GTGT (%)',
   'Tiền thuế GTGT',
 ];
-
-double _restaurantVatRate(Map<String, dynamic> line) {
-  final supply = _number(
-    line['total_amount_ex_tax'] ?? line['AmountWithoutVAT'],
-    fallback:
-        _number(line['unit_price']) * _number(line['quantity'], fallback: 1),
-  );
-  final vat = _number(line['vat_amount'] ?? line['VATAmount']);
-  return _number(
-    line['vat_rate'],
-    fallback: supply == 0 ? 0 : vat / supply * 100,
-  );
-}
-
-double _lineGross(
-  Map<String, dynamic> line,
-  double vatRate, {
-  required bool isPhoto,
-}) {
-  final quantity = _number(line['quantity'], fallback: 1).clamp(1, 999999);
-  if (isPhoto) {
-    return _number(
-      line['paying_amount_inc_tax'] ?? line['AmountAfterTax'],
-      fallback: _number(line['unit_price']) * quantity,
-    );
-  }
-  final suppliedGross = line['paying_amount_inc_tax'] ?? line['AmountAfterTax'];
-  if (suppliedGross != null) return _number(suppliedGross);
-  final supply = _number(
-    line['total_amount_ex_tax'] ?? line['AmountWithoutVAT'],
-    fallback: _number(line['unit_price']) * quantity,
-  );
-  final rawVat = line['vat_amount'] ?? line['VATAmount'];
-  final vat = rawVat == null ? supply * vatRate / 100 : _number(rawVat);
-  return supply + vat;
-}
 
 String misaPaymentCode(Object? value) {
   final normalized = _text(

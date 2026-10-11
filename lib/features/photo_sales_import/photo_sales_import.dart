@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 
 import '../../core/utils/excel_workbook_decoder.dart';
 import '../../core/utils/bounded_xlsx.dart';
@@ -179,7 +180,25 @@ List<int> buildPhotoSalesMisaWorkbook({
   final jobs = source.rows
       .map((row) {
         final soldAt = _soldAt(date, row.saleTime, row.sourceRow);
+        final id = sha256
+            .convert(
+              utf8.encode(
+                jsonEncode([
+                  row.branchCode,
+                  row.deviceId,
+                  row.deviceName,
+                  soldAt.toIso8601String(),
+                  row.amount,
+                  row.type,
+                  row.sourceRow,
+                ]),
+              ),
+            )
+            .toString();
         return <String, dynamic>{
+          'receipt_id': id,
+          'receipt_number': id,
+          'source_hash': id,
           'source_system': 'photo_objet_moers',
           'source_snapshot': {'sale_date': soldAt.toIso8601String()},
           'created_at': soldAt.toIso8601String(),
@@ -187,6 +206,12 @@ List<int> buildPhotoSalesMisaWorkbook({
           'buyer_snapshot': const <String, dynamic>{},
           'line_items_snapshot': [
             {
+              'order_item_id': id,
+              'source_order_item_id': id,
+              'invoice_approval_type': 'source_contract',
+              'invoice_mapping_version': 'photo-service-v1',
+              'invoice_source_reference':
+                  'POS manual Photo import / 8% service contract',
               'display_name': 'Dịch vụ chụp ảnh',
               'quantity': 1,
               'paying_amount_inc_tax': row.amount,

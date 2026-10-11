@@ -26,9 +26,13 @@ const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
     source:
         'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart',
-    directCalls: 1,
+    directCalls: 3,
     test: 'test/daily_sales_report_screen_test.dart',
-    markers: ['sales_collection_bank_dialog'],
+    markers: [
+      'sales_collection_bank_dialog',
+      'download rejects all invalid items before save and shows source identities',
+      'mapping dialog opens, requires selected JSON and closes without writes',
+    ],
   ),
   _OperationalCoverage(
     source: 'lib/features/red_invoice_intake/buyer_information_form.dart',
@@ -438,7 +442,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 154 dialog and sheet entrypoints map to operational tests', () {
+  test('all 156 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -450,10 +454,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 151);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 153);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      154,
+      156,
     );
 
     final inventory = File(
