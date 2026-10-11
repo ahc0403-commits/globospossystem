@@ -16,9 +16,10 @@ class CompanyLookupResult {
     this.taxCode,
     this.companyName,
     this.fetchedAt,
+    this.source,
   });
   final CompanyLookupOutcome outcome;
-  final String? taxCode, companyName;
+  final String? taxCode, companyName, source;
   final DateTime? fetchedAt;
 
   static CompanyLookupResult parse(dynamic raw, String requestedCode) {
@@ -28,7 +29,7 @@ class CompanyLookupResult {
     if (raw['outcome'] == 'success') {
       final name = raw['company_name'];
       final at = raw['fetched_at'];
-      if (raw['source'] != 'esgoo' ||
+      if (!const {'esgoo', 'vietqr'}.contains(raw['source']) ||
           raw['tax_code'] != requestedCode ||
           name is! String ||
           name.trim().isEmpty ||
@@ -43,6 +44,7 @@ class CompanyLookupResult {
         taxCode: requestedCode,
         companyName: name.trim(),
         fetchedAt: DateTime.parse(at),
+        source: raw['source'] as String,
       );
     }
     return CompanyLookupResult(switch (raw['outcome']) {
@@ -132,7 +134,7 @@ class CompanyTaxLookupService extends ChangeNotifier {
         const CompanyLookupResult(CompanyLookupOutcome.forbidden),
       );
     }
-    final key = '$scope|$storeId|$code|esgoo';
+    final key = '$scope|$storeId|$code|esgoo-vietqr-v1';
     final now = _clock();
     _cache.removeWhere((_, value) => !now.isBefore(value.expires));
     final cached = _cache[key];
