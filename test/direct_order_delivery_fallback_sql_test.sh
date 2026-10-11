@@ -543,6 +543,7 @@ PYRECIPIENT
   [[ "$recipient_details" == "0" ]] || { printf 'RECIPIENT_CUSTOMER_N_PLUS_ONE\n'; exit 1; }
   printf 'RECIPIENT_CUSTOMER_LIST limit=%s per_order_calls=%s\n' "$recipient_limit" "$recipient_details"
  done
+ DIRECT_ORDER_RECIPIENT_RPC_TEST=1 bash "$PHOTO_ROOT/test/direct_order_status_rpc_test.sh" "$PHOTO_CONTAINER"
  if [[ "${DIRECT_ORDER_POS_BUYER_TEST:-0}" == "1" ]]; then
   run_sql "$PHOTO_ROOT/test/fixtures/pos_buyer_legacy_setup.sql" >/dev/null
   run_sql "$PHOTO_ROOT/supabase/migrations/20261010053000_pos_buyer_information.sql" > "$PHOTO_TMP/buyer_migration.log" 2>&1 || { cat "$PHOTO_TMP/buyer_migration.log"; exit 1; }
