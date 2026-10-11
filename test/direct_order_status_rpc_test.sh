@@ -134,21 +134,20 @@ if os.environ.get('DIRECT_ORDER_RECIPIENT_RPC_TEST') == '1':
         assert code == 200 and any(row['request_id'] == status_body['p_request_id'] for row in listed), (code, listed)
         assert all('booking_status' in row for row in listed)
     for limit in (1, 10, 50):
-        sql('SELECT pg_stat_reset()')
         started = time.monotonic()
         code, value = rpc('direct_order_public_orders_v5', dict(page_body, p_limit=limit))
         elapsed = time.monotonic() - started
         assert code == 200 and len(value) == limit, (code, len(value), limit)
-        # PostgREST's idle pooled connection flushes function stats after the call.
-        for attempt in range(30):
-            batch_calls = int(sql("SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_cooking_progress(uuid[])'::regprocedure"))
-            if batch_calls == 1:
-                break
-            time.sleep(0.1)
+        # Measure SQL calls separately: idle PostgREST pool connections may not
+        # flush their local function counters while this test is observing them.
+        sql("SELECT pg_stat_reset(); SELECT jsonb_array_length(public.direct_order_public_orders_v5("
+            f"'{page_body['p_session_id']}','{page_body['p_secret_hash']}',{limit})); "
+            "SELECT pg_stat_force_next_flush()")
+        batch_calls = int(sql("SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid='public.direct_order_cooking_progress(uuid[])'::regprocedure"))
         assert batch_calls == 1, batch_calls
         detail_calls = int(sql("SELECT COALESCE(sum(calls),0) FROM pg_stat_user_functions WHERE funcid IN ('public.direct_order_booking_snapshot(uuid)'::regprocedure,'public.direct_order_public_status_v10(uuid,text,uuid)'::regprocedure,'public.direct_order_support_context(uuid,boolean)'::regprocedure)"))
         assert detail_calls == 0, detail_calls
-        print(f'DIRECT_ORDER_RECIPIENT_RPC_LIST limit={limit} rows={len(value)} bytes={len(json.dumps(value).encode())} seconds={elapsed:.3f} cooking_batch_calls={batch_calls} detail_calls={detail_calls}')
+        print(f'DIRECT_ORDER_RECIPIENT_RPC_LIST limit={limit} rows={len(value)} bytes={len(json.dumps(value).encode())} seconds={elapsed:.3f} sql_cooking_batch_calls={batch_calls} sql_detail_calls={detail_calls}')
     denied_probes = [
         ('direct_order_public_orders_v5', dict(empty_body, p_secret_hash='d' * 64)),
         ('direct_order_public_orders_v5', dict(empty_body, p_limit=51)),
