@@ -50,6 +50,61 @@ String text(Data? c) => c?.value?.toString() ?? '';
 
 void main() {
   test(
+    'open-ended menu and wet tissue mapping remains valid on the following day',
+    () {
+      for (final sale in [
+        '2026-10-12T12:00:00+07:00',
+        '2026-10-13T12:00:00+07:00',
+      ]) {
+        final items = [
+          line('permanent-menu'),
+          line('permanent-wet', wet: true),
+        ];
+        for (final item in items) {
+          item['invoice_effective_from'] = '2026-10-12T00:00:00+07:00';
+          item['invoice_effective_to'] = null;
+        }
+        final receipt = job('permanent', items)..['created_at'] = sale;
+        expect(validateSalesExportJobs([receipt]), isEmpty);
+        final workbook = Excel.decodeBytes(
+          buildMisaPendingInvoiceWorkbook([receipt]),
+        );
+        final rows = workbook.tables['Hóa đơn GTGT']!.rows;
+        expect(rows.length, 10);
+        expect(text(rows[8][11]), 'Phần');
+        expect(text(rows[9][11]), 'Cái');
+        expect(
+          rows[9].sublist(1, 10).every((cell) => cell?.value == null),
+          isTrue,
+        );
+        expect(text(workbook.tables['Invoice Mapping']!.rows[1][7]), isEmpty);
+      }
+    },
+  );
+  test(
+    'mapping files without an end date do not acquire a next-day expiry',
+    () {
+      final input = InvoiceMappingImport.parse(
+        jsonEncode({
+          'format_version': 'pos-invoice-mapping-v1',
+          'tax_entity_id': 'fixture-entity',
+          'rows': [
+            {
+              'approval_type': 'menu_item',
+              'menu_item_id': 'fixture-menu',
+              'invoice_name_vi': 'Japchae (Miến Xào)',
+              'unit_name': 'Phần',
+              'mapping_version': 'fixture-permanent-v1',
+              'source_reference': 'fixture approved naming',
+              'effective_from': '2026-10-12T00:00:00+07:00',
+            },
+          ],
+        }),
+      );
+      expect(input.rows.single['effective_to'], isNull);
+    },
+  );
+  test(
     'OOXML has text A, empty B:J continuation, unchanged numeric K:Q and source ledger',
     () {
       final a = line('a')

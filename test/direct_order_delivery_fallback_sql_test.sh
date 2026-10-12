@@ -550,6 +550,10 @@ PYRECIPIENT
   run_sql "$PHOTO_ROOT/supabase/tests/pos_buyer_information_test.sql"
   bash "$PHOTO_ROOT/test/pos_buyer_information_concurrency.sh" "$PHOTO_CONTAINER" "$PHOTO_TMP"
  fi
+ if [[ "${DIRECT_ORDER_NO_DELIVERY_FEE_TEST:-0}" == "1" ]]; then
+  run_sql "$PHOTO_ROOT/supabase/migrations/20261012230000_direct_order_no_delivery_fee.sql" > "$PHOTO_TMP/no_delivery_fee_migration.log" 2>&1 || { cat "$PHOTO_TMP/no_delivery_fee_migration.log"; exit 1; }
+  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_no_delivery_fee_test.sql"
+ fi
 
 fi
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"

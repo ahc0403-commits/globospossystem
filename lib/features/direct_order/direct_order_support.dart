@@ -1168,17 +1168,6 @@ class _DirectOrderStaffSupportPanelState
                       ),
                     ),
                 ],
-                if (!_recipientPolicy &&
-                    request['state'] == 'awaiting_quote' &&
-                    supportMap(widget.detail['delivery'])['method'] != 'pickup')
-                  SwitchListTile(
-                    key: const Key('direct_deferred_delivery_fee'),
-                    value: _support['delivery_fee_deferred'] == true,
-                    onChanged: _busy
-                        ? null
-                        : (v) => _action('defer_delivery_fee', {'enabled': v}),
-                    title: Text(_copy.text('defer')),
-                  ),
                 if (_support['delivery_fee_finalized'] == false)
                   Text(_copy.text('fee_pending')),
                 for (final charge in charges)
@@ -1208,10 +1197,6 @@ class _DirectOrderStaffSupportPanelState
                     beforeHandoff &&
                     supportMap(widget.detail['delivery'])['method'] !=
                         'pickup') ...[
-                  OutlinedButton(
-                    onPressed: _busy ? null : () => _charge('delivery'),
-                    child: Text(_copy.text('delivery')),
-                  ),
                   if (supportNumber(
                         _support['delivery_adjustment_refund_due'],
                       ) >

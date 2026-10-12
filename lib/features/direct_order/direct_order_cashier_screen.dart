@@ -46,7 +46,6 @@ class _DirectOrderCashierScreenState
     extends ConsumerState<DirectOrderCashierScreen> {
   final _money = NumberFormat('#,###', 'vi_VN');
   final _chatController = TextEditingController();
-  final _feeController = TextEditingController();
   final _quoteNoteController = TextEditingController();
   final _grabUrlController = TextEditingController();
   final _actualGrabFeeController = TextEditingController();
@@ -102,7 +101,6 @@ class _DirectOrderCashierScreenState
     _timer?.cancel();
     _chatRefreshTimer?.cancel();
     _chatController.dispose();
-    _feeController.dispose();
     _quoteNoteController.dispose();
     _grabUrlController.dispose();
     _actualGrabFeeController.dispose();
@@ -267,7 +265,6 @@ class _DirectOrderCashierScreenState
     if (_map(detail['delivery'])['method'] == 'pickup' &&
         _map(detail['request'])['state'] == 'awaiting_quote') {
       _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.storePrepaid;
-      _feeController.text = '0';
     }
   }
 
@@ -385,21 +382,14 @@ class _DirectOrderCashierScreenState
 
   Future<void> _sendQuote() async {
     if (_hasPendingRequirements) return;
-    final fee =
-        (_recipientPolicy ||
-            _isPickup ||
-            _deliveryPaymentMode ==
-                DirectOrderDeliveryPaymentMode.customerDirect)
-        ? 0
-        : parseDirectOrderVnd(_feeController.text);
-    if (fee == null || _storeId == null || _selectedId == null) {
+    if (_storeId == null || _selectedId == null) {
       return;
     }
     await _act(() async {
       await directOrderStaffService.quote(
         storeId: _storeId!,
         requestId: _selectedId!,
-        deliveryFee: fee.toDouble(),
+        deliveryFee: 0,
         deliveryPaymentMode: _isPickup
             ? (_map(_detail?['request'])['fulfillment_type'] == 'pickup'
                   ? DirectOrderDeliveryPaymentMode.notApplicable
@@ -1187,7 +1177,6 @@ class _DirectOrderCashierScreenState
   }
 
   void _seedOrderInputs(Map<String, dynamic> detail) {
-    _feeController.clear();
     _quoteNoteController.clear();
     _grabUrlController.clear();
     _actualGrabFeeController.clear();
@@ -1206,10 +1195,6 @@ class _DirectOrderCashierScreenState
       _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.fromValue(
         activeQuote['delivery_payment_mode'] ?? 'store_prepaid',
       );
-      final fee = activeQuote['delivery_fee_total'];
-      if (fee is num && fee > 0) {
-        _feeController.text = formatDirectOrderVnd(fee);
-      }
       _quoteNoteController.text = activeQuote['cashier_note']?.toString() ?? '';
     }
 
@@ -1757,9 +1742,7 @@ class _DirectOrderCashierScreenState
         if ((state == 'awaiting_quote' || state == 'quoted') &&
             !_pickupOriginalPaymentPending)
           _Section(
-            title: _recipientPolicy
-                ? _copy.finalOrderAmount
-                : _copy.enterGrabFee,
+            title: _copy.finalOrderAmount,
             icon: Icons.delivery_dining_outlined,
             child: Column(
               children: [
@@ -1790,38 +1773,8 @@ class _DirectOrderCashierScreenState
                             if (value == null) return;
                             setState(() {
                               _deliveryPaymentMode = value;
-                              if (value ==
-                                  DirectOrderDeliveryPaymentMode
-                                      .customerDirect) {
-                                _feeController.clear();
-                              }
                             });
                           },
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    key: const Key('direct_order_delivery_fee_input'),
-                    controller: _feeController,
-                    enabled:
-                        state == 'awaiting_quote' &&
-                        !_isPickup &&
-                        _deliveryPaymentMode ==
-                            DirectOrderDeliveryPaymentMode.storePrepaid,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: const [DirectOrderVndInputFormatter()],
-                    decoration: InputDecoration(
-                      labelText:
-                          _deliveryPaymentMode ==
-                              DirectOrderDeliveryPaymentMode.customerDirect
-                          ? _copy.customerPaysDriver
-                          : _copy.storeCollectedDeliveryFee,
-                      suffixText: 'VND',
-                      helperText:
-                          _deliveryPaymentMode ==
-                              DirectOrderDeliveryPaymentMode.customerDirect
-                          ? _copy.customerPaysDriverHelp
-                          : _copy.storePrepaysDriverHelp,
-                    ),
                   ),
                   const SizedBox(height: 8),
                 ],
@@ -1886,6 +1839,7 @@ class _DirectOrderCashierScreenState
                   value: _vnd(quote['service_charge_total']),
                 ),
                 if (!_isPickup &&
+                    _number(quote['delivery_fee_total']) > 0 &&
                     DirectOrderDeliveryPaymentMode.fromValue(
                           quote['delivery_payment_mode'] ?? 'store_prepaid',
                         ) ==
@@ -1894,7 +1848,11 @@ class _DirectOrderCashierScreenState
                     label: _copy.storeCollectedDeliveryFee,
                     value: _vnd(quote['delivery_fee_total']),
                   )
-                else if (!_isPickup)
+                else if (!_isPickup &&
+                    DirectOrderDeliveryPaymentMode.fromValue(
+                          quote['delivery_payment_mode'] ?? 'store_prepaid',
+                        ) ==
+                        DirectOrderDeliveryPaymentMode.customerDirect)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.delivery_dining_outlined),
