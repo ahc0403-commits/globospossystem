@@ -1,12 +1,13 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
-import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import 'package:qr_flutter/qr_flutter.dart' as qr;
+import '../payments/collection_bank.dart';
+import '../payments/vietqr_payload.dart';
 import '../utils/floor_label.dart';
 import '../utils/time_utils.dart';
 import 'receipt_delivery_policy.dart';
 
 class ReceiptBuilder {
-  static const bankTransferQrAsset = 'assets/images/woori_bank_account_qr.jpg';
   static const internalBuzzerAlertBytes = <int>[0x1B, 0x42, 5, 9];
 
   static Future<List<int>> buildPaymentReceipt({
@@ -16,6 +17,7 @@ class ReceiptBuilder {
     required double totalAmount,
     required String paymentMethod,
     required DateTime paidAt,
+    CollectionBank? bank,
     bool isService = false,
     String? legalName,
     String? taxCode,
@@ -287,7 +289,7 @@ class ReceiptBuilder {
       );
     }
 
-    if (!isService) {
+    if (!isService && bank != null) {
       bytes.addAll(generator.hr());
       bytes.addAll(
         generator.text(
@@ -297,17 +299,17 @@ class ReceiptBuilder {
       );
       bytes.addAll(
         generator.text(
-          'WOORI BANK - 100202042976',
+          _escText('${bank.label} - ${bank.accountNumber}'),
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
       );
       bytes.addAll(
         generator.text(
-          'AHN HYOCHANG',
+          _escText(bank.accountHolder),
           styles: const PosStyles(align: PosAlign.center),
         ),
       );
-      bytes.addAll(generator.imageRaster(await _loadBankTransferQr()));
+      bytes.addAll(generator.imageRaster(_bankTransferQr(bank)));
     }
 
     bytes.addAll(generator.hr());
@@ -496,17 +498,37 @@ class ReceiptBuilder {
     return bytes;
   }
 
-  static Future<img.Image> _loadBankTransferQr() async {
-    final data = await rootBundle.load(bankTransferQrAsset);
-    final decoded = img.decodeImage(data.buffer.asUint8List());
-    if (decoded == null) {
-      throw StateError('BANK_TRANSFER_QR_ASSET_INVALID');
-    }
-    return img.copyResize(
-      decoded,
-      width: 512,
-      interpolation: img.Interpolation.average,
+  static img.Image _bankTransferQr(CollectionBank bank) {
+    // Receipts show an account-only QR, without requesting another payment.
+    final code = qr.QrImage(
+      qr.QrCode.fromData(
+        data: VietQrPayload.bankTransfer(
+          bankBin: bank.bin,
+          accountNumber: bank.accountNumber,
+        ),
+        errorCorrectLevel: qr.QrErrorCorrectLevel.M,
+      ),
     );
+    const width = 512;
+    const quietZone = 4;
+    final scale = width ~/ (code.moduleCount + quietZone * 2);
+    final offset = (width - code.moduleCount * scale) ~/ 2;
+    final image = img.Image(width: width, height: width);
+    img.fill(image, color: img.ColorRgb8(255, 255, 255));
+    for (var row = 0; row < code.moduleCount; row++) {
+      for (var col = 0; col < code.moduleCount; col++) {
+        if (!code.isDark(row, col)) continue;
+        img.fillRect(
+          image,
+          x1: offset + col * scale,
+          y1: offset + row * scale,
+          x2: offset + (col + 1) * scale - 1,
+          y2: offset + (row + 1) * scale - 1,
+          color: img.ColorRgb8(0, 0, 0),
+        );
+      }
+    }
+    return image;
   }
 
   static List<int> _amountRow(
@@ -1260,6 +1282,7 @@ class QueuedPaymentReceipt {
     required this.vatAmount,
     required this.receivedAmount,
     required this.changeAmount,
+    this.bank,
     this.dinerCount,
     this.utensilsRequested = true,
     this.fulfillmentMethod,
@@ -1289,6 +1312,7 @@ class QueuedPaymentReceipt {
   final double vatAmount;
   final double? receivedAmount;
   final double changeAmount;
+  final CollectionBank? bank;
   final int? dinerCount;
   final bool utensilsRequested;
   final String? fulfillmentMethod;
@@ -1308,6 +1332,11 @@ class QueuedPaymentReceipt {
         ? payload[combinedKey] ?? payload[standardKey]
         : payload[standardKey];
     return QueuedPaymentReceipt(
+      bank: payload['bank'] is Map
+          ? CollectionBank.fromJson(
+              Map<String, dynamic>.from(payload['bank'] as Map),
+            )
+          : null,
       orderNotes: payload['order_notes']?.toString(),
       directFulfillmentType: payload['direct_fulfillment_type']?.toString(),
       directDeliveryPaymentMode: payload['direct_delivery_payment_mode']

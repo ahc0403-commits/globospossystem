@@ -33,6 +33,7 @@ SKIP_VERCEL="${SKIP_VERCEL:-0}"
 REQUIRE_CLEAN_GIT="${REQUIRE_CLEAN_GIT:-1}"
 ROLLBACK_HIERARCHY=0
 DB_ONLY=0
+WEB_ONLY=0
 MIGRATION_OPTION_SET=0
 
 # shellcheck source=scripts/lib/production_migration_gate.sh
@@ -64,6 +65,8 @@ Options:
   --db-only          Run the required migration gates without Auth or Vercel work.
                      Requires --migration and all checks; incompatible with
                      remote mode, skip options, and rollback.
+  --web-only         Deploy POS web/mobile browser UI; no DB or Edge changes.
+                     Requires every source, CI, Auth, test and login gate.
   --mode MODE        prebuilt (default) or remote.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
@@ -282,6 +285,9 @@ parse_args() {
       --db-only)
         DB_ONLY=1
         ;;
+      --web-only)
+        WEB_ONLY=1
+        ;;
       --mode)
         shift
         DEPLOY_MODE="${1:-}"
@@ -359,6 +365,21 @@ validate_db_only_options() {
     fail "--db-only is incompatible with --skip-vercel; Vercel is already not applicable."
   [[ "$ROLLBACK_HIERARCHY" == "0" ]] ||
     fail "--db-only is incompatible with --rollback-hierarchy."
+}
+
+validate_web_only_options() {
+  [[ "$WEB_ONLY" == "1" ]] || return 0
+  [[ "$DB_ONLY" == "0" ]] || fail "--web-only is incompatible with --db-only."
+  [[ "$MIGRATION_OPTION_SET" == "0" && -z "$MIGRATION_FILE" ]] ||
+    fail "--web-only cannot apply a migration."
+  [[ "$ROLLBACK_HIERARCHY" == "0" ]] ||
+    fail "--web-only is incompatible with --rollback-hierarchy."
+  [[ "$SKIP_CHECKS" == "0" && -n "$TEST_TARGETS" ]] ||
+    fail "--web-only requires static analysis and tests."
+  [[ "$SKIP_AUTH_CHECK" == "0" && "$SKIP_LOGIN_SMOKE" == "0" && "$SKIP_SMOKE_TESTS" == "0" ]] ||
+    fail "--web-only requires Auth readiness and login smoke."
+  [[ "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" && "$SKIP_VERCEL" == "0" ]] ||
+    fail "--web-only is incompatible with skip options."
 }
 
 preflight() {
@@ -1187,6 +1208,8 @@ run_db_only_flow() {
 
 main() {
   parse_args "$@"
+  readonly WEB_ONLY
+  validate_web_only_options
   validate_db_only_options
   cd "$ROOT_DIR"
   confirm_production
@@ -1201,25 +1224,33 @@ main() {
     return 0
   fi
   load_env
+  validate_web_only_options
   ensure_flutter_env
   verify_allowed_production_origins
   verify_vercel_firebase_web_env
   run_auth_check
   run_checks
-  verify_sepay_alert_secrets
-  run python3 "$ROOT_DIR/scripts/sync_direct_order_translation_schedule_secret.py"
-  verify_direct_order_secrets
-  # Deploy the compatibility-capable self-service endpoint before replacing the
-  # predecessor password trigger. If the DB gate fails, the endpoint remains
-  # safe against the predecessor schema; the web app is deployed only after the
-  # fail-closed migration and verification succeed.
-  deploy_pos_edge_functions
-  verify_no_smoke_edge_metadata
-  verify_deliberry_retirement_readiness
-  verify_remote_allowed_origin
-  verify_emergency_dispatcher_readiness
-  verify_direct_order_dispatcher_readiness
-  apply_migration
+  if [[ "$WEB_ONLY" == "1" ]]; then
+    log "POS web/mobile web release scope"
+    printf 'POS Edge functions: N/A (not deployed).\n'
+    printf 'Database migration: N/A (already gated in separate DB-only phases).\n'
+    printf 'Mobile web uses the same POS web release; native installation is separate.\n'
+  else
+    verify_sepay_alert_secrets
+    run python3 "$ROOT_DIR/scripts/sync_direct_order_translation_schedule_secret.py"
+    verify_direct_order_secrets
+    # Deploy the compatibility-capable self-service endpoint before replacing the
+    # predecessor password trigger. If the DB gate fails, the endpoint remains
+    # safe against the predecessor schema; the web app is deployed only after the
+    # fail-closed migration and verification succeed.
+    deploy_pos_edge_functions
+    verify_no_smoke_edge_metadata
+    verify_deliberry_retirement_readiness
+    verify_remote_allowed_origin
+    verify_emergency_dispatcher_readiness
+    verify_direct_order_dispatcher_readiness
+    apply_migration
+  fi
   local_flutter_build
   deploy_vercel
   run_login_smoke

@@ -1,8 +1,98 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/hardware/receipt_builder.dart';
+import 'package:globos_pos_system/core/payments/collection_bank.dart';
 import 'package:globos_pos_system/core/utils/floor_label.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const corporateBank = CollectionBank(
+    bin: '970426',
+    accountNumber: '80002014298',
+    accountHolder: 'AKJ INTERNATIONAL CO., LTD',
+    label: 'MSB',
+  );
+
+  test(
+    'queued receipt uses the server beneficiary and keeps it in the QR',
+    () async {
+      final receipt = QueuedPaymentReceipt.fromPayload({
+        'bank': {
+          'bin': corporateBank.bin,
+          'label': corporateBank.label,
+          'account_number': corporateBank.accountNumber,
+          'account_holder': corporateBank.accountHolder,
+        },
+        'total_amount': 108000,
+        'items': <dynamic>[],
+      });
+      expect(receipt.bank?.accountNumber, corporateBank.accountNumber);
+      final bytes = await ReceiptBuilder.buildPaymentReceipt(
+        restaurantName: receipt.restaurantName,
+        tableNumber: receipt.tableNumber,
+        items: receipt.items,
+        totalAmount: receipt.totalAmount,
+        paymentMethod: receipt.paymentMethod,
+        paidAt: receipt.paidAt,
+        bank: receipt.bank,
+      );
+      final text = String.fromCharCodes(bytes);
+      expect(text, contains('MSB - 80002014298'));
+      expect(text, isNot(contains('WOORI BANK')));
+      // GS v 0 is the raster image command, including 512px width/height.
+      expect(
+        text,
+        contains(String.fromCharCodes([0x1d, 0x76, 0x30, 0, 64, 0, 0, 2])),
+      );
+      final evidencePath = Platform.environment['GLOBOS_RECEIPT_QR_EVIDENCE'];
+      if (evidencePath != null) File(evidencePath).writeAsBytesSync(bytes);
+    },
+  );
+
+  test('missing beneficiary never falls back to a personal account', () async {
+    final receipt = QueuedPaymentReceipt.fromPayload({});
+    expect(receipt.bank, isNull);
+    final text = String.fromCharCodes(
+      await ReceiptBuilder.buildPaymentReceipt(
+        restaurantName: receipt.restaurantName,
+        tableNumber: receipt.tableNumber,
+        items: receipt.items,
+        totalAmount: receipt.totalAmount,
+        paymentMethod: receipt.paymentMethod,
+        paidAt: receipt.paidAt,
+      ),
+    );
+    expect(text, isNot(contains('CHUYEN KHOAN')));
+    expect(text, isNot(contains('100202042976')));
+  });
+
+  test('malformed server beneficiary blocks printing a payment QR', () {
+    expect(
+      () => QueuedPaymentReceipt.fromPayload({
+        'bank': {'bin': '970426', 'account_number': 'bad'},
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('service receipts do not request transfers even with a bank', () async {
+    final text = String.fromCharCodes(
+      await ReceiptBuilder.buildPaymentReceipt(
+        restaurantName: 'GLOBOS',
+        tableNumber: 'A1',
+        items: const [],
+        totalAmount: 0,
+        paymentMethod: 'service',
+        paidAt: DateTime.utc(2026),
+        isService: true,
+        bank: corporateBank,
+      ),
+    );
+    expect(text, isNot(contains('80002014298')));
+    expect(text, isNot(contains('CHUYEN KHOAN')));
+  });
+
   test('pickup kitchen slip includes order type and reference', () async {
     final ticket = PrintTicket.fromPayload({
       'ticket': 'kitchen',
@@ -35,8 +125,6 @@ void main() {
     expect(output, isNot(contains('Khach can tra: 0 VND')));
     expect(output, isNot(contains('Phi giao hang Grab')));
   });
-
-  TestWidgetsFlutterBinding.ensureInitialized();
 
   final forms = <String, Future<List<int>> Function(PrintTicket)>{
     'kitchen': ReceiptBuilder.buildKitchenTicket,
@@ -323,6 +411,7 @@ void main() {
       totalAmount: 50000,
       paymentMethod: 'cash',
       paidAt: DateTime.utc(2026, 5, 18, 10, 30),
+      bank: corporateBank,
       legalName: 'CÔNG TY TNHH AKJ INTERNATIONAL',
       taxCode: '0318453298',
       addressLines: const ['69/1A2 Nguyễn Gia Trí'],
@@ -345,8 +434,10 @@ void main() {
     expect(text, contains('3,703 VND'));
     expect(text, isNot(contains('***')));
     expect(text, contains('CHUYEN KHOAN'));
-    expect(text, contains('WOORI BANK - 100202042976'));
-    expect(text, contains('AHN HYOCHANG'));
+    expect(text, contains('MSB - 80002014298'));
+    expect(text, contains('AKJ INTERNATIONAL CO., LTD'));
+    expect(text, isNot(contains('100202042976')));
+    expect(text, isNot(contains('AHN HYOCHANG')));
     expect(bytes, contains(0x76));
     expect(bytes, contains(0x1d));
     expect(bytes, contains(0x56));
@@ -527,6 +618,7 @@ void main() {
       totalAmount: 10000,
       paymentMethod: 'service',
       paidAt: DateTime.utc(2026, 5, 18, 10, 30),
+      bank: corporateBank,
       isService: true,
     );
 

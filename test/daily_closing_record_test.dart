@@ -82,6 +82,8 @@ void main() {
       'reconciliation_delta': 4803300,
       'ledger_as_of': '2026-09-16T08:30:00Z',
       'close_source': 'manual',
+      'counted_cash_amount': 6391040,
+      'opening_cash_amount': 5000000,
       'created_at': '2026-09-16T05:00:00Z',
     });
 

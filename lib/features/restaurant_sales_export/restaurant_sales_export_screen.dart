@@ -1,6 +1,11 @@
 import '../../widgets/error_toast.dart';
+import 'daily_deposit_panel.dart';
+import '../photo_sales_import/photo_sales_import_screen.dart';
+import '../admin/tabs/reports_tab.dart' show DailyClosingScreen;
+import '../../widgets/bank_transfer_ledger_dialog.dart';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:async';
 import '../admin/einvoice_misa_workbook.dart';
 import '../admin/widgets/invoice_mapping_import_dialog.dart';
 
@@ -41,6 +46,8 @@ class RestaurantSalesExportScreen extends StatefulWidget {
     this.ledgerService,
     this.reportService,
     this.saveCollectionBank,
+    this.initialBusinessDate,
+    this.summaryRefreshInterval,
   });
 
   /// Optional deterministic loader for operational-state widget tests.
@@ -54,6 +61,10 @@ class RestaurantSalesExportScreen extends StatefulWidget {
   final PosReceiptLedgerService? ledgerService;
   final DailySalesReportService? reportService;
   final Future<void> Function(Map<String, dynamic>)? saveCollectionBank;
+  final String? initialBusinessDate;
+
+  /// Injected test loaders do not poll unless an interval is supplied.
+  final Duration? summaryRefreshInterval;
 
   @override
   State<RestaurantSalesExportScreen> createState() =>
@@ -61,7 +72,8 @@ class RestaurantSalesExportScreen extends StatefulWidget {
 }
 
 class _RestaurantSalesExportScreenState
-    extends State<RestaurantSalesExportScreen> {
+    extends State<RestaurantSalesExportScreen>
+    with WidgetsBindingObserver {
   late String _businessDate;
   List<CombinedSalesExport> _exports = const [];
   List<DailySalesSummary> _summaries = const [];
@@ -81,6 +93,9 @@ class _RestaurantSalesExportScreenState
   SalesExportArtifact? _lastArtifact;
   String? _lastArtifactName;
   bool _statusIsError = false;
+  int _loadGeneration = 0;
+  Timer? _summaryRefreshTimer;
+  bool _foreground = true;
 
   CombinedSalesExport? get _selectedExport {
     for (final export in _exports) {
@@ -92,10 +107,44 @@ class _RestaurantSalesExportScreenState
   @override
   void initState() {
     super.initState();
-    _businessDate = restaurantHcmBusinessDate(
-      widget.todayOverride ?? DateTime.now(),
-    );
+    _businessDate =
+        widget.initialBusinessDate ??
+        restaurantHcmBusinessDate(widget.todayOverride ?? DateTime.now());
     Future.microtask(_load);
+    WidgetsBinding.instance.addObserver(this);
+    final interval =
+        widget.summaryRefreshInterval ??
+        (widget.reportService != null || widget.loader != null
+            ? Duration.zero
+            : const Duration(seconds: 30));
+    if (interval > Duration.zero) {
+      _summaryRefreshTimer = Timer.periodic(interval, (_) {
+        if (mounted &&
+            _foreground &&
+            !_isLoading &&
+            !_isDownloading &&
+            TickerMode.valuesOf(context).enabled &&
+            ModalRoute.of(context)?.isCurrent != false) {
+          unawaited(_load());
+        }
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground && mounted && !_isLoading && !_isDownloading) {
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadGeneration++;
+    _summaryRefreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -350,6 +399,29 @@ class _RestaurantSalesExportScreenState
               ? null
               : (id) => setState(() => _selectedTaxEntityId = id),
         ),
+        const SizedBox(height: 16),
+        DailyDepositPanel(
+          summary: summary,
+          onBank: _isDownloading
+              ? null
+              : () => showDialog<void>(
+                  context: context,
+                  builder: (_) => BankTransferLedgerDialog(
+                    loadPage: (time, id) => _reportService.bankTransfers(
+                      fromDate: summary.businessDate,
+                      toDate: summary.businessDate,
+                      taxEntityId: summary.taxEntityId,
+                      afterTime: time,
+                      afterId: id,
+                    ),
+                  ),
+                ),
+          onPhoto: _isDownloading ? null : _openPhotoImport,
+          onClosing: _isDownloading || summary.bunsikStores.isEmpty
+              ? null
+              : () => _openClosing(summary),
+        ),
+        const SizedBox(height: 16),
         TextButton(
           onPressed: _isDownloading
               ? null
@@ -451,86 +523,63 @@ class _RestaurantSalesExportScreenState
           ],
         ),
         const SizedBox(height: 20),
-        Container(
-          key: const Key('sales_next_day_deposit'),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: ToastColorTokens.infoMuted,
-            borderRadius: ToastRadiusTokens.sm,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _copy(
-                  '익일 매출 입금 예정액',
-                  'Số tiền doanh thu dự kiến nộp ngày hôm sau',
-                  'Next-day sales deposit',
-                ),
-                style: AppFonts.system(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              Text(
-                '${summary.depositDate} · ${summary.depositConfirmed ? _copy('확정', 'Đã chốt', 'Confirmed') : _copy('잠정', 'Tạm tính', 'Provisional')}',
-              ),
-              Text(
-                summary.nextDeposit == null
-                    ? _copy(
-                        '포토 매출 등록 확인 필요',
-                        'Cần xác nhận nhập doanh thu Photo',
-                        'Photo import needs confirmation',
-                      )
-                    : money(summary.nextDeposit!),
-                key: const Key('sales_next_day_deposit_amount'),
-                style: AppFonts.system(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              Text(
-                '${_copy('포토 매출', 'Doanh thu Photo', 'Photo sales')}: ${money(summary.photoGross)} + ${_copy('레스토랑 현금 매출', 'Doanh thu tiền mặt nhà hàng', 'Restaurant cash sales')}: ${money(summary.restaurantCash)}',
-              ),
-              Text(
-                '${_copy('레스토랑 계좌이체 매출', 'Chuyển khoản nhà hàng', 'Restaurant bank transfers')}: ${money(summary.restaurantBankTransfer)}',
-              ),
-              if (summary.bank case final bank?)
-                SelectableText(
-                  '${bank.label} · ${bank.accountNumber} · ${bank.accountHolder}',
-                )
-              else
-                Text(
-                  _copy(
-                    '법인 수금 계좌 설정 필요',
-                    'Cần thiết lập tài khoản pháp nhân',
-                    'Configure the legal entity collection account',
-                  ),
-                ),
-              TextButton(
-                onPressed: _isDownloading
-                    ? null
-                    : () => _editCollectionBank(summary),
-                child: Text(
-                  _copy(
-                    '법인 수금 계좌 설정',
-                    'Thiết lập tài khoản pháp nhân',
-                    'Collection account settings',
-                  ),
-                ),
-              ),
-              if (summary.closingDeposit != null)
-                Text(
-                  '${_copy('레스토랑 마감 실사 입금액', 'Tiền nộp theo kiểm đếm nhà hàng', 'Restaurant counted deposit')}: ${money(summary.closingDeposit!)}',
-                ),
-              Text(
-                '${_copy('현금 환불 / 배달비 지급 / 회수 / 과부족', 'Hoàn tiền mặt / chi giao hàng / thu hồi / chênh lệch', 'Cash refunds / delivery payouts / recoveries / variance')}: ${money(summary.cashRefunds)} / ${money(summary.deliveryCashPaid)} / ${money(summary.deliveryCashRecovered)} / ${money(summary.cashVariance)}',
-              ),
-            ],
+        TextButton(
+          onPressed: _isDownloading ? null : () => _editCollectionBank(summary),
+          child: Text(
+            _copy(
+              '법인 수금 계좌 설정',
+              'Thiết lập tài khoản pháp nhân',
+              'Collection account settings',
+            ),
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _openPhotoImport() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            const Scaffold(body: SafeArea(child: PhotoSalesImportScreen())),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
+  Future<void> _openClosing(DailySalesSummary summary) async {
+    final store = summary.bunsikStores.length == 1
+        ? summary.bunsikStores.single
+        : await showDialog<DepositStore>(
+            context: context,
+            builder: (context) => AlertDialog(
+              key: const Key('sales_deposit_store_dialog'),
+              title: Text(context.l10n.salesDepositOpenClosing),
+              content: SizedBox(
+                width: 400,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final store in summary.bunsikStores)
+                      ListTile(
+                        title: Text(store.name),
+                        onTap: () => Navigator.pop(context, store),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+    if (!mounted || store == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DailyClosingScreen(
+          storeId: store.id,
+          closingDate: summary.businessDate,
+        ),
+      ),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _openSummaryLedger(DailySalesSummary summary, bool red) async {
@@ -856,15 +905,21 @@ class _RestaurantSalesExportScreenState
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final day = _businessDate;
     setState(() {
       _isLoading = true;
       _statusMessage = null;
       _statusIsError = false;
+      _summaries = const [];
     });
     try {
       if (widget.loader == null) {
-        final summaries = await _reportService.summaries(_businessDate);
-        if (!mounted) return;
+        _reportService.invalidateSummary(day);
+        final summaries = await _reportService.summaries(day);
+        if (!mounted || generation != _loadGeneration || day != _businessDate) {
+          return;
+        }
         setState(() {
           _summaries = summaries;
           _exports = const [];
@@ -911,7 +966,7 @@ class _RestaurantSalesExportScreenState
         }
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _exports = const [];
         _selectedTaxEntityId = null;
@@ -919,7 +974,9 @@ class _RestaurantSalesExportScreenState
         _statusIsError = true;
       });
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

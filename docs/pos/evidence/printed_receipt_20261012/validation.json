@@ -1,0 +1,18 @@
+{
+  "input": "synthetic paid order",
+  "paper_width_dots": 576,
+  "qr_width_dots": 512,
+  "qr_height_dots": 512,
+  "escpos_bytes": 34015,
+  "bank_bin": "970426",
+  "account_number": "80002014298",
+  "encoded_amount": null,
+  "sample_receipt_total_vnd": 181000,
+  "qr_matches_user_attachment_payload": true,
+  "decoded_images": [
+    "receipt_qr.png",
+    "receipt_80mm.png"
+  ],
+  "physical_print_executed": false,
+  "production_deployment_executed": false
+}

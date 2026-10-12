@@ -130,6 +130,8 @@ void main() {
 
     expect(find.byKey(const Key('nav_daily_closing')), findsOneWidget);
     expect(find.byKey(const Key('daily_closing_cards')), findsNothing);
+    expect(find.byKey(const Key('closing_deposit_2026-08-13')), findsOneWidget);
+    expect(find.textContaining('2026-08-14'), findsWidgets);
     expect(
       find.byKey(const Key('daily_closing_action_2026-08-13')),
       findsOneWidget,
@@ -152,6 +154,29 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('123.456.789 VND'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('wide closing uses readable cards at 200 percent text scale', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _app(
+        const Scaffold(
+          body: SingleChildScrollView(
+            child: DailyClosingSection(storeId: _storeId),
+          ),
+        ),
+        textScale: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('daily_closing_cards')), findsOneWidget);
+    expect(
+      find.byKey(const Key('daily_closing_table_horizontal_scroll')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 }

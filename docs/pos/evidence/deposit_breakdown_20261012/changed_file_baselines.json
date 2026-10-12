@@ -1,0 +1,98 @@
+[
+  {
+    "path": "lib/features/restaurant_sales_export/daily_sales_summary.dart",
+    "baseline_sha256": "44fe5dc38d10e72199ccef887fad0e04414ca6bba6a808285766364441a733d4",
+    "current_sha256": "8abd74b629883a949fc260c6e11ef54910f0cf750b74fa1894d625545e2d7e24",
+    "baseline_delta_lines": 190
+  },
+  {
+    "path": "lib/features/restaurant_sales_export/daily_sales_report_service.dart",
+    "baseline_sha256": "973d04f716ecd811037f63aae7a0bfebc1cbdd224c1287c6fda54f22cdf931d5",
+    "current_sha256": "3248a89ca213ee3e35a8be157b8cb85b2f4ff0cb59f3d642d13bf0856c31d31b",
+    "baseline_delta_lines": 206
+  },
+  {
+    "path": "lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart",
+    "baseline_sha256": "5ef91812693ec933aaf5beb53049a185d6b1c11bf2db5245f5fb5f8242f9d7b7",
+    "current_sha256": "0b1930ea1c92cc0bf3c36e8f5c254f360cc17f052f39055806cd322e1277ec5d",
+    "baseline_delta_lines": 330
+  },
+  {
+    "path": "lib/features/admin/providers/daily_closing_provider.dart",
+    "baseline_sha256": "50c7f5d9a4e8dcf12b2859550e29f447891143d46b23bfaeec48ef2779b3eb18",
+    "current_sha256": "2740b4d7e02254e87fe0f15126a8b1ff6d2704320818e1b4c3c1aecf363b8060",
+    "baseline_delta_lines": 96
+  },
+  {
+    "path": "lib/features/admin/tabs/reports_tab.dart",
+    "baseline_sha256": "16e0825ca5d55dec155d36b0eba87896eb329192080e2c5ddd394bd2e34c0c27",
+    "current_sha256": "175df69c543f060aa2e7d0cc2f933c82415d182e32136f23049c986a46b855da",
+    "baseline_delta_lines": 570
+  },
+  {
+    "path": "lib/core/services/daily_closing_service.dart",
+    "baseline_sha256": "2ad6f9d70c02f73cd24d2417efc8ece86cd5ee517fd98cc45906991a6dc67da8",
+    "current_sha256": "28e92d8a5f3fd5aa9991d2ba522ad6bf367edb7d893997f108989052b274deee",
+    "baseline_delta_lines": 36
+  },
+  {
+    "path": "lib/features/photo_sales_import/photo_sales_import_screen.dart",
+    "baseline_sha256": "35d6844b7e0e8f0783d99b1da03e21fafdd9f76a8c081a71a3fa7de2bd3cc3a1",
+    "current_sha256": "e13d26441442f090944574bc571c3da5527a6e4ca61699ada33ff6d70aa135e5",
+    "baseline_delta_lines": 81
+  },
+  {
+    "path": "lib/features/photo_sales_import/photo_sales_import_service.dart",
+    "baseline_sha256": "6e5c38d673655be696abe51c754b755899bec9111bc1eca5e77fac1bbbdb02cf",
+    "current_sha256": "9214e152cfffe77e4137a926aaa3d73b0583e935bca2f068173a5ef2e43e9bed",
+    "baseline_delta_lines": 22
+  },
+  {
+    "path": "lib/l10n/app_ko.arb",
+    "baseline_sha256": "074d8b9ffe56420d1464afba360eb72c13d4dea70693689b873f39c9ea8b6cac",
+    "current_sha256": "7c611705fe3f42c000702cea46828c05ad79e81b778e52e9daa9f303b604c8e6",
+    "baseline_delta_lines": 95
+  },
+  {
+    "path": "lib/l10n/app_vi.arb",
+    "baseline_sha256": "b0a91be08c5c477d53ded5c0821f7b7a3a1dfc305bd85d0c4603cf4cc537e3ad",
+    "current_sha256": "84db2cff20bd50047881ce3bd8f9834465071fa3121855de78b7d2e0585625f6",
+    "baseline_delta_lines": 95
+  },
+  {
+    "path": "lib/l10n/app_en.arb",
+    "baseline_sha256": "28d5ba666554a55742f7a4fdcdb42f0768ef0ffa579f0e292d53e93c72ae17fb",
+    "current_sha256": "859b8d65787141777a169e863db8ebb595756c74d9a47a9b8abea0aed744ad45",
+    "baseline_delta_lines": 95
+  },
+  {
+    "path": "test/daily_sales_report_service_test.dart",
+    "baseline_sha256": "c87d2ede581fe42318190e13690bd2d399d0323061a7ef9d75f33c1ba8bed278",
+    "current_sha256": "d4a1748a15c8bffe5a6959f0864976b55c189e67fa55fdffee69518abb56624b",
+    "baseline_delta_lines": 67
+  },
+  {
+    "path": "test/daily_sales_report_screen_test.dart",
+    "baseline_sha256": "252c10ee7b08697528c998eef189077dd8788d3dce3e6c5877963067a25c27ef",
+    "current_sha256": "4e736bf2309da0c364b0dfd8021e88a1c3887d08f43aa8ff02264410b04e3586",
+    "baseline_delta_lines": 146
+  },
+  {
+    "path": "test/daily_closing_record_test.dart",
+    "baseline_sha256": "3202a7c768da5be68b1657beb0c9e9d5a65bfb46130d3323ca1006a2d7d4858a",
+    "current_sha256": "24412bff53dfba890ebca8f5afa72da51117f0a1a4a62dbd6aa3294c79f97cbb",
+    "baseline_delta_lines": 14
+  },
+  {
+    "path": "test/daily_closing_responsive_test.dart",
+    "baseline_sha256": "21bba7f1e77dff0c6c32a747dd1d90050db6a84e785d8deffa31b6967a465e3a",
+    "current_sha256": "bb45355a2f8804451a06b4a98ba4596aee053e51e5553f5a8e38d83aa02e606d",
+    "baseline_delta_lines": 43
+  },
+  {
+    "path": "test/corporate_sales_export_sql_test.sh",
+    "baseline_sha256": "f8ae7af93eedcc69132ea52d0b8b28bab476ddaeddfce8fa2a690dd914d67a4d",
+    "current_sha256": "7c5d502e0647f59e17966a28fa4e66da97b5f3df8745a91d508e5ac2a9887e31",
+    "baseline_delta_lines": 17
+  }
+]

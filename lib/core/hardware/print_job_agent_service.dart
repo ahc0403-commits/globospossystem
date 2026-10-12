@@ -325,6 +325,7 @@ class PrintJobAgentService implements PrintAgentDriver {
       totalAmount: receipt.totalAmount,
       paymentMethod: receipt.paymentMethod,
       paidAt: receipt.paidAt,
+      bank: receipt.bank,
       isService: receipt.isService,
       legalName: receipt.legalName,
       taxCode: receipt.taxCode,

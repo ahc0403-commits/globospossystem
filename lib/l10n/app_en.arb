@@ -4188,5 +4188,88 @@
   "excelImportInvalidXml": "The Excel file contains unreadable workbook data. Save it again or paste its values into the import template.",
   "excelImportUnsupportedNumberFormat": "Some cell formats in this file could not be processed. Paste the values into the import template and save it again.",
   "excelImportDecodeFailed": "The Excel file could not be processed. Save it again or paste its values into the import template.",
-  "collectionBankUnavailable": "The company collection account is unavailable. Please contact an administrator."
+  "collectionBankUnavailable": "The company collection account is unavailable. Please contact an administrator.",
+  "salesDepositBankTitle": "Customer bank transfers",
+  "salesDepositBankNote": "POS collection records · excluded from cash deposits",
+  "salesDepositPhotoTitle": "Photo · next-day corporate deposit",
+  "salesDepositCashTitle": "BunsikClub cash · next-day corporate deposit",
+  "salesDepositDate": "Deposit date: {date}",
+  "@salesDepositDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositSourceDate": "Sales / closing date: {date}",
+  "@salesDepositSourceDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositTotalTitle": "Total next-day corporate deposit",
+  "salesDepositConfirmed": "Closing confirmed",
+  "salesDepositPending": "Before closing · provisional",
+  "salesDepositPhotoComplete": "Photo import complete",
+  "salesDepositPhotoMissing": "Photo import needs confirmation",
+  "salesDepositReview": "Closing confirmed · review differences",
+  "salesDepositShortfall": "Cash float shortage · review required",
+  "salesDepositUnavailable": "Deposit information needs confirmation",
+  "salesDepositKnownAmount": "Recorded amount: {amount}",
+  "@salesDepositKnownAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositExpectedAmount": "Expected cash deposit: {amount}",
+  "@salesDepositExpectedAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositMissingStores": "Photo stores to confirm: {count}",
+  "@salesDepositMissingStores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "salesDepositPendingStores": "Stores awaiting closing: {count}",
+  "@salesDepositPendingStores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "salesDepositNoAccount": "Configure the legal entity collection account",
+  "salesDepositPreview": "Corporate deposit after closing",
+  "salesDepositOpenPhoto": "Review Photo import",
+  "salesDepositOpenClosing": "Review daily closing",
+  "salesDepositOpenBank": "View bank transfers",
+  "salesDepositAsOf": "Updated: {time}",
+  "@salesDepositAsOf": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositNextPage": "Next page",
+  "salesDepositImportAmount": "This file’s registered amount: {amount}",
+  "@salesDepositImportAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositImportCompleteness": "Check the legal-entity sales summary for registration completeness across Photo stores and the deposit amount."
 }

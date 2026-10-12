@@ -1,0 +1,51 @@
+{
+  "environment": "owned disposable Docker DB; synthetic data",
+  "results": [
+    {
+      "stores": 5,
+      "payments": 1000,
+      "items": 1000,
+      "single": {
+        "entities": 3,
+        "server_ms": 21.19,
+        "response_bytes": 4204,
+        "client_ms": 97.12037499411963
+      },
+      "concurrent_users": 20,
+      "p50_server_ms": 53.6305,
+      "p95_server_ms": 107.809,
+      "function_calls": "get_pos_daily_sales_summary|0\nget_pos_daily_sales_summary|21\npos_sales_export_source_revision|0\npos_sales_export_source_revisions|0"
+    },
+    {
+      "stores": 50,
+      "payments": 10000,
+      "items": 10000,
+      "single": {
+        "entities": 3,
+        "server_ms": 103.681,
+        "response_bytes": 8085,
+        "client_ms": 204.1239159880206
+      },
+      "concurrent_users": 20,
+      "p50_server_ms": 309.2845,
+      "p95_server_ms": 455.48,
+      "function_calls": "get_pos_daily_sales_summary|0\nget_pos_daily_sales_summary|21\npos_sales_export_source_revision|0\npos_sales_export_source_revisions|0"
+    },
+    {
+      "stores": 500,
+      "payments": 100000,
+      "items": 100000,
+      "single": {
+        "entities": 3,
+        "server_ms": 1301.465,
+        "response_bytes": 47201,
+        "client_ms": 1388.0822499922942
+      },
+      "concurrent_users": 20,
+      "p50_server_ms": 5367.502,
+      "p95_server_ms": 6402.838,
+      "function_calls": "get_pos_daily_sales_summary|0\nget_pos_daily_sales_summary|21\npos_sales_export_source_revision|0\npos_sales_export_source_revisions|0",
+      "scan_rows_examined_including_repeated_scans": 510723
+    }
+  ]
+}

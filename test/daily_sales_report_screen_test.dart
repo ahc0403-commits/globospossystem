@@ -36,6 +36,7 @@ void main() {
       await tester.pumpAndSettle();
       final open = find.text('Approve invoice mappings');
       await tester.ensureVisible(open);
+      await tester.pumpAndSettle();
       await tester.tap(open);
       await tester.pumpAndSettle();
       expect(find.text('Choose mapping JSON'), findsOneWidget);
@@ -145,7 +146,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('308.000 ₫'), findsOneWidget);
+    expect(find.textContaining('308.000 VND'), findsOneWidget);
     final button = find.text('법인 수금 계좌 설정');
     await tester.ensureVisible(button);
     await tester.pumpAndSettle();

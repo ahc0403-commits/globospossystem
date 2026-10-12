@@ -29,7 +29,7 @@ void main() {
     expect(screen, contains("Key('daily_closing_cash_dialog')"));
     expect(
       screen,
-      contains('static const double _defaultOpeningCash = 5000000'),
+      contains("openingCash: _reportDouble(preview['opening_cash_amount'])"),
     );
     expect(screen, contains("Key('daily_closing_note_\$denomination')"));
   });

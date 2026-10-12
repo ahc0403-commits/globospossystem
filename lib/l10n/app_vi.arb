@@ -4187,5 +4187,88 @@
   "excelImportInvalidXml": "Không đọc được dữ liệu bên trong tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập.",
   "excelImportUnsupportedNumberFormat": "Không xử lý được một số định dạng ô trong tệp. Hãy dán các giá trị vào mẫu nhập và lưu lại.",
   "excelImportDecodeFailed": "Không xử lý được tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập.",
-  "collectionBankUnavailable": "Không thể xác nhận tài khoản thu tiền của công ty. Vui lòng liên hệ quản trị viên."
+  "collectionBankUnavailable": "Không thể xác nhận tài khoản thu tiền của công ty. Vui lòng liên hệ quản trị viên.",
+  "salesDepositBankTitle": "Doanh thu chuyển khoản của khách",
+  "salesDepositBankNote": "Ghi nhận thu tiền POS · không cộng vào tiền mặt cần nộp",
+  "salesDepositPhotoTitle": "Photo · tiền nộp tài khoản pháp nhân ngày hôm sau",
+  "salesDepositCashTitle": "Tiền mặt BunsikClub · nộp tài khoản pháp nhân ngày hôm sau",
+  "salesDepositDate": "Ngày dự kiến nộp: {date}",
+  "@salesDepositDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositSourceDate": "Ngày doanh thu / chốt: {date}",
+  "@salesDepositSourceDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositTotalTitle": "Tổng tiền nộp pháp nhân ngày hôm sau",
+  "salesDepositConfirmed": "Đã chốt kiểm đếm",
+  "salesDepositPending": "Chưa chốt · tạm tính",
+  "salesDepositPhotoComplete": "Đã nhập đủ doanh thu Photo",
+  "salesDepositPhotoMissing": "Cần xác nhận nhập doanh thu Photo",
+  "salesDepositReview": "Đã chốt · cần kiểm tra chênh lệch",
+  "salesDepositShortfall": "Thiếu tiền quỹ · cần kiểm tra",
+  "salesDepositUnavailable": "Cần xác nhận thông tin tiền nộp",
+  "salesDepositKnownAmount": "Số tiền đã ghi nhận: {amount}",
+  "@salesDepositKnownAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositExpectedAmount": "Tiền mặt dự kiến nộp: {amount}",
+  "@salesDepositExpectedAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositMissingStores": "Chi nhánh Photo cần xác nhận: {count}",
+  "@salesDepositMissingStores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "salesDepositPendingStores": "Chi nhánh chưa chốt: {count}",
+  "@salesDepositPendingStores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "salesDepositNoAccount": "Cần thiết lập tài khoản pháp nhân",
+  "salesDepositPreview": "Tiền nộp pháp nhân sau khi chốt",
+  "salesDepositOpenPhoto": "Kiểm tra nhập Photo",
+  "salesDepositOpenClosing": "Kiểm tra chốt ngày",
+  "salesDepositOpenBank": "Xem giao dịch chuyển khoản",
+  "salesDepositAsOf": "Cập nhật: {time}",
+  "@salesDepositAsOf": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositNextPage": "Trang tiếp theo",
+  "salesDepositImportAmount": "Số tiền trong tệp đã nhập: {amount}",
+  "@salesDepositImportAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositImportCompleteness": "Kiểm tra tổng hợp doanh thu pháp nhân để xác nhận tất cả cửa hàng Photo đã đăng ký và số tiền dự kiến nộp."
 }

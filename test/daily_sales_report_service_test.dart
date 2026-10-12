@@ -75,7 +75,7 @@ void main() {
       expect(export.grossSales, 205 * 10800);
     },
   );
-  test('counted deposit differences stay provisional', () {
+  test('counted deposit remains confirmed with a variance warning', () {
     final source = row()
       ..addAll({'closing_complete': true, 'closing_deposit': 200000});
     expect(
@@ -83,9 +83,20 @@ void main() {
       isTrue,
     );
     source['closing_deposit'] = 195000;
+    source['bunsik_closed_deposit'] = 195000;
+    source['bunsik_variance_store_count'] = 1;
+    source['bunsik_variance'] = -5000;
     expect(
       DailySalesSummary.fromJson('2026-10-08', source).depositConfirmed,
-      isFalse,
+      isTrue,
+    );
+    expect(
+      DailySalesSummary.fromJson('2026-10-08', source).cashNeedsReview,
+      isTrue,
+    );
+    expect(
+      DailySalesSummary.fromJson('2026-10-08', source).cashDeposit,
+      195000,
     );
   });
   test('changed receipt count requires refresh', () async {
@@ -125,6 +136,16 @@ Map<String, dynamic> row() => {
   'restaurant_bank_transfer': 439560,
   'photo_complete': true,
   'closing_complete': false,
+  'bunsik_store_count': 1,
+  'bunsik_closed_store_count': 1,
+  'bunsik_closed_deposit': 200000,
+  'bunsik_shortfall_store_count': 0,
+  'bunsik_variance_store_count': 0,
+  'bunsik_late_ledger_store_count': 0,
+  'bunsik_cash': 200000,
+  'bunsik_expected_deposit': 200000,
+  'bunsik_variance': 0,
+  'missing_photo_store_count': 0,
   'cash_variance': 0,
   'cash_refunds': 0,
   'delivery_cash_paid': 0,
