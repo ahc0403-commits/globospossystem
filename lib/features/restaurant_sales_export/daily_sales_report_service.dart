@@ -8,23 +8,149 @@ import 'restaurant_sales_export.dart';
 typedef SalesReportRpc = Future<dynamic> Function(String, Map<String, dynamic>);
 
 class DailySalesReportService {
-  DailySalesReportService({SalesReportRpc? rpc, String Function()? sessionKey})
-    : _rpc = rpc ?? ((name, params) => supabase.rpc(name, params: params)),
-      _sessionKey =
-          sessionKey ??
-          (rpc == null
-              ? (() =>
-                    '${supabase.auth.currentUser?.id}:${supabase.auth.currentSession?.accessToken.hashCode}')
-              : (() => '${identityHashCode(rpc)}'));
+  DailySalesReportService({
+    SalesReportRpc? rpc,
+    String Function()? sessionKey,
+    DateTime Function()? now,
+  }) : _rpc = rpc ?? ((name, params) => supabase.rpc(name, params: params)),
+       _now = now ?? DateTime.now,
+       _sessionKey =
+           sessionKey ??
+           (rpc == null
+               ? (() =>
+                     '${supabase.auth.currentUser?.id}:${supabase.auth.currentSession?.accessToken.hashCode}')
+               : (() => '${identityHashCode(rpc)}'));
   final String Function() _sessionKey;
+  final DateTime Function() _now;
   final SalesReportRpc _rpc;
   final _inflight = <String, Future<CombinedSalesExport>>{};
+  final _summaryInflight = <String, Future<List<DailySalesSummary>>>{};
+  final _summaryCache =
+      <String, ({DateTime expires, List<DailySalesSummary> rows})>{};
+  int _summaryGeneration = 0;
+  void invalidateSummary([String? day]) {
+    _summaryGeneration++;
+    _summaryCache.removeWhere((key, _) => day == null || key.endsWith(':$day'));
+    _summaryInflight.removeWhere(
+      (key, _) => day == null || key.endsWith(':$day'),
+    );
+  }
+
   Future<dynamic> mappingRpc(String name, Map<String, dynamic> params) =>
       _rpc(name, params);
 
-  Future<List<DailySalesSummary>> summaries(String day) async {
+  Future<Map<String, dynamic>> bankTransfers({
+    required String fromDate,
+    required String toDate,
+    String? taxEntityId,
+    String? storeId,
+    String? afterTime,
+    String? afterId,
+  }) async {
+    final session = _sessionKey();
+    final result = Map<String, dynamic>.from(
+      await _rpc('get_bank_transfer_sales_page', {
+            'p_from_date': fromDate,
+            'p_to_date': toDate,
+            'p_tax_entity_id': taxEntityId,
+            'p_store_id': storeId,
+            'p_after_time': afterTime,
+            'p_after_id': afterId,
+            'p_limit': 100,
+          })
+          as Map,
+    );
+    if (_sessionKey() != session) {
+      throw const FormatException('BANK_TRANSFER_SESSION_CHANGED');
+    }
+    if (result['from_date'] != fromDate ||
+        result['to_date'] != toDate ||
+        result['tax_entity_id'] != taxEntityId ||
+        result['store_id'] != storeId ||
+        result['has_more'] is! bool ||
+        result['rows'] is! List ||
+        (result['rows'] as List).length > 100) {
+      throw const FormatException('BANK_TRANSFER_PAGE_INVALID');
+    }
+    DateTime? previous = afterTime == null ? null : DateTime.parse(afterTime);
+    String? previousId = afterId;
+    for (final value in result['rows'] as List) {
+      final row = Map<String, dynamic>.from(value as Map);
+      final time = DateTime.tryParse(row['created_at']?.toString() ?? '');
+      final id = row['payment_id'];
+      final amount = row['amount'];
+      if (time == null ||
+          id is! String ||
+          id.isEmpty ||
+          amount is! num ||
+          !amount.isFinite ||
+          amount < 0 ||
+          row['store_name'] is! String ||
+          (storeId != null && row['store_id'] != storeId) ||
+          restaurantHcmBusinessDate(time).compareTo(fromDate) < 0 ||
+          restaurantHcmBusinessDate(time).compareTo(toDate) > 0 ||
+          (previous != null &&
+              (time.isBefore(previous) ||
+                  (time.isAtSameMomentAs(previous) &&
+                      id.compareTo(previousId!) <= 0)))) {
+        throw const FormatException('BANK_TRANSFER_PAGE_INVALID');
+      }
+      previous = time;
+      previousId = id;
+    }
+    if (result['has_more'] == true && (result['rows'] as List).isEmpty) {
+      throw const FormatException('BANK_TRANSFER_PAGE_INVALID');
+    }
+    return result;
+  }
+
+  Future<List<DailySalesSummary>> summaries(String day) {
+    final key = '${_sessionKey()}:$day';
+    final cached = _summaryCache[key];
+    if (cached != null && _now().isBefore(cached.expires)) {
+      return Future.value(cached.rows);
+    }
+    final generation = _summaryGeneration;
+    final session = _sessionKey();
+    return _summaryInflight.putIfAbsent(key, () {
+      late final Future<List<DailySalesSummary>> request;
+      request = _summaries(day)
+          .then((rows) {
+            if (_sessionKey() != session) {
+              throw const FormatException('SALES_SUMMARY_SCOPE_INVALID');
+            }
+            if (generation == _summaryGeneration) {
+              _summaryCache.removeWhere(
+                (_, entry) => !_now().isBefore(entry.expires),
+              );
+              if (_summaryCache.length >= 32) {
+                _summaryCache.remove(_summaryCache.keys.first);
+              }
+              _summaryCache[key] = (
+                expires: _now().add(const Duration(seconds: 30)),
+                rows: rows,
+              );
+            }
+            return rows;
+          })
+          .whenComplete(() {
+            if (identical(_summaryInflight[key], request)) {
+              _summaryInflight.remove(key);
+            }
+          });
+      return request;
+    });
+  }
+
+  Future<List<DailySalesSummary>> _summaries(
+    String day, {
+    bool includeExportMetadata = false,
+  }) async {
     final response = Map<String, dynamic>.from(
-      await _rpc('get_pos_daily_sales_summary', {'p_business_date': day})
+      await _rpc('get_pos_daily_sales_summary', {
+            'p_business_date': day,
+            'p_include_export_metadata': includeExportMetadata,
+          })
           as Map,
     );
     if (response['business_date'] != day || response['entities'] is! List) {
@@ -35,13 +161,14 @@ class DailySalesReportService {
           (row) => DailySalesSummary.fromJson(
             day,
             Map<String, dynamic>.from(row as Map),
+            asOf: DateTime.tryParse(response['as_of']?.toString() ?? ''),
           ),
         )
         .toList();
     if (rows.map((r) => r.taxEntityId).toSet().length != rows.length) {
       throw const FormatException('SALES_SUMMARY_DUPLICATE_ENTITY');
     }
-    return rows;
+    return List.unmodifiable(rows);
   }
 
   Future<List<Map<String, dynamic>>> _pages(
@@ -214,6 +341,22 @@ class DailySalesReportService {
 
   Future<CombinedSalesExport> _loadExport(DailySalesSummary summary) async {
     final session = _sessionKey();
+    if (summary.exportMetadataDeferred) {
+      final current = (await _summaries(
+        summary.businessDate,
+        includeExportMetadata: true,
+      )).where((s) => s.taxEntityId == summary.taxEntityId).single;
+      if (session != _sessionKey() ||
+          current.exportMetadataDeferred ||
+          current.sourceRevision == null ||
+          current.gross != summary.gross ||
+          current.receiptCount != summary.receiptCount ||
+          current.mappingRevision != summary.mappingRevision ||
+          current.externallyReported) {
+        throw const FormatException('SALES_REPORT_CHANGED_REFRESH_REQUIRED');
+      }
+      summary = current;
+    }
     // At most two keyset streams; neither creates a request for each receipt.
     final loaded = await Future.wait([
       _pages(

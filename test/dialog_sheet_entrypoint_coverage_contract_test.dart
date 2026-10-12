@@ -26,12 +26,15 @@ const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
     source:
         'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart',
-    directCalls: 3,
+    directCalls: 5,
     test: 'test/daily_sales_report_screen_test.dart',
+    additionalTests: ['test/deposit_breakdown_responsive_test.dart'],
     markers: [
       'sales_collection_bank_dialog',
       'download rejects all invalid items before save and shows source identities',
       'mapping dialog opens, requires selected JSON and closes without writes',
+      'transfer details paginate without per-row calls',
+      'multiple stores choose a closing without changing selected entity',
     ],
   ),
   _OperationalCoverage(
@@ -358,9 +361,14 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/reports_tab.dart',
-    directCalls: 2,
+    directCalls: 3,
     test: 'test/reports_operational_attention_contract_test.dart',
-    markers: ['reports_issue_detail_list', 'daily_closing_cash_dialog'],
+    additionalTests: ['test/deposit_breakdown_responsive_test.dart'],
+    markers: [
+      'reports_issue_detail_list',
+      'daily_closing_cash_dialog',
+      'transfer details paginate without per-row calls',
+    ],
   ),
   _OperationalCoverage(
     source: 'lib/features/report/bm_menu_exception_history.dart',
@@ -442,7 +450,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 156 dialog and sheet entrypoints map to operational tests', () {
+  test('all 159 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -454,10 +462,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 153);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 156);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      156,
+      159,
     );
 
     final inventory = File(

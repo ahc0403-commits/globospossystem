@@ -1,4 +1,5 @@
 import '../../main.dart';
+import '../../features/restaurant_sales_export/daily_sales_report_service.dart';
 
 class DailyClosingService {
   Future<Map<String, dynamic>> fetchCashPreview({
@@ -29,15 +30,21 @@ class DailyClosingService {
         if (notes != null && notes.isNotEmpty) 'p_notes': notes,
       },
     );
+    dailySalesReportService.invalidateSummary(closingDate);
   }
 
   Future<List<Map<String, dynamic>>> fetchDailyClosings({
     required String storeId,
     int limit = 30,
+    String? closingDate,
   }) async {
     final result = await supabase.rpc(
-      'get_daily_closing_days',
-      params: {'p_store_id': storeId, 'p_limit': limit},
+      'get_daily_closing_deposit_days',
+      params: {
+        'p_store_id': storeId,
+        'p_limit': limit,
+        if (closingDate != null) 'p_closing_date': closingDate,
+      },
     );
 
     return List<Map<String, dynamic>>.from(

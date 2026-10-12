@@ -58,15 +58,16 @@ const _frozenAlertFiles = <String, String>{
   // stocktake, safety-stock, and Deliberry retirement copy are independent.
   // Workbook import error copy is independent and has localized widget coverage.
   // Corporate account unavailable copy has payment widget coverage.
+  // D+1 deposit copy has responsive ko/vi/en widget coverage.
   // Arrival behavior remains covered below.
   'lib/l10n/app_localizations.dart':
-      'be14fc065af8ee0e81ca1e2a43b0dbae809fdf8b4fa89a375d644266407257a3',
+      'f8d4dbc8fa9ef2afc1328d54701bf0784cc52f620d985c456f3bb6e24d47868c',
   'lib/l10n/app_localizations_ko.dart':
-      'c33f5b9317b8a3e877e075de1409cd878353dca2de3a039fdc52ffa81c4e89b7',
+      '09f17f8a6e8b65ee80ee10af6bfa08d1eeff515450d3fb7576b0aacb916db0db',
   'lib/l10n/app_localizations_vi.dart':
-      'a4e0136245aba2cb4a50116aed30a22d3ccb7e5331b8f0d581df3392ff17b066',
+      'e2d2df2e022653b63d66c866b49287ceafbe1fb670b8a85ed996aeabe64f8856',
   'lib/l10n/app_localizations_en.dart':
-      '69ddc7bd0d9e2ea1449b47ebffbf88c19ec51c5ed4c3b95f2f4bdd44cef14e3e',
+      'afc1366b3f8293284b1fdcb94ace8a53de84815a4f080ed94c8ae33b44f90160',
 };
 
 void main() {

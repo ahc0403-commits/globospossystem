@@ -53,8 +53,10 @@ const _frozenFiles = <String, String>{
   // 2026-10-10: confirmed-request addenda render as memo slips; destinations
   // and physical endpoints are fetched in two batch reads for 1/10/50 printers.
   // direct_order_requirements_test + wifi_printer_service_test cover the path.
+  // 2026-10-13: pass the server's immutable beneficiary to the receipt QR.
+  // receipt_builder_contract_test retains pickup/delivery and validates QR bytes.
   'lib/core/hardware/print_job_agent_service.dart':
-      '287464ae95bdee00f2d4e12e651f6fd644bc7bf3deae0b0f20f481b27b89698a',
+      '53cd8fcadc39fda2d52ceb8e7e33fda7a92fbf3aa47d6ce742eb7d39b7cd172c',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
       '812fdaa3f993520983fc87e4bdb2c1f28c7ccca23f0eb384d69fdf42f4101993',
   'supabase/migrations/20260722050000_kitchen_direct_completion.sql':

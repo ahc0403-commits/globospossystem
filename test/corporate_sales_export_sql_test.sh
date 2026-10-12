@@ -112,6 +112,17 @@ run_sql < supabase/migrations/20261012030000_sales_invoice_initial_mapping.sql
 run_sql <<'SQL'
 SELECT fixture_assert((SELECT count(*)=74 FROM invoice_approved_profiles WHERE mapping_version='AKJ-MANUAL-20261011-v1'),'initial one-day data migration is idempotent with exactly 74 approvals');
 SQL
+run_deposit_tests() {
+  run_sql < test/sql/deposit_breakdown_setup.sql
+  run_sql < supabase/migrations/20261012210000_deposit_breakdown.sql
+  run_sql < supabase/migrations/20261012210000_deposit_breakdown.sql
+  run_sql < test/sql/deposit_breakdown_test.sql
+  if [[ -n "${GLOBOS_DEPOSIT_PERF_OUTPUT:-}" ]]; then
+    python3 scripts/tests/deposit_breakdown_performance.py "$db_name" "$GLOBOS_DEPOSIT_PERF_OUTPUT"
+  fi
+}
+# Both supported histories: timestamp order and the already deployed fee fix.
+if [[ "${CORPORATE_RELEASE_ATOMIC:-0}" != 1 ]]; then run_deposit_tests; fi
 python3 - "$ledger_tmp/delivery_fee_helper.sql" <<'PYFEE'
 from pathlib import Path
 import sys
@@ -124,4 +135,5 @@ run_sql < "$ledger_tmp/delivery_fee_helper.sql"
 run_sql < test/sql/sales_export_no_delivery_fee_setup.sql
 run_sql < supabase/migrations/20261012231000_sales_export_no_delivery_fee.sql
 run_sql < test/sql/sales_export_no_delivery_fee_test.sql
+if [[ "${CORPORATE_RELEASE_ATOMIC:-0}" == 1 ]]; then run_deposit_tests; fi
 printf 'CORPORATE_SALES_SQL_TEST=PASS\n'

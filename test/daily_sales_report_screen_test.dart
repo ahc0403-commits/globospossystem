@@ -7,6 +7,79 @@ import 'daily_sales_report_service_test.dart' as fixtures;
 
 void main() {
   testWidgets(
+    'multiple stores choose a closing without changing selected entity',
+    (tester) async {
+      Map<String, dynamic>? bankScope;
+      final service = DailySalesReportService(
+        rpc: (name, p) async {
+          if (name == 'get_bank_transfer_sales_page') {
+            bankScope = p;
+            return {
+              'from_date': p['p_from_date'],
+              'to_date': p['p_to_date'],
+              'tax_entity_id': p['p_tax_entity_id'],
+              'store_id': p['p_store_id'],
+              'rows': <dynamic>[],
+              'has_more': false,
+            };
+          }
+          return {
+            'business_date': p['p_business_date'],
+            'entities': [
+              fixtures.row()
+                ..['bunsik_stores'] = [
+                  {'store_id': 'store-a', 'store_name': 'Store A'},
+                  {'store_id': 'store-b', 'store_name': 'Store B'},
+                ],
+            ],
+          };
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: RestaurantSalesExportScreen(
+              embedded: true,
+              initialBusinessDate: '2026-10-08',
+              reportService: service,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final closing = find.text('Review daily closing');
+      await tester.ensureVisible(closing);
+      await tester.pumpAndSettle();
+      await tester.tap(closing);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('sales_deposit_store_dialog')),
+        findsOneWidget,
+      );
+      expect(find.text('Store A'), findsOneWidget);
+      expect(find.text('Store B'), findsOneWidget);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('sales_deposit_store_dialog')), findsNothing);
+      final bank = find.text('View bank transfers');
+      await tester.ensureVisible(bank);
+      await tester.pumpAndSettle();
+      await tester.tap(bank);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('bank_transfer_ledger_dialog')),
+        findsOneWidget,
+      );
+      expect(bankScope?['p_tax_entity_id'], 'entity');
+      expect(bankScope?['p_from_date'], '2026-10-08');
+      expect(bankScope?['p_limit'], 100);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'mapping dialog opens, requires selected JSON and closes without writes',
     (tester) async {
       final calls = <String>[];
@@ -36,6 +109,7 @@ void main() {
       await tester.pumpAndSettle();
       final open = find.text('Approve invoice mappings');
       await tester.ensureVisible(open);
+      await tester.pumpAndSettle();
       await tester.tap(open);
       await tester.pumpAndSettle();
       expect(find.text('Choose mapping JSON'), findsOneWidget);
@@ -145,7 +219,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('308.000 ₫'), findsOneWidget);
+    expect(find.textContaining('308.000 VND'), findsOneWidget);
     final button = find.text('법인 수금 계좌 설정');
     await tester.ensureVisible(button);
     await tester.pumpAndSettle();

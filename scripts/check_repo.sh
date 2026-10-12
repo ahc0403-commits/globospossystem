@@ -86,6 +86,8 @@ bash test/restaurant_sales_report_ready_sql_test.sh
 printf 'CHECK_REPO_STEP=corporate_sales_ledger_sql\n'
 python3 scripts/build_pos_corporate_sales_release.py --check
 bash test/corporate_sales_export_sql_test.sh
+printf 'CHECK_REPO_STEP=receipt_collection_bank_sql\n'
+bash test/receipt_collection_bank_sql_test.sh
 CORPORATE_RELEASE_ATOMIC=1 bash test/corporate_sales_export_sql_test.sh
 deno fmt --check supabase/functions/_shared/meinvoice.ts \
   supabase/functions/_shared/meinvoice_ledger_test.ts
@@ -157,6 +159,9 @@ printf 'CHECK_REPO_STEP=node_contracts\n'
 
 printf 'CHECK_REPO_STEP=deploy_shell_syntax\n'
 bash -n scripts/deploy_pos_production.sh
+bash -n scripts/release_payment_qr_deposit.sh
+printf 'CHECK_REPO_STEP=payment_deposit_release_scope\n'
+bash test/pos_payment_deposit_release_test.sh
 printf 'CHECK_REPO_STEP=deploy_clean_worktree_contract\n'
 bash test/pos_deploy_clean_worktree_checks_test.sh
 printf 'CHECK_REPO_STEP=deploy_no_smoke_policy_contract\n'

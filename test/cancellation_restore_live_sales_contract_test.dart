@@ -82,18 +82,15 @@ void main() {
     },
   );
 
-  test('receipt uses the supplied Woori account QR image asset', () {
+  test('receipt uses the queued legal entity beneficiary', () {
     final receipt = File(
       'lib/core/hardware/receipt_builder.dart',
     ).readAsStringSync();
 
-    expect(
-      File('assets/images/woori_bank_account_qr.jpg').existsSync(),
-      isTrue,
-    );
-    expect(receipt, contains('assets/images/woori_bank_account_qr.jpg'));
     expect(receipt, contains('generator.imageRaster'));
-    expect(receipt, contains('WOORI BANK - 100202042976'));
-    expect(receipt, isNot(contains('_bankTransferQrPayload')));
+    expect(receipt, contains('VietQrPayload.bankTransfer'));
+    expect(receipt, contains('bank.accountNumber'));
+    expect(receipt, isNot(contains('100202042976')));
+    expect(receipt, isNot(contains('woori_bank_account_qr.jpg')));
   });
 }
