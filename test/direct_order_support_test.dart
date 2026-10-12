@@ -256,75 +256,47 @@ void main() {
       expect(find.textContaining('15.000'), findsWidgets);
     },
   );
-  testWidgets(
-    'cashier reconciliation requires a provider reference and cost attachment',
-    (tester) async {
-      final service = _Staff();
-      await pumpSupport(
-        tester,
-        DirectOrderStaffSupportPanel(
-          storeId: 'store',
-          requestId: 'request',
-          service: service,
-          onChanged: () async {},
-          detail: {
-            'messages': [
-              {
-                'id': 'cost-evidence',
-                'sender_type': 'cashier',
-                'message_type': 'attachment',
-                'body': 'Grab booking evidence',
-                'metadata': {'filename': 'grab-cost.png'},
-              },
-            ],
-            'request': {'state': 'approved'},
-            'financial': {'delivery_payment_mode': 'store_prepaid'},
-            'delivery': {'method': 'delivery'},
-            'support': {
-              'version': 5,
-              'delivery_fee_deferred': false,
-              'delivery_fee_finalized': true,
-              'food_due': 0,
-              'food_received': 138000,
-              'invoice': {},
-              'charges': [],
+  testWidgets('cashier cannot create or defer a delivery charge', (
+    tester,
+  ) async {
+    final service = _Staff();
+    await pumpSupport(
+      tester,
+      DirectOrderStaffSupportPanel(
+        storeId: 'store',
+        requestId: 'request',
+        service: service,
+        onChanged: () async {},
+        detail: {
+          'messages': [
+            {
+              'id': 'cost-evidence',
+              'sender_type': 'cashier',
+              'message_type': 'attachment',
+              'body': 'Grab booking evidence',
+              'metadata': {'filename': 'grab-cost.png'},
             },
+          ],
+          'request': {'state': 'approved'},
+          'financial': {'delivery_payment_mode': 'store_prepaid'},
+          'delivery': {'method': 'delivery'},
+          'support': {
+            'version': 5,
+            'delivery_fee_deferred': false,
+            'delivery_fee_finalized': true,
+            'food_due': 0,
+            'food_received': 138000,
+            'invoice': {},
+            'charges': [],
           },
-        ),
-      );
-      await tester.tap(find.text('Reconcile actual delivery fee'));
-      await tester.pumpAndSettle();
-      final fields = find.byType(TextField);
-      await tester.enterText(fields.at(0), '15000');
-      await tester.enterText(fields.at(1), 'GRAB-BOOKING-001');
-      await tester.pump();
-      expect(
-        tester
-            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save'))
-            .onPressed,
-        isNull,
-      );
-      await tester.tap(
-        find.widgetWithText(
-          DropdownButtonFormField<String>,
-          'Delivery cost evidence',
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('grab-cost.png').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-      await tester.pumpAndSettle();
-      expect(service.actions, ['reconcile_delivery_fee']);
-      final payload = service.payloads.single;
-      expect(payload['amount'], 15000);
-      expect(payload['provider'], 'grab');
-      expect(payload['reference'], 'GRAB-BOOKING-001');
-      expect(payload['evidence_message_id'], 'cost-evidence');
-      expect(payload['operation_id'], isNotEmpty);
-      await tester.pump(const Duration(milliseconds: 500));
-    },
-  );
+        },
+      ),
+    );
+    expect(find.text('Reconcile actual delivery fee'), findsNothing);
+    expect(find.byKey(const Key('direct_deferred_delivery_fee')), findsNothing);
+    expect(find.byKey(const Key('direct_actual_delivery_cost')), findsNothing);
+    expect(service.actions, isEmpty);
+  });
   testWidgets('VAT invoice draft is saved on the customer request', (
     tester,
   ) async {
@@ -608,14 +580,7 @@ void main() {
       locale: const Locale('ko'),
     );
     expect(find.text('미수금: 15.000 VND'), findsOneWidget);
-    expect(
-      tester
-          .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, '실제 배송비 정산'),
-          )
-          .onPressed,
-      isNotNull,
-    );
+    expect(find.widgetWithText(OutlinedButton, '실제 배송비 정산'), findsNothing);
     expect(tester.takeException(), isNull);
     if (capture) {
       await tester.runAsync(() async {

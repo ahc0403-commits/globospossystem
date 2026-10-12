@@ -112,4 +112,16 @@ run_sql < supabase/migrations/20261012030000_sales_invoice_initial_mapping.sql
 run_sql <<'SQL'
 SELECT fixture_assert((SELECT count(*)=74 FROM invoice_approved_profiles WHERE mapping_version='AKJ-MANUAL-20261011-v1'),'initial one-day data migration is idempotent with exactly 74 approvals');
 SQL
+python3 - "$ledger_tmp/delivery_fee_helper.sql" <<'PYFEE'
+from pathlib import Path
+import sys
+s=Path('supabase/migrations/20261012230000_direct_order_no_delivery_fee.sql').read_text()
+start=s.index('CREATE FUNCTION public.pos_is_delivery_fee_item(')
+end=s.index('$$;',start)+3
+Path(sys.argv[1]).write_text(s[start:end]+'\n')
+PYFEE
+run_sql < "$ledger_tmp/delivery_fee_helper.sql"
+run_sql < test/sql/sales_export_no_delivery_fee_setup.sql
+run_sql < supabase/migrations/20261012231000_sales_export_no_delivery_fee.sql
+run_sql < test/sql/sales_export_no_delivery_fee_test.sql
 printf 'CORPORATE_SALES_SQL_TEST=PASS\n'

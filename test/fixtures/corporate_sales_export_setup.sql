@@ -17,7 +17,7 @@ CREATE FUNCTION enqueue_meinvoice_cash_register_job() RETURNS trigger LANGUAGE p
  SELECT jsonb_agg(jsonb_build_object('order_item_id',oi.id,'item_type', oi.item_type,'quantity',oi.quantity,'vat_rate',oi.vat_rate)) INTO items
  FROM public.order_items oi
  CROSS JOIN LATERAL (SELECT oi.total_amount_ex_tax,oi.quantity) tax_line
-  WHERE oi.order_id = NEW.id;
+  WHERE oi.order_id = NEW.id AND COALESCE(oi.is_service_item, false) = false;
  RETURN NEW;END $$;
 ALTER TABLE public.meinvoice_jobs ADD COLUMN manual_action_type text,ADD COLUMN error_message text,ADD COLUMN last_dispatch_at timestamptz,ADD COLUMN sent_at timestamptz,ADD COLUMN transaction_id text,ADD COLUMN invoice_series text,ADD COLUMN tax_authority_code text,ADD COLUMN search_code text;
 CREATE TABLE public.meinvoice_job_events(job_id uuid,event_type text,description text,retry_count integer,metadata jsonb DEFAULT '{}');

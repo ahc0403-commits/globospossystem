@@ -48,6 +48,12 @@ requests and higher-priority instructions take precedence.
 - General daily cash close is 23:00 Asia/Ho_Chi_Minh. Restaurant order cutoff
   is 21:30, grace ends at 21:45, and finalization is 22:20; these are separate
   operating contracts.
+- **Customer delivery fees are disabled by the owner's 2026-10-12 decision.**
+  Do not create delivery fee quotes, invoice mappings, order items (including
+  zero-value placeholders), or supplemental delivery sales. New fee-free
+  financials have no delivery fee item ID. Keep issued history and actual
+  courier handoff records auditable; courier fares are outside POS sales.
+  Invoice mappings with `effective_to = NULL` remain valid indefinitely.
 
 ## Retired integrations
 

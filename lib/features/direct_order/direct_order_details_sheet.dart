@@ -125,7 +125,8 @@ class DirectOrderDetailsSheet extends StatelessWidget {
                     amount(copy.serviceCharge, quote.serviceChargeTotal),
                     if (recipientPaysDriver)
                       Text(copy.customerPaysDriverHelp)
-                    else if (delivery?.isPickup != true) ...[
+                    else if (delivery?.isPickup != true &&
+                        quote.deliveryFeeTotal > 0) ...[
                       amount(copy.deliveryFee, quote.deliveryFeeTotal),
                       Text(copy.deliveryFeeIncluded),
                     ],
