@@ -16,5 +16,9 @@ DO $$DECLARE o uuid;lines jsonb;a jsonb;b jsonb;BEGIN
   JOIN public.meinvoice_jobs j ON j.id=v.job_id JOIN no_delivery_fee_scope s ON s.order_id=j.order_id WHERE v.snapshot_version=2),'previous snapshot preserved');
  PERFORM fixture_assert((SELECT count(*)=2 AND sum(total_amount_ex_tax+vat_amount)=10800 FROM public.order_items WHERE order_id=o),'original sale and zero placeholder rows are untouched');
  PERFORM fixture_assert(EXISTS(SELECT 1 FROM jsonb_array_elements(public.get_pos_daily_sales_summary('2026-10-12')->'entities') e
-  WHERE e->>'tax_entity_id'='10000000-0000-0000-0000-000000000001' AND e->>'source_item_count'='1' AND e->>'export_line_count'='1'),'summary and exported line counts exclude the same fee');
+  JOIN no_delivery_fee_scope s ON (e->>'source_item_count')::integer=s.source_item_count-1 AND (e->>'export_line_count')::integer=s.export_line_count-1
+  WHERE e->>'tax_entity_id'='10000000-0000-0000-0000-000000000001'),'summary and exported line counts exclude the same fee');
+ PERFORM fixture_assert(EXISTS(SELECT 1 FROM jsonb_array_elements(public.get_pos_daily_sales_summary('2026-10-12',false)->'entities') e
+  JOIN no_delivery_fee_scope s ON (e->>'source_item_count')::integer=s.source_item_count-1 AND (e->>'export_line_count')::integer=s.export_line_count-1
+  WHERE e->>'tax_entity_id'='10000000-0000-0000-0000-000000000001'),'shared-aggregate summary overload excludes the same fee');
 END $$;
