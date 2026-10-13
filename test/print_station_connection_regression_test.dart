@@ -216,15 +216,20 @@ void main() {
       SharedPreferences.setMockInitialValues({'printer_ip': '192.168.68.251'});
       final saved = await SharedPreferences.getInstance();
       final initial = Completer<SharedPreferences>();
+      final writing = Completer<SharedPreferences>();
       var calls = 0;
       final notifier = PrinterNotifier(
-        preferences: () => ++calls == 1 ? initial.future : Future.value(saved),
+        preferences: () => ++calls == 1 ? initial.future : writing.future,
       );
       addTearDown(notifier.dispose);
-      await notifier.setIp('192.168.1.251');
+      final save = notifier.setIp('192.168.1.251');
+      // Restore the old value before the new preference has finished writing.
       initial.complete(saved);
       await Future<void>.delayed(Duration.zero);
       expect(notifier.state.printerIp, '192.168.1.251');
+      writing.complete(saved);
+      await save;
+      expect(saved.getString('printer_ip'), '192.168.1.251');
     },
   );
 
