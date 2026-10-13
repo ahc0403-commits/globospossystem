@@ -76,9 +76,7 @@ class _RegisteredReceiptPrinterPanelState
     final selected =
         destinations.where((d) => d.id == _selectedId).firstOrNull ??
         (destinations.length == 1 ? destinations.single : null);
-    final supported = ref
-        .read(printAgentCoordinatorProvider.notifier)
-        .isSupported;
+    final supported = ref.read(printAgentDriverProvider).isSupported;
     return Column(
       key: const Key('registered_receipt_printer_panel'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,8 +110,8 @@ class _RegisteredReceiptPrinterPanelState
             for (final endpoint in selected.endpoints)
               SelectableText(
                 endpoint.type == 'usb'
-                    ? 'USB · ${endpoint.deviceName}'
-                    : '${endpoint.type.toUpperCase()} · ${endpoint.ip}:${endpoint.port}',
+                    ? '${context.l10n.settingsPrinterUsb} · ${endpoint.deviceName}'
+                    : '${printerEndpointLabel(context, endpoint.type)} · ${endpoint.ip}:${endpoint.port}',
               ),
           const SizedBox(height: 10),
           Wrap(

@@ -46,7 +46,9 @@ class PrinterDiagnosticView extends StatelessWidget {
           ),
         ),
       for (final attempt in report.attempts) ...[
-        SelectableText('${attempt.type.toUpperCase()} · ${attempt.address}'),
+        SelectableText(
+          '${printerEndpointLabel(context, attempt.type)} · ${attempt.address}',
+        ),
         Text(_message(context, attempt.status)),
         if (attempt.status.errorCode != null)
           SelectableText(attempt.status.errorCode!),
@@ -65,6 +67,7 @@ Future<void> showPrinterDiagnosticDialog(
 ) => showDialog<void>(
   context: context,
   builder: (context) => AlertDialog(
+    key: const Key('printer_connection_diagnostic_dialog'),
     title: Text(context.l10n.printerDiagnosticTitle),
     content: SingleChildScrollView(
       child: PrinterDiagnosticView(report: report),
@@ -77,3 +80,11 @@ Future<void> showPrinterDiagnosticDialog(
     ],
   ),
 );
+
+String printerEndpointLabel(BuildContext context, String type) =>
+    switch (type) {
+      'usb' => context.l10n.settingsPrinterUsb,
+      'wired' => context.l10n.settingsPrinterWired,
+      'wireless' => context.l10n.settingsPrinterWireless,
+      _ => context.l10n.printStationNetwork,
+    };

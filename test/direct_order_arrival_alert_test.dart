@@ -59,15 +59,16 @@ const _frozenAlertFiles = <String, String>{
   // Workbook import error copy is independent and has localized widget coverage.
   // Corporate account unavailable copy has payment widget coverage.
   // D+1 deposit copy has responsive ko/vi/en widget coverage.
+  // Printer diagnosis copy has ko/vi/en registered-receipt widget coverage.
   // Arrival behavior remains covered below.
   'lib/l10n/app_localizations.dart':
-      'f8d4dbc8fa9ef2afc1328d54701bf0784cc52f620d985c456f3bb6e24d47868c',
+      'b9abc35c122234dd9b120147bebb43e19e3e4d8ab0a7cee930d0ffc387c1489b',
   'lib/l10n/app_localizations_ko.dart':
-      '09f17f8a6e8b65ee80ee10af6bfa08d1eeff515450d3fb7576b0aacb916db0db',
+      '86ed160435808a094ae2ed3b6366dad0fa956ac440dc00b2f1aa4dfc82da971b',
   'lib/l10n/app_localizations_vi.dart':
-      'e2d2df2e022653b63d66c866b49287ceafbe1fb670b8a85ed996aeabe64f8856',
+      'b820d07d007c65a04ce52b9670ac5b2bf6a0775473b8a8b0746f360242702ffa',
   'lib/l10n/app_localizations_en.dart':
-      'afc1366b3f8293284b1fdcb94ace8a53de84815a4f080ed94c8ae33b44f90160',
+      'f5a04c0a915e64dff5a30f543f5512cea189a9b8de5c917832c06153473f36c1',
 };
 
 void main() {

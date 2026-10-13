@@ -52,7 +52,9 @@ failure protection are retained.
 The panel reuses the existing store-scoped destination provider: one bounded
 store destination query and one endpoint batch query shared with the routing
 section. A manual test reloads its selected destination and endpoint batch;
-no per-menu or per-destination polling was added. Existing queue claim/batch
+no per-menu or per-destination polling was added. Reading printer capability
+does not initialize the coordinator or start background queue polling; existing
+application session lifecycle continues to control the agent. Existing queue claim/batch
 loading, role/RLS checks and session lifecycle are preserved. Diagnostics do
 not create sales, claim production jobs or enqueue extra test jobs.
 

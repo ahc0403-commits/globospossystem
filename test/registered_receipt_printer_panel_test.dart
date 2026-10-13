@@ -14,6 +14,7 @@ import 'package:globos_pos_system/core/hardware/printer_service.dart';
 import 'package:globos_pos_system/core/services/printer_destination_service.dart';
 import 'package:globos_pos_system/features/admin/providers/printer_destinations_provider.dart';
 import 'package:globos_pos_system/features/settings/registered_receipt_printer_panel.dart';
+import 'package:globos_pos_system/features/settings/printer_diagnostic_view.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 
 void main() {
@@ -34,6 +35,7 @@ void main() {
         ProviderScope(
           overrides: [
             printAgentCoordinatorProvider.overrideWith((_) => coordinator),
+            printAgentDriverProvider.overrideWithValue(driver),
             printerDestinationsProvider('store-a').overrideWith(
               (_) => _Destinations('store-a', [
                 _destination(
@@ -83,6 +85,7 @@ void main() {
       ProviderScope(
         overrides: [
           printAgentCoordinatorProvider.overrideWith((_) => coordinator),
+          printAgentDriverProvider.overrideWithValue(driver),
           printerDestinationsProvider('store-a').overrideWith(
             (_) => _Destinations('store-a', [
               _destination('one', 'store-a', 'receipt', '192.168.1.251'),
@@ -111,6 +114,51 @@ void main() {
     expect(driver.calls, ['two:print']);
   });
 
+  testWidgets(
+    'printer_connection_diagnostic_dialog opens with endpoint and closes',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showPrinterDiagnosticDialog(
+                context,
+                const PrinterTestReport(
+                  result: PrintResult.connectionRefused,
+                  attempts: [
+                    PrinterEndpointAttempt(
+                      type: 'wired',
+                      address: '192.168.1.251:9100',
+                      status: PrinterOperationStatus(
+                        PrintResult.connectionRefused,
+                        errorCode: 'SOCKET_10061',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              child: const Icon(Icons.print),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextButton));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('printer_connection_diagnostic_dialog')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('192.168.1.251:9100'), findsOneWidget);
+      expect(find.textContaining('연결을 거부'), findsOneWidget);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(AlertDialog)),
+      )!;
+      await tester.tap(find.text(l10n.close));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+    },
+  );
+
   for (final locale in ['ko', 'vi', 'en']) {
     testWidgets(
       'diagnostics remain readable at phone width and 2x text ($locale)',
@@ -128,6 +176,7 @@ void main() {
           ProviderScope(
             overrides: [
               printAgentCoordinatorProvider.overrideWith((_) => coordinator),
+              printAgentDriverProvider.overrideWithValue(driver),
               printerDestinationsProvider('store-a').overrideWith(
                 (_) => _Destinations('store-a', [
                   _destination(
