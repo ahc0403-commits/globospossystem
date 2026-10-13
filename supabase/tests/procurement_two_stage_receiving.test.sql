@@ -35,7 +35,10 @@ BEGIN
  original_po:=poid;SELECT id INTO polid FROM public.inventory_purchase_order_lines WHERE purchase_order_id=poid;original_line:=polid;
  PERFORM set_config('app.procurement_write','true',true);
  UPDATE public.inventory_purchase_orders SET procurement_status='confirmed' WHERE id=poid;
+ PERFORM public.procurement_command(test_uuid(101),'assign_principal',NULL,0,'two-stage-combined-receiver',jsonb_build_object('account_kind','shared_role','system','pos','subject_id',test_uuid(1),'stage','receiver','valid_from',now()-interval '1 day','valid_until',now()+interval '365 days','reason','Compatibility fixture'),buyer);
+ PERFORM public.procurement_command(test_uuid(101),'assign_principal',NULL,0,'two-stage-combined-verifier',jsonb_build_object('account_kind','shared_role','system','pos','subject_id',test_uuid(1),'stage','verifier','valid_from',now()-interval '1 day','valid_until',now()+interval '365 days','reason','Compatibility fixture'),buyer);
  PERFORM set_config('request.jwt.claim.role','authenticated',true);PERFORM set_config('request.jwt.claim.sub',test_uuid(1)::text,true);
+ ASSERT public.can_receive_and_confirm_inventory_receipt(test_uuid(101)),'Policy 3 also works when the receiver has legacy combined assignments';
  path:=test_uuid(101)::text||'/'||receipt_id::text||'/statement.pdf';
  INSERT INTO storage.objects(bucket_id,name,owner_id,metadata) VALUES('inventory-receipt-statements',path,test_uuid(1)::text,'{"mimetype":"application/pdf","size":100}');
  SELECT current_stock INTO stock FROM public.inventory_items WHERE id=test_uuid(501);
@@ -47,6 +50,8 @@ BEGIN
  ASSERT NULLIF(current_setting('app.procurement_receipt_finalize_id',true),'') IS NULL,'Private receipt scope restored';
  PERFORM public.test_expect_error(format('UPDATE public.inventory_receipt_lines SET accepted_quantity_base=accepted_quantity_base WHERE receipt_id=%L',receipt_id),'INVENTORY_RECEIPT_CONFIRMED_IMMUTABLE');
  ASSERT (SELECT current_stock FROM public.inventory_items WHERE id=test_uuid(501))=stock+7;
+ UPDATE public.procurement_role_roster SET valid_until=now()-interval '1 second' WHERE subject_id=test_uuid(1) AND stage='verifier';
+ ASSERT NOT public.can_receive_and_confirm_inventory_receipt(test_uuid(101)),'Later policy-3 receipts do not require legacy combined assignment';
  ASSERT public.finalize_procurement_receipt(payload)=r;
  ASSERT (SELECT current_stock FROM public.inventory_items WHERE id=test_uuid(501))=stock+7,'Retry does not repost stock';
  report:=public.procurement_receipt_report_data(test_uuid(101),receipt_id);

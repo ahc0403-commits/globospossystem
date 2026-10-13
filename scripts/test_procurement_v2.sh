@@ -123,5 +123,8 @@ run_sql "$INVENTORY_ROOT/supabase/tests/procurement_two_stage_upgrade_fixture.sq
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261013010000_procurement_two_stage_receiving_carryover.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261013011000_procurement_receipt_reports.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261013012000_procurement_shortage_carryover.sql" >/dev/null
+# Replay legacy receiving after every replacement: assignments, automatic
+# submit+confirm, rollback, stable retries and the detail capability survive.
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_combined_receiving.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_two_stage_receiving.test.sql"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_carryover_concurrency.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"

@@ -183,7 +183,7 @@ BEGIN
     IF public.inventory_purchase_actor_role()='inventory_orderer' AND EXISTS(SELECT 1 FROM jsonb_array_elements(p_lines) x WHERE x->>'actual_unit_price' IS NOT NULL) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_PRICE_FORBIDDEN'; END IF;
   ELSE
     IF NOT public.can_verify_inventory_receipt(v_receipt.restaurant_id) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_VERIFY_FORBIDDEN'; END IF;
-    IF v_receipt.received_by IS NOT DISTINCT FROM auth.uid() OR EXISTS(SELECT 1 FROM public.inventory_receipt_submission_attempts a WHERE a.receipt_id=v_receipt.id AND a.actor_id=auth.uid()) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_MAKER_CHECKER_REQUIRED'; END IF;
+    IF NOT public.can_receive_and_confirm_inventory_receipt(v_receipt.restaurant_id) AND (v_receipt.received_by IS NOT DISTINCT FROM auth.uid() OR EXISTS(SELECT 1 FROM public.inventory_receipt_submission_attempts a WHERE a.receipt_id=v_receipt.id AND a.actor_id=auth.uid())) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_MAKER_CHECKER_REQUIRED'; END IF;
   END IF;
   v_payload_hash := encode(extensions.digest(convert_to(jsonb_build_object(
     'receipt_id',p_receipt_id,'lines',COALESCE(p_lines,'[]'::jsonb),
@@ -415,6 +415,16 @@ BEGIN
   v_result:=jsonb_build_object('receipt_id',p_receipt_id,'row_version',v_receipt.row_version,'status',v_receipt.status);
   INSERT INTO public.inventory_receipt_submission_attempts(receipt_id,attempt_key,actor_id,payload_hash,result)
     VALUES(p_receipt_id,p_idempotency_key,auth.uid(),v_hash,v_result);
+  IF v_order.commercial_terms->>'approval_policy_version' IS DISTINCT FROM '3'
+     AND public.can_receive_and_confirm_inventory_receipt(v_order.restaurant_id) THEN
+    PERFORM public.verify_inventory_receipt(p_receipt_id,v_receipt.row_version,
+      'receive-confirm:'||p_idempotency_key,'[]'::jsonb,'combined_receiving_inspection');
+    SELECT * INTO v_receipt FROM public.inventory_receipts WHERE id=p_receipt_id;
+    v_result:=jsonb_build_object('receipt_id',p_receipt_id,'row_version',v_receipt.row_version,
+      'status',v_receipt.status,'combined_receiving',true);
+    UPDATE public.inventory_receipt_submission_attempts SET result=v_result
+      WHERE receipt_id=p_receipt_id AND attempt_key=p_idempotency_key;
+  END IF;
   RETURN v_result;
 END $$;
 
