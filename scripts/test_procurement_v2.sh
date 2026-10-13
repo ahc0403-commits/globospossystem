@@ -118,3 +118,10 @@ run_sql "$INVENTORY_ROOT/supabase/tests/procurement_combined_receiving.test.sql"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_pr_rollback_safety.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_pr_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
+
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_two_stage_upgrade_fixture.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261013010000_procurement_two_stage_receiving_carryover.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261013011000_procurement_receipt_reports.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261013012000_procurement_shortage_carryover.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_two_stage_receiving.test.sql"
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_carryover_concurrency.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"

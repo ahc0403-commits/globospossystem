@@ -1,6 +1,11 @@
 import 'direct_order_translation.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'direct_order_payment_document.dart';
+import 'direct_order_service.dart' show DirectOrderException;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,9 +38,11 @@ class DirectOrderCashierScreen extends ConsumerStatefulWidget {
   const DirectOrderCashierScreen({
     super.key,
     this.service = directOrderStaffService,
+    this.documentService = const DirectOrderPaymentDocumentService(),
   });
 
   final DirectOrderStaffService service;
+  final DirectOrderPaymentDocumentService documentService;
 
   @override
   ConsumerState<DirectOrderCashierScreen> createState() =>
@@ -74,6 +81,12 @@ class _DirectOrderCashierScreenState
   final _requirementMutationIds = <String, String>{};
   final _requirementDraftSources = <String, String>{};
   int _refreshRevision = 0;
+  String? _linkRequestId, _linkOperationId, _linkAccessKey;
+  String? _documentFingerprint, _documentPath;
+  Uint8List? _documentBytes;
+
+  DirectOrderPaymentGuideCopy get _guideCopy =>
+      DirectOrderPaymentGuideCopy(Localizations.localeOf(context).languageCode);
 
   DirectOrderCopy get _copy =>
       DirectOrderCopy(Localizations.localeOf(context).languageCode);
@@ -167,8 +180,10 @@ class _DirectOrderCashierScreenState
     } catch (_) {
       if (!mounted || revision != _refreshRevision) return;
       setState(() {
-        _error = _copy.loadFailed;
-        _detail = null;
+        if (!silent || _detail == null) {
+          _error = _copy.loadFailed;
+          _detail = null;
+        }
         _loading = false;
       });
     }
@@ -380,13 +395,254 @@ class _DirectOrderCashierScreenState
     onChanged: () => _refresh(silent: true),
   );
 
+  Future<void> _customerOrderLink({required bool send}) async {
+    final storeId = _storeId, requestId = _selectedId;
+    if (_busy || storeId == null || requestId == null) return;
+    if (_linkRequestId != requestId) {
+      _linkRequestId = requestId;
+      _linkOperationId = const Uuid().v4();
+      final random = math.Random.secure();
+      _linkAccessKey = base64UrlEncode(
+        List<int>.generate(32, (_) => random.nextInt(256)),
+      ).replaceAll('=', '');
+    }
+    setState(() => _busy = true);
+    try {
+      final result = await directOrderStaffService.issueOrderLink(
+        storeId: storeId,
+        requestId: requestId,
+        operationId: _linkOperationId!,
+        accessKey: _linkAccessKey!,
+        sendToCustomer: send,
+      );
+      if (!send) {
+        await Clipboard.setData(ClipboardData(text: result['url'] as String));
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(send ? _guideCopy.sent : _guideCopy.linkCopied)),
+      );
+      if (send) await _refresh(silent: true, allowWhileBusy: true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_copy.errorMessage(directOrderStaffErrorCode(error))),
+            backgroundColor: PosColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _paymentDocument({
+    required bool payment,
+    bool png = false,
+    bool send = false,
+  }) async {
+    final storeId = _storeId, requestId = _selectedId, quote = _activeQuote;
+    if (_busy || storeId == null || requestId == null || quote == null) return;
+    setState(() => _busy = true);
+    try {
+      // Revalidate state, quote version, amount due and bank before each action.
+      final source = await directOrderStaffService.paymentDocument(
+        storeId: storeId,
+        requestId: requestId,
+        quoteId: quote['id'].toString(),
+        quoteVersion: (quote['version'] as num).toInt(),
+        includePayment: payment,
+      );
+      final data = _map(source['data']);
+      final language = _guideCopy.language;
+      final fingerprint =
+          '$requestId/${source['source_hash']}/$language/$png/$payment';
+      if (_documentFingerprint != fingerprint) {
+        final bytes = png
+            ? await widget.documentService.buildPng(data, language: language)
+            : await widget.documentService.buildPdf(data, language: language);
+        if (bytes.isEmpty || bytes.length > 10 * 1024 * 1024) {
+          throw const DirectOrderException('DIRECT_ORDER_DOCUMENT_TOO_LARGE');
+        }
+        _documentFingerprint = fingerprint;
+        _documentBytes = bytes;
+        _documentPath =
+            '$storeId/$requestId/${const Uuid().v4()}.${png ? 'png' : 'pdf'}';
+      }
+      final filename =
+          '${payment ? 'payment' : 'quote'}-${data['reference_code']}-v${data['quote_version']}';
+      if (send) {
+        await directOrderStaffService.uploadPaymentDocument(
+          storeId: storeId,
+          requestId: requestId,
+          quoteId: quote['id'].toString(),
+          quoteVersion: (quote['version'] as num).toInt(),
+          includePayment: payment,
+          sourceHash: source['source_hash'].toString(),
+          path: _documentPath!,
+          filename: '$filename.${png ? 'png' : 'pdf'}',
+          mimeType: png ? 'image/png' : 'application/pdf',
+          bytes: _documentBytes!,
+        );
+      } else {
+        await widget.documentService.save(
+          _documentBytes!,
+          filename: filename,
+          png: png,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(send ? _guideCopy.sent : _guideCopy.saved)),
+      );
+      if (send) await _refresh(silent: true, allowWhileBusy: true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is DirectOrderException || error is PostgrestException
+                  ? _copy.errorMessage(directOrderStaffErrorCode(error))
+                  : _guideCopy.documentError,
+            ),
+            backgroundColor: PosColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _buildPaymentTools(Map<String, dynamic> request) {
+    final summary = _map(_detail?['amount_summary']);
+    final amounts = _map(summary['amounts']);
+    final quote = _activeQuote;
+    final canDocument =
+        quote != null &&
+        const {
+          'quoted',
+          'awaiting_payment_review',
+        }.contains(request['state']) &&
+        _detail?['financial'] is! Map;
+    final canLink = _detail?['can_issue_order_link'] == true;
+    return _Section(
+      title: summary['finalized'] == true
+          ? _guideCopy.finalAmount
+          : _guideCopy.preview,
+      icon: Icons.payments_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (amounts['final_total'] is num) ...[
+            _AmountRow(
+              label: _copy.subtotal,
+              value: _vnd(amounts['menu_total']),
+            ),
+            _AmountRow(
+              label: _copy.serviceCharge,
+              value: _vnd(amounts['service_charge_total']),
+            ),
+            _AmountRow(
+              label: _copy.includedVat,
+              value: _vnd(
+                _number(amounts['menu_vat']) +
+                    _number(amounts['service_charge_vat']),
+              ),
+            ),
+            _AmountRow(
+              label: _copy.finalTotal,
+              value: _vnd(amounts['final_total']),
+              strong: true,
+            ),
+          ] else
+            Text(_guideCopy.unavailable),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (canLink) ...[
+                OutlinedButton.icon(
+                  key: const Key('direct_staff_copy_order_link'),
+                  onPressed: _busy
+                      ? null
+                      : () => _customerOrderLink(send: false),
+                  icon: const Icon(Icons.link),
+                  label: Text(_guideCopy.copyLink),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('direct_staff_send_order_link'),
+                  onPressed: _busy
+                      ? null
+                      : () => _customerOrderLink(send: true),
+                  icon: const Icon(Icons.send_outlined),
+                  label: Text(_guideCopy.sendLink),
+                ),
+              ],
+              if (canDocument) ...[
+                OutlinedButton(
+                  key: const Key('direct_staff_send_quote_pdf'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: false, send: true),
+                  child: Text(_guideCopy.sendQuote),
+                ),
+                OutlinedButton(
+                  key: const Key('direct_staff_quote_pdf'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: false),
+                  child: Text(_guideCopy.quote),
+                ),
+                OutlinedButton(
+                  key: const Key('direct_staff_payment_pdf'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: true),
+                  child: Text(_guideCopy.guide),
+                ),
+                OutlinedButton(
+                  key: const Key('direct_staff_payment_png'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: true, png: true),
+                  child: Text(_guideCopy.png),
+                ),
+                FilledButton(
+                  key: const Key('direct_staff_send_payment_pdf'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: true, send: true),
+                  child: Text(_guideCopy.sendPdf),
+                ),
+                FilledButton(
+                  key: const Key('direct_staff_send_payment_png'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(
+                          payment: true,
+                          png: true,
+                          send: true,
+                        ),
+                  child: Text(_guideCopy.sendPng),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _sendQuote() async {
     if (_hasPendingRequirements) return;
     if (_storeId == null || _selectedId == null) {
       return;
     }
     await _act(() async {
-      await directOrderStaffService.quote(
+      final saved = await directOrderStaffService.quote(
         storeId: _storeId!,
         requestId: _selectedId!,
         deliveryFee: 0,
@@ -401,6 +657,16 @@ class _DirectOrderCashierScreenState
             : _deliveryPaymentMode,
         note: _quoteNoteController.text.trim(),
       );
+      if (mounted && _detail != null) {
+        setState(() {
+          _detail = {
+            ..._detail!,
+            'quotes': [saved],
+            'amount_summary': {'finalized': true, 'amounts': saved},
+            'request': {..._map(_detail!['request']), 'state': 'quoted'},
+          };
+        });
+      }
     }, _copy.quoteSent);
   }
 
@@ -1562,7 +1828,7 @@ class _DirectOrderCashierScreenState
     final fulfillment = _map(_detail?['fulfillment']);
     final fulfillmentStatus = fulfillment['status']?.toString() ?? '';
     final displayState = fulfillmentStatus.isEmpty ? state : fulfillmentStatus;
-    return ListView(
+    final content = ListView(
       key: const Key('direct_staff_detail_list'),
       padding: const EdgeInsets.all(16),
       children: [
@@ -1599,6 +1865,8 @@ class _DirectOrderCashierScreenState
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        _buildPaymentTools(request),
         const SizedBox(height: 12),
         _Section(
           title: _isPickup ? _copy.pickup : _copy.directDelivery,
@@ -2050,6 +2318,26 @@ class _DirectOrderCashierScreenState
         ],
       ],
     );
+    final summary = _map(_detail?['amount_summary']);
+    final amounts = _map(summary['amounts']);
+    return Column(
+      children: [
+        if (amounts['final_total'] is num)
+          Container(
+            key: const Key('direct_staff_fixed_amount'),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            child: _AmountRow(
+              label: summary['finalized'] == true
+                  ? _guideCopy.finalAmount
+                  : _guideCopy.preview,
+              value: _vnd(amounts['final_total']),
+              strong: true,
+            ),
+          ),
+        Expanded(child: content),
+      ],
+    );
   }
 
   Widget _buildPaymentReview() {
@@ -2387,7 +2675,14 @@ class _DirectOrderCashierScreenState
                           : PosColors.panelMuted,
                       borderRadius: AppRadius.sm,
                     ),
-                    child: type == 'attachment'
+                    child:
+                        supportMap(message['metadata'])['order_access_link'] ==
+                            true
+                        ? DirectOrderTrackingLink(
+                            url: message['body'].toString(),
+                            orderLink: true,
+                          )
+                        : type == 'attachment'
                         ? InkWell(
                             onTap: () => openDirectOrderAttachment(
                               context,

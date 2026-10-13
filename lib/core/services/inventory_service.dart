@@ -57,6 +57,18 @@ class InventoryService {
     },
   );
 
+  Future<Map<String, dynamic>> procurementReceiptReport(
+    String storeId,
+    String receiptId,
+  ) => _rpcMap(
+    'procurement_receipt_report_data',
+    params: {'p_store_id': storeId, 'p_receipt_id': receiptId},
+  );
+
+  Future<Map<String, dynamic>> finalizeProcurementReceipt(
+    Map<String, dynamic> payload,
+  ) => _rpcMap('finalize_procurement_receipt', params: {'p_payload': payload});
+
   Future<Map<String, dynamic>> fetchProcurementWorkspace(String storeId) =>
       _rpcMap('procurement_workspace', params: {'p_store_id': storeId});
 

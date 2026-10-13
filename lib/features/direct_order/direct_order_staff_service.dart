@@ -11,7 +11,7 @@ String directOrderStaffErrorCode(Object error) {
   if (error is DirectOrderException) return error.code;
   if (error is PostgrestException) {
     final match = RegExp(
-      r'\b(?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+\b',
+      r'\b(?:(?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+|DELIVERY_FEE_DISABLED)\b',
     ).firstMatch(error.message);
     if (match != null) return match.group(0)!;
   }
@@ -198,11 +198,50 @@ class DirectOrderStaffService {
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_detail_v6',
+        'direct_order_staff_detail_v7',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
   }
+
+  Future<Map<String, dynamic>> issueOrderLink({
+    required String storeId,
+    required String requestId,
+    required String operationId,
+    required String accessKey,
+    required bool sendToCustomer,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_staff_issue_order_link',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_operation_id': operationId,
+        'p_access_key': accessKey,
+        'p_public_origin': AppConstants.posPublicUrl,
+        'p_send_to_customer': sendToCustomer,
+      },
+    ),
+  );
+
+  Future<Map<String, dynamic>> paymentDocument({
+    required String storeId,
+    required String requestId,
+    required String quoteId,
+    required int quoteVersion,
+    required bool includePayment,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_staff_payment_document',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_quote_id': quoteId,
+        'p_quote_version': quoteVersion,
+        'p_include_payment': includePayment,
+      },
+    ),
+  );
 
   Future<Map<String, dynamic>> quote({
     required String storeId,
@@ -471,6 +510,58 @@ class DirectOrderStaffService {
             : 'DIRECT_ORDER_ATTACHMENT_INVALID',
       );
     }
+  }
+
+  Future<void> uploadPaymentDocument({
+    required String storeId,
+    required String requestId,
+    required String quoteId,
+    required int quoteVersion,
+    required bool includePayment,
+    required String sourceHash,
+    required String path,
+    required String filename,
+    required String mimeType,
+    required Uint8List bytes,
+  }) async {
+    Future<void> commit() async {
+      await supabase.rpc(
+        'direct_order_staff_commit_payment_document',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_quote_id': quoteId,
+          'p_quote_version': quoteVersion,
+          'p_include_payment': includePayment,
+          'p_source_hash': sourceHash,
+          'p_path': path,
+          'p_filename': filename,
+          'p_mime': mimeType,
+        },
+      );
+    }
+
+    try {
+      await commit();
+      return;
+    } on PostgrestException catch (error) {
+      if (error.message != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
+    }
+    final upload = await attachmentRequest(
+      storeId: storeId,
+      requestId: requestId,
+      action: 'staff_chat_attachment_upload',
+      payload: {'path': path, 'filename': filename, 'mime_type': mimeType},
+    );
+    await supabase.storage
+        .from('direct-order-chat')
+        .uploadBinaryToSignedUrl(
+          path,
+          upload['token'] as String,
+          bytes,
+          FileOptions(contentType: mimeType),
+        );
+    await commit();
   }
 
   Future<void> uploadChatAttachment({

@@ -139,7 +139,9 @@ void main() {
       find.widgetWithText(TextFormField, 'Reason *'),
       'Weekly replenishment',
     );
-    final item = find.widgetWithText(DropdownButtonFormField<String>, 'Item');
+    final item = find.byWidgetPredicate(
+      (w) => w is InkWell && w.key.toString().contains('procurement_pick_'),
+    );
     await tester.ensureVisible(item);
     await tester.tap(item);
     await tester.pumpAndSettle();
@@ -159,8 +161,9 @@ void main() {
     expect(find.text('PR-SAVED · Draft'), findsOneWidget);
     expect(
       queries.length,
-      readsBeforeSave + 1,
-      reason: 'one bounded reload after the command',
+      readsBeforeSave + 3,
+      reason:
+          'one shortage read, one catalog read and one reload after the command',
     );
     expect(queries.last['request_sort'], 'created');
     expect(tester.takeException(), isNull);
@@ -318,7 +321,11 @@ void main() {
             refreshListenable: refresh,
             loadPage: (query) async {
               queries.add({...query});
-              if (queries.length == 2) throw StateError('Network unavailable');
+              if (commands > 0 &&
+                  query['request_id'] != null &&
+                  queries.length < 5) {
+                throw StateError('Network unavailable');
+              }
               return {
                 ..._requesterWorkspace(),
                 if (commands > 0) 'requests': [saved],
@@ -350,7 +357,7 @@ void main() {
       );
       refresh.notifyListeners();
       await tester.pumpAndSettle();
-      expect(queries, hasLength(3));
+      expect(queries, hasLength(5));
       expect(queries.last['request_id'], 'saved-pr');
       expect(commands, 1);
       expect(
@@ -537,7 +544,9 @@ Future<void> _fillNewRequest(WidgetTester tester) async {
     find.widgetWithText(TextFormField, 'Reason *'),
     'Weekly replenishment',
   );
-  final item = find.widgetWithText(DropdownButtonFormField<String>, 'Item');
+  final item = find.byWidgetPredicate(
+    (w) => w is InkWell && w.key.toString().contains('procurement_pick_'),
+  );
   await tester.ensureVisible(item);
   await tester.tap(item);
   await tester.pumpAndSettle();

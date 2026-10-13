@@ -553,6 +553,23 @@ PYRECIPIENT
  if [[ "${DIRECT_ORDER_NO_DELIVERY_FEE_TEST:-0}" == "1" ]]; then
   run_sql "$PHOTO_ROOT/supabase/migrations/20261012230000_direct_order_no_delivery_fee.sql" > "$PHOTO_TMP/no_delivery_fee_migration.log" 2>&1 || { cat "$PHOTO_TMP/no_delivery_fee_migration.log"; exit 1; }
   run_sql "$PHOTO_ROOT/supabase/tests/direct_order_no_delivery_fee_test.sql"
+  python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYGUIDE'
+from pathlib import Path
+import re,sys
+root,tmp=map(Path,sys.argv[1:]);s=(root/'supabase/migrations/20260929010000_beverage_sugar_vat.sql').read_text();out=''
+for name in ['allocate_vat_cents','calculate_item_vat']:
+ m=re.search(r'CREATE FUNCTION public\.'+name+r'\(',s)
+ out+=s[m.start():s.index('$$;',m.start())+3]+'\n'
+(tmp/'guide_vat.sql').write_text(out)
+PYGUIDE
+  run_sql "$PHOTO_TMP/guide_vat.sql" >/dev/null
+  if [[ -n "${DIRECT_ORDER_GUIDE_BASELINE_DUMP:-}" ]]; then
+    docker exec "$PHOTO_CONTAINER" pg_dump -U postgres -d codex_direct_photo > "$DIRECT_ORDER_GUIDE_BASELINE_DUMP"
+  fi
+  run_sql "$PHOTO_ROOT/test/sql/direct_order_quote_creation_before.sql"
+  run_sql "$PHOTO_ROOT/supabase/migrations/20261013020000_direct_order_quote_payment_guide.sql" > "$PHOTO_TMP/payment_guide_migration.log" 2>&1 || { cat "$PHOTO_TMP/payment_guide_migration.log"; exit 1; }
+  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_quote_payment_guide_test.sql"
+  python3 "$PHOTO_ROOT/scripts/tests/direct_order_payment_guide_rpc.py" "$PHOTO_CONTAINER"
  fi
 
 fi

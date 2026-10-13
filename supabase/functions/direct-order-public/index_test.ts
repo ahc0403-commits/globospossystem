@@ -492,7 +492,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    185,
+    195,
     "registered SQL error count",
   );
   assertEquals(
@@ -510,6 +510,18 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
     "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
     "broken pickup graph does not expose internal details",
   );
+  for (
+    const [code, status] of [
+      ["DIRECT_ORDER_LINK_INPUT_INVALID", 400],
+      ["DIRECT_ORDER_LINK_RETRY_CHANGED", 409],
+      ["DIRECT_ORDER_PAYMENT_DOCUMENT_NOT_ALLOWED", 409],
+      ["DIRECT_ORDER_DOCUMENT_TOO_LARGE", 400],
+    ] as const
+  ) {
+    const result = normalizeRpcError(code);
+    assertEquals(result.status, status, "payment document error status");
+    assertEquals(result.code, code, "payment document error code");
+  }
   const packingFailure = normalizeRpcError(
     "DIRECT_ORDER_PACKING_CONTRACT_VERIFICATION_FAILED",
   );

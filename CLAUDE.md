@@ -32,6 +32,23 @@ requests and higher-priority instructions take precedence.
 - Authentication users and workforce employees are separate concepts;
   preserve their explicit mappings where required.
 
+## Procurement owner contract (2026-10-13)
+
+- New PRs use policy 3: requester -> Store Manager review/quantity adjustment/
+  approval -> buyer final approval -> PO. BM approval is removed. Preserve
+  historical policy-1/2 approvals and issued documents.
+- PRs show the registered raw-material code as text below the item name.
+  Procurement QR and automatic menu QR generation are not requested.
+- Policy-3 receiving confirms inspected accepted quantities and posts stock
+  atomically. Complete delivery is determined per original PO line and cumulative
+  accepted receipts, never from a cancelled/transferred balance or header total.
+- Generate immutable, price-free complete-delivery or discrepancy PDFs for
+  suppliers. File creation/download does not establish supplier transmission;
+  record the actual channel, recipient/evidence and file hash separately.
+- Reserve shortages in the next PR, list them first with quantities and original
+  PO references, and transfer the original unreceived balance only on new PO
+  issuance. Preserve lineage and prevent duplicate reservations/stock/payment.
+
 ## Payments and operating times
 
 - `process_payment` is the atomic single-order payment entry point. Determine
