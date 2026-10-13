@@ -172,7 +172,7 @@ void main() {
     expect(find.byType(ProcurementCatalogDialog), findsOneWidget);
     for (final entry in {
       'Item': 'Cleaning gloves',
-      'Item code': 'GLOVE-01',
+      'Material code': 'GLOVE-01',
       'Specification': 'Size M',
       'Estimated unit price': '25000',
       'VAT (%)': '8',
@@ -250,7 +250,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text(
-          'New PRs will require store adjustment, brand agreement and purchase approval. Existing requests retain their policy.',
+          'Apply request → store manager review/adjustment/approval → buyer final approval → PO.',
         ),
         findsOneWidget,
       );
@@ -270,7 +270,7 @@ void main() {
         'version': 7,
         'payload': {
           'enabled': true,
-          'three_stage_required': true,
+          'three_stage_required': false,
           'high_value_amount': 2000000.0,
           'quantity_review_multiplier': 2.0,
           'max_price_increase_percent': 10.0,
@@ -425,6 +425,62 @@ void main() {
       expect(find.textContaining('Eggs'), findsNothing);
       expect(find.text('Drafts / pending (0)'), findsOneWidget);
       expect(find.text('Cancelled (1)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'supplier transmission requires channel and delivery evidence for the selected file',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final commands = <Map<String, dynamic>>[];
+      final data = {
+        ...workspace(),
+        'receipt_reports': [
+          {
+            'receipt_id': 'receipt-a',
+            'kind': 'discrepancy',
+            'file_hash': 'selected-file-hash',
+          },
+        ],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProcurementWorkspacePage(
+            load: () async => data,
+            execute: (action, id, version, key, payload) async {
+              commands.add({'action': action, 'id': id, 'payload': payload});
+              return {'id': id};
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final record = find.text('Record sent');
+      await tester.ensureVisible(record);
+      await tester.tap(record);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+      await tester.pumpAndSettle();
+      expect(commands, isEmpty);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Channel'),
+        'Zalo',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Recipient / delivery evidence'),
+        'Supplier message 123',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+      await tester.pumpAndSettle();
+      expect(commands.single, {
+        'action': 'mark_receipt_report_sent',
+        'id': 'receipt-a',
+        'payload': {
+          'channel': 'Zalo',
+          'delivery_reference': 'Supplier message 123',
+          'file_hash': 'selected-file-hash',
+        },
+      });
       expect(tester.takeException(), isNull);
     },
   );

@@ -338,7 +338,28 @@ class DirectOrderCopy {
       'Book a driver before handoff.',
     ),
     'DIRECT_ORDER_BOOKING_INPUT_INVALID' => bookingInputRequired,
-    'DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED' => customerPaysDriverHelp,
+    'DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED' ||
+    'DELIVERY_FEE_DISABLED' => _pick(
+      '배송 결제 정책과 견적이 일치하지 않아 저장하지 못했습니다. 다시 조회 후 재시도하세요.',
+      'Chưa lưu báo giá do chính sách thanh toán giao hàng không khớp. Tải lại và thử lại.',
+      'The quote could not be saved because delivery payment policies do not match. Refresh and retry.',
+    ),
+    'DIRECT_ORDER_LINK_INPUT_INVALID' ||
+    'DIRECT_ORDER_LINK_RETRY_CHANGED' => _pick(
+      '주문 링크를 만들지 못했습니다. 다시 조회 후 재시도하세요.',
+      'Chưa tạo được liên kết đơn. Tải lại và thử lại.',
+      'The order link could not be created. Refresh and retry.',
+    ),
+    'DIRECT_ORDER_PAYMENT_DOCUMENT_NOT_ALLOWED' => _pick(
+      '결제 또는 종료 상태가 변경되어 안내서를 생성할 수 없습니다. 주문을 다시 확인하세요.',
+      'Trạng thái thanh toán hoặc kết thúc đã đổi. Kiểm tra lại đơn trước khi tạo chứng từ.',
+      'Payment or closure changed. Check the order before creating a payment document.',
+    ),
+    'DIRECT_ORDER_DOCUMENT_TOO_LARGE' => _pick(
+      '안내 파일의 크기를 확인하세요.',
+      'Kiểm tra kích thước chứng từ.',
+      'Check the document size.',
+    ),
     'DIRECT_ORDER_FINAL_AMOUNT_LOCKED' => _pick(
       '최종금액은 확정되었습니다. 실제 배송비 변경은 배송비 정산에서 처리하세요.',
       'Tổng tiền đã chốt. Đối soát phí giao thực tế tại mục phí giao.',
@@ -1600,6 +1621,9 @@ class DirectOrderCopy {
     'Thay bản nháp đang viết bằng mẫu?',
     'Replace the current draft with this template?',
   );
+  String get openCustomerOrderLink =>
+      _pick('고객 주문 열기', 'Mở đơn khách', 'Open customer order');
+
   String get itemPricesBeforeTax => _pick(
     '메뉴별 단가와 금액은 세전입니다. 세금은 아래 최종 금액에 포함됩니다.',
     'Đơn giá và số tiền từng món chưa gồm thuế. Thuế đã gồm trong tổng cuối cùng bên dưới.',

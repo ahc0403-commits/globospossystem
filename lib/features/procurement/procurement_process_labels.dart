@@ -14,6 +14,8 @@ const procurementDocumentLabelKeys = [
   'other',
   'reason',
   'item',
+  'productCode',
+  'carryShortage',
   'specification',
   'quantity',
   'unit',
@@ -52,6 +54,7 @@ const procurementDocumentLabelKeys = [
 
 String procurementProcessLabel(String key, String languageCode) {
   final values = {
+    'carryShortage': ['이전 PO 부족분', 'Previous PO shortage', 'Thiếu từ PO trước'],
     'store': ['매장', 'Store', 'Cửa hàng'],
     'submittedAt': ['제출일시', 'Submitted at', 'Thời gian gửi'],
     'stage': ['승인 단계', 'Approval stage', 'Bước duyệt'],
@@ -195,9 +198,9 @@ String procurementProcessLabel(String key, String languageCode) {
     "notes": ["비고", "Notes", "Ghi chú"],
     "expectedVat": ["예상 VAT", "Estimated VAT", "VAT dự kiến"],
     'activatePolicy': [
-      "새 PR부터 매장 조정 → 브랜드 동의 → 구매팀 승인을 적용합니다. 기존 진행 건은 기존 정책을 유지합니다.",
-      "New PRs will require store adjustment, brand agreement and purchase approval. Existing requests retain their policy.",
-      "Yêu cầu mới cần cửa hàng điều chỉnh, thương hiệu đồng ý và bộ phận mua hàng duyệt. Yêu cầu đang xử lý giữ chính sách cũ.",
+      "구매요청 → 스토어매니저 검토·수량 조정·승인 → 구매담당자 최종 승인 → PO 발행을 적용합니다.",
+      "Apply request → store manager review/adjustment/approval → buyer final approval → PO.",
+      "Áp dụng yêu cầu → quản lý cửa hàng kiểm tra/điều chỉnh/duyệt → nhân viên mua hàng duyệt cuối → PO.",
     ],
     'company': ["법인", "Company", "Công ty"],
     'employee': ["직원", "Employee", "Nhân viên"],
@@ -274,7 +277,7 @@ String procurementProcessLabel(String key, String languageCode) {
       "Set up purchase item",
       "Thiết lập mặt hàng mua",
     ],
-    "productCode": ["품목 코드", "Item code", "Mã mặt hàng"],
+    "productCode": ["원료코드", "Material code", "Mã nguyên liệu"],
     "receiptClass": [
       "입고 분류",
       "Receiving classification",

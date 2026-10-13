@@ -37,8 +37,10 @@ class DirectOrderTrackingLink extends StatelessWidget {
     required this.url,
     this.opener,
     this.copier,
+    this.orderLink = false,
   });
   final String url;
+  final bool orderLink;
   final Future<bool> Function(Uri)? opener;
   final Future<void> Function(String)? copier;
 
@@ -61,7 +63,7 @@ class DirectOrderTrackingLink extends StatelessWidget {
         } else {
           await Clipboard.setData(ClipboardData(text: url));
         }
-        notice(copy.deliveryLinkCopied);
+        notice(orderLink ? copy.orderLinkCopied : copy.deliveryLinkCopied);
       } catch (_) {
         notice(copy.deliveryLinkCopyFailed);
       }
@@ -88,12 +90,16 @@ class DirectOrderTrackingLink extends StatelessWidget {
                 notice(copy.deliveryLinkOpenFailed);
               },
               icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              label: Text(copy.openGrab),
+              label: Text(
+                orderLink ? copy.openCustomerOrderLink : copy.openGrab,
+              ),
             ),
             OutlinedButton.icon(
               onPressed: copyLink,
               icon: const Icon(Icons.copy, size: 18),
-              label: Text(copy.copyDeliveryLink),
+              label: Text(
+                orderLink ? copy.copyOrderLink : copy.copyDeliveryLink,
+              ),
             ),
           ],
         ),

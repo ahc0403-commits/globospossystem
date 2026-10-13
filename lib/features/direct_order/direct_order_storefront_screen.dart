@@ -3673,7 +3673,11 @@ class _DirectOrderStorefrontScreenState
                         : const {},
                     status: message.metadata['translation_status']?.toString(),
                   ),
-                for (final url in links) DirectOrderTrackingLink(url: url),
+                for (final url in links)
+                  DirectOrderTrackingLink(
+                    url: url,
+                    orderLink: message.metadata['order_access_link'] == true,
+                  ),
               ],
             ),
           ),

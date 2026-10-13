@@ -83,3 +83,7 @@ lib/l10n/app_localizations*.dart
 web/photo_import_worker.js
 web/photo_import_worker.js.deps
 web/photo_import_worker.js.map
+
+# Generated procurement and payment-guide verification artifacts.
+outputs/procurement-20261013/
+outputs/direct-order-payment-guide-20261013/

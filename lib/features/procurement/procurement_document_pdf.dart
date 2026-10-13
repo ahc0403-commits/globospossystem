@@ -53,6 +53,12 @@ Future<Uint8List> buildProcurementDocumentPdf(
               .toStringAsFixed(2),
         ),
   );
+  String carryText(Map line) {
+    final sources = (line['shortage_sources'] as List? ?? []);
+    if (sources.isEmpty) return '';
+    return '\n${copy('carryShortage')}: ${procurementNumber(line['shortage_quantity'], decimals: 3)} ${text(line[supplier ? 'unit' : 'requested_unit'])} · ${sources.map((s) => s['purchase_order_no']).where((s) => s != null).join(', ')}';
+  }
+
   final no = text(data[supplier ? 'purchase_order_no' : 'request_no']);
   final ink = PdfColor.fromHex('#172B3B');
   final pale = PdfColor.fromHex('#EFF4F7');
@@ -229,6 +235,15 @@ Future<Uint8List> buildProcurementDocumentPdf(
             fontWeight: pw.FontWeight.bold,
           ),
           cellStyle: const pw.TextStyle(fontSize: 8),
+          cellBuilder: (column, value, row) => column == (supplier ? 3 : 3)
+              ? pw.FittedBox(
+                  fit: pw.BoxFit.scaleDown,
+                  child: pw.Text(
+                    value.toString(),
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+                )
+              : null,
           cellPadding: const pw.EdgeInsets.symmetric(
             horizontal: 5,
             vertical: 7,
@@ -249,14 +264,14 @@ Future<Uint8List> buildProcurementDocumentPdf(
                   4: const pw.FlexColumnWidth(2),
                 }
               : {
-                  0: const pw.FixedColumnWidth(28),
-                  1: const pw.FixedColumnWidth(160),
-                  2: const pw.FixedColumnWidth(40),
-                  3: const pw.FixedColumnWidth(40),
-                  4: const pw.FixedColumnWidth(44),
-                  5: const pw.FixedColumnWidth(66),
-                  6: const pw.FixedColumnWidth(70),
-                  7: const pw.FixedColumnWidth(75),
+                  0: const pw.FixedColumnWidth(22),
+                  1: const pw.FixedColumnWidth(151),
+                  2: const pw.FixedColumnWidth(35),
+                  3: const pw.FixedColumnWidth(72),
+                  4: const pw.FixedColumnWidth(42),
+                  5: const pw.FixedColumnWidth(65),
+                  6: const pw.FixedColumnWidth(65),
+                  7: const pw.FixedColumnWidth(71),
                 },
           cellAlignments: supplier
               ? {2: pw.Alignment.topRight}
@@ -272,7 +287,7 @@ Future<Uint8List> buildProcurementDocumentPdf(
             for (var i = 0; i < lines.length; i++)
               if (supplier)
                 [
-                  text(lines[i]['product_name']),
+                  '${text(lines[i]['product_name'])}\n${copy('productCode')}: ${text(lines[i]['product_code'])}${carryText(lines[i])}',
                   text(lines[i]['specification']),
                   procurementNumber(lines[i]['quantity'], decimals: 3),
                   text(lines[i]['unit']),
@@ -281,7 +296,7 @@ Future<Uint8List> buildProcurementDocumentPdf(
               else
                 [
                   '${i + 1}',
-                  '${text(lines[i]['product_name'])}${(lines[i]['specification_snapshot']?.toString() ?? '').isEmpty ? '' : '\n${lines[i]['specification_snapshot']}'}',
+                  '${text(lines[i]['product_name'])}\n${copy('productCode')}: ${text(lines[i]['product_code'] ?? lines[i]['product_code_snapshot'])}${carryText(lines[i])}${(lines[i]['specification_snapshot']?.toString() ?? '').isEmpty ? '' : '\n${lines[i]['specification_snapshot']}'}',
                   procurementNumber(
                     lines[i]['requested_quantity'],
                     decimals: 3,
@@ -293,7 +308,9 @@ Future<Uint8List> buildProcurementDocumentPdf(
                   ),
                   lines[i]['estimated_unit_price'] == null
                       ? copy('quoteNeeded')
-                      : '${procurementNumber(lines[i]['estimated_unit_price'])}\n/ ${text(lines[i]['estimated_order_unit'])}',
+                      : procurementNumber(
+                          procurementDisplayUnitPrice(lines[i]),
+                        ),
                   estimate(lines[i]) == null
                       ? copy('quoteNeeded')
                       : procurementNumber(estimate(lines[i])),
@@ -345,6 +362,16 @@ Future<Uint8List> buildProcurementDocumentPdf(
                           fontWeight: pw.FontWeight.bold,
                         ),
                         cellStyle: const pw.TextStyle(fontSize: 8),
+                        cellBuilder: (column, value, row) =>
+                            column == (supplier ? 3 : 3)
+                            ? pw.FittedBox(
+                                fit: pw.BoxFit.scaleDown,
+                                child: pw.Text(
+                                  value.toString(),
+                                  style: const pw.TextStyle(fontSize: 8),
+                                ),
+                              )
+                            : null,
                         headerDecoration: pw.BoxDecoration(color: pale),
                         columnWidths: {
                           0: const pw.FlexColumnWidth(2),
@@ -353,7 +380,10 @@ Future<Uint8List> buildProcurementDocumentPdf(
                           3: const pw.FlexColumnWidth(2),
                         },
                         data: [
-                          for (final stage in ['store', 'brand', 'office'])
+                          for (final stage
+                              in (data['approval_policy_version'] == 3
+                                  ? ['store', 'office']
+                                  : ['store', 'brand', 'office']))
                             [
                               copy(
                                 stage == 'store'
