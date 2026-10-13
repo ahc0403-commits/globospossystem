@@ -551,7 +551,10 @@ void main() {
     expect(provider, contains('deleteDestination'));
     expect(provider, contains('enqueueTestPrintJob'));
     expect(provider, contains('PRINTER_FLOOR_LABEL_REQUIRED'));
-    expect(settingsScreen, contains('testDestination(destination.id)'));
+    expect(
+      settingsScreen,
+      contains('diagnoseDestination(destination.id, printTicket: true)'),
+    );
     expect(
       settingsScreen,
       isNot(contains('enqueueTestPrintJob(destination.id)')),
@@ -580,7 +583,10 @@ void main() {
     expect(printStation, isNot(contains('PrintJobAgentService()')));
     expect(printStation, contains('.processOnce()'));
     expect(printStation, contains('printStationJobsProvider(storeId)'));
-    expect(printStation, contains('.testDestination(destination.id)'));
+    expect(
+      printStation,
+      contains('.diagnoseDestination(destination.id, printTicket: true)'),
+    );
     expect(printStation, contains('reprintPrintJob(job.id)'));
     expect(printStation, contains("Key('print_station_root')"));
     expect(printStation, contains("Key('print_station_job_feed')"));

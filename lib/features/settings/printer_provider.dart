@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/hardware/printer_service.dart';
+import '../../core/hardware/printer_diagnostics.dart';
 import '../../core/hardware/wifi_printer_service.dart';
 
 class PrinterState {
@@ -9,6 +10,7 @@ class PrinterState {
     this.printerIp = '',
     this.isTesting = false,
     this.lastTestResult,
+    this.diagnostic,
     this.isPrinting = false,
     this.error,
   });
@@ -16,6 +18,7 @@ class PrinterState {
   final String printerIp;
   final bool isTesting;
   final bool? lastTestResult;
+  final PrinterTestReport? diagnostic;
   final bool isPrinting;
   final String? error;
 
@@ -23,6 +26,7 @@ class PrinterState {
     String? printerIp,
     bool? isTesting,
     bool? lastTestResult,
+    PrinterTestReport? diagnostic,
     bool? isPrinting,
     String? error,
     bool clearError = false,
@@ -34,6 +38,7 @@ class PrinterState {
       lastTestResult: clearTestResult
           ? null
           : (lastTestResult ?? this.lastTestResult),
+      diagnostic: clearTestResult ? null : (diagnostic ?? this.diagnostic),
       isPrinting: isPrinting ?? this.isPrinting,
       error: clearError ? null : (error ?? this.error),
     );
@@ -41,16 +46,24 @@ class PrinterState {
 }
 
 class PrinterNotifier extends StateNotifier<PrinterState> {
-  PrinterNotifier() : super(const PrinterState()) {
+  PrinterNotifier({
+    PrinterService? service,
+    Future<SharedPreferences> Function()? preferences,
+  }) : _service = service ?? createPrinterService(),
+       _preferences = preferences ?? SharedPreferences.getInstance,
+       super(const PrinterState()) {
     _loadSavedIp();
   }
 
-  final _service = createPrinterService();
+  final PrinterService _service;
+  final Future<SharedPreferences> Function() _preferences;
   static const _ipKey = 'printer_ip';
   int _ipRevision = 0;
 
   Future<void> _loadSavedIp() async {
-    final prefs = await SharedPreferences.getInstance();
+    final revision = _ipRevision;
+    final prefs = await _preferences();
+    if (!mounted || revision != _ipRevision) return;
     final ip = prefs.getString(_ipKey) ?? '';
     state = state.copyWith(printerIp: ip);
   }
@@ -60,16 +73,18 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
     final revision = ++_ipRevision;
     state = state.copyWith(
       printerIp: normalized,
+      isTesting: false,
       clearTestResult: true,
       clearError: true,
     );
-    final prefs = await SharedPreferences.getInstance();
-    if (revision != _ipRevision) return;
+    final prefs = await _preferences();
+    if (!mounted || revision != _ipRevision) return;
     await prefs.setString(_ipKey, normalized);
   }
 
   Future<void> testConnection({String? ip}) async {
     final targetIp = (ip ?? state.printerIp).trim();
+    final revision = _ipRevision;
     if (targetIp.isEmpty) {
       state = state.copyWith(error: 'Enter the IP address first.');
       return;
@@ -80,8 +95,30 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
       clearError: true,
       clearTestResult: true,
     );
-    final ok = await _service.testConnection(targetIp);
-    state = state.copyWith(isTesting: false, lastTestResult: ok);
+    final status = _service is DiagnosticPrinterService
+        ? await (_service as DiagnosticPrinterService).checkNetworkPrinter(
+            targetIp,
+          )
+        : PrinterOperationStatus(
+            await _service.testConnection(targetIp)
+                ? PrintResult.success
+                : PrintResult.connectionFailed,
+          );
+    if (!mounted || revision != _ipRevision) return;
+    state = state.copyWith(
+      isTesting: false,
+      lastTestResult: status.result == PrintResult.success,
+      diagnostic: PrinterTestReport(
+        result: status.result,
+        attempts: [
+          PrinterEndpointAttempt(
+            type: 'network',
+            address: '$targetIp:9100',
+            status: status,
+          ),
+        ],
+      ),
+    );
   }
 
   Future<PrintResult> print(List<int> bytes) async {
@@ -89,8 +126,32 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
       return PrintResult.connectionFailed;
     }
     state = state.copyWith(isPrinting: true, clearError: true);
-    final result = await _service.printReceipt(state.printerIp, bytes);
-    state = state.copyWith(isPrinting: false);
+    final targetIp = state.printerIp;
+    final revision = _ipRevision;
+    final status = _service is DiagnosticPrinterService
+        ? await (_service as DiagnosticPrinterService).printNetworkPrinter(
+            targetIp,
+            bytes,
+          )
+        : PrinterOperationStatus(await _service.printReceipt(targetIp, bytes));
+    final result = status.result;
+    if (!mounted) return result;
+    state = state.copyWith(
+      isPrinting: false,
+      diagnostic: revision == _ipRevision
+          ? PrinterTestReport(
+              result: result,
+              attempts: [
+                PrinterEndpointAttempt(
+                  type: 'network',
+                  address: '$targetIp:9100',
+                  status: status,
+                ),
+              ],
+            )
+          : null,
+    );
+    if (revision != _ipRevision) return result;
     if (result == PrintResult.connectionFailed) {
       state = state.copyWith(error: 'Printer connection failed. Check the IP.');
     } else if (result == PrintResult.printFailed) {

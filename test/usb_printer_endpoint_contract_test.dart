@@ -29,7 +29,17 @@ void main() {
     expect(destinationService, contains('admin_upsert_printer_destination_v3'));
     expect(destinationService, contains("'p_usb_printer_name'"));
     expect(printAgent, contains('PrinterEndpointType.usb'));
-    expect(printAgent, contains('printUsbReceipt(endpoint.deviceName, bytes)'));
+    expect(
+      RegExp(
+        r'printUsbReceipt\(\s*endpoint.deviceName,\s*bytes,?\s*\)',
+      ).hasMatch(printAgent),
+      isTrue,
+    );
+    expect(
+      printAgent,
+      contains('printWindowsPrinter(endpoint.deviceName, bytes)'),
+    );
+    expect(printAgent, contains('checkUsbPrinter(endpoint.deviceName)'));
     expect(windowsRunner, contains('globos/usb_printer'));
     expect(windowsRunner, contains('OpenPrinterW'));
     expect(windowsRunner, contains('WritePrinter'));

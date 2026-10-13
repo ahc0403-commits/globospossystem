@@ -116,7 +116,10 @@ void main() {
       expect(printer, contains('printFlushTimeout'));
       expect(printer, contains('socketCloseTimeout'));
       expect(printer, contains('if (bytes.isEmpty)'));
-      expect(printer, contains('on TimeoutException'));
+      expect(
+        printer,
+        contains('TimeoutException() => PrintResult.connectionTimeout'),
+      );
       expect(printer, contains('socket?.destroy();'));
     },
   );

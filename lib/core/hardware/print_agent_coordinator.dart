@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'print_job_agent_service.dart';
 import 'printer_service.dart';
+import 'printer_diagnostics.dart';
 
 enum PrintAgentStatus {
   disabled,
@@ -238,6 +239,23 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
 
   Future<PrintResult> testDestination(String destinationId) {
     return _agent.testPrintDestination(destinationId);
+  }
+
+  Future<PrinterTestReport> diagnoseDestination(
+    String destinationId, {
+    required bool printTicket,
+  }) async {
+    if (_agent is DiagnosticPrintAgent) {
+      return (_agent as DiagnosticPrintAgent).diagnoseDestination(
+        destinationId,
+        printTicket: printTicket,
+      );
+    }
+    return PrinterTestReport(
+      result: printTicket
+          ? await testDestination(destinationId)
+          : PrintResult.notSupported,
+    );
   }
 
   @override

@@ -4270,5 +4270,17 @@
       }
     }
   },
-  "salesDepositImportCompleteness": "Kiểm tra tổng hợp doanh thu pháp nhân để xác nhận tất cả cửa hàng Photo đã đăng ký và số tiền dự kiến nộp."
+  "salesDepositImportCompleteness": "Kiểm tra tổng hợp doanh thu pháp nhân để xác nhận tất cả cửa hàng Photo đã đăng ký và số tiền dự kiến nộp.",
+  "printerRegisteredHint": "Kiểm tra kết nối và in thử bằng máy in hóa đơn đã đăng ký cho cửa hàng đang chọn.",
+  "printerManualIpTitle": "Thử IP thủ công (chỉ máy tính này)",
+  "printerDiagnosticTitle": "Chẩn đoán kết nối máy in",
+  "printerDiagnosticRefused": "Máy in từ chối kết nối. Kiểm tra IP và cổng in.",
+  "printerDiagnosticTimeout": "Kết nối hết thời gian chờ. Kiểm tra nguồn máy in, mạng cửa hàng và tường lửa.",
+  "printerDiagnosticRoute": "Không có đường mạng đến máy in. Kiểm tra mạng của máy tính và máy in.",
+  "printerDiagnosticOffline": "Không có kết nối mạng. Hãy kết nối với mạng cửa hàng.",
+  "printerDiagnosticUsb": "Kiểm tra tên máy in Windows, trạng thái ngoại tuyến và hàng đợi in.",
+  "printerDiagnosticConfig": "Thiếu hoặc sai cấu hình máy in. Kiểm tra máy in đã đăng ký, IP và cổng, rồi làm mới.",
+  "printerDiagnosticGeneric": "Kết nối in thất bại. Kiểm tra địa chỉ và lỗi bên dưới.",
+  "printerDiagnosticPartial": "Dữ liệu có thể đã được gửi; đã dừng tự động thử lại. Kiểm tra bản in trước khi thử lại.",
+  "printerDiagnosticAccepted": "Đã kết nối hoặc gửi dữ liệu. Kiểm tra bản in thực tế tại máy in."
 }
