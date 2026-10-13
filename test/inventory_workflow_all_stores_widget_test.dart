@@ -71,6 +71,21 @@ class _Inventory extends InventoryService {
   bool failNext = false;
   bool combinedReceiving = false;
   final submissions = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>>? verifiedLines;
+  @override
+  Future<Map<String, dynamic>> verifyInventoryReceipt({
+    required String receiptId,
+    required int expectedVersion,
+    required String idempotencyKey,
+    List<Map<String, dynamic>> lines = const [],
+    String? verificationReason,
+  }) async {
+    verifiedLines = lines;
+    receipt['status'] = 'confirmed';
+    order['status'] = 'received';
+    return order;
+  }
+
   final orderSubmissions = <Map<String, dynamic>>[];
   Map<String, dynamic> quantityWarnings = {
     'warning_token': null,
@@ -402,6 +417,50 @@ void main() {
       expect(
         find.text('A separate accounting account must confirm.'),
         findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      router.dispose();
+      await events.close();
+    },
+  );
+
+  testWidgets(
+    'policy 3 receiver can confirm its submitted quantities without sending hidden prices',
+    (tester) async {
+      final service = _Inventory();
+      service.order['commercial_terms'] = {'approval_policy_version': 3};
+      service.lines.removeRange(1, service.lines.length);
+      service.receipt['received_by'] = 'actor';
+      service.receipt['submitted_at'] = '2026-10-13T12:00:00Z';
+      service.receipt['inspector_name'] = 'Receiver A';
+      final line = (service.receipt['line_details'] as List).single as Map;
+      line.remove('actual_unit_price');
+      line['received_quantity_base'] = 20;
+      line['accepted_quantity_base'] = 10;
+      final events = StreamController<PosLiveEvent>.broadcast();
+      final router = await _mount(tester, service, events);
+      await tester.tap(find.text('Receiving'));
+      await tester.pumpAndSettle();
+      final quantity = find.byKey(
+        const ValueKey('inventory_receipt_quantity_line-0'),
+      );
+      expect(tester.widget<TextField>(quantity).controller!.text, '1');
+      final confirm = find.byKey(const Key('inventory_receipt_verify'));
+      await tester.ensureVisible(confirm);
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Confirm'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(service.verifiedLines!.single['accepted_quantity_base'], 10);
+      expect(
+        service.verifiedLines!.single.containsKey('actual_unit_price'),
+        isFalse,
       );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());

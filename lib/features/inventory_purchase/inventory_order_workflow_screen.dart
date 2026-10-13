@@ -140,7 +140,14 @@ class _InventoryOrderWorkflowScreenState
   String? get _role => ref.read(authProvider).role;
   bool get _isAccounting => _role == 'inventory_accounting';
   bool get _combinedReceiving => _detail?['can_receive_and_confirm'] == true;
-  bool get _canConfirmReceipt => _isAccounting || _combinedReceiving;
+  bool get _canConfirmReceipt =>
+      _isAccounting ||
+      _combinedReceiving ||
+      (_map(
+                _map(_detail?['order'])['commercial_terms'],
+              )['approval_policy_version'] ==
+              3 &&
+          PermissionUtils.canCreateInventoryPurchaseOrder(_role));
 
   bool get _canManagePrices =>
       PermissionUtils.canManageInventorySupplierPrices(_role);
@@ -375,7 +382,11 @@ class _InventoryOrderWorkflowScreenState
     };
     final finalReview =
         _isAccounting ||
-        (detail?['can_receive_and_confirm'] == true &&
+        ((detail?['can_receive_and_confirm'] == true ||
+                _map(
+                      _map(detail?['order'])['commercial_terms'],
+                    )['approval_policy_version'] ==
+                    3) &&
             _string(draft?['submitted_at']).isNotEmpty);
     for (final line in _maps(detail?['lines'])) {
       final id = _id(line);
@@ -1640,13 +1651,13 @@ class _InventoryOrderWorkflowScreenState
               const SizedBox(height: 8),
               Text(
                 _text(
-                  ko: _combinedReceiving
+                  ko: twoStage || _combinedReceiving
                       ? '제출된 입고 내역을 검수하고 입고를 확정하세요.'
                       : '입고 내역이 제출되었습니다. 회계 계정의 최종 검증을 기다리고 있습니다.',
-                  en: _combinedReceiving
+                  en: twoStage || _combinedReceiving
                       ? 'Inspect the submitted receipt and confirm the delivery.'
                       : 'Receipt submitted. Awaiting final accounting verification.',
-                  vi: _combinedReceiving
+                  vi: twoStage || _combinedReceiving
                       ? 'Kiểm tra phiếu nhập đã gửi và xác nhận hàng nhận.'
                       : 'Đã gửi phiếu nhập. Đang chờ kế toán xác nhận cuối cùng.',
                 ),
@@ -1725,7 +1736,7 @@ class _InventoryOrderWorkflowScreenState
                   ),
                 ),
               ),
-              if (independent || _combinedReceiving)
+              if (independent || twoStage || _combinedReceiving)
                 FilledButton.icon(
                   key: const Key('inventory_receipt_verify'),
                   onPressed: _busy
@@ -2693,6 +2704,7 @@ class _InventoryOrderWorkflowScreenState
     Map<String, dynamic> draft,
     List<Map<String, dynamic>> orderLines,
   ) async {
+    final quantitiesOnly = _role == 'inventory_orderer';
     if (_string(draft['inspector_name']).isEmpty ||
         _string(draft['statement_storage_path']).isEmpty) {
       await _editStatement(draft);
@@ -2711,9 +2723,15 @@ class _InventoryOrderWorkflowScreenState
         vi: 'Xác nhận nhập kho',
       ),
       message: _text(
-        ko: '거래명세서의 최종 수량과 금액을 확인했습니다. 확정 즉시 재고가 증가합니다.',
-        en: 'I verified final quantities and amounts. Stock increases immediately on confirmation.',
-        vi: 'Đã kiểm tra số lượng và tiền. Tồn kho tăng ngay khi xác nhận.',
+        ko: quantitiesOnly
+            ? '실제 합격 수량을 확인했습니다. 확정 즉시 재고가 증가합니다.'
+            : '거래명세서의 최종 수량과 금액을 확인했습니다. 확정 즉시 재고가 증가합니다.',
+        en: quantitiesOnly
+            ? 'I verified accepted quantities. Stock increases immediately on confirmation.'
+            : 'I verified final quantities and amounts. Stock increases immediately on confirmation.',
+        vi: quantitiesOnly
+            ? 'Đã kiểm tra số lượng đạt. Tồn kho tăng ngay khi xác nhận.'
+            : 'Đã kiểm tra số lượng và tiền. Tồn kho tăng ngay khi xác nhận.',
       ),
     );
     if (!confirmed) return;
@@ -2734,7 +2752,7 @@ class _InventoryOrderWorkflowScreenState
       final enteredPrice = parseInventoryQuantity(
         _receiptPriceControllers[lineId]?.text ?? '',
       );
-      if (qty == null || enteredPrice == null) {
+      if (qty == null || (!quantitiesOnly && enteredPrice == null)) {
         setState(
           () => _error = StateError('INVENTORY_RECEIPT_QUANTITY_INVALID'),
         );
@@ -2743,19 +2761,20 @@ class _InventoryOrderWorkflowScreenState
       final accepted = qty * conversion;
       final received = _number(draftLine['received_quantity_base']);
       final currentAccepted = _number(draftLine['accepted_quantity_base']);
-      final price = enteredPrice;
+      final price = enteredPrice ?? 0;
       final currentPrice = _number(
         draftLine['actual_unit_price'] ?? line['unit_price'],
       );
       final changed =
           (accepted - currentAccepted).abs() > 0.0001 ||
-          (price - currentPrice).abs() > 0.01 ||
-          (price - _number(line['unit_price'])).abs() > 0.01;
+          (!quantitiesOnly &&
+              ((price - currentPrice).abs() > 0.01 ||
+                  (price - _number(line['unit_price'])).abs() > 0.01));
       finalLines.add({
         'purchase_order_line_id': lineId,
         'accepted_quantity_base': accepted,
         'rejected_quantity_base': received > accepted ? received - accepted : 0,
-        'actual_unit_price': price,
+        if (!quantitiesOnly) 'actual_unit_price': price,
         'discrepancy_reason': _nullable(draftLine['discrepancy_reason']),
       });
       if (changed) changedFinalLines.add(finalLines.last);
@@ -2801,6 +2820,30 @@ class _InventoryOrderWorkflowScreenState
         });
       }
       await _load();
+      if (_map(order['commercial_terms'])['approval_policy_version'] == 3) {
+        try {
+          await _exportProcurementDocument(
+            _string(order['restaurant_id']),
+            'receipt',
+            {'id': _id(draft)},
+            'supplier',
+          );
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  _text(
+                    ko: '입고·재고 반영은 완료됐습니다. 입고 문서 버튼으로 파일 생성을 재시도하세요.',
+                    en: 'Stock was posted. Retry the file using the receipt document button.',
+                    vi: 'Đã cộng kho. Dùng nút chứng từ nhập để thử tạo tệp lại.',
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+      }
     });
   }
 

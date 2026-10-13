@@ -116,6 +116,25 @@ GRANT EXECUTE ON FUNCTION public.can_access_procurement_receipt_file(text) TO au
 CREATE POLICY procurement_receipt_objects_read ON storage.objects FOR SELECT TO authenticated USING(bucket_id='inventory-purchase-documents' AND public.can_access_procurement_receipt_file(name));
 CREATE POLICY procurement_receipt_objects_insert ON storage.objects FOR INSERT TO authenticated WITH CHECK(bucket_id='inventory-purchase-documents' AND public.can_access_procurement_receipt_file(name));
 
+-- The private policy-3 verifier opens an exact receipt scope only while posting.
+-- Ordinary submitted edits and all confirmed receipt changes remain blocked.
+DO $receipt_guards$
+DECLARE d text; guard_name text; target text; receipt_ref text; anchor text;
+BEGIN
+ FOR guard_name,receipt_ref IN SELECT * FROM (VALUES
+  ('guard_inventory_receipt_header_change','OLD'),
+  ('guard_inventory_receipt_line_change','v_receipt')) g(name,ref)
+ LOOP
+  target:='public.'||guard_name||'()';
+  IF to_regprocedure(target) IS NULL THEN CONTINUE; END IF;
+  d:=pg_get_functiondef(target::regprocedure);
+  anchor:='AND NOT public.can_verify_inventory_receipt('||receipt_ref||'.restaurant_id)';
+  IF strpos(d,anchor)=0 THEN RAISE EXCEPTION 'PROCUREMENT_RECEIPT_GUARD_ANCHOR_DRIFT'; END IF;
+  d:=replace(d,anchor,'AND NOT (public.can_verify_inventory_receipt('||receipt_ref||'.restaurant_id) OR (TG_OP=''UPDATE'' AND '||receipt_ref||'.id::text=NULLIF(current_setting(''app.procurement_receipt_finalize_id'',true),'''')))');
+  EXECUTE d;
+ END LOOP;
+END $receipt_guards$;
+
 CREATE OR REPLACE FUNCTION public.verify_inventory_receipt_p1(
   p_receipt_id uuid,
   p_expected_version integer,
@@ -147,6 +166,7 @@ DECLARE
   v_accepted_after numeric(12,3);
   v_previous public.inventory_receipt_confirmation_attempts%ROWTYPE;
   v_payload_hash text;
+  v_saved_finalize text := current_setting('app.procurement_receipt_finalize_id',true);
   v_attempt_key text := NULLIF(btrim(COALESCE(p_idempotency_key, '')), '');
 BEGIN
   IF v_attempt_key IS NULL THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_IDEMPOTENCY_KEY_REQUIRED'; END IF;
@@ -160,6 +180,7 @@ BEGIN
   WHERE id = p_receipt_id FOR UPDATE;
   IF v_order.commercial_terms->>'approval_policy_version'='3' THEN
     IF NOT public.can_create_inventory_purchase_order(v_receipt.restaurant_id) AND NOT public.can_verify_inventory_receipt(v_receipt.restaurant_id) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_VERIFY_FORBIDDEN'; END IF;
+    IF public.inventory_purchase_actor_role()='inventory_orderer' AND EXISTS(SELECT 1 FROM jsonb_array_elements(p_lines) x WHERE x->>'actual_unit_price' IS NOT NULL) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_PRICE_FORBIDDEN'; END IF;
   ELSE
     IF NOT public.can_verify_inventory_receipt(v_receipt.restaurant_id) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_VERIFY_FORBIDDEN'; END IF;
     IF v_receipt.received_by IS NOT DISTINCT FROM auth.uid() OR EXISTS(SELECT 1 FROM public.inventory_receipt_submission_attempts a WHERE a.receipt_id=v_receipt.id AND a.actor_id=auth.uid()) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_MAKER_CHECKER_REQUIRED'; END IF;
@@ -201,6 +222,9 @@ BEGIN
   IF EXISTS(SELECT 1 FROM jsonb_array_elements(p_lines) x WHERE (x->>'accepted_quantity_base')::numeric<0 OR (x->>'rejected_quantity_base')::numeric<0 OR (x->>'actual_unit_price')::numeric<0 OR (x->>'accepted_quantity_base')::numeric::text IN ('NaN','Infinity','-Infinity') OR (x->>'rejected_quantity_base')::numeric::text IN ('NaN','Infinity','-Infinity') OR (x->>'actual_unit_price')::numeric::text IN ('NaN','Infinity','-Infinity')) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_FINAL_VALUE_INVALID'; END IF;
   IF EXISTS(SELECT 1 FROM jsonb_array_elements(p_lines) x JOIN public.inventory_receipt_lines l ON l.receipt_id=v_receipt.id AND l.purchase_order_line_id=(x->>'purchase_order_line_id')::uuid JOIN public.inventory_purchase_order_lines ol ON ol.id=l.purchase_order_line_id WHERE
     (COALESCE((x->>'accepted_quantity_base')::numeric,l.accepted_quantity_base)<>l.accepted_quantity_base OR COALESCE((x->>'actual_unit_price')::numeric,l.actual_unit_price,ol.unit_price)<>ol.unit_price) AND NULLIF(btrim(x->>'discrepancy_reason'),'') IS NULL) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_DISCREPANCY_REASON_REQUIRED'; END IF;
+  IF v_order.commercial_terms->>'approval_policy_version'='3' THEN
+    PERFORM set_config('app.procurement_receipt_finalize_id',v_receipt.id::text,true);
+  END IF;
   UPDATE public.inventory_receipt_lines l SET accepted_quantity_base=COALESCE((x->>'accepted_quantity_base')::numeric,l.accepted_quantity_base),
     rejected_quantity_base=COALESCE((x->>'rejected_quantity_base')::numeric,l.rejected_quantity_base),
     received_quantity_base=COALESCE((x->>'accepted_quantity_base')::numeric,l.accepted_quantity_base)+COALESCE((x->>'rejected_quantity_base')::numeric,l.rejected_quantity_base),
@@ -309,7 +333,11 @@ BEGIN
       'order_status_after', v_order.status
     )
   );
+  PERFORM set_config('app.procurement_receipt_finalize_id',COALESCE(v_saved_finalize,''),true);
   RETURN v_order;
+EXCEPTION WHEN OTHERS THEN
+  PERFORM set_config('app.procurement_receipt_finalize_id',COALESCE(v_saved_finalize,''),true);
+  RAISE;
 END;
 $$;
 
@@ -331,6 +359,7 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'INVENTORY_PURCHASE_NOT_FOUND'; END IF;
   IF NOT public.can_create_inventory_purchase_order(v_order.restaurant_id) THEN
     RAISE EXCEPTION 'INVENTORY_RECEIPT_DRAFT_FORBIDDEN'; END IF;
+  IF v_order.commercial_terms->>'approval_policy_version'='3' AND public.inventory_purchase_actor_role()='inventory_orderer' AND EXISTS(SELECT 1 FROM jsonb_array_elements(p_lines) x WHERE x->>'actual_unit_price' IS NOT NULL) THEN RAISE EXCEPTION 'INVENTORY_RECEIPT_PRICE_FORBIDDEN'; END IF;
   v_hash:=encode(extensions.digest(convert_to(jsonb_build_object('order',p_purchase_order_id,
     'lines',p_lines,'inspector',p_inspector_name,'file',p_statement_storage_path,
     'number',p_statement_number,'date',p_statement_date,'memo',p_memo)::text,'UTF8'),'sha256'),'hex');
@@ -425,6 +454,6 @@ CREATE POLICY procurement_receipt_objects_no_update ON storage.objects AS RESTRI
 CREATE POLICY procurement_receipt_objects_no_delete ON storage.objects AS RESTRICTIVE FOR DELETE TO authenticated
  USING(bucket_id<>'inventory-purchase-documents' OR NOT(name LIKE '%/procurement/receipt/%'));
 DO $$ BEGIN
- IF NOT EXISTS(SELECT 1 FROM pg_class WHERE oid='public.procurement_receipt_reports'::regclass AND relrowsecurity) OR has_table_privilege('authenticated','public.procurement_receipt_reports','INSERT') OR NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='storage' AND policyname='procurement_receipt_objects_no_update') THEN RAISE EXCEPTION 'PROCUREMENT_20261013_BOUNDARY_INVALID'; END IF;
+ IF has_function_privilege('authenticated','public.verify_inventory_receipt_p1(uuid,integer,text,jsonb,text)','EXECUTE') OR has_function_privilege('anon','public.verify_inventory_receipt_p1(uuid,integer,text,jsonb,text)','EXECUTE') OR NOT EXISTS(SELECT 1 FROM pg_class WHERE oid='public.procurement_receipt_reports'::regclass AND relrowsecurity) OR has_table_privilege('authenticated','public.procurement_receipt_reports','INSERT') OR NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='storage' AND policyname='procurement_receipt_objects_no_update') THEN RAISE EXCEPTION 'PROCUREMENT_20261013_BOUNDARY_INVALID'; END IF;
 END $$;
 COMMIT;

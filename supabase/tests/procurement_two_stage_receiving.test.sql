@@ -41,7 +41,11 @@ BEGIN
  SELECT current_stock INTO stock FROM public.inventory_items WHERE id=test_uuid(501);
  SELECT to_jsonb(po) INTO r FROM public.inventory_purchase_orders po WHERE id=poid;
  payload:=jsonb_build_object('p_purchase_order_id',poid,'p_receipt_id',receipt_id,'p_expected_order_version',r->'row_version','p_expected_receipt_version',0,'p_idempotency_key','two-stage-receive','p_inspector_name','Actual receiver','p_statement_storage_path',path,'p_lines',jsonb_build_array(jsonb_build_object('purchase_order_line_id',polid,'received_quantity_base',7,'discrepancy_reason','Short 3','inspection',jsonb_build_object('spec_ok',true,'quality_ok',true,'packaging_ok',true,'expiry_not_applicable',true,'issue_type','shortage','photo_paths','[]'::jsonb))));
+ PERFORM public.test_expect_error(format('SELECT public.finalize_procurement_receipt(%L::jsonb)',jsonb_set(payload,'{p_lines,0,actual_unit_price}','0')),'INVENTORY_RECEIPT_PRICE_FORBIDDEN');
+ ASSERT NOT EXISTS(SELECT 1 FROM public.inventory_receipts WHERE id=receipt_id),'Unauthorized price leaves no submitted receipt';
  r:=public.finalize_procurement_receipt(payload);original_payload:=payload;original_result:=r;
+ ASSERT NULLIF(current_setting('app.procurement_receipt_finalize_id',true),'') IS NULL,'Private receipt scope restored';
+ PERFORM public.test_expect_error(format('UPDATE public.inventory_receipt_lines SET accepted_quantity_base=accepted_quantity_base WHERE receipt_id=%L',receipt_id),'INVENTORY_RECEIPT_CONFIRMED_IMMUTABLE');
  ASSERT (SELECT current_stock FROM public.inventory_items WHERE id=test_uuid(501))=stock+7;
  ASSERT public.finalize_procurement_receipt(payload)=r;
  ASSERT (SELECT current_stock FROM public.inventory_items WHERE id=test_uuid(501))=stock+7,'Retry does not repost stock';
