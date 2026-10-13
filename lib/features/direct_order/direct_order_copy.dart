@@ -54,9 +54,9 @@ class DirectOrderCopy {
   String get cart => _pick('장바구니', 'Giỏ hàng', 'Cart');
   String get viewCart => _pick('장바구니 보기', 'Xem giỏ hàng', 'View cart');
   String get cartQuoteNotice => _pick(
-    '배송비와 세금·서비스 요금은 최종 견적에 반영됩니다.',
-    'Phí giao hàng, thuế và phí dịch vụ sẽ được tính trong báo giá cuối cùng.',
-    'Delivery fees, tax and service charges are included in the final quote.',
+    '세금·서비스 요금은 최종 견적에 반영됩니다.',
+    'Thuế và phí dịch vụ được tính trong báo giá cuối cùng.',
+    'Tax and service charges are included in the final quote.',
   );
   String get cartEmpty =>
       _pick('메뉴를 선택해 주세요.', 'Vui lòng chọn món.', 'Please choose an item.');
@@ -472,8 +472,10 @@ class DirectOrderCopy {
       'Please check the delivery address.',
     ),
     'DIRECT_ORDER_ITEM_INVALID' ||
-    'DIRECT_ORDER_MENU_UNAVAILABLE' ||
-    'DIRECT_ORDER_MENU_CHANGED' => _pick(
+    'DIRECT_ORDER_COMBO_CHOICES_INVALID' ||
+    'DIRECT_ORDER_COMBO_UNAVAILABLE' ||
+    'DIRECT_ORDER_COMBO_STOCK_UNAVAILABLE' => comboUnavailable,
+    'DIRECT_ORDER_MENU_UNAVAILABLE' || 'DIRECT_ORDER_MENU_CHANGED' => _pick(
       '메뉴가 변경되었습니다. 장바구니를 다시 확인해 주세요.',
       'Thực đơn đã thay đổi. Vui lòng kiểm tra lại giỏ hàng.',
       'The menu changed. Please review your cart.',
@@ -1057,9 +1059,21 @@ class DirectOrderCopy {
   String get markCooked =>
       _pick('조리 완료 기록', 'Ghi nhận món đã làm xong', 'Mark cooking complete');
   String get customerPaysDriverHelp => _pick(
-    '배달비는 주문 금액에 포함되지 않습니다. 음식 수령 시 기사님께 직접 결제해주세요.',
-    'Phí giao hàng không bao gồm trong tiền trả cửa hàng. Trả trực tiếp cho tài xế khi nhận món.',
-    'Delivery is excluded from the store payment. Pay the driver directly when receiving your food.',
+    '배달비는 주문 금액에 포함되지 않습니다.',
+    'Tiền món không bao gồm phí giao hàng.',
+    'Delivery fees are excluded from the order amount.',
+  );
+  String get comboDrinks =>
+      _pick('콤보 음료 선택', 'Chọn đồ uống combo', 'Choose combo drinks');
+  String comboDrinkCount(int selected, int required) => _pick(
+    '음료 $selected / $required개 선택',
+    'Đã chọn $selected / $required đồ uống',
+    'Drinks selected: $selected / $required',
+  );
+  String get comboUnavailable => _pick(
+    '콤보 구성품 또는 음료가 품절되었습니다. 메뉴를 다시 확인해 주세요.',
+    'Món hoặc đồ uống trong combo đã hết. Vui lòng kiểm tra lại thực đơn.',
+    'A combo item or drink is unavailable. Please check the menu again.',
   );
   String get storePrepaysDriver => _pick(
     '그랩비 선결제 · 매장이 기사비 대납',

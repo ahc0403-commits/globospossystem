@@ -148,8 +148,43 @@ class DirectOrderService {
   }
 
   Future<DirectOrderStorefront> fetchStorefront(String slug) async {
-    final data = await _invoke({'action': 'storefront_v2', 'slug': slug});
-    return DirectOrderStorefront.fromJson(data);
+    final items = <dynamic>[];
+    Map<String, dynamic>? cursor;
+    final seen = <String>{};
+    for (var page = 0; page < 50; page++) {
+      final data = await _invoke({
+        'action': 'storefront_v3',
+        'slug': slug,
+        'limit': 200,
+        if (cursor != null) 'cursor': cursor,
+      });
+      final next = data.remove('next_cursor');
+      final options = data.remove('combo_drink_options');
+      if (options is List && data['items'] is List) {
+        data['items'] = (data['items'] as List)
+            .map(
+              (row) =>
+                  row is Map &&
+                      (row['combo_drink_choice_count'] as num? ?? 0) > 0
+                  ? {...row, 'combo_drink_options': options}
+                  : row,
+            )
+            .toList();
+      }
+      final rows = data['items'];
+      if (rows is! List || rows.length > 200) {
+        throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+      }
+      items.addAll(rows);
+      if (next == null) {
+        return DirectOrderStorefront.fromJson({...data, 'items': items});
+      }
+      if (next is! Map || !seen.add(jsonEncode(next))) {
+        throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+      }
+      cursor = Map<String, dynamic>.from(next);
+    }
+    throw const DirectOrderException('DIRECT_ORDER_TEMPORARILY_UNAVAILABLE');
   }
 
   String _newAccessKey() {
@@ -335,6 +370,7 @@ class DirectOrderService {
     required String locale,
     required Map<String, int> cart,
     required Map<String, String> itemNotes,
+    Map<String, List<String>> comboDrinkChoices = const {},
     required DirectOrderAddress address,
     required bool rememberAddress,
     DirectOrderFulfillmentType fulfillmentType =
@@ -394,6 +430,8 @@ class DirectOrderService {
                 'menu_item_id': entry.key,
                 'quantity': entry.value,
                 'note': itemNotes[entry.key],
+                if (comboDrinkChoices.containsKey(entry.key))
+                  'combo_drink_choices': comboDrinkChoices[entry.key],
               },
             )
             .toList(growable: false),
@@ -528,7 +566,7 @@ class DirectOrderService {
     required String requestId,
   }) async {
     final data = await _invoke({
-      'action': 'status_v10',
+      'action': 'status_v11',
       ...session.credentials,
       'request_id': requestId,
     });

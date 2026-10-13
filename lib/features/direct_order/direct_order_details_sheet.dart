@@ -110,6 +110,10 @@ class DirectOrderDetailsSheet extends StatelessWidget {
                             '${money.format(item.unitPrice)} × ${item.quantity}',
                             item.amount,
                           ),
+                          for (final component in item.comboComponents)
+                            Text(
+                              '${component.localizedName(languageCode)} × ${component.quantity * (component.isTotalQuantity ? 1 : item.quantity)}',
+                            ),
                           DirectOrderInstructions(
                             label: copy.itemRequest,
                             note: item.note?.trim().isNotEmpty == true

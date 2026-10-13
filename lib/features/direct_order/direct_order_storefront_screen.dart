@@ -24,6 +24,7 @@ import 'direct_order_customer_push_service.dart';
 import 'direct_order_support.dart';
 import 'direct_order_localization.dart';
 import 'direct_order_dialog.dart';
+import 'direct_order_combo_dialog.dart';
 import 'direct_order_hours.dart';
 import 'direct_order_models.dart';
 import 'direct_order_service.dart';
@@ -68,6 +69,8 @@ class _DirectOrderStorefrontScreenState
   final String _submitDraftId = const Uuid().v4();
   final _cart = <String, int>{};
   final _itemNotes = <String, String>{};
+  final _comboDrinkChoices = <String, List<String>>{};
+  bool _comboSelecting = false;
   final _dinerController = TextEditingController(text: '1');
   bool _utensilsRequested = true;
   String? _closedProgress;
@@ -513,16 +516,51 @@ class _DirectOrderStorefrontScreenState
               _status?.delivery?.offer?.refundRecorded == false) ||
           (_status != null && _hasCompletionRefund(_status!)));
 
-  void _changeQuantity(String itemId, int delta) {
+  Future<void> _changeQuantity(String itemId, int delta) async {
+    if (_comboSelecting || _submitting) return;
+    final item = _storefront!.items.firstWhere((item) => item.id == itemId);
+    final next = ((_cart[itemId] ?? 0) + delta).clamp(0, 50);
+    List<String>? choices;
+    if (next > 0 && item.comboDrinkChoiceCount > 0) {
+      _comboSelecting = true;
+      try {
+        choices = await showDirectOrderDialog<List<String>>(
+          context: context,
+          builder: (_) => DirectOrderComboDialog(
+            item: item,
+            quantity: next,
+            languageCode: _languageCode,
+            initial: _comboDrinkChoices[itemId] ?? const [],
+          ),
+        );
+      } finally {
+        _comboSelecting = false;
+      }
+      if (!mounted || choices == null) return;
+    }
     setState(() {
-      final next = (_cart[itemId] ?? 0) + delta;
       if (next <= 0) {
         _cart.remove(itemId);
         _itemNotes.remove(itemId);
+        _comboDrinkChoices.remove(itemId);
       } else {
-        _cart[itemId] = next.clamp(1, 50);
+        _cart[itemId] = next;
+        if (choices != null) _comboDrinkChoices[itemId] = choices;
       }
     });
+  }
+
+  String _comboChoiceSummary(DirectOrderMenuItem item) {
+    final counts = <String, int>{};
+    for (final id in _comboDrinkChoices[item.id] ?? const <String>[]) {
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return item.comboDrinkOptions
+        .where((o) => (counts[o.menuItemId] ?? 0) > 0)
+        .map(
+          (o) => '${o.localizedName(_languageCode)} × ${counts[o.menuItemId]}',
+        )
+        .join(', ');
   }
 
   double get _cartSubtotal {
@@ -642,6 +680,25 @@ class _DirectOrderStorefrontScreenState
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 8),
+                          if (item.isCombo) ...[
+                            Text(
+                              item.comboComponents
+                                  .map(
+                                    (c) =>
+                                        '${c.localizedName(_languageCode)} × ${c.quantity * quantity}',
+                                  )
+                                  .join(', '),
+                            ),
+                            Text(_comboChoiceSummary(item)),
+                            if (item.comboDrinkChoiceCount > 0)
+                              TextButton(
+                                onPressed: () async {
+                                  await _changeQuantity(item.id, 0);
+                                  if (context.mounted) refreshSheet(() {});
+                                },
+                                child: Text(_copy.comboDrinks),
+                              ),
+                          ],
                           Row(
                             children: [
                               Expanded(
@@ -770,6 +827,7 @@ class _DirectOrderStorefrontScreenState
         locale: _languageCode,
         cart: _cart,
         itemNotes: _itemNotes,
+        comboDrinkChoices: _comboDrinkChoices,
         address: address,
         rememberAddress: _rememberAddress && !_isPickup,
         fulfillmentType: _fulfillmentType,
@@ -1263,7 +1321,7 @@ class _DirectOrderStorefrontScreenState
     }
     return status.quote?.deliveryPaymentMode == 'customer_direct'
         ? _copy.customerPaysDriverHelp
-        : _copy.deliveryVatIncluded;
+        : _copy.prepaidHelp;
   }
 
   DirectOrderProofAttempt? _proofAttemptFor(DirectOrderStatus status) {
@@ -1614,6 +1672,7 @@ class _DirectOrderStorefrontScreenState
       _status = null;
       _cart.clear();
       _itemNotes.clear();
+      _comboDrinkChoices.clear();
       _noteController.clear();
       _dinerController.text = '1';
       _utensilsRequested = true;
@@ -2004,6 +2063,24 @@ class _DirectOrderStorefrontScreenState
             ),
             if (quantity > 0) ...[
               const SizedBox(height: 8),
+              if (item.isCombo) ...[
+                Text(
+                  item.comboComponents
+                      .map(
+                        (c) =>
+                            '${c.localizedName(_languageCode)} × ${c.quantity * quantity}',
+                      )
+                      .join(', '),
+                ),
+                if (item.comboDrinkChoiceCount > 0)
+                  TextButton(
+                    key: Key('direct_combo_edit_${item.id}'),
+                    onPressed: () => _changeQuantity(item.id, 0),
+                    child: Text(
+                      '${_copy.comboDrinks}: ${_comboChoiceSummary(item)}',
+                    ),
+                  ),
+              ],
               if (_itemNotes[item.id]?.isNotEmpty == true)
                 Text(
                   '${_copy.itemRequest}: ${_itemNotes[item.id]}',
@@ -3098,7 +3175,8 @@ class _DirectOrderStorefrontScreenState
                         amount,
                         strong: true,
                       ),
-                      if (!additional) Text(_quoteDeliveryNotice(status)),
+                      if (!additional && !status.isPickup)
+                        Text(_quoteDeliveryNotice(status)),
                       if (additional) ...[
                         _amountRow(
                           charge?['kind'] == 'delivery'
@@ -3117,15 +3195,6 @@ class _DirectOrderStorefrontScreenState
                         if (charge != null)
                           Text(charge['reason']?.toString() ?? ''),
                       ],
-                      if (!additional)
-                        Text(
-                          status.isPickup
-                              ? _copy.pickup
-                              : (status.quote!.deliveryPaymentMode ==
-                                        'store_prepaid'
-                                    ? _copy.prepaidHelp
-                                    : _copy.customerPaysDriverHelp),
-                        ),
                       const SizedBox(height: 12),
                       if (payment && canPay && _storefront != null) ...[
                         Text(_copy.transferInstruction),

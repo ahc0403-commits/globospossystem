@@ -87,3 +87,4 @@ web/photo_import_worker.js.map
 # Generated procurement and payment-guide verification artifacts.
 outputs/procurement-20261013/
 outputs/direct-order-payment-guide-20261013/
+outputs/direct-order-combo-20261013/

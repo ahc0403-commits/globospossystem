@@ -570,6 +570,19 @@ PYGUIDE
   run_sql "$PHOTO_ROOT/supabase/migrations/20261013020000_direct_order_quote_payment_guide.sql" > "$PHOTO_TMP/payment_guide_migration.log" 2>&1 || { cat "$PHOTO_TMP/payment_guide_migration.log"; exit 1; }
   run_sql "$PHOTO_ROOT/supabase/tests/direct_order_quote_payment_guide_test.sql"
   python3 "$PHOTO_ROOT/scripts/tests/direct_order_payment_guide_rpc.py" "$PHOTO_CONTAINER"
+  if [[ "${DIRECT_ORDER_COMBO_TEST:-0}" == "1" ]]; then
+   run_sql "$PHOTO_ROOT/test/fixtures/direct_order_combo_storefront_predecessor.sql" >/dev/null
+   run_sql "$PHOTO_ROOT/test/fixtures/direct_order_combo_snapshot_triggers.sql" >/dev/null
+   run_sql "$PHOTO_ROOT/test/fixtures/direct_order_combo_setup.sql" >/dev/null
+   run_sql "$PHOTO_ROOT/test/fixtures/direct_order_combo_payment_anchor.sql" >/dev/null
+   if [[ -n "${DIRECT_ORDER_COMBO_BASELINE_DUMP:-}" ]]; then
+    docker exec "$PHOTO_CONTAINER" pg_dump -U postgres -d codex_direct_photo > "$DIRECT_ORDER_COMBO_BASELINE_DUMP"
+   fi
+   PHOTO_PAYMENT_HASH="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
+   run_sql "$PHOTO_ROOT/supabase/migrations/20261013030000_direct_order_combo_ordering.sql" > "$PHOTO_TMP/combo_migration.log" 2>&1 || { cat "$PHOTO_TMP/combo_migration.log"; exit 1; }
+   run_sql "$PHOTO_ROOT/supabase/tests/direct_order_combo_ordering_test.sql"
+   python3 "$PHOTO_ROOT/scripts/tests/direct_order_combo_rpc.py" "$PHOTO_CONTAINER"
+  fi
  fi
 
 fi

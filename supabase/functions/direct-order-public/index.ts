@@ -31,6 +31,7 @@ export const directOrderActionRegistry = Object.freeze(
   {
     storefront: { actor: "public", rateLimit: 60 },
     storefront_v2: { actor: "public", rateLimit: 60 },
+    storefront_v3: { actor: "public", rateLimit: 60 },
     create_session: { actor: "public", rateLimit: 60 },
     submit: { actor: "public", rateLimit: 60 },
     submit_v2: { actor: "public", rateLimit: 60 },
@@ -38,6 +39,7 @@ export const directOrderActionRegistry = Object.freeze(
     status_v8: { actor: "public", rateLimit: 60 },
     status_v9: { actor: "public", rateLimit: 60 },
     status_v10: { actor: "public", rateLimit: 60 },
+    status_v11: { actor: "public", rateLimit: 60 },
     decide_requirement: { actor: "public", rateLimit: 30 },
     resume_storefront: { actor: "public", rateLimit: 60 },
     resume_order: { actor: "public", rateLimit: 60 },
@@ -696,6 +698,15 @@ export const sqlDomainErrorRegistry: Readonly<
     "DIRECT_ORDER_STOREFRONT_DISABLED",
   ),
   DIRECT_ORDER_MENU_CHANGED: conflict("DIRECT_ORDER_MENU_CHANGED"),
+  DIRECT_ORDER_COMBO_CHOICES_INVALID: invalidRequest(
+    "DIRECT_ORDER_COMBO_CHOICES_INVALID",
+  ),
+  DIRECT_ORDER_COMBO_UNAVAILABLE: conflict("DIRECT_ORDER_COMBO_UNAVAILABLE"),
+  DIRECT_ORDER_COMBO_STOCK_UNAVAILABLE: conflict(
+    "DIRECT_ORDER_COMBO_STOCK_UNAVAILABLE",
+  ),
+  DIRECT_ORDER_COMBO_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_COMBO_VERIFICATION_FAILED: internalFailure,
   DIRECT_ORDER_BELOW_MINIMUM: conflict("DIRECT_ORDER_BELOW_MINIMUM"),
   DIRECT_ORDER_REJECTION_REASON_INVALID: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_REQUEST_NOT_REJECTABLE: conflict(
@@ -856,6 +867,22 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_PHOTO_APPROVAL_ANCHOR_DRIFT: internalFailure,
   DIRECT_ORDER_PHOTO_APPROVAL_VERIFICATION_FAILED: internalFailure,
 });
+
+function boundedInteger(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (value == null) return fallback;
+  if (
+    typeof value !== "number" || !Number.isInteger(value) || value < min ||
+    value > max
+  ) {
+    throw new SafeHttpError(400, "INVALID_REQUEST");
+  }
+  return value;
+}
 
 export function directOrderDinerCount(value: unknown): number {
   if (
@@ -1048,6 +1075,7 @@ export async function resolveOrderScopedRequest(
     "status_v8",
     "status_v9",
     "status_v10",
+    "status_v11",
     "decide_requirement",
     "message",
     "decide_pickup",
@@ -1189,6 +1217,20 @@ function productionDependencies(): DirectOrderDependencies {
           ),
         });
       }
+      case "storefront_v3": {
+        const slug = requiredString(body, "slug", 63, slugPattern);
+        const cursor = body.cursor == null ? null : asObject(body.cursor);
+        const value = await rpc(service, "direct_order_public_storefront_v3", {
+          p_slug: slug,
+          p_limit: boundedInteger(body.limit, 1, 200, 200),
+          p_after_sort: cursor == null
+            ? null
+            : boundedInteger(cursor.sort_order, -2147483648, 2147483647, 0),
+          p_after_id: cursor == null ? null : requiredUuid(cursor, "id"),
+        });
+        if (!value) throw new SafeHttpError(404, "DIRECT_ORDER_UNAVAILABLE");
+        return { ...asObject(value), google_maps_browser_key: null };
+      }
       case "storefront":
       case "storefront_v2": {
         const slug = requiredString(body, "slug", 63, slugPattern);
@@ -1286,7 +1328,8 @@ function productionDependencies(): DirectOrderDependencies {
       case "status_v7":
       case "status_v8":
       case "status_v9":
-      case "status_v10": {
+      case "status_v10":
+      case "status_v11": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
