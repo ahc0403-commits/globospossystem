@@ -751,4 +751,3 @@ BEGIN
   RETURN v_payment;
 END;
 $function$;
-

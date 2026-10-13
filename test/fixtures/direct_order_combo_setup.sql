@@ -56,4 +56,3 @@ $$;
 CREATE TRIGGER direct_order_item_vat_snapshot BEFORE INSERT OR UPDATE ON public.direct_order_request_items FOR EACH ROW EXECUTE FUNCTION public.snapshot_direct_order_item_vat();
 CREATE TRIGGER combo_snapshot BEFORE INSERT ON public.order_items FOR EACH ROW EXECUTE FUNCTION public.snapshot_order_item_combo_components();
 CREATE TRIGGER zzz_order_item_vat_snapshot BEFORE INSERT OR UPDATE ON public.order_items FOR EACH ROW EXECUTE FUNCTION public.snapshot_order_item_vat();
-
