@@ -4272,7 +4272,7 @@
     }
   },
   "salesDepositImportCompleteness": "Check the legal-entity sales summary for registration completeness across Photo stores and the deposit amount.",
-  "printerRegisteredHint": "Use the receipt printer registered for this store.",
+  "printerRegisteredHint": "Connection tests and test prints use the receipt printer registered for the selected store.",
   "printerManualIpTitle": "Manual IP test (this PC only)",
   "printerDiagnosticTitle": "Printer connection diagnosis",
   "printerDiagnosticRefused": "The printer refused the connection. Check its IP and print port.",

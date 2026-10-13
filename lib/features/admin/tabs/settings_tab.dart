@@ -644,7 +644,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         tone: _hasPayrollPin == true ? PosColors.success : PosColors.warning,
       ),
       ToastMetric(
-        label: context.l10n.settingsSyncStatus,
+        label: context.l10n.printerManualIpTitle,
         value: printerSyncLabel,
         tone: printerTone,
       ),

@@ -4271,7 +4271,7 @@
     }
   },
   "salesDepositImportCompleteness": "법인 매출 요약에서 전체 포토 매장 등록 여부와 입금 예정액을 확인하세요.",
-  "printerRegisteredHint": "매장에 등록된 영수증 프린터를 사용합니다. 다른 로컬 IP로 시험하지 않습니다.",
+  "printerRegisteredHint": "선택한 매장에 등록된 영수증 프린터로 연결 테스트와 시험 출력을 진행합니다.",
   "printerManualIpTitle": "수동 IP 시험 (이 PC만)",
   "printerDiagnosticTitle": "프린터 연결 진단",
   "printerDiagnosticRefused": "프린터가 연결을 거부했습니다. IP와 인쇄 포트를 확인하세요.",

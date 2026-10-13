@@ -4271,7 +4271,7 @@
     }
   },
   "salesDepositImportCompleteness": "Kiểm tra tổng hợp doanh thu pháp nhân để xác nhận tất cả cửa hàng Photo đã đăng ký và số tiền dự kiến nộp.",
-  "printerRegisteredHint": "Sử dụng máy in hóa đơn đã đăng ký cho cửa hàng.",
+  "printerRegisteredHint": "Kiểm tra kết nối và in thử bằng máy in hóa đơn đã đăng ký cho cửa hàng đang chọn.",
   "printerManualIpTitle": "Thử IP thủ công (chỉ máy tính này)",
   "printerDiagnosticTitle": "Chẩn đoán kết nối máy in",
   "printerDiagnosticRefused": "Máy in từ chối kết nối. Kiểm tra IP và cổng in.",
