@@ -4271,5 +4271,17 @@
       }
     }
   },
-  "salesDepositImportCompleteness": "Check the legal-entity sales summary for registration completeness across Photo stores and the deposit amount."
+  "salesDepositImportCompleteness": "Check the legal-entity sales summary for registration completeness across Photo stores and the deposit amount.",
+  "printerRegisteredHint": "Use the receipt printer registered for this store.",
+  "printerManualIpTitle": "Manual IP test (this PC only)",
+  "printerDiagnosticTitle": "Printer connection diagnosis",
+  "printerDiagnosticRefused": "The printer refused the connection. Check its IP and print port.",
+  "printerDiagnosticTimeout": "Connection timed out. Check printer power, the store network and firewall.",
+  "printerDiagnosticRoute": "No network route to the printer. Check the PC and printer networks.",
+  "printerDiagnosticOffline": "No active network connection. Connect to the store network.",
+  "printerDiagnosticUsb": "Check the Windows printer name, offline status and print queue.",
+  "printerDiagnosticConfig": "Printer settings are missing or invalid. Check the registered printer, IP and port, then refresh.",
+  "printerDiagnosticGeneric": "Printing connection failed. Check the endpoint and error below.",
+  "printerDiagnosticPartial": "Some data may already have been sent; automatic retry stopped. Check paper output before testing again.",
+  "printerDiagnosticAccepted": "Connection or data transfer completed. Confirm physical output at the printer."
 }

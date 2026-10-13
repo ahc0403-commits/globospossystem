@@ -21,6 +21,8 @@ import '../../auth/auth_provider.dart';
 import '../providers/admin_scope_provider.dart';
 import '../../auth/auth_state.dart';
 import '../../settings/printer_provider.dart';
+import '../../settings/registered_receipt_printer_panel.dart';
+import '../../settings/printer_diagnostic_view.dart';
 import '../../settings/promotion_settings_card.dart';
 import '../../settings/qr_takeout_settings_card.dart';
 import '../providers/admin_audit_provider.dart';
@@ -1299,132 +1301,144 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
               title: context.l10n.settingsReceiptPrinter,
               summary: context.l10n.settingsReceiptPrinterSummary,
               badge: ToastStatusBadge(
-                label: switch (printerState.lastTestResult) {
-                  true => context.l10n.settingsPrinterConnectedGood,
-                  false => context.l10n.settingsPrinterConnectionFailedBad,
-                  null => context.l10n.settingsPrinterUnchecked,
-                },
-                color: switch (printerState.lastTestResult) {
-                  true => PosColors.success,
-                  false => PosColors.danger,
-                  null => PosColors.textSecondary,
-                },
+                label: context.l10n.settingsPrintDestinationReceipt,
+                color: PosColors.info,
                 compact: true,
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              context.l10n.settingsPrinterWifiHint,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _printerIpController,
-              keyboardType: TextInputType.number,
-              onChanged: (value) => printerNotifier.setIp(value),
-              style: AppFonts.system(color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                labelText: context.l10n.settingsPrinterIpAddress,
-                hintText: context.l10n.settingsPrinterIpExample,
+            if (storeId != null)
+              RegisteredReceiptPrinterPanel(
+                key: ValueKey('registered_receipt_$storeId'),
+                storeId: storeId,
               ),
-            ),
-            const SizedBox(height: 14),
-            Row(
+            const SizedBox(height: 12),
+            ExpansionTile(
+              key: const Key('settings_manual_printer_test'),
+              title: Text(context.l10n.printerManualIpTitle),
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: printerState.isTesting
-                        ? null
-                        : () async {
-                            if (!PlatformInfo.isPrinterSupported) {
-                              showErrorToast(
-                                context,
-                                context.l10n.settingsPrinterAppOnly,
-                              );
-                              return;
-                            }
-                            await printerNotifier.testConnection(
-                              ip: _printerIpController.text,
-                            );
-                          },
-                    child: printerState.isTesting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(context.l10n.settingsConnectionTest),
+                Text(
+                  context.l10n.settingsPrinterWifiHint,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: printerState.isPrinting
-                        ? null
-                        : () async {
-                            if (!PlatformInfo.isPrinterSupported) {
-                              showErrorToast(
-                                context,
-                                context.l10n.settingsPrinterAppOnly,
-                              );
-                              return;
-                            }
-                            if (printerState.printerIp.isEmpty) {
-                              showErrorToast(
-                                context,
-                                context.l10n.settingsEnterIpFirst,
-                              );
-                              return;
-                            }
-                            final bytes =
-                                await ReceiptBuilder.buildPaymentReceipt(
-                                  restaurantName:
-                                      settingsState.restaurantName.isEmpty
-                                      ? context
-                                            .l10n
-                                            .settingsPrinterFallbackStore
-                                      : settingsState.restaurantName,
-                                  tableNumber: 'BAN THU',
-                                  items: const [
-                                    ReceiptItem(
-                                      name: 'Mon an thu',
-                                      quantity: 1,
-                                      unitPrice: 10000,
-                                    ),
-                                  ],
-                                  totalAmount: 10000,
-                                  paymentMethod: 'cash',
-                                  paidAt: DateTime.now(),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _printerIpController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) => printerNotifier.setIp(value),
+                  style: AppFonts.system(color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.settingsPrinterIpAddress,
+                    hintText: context.l10n.settingsPrinterIpExample,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: printerState.isTesting
+                            ? null
+                            : () async {
+                                if (!PlatformInfo.isPrinterSupported) {
+                                  showErrorToast(
+                                    context,
+                                    context.l10n.settingsPrinterAppOnly,
+                                  );
+                                  return;
+                                }
+                                await printerNotifier.testConnection(
+                                  ip: _printerIpController.text,
                                 );
-                            final result = await printerNotifier.print(bytes);
-                            if (!context.mounted) return;
-                            if (result == PrintResult.success) {
-                              showSuccessToast(
-                                context,
-                                context.l10n.settingsTestPrintComplete,
-                              );
-                            } else {
-                              showErrorToast(
-                                context,
-                                context.l10n.settingsTestPrintFailed,
-                              );
-                            }
-                          },
-                    child: printerState.isPrinting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(context.l10n.settingsTestPrint),
-                  ),
+                              },
+                        child: printerState.isTesting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(context.l10n.settingsConnectionTest),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: printerState.isPrinting
+                            ? null
+                            : () async {
+                                if (!PlatformInfo.isPrinterSupported) {
+                                  showErrorToast(
+                                    context,
+                                    context.l10n.settingsPrinterAppOnly,
+                                  );
+                                  return;
+                                }
+                                if (printerState.printerIp.isEmpty) {
+                                  showErrorToast(
+                                    context,
+                                    context.l10n.settingsEnterIpFirst,
+                                  );
+                                  return;
+                                }
+                                final bytes =
+                                    await ReceiptBuilder.buildPaymentReceipt(
+                                      restaurantName:
+                                          settingsState.restaurantName.isEmpty
+                                          ? context
+                                                .l10n
+                                                .settingsPrinterFallbackStore
+                                          : settingsState.restaurantName,
+                                      tableNumber: 'BAN THU',
+                                      items: const [
+                                        ReceiptItem(
+                                          name: 'Mon an thu',
+                                          quantity: 1,
+                                          unitPrice: 10000,
+                                        ),
+                                      ],
+                                      totalAmount: 10000,
+                                      paymentMethod: 'cash',
+                                      paidAt: DateTime.now(),
+                                    );
+                                final result = await printerNotifier.print(
+                                  bytes,
+                                );
+                                if (!context.mounted) return;
+                                if (result == PrintResult.success) {
+                                  showSuccessToast(
+                                    context,
+                                    context.l10n.settingsTestPrintComplete,
+                                  );
+                                } else {
+                                  showErrorToast(
+                                    context,
+                                    context.l10n.settingsTestPrintFailed,
+                                  );
+                                }
+                              },
+                        child: printerState.isPrinting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(context.l10n.settingsTestPrint),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 10),
+                _printerStatusRow(printerState.lastTestResult),
+                if (printerState.diagnostic != null)
+                  PrinterDiagnosticView(report: printerState.diagnostic!),
               ],
             ),
-            const SizedBox(height: 10),
-            _printerStatusRow(printerState.lastTestResult),
             const SizedBox(height: 18),
             _buildPrinterDestinationsSection(storeId: storeId),
           ],
@@ -1447,19 +1461,17 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       _testingDestinationIds.add(destination.id);
     });
     try {
-      final result = await ref
+      final report = await ref
           .read(printAgentCoordinatorProvider.notifier)
-          .testDestination(destination.id);
+          .diagnoseDestination(destination.id, printTicket: true);
+      final result = report.result;
       if (!mounted) {
         return;
       }
       if (result == PrintResult.success) {
         showSuccessToast(context, context.l10n.settingsTestPrintComplete);
       } else {
-        showErrorToast(
-          context,
-          context.l10n.settingsPrintDestinationTestFailed,
-        );
+        await showPrinterDiagnosticDialog(context, report);
       }
     } finally {
       if (!mounted) {

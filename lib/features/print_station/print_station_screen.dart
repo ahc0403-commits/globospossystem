@@ -25,6 +25,7 @@ import '../admin/providers/printer_destinations_provider.dart';
 import '../auth/auth_provider.dart';
 import '../kitchen/kitchen_provider.dart';
 import '../store_setup/store_setup_localization.dart';
+import '../settings/printer_diagnostic_view.dart';
 
 class PrintStationScreen extends ConsumerStatefulWidget {
   const PrintStationScreen({super.key, this.isSupportedOverride});
@@ -81,19 +82,17 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     }
     setState(() => _testingDestinationIds.add(destination.id));
     try {
-      final result = await ref
+      final report = await ref
           .read(printAgentCoordinatorProvider.notifier)
-          .testDestination(destination.id);
+          .diagnoseDestination(destination.id, printTicket: true);
+      final result = report.result;
       if (!mounted) {
         return;
       }
       if (result == PrintResult.success) {
         showSuccessToast(context, context.l10n.printStationTestComplete);
       } else {
-        showErrorToast(
-          context,
-          '${context.l10n.printStationTestFailed} (${result.name})',
-        );
+        await showPrinterDiagnosticDialog(context, report);
       }
     } finally {
       if (!mounted) {

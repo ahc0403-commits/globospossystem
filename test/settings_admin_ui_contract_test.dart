@@ -98,7 +98,10 @@ void main() {
     expect(source, contains('settings_printer_destination_floor_label'));
     expect(source, contains('printerDestinationsProvider(storeId)'));
     expect(source, contains('PrinterDestinationDraft('));
-    expect(source, contains('testDestination(destination.id)'));
+    expect(
+      source,
+      contains('diagnoseDestination(destination.id, printTicket: true)'),
+    );
     expect(source, isNot(contains('PrintJobAgentService')));
     expect(source, isNot(contains('enqueueTestPrintJob(destination.id)')));
     expect(source, contains('context.go(\'/print-station\')'));

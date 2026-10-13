@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/live_sync_scope.dart';
 import 'network_capability_service.dart';
 import 'printer_service.dart';
+import 'printer_diagnostics.dart';
 import 'receipt_builder.dart';
 import 'wifi_printer_service.dart';
 
@@ -17,7 +18,7 @@ abstract class PrintAgentDriver {
   Future<PrintResult> testPrintDestination(String destinationId);
 }
 
-class PrintJobAgentService implements PrintAgentDriver {
+class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
   PrintJobAgentService({
     PrintJobBackend? backend,
     PrinterService? printerService,
@@ -172,41 +173,62 @@ class PrintJobAgentService implements PrintAgentDriver {
   }
 
   @override
-  Future<PrintResult> testPrintDestination(String destinationId) async {
+  Future<PrintResult> testPrintDestination(String destinationId) async =>
+      (await diagnoseDestination(destinationId, printTicket: true)).result;
+
+  @override
+  Future<PrinterTestReport> diagnoseDestination(
+    String destinationId, {
+    required bool printTicket,
+  }) async {
     if (!isSupported) {
-      return PrintResult.notSupported;
+      return const PrinterTestReport(result: PrintResult.notSupported);
     }
-
-    final destination = await _backend.loadDestination(destinationId);
-    if (destination == null) {
-      return PrintResult.connectionFailed;
+    try {
+      final destination = await _backend.loadDestination(destinationId);
+      if (destination == null) {
+        return const PrinterTestReport(
+          result: PrintResult.connectionFailed,
+          errorCode: 'DESTINATION_NOT_FOUND',
+        );
+      }
+      List<int>? bytes;
+      if (printTicket) {
+        final ticketBytes = await ReceiptBuilder.buildKitchenTicket(
+          PrintTicket(
+            ticket: 'kitchen',
+            floorLabel: 'THU',
+            tableNumber: 'MAY IN',
+            ticketCode: 'TEST',
+            batchNo: 1,
+            printedReason: 'initial',
+            printedAt: DateTime.now().toIso8601String(),
+            items: const [PrintTicketItem(label: 'Thu duong in', quantity: 1)],
+            orderNotes: 'Thu tram in',
+          ),
+        );
+        bytes = <int>[
+          if (destination.usesOperationalAlert)
+            ...ReceiptBuilder.internalBuzzerAlertBytes,
+          ...ticketBytes,
+        ];
+      }
+      final outcome = await _printToDestination(
+        destination,
+        bytes,
+        copyCount: printTicket && destination.purpose == 'floor' ? 2 : 1,
+      );
+      return PrinterTestReport(
+        result: outcome.result,
+        attempts: outcome.attempts,
+        errorCode: outcome.error,
+      );
+    } catch (_) {
+      return const PrinterTestReport(
+        result: PrintResult.connectionFailed,
+        errorCode: 'PRINTER_TEST_SETUP_FAILED',
+      );
     }
-
-    final ticketBytes = await ReceiptBuilder.buildKitchenTicket(
-      PrintTicket(
-        ticket: 'kitchen',
-        floorLabel: 'THU',
-        tableNumber: 'MAY IN',
-        ticketCode: 'TEST',
-        batchNo: 1,
-        printedReason: 'initial',
-        printedAt: DateTime.now().toIso8601String(),
-        items: const [PrintTicketItem(label: 'Thu duong in', quantity: 1)],
-        orderNotes: 'Thu tram in',
-      ),
-    );
-    final bytes = <int>[
-      if (destination.usesOperationalAlert)
-        ...ReceiptBuilder.internalBuzzerAlertBytes,
-      ...ticketBytes,
-    ];
-
-    final outcome = await _printToDestination(
-      destination,
-      bytes,
-      copyCount: destination.purpose == 'floor' ? 2 : 1,
-    );
-    return outcome.result;
   }
 
   int _copyCountForTicket(String ticketType) {
@@ -215,7 +237,7 @@ class PrintJobAgentService implements PrintAgentDriver {
 
   Future<_EndpointPrintOutcome> _printToDestination(
     PrintDestination destination,
-    List<int> bytes, {
+    List<int>? bytes, {
     int copyCount = 1,
   }) async {
     final configuredEndpoints = destination.endpoints.isEmpty
@@ -262,47 +284,94 @@ class PrintJobAgentService implements PrintAgentDriver {
     }
 
     final failures = <String>[];
+    final attempts = <PrinterEndpointAttempt>[];
+    var lastResult = PrintResult.connectionFailed;
     for (final endpoint in candidates) {
       var printedCopies = 0;
-      var result = PrintResult.success;
+      var status = const PrinterOperationStatus(PrintResult.success);
       while (printedCopies < copyCount) {
-        result = endpoint.type == PrinterEndpointType.usb
-            ? _printerService is UsbPrinterService
-                  ? await (_printerService as UsbPrinterService)
-                        .printUsbReceipt(endpoint.deviceName, bytes)
-                  : PrintResult.notSupported
-            : await _printerService.printReceipt(
-                endpoint.ip,
-                bytes,
-                port: endpoint.port,
-              );
-        if (result != PrintResult.success) break;
+        status = await _operateEndpoint(endpoint, bytes);
+        attempts.add(
+          PrinterEndpointAttempt(
+            type: endpoint.type.name,
+            address: endpoint.displayAddress,
+            status: status,
+          ),
+        );
+        if (status.result != PrintResult.success) break;
         printedCopies++;
       }
       if (printedCopies == copyCount) {
         return _EndpointPrintOutcome(
           result: PrintResult.success,
           endpoint: endpoint,
+          attempts: attempts,
         );
       }
+      lastResult = status.result;
       failures.add(
-        '${endpoint.type.name}@${endpoint.displayAddress}=${result.name}',
+        '${endpoint.type.name}@${endpoint.displayAddress}=${status.result.name}',
       );
-      // Do not switch endpoints after a partial multi-copy print; doing so can
-      // create an extra first copy at a different physical interface.
-      if (printedCopies > 0) {
+      // Never resend a possibly printed ticket through another endpoint.
+      if (printedCopies > 0 || status.mayHavePrinted) {
         return _EndpointPrintOutcome(
-          result: result,
+          result: status.result,
           endpoint: endpoint,
+          attempts: attempts,
           error: 'PARTIAL_PRINT:${failures.join(',')}',
         );
       }
     }
-
     return _EndpointPrintOutcome(
-      result: PrintResult.connectionFailed,
+      result: lastResult,
+      attempts: attempts,
       error: 'ALL_ENDPOINTS_FAILED:${failures.join(',')}',
     );
+  }
+
+  Future<PrinterOperationStatus> _operateEndpoint(
+    PrinterEndpoint endpoint,
+    List<int>? bytes,
+  ) async {
+    if (_printerService is DiagnosticPrinterService) {
+      final service = _printerService as DiagnosticPrinterService;
+      if (endpoint.type == PrinterEndpointType.usb) {
+        return bytes == null
+            ? service.checkUsbPrinter(endpoint.deviceName)
+            : service.printWindowsPrinter(endpoint.deviceName, bytes);
+      }
+      return bytes == null
+          ? service.checkNetworkPrinter(endpoint.ip, port: endpoint.port)
+          : service.printNetworkPrinter(
+              endpoint.ip,
+              bytes,
+              port: endpoint.port,
+            );
+    }
+    if (bytes == null) {
+      return PrinterOperationStatus(
+        endpoint.type != PrinterEndpointType.usb &&
+                await _printerService.testConnection(
+                  endpoint.ip,
+                  port: endpoint.port,
+                )
+            ? PrintResult.success
+            : PrintResult.connectionFailed,
+      );
+    }
+    final result = endpoint.type == PrinterEndpointType.usb
+        ? _printerService is UsbPrinterService
+              ? await (_printerService as UsbPrinterService).printUsbReceipt(
+                  endpoint.deviceName,
+                  bytes,
+                )
+              : PrintResult.notSupported
+        : await _printerService.printReceipt(
+            endpoint.ip,
+            bytes,
+            port: endpoint.port,
+          );
+    return PrinterOperationStatus(result);
   }
 
   Future<List<int>> _buildBytes(PrintAgentJob job) {
@@ -632,11 +701,13 @@ class _EndpointPrintOutcome {
     required this.result,
     this.endpoint,
     this.error,
+    this.attempts = const [],
   });
 
   final PrintResult result;
   final PrinterEndpoint? endpoint;
   final String? error;
+  final List<PrinterEndpointAttempt> attempts;
 }
 
 class PrintJobAgentResult {

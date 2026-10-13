@@ -150,7 +150,8 @@ bool FlutterWindow::OnCreate() {
   usb_printer_channel_->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-        if (call.method_name() != "printRaw") {
+        if (call.method_name() != "printRaw" &&
+            call.method_name() != "testConnection") {
           result->NotImplemented();
           return;
         }
@@ -165,7 +166,9 @@ bool FlutterWindow::OnCreate() {
         const auto name_it =
             arguments->find(flutter::EncodableValue("printerName"));
         const auto bytes_it = arguments->find(flutter::EncodableValue("bytes"));
-        if (name_it == arguments->end() || bytes_it == arguments->end()) {
+        const bool connection_test = call.method_name() == "testConnection";
+        if (name_it == arguments->end() ||
+            (!connection_test && bytes_it == arguments->end())) {
           result->Error("USB_PRINTER_ARGUMENTS_INVALID",
                         "Printer name and raw bytes are required.");
           return;
@@ -173,9 +176,10 @@ bool FlutterWindow::OnCreate() {
         const auto* printer_name_utf8 =
             std::get_if<std::string>(&name_it->second);
         const auto* bytes =
-            std::get_if<std::vector<uint8_t>>(&bytes_it->second);
+            connection_test ? nullptr
+                            : std::get_if<std::vector<uint8_t>>(&bytes_it->second);
         if (printer_name_utf8 == nullptr || printer_name_utf8->empty() ||
-            bytes == nullptr || bytes->empty()) {
+            (!connection_test && (bytes == nullptr || bytes->empty()))) {
           result->Error("USB_PRINTER_ARGUMENTS_INVALID",
                         "Printer name and raw bytes must not be empty.");
           return;
@@ -198,6 +202,33 @@ bool FlutterWindow::OnCreate() {
 
         wchar_t document_name[] = L"GLOBOS POS Receipt";
         wchar_t data_type[] = L"RAW";
+        if (connection_test) {
+          DWORD needed = 0;
+          GetPrinterW(printer, 2, nullptr, 0, &needed);
+          std::vector<uint8_t> info_buffer(needed);
+          if (needed == 0 || !GetPrinterW(printer, 2, info_buffer.data(), needed,
+                                          &needed)) {
+            ClosePrinter(printer);
+            result->Error("USB_PRINTER_STATUS_FAILED",
+                          "Windows could not read the printer status.");
+            return;
+          }
+          const auto* info =
+              reinterpret_cast<const PRINTER_INFO_2W*>(info_buffer.data());
+          const DWORD unavailable = PRINTER_STATUS_OFFLINE |
+                                    PRINTER_STATUS_ERROR |
+                                    PRINTER_STATUS_NOT_AVAILABLE;
+          const bool online = (info->Status & unavailable) == 0;
+          ClosePrinter(printer);
+          if (!online) {
+            result->Error("USB_PRINTER_OFFLINE",
+                          "The Windows printer is offline or unavailable.");
+            return;
+          }
+          result->Success(flutter::EncodableValue(true));
+          return;
+        }
+
         DOC_INFO_1W document_info{};
         document_info.pDocName = document_name;
         document_info.pDatatype = data_type;

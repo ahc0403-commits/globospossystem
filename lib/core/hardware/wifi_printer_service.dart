@@ -5,8 +5,33 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'printer_service.dart';
+import 'printer_diagnostics.dart';
 
-class WifiPrinterService implements PrinterService, UsbPrinterService {
+typedef PrinterSocketConnector =
+    Future<Socket> Function(
+      String ip,
+      int port,
+      String? sourceAddress,
+      Duration timeout,
+    );
+
+class WifiPrinterService
+    implements PrinterService, UsbPrinterService, DiagnosticPrinterService {
+  WifiPrinterService({
+    PrinterSocketConnector? socketConnector,
+    Future<List<String>> Function(String)? sourceAddresses,
+  }) : _socketConnector = socketConnector ?? _openSocket,
+       _sourceAddresses = sourceAddresses;
+
+  final PrinterSocketConnector _socketConnector;
+  final Future<List<String>> Function(String)? _sourceAddresses;
+
+  static Future<Socket> _openSocket(
+    String ip,
+    int port,
+    String? sourceAddress,
+    Duration timeout,
+  ) => Socket.connect(ip, port, sourceAddress: sourceAddress, timeout: timeout);
   static const _usbPrinterChannel = MethodChannel('globos/usb_printer');
   static const connectionTimeout = Duration(seconds: 5);
   static const sourceAddressTimeout = Duration(seconds: 2);
@@ -17,20 +42,28 @@ class WifiPrinterService implements PrinterService, UsbPrinterService {
   bool get isSupported => !kIsWeb;
 
   @override
-  Future<bool> testConnection(String ip, {int port = 9100}) async {
-    if (kIsWeb) {
-      return false;
-    }
+  Future<bool> testConnection(String ip, {int port = 9100}) async =>
+      (await checkNetworkPrinter(ip, port: port)).result == PrintResult.success;
+
+  @override
+  Future<PrinterOperationStatus> checkNetworkPrinter(
+    String ip, {
+    int port = 9100,
+  }) async {
+    if (kIsWeb) return const PrinterOperationStatus(PrintResult.notSupported);
+    Socket? socket;
     try {
-      final socket = await _connectToPrinter(
-        ip,
+      socket = await _connectToPrinter(
+        ip.trim(),
         port,
         fallbackTimeout: const Duration(seconds: 3),
       );
-      await socket.close();
-      return true;
-    } catch (_) {
-      return false;
+      await socket.close().timeout(socketCloseTimeout);
+      return const PrinterOperationStatus(PrintResult.success);
+    } catch (error) {
+      return _failure(error);
+    } finally {
+      socket?.destroy();
     }
   }
 
@@ -39,40 +72,33 @@ class WifiPrinterService implements PrinterService, UsbPrinterService {
     String ip,
     List<int> bytes, {
     int port = 9100,
+  }) async => (await printNetworkPrinter(ip, bytes, port: port)).result;
+
+  @override
+  Future<PrinterOperationStatus> printNetworkPrinter(
+    String ip,
+    List<int> bytes, {
+    int port = 9100,
   }) async {
-    if (kIsWeb) {
-      return PrintResult.notSupported;
-    }
+    if (kIsWeb) return const PrinterOperationStatus(PrintResult.notSupported);
     if (bytes.isEmpty) {
-      return PrintResult.printFailed;
+      return const PrinterOperationStatus(PrintResult.printFailed);
     }
     Socket? socket;
+    var mayHavePrinted = false;
     try {
       socket = await _connectToPrinter(
-        ip,
+        ip.trim(),
         port,
         fallbackTimeout: connectionTimeout,
       );
+      mayHavePrinted = true;
       socket.add(bytes);
       await socket.flush().timeout(printFlushTimeout);
       await socket.close().timeout(socketCloseTimeout);
-      return PrintResult.success;
-    } on SocketException catch (error) {
-      return switch (error.osError?.errorCode) {
-        10061 || 61 || 111 => PrintResult.connectionRefused,
-        10060 || 60 || 110 => PrintResult.connectionTimeout,
-        10051 ||
-        10065 ||
-        51 ||
-        65 ||
-        101 ||
-        113 => PrintResult.networkUnreachable,
-        _ => PrintResult.connectionFailed,
-      };
-    } on TimeoutException {
-      return PrintResult.connectionTimeout;
-    } catch (_) {
-      return PrintResult.printFailed;
+      return const PrinterOperationStatus(PrintResult.success);
+    } catch (error) {
+      return _failure(error, mayHavePrinted: mayHavePrinted);
     } finally {
       socket?.destroy();
     }
@@ -82,21 +108,84 @@ class WifiPrinterService implements PrinterService, UsbPrinterService {
   Future<PrintResult> printUsbReceipt(
     String printerName,
     List<int> bytes,
-  ) async {
-    if (!Platform.isWindows || printerName.trim().isEmpty || bytes.isEmpty) {
-      return PrintResult.notSupported;
+  ) async => (await printWindowsPrinter(printerName, bytes)).result;
+
+  @override
+  Future<PrinterOperationStatus> checkUsbPrinter(String printerName) =>
+      _windowsPrinterOperation('testConnection', printerName);
+
+  @override
+  Future<PrinterOperationStatus> printWindowsPrinter(
+    String printerName,
+    List<int> bytes,
+  ) => _windowsPrinterOperation('printRaw', printerName, bytes: bytes);
+
+  Future<PrinterOperationStatus> _windowsPrinterOperation(
+    String method,
+    String printerName, {
+    List<int>? bytes,
+  }) async {
+    if (!Platform.isWindows) {
+      return const PrinterOperationStatus(PrintResult.notSupported);
+    }
+    if (printerName.trim().isEmpty || (bytes != null && bytes.isEmpty)) {
+      return const PrinterOperationStatus(
+        PrintResult.connectionFailed,
+        errorCode: 'PRINTER_CONFIGURATION_INVALID',
+      );
     }
     try {
-      final printed = await _usbPrinterChannel.invokeMethod<bool>('printRaw', {
+      final ok = await _usbPrinterChannel.invokeMethod<bool>(method, {
         'printerName': printerName.trim(),
-        'bytes': Uint8List.fromList(bytes),
+        if (bytes != null) 'bytes': Uint8List.fromList(bytes),
       });
-      return printed == true ? PrintResult.success : PrintResult.printFailed;
-    } on PlatformException {
-      return PrintResult.printFailed;
+      return PrinterOperationStatus(
+        ok == true ? PrintResult.success : PrintResult.printFailed,
+        mayHavePrinted: bytes != null,
+      );
+    } on PlatformException catch (error) {
+      return PrinterOperationStatus(
+        PrintResult.printFailed,
+        errorCode: error.code,
+        mayHavePrinted:
+            bytes != null && error.code == 'USB_PRINTER_WRITE_FAILED',
+      );
     } catch (_) {
-      return PrintResult.printFailed;
+      return PrinterOperationStatus(
+        PrintResult.printFailed,
+        errorCode: 'WINDOWS_PRINTER_UNAVAILABLE',
+        mayHavePrinted: bytes != null,
+      );
     }
+  }
+
+  PrinterOperationStatus _failure(Object error, {bool mayHavePrinted = false}) {
+    final result = switch (error) {
+      SocketException e => switch (e.osError?.errorCode) {
+        10061 || 61 || 111 => PrintResult.connectionRefused,
+        10060 || 60 || 110 => PrintResult.connectionTimeout,
+        10051 ||
+        10065 ||
+        51 ||
+        65 ||
+        101 ||
+        113 => PrintResult.networkUnreachable,
+        _ => PrintResult.connectionFailed,
+      },
+      TimeoutException() => PrintResult.connectionTimeout,
+      ArgumentError() => PrintResult.connectionFailed,
+      _ => PrintResult.printFailed,
+    };
+    return PrinterOperationStatus(
+      result,
+      errorCode: switch (error) {
+        SocketException e when e.osError != null =>
+          'SOCKET_${e.osError!.errorCode}',
+        ArgumentError() => 'PRINTER_CONFIGURATION_INVALID',
+        _ => null,
+      },
+      mayHavePrinted: mayHavePrinted,
+    );
   }
 
   Future<Socket> _connectToPrinter(
@@ -104,30 +193,31 @@ class WifiPrinterService implements PrinterService, UsbPrinterService {
     int port, {
     required Duration fallbackTimeout,
   }) async {
-    Object? lastError;
-    StackTrace? lastStackTrace;
-    for (final sourceAddress in await _printerSourceAddresses(ip)) {
-      try {
-        return await Socket.connect(
-          ip,
-          port,
-          sourceAddress: sourceAddress,
-          timeout: sourceAddressTimeout,
-        );
-      } catch (error, stackTrace) {
-        lastError = error;
-        lastStackTrace = stackTrace;
-      }
+    if (InternetAddress.tryParse(ip) == null || port <= 0 || port > 65535) {
+      throw ArgumentError('PRINTER_CONFIGURATION_INVALID');
     }
-
+    // Let Windows select its routed interface first. A VPN, virtual adapter or
+    // unrelated NIC must not delay a working default route to the printer.
     try {
-      return await Socket.connect(ip, port, timeout: fallbackTimeout);
-    } catch (error, stackTrace) {
-      lastError = error;
-      lastStackTrace = stackTrace;
+      return await _socketConnector(ip, port, null, fallbackTimeout);
+    } catch (defaultError, defaultStack) {
+      final addresses =
+          await (_sourceAddresses?.call(ip) ?? _printerSourceAddresses(ip))
+              .timeout(const Duration(seconds: 1), onTimeout: () => const []);
+      for (final sourceAddress in addresses.toSet().take(3)) {
+        try {
+          return await _socketConnector(
+            ip,
+            port,
+            sourceAddress,
+            sourceAddressTimeout,
+          );
+        } catch (_) {
+          // Connection failed before bytes were sent; bounded fallback is safe.
+        }
+      }
+      Error.throwWithStackTrace(defaultError, defaultStack);
     }
-
-    Error.throwWithStackTrace(lastError, lastStackTrace);
   }
 
   Future<List<String>> _printerSourceAddresses(String printerIp) async {

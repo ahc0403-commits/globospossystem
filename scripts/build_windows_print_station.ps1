@@ -108,7 +108,9 @@ try {
     "test/printer_network_endpoint_contract_test.dart",
     "test/cashier_receipt_print_contract_test.dart",
     "test/receipt_builder_contract_test.dart",
-    "test/wifi_printer_service_test.dart"
+    "test/wifi_printer_service_test.dart",
+    "test/print_station_connection_regression_test.dart",
+    "test/registered_receipt_printer_panel_test.dart"
   )
   Invoke-NativeCommand -FilePath "flutter" -Arguments @(
     "build",
@@ -139,6 +141,22 @@ try {
       throw "Required Visual C++ runtime was not bundled: $runtimeFile"
     }
   }
+
+  $sourceSha = (& git rev-parse HEAD).Trim()
+  if ($LASTEXITCODE -ne 0 -or $sourceSha -notmatch '^[0-9a-f]{40}$') {
+    throw "Could not identify the Windows package source commit."
+  }
+  @"
+GLOBOS POS Windows print station x64
+Source commit: $sourceSha
+
+Close the old app before installing. Extract this complete ZIP to a new folder.
+Keep globos_print_station.exe, all DLLs and the data folder together.
+Open Settings > Receipt and use the registered store receipt printer.
+Manual IP tests apply only to this PC and do not update store printer routing.
+Connection diagnostics show the attempted IP:port or Windows printer name.
+Confirm physical test output before starting normal use.
+"@ | Set-Content -LiteralPath (Join-Path $releaseDirectory "INSTALL.txt") -Encoding utf8
 
   New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
   Compress-Archive -Path (Join-Path $releaseDirectory "*") -DestinationPath $archivePath -Force
