@@ -318,6 +318,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
     [
       "storefront",
       "storefront_v2",
+      "storefront_v3",
       "create_session",
       "submit",
       "submit_v2",
@@ -325,6 +326,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "status_v8",
       "status_v9",
       "status_v10",
+      "status_v11",
       "decide_requirement",
       "resume_storefront",
       "resume_order",
@@ -492,7 +494,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    195,
+    200,
     "registered SQL error count",
   );
   assertEquals(

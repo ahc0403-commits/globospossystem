@@ -151,6 +151,47 @@ class DirectOrderCategory {
   }, languageCode);
 }
 
+class DirectOrderComboComponent {
+  const DirectOrderComboComponent({
+    required this.menuItemId,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    this.quantity = 1,
+    this.isTotalQuantity = false,
+  });
+  final String menuItemId, nameKo, nameVi, nameEn;
+  final int quantity;
+  final bool isTotalQuantity;
+  factory DirectOrderComboComponent.fromJson(Map<String, dynamic> json) =>
+      DirectOrderComboComponent(
+        menuItemId: _requiredString(json, 'menu_item_id'),
+        nameKo: _requiredString(json, 'name_ko'),
+        nameVi: _requiredString(json, 'name_vi'),
+        nameEn: _requiredString(json, 'name_en'),
+        quantity: _requiredNumber(json, 'quantity').toInt(),
+        isTotalQuantity: json['is_total_quantity'] == true,
+      );
+  String localizedName(String languageCode) => localizedMenuName({
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
+}
+
+List<DirectOrderComboComponent> _comboComponents(Object? raw) {
+  if (raw == null) return const [];
+  if (raw is! List) _invalidModel('combo_components');
+  return raw
+      .map((row) {
+        if (row is! Map) _invalidModel('combo_components');
+        return DirectOrderComboComponent.fromJson(
+          Map<String, dynamic>.from(row),
+        );
+      })
+      .toList(growable: false);
+}
+
 class DirectOrderMenuItem {
   const DirectOrderMenuItem({
     required this.id,
@@ -163,6 +204,10 @@ class DirectOrderMenuItem {
     required this.imageUrl,
     required this.vatCategory,
     required this.sortOrder,
+    this.isCombo = false,
+    this.comboDrinkChoiceCount = 0,
+    this.comboDrinkOptions = const [],
+    this.comboComponents = const [],
   });
 
   final String id;
@@ -175,6 +220,9 @@ class DirectOrderMenuItem {
   final String? imageUrl;
   final String vatCategory;
   final int sortOrder;
+  final bool isCombo;
+  final int comboDrinkChoiceCount;
+  final List<DirectOrderComboComponent> comboDrinkOptions, comboComponents;
 
   factory DirectOrderMenuItem.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
@@ -188,6 +236,10 @@ class DirectOrderMenuItem {
       'image_url',
       'vat_category',
       'sort_order',
+      'is_combo',
+      'combo_drink_choice_count',
+      'combo_drink_options',
+      'combo_components',
     });
     return DirectOrderMenuItem(
       id: _requiredString(json, 'id'),
@@ -200,6 +252,11 @@ class DirectOrderMenuItem {
       imageUrl: _optionalString(json, 'image_url'),
       vatCategory: _requiredString(json, 'vat_category'),
       sortOrder: _requiredNumber(json, 'sort_order').toInt(),
+      isCombo: json['is_combo'] == true,
+      comboDrinkChoiceCount:
+          (json['combo_drink_choice_count'] as num?)?.toInt() ?? 0,
+      comboDrinkOptions: _comboComponents(json['combo_drink_options']),
+      comboComponents: _comboComponents(json['combo_components']),
     );
   }
 
@@ -739,6 +796,7 @@ class DirectOrderItemSnapshot {
     this.note,
     this.noteTranslations = const {},
     this.translationStatus,
+    this.comboComponents = const [],
   });
 
   final String menuItemId;
@@ -750,6 +808,7 @@ class DirectOrderItemSnapshot {
   final String? note;
   final Map<String, dynamic> noteTranslations;
   final String? translationStatus;
+  final List<DirectOrderComboComponent> comboComponents;
   double get amount => unitPrice * quantity;
   String localizedName(String locale) => switch (locale) {
     'ko' => nameKo,
@@ -768,6 +827,7 @@ class DirectOrderItemSnapshot {
       'note',
       'note_translations',
       'translation_status',
+      'combo_components',
     });
     final quantity = _requiredNumber(json, 'quantity');
     final price = _requiredNumber(json, 'unit_price');
@@ -786,6 +846,7 @@ class DirectOrderItemSnapshot {
           ? Map<String, dynamic>.from(json['note_translations'] as Map)
           : const {},
       translationStatus: _optionalString(json, 'translation_status'),
+      comboComponents: _comboComponents(json['combo_components']),
     );
   }
 }

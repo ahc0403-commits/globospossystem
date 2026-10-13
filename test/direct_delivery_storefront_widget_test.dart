@@ -276,6 +276,7 @@ class _StorefrontFixtureService extends DirectOrderService {
     required String locale,
     required Map<String, int> cart,
     required Map<String, String> itemNotes,
+    Map<String, List<String>> comboDrinkChoices = const {},
     required DirectOrderAddress address,
     required bool rememberAddress,
     DirectOrderFulfillmentType fulfillmentType =
@@ -431,6 +432,84 @@ Future<void> _openAddress(WidgetTester tester, {bool fillDiners = true}) async {
 }
 
 void main() {
+  for (final count in [1, 2]) {
+    testWidgets(
+      'combo selects $count drinks and retains distinct choices across quantities',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        const cola = DirectOrderComboComponent(
+          menuItemId: 'cola',
+          nameKo: '콜라',
+          nameVi: 'Cola',
+          nameEn: 'Cola',
+        );
+        const tea = DirectOrderComboComponent(
+          menuItemId: 'tea',
+          nameKo: '차',
+          nameVi: 'Trà',
+          nameEn: 'Tea',
+        );
+        final item = DirectOrderMenuItem(
+          id: 'combo',
+          categoryId: 'popular',
+          nameKo: '콤보',
+          nameVi: 'Combo',
+          nameEn: 'Combo',
+          description: null,
+          price: 100000,
+          imageUrl: null,
+          vatCategory: 'food',
+          sortOrder: 1,
+          isCombo: true,
+          comboDrinkChoiceCount: count,
+          comboDrinkOptions: const [cola, tea],
+        );
+        final service = _StorefrontFixtureService(
+          defaultMenu: false,
+          extraItems: [item],
+        );
+        await tester.pumpWidget(
+          _fixtureApp(service: service, locale: const Locale('ko')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('direct_add_combo')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.byKey(const Key('direct_combo_confirm')),
+              )
+              .onPressed,
+          isNull,
+        );
+        for (var n = 0; n < count; n++) {
+          await tester.tap(
+            find.byKey(Key('direct_combo_plus_${n == 0 ? "cola" : "tea"}')),
+          );
+          await tester.pump();
+        }
+        await tester.tap(find.byKey(const Key('direct_combo_confirm')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('direct_combo_edit_combo')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('콜라 × 1'), findsOneWidget);
+        await _captureCustomerUi(tester, 'combo-selected-$count');
+        await tester.tap(find.byKey(const Key('direct_combo_edit_combo')));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(DirectOrderCopy('ko').comboDrinkCount(count, count)),
+          findsOneWidget,
+        );
+        await tester.tap(find.text(DirectOrderCopy('ko').close));
+        await tester.pumpAndSettle();
+        expect(service.fetchStorefrontCalls, 1);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets(
     'mobile customer confirms a pinned request without another detail read',
     (tester) async {
@@ -1900,6 +1979,13 @@ void main() {
         await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
         await tester.pumpAndSettle();
         final sheet = find.byKey(const Key('direct_customer_quote_sheet'));
+        expect(
+          find.descendant(
+            of: sheet,
+            matching: find.text(DirectOrderCopy(language).prepaidHelp),
+          ),
+          findsOneWidget,
+        );
         expect(
           find.descendant(
             of: sheet,

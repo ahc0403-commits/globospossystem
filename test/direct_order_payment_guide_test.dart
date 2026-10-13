@@ -69,6 +69,7 @@ class _Auth extends AuthNotifier {
 
 class _Staff extends DirectOrderStaffService {
   String state = 'awaiting_quote';
+  bool isPickup = false;
   int reads = 0, quoteCalls = 0, linkCalls = 0, uploads = 0;
   bool failRefresh = false,
       loseLink = false,
@@ -104,9 +105,13 @@ class _Staff extends DirectOrderStaffService {
         'state': state,
         'reference_code': 'DFIXTURE1',
         'delivery_policy_version': 2,
+        'fulfillment_type': isPickup ? 'pickup' : 'delivery',
       },
       'items': _data()['items'],
-      'delivery': {'method': 'delivery', 'diner_count': 1},
+      'delivery': {
+        'method': isPickup ? 'pickup' : 'delivery',
+        'diner_count': 1,
+      },
       'quotes': state == 'quoted' ? [quoteRow] : [],
       'amount_summary': {'finalized': state == 'quoted', 'amounts': _data()},
       'can_issue_order_link': true,
@@ -333,6 +338,30 @@ void main() {
       );
     }
   }
+  for (final pickup in [false, true]) {
+    testWidgets('one quote send action for ${pickup ? "pickup" : "delivery"}', (
+      tester,
+    ) async {
+      final service = _Staff()..isPickup = pickup;
+      await _pump(tester, service, _Documents());
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('direct_order_send_quote')),
+        300,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('direct_staff_detail_list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(DirectOrderCopy('en').sendQuote), findsOneWidget);
+      await tester.tap(find.byKey(const Key('direct_order_send_quote')));
+      await tester.pumpAndSettle();
+      expect(service.quoteCalls, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
   testWidgets(
     'first quote preserves committed final total when background refresh fails',
     (tester) async {
@@ -444,6 +473,45 @@ void main() {
       });
     },
   );
+  testWidgets('combo payment PDFs include selected components in all locales', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      const service = DirectOrderPaymentDocumentService();
+      final out = Directory('outputs/direct-order-combo-20261013');
+      await out.create(recursive: true);
+      final data = _data(lines: 1);
+      (data['items'] as List).single['combo_components'] = [
+        {
+          'name_ko': '떡볶이',
+          'name_vi': 'Tokbokki',
+          'name_en': 'Tteokbokki',
+          'quantity': 1,
+        },
+        {
+          'name_ko': '콜라',
+          'name_vi': 'Cola',
+          'name_en': 'Cola',
+          'quantity': 1,
+          'is_total_quantity': true,
+        },
+        {
+          'name_ko': '레몬차',
+          'name_vi': 'Trà chanh',
+          'name_en': 'Lemon tea',
+          'quantity': 1,
+          'is_total_quantity': true,
+        },
+      ];
+      for (final language in ['ko', 'vi', 'en']) {
+        final bytes = await service.buildPdf(data, language: language);
+        expect(bytes.length, greaterThan(1000));
+        await File(
+          '${out.path}/combo-payment-$language.pdf',
+        ).writeAsBytes(bytes);
+      }
+    });
+  });
   testWidgets('capture Vietnamese cashier payment controls', (tester) async {
     final service = _Staff()..state = 'quoted';
     await _pump(tester, service, _Documents(), locale: 'vi');

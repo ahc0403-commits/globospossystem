@@ -198,7 +198,7 @@ class DirectOrderStaffService {
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_detail_v7',
+        'direct_order_staff_detail_v8',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );

@@ -1996,6 +1996,10 @@ class _DirectOrderCashierScreenState
                             ? (item['item_note'] ?? item['note']).toString()
                             : _copy.noInstructions,
                       ),
+                      for (final component in _maps(item['combo_components']))
+                        Text(
+                          '${localizedDirectOrderSnapshotName(component, Localizations.localeOf(context).languageCode)} × ${_number(component['quantity']).toInt() * (component['is_total_quantity'] == true ? 1 : _number(item['quantity']).toInt())}',
+                        ),
                     ],
                   ),
                 ),
@@ -2014,7 +2018,7 @@ class _DirectOrderCashierScreenState
             icon: Icons.delivery_dining_outlined,
             child: Column(
               children: [
-                if (_recipientPolicy && !_isPickup)
+                if (_recipientPolicy && !_isPickup && quote == null)
                   Text(_copy.customerPaysDriverHelp),
                 if (!_recipientPolicy &&
                     supportMap(_detail?['support'])['delivery_fee_deferred'] !=
@@ -2054,6 +2058,7 @@ class _DirectOrderCashierScreenState
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
+                    key: const Key('direct_order_send_quote'),
                     onPressed: _busy || _hasPendingRequirements
                         ? null
                         : _sendQuote,
@@ -2070,13 +2075,6 @@ class _DirectOrderCashierScreenState
                   ),
               ],
             ),
-          ),
-        if (isPickup && (state == 'awaiting_quote' || state == 'quoted'))
-          FilledButton.icon(
-            key: const Key('direct_pickup_send_quote'),
-            onPressed: _busy || _hasPendingRequirements ? null : _sendQuote,
-            icon: const Icon(Icons.send_outlined),
-            label: Text(_copy.sendQuote),
           ),
         if (_isPickup && fulfillmentStatus == 'ready') ...[
           Text('${_copy.pickupCode}: ${fulfillment['pickup_code'] ?? ''}'),

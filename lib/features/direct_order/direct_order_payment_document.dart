@@ -109,9 +109,14 @@ class DirectOrderPaymentDocumentService {
 
   String _money(Object? amount) =>
       '${NumberFormat('#,##0.##', 'vi_VN').format(amount)} VND';
-  String _name(Map<String, dynamic> item, String locale) =>
-      (item['name_$locale'] ?? item['name_vi'] ?? item['display_name'] ?? '')
-          .toString();
+  String _name(Map<String, dynamic> item, String locale) {
+    final name =
+        (item['name_$locale'] ?? item['name_vi'] ?? item['display_name'] ?? '')
+            .toString();
+    final components = item['combo_components'];
+    if (components is! List || components.isEmpty) return name;
+    return '$name\n${components.whereType<Map>().map((c) => '${c['name_$locale'] ?? c['name_vi'] ?? c['label']} × ${(c['quantity'] as num).toInt() * (c['is_total_quantity'] == true ? 1 : (item['quantity'] as num).toInt())}').join(', ')}';
+  }
 
   Future<Uint8List> buildPdf(
     Map<String, dynamic> data, {
