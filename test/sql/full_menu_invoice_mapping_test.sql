@@ -50,6 +50,9 @@ DO $$DECLARE page jsonb; second jsonb; a jsonb; b jsonb; ids uuid[]; BEGIN
  a:=apply_invoice_mapping_policy_batch('20000000-0000-0000-0000-000000000001',ids);
  b:=apply_invoice_mapping_policy_batch('20000000-0000-0000-0000-000000000001',ids);
  PERFORM fixture_assert(a=b AND a->>'unchanged_count'='1','automatic mapping retry creates no new version');
+ BEGIN UPDATE menu_items SET restaurant_id='20000000-0000-0000-0000-000000000002' WHERE id=ids[1];
+ RAISE EXCEPTION 'HISTORICAL_STORE_MOVE_ACCEPTED'; EXCEPTION WHEN others THEN IF SQLERRM<>'INVOICE_APPROVED_MENU_STORE_IMMUTABLE' THEN RAISE; END IF; END;
+ PERFORM fixture_assert((SELECT restaurant_id='20000000-0000-0000-0000-000000000001'::uuid FROM menu_items WHERE id=ids[1]),'approved menu cannot rewrite historical store scope');
  UPDATE menu_items SET invoice_name_vi=NULL,invoice_unit_name=NULL WHERE id=ids[1];
  a:=apply_invoice_mapping_policy_batch('20000000-0000-0000-0000-000000000001',ids);
  PERFORM fixture_assert(a->>'unchanged_count'='1' AND (SELECT invoice_name_vi=name_vi AND invoice_unit_name='Phần' FROM menu_items WHERE id=ids[1]),'display mismatch repaired from actual profile without duplicate approval');

@@ -182,6 +182,12 @@ DECLARE changed jsonb; batch record;
 BEGIN
  IF TG_OP='INSERT' THEN SELECT jsonb_agg(jsonb_build_object('id',id,'store_id',restaurant_id)) INTO changed FROM invoice_new_menus;
  ELSE
+  -- The historical approved-profile view resolves store from the menu master.
+  -- Moving an approved ID would rewrite that history; copy to a new ID instead.
+  IF EXISTS(SELECT 1 FROM invoice_new_menus n JOIN invoice_old_menus o ON o.id=n.id
+   JOIN public.menu_invoice_profiles p ON p.menu_item_id=n.id WHERE n.restaurant_id IS DISTINCT FROM o.restaurant_id) THEN
+   RAISE EXCEPTION 'INVOICE_APPROVED_MENU_STORE_IMMUTABLE';
+  END IF;
   SELECT jsonb_agg(jsonb_build_object('id',n.id,'store_id',n.restaurant_id)) INTO changed FROM invoice_new_menus n JOIN invoice_old_menus o ON o.id=n.id
   WHERE (n.name_vi,n.category_id,n.is_combo,n.invoice_sale_unit,n.restaurant_id) IS DISTINCT FROM (o.name_vi,o.category_id,o.is_combo,o.invoice_sale_unit,o.restaurant_id)
    OR (o.is_archived AND NOT n.is_archived);
