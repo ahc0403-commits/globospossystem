@@ -60,19 +60,31 @@ $$;
 ALTER FUNCTION public.procurement_allowed_actions(public.inventory_purchase_requests,jsonb) RENAME TO procurement_pre_inbox_actions;
 REVOKE ALL ON FUNCTION public.procurement_pre_inbox_actions(public.inventory_purchase_requests,jsonb) FROM PUBLIC,anon,authenticated,service_role;
 CREATE FUNCTION public.procurement_allowed_actions(p_request public.inventory_purchase_requests,p_actor jsonb)
-RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
- SELECT COALESCE(jsonb_agg(a),'[]') FROM jsonb_array_elements(public.procurement_pre_inbox_actions(p_request,p_actor)) a
- WHERE NOT(p_request.approval_policy_version IN (2,3) AND public.procurement_inbox_same_identity(p_request.created_actor,p_actor)
-   AND a #>> '{}' IN ('adjust_request','store_approve','brand_approve','office_approve','senior_approve'))
- AND NOT(p_request.approval_policy_version IN (2,3) AND public.procurement_inbox_same_identity(p_request.store_approved_actor,p_actor)
-   AND a #>> '{}' IN ('brand_approve','office_approve','senior_approve'))
- AND NOT(p_request.approval_policy_version=2 AND public.procurement_inbox_same_identity(p_request.brand_approved_actor,p_actor)
-   AND a #>> '{}' IN ('office_approve','senior_approve'))
- AND NOT(p_request.approval_policy_version IN (2,3) AND public.procurement_inbox_same_identity(p_request.office_approved_actor,p_actor)
-   AND a #>> '{}'='senior_approve')
- AND NOT(p_request.approval_policy_version=3 AND a #>> '{}' IN ('brand_approve','senior_approve'))
- AND NOT(p_request.approval_policy_version=3 AND p_actor->>'role' IN ('brand_admin','brand_manager') AND a #>> '{}' IN ('adjust_request','store_approve','office_approve','return_request'))
-$$;
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
+DECLARE actions jsonb:=public.procurement_pre_inbox_actions(p_request,p_actor);
+BEGIN
+ IF p_request.approval_policy_version IN (2,3) THEN
+  IF public.procurement_inbox_same_identity(p_request.created_actor,p_actor) THEN
+   actions:=actions-ARRAY['adjust_request','store_approve','brand_approve','office_approve','senior_approve'];
+  END IF;
+  IF public.procurement_inbox_same_identity(p_request.store_approved_actor,p_actor) THEN
+   actions:=actions-ARRAY['brand_approve','office_approve','senior_approve'];
+  END IF;
+  IF p_request.approval_policy_version=2 AND public.procurement_inbox_same_identity(p_request.brand_approved_actor,p_actor) THEN
+   actions:=actions-ARRAY['office_approve','senior_approve'];
+  END IF;
+  IF public.procurement_inbox_same_identity(p_request.office_approved_actor,p_actor) THEN
+   actions:=actions-'senior_approve';
+  END IF;
+ END IF;
+ IF p_request.approval_policy_version=3 THEN
+  actions:=actions-ARRAY['brand_approve','senior_approve'];
+  IF p_actor->>'role' IN ('brand_admin','brand_manager') THEN
+   actions:=actions-ARRAY['adjust_request','store_approve','office_approve','return_request'];
+  END IF;
+ END IF;
+ RETURN COALESCE(actions,'[]');
+END $$;
 REVOKE ALL ON FUNCTION public.procurement_inbox_stage(public.inventory_purchase_requests,jsonb),public.procurement_inbox_same_identity(jsonb,jsonb),public.procurement_allowed_actions(public.inventory_purchase_requests,jsonb) FROM PUBLIC,anon,authenticated;
 CREATE OR REPLACE FUNCTION public.procurement_workspace_page_core(p_store_id uuid,p_query jsonb DEFAULT '{}',p_office_actor jsonb DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,auth AS $$
@@ -289,10 +301,9 @@ BEGIN
  FROM public.procurement_role_roster rr WHERE rr.restaurant_id=ANY((SELECT array_agg(store_id) FROM scopes)::uuid[]) AND rr.valid_from<=now() AND rr.valid_until>now()
  GROUP BY rr.restaurant_id),
  actors AS MATERIALIZED(SELECT s.store_id,s.actor||jsonb_build_object('identity_people',COALESCE(p.identities,'{}'),'person_id',p.identities->((s.actor->>'system')||':'||(s.actor->>'subject_id'))) actor FROM scopes s LEFT JOIN people p ON p.restaurant_id=s.store_id),
- scoped_requests AS MATERIALIZED(SELECT r.* FROM public.inventory_purchase_requests r WHERE r.restaurant_id=ANY((SELECT array_agg(store_id) FROM scopes)::uuid[]) AND r.status IN ('submitted','brand_review','office_review','senior_review')),
- pending AS MATERIALIZED(SELECT r.*,a.actor,CASE WHEN COALESCE(pol.enabled,false) THEN public.procurement_allowed_actions(jsonb_populate_record(NULL::public.inventory_purchase_requests,to_jsonb(r)),a.actor) ELSE '[]'::jsonb END actions FROM scoped_requests r JOIN actors a ON a.store_id=r.restaurant_id LEFT JOIN public.procurement_store_policies pol ON pol.restaurant_id=r.restaurant_id
- WHERE r.status IN ('submitted','brand_review','office_review','senior_review')),
- page AS(SELECT * FROM pending r WHERE public.procurement_inbox_stage(jsonb_populate_record(NULL::public.inventory_purchase_requests,to_jsonb(r)),r.actor)
+ scoped_requests AS MATERIALIZED(SELECT r AS request FROM public.inventory_purchase_requests r WHERE r.restaurant_id=ANY((SELECT array_agg(store_id) FROM scopes)::uuid[]) AND r.status IN ('submitted','brand_review','office_review','senior_review')),
+ pending AS MATERIALIZED(SELECT (r.request).*,r.request,a.actor,CASE WHEN COALESCE(pol.enabled,false) THEN public.procurement_allowed_actions(r.request,a.actor) ELSE '[]'::jsonb END actions FROM scoped_requests r JOIN actors a ON a.store_id=(r.request).restaurant_id LEFT JOIN public.procurement_store_policies pol ON pol.restaurant_id=(r.request).restaurant_id),
+ page AS(SELECT * FROM pending r WHERE public.procurement_inbox_stage(r.request,r.actor)
  AND(NULLIF(p_query->>'request_before','') IS NULL OR(COALESCE(r.submitted_at,r.created_at),r.id)>((p_query->>'request_before')::timestamptz,(p_query->>'request_before_id')::uuid))
  ORDER BY COALESCE(submitted_at,created_at),id LIMIT lim+1)
  SELECT jsonb_build_object('contract_version',2,'read_contract','approval_inbox','request_sort','submitted',
@@ -302,7 +313,7 @@ BEGIN
   FROM(SELECT * FROM page ORDER BY COALESCE(submitted_at,created_at),id LIMIT lim)p),'[]'),
  'request_has_more',(SELECT count(*)>lim FROM page),
  'approval_counts',(SELECT jsonb_build_object('pending',count(*),'actionable',count(*) FILTER(WHERE actions ?| ARRAY['store_approve','brand_approve','office_approve','senior_approve']),
- 'blocked',count(*) FILTER(WHERE public.procurement_inbox_stage(jsonb_populate_record(NULL::public.inventory_purchase_requests,to_jsonb(r)),r.actor)
+ 'blocked',count(*) FILTER(WHERE public.procurement_inbox_stage(r.request,r.actor)
   AND NOT(actions ?| ARRAY['store_approve','brand_approve','office_approve','senior_approve']))) FROM pending r)) INTO result;
  RETURN result;
 END $$;
