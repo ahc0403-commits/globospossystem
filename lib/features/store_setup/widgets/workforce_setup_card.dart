@@ -100,6 +100,34 @@ class WorkforceSetupCard extends StatelessWidget {
                 context.l10n.storeSetupSuperAdminRole,
               ),
             ),
+            if (readiness?['procurement_readiness'] is Map) ...[
+              const SizedBox(height: 12),
+              Text(context.l10n.storeSetupProcurementReadiness),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final entry in <String, String>{
+                    'requester': context.l10n.storeSetupProcurementRequester,
+                    'store_manager': context.l10n.storeSetupProcurementManager,
+                    'receiver': context.l10n.storeSetupProcurementReceiver,
+                    'accounting': context.l10n.storeSetupProcurementAccounting,
+                    'office_connected':
+                        context.l10n.storeSetupProcurementOffice,
+                  }.entries)
+                    Chip(
+                      avatar: Icon(
+                        (readiness!['procurement_readiness']
+                                    as Map)[entry.key] ==
+                                true
+                            ? Icons.check_circle
+                            : Icons.hourglass_empty,
+                        size: 16,
+                      ),
+                      label: Text(entry.value),
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             Wrap(
               spacing: 18,
@@ -256,8 +284,11 @@ class WorkforceSetupCard extends StatelessWidget {
                       onPressed: () => setDialogState(() {
                         managementModel = 'store_managed';
                         slotsController.text = '1';
-                        templates = WorkforcePresetCatalog.bunsik(
-                          shortCodeController.text,
+                        templates = WorkforcePresetCatalog.preserveExisting(
+                          WorkforcePresetCatalog.bunsik(
+                            shortCodeController.text,
+                          ),
+                          _templatesFromReadiness(readiness),
                         );
                       }),
                       child: Text(context.l10n.storeSetupBunsikPreset),

@@ -4283,4 +4283,11 @@
   "printerDiagnosticGeneric": "인쇄 연결에 실패했습니다. 아래 연결 대상과 오류를 확인하세요.",
   "printerDiagnosticPartial": "일부 데이터가 이미 전송됐을 수 있어 자동으로 재출력하지 않았습니다. 종이 출력을 확인한 뒤 다시 시험하세요.",
   "printerDiagnosticAccepted": "연결 또는 데이터 전송을 완료했습니다. 실제 종이 출력은 프린터에서 확인하세요."
+,
+  "storeSetupProcurementReadiness": "구매 업무 연결 상태",
+  "storeSetupProcurementRequester": "PR 작성자",
+  "storeSetupProcurementManager": "스토어 매니저",
+  "storeSetupProcurementReceiver": "입고 담당자",
+  "storeSetupProcurementAccounting": "회계",
+  "storeSetupProcurementOffice": "Office 연결"
 }

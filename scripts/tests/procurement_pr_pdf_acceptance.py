@@ -18,7 +18,7 @@ def compact(text):
 
 
 for locale, (quote, calculation, pending, total, approved_at) in labels.items():
-    for count in (1, 11, 50):
+    for count in (1, 11, 20, 50, 200):
         file = directory / f"pr-{count}-{locale}.pdf"
         reader = PdfReader(file)
         pages = [compact(page.extract_text()) for page in reader.pages]
@@ -32,8 +32,8 @@ for locale, (quote, calculation, pending, total, approved_at) in labels.items():
         assert compact(pending) in pages[-1], file
         assert f"{count * 13333.32:,.2f}".rstrip("0").rstrip(".") in pages[-1], file
         for index, page in enumerate(reader.pages, 1):
-            assert abs(float(page.mediabox.width) - 595.28) < 1, file
-            assert abs(float(page.mediabox.height) - 841.89) < 1, file
+            assert abs(float(page.mediabox.width) - 841.89) < 1, file
+            assert abs(float(page.mediabox.height) - 595.28) < 1, file
             assert "PR-EXAMPLE-20261007" in pages[index - 1], file
             assert f"{index}/{len(pages)}" in pages[index - 1], file
         print(f"PASS: {file.name}; {len(pages)} A4 pages, dates, precision, final summary and pending approval")
@@ -49,3 +49,13 @@ for locale, (quote, calculation, pending, total, approved_at) in labels.items():
     assert "2026-10-07" in text and "2026-10-09" in text, file
     assert "13,333.32" not in text, f"Partial known line must not become a complete total: {file}"
     print(f"PASS: {file.name}; missing price and three incomplete totals; three pending approvals")
+
+for locale in labels:
+    file = directory / f'internal-pr-{locale}.pdf'
+    if not file.exists():
+        import tempfile
+        file = pathlib.Path(tempfile.gettempdir()) / 'procurement-pdf-globos_pos_system' / f'internal-pr-{locale}.pdf'
+    text = ''.join(page.extract_text() for page in PdfReader(file).pages)
+    assert 'WR000' in text and 'WR199' in text
+    assert 'Mã nguyên liệu' not in text and 'Raw material code' not in text and '원재료 코드' not in text
+print('PASS: PR real code only, landscape, all 200 rows retained')

@@ -69,6 +69,7 @@ class _Inventory extends InventoryService {
   int detailLoads = 0;
   int listLoads = 0;
   bool failNext = false;
+  bool canFinalizeReceipt = false;
   bool combinedReceiving = false;
   final submissions = <Map<String, dynamic>>[];
   List<Map<String, dynamic>>? verifiedLines;
@@ -187,6 +188,7 @@ class _Inventory extends InventoryService {
     return {
       'order': Map<String, dynamic>.from(order),
       'can_receive_and_confirm': combinedReceiving,
+      'can_finalize_receipt': canFinalizeReceipt,
       'lines': lines,
       'receipts': [Map<String, dynamic>.from(receipt)],
       'documents': [],
@@ -430,6 +432,7 @@ void main() {
     (tester) async {
       final service = _Inventory();
       service.order['commercial_terms'] = {'approval_policy_version': 3};
+      service.canFinalizeReceipt = true;
       service.lines.removeRange(1, service.lines.length);
       service.receipt['received_by'] = 'actor';
       service.receipt['submitted_at'] = '2026-10-13T12:00:00Z';

@@ -37,6 +37,28 @@ abstract final class WorkforcePresetCatalog {
   static const andreEmail = 'andre@globos.world';
   static const andreRole = 'super_admin';
 
+  /// Reapplying a preset preserves configured identities, including old SM codes.
+  static List<WorkforceAccountTemplate> preserveExisting(
+    List<WorkforceAccountTemplate> preset,
+    List<WorkforceAccountTemplate> existing,
+  ) {
+    String purpose(WorkforceAccountTemplate value) =>
+        value.accountCode.endsWith('_pr1') ? 'requester' : value.accountType;
+    final result = <WorkforceAccountTemplate>[];
+    for (final proposed in preset) {
+      final matches = existing.where(
+        (value) =>
+            value.role == proposed.role &&
+            value.scope == proposed.scope &&
+            purpose(value) == purpose(proposed),
+      );
+      result.add(matches.isEmpty ? proposed : matches.first);
+    }
+    final codes = result.map((value) => value.accountCode).toSet();
+    result.addAll(existing.where((value) => codes.add(value.accountCode)));
+    return result;
+  }
+
   static List<WorkforceAccountTemplate> photo(String shortCode) {
     final short = shortCode.trim().toLowerCase().replaceAll(
       RegExp('[^a-z0-9_]'),
@@ -82,11 +104,11 @@ abstract final class WorkforcePresetCatalog {
         displayName: 'Bunsik Brand Manager',
         scope: 'brand',
       ),
-      const WorkforceAccountTemplate(
-        accountCode: 'bunsik_sm1',
+      WorkforceAccountTemplate(
+        accountCode: '${prefix}_sm1',
         accountType: 'store_manager',
         role: 'store_admin',
-        displayName: 'Bunsik Store Manager',
+        displayName: '${prefix.toUpperCase()} Store Manager',
         scope: 'store',
       ),
       WorkforceAccountTemplate(
@@ -108,6 +130,13 @@ abstract final class WorkforcePresetCatalog {
         accountType: 'device_kitchen',
         role: 'kitchen',
         displayName: '${prefix.toUpperCase()} Kitchen',
+        scope: 'store',
+      ),
+      WorkforceAccountTemplate(
+        accountCode: '${prefix}_pr1',
+        accountType: 'inventory_orderer',
+        role: 'inventory_orderer',
+        displayName: '${prefix.toUpperCase()} Purchase Requester',
         scope: 'store',
       ),
       WorkforceAccountTemplate(

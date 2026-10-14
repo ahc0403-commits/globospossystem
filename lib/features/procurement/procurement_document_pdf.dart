@@ -59,6 +59,84 @@ Future<Uint8List> buildProcurementDocumentPdf(
     return '\n${copy('carryShortage')}: ${procurementNumber(line['shortage_quantity'], decimals: 3)} ${text(line[supplier ? 'unit' : 'requested_unit'])} · ${sources.map((s) => s['purchase_order_no']).where((s) => s != null).join(', ')}';
   }
 
+  String internalItem(Map line) {
+    final code =
+        (line['product_code'] ?? line['product_code_snapshot'])
+            ?.toString()
+            .trim() ??
+        '';
+    final specification = line['specification_snapshot']?.toString() ?? '';
+    return '${text(line['product_name'])}${code.isEmpty ? '' : '\n$code'}${carryText(line)}${specification.isEmpty ? '' : '\n$specification'}';
+  }
+
+  final tableRows = [
+    for (var i = 0; i < lines.length; i++)
+      if (supplier)
+        [
+          '${text(lines[i]['product_name'])}\n${copy('productCode')}: ${text(lines[i]['product_code'])}${carryText(lines[i])}',
+          text(lines[i]['specification']),
+          procurementNumber(lines[i]['quantity'], decimals: 3),
+          text(lines[i]['unit']),
+          text(lines[i]['memo']),
+        ]
+      else
+        [
+          '${i + 1}',
+          internalItem(lines[i]),
+          procurementNumber(lines[i]['requested_quantity'], decimals: 3),
+          text(lines[i]['requested_unit']),
+          procurementNumber(lines[i]['current_stock_snapshot'], decimals: 3),
+          lines[i]['estimated_unit_price'] == null
+              ? copy('quoteNeeded')
+              : procurementNumber(procurementDisplayUnitPrice(lines[i])),
+          estimate(lines[i]) == null
+              ? copy('quoteNeeded')
+              : procurementNumber(estimate(lines[i])),
+          text(lines[i]['memo']),
+        ],
+  ];
+  final scalarWidths = <int, double>{
+    0: 35,
+    2: 62,
+    3: 72,
+    4: 66,
+    5: 84,
+    6: 84,
+    7: 71,
+  };
+  var itemWidth = 151.0;
+  if (!supplier) {
+    final metrics = font.getFont(pw.Context(document: doc.document));
+    final headers = [
+      copy('lineNo'),
+      copy('item'),
+      copy('quantity'),
+      copy('unit'),
+      copy('stock'),
+      copy('estimate'),
+      copy('amount'),
+      copy('notes'),
+    ];
+    for (final row in [headers, ...tableRows]) {
+      for (var column = 0; column < 7; column++) {
+        for (final line in row[column].toString().split('\n')) {
+          final required = metrics.stringMetrics(line).advanceWidth * 8 + 12;
+          if (column == 1) {
+            if (required > itemWidth) itemWidth = required;
+          } else if (required > scalarWidths[column]!) {
+            scalarWidths[column] = required;
+          }
+        }
+      }
+    }
+  }
+  final requiredWidth =
+      scalarWidths.values.fold<double>(itemWidth, (a, b) => a + b) + 72;
+  final prFormat = requiredWidth <= PdfPageFormat.a4.landscape.width
+      ? PdfPageFormat.a4.landscape
+      : requiredWidth <= PdfPageFormat.a3.landscape.width
+      ? PdfPageFormat.a3.landscape
+      : PdfPageFormat(requiredWidth, PdfPageFormat.a3.landscape.height);
   final no = text(data[supplier ? 'purchase_order_no' : 'request_no']);
   final ink = PdfColor.fromHex('#172B3B');
   final pale = PdfColor.fromHex('#EFF4F7');
@@ -96,7 +174,7 @@ Future<Uint8List> buildProcurementDocumentPdf(
   );
   doc.addPage(
     pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
+      pageFormat: supplier ? PdfPageFormat.a4 : prFormat,
       margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 40),
       maxPages: 100,
       theme: pw.ThemeData.withFont(
@@ -235,13 +313,12 @@ Future<Uint8List> buildProcurementDocumentPdf(
             fontWeight: pw.FontWeight.bold,
           ),
           cellStyle: const pw.TextStyle(fontSize: 8),
-          cellBuilder: (column, value, row) => column == (supplier ? 3 : 3)
-              ? pw.FittedBox(
-                  fit: pw.BoxFit.scaleDown,
-                  child: pw.Text(
-                    value.toString(),
-                    style: const pw.TextStyle(fontSize: 8),
-                  ),
+          cellBuilder: (column, value, row) =>
+              (supplier ? column == 3 : [0, 2, 3, 4, 5, 6].contains(column))
+              ? pw.Text(
+                  value.toString(),
+                  style: const pw.TextStyle(fontSize: 8),
+                  maxLines: 1,
                 )
               : null,
           cellPadding: const pw.EdgeInsets.symmetric(
@@ -264,14 +341,9 @@ Future<Uint8List> buildProcurementDocumentPdf(
                   4: const pw.FlexColumnWidth(2),
                 }
               : {
-                  0: const pw.FixedColumnWidth(22),
-                  1: const pw.FixedColumnWidth(151),
-                  2: const pw.FixedColumnWidth(35),
-                  3: const pw.FixedColumnWidth(72),
-                  4: const pw.FixedColumnWidth(42),
-                  5: const pw.FixedColumnWidth(65),
-                  6: const pw.FixedColumnWidth(65),
-                  7: const pw.FixedColumnWidth(71),
+                  for (final entry in scalarWidths.entries)
+                    entry.key: pw.FixedColumnWidth(entry.value),
+                  1: const pw.FlexColumnWidth(),
                 },
           cellAlignments: supplier
               ? {2: pw.Alignment.topRight}
@@ -283,40 +355,7 @@ Future<Uint8List> buildProcurementDocumentPdf(
                   5: pw.Alignment.topRight,
                   6: pw.Alignment.topRight,
                 },
-          data: [
-            for (var i = 0; i < lines.length; i++)
-              if (supplier)
-                [
-                  '${text(lines[i]['product_name'])}\n${copy('productCode')}: ${text(lines[i]['product_code'])}${carryText(lines[i])}',
-                  text(lines[i]['specification']),
-                  procurementNumber(lines[i]['quantity'], decimals: 3),
-                  text(lines[i]['unit']),
-                  text(lines[i]['memo']),
-                ]
-              else
-                [
-                  '${i + 1}',
-                  '${text(lines[i]['product_name'])}\n${copy('productCode')}: ${text(lines[i]['product_code'] ?? lines[i]['product_code_snapshot'])}${carryText(lines[i])}${(lines[i]['specification_snapshot']?.toString() ?? '').isEmpty ? '' : '\n${lines[i]['specification_snapshot']}'}',
-                  procurementNumber(
-                    lines[i]['requested_quantity'],
-                    decimals: 3,
-                  ),
-                  text(lines[i]['requested_unit']),
-                  procurementNumber(
-                    lines[i]['current_stock_snapshot'],
-                    decimals: 3,
-                  ),
-                  lines[i]['estimated_unit_price'] == null
-                      ? copy('quoteNeeded')
-                      : procurementNumber(
-                          procurementDisplayUnitPrice(lines[i]),
-                        ),
-                  estimate(lines[i]) == null
-                      ? copy('quoteNeeded')
-                      : procurementNumber(estimate(lines[i])),
-                  text(lines[i]['memo']),
-                ],
-          ],
+          data: tableRows,
         ),
         if (!supplier)
           pw.Table(

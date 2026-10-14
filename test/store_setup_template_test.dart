@@ -2,6 +2,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/store_setup/store_setup_models.dart';
 
 void main() {
+  test(
+    'new stores receive distinct local SM/requester/receiver codes and preserve old configured IDs',
+    () {
+      final a = WorkforcePresetCatalog.bunsik('A7');
+      final b = WorkforcePresetCatalog.bunsik('B8');
+      final localA = a
+          .where((v) => v.scope == 'store')
+          .map((v) => v.accountCode)
+          .toSet();
+      final localB = b
+          .where((v) => v.scope == 'store')
+          .map((v) => v.accountCode)
+          .toSet();
+      expect(localA.intersection(localB), isEmpty);
+      expect(localA, containsAll(['a7_sm1', 'a7_pr1', 'a7_order']));
+      expect(
+        a.where(
+          (v) => v.role == 'inventory_accounting' || v.role == 'super_admin',
+        ),
+        isEmpty,
+      );
+      const old = WorkforceAccountTemplate(
+        accountCode: 'bunsik_sm1',
+        accountType: 'store_manager',
+        role: 'store_admin',
+        displayName: 'Existing SM',
+        scope: 'store',
+      );
+      final merged = WorkforcePresetCatalog.preserveExisting(a, [old]);
+      expect(
+        merged.where((v) => v.role == 'store_admin').single.accountCode,
+        'bunsik_sm1',
+      );
+      expect(merged.map((v) => v.accountCode).toSet().length, merged.length);
+    },
+  );
   test('3-floor template maps four physical printers to five routes', () {
     final printers = StoreOpeningTemplate.defaultPrinters();
     printers[PhysicalPrinterSlot.cashier] =
