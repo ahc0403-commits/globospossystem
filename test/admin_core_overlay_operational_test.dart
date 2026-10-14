@@ -25,6 +25,7 @@ import 'package:globos_pos_system/features/admin/providers/staff_provider.dart';
 import 'package:globos_pos_system/features/admin/providers/tables_provider.dart';
 import 'package:globos_pos_system/features/admin/menu_import/menu_excel_roundtrip.dart';
 import 'package:globos_pos_system/features/admin/tabs/menu_tab.dart';
+import 'package:globos_pos_system/features/restaurant_sales_export/invoice_mapping_service.dart';
 import 'package:globos_pos_system/features/admin/tabs/attendance_tab.dart';
 import 'package:globos_pos_system/features/admin/tabs/qc_tab.dart';
 import 'package:globos_pos_system/features/admin/tabs/settings_tab.dart';
@@ -298,6 +299,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameEn,
     String? paperlessNameVi,
     BeverageTax? beverageTax,
+    String? invoiceSaleUnit,
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
@@ -891,6 +893,39 @@ void _expectDialogButtonsAreTouchSized(WidgetTester tester, Key dialogKey) {
 }
 
 void main() {
+  testWidgets(
+    'admin_menu_invoice_catalog_action opens the complete master catalog',
+    (tester) async {
+      final notifier = _MenuNotifier();
+      var reads = 0;
+      final service = InvoiceMappingService((name, params) async {
+        expect(name, 'get_invoice_mapping_catalog');
+        reads++;
+        return {
+          'total_count': 0,
+          'mapped_count': 0,
+          'missing_count': 0,
+          'catalog_revision': 'fixture',
+          'rows': [],
+          'stores': [],
+          'entities': [],
+        };
+      });
+      await _pump(
+        tester,
+        child: MenuTab(invoiceMappingService: service),
+        authState: _authState.copyWith(role: 'super_admin'),
+        overrides: [menuProvider.overrideWith((ref, storeId) => notifier)],
+      );
+      await tester.tap(
+        find.byKey(const Key('admin_menu_invoice_catalog_action')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('invoice_catalog_counts')), findsOneWidget);
+      expect(reads, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
@@ -1257,13 +1292,30 @@ void main() {
       );
       await tester.enterText(addFields.at(0), '연유 커피');
       await tester.enterText(addFields.at(1), 'Cà phê sữa');
-      await tester.enterText(addFields.at(2), 'Cà phê sữa KDS');
-      await tester.enterText(addFields.at(3), 'Milk coffee');
-      await tester.enterText(addFields.at(4), '45000');
+      await tester.enterText(
+        find.byKey(const Key('admin_menu_item_invoice_sale_unit')),
+        'Suất',
+      );
+      await tester.enterText(
+        find.byKey(const Key('admin_menu_item_paperless_name_vi')),
+        'Cà phê sữa KDS',
+      );
+      await tester.enterText(
+        find.byKey(const Key('admin_menu_item_name_en')),
+        'Milk coffee',
+      );
+      await tester.enterText(
+        find.byKey(const Key('admin_menu_item_price')),
+        '45000',
+      );
       await tester.tap(find.byKey(const Key('admin_menu_combo_toggle')));
       await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const Key('admin_menu_combo_component_$_menuItemId')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('admin_menu_combo_drink_count')),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('admin_menu_combo_drink_count')));

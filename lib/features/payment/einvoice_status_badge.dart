@@ -62,18 +62,20 @@ class _BadgeRow extends StatelessWidget {
     _ => Icons.receipt_long,
   };
 
-  String get _label => switch (job.status) {
-    'pending' => 'Invoice: Queued',
-    'pending_manual_config' => 'Invoice: Config',
-    'dispatch_paused' => 'Invoice: Paused',
-    'sent_to_misa' => 'Invoice: Sent',
-    'sent_to_tax_authority' => 'Invoice: Tax sent',
-    'valid_invoice' =>
-      job.redinvoiceRequested ? 'Red Invoice: Issued' : 'Invoice: Issued',
-    'failed' => 'Invoice: Failed',
-    'manual_action_required' => 'Invoice: Review',
-    _ => 'Invoice: Unknown',
-  };
+  String get _label => job.needsInvoiceMapping
+      ? 'Invoice: Mapping review'
+      : switch (job.status) {
+          'pending' => 'Invoice: Queued',
+          'pending_manual_config' => 'Invoice: Config',
+          'dispatch_paused' => 'Invoice: Paused',
+          'sent_to_misa' => 'Invoice: Sent',
+          'sent_to_tax_authority' => 'Invoice: Tax sent',
+          'valid_invoice' =>
+            job.redinvoiceRequested ? 'Red Invoice: Issued' : 'Invoice: Issued',
+          'failed' => 'Invoice: Failed',
+          'manual_action_required' => 'Invoice: Review',
+          _ => 'Invoice: Unknown',
+        };
 
   @override
   Widget build(BuildContext context) {

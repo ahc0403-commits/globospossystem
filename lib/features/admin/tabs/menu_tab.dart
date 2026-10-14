@@ -1,5 +1,7 @@
 import '../../auth/auth_provider.dart';
 import '../widgets/invoice_profile_editor.dart';
+import '../widgets/invoice_mapping_catalog_dialog.dart';
+import '../../restaurant_sales_export/invoice_mapping_service.dart';
 import '../../../core/payments/beverage_tax.dart';
 import '../widgets/beverage_tax_editor.dart';
 import '../../../core/i18n/menu_localization.dart';
@@ -33,10 +35,16 @@ typedef MenuExportFileSaver =
     Future<void> Function(String fileName, Uint8List bytes);
 
 class MenuTab extends ConsumerStatefulWidget {
-  const MenuTab({super.key, this.pickImportFile, this.saveExportFile});
+  const MenuTab({
+    super.key,
+    this.pickImportFile,
+    this.saveExportFile,
+    this.invoiceMappingService,
+  });
 
   final MenuImportFilePicker? pickImportFile;
   final MenuExportFileSaver? saveExportFile;
+  final InvoiceMappingService? invoiceMappingService;
 
   @override
   ConsumerState<MenuTab> createState() => _MenuTabState();
@@ -289,6 +297,34 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     ? WrapAlignment.start
                     : WrapAlignment.end,
                 children: [
+                  if (ref.watch(authProvider).role == 'super_admin')
+                    OutlinedButton.icon(
+                      key: const Key('admin_menu_invoice_catalog_action'),
+                      onPressed: () async {
+                        await showDialog<void>(
+                          context: context,
+                          builder: (_) => InvoiceMappingCatalogDialog(
+                            service: widget.invoiceMappingService,
+                          ),
+                        );
+                        if (mounted) {
+                          final storeId = ref.read(adminScopedStoreIdProvider);
+                          if (storeId != null) {
+                            await ref
+                                .read(menuProvider(storeId).notifier)
+                                .fetchItems();
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                      label: Text(switch (Localizations.localeOf(
+                        context,
+                      ).languageCode) {
+                        'vi' => 'Ánh xạ hóa đơn toàn bộ menu',
+                        'en' => 'Full menu invoice mapping',
+                        _ => '전체 메뉴 계산서 매핑',
+                      }),
+                    ),
                   OutlinedButton.icon(
                     key: const Key('admin_menu_export_excel_action'),
                     onPressed: onExportExcel,
@@ -1089,6 +1125,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final l10n = context.l10n;
     final nameKoController = TextEditingController();
     final nameViController = TextEditingController();
+    final invoiceUnitController = TextEditingController();
     final paperlessNameViController = TextEditingController();
     final nameEnController = TextEditingController();
     final priceController = TextEditingController();
@@ -1134,6 +1171,22 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
+                    key: const Key('admin_menu_item_invoice_sale_unit'),
+                    controller: invoiceUnitController,
+                    maxLength: 40,
+                    decoration: InputDecoration(
+                      labelText: switch (Localizations.localeOf(
+                        context,
+                      ).languageCode) {
+                        'vi' =>
+                          'Đơn vị hóa đơn (trống: theo chính sách đã duyệt)',
+                        'en' => 'Invoice unit (blank: approved policy)',
+                        _ => '계산서 단위 (빈값: 승인된 정책 사용)',
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
                     key: const Key('admin_menu_item_paperless_name_vi'),
                     controller: paperlessNameViController,
                     maxLength: 200,
@@ -1155,6 +1208,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: priceController,
+                    key: const Key('admin_menu_item_price'),
                     keyboardType: TextInputType.number,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: l10n.menuPrice),
@@ -1253,6 +1307,10 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           categoryId: categoryId,
                           nameKo: nameKo,
                           nameVi: nameVi,
+                          invoiceSaleUnit:
+                              invoiceUnitController.text.trim().isEmpty
+                              ? null
+                              : invoiceUnitController.text.trim(),
                           nameEn: nameEn,
                           paperlessNameVi: paperlessNameVi.isEmpty
                               ? null
@@ -1267,6 +1325,10 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           categoryId: categoryId,
                           nameKo: nameKo,
                           nameVi: nameVi,
+                          invoiceSaleUnit:
+                              invoiceUnitController.text.trim().isEmpty
+                              ? null
+                              : invoiceUnitController.text.trim(),
                           nameEn: nameEn,
                           paperlessNameVi: paperlessNameVi.isEmpty
                               ? null
@@ -1295,6 +1357,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     nameKoController.dispose();
     nameViController.dispose();
+    invoiceUnitController.dispose();
     paperlessNameViController.dispose();
     nameEnController.dispose();
     priceController.dispose();

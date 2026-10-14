@@ -11,7 +11,8 @@ void main() {
     expect(source, contains("'admin_create_menu_category_with_group'"));
     expect(source, contains("'admin_update_menu_category_with_group'"));
     expect(source, contains("'p_analytics_group': analyticsGroup"));
-    expect(source, contains("'admin_create_menu_item_i18n_paperless'"));
+    expect(source, contains("'admin_create_menu_item_with_invoice'"));
+    expect(source, contains("'p_invoice_sale_unit': invoiceSaleUnit"));
     expect(source, contains("'p_store_id': storeId"));
     expect(source, contains("'p_name_ko': nameKo"));
     expect(source, contains("'p_name_vi': nameVi"));

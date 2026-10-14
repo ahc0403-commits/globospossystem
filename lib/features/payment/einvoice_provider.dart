@@ -23,6 +23,8 @@ class EinvoiceJobStatus {
       status == 'pending' ||
       status == 'pending_manual_config' ||
       status == 'dispatch_paused';
+  bool get needsInvoiceMapping =>
+      errorClassification == 'invoice_mapping_required';
   bool get isIssued => status == 'valid_invoice';
 }
 

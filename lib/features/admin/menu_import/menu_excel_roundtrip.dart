@@ -24,6 +24,7 @@ const menuRoundTripHeaders = <String>[
   'QR메뉴노출',
   '메뉴순서',
   ...beverageTaxExcelHeaders,
+  '계산서단위',
 ];
 
 const _paperlessNameViHeader = '페이퍼리스 메뉴명(VI)';
@@ -64,6 +65,7 @@ class MenuRoundTripItem {
   const MenuRoundTripItem({
     required this.sourceRow,
     this.beverageTax,
+    this.invoiceSaleUnit,
     required this.storeId,
     required this.categoryId,
     required this.itemId,
@@ -79,6 +81,7 @@ class MenuRoundTripItem {
   });
 
   final BeverageTax? beverageTax;
+  final String? invoiceSaleUnit;
   final int sourceRow;
   final String storeId;
   final String categoryId;
@@ -101,6 +104,7 @@ class MenuRoundTripItem {
     'store_id': storeId,
     'category_id': categoryId,
     'item_id': itemId,
+    if (invoiceSaleUnit != null) 'invoice_sale_unit': invoiceSaleUnit,
     'name_ko': nameKo,
     'name_vi': nameVi,
     if (paperlessNameVi != null) 'paperless_name_vi': paperlessNameVi,
@@ -189,7 +193,10 @@ List<int> buildMenuRoundTripWorkbook({
         TextCellValue(categoryNameVi),
         TextCellValue(categoryNameEn),
         IntCellValue(categorySortOrder),
-        ...List<CellValue>.generate(13, (_) => TextCellValue('')),
+        ...List<CellValue>.generate(
+          menuRoundTripHeaders.length - 6,
+          (_) => TextCellValue(''),
+        ),
       ]);
       continue;
     }
@@ -220,6 +227,7 @@ List<int> buildMenuRoundTripWorkbook({
         ),
         TextCellValue(item['sugar_g_per_100ml']?.toString() ?? ''),
         TextCellValue(item['tax_basis_note']?.toString() ?? ''),
+        TextCellValue(item['invoice_sale_unit']?.toString() ?? ''),
       ]);
     }
   }
@@ -274,6 +282,7 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
       .where(
         (header) =>
             header != _paperlessNameViHeader &&
+            header != '계산서단위' &&
             !beverageTaxExcelHeaders.contains(header),
       )
       .where((header) => !headerIndexes.containsKey(header))
@@ -449,6 +458,9 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
         MenuRoundTripItem(
           sourceRow: sourceRow,
           beverageTax: beverageTax,
+          invoiceSaleUnit: headerIndexes.containsKey('계산서단위')
+              ? text('계산서단위')
+              : null,
           storeId: storeId,
           categoryId: categoryId,
           itemId: itemId,

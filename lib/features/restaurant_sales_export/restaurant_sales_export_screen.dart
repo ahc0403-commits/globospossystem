@@ -7,7 +7,8 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:async';
 import '../admin/einvoice_misa_workbook.dart';
-import '../admin/widgets/invoice_mapping_import_dialog.dart';
+import '../admin/widgets/invoice_mapping_catalog_dialog.dart';
+import 'invoice_mapping_service.dart';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
@@ -426,13 +427,14 @@ class _RestaurantSalesExportScreenState
           onPressed: _isDownloading
               ? null
               : () async {
-                  final n = await showDialog<int>(
+                  await showDialog<void>(
                     context: context,
-                    builder: (context) => InvoiceMappingImportDialog(
+                    builder: (context) => InvoiceMappingCatalogDialog(
                       taxEntityId: summary.taxEntityId,
+                      service: InvoiceMappingService(_reportService.mappingRpc),
                     ),
                   );
-                  if (n != null && mounted) await _load();
+                  if (mounted) await _load();
                 },
           child: Text(
             _copy(
@@ -1055,7 +1057,7 @@ class _RestaurantSalesExportScreenState
           final rows = error.issues.skip(page * 100).take(100).toList();
           return AlertDialog(
             title: Text(
-              '${_copy('오류 영수증', 'Hóa đơn lỗi', 'Receipts with errors')} ${error.receiptCount} / ${_copy('오류 품목', 'Mặt hàng lỗi', 'Items with errors')} ${error.itemCount}',
+              '${_copy('누락 메뉴', 'Món thiếu ánh xạ', 'Menus missing mappings')} ${error.missingMenuCount} / ${_copy('품목 행', 'Dòng hàng', 'Item rows')} ${error.itemCount} / ${_copy('영수증', 'Hóa đơn', 'Receipts')} ${error.receiptCount}',
             ),
             content: SizedBox(
               width: 700,
@@ -1066,7 +1068,7 @@ class _RestaurantSalesExportScreenState
                       (e) => ListTile(
                         title: Text('${e.receiptNumber} / ${e.itemName}'),
                         subtitle: Text(
-                          '${e.itemId.isEmpty && e.lineNumber > 0 ? '#${e.lineNumber}' : e.itemId} · ${e.field}\n${e.code}\n${e.soldAt} · ${e.mappingVersion} · ${e.resolution}',
+                          '${_copy('영수증 내 품목', 'Mặt hàng trong hóa đơn', 'Item within receipt')} #${e.lineNumber} · ${e.itemId} · ${e.field}\n${e.code}\n${e.soldAt} · ${e.mappingVersion} · ${e.resolution}',
                         ),
                       ),
                     )

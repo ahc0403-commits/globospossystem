@@ -11,10 +11,12 @@ class SalesExportIssue {
     required this.soldAt,
     this.mappingVersion = '',
     this.lineNumber = 0,
+    this.menuId = '',
   });
   final String receiptId, receiptNumber, source, itemId, itemName, field, code;
   final String soldAt, mappingVersion;
   final int lineNumber;
+  final String menuId;
   String get resolution =>
       field.startsWith('invoice_') || field == 'misa_unit_name'
       ? 'invoice_mapping'
@@ -30,6 +32,11 @@ class SalesExportValidationException extends FormatException {
   final List<SalesExportIssue> issues;
   int get receiptCount =>
       issues.map((e) => '${e.source}:${e.receiptId}').toSet().length;
+  int get missingMenuCount => issues
+      .where((e) => e.resolution == 'invoice_mapping' && e.menuId.isNotEmpty)
+      .map((e) => e.menuId)
+      .toSet()
+      .length;
   int get itemCount => issues
       .where((e) => e.itemId.isNotEmpty || e.lineNumber > 0)
       .map(
@@ -74,6 +81,7 @@ List<SalesExportIssue> validateSalesExportJobs(
         soldAt: soldAt,
         mappingVersion: '${line['invoice_mapping_version'] ?? ''}',
         lineNumber: currentLine,
+        menuId: '${line['menu_item_id'] ?? ''}',
       ),
     );
     if (job['externally_reported'] == true) {
@@ -110,6 +118,7 @@ List<SalesExportIssue> validateSalesExportJobs(
           'invoice_approval_type',
           'invoice_mapping_version',
           'invoice_source_reference',
+          'invoice_store_id',
         ]) {
           if ('${line[field] ?? ''}'.trim().isEmpty) {
             add(line, field, 'MISA_APPROVED_ITEM_METADATA_REQUIRED');

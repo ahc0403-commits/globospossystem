@@ -13,7 +13,7 @@ class InvoiceMappingImport {
     rows = (payload['rows'] as List)
         .map((r) => Map<String, dynamic>.from(r as Map))
         .toList();
-    if (rows.isEmpty || rows.length > 100) {
+    if (rows.isEmpty || rows.length > 10000) {
       throw const FormatException('INVOICE_MAPPING_BATCH_LIMIT');
     }
     final keys = <String>{};
@@ -56,6 +56,72 @@ class InvoiceMappingImport {
 class InvoiceMappingService {
   InvoiceMappingService(this.rpc);
   final SalesReportRpc rpc;
+
+  Future<Map<String, dynamic>> catalog({String? taxEntityId}) async {
+    final rows = <Map<String, dynamic>>[];
+    Map<String, dynamic>? first;
+    String? after;
+    while (true) {
+      final page = Map<String, dynamic>.from(
+        await rpc('get_invoice_mapping_catalog', {
+              'p_tax_entity_id': taxEntityId,
+              'p_after_id': after,
+              'p_limit': 100,
+            })
+            as Map,
+      );
+      first ??= page;
+      if (page['total_count'] != first['total_count'] ||
+          page['catalog_revision'] != first['catalog_revision']) {
+        throw const FormatException('INVOICE_CATALOG_CHANGED_REFRESH_REQUIRED');
+      }
+      final batch = (page['rows'] as List)
+          .map((r) => Map<String, dynamic>.from(r as Map))
+          .toList();
+      for (final row in batch) {
+        final id = row['id'] as String;
+        if (after != null && id.compareTo(after) <= 0) {
+          throw const FormatException('INVOICE_CATALOG_CURSOR_INVALID');
+        }
+        after = id;
+      }
+      rows.addAll(batch);
+      if (rows.length == first['total_count']) break;
+      if (batch.length != 100 || rows.length > (first['total_count'] as int)) {
+        throw const FormatException('INVOICE_CATALOG_CHANGED_REFRESH_REQUIRED');
+      }
+    }
+    return {...first, 'rows': rows};
+  }
+
+  Future<int> applyPolicy(
+    List<Map<String, dynamic>> rows, {
+    required String effectiveFrom,
+  }) async {
+    final stores = <String, List<String>>{};
+    for (final row in rows) {
+      if (row['mapping_status'] == 'mapped') continue;
+      stores
+          .putIfAbsent(row['store_id'] as String, () => [])
+          .add(row['id'] as String);
+    }
+    var changed = 0;
+    for (final entry in stores.entries) {
+      for (var start = 0; start < entry.value.length; start += 100) {
+        final result = Map<String, dynamic>.from(
+          await rpc('apply_invoice_mapping_policy_batch', {
+                'p_store_id': entry.key,
+                'p_menu_ids': entry.value.skip(start).take(100).toList(),
+                'p_effective_from': effectiveFrom,
+              })
+              as Map,
+        );
+        changed += (result['profiles'] as List).length;
+      }
+    }
+    return changed;
+  }
+
   Future<int> approve(InvoiceMappingImport input, String selectedEntity) async {
     if (input.taxEntityId != selectedEntity) {
       throw const FormatException('INVOICE_MAPPING_ENTITY_MISMATCH');
@@ -68,14 +134,24 @@ class InvoiceMappingService {
         .expand((r) => (r['store_names'] as List? ?? []))
         .toSet()
         .toList();
-    final scope = Map<String, dynamic>.from(
-      await rpc('resolve_invoice_mapping_scope', {
-            'p_tax_entity_id': selectedEntity,
-            'p_menu_ids': menuIds,
-            'p_store_names': storeNames,
-          })
-          as Map,
-    );
+    // Validate every scope before any write. Each endpoint accepts at most 100
+    // identifiers, while an import can span many endpoint-sized batches.
+    final scope = <String, List<dynamic>>{'menus': [], 'stores': []};
+    final length = menuIds.length > storeNames.length
+        ? menuIds.length
+        : storeNames.length;
+    for (var start = 0; start < length; start += 100) {
+      final batch = Map<String, dynamic>.from(
+        await rpc('resolve_invoice_mapping_scope', {
+              'p_tax_entity_id': selectedEntity,
+              'p_menu_ids': menuIds.skip(start).take(100).toList(),
+              'p_store_names': storeNames.skip(start).take(100).toList(),
+            })
+            as Map,
+      );
+      scope['menus']!.addAll(batch['menus'] as List);
+      scope['stores']!.addAll(batch['stores'] as List);
+    }
     final menus = {
       for (final m in scope['menus'] as List) m['menu_item_id']: m['store_id'],
     };

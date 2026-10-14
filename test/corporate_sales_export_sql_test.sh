@@ -136,4 +136,16 @@ run_sql < test/sql/sales_export_no_delivery_fee_setup.sql
 run_sql < supabase/migrations/20261012231000_sales_export_no_delivery_fee.sql
 run_sql < test/sql/sales_export_no_delivery_fee_test.sql
 if [[ "${CORPORATE_RELEASE_ATOMIC:-0}" == 1 ]]; then run_deposit_tests; fi
+run_sql < test/sql/full_menu_invoice_mapping_setup.sql
+run_sql < supabase/migrations/20260722070000_menu_excel_roundtrip_i18n.sql
+run_sql < supabase/migrations/20260805140000_admin_menu_excel_replace.sql
+if [[ "${FULL_INVOICE_IMPORT_LEGACY:-0}" == "1" ]]; then
+  run_sql < supabase/migrations/20260721020000_admin_menu_excel_import.sql
+fi
+run_sql <<'SQL'
+ALTER FUNCTION public.admin_import_menu_items(uuid,jsonb) RENAME TO admin_import_menu_items_before_beverage_tax;
+ALTER FUNCTION public.admin_update_menu_workbook_i18n(uuid,jsonb,jsonb) RENAME TO admin_update_menu_workbook_before_beverage_tax;
+SQL
+run_sql < supabase/migrations/20261014033749_full_menu_invoice_mapping.sql
+run_sql < test/sql/full_menu_invoice_mapping_test.sql
 printf 'CORPORATE_SALES_SQL_TEST=PASS\n'

@@ -86,6 +86,19 @@ void main() {
       final service = DailySalesReportService(
         rpc: (name, p) async {
           calls.add(name);
+          if (name == 'get_invoice_mapping_catalog') {
+            return {
+              'total_count': 0,
+              'mapped_count': 0,
+              'missing_count': 0,
+              'catalog_revision': 'fixture',
+              'rows': [],
+              'stores': [],
+              'entities': [
+                {'id': fixtures.row()['tax_entity_id'], 'name': 'Fixture'},
+              ],
+            };
+          }
           return {
             'business_date': p['p_business_date'],
             'entities': [fixtures.row()],
@@ -112,16 +125,26 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(open);
       await tester.pumpAndSettle();
+      expect(find.text('Full menu invoice mapping'), findsOneWidget);
+      await tester.tap(find.text('Import JSON'));
+      await tester.pumpAndSettle();
       expect(find.text('Choose mapping JSON'), findsOneWidget);
       final approve = find.widgetWithText(
         FilledButton,
         'Approve reviewed mappings',
       );
       expect(tester.widget<FilledButton>(approve).onPressed, isNull);
-      await tester.tap(find.text('Close'));
+      await tester.tap(find.text('Close').last);
       await tester.pumpAndSettle();
       expect(find.text('Choose mapping JSON'), findsNothing);
-      expect(calls, ['get_pos_daily_sales_summary']);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(calls.where((name) => name.startsWith('approve_')), isEmpty);
+      expect(calls.first, 'get_pos_daily_sales_summary');
+      expect(
+        calls.where((name) => name == 'get_invoice_mapping_catalog').length,
+        2,
+      );
       expect(tester.takeException(), isNull);
     },
   );
