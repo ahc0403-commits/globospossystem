@@ -293,7 +293,7 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/menu_tab.dart',
-    directCalls: 8,
+    directCalls: 9,
     test: 'test/admin_core_overlay_operational_test.dart',
     markers: [
       'admin_menu_add_category_dialog',
@@ -304,6 +304,18 @@ const _coverage = <_OperationalCoverage>[
       'admin_menu_edit_item_dialog',
       'admin_menu_import_preview_dialog',
       'admin_menu_import_validation_dialog',
+      'admin_menu_invoice_catalog_action',
+    ],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/admin/widgets/invoice_mapping_catalog_dialog.dart',
+    directCalls: 3,
+    test: 'test/invoice_mapping_catalog_test.dart',
+    additionalTests: ['test/daily_sales_report_screen_test.dart'],
+    markers: [
+      'policy approval records reviewed units and real evidence',
+      'catalog item opens its actual profile editor and closes without approval',
+      'mapping dialog opens, requires selected JSON and closes without writes',
     ],
   ),
   _OperationalCoverage(
@@ -460,7 +472,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 161 dialog and sheet entrypoints map to operational tests', () {
+  test('all 165 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -472,10 +484,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 158);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 162);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      161,
+      165,
     );
 
     final inventory = File(

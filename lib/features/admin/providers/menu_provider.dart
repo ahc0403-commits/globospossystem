@@ -243,6 +243,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameEn,
     String? paperlessNameVi,
     BeverageTax? beverageTax,
+    String? invoiceSaleUnit,
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
@@ -260,6 +261,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameEn: nameEn,
         paperlessNameVi: paperlessNameVi,
         beverageTax: beverageTax,
+        invoiceSaleUnit: invoiceSaleUnit,
         price: price,
         sortOrder: sortOrder,
       );
@@ -299,6 +301,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameEn,
     String? paperlessNameVi,
     BeverageTax? beverageTax,
+    String? invoiceSaleUnit,
     required double price,
     required XFile photo,
     bool isCombo = false,
@@ -317,6 +320,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameEn: nameEn,
         paperlessNameVi: paperlessNameVi,
         beverageTax: beverageTax,
+        invoiceSaleUnit: invoiceSaleUnit,
         price: price,
         sortOrder: sortOrder,
       );

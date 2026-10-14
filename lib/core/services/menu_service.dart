@@ -139,13 +139,12 @@ class MenuService {
     required String nameEn,
     String? paperlessNameVi,
     BeverageTax? beverageTax,
+    String? invoiceSaleUnit,
     required double price,
     required int sortOrder,
   }) async {
     final response = await supabase.rpc(
-      beverageTax == null
-          ? 'admin_create_menu_item_i18n_paperless'
-          : 'admin_create_menu_item_with_tax',
+      'admin_create_menu_item_with_invoice',
       params: {
         'p_store_id': storeId,
         'p_category_id': categoryId,
@@ -153,7 +152,8 @@ class MenuService {
         'p_name_vi': nameVi,
         'p_name_en': nameEn,
         'p_paperless_name_vi': paperlessNameVi,
-        if (beverageTax != null) 'p_tax': beverageTax.toJson(),
+        'p_tax': beverageTax?.toJson(),
+        'p_invoice_sale_unit': invoiceSaleUnit,
         'p_price': price,
         'p_sort_order': sortOrder,
         'p_is_available': true,

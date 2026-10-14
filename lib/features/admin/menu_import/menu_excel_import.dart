@@ -24,6 +24,8 @@ class MenuImportRow {
   const MenuImportRow({
     required this.sourceRow,
     this.beverageTax,
+    this.nameVi,
+    this.invoiceSaleUnit,
     required this.storeCode,
     required this.categoryName,
     required this.categorySortOrder,
@@ -36,6 +38,7 @@ class MenuImportRow {
   });
 
   final BeverageTax? beverageTax;
+  final String? nameVi, invoiceSaleUnit;
   final int sourceRow;
   final String storeCode;
   final String categoryName;
@@ -54,6 +57,8 @@ class MenuImportRow {
     'category_name': categoryName,
     'category_sort_order': categorySortOrder,
     'name': name,
+    if (nameVi != null) 'name_vi': nameVi,
+    if (invoiceSaleUnit != null) 'invoice_sale_unit': invoiceSaleUnit,
     'description': description,
     'price': price,
     'is_available': isAvailable,
@@ -235,6 +240,14 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
           categoryName: categoryName,
           categorySortOrder: categorySortOrder,
           name: menuName,
+          nameVi: headerIndexes['메뉴명(VI)'] == null
+              ? null
+              : _cellText(
+                  _cellValueAt(cells, headerIndexes['메뉴명(VI)']!),
+                ).trim(),
+          invoiceSaleUnit: headerIndexes['계산서단위'] == null
+              ? null
+              : _cellText(_cellValueAt(cells, headerIndexes['계산서단위']!)).trim(),
           description: description.isEmpty ? null : description,
           price: price,
           isAvailable: isAvailable,

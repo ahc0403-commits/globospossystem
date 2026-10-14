@@ -27,6 +27,9 @@ class _InvoiceProfileEditorState extends State<InvoiceProfileEditor> {
     text: 'Menu management operator approval',
   );
   String? _approvedVersion;
+  String? _requestSignature;
+  String? _requestVersion;
+  String? _requestTime;
   bool _saving = false;
   String? _error;
   String _copy(String ko, String vi, String en) =>
@@ -54,7 +57,14 @@ class _InvoiceProfileEditorState extends State<InvoiceProfileEditor> {
       _error = null;
     });
     try {
-      final version = 'POS-menu-${const Uuid().v4()}';
+      final signature =
+          '${_name.text.trim()}|${_unit.text.trim()}|${_reference.text.trim()}|$_effectiveDate|$_effectiveTo';
+      if (signature != _requestSignature) {
+        _requestSignature = signature;
+        _requestVersion = 'POS-menu-${const Uuid().v4()}';
+        _requestTime = DateTime.now().toUtc().toIso8601String();
+      }
+      final version = _requestVersion!;
       await supabase.rpc(
         'approve_menu_invoice_profile_v3',
         params: {
@@ -62,7 +72,7 @@ class _InvoiceProfileEditorState extends State<InvoiceProfileEditor> {
           'p_name': _name.text.trim(),
           'p_unit': _unit.text.trim(),
           'p_effective_from': _effectiveDate == null
-              ? DateTime.now().toUtc().toIso8601String()
+              ? _requestTime
               : '${_effectiveDate!.toIso8601String().substring(0, 10)}T00:00:00+07:00',
           'p_effective_to': _effectiveTo == null
               ? null
