@@ -90,7 +90,7 @@ class _InventoryOrderWorkflowScreenState
   bool _showLegacyOrders = false;
   final _prRefresh = ValueNotifier<int>(0);
   bool get _primaryPr =>
-      _role == 'inventory_orderer' &&
+      ['inventory_orderer', 'store_admin', 'super_admin'].contains(_role) &&
       (_procurementPolicy['two_stage_required'] == true ||
           _procurementPolicy['three_stage_required'] == true) &&
       _section == _WorkflowSection.orders &&
@@ -143,11 +143,7 @@ class _InventoryOrderWorkflowScreenState
   bool get _canConfirmReceipt =>
       _isAccounting ||
       _combinedReceiving ||
-      (_map(
-                _map(_detail?['order'])['commercial_terms'],
-              )['approval_policy_version'] ==
-              3 &&
-          PermissionUtils.canCreateInventoryPurchaseOrder(_role));
+      _detail?['can_finalize_receipt'] == true;
 
   bool get _canManagePrices =>
       PermissionUtils.canManageInventorySupplierPrices(_role);
@@ -214,7 +210,7 @@ class _InventoryOrderWorkflowScreenState
     }
     try {
       Map<String, dynamic>? catalog;
-      if (_role == 'inventory_orderer' &&
+      if (['inventory_orderer', 'store_admin', 'super_admin'].contains(_role) &&
           _section == _WorkflowSection.orders &&
           !_showLegacyOrders) {
         catalog = await _service.fetchInventoryOrderCatalog(storeId!);
@@ -2138,6 +2134,7 @@ class _InventoryOrderWorkflowScreenState
       ProcurementWorkspacePage(
         key: ValueKey('procurement:$_scopeKey'),
         requesterView: _role == 'inventory_orderer',
+        approvalView: _role == 'store_admin' || _role == 'super_admin',
         refreshListenable: _prRefresh,
         onOpenReceiving: standalone
             ? () {

@@ -128,3 +128,10 @@ run_sql "$INVENTORY_ROOT/supabase/migrations/20261013012000_procurement_shortage
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_combined_receiving.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_two_stage_receiving.test.sql"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_carryover_concurrency.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
+
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_onboarding_fixture.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261014080000_procurement_approval_inbox.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261014081000_procurement_store_onboarding.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_approval_inbox.test.sql"
+
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_inbox_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"

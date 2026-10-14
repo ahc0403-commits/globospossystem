@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,55 @@ void main() {
     'products': [],
     'supplier_items': [],
   };
+  testWidgets(
+    'SM inbox starts with all-time submitted cursor and keeps refreshes received in flight',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final refresh = ValueNotifier<int>(0);
+      final queries = <Map<String, dynamic>>[];
+      final first = Completer<Map<String, dynamic>>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProcurementWorkspacePage(
+            approvalView: true,
+            refreshListenable: refresh,
+            load: () async => workspace(),
+            loadPage: (query) {
+              queries.add({...query});
+              return queries.length == 1
+                  ? first.future
+                  : Future.value({
+                      ...workspace(),
+                      'approval_counts': {
+                        'pending': 12,
+                        'actionable': 12,
+                        'blocked': 0,
+                      },
+                    });
+            },
+            execute: (a, b, c, d, e) async => {},
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(queries.single['request_scope'], 'mine');
+      expect(queries.single['request_sort'], 'submitted');
+      expect(queries.single.containsKey('created_from'), false);
+      refresh.value++;
+      refresh.value++;
+      expect(queries.length, 1);
+      first.complete(workspace());
+      await tester.pumpAndSettle();
+      expect(
+        queries.length,
+        2,
+        reason: 'In-flight signals merge into one follow-up read',
+      );
+      expect(find.textContaining('Actionable 12'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      refresh.dispose();
+    },
+  );
   testWidgets('disabled store cannot create requests', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(

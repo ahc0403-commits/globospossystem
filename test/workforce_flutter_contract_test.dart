@@ -74,10 +74,11 @@ void main() {
     final bunsik = WorkforcePresetCatalog.bunsik('BT');
     expect(bunsik.map((row) => row.accountCode), [
       'bunsik_bm1',
-      'bunsik_sm1',
+      'bt_sm1',
       'bt_pos1',
       'bt_tab1',
       'bt_kit',
+      'bt_pr1',
       'bt_order',
       'bt_print',
       'bt_customer',
@@ -87,9 +88,7 @@ void main() {
       isEmpty,
       reason: 'Legal-entity accounting must not be configured per store.',
     );
-    final orderer = bunsik.singleWhere(
-      (row) => row.accountType == 'inventory_orderer',
-    );
+    final orderer = bunsik.singleWhere((row) => row.accountCode == 'bt_order');
     expect(orderer.role, 'inventory_orderer');
     expect(bunsik[bunsik.length - 2].accountType, 'device_print_station');
     expect(bunsik[bunsik.length - 2].role, 'print_station');

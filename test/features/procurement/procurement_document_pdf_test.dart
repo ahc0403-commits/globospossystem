@@ -6,6 +6,55 @@ import 'package:globos_pos_system/features/procurement/procurement_process_label
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'large quantities and long units widen the PR instead of clipping or shrinking',
+    () async {
+      final source = {
+        'kind': 'pr',
+        'audience': 'internal',
+        'data': {
+          'request_no': 'PR-WIDE',
+          'store_name': 'Layout fixture',
+          'status': 'draft',
+          'created_at': '2026-10-14',
+          'requested_delivery_date': '2026-10-15',
+          'reason': 'Width test',
+          'lines': [
+            {
+              'product_name':
+                  'Long material name for a readable procurement document',
+              'product_code': 'WR-WIDE',
+              'requested_quantity': 999999999999.125,
+              'requested_unit':
+                  'Gói nguyên liệu đóng hộp quy cách lớn (25 kg mỗi gói)',
+              'current_stock_snapshot': -999999999999.375,
+              'quantity_base': 999999999999.125,
+              'estimated_conversion': 1,
+              'conversion_snapshot': 1,
+              'estimated_unit_price': 999999999999.75,
+              'estimated_tax_rate': 8,
+            },
+          ],
+        },
+      };
+      final bytes = await buildProcurementDocumentPdf(
+        source,
+        labels: {
+          for (final key in procurementDocumentLabelKeys)
+            key: procurementProcessLabel(key, 'vi'),
+        },
+        fontAsset: 'assets/fonts/PretendardVariable.ttf',
+        printedAt: DateTime.utc(2026, 10, 14),
+      );
+      final dir = Directory(
+        Platform.environment['PROCUREMENT_PDF_OUTPUT'] ??
+            '${Directory.systemTemp.path}/procurement-pdf-globos_pos_system',
+      );
+      await dir.create(recursive: true);
+      await File('${dir.path}/pr-wide-vi.pdf').writeAsBytes(bytes);
+      expect(bytes.length, greaterThan(1000));
+    },
+  );
   for (final locale in ['ko', 'en', 'vi']) {
     for (final supplier in [true, false]) {
       test(
@@ -44,6 +93,7 @@ void main() {
                 200,
                 (i) => {
                   'product_name': 'Test item $i',
+                  'product_code': 'WR${i.toString().padLeft(3, '0')}',
                   'specification': 'A4',
                   'specification_snapshot': 'A4',
                   'quantity': 1,
@@ -135,14 +185,15 @@ void main() {
           printedAt: DateTime.utc(2026, 10, 7, 2, 30),
         );
         final dir = Directory(
-          '${Directory.systemTemp.path}/procurement-pr-layout-20261007',
+          Platform.environment['PROCUREMENT_PDF_OUTPUT'] ??
+              '${Directory.systemTemp.path}/procurement-pr-layout-20261007',
         );
         await dir.create(recursive: true);
         await File('${dir.path}/pr-incomplete-$locale.pdf').writeAsBytes(bytes);
         expect(ascii.decode(bytes.take(5).toList()), '%PDF-');
       },
     );
-    for (final count in [1, 11, 50]) {
+    for (final count in [1, 11, 20, 50, 200]) {
       test('$count-line multilingual PR layout ($locale)', () async {
         final data = {
           'request_no': 'PR-EXAMPLE-20261007',
@@ -188,7 +239,8 @@ void main() {
           printedAt: DateTime.utc(2026, 10, 7, 2, 30),
         );
         final dir = Directory(
-          '${Directory.systemTemp.path}/procurement-pr-layout-20261007',
+          Platform.environment['PROCUREMENT_PDF_OUTPUT'] ??
+              '${Directory.systemTemp.path}/procurement-pr-layout-20261007',
         );
         await dir.create(recursive: true);
         await File('${dir.path}/pr-$count-$locale.pdf').writeAsBytes(bytes);

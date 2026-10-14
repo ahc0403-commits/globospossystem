@@ -39,6 +39,7 @@ class ProcurementWorkspacePage extends StatefulWidget {
     this.exportDocument,
     this.openEvidence,
     this.requesterView = false,
+    this.approvalView = false,
     this.onOpenReceiving,
     this.onOpenLegacy,
     this.onLogout,
@@ -47,6 +48,7 @@ class ProcurementWorkspacePage extends StatefulWidget {
   final Future<void> Function(String receiptId, String path)? openEvidence;
   final Listenable? refreshListenable;
   final bool requesterView;
+  final bool approvalView;
   final VoidCallback? onOpenReceiving, onOpenLegacy, onLogout;
   final ProcurementLoad load;
   final ProcurementPageLoad? loadPage;
@@ -71,6 +73,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   String? _selectedId, _error, _journalKey;
   bool _loading = true, _busy = false, _needsListRefresh = false;
   int _generation = 0;
+  bool _fetching = false, _refreshQueued = false, _editing = false;
   String _period = 'recent';
   String? _notice;
   final _search = TextEditingController();
@@ -97,16 +100,28 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   @override
   void initState() {
     super.initState();
-    _query.addAll(procurementRecentMonth());
+    if (widget.approvalView) {
+      _period = 'all';
+      _query['request_scope'] = 'mine';
+      _query['request_sort'] = 'submitted';
+    } else {
+      _query.addAll(procurementRecentMonth());
+      _query['request_sort'] = 'created';
+    }
     _query['request_group'] = 'pending';
-    _query['request_sort'] = 'created';
-    if (widget.requesterView) _query['request_view'] = true;
+    if (widget.requesterView || widget.approvalView) {
+      _query['request_view'] = true;
+    }
     widget.refreshListenable?.addListener(_refresh);
     _load();
   }
 
   void _refresh() {
-    if (!_busy && _pending == null) _load();
+    _refreshQueued = true;
+    if (!_busy && !_editing && !_fetching && _pending == null) {
+      _refreshQueued = false;
+      _load();
+    }
   }
 
   @override
@@ -118,6 +133,11 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   }
 
   Future<bool> _load() async {
+    if (_fetching) {
+      _refreshQueued = true;
+      return false;
+    }
+    _fetching = true;
     final generation = ++_generation;
     if (mounted) setState(() => _loading = true);
     try {
@@ -154,6 +174,15 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
         });
       }
       return false;
+    } finally {
+      _fetching = false;
+      if (_refreshQueued &&
+          mounted &&
+          !_busy &&
+          !_editing &&
+          _pending == null) {
+        _refresh();
+      }
     }
   }
 
@@ -220,7 +249,10 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       if (mounted) setState(() => _error = _errorText(e));
       return false;
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (_refreshQueued) _refresh();
+      }
     }
   }
 
@@ -310,6 +342,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       } else {
         _query[key] = value;
       }
+      if (widget.approvalView && key == 'request_group') {
+        _query['request_scope'] = value == 'pending' ? 'mine' : 'all';
+      }
       _resetPages();
       _selectedId = null;
       _selectedOrderId = null;
@@ -318,6 +353,18 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   }
 
   Future<void> _choosePeriod(String? value) async {
+    if (value == 'all') {
+      setState(() {
+        _period = 'all';
+        _query.remove('created_from');
+        _query.remove('created_to');
+        _resetPages();
+        _selectedId = null;
+        _selectedOrderId = null;
+      });
+      await _load();
+      return;
+    }
     if (value == 'recent') {
       setState(() {
         _period = 'recent';
@@ -335,8 +382,10 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       firstDate: DateTime(2000),
       lastDate: DateTime(now.year + 5, 12, 31),
       initialDateRange: DateTimeRange(
-        start: DateTime.parse(_query['created_from'].toString()),
-        end: DateTime.parse(_query['created_to'].toString()),
+        start:
+            DateTime.tryParse(_query['created_from'].toString()) ??
+            now.subtract(const Duration(days: 30)),
+        end: DateTime.tryParse(_query['created_to'].toString()) ?? now,
       ),
     );
     if (selected == null || !mounted) return;
@@ -365,7 +414,10 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       if (mounted) setState(() => _error = _errorText(e));
       return false;
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (_refreshQueued) _refresh();
+      }
     }
   }
 
@@ -529,33 +581,39 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       initial = {...initial!, 'lines': converted};
     }
     if (!mounted) return;
-    await showDialog<Map<String, dynamic>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (c) => ProcurementRequestDialog(
-        products: rows(_data['products']),
-        supplierItems: rows(_data['supplier_items']),
-        initial: initial,
-        catalogHasMore: _data['catalog_has_more'] == true,
-        loadCatalog: widget.loadPage == null
-            ? null
-            : (query) => widget.loadPage!({
-                ...query,
-                if (request != null) 'request_id': request['id'],
-              }),
-        saveRequest: (payload) async =>
-            await _execute(
-              request == null ? 'create_request' : 'save_request',
-              request,
-              payload,
-            )
-            ? null
-            : (_error ?? copy('saveFailed')),
-        needsConfirmation: () => _pending != null,
-        retrySavedRequest: () async =>
-            await _retry() ? null : (_error ?? copy('saveFailed')),
-      ),
-    );
+    _editing = true;
+    try {
+      await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => ProcurementRequestDialog(
+          products: rows(_data['products']),
+          supplierItems: rows(_data['supplier_items']),
+          initial: initial,
+          catalogHasMore: _data['catalog_has_more'] == true,
+          loadCatalog: widget.loadPage == null
+              ? null
+              : (query) => widget.loadPage!({
+                  ...query,
+                  if (request != null) 'request_id': request['id'],
+                }),
+          saveRequest: (payload) async =>
+              await _execute(
+                request == null ? 'create_request' : 'save_request',
+                request,
+                payload,
+              )
+              ? null
+              : (_error ?? copy('saveFailed')),
+          needsConfirmation: () => _pending != null,
+          retrySavedRequest: () async =>
+              await _retry() ? null : (_error ?? copy('saveFailed')),
+        ),
+      );
+    } finally {
+      _editing = false;
+      if (_refreshQueued && mounted) _refresh();
+    }
   }
 
   Future<Map<String, dynamic>?> _fields(
@@ -661,7 +719,10 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     final records = rows(_data[kind == 'request' ? 'requests' : 'orders']);
     if (records.isEmpty) return;
     final last = records.last;
-    _query['${kind}_before'] = last['created_at'];
+    _query['${kind}_before'] =
+        kind == 'request' && _data['request_sort'] == 'submitted'
+        ? last['submitted_at'] ?? last['created_at']
+        : last['created_at'];
     _query['${kind}_before_id'] = last['id'];
     _selectedId = null;
     _selectedOrderId = null;
@@ -681,7 +742,10 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     } catch (e) {
       if (mounted) setState(() => _error = _errorText(e));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (_refreshQueued) _refresh();
+      }
     }
   }
 
@@ -1078,14 +1142,17 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
         title: Text(copy(widget.requesterView ? 'management' : 'historyTitle')),
         actions: [
           if (compact &&
-              (widget.onOpenReceiving != null || widget.onOpenLegacy != null))
+              (widget.onOpenReceiving != null &&
+                      actor['can_receive'] != false ||
+                  widget.onOpenLegacy != null))
             PopupMenuButton<String>(
               enabled: !unavailable,
               onSelected: (value) => value == 'receiving'
                   ? widget.onOpenReceiving?.call()
                   : widget.onOpenLegacy?.call(),
               itemBuilder: (_) => [
-                if (widget.onOpenReceiving != null)
+                if (widget.onOpenReceiving != null &&
+                    actor['can_receive'] != false)
                   PopupMenuItem(
                     value: 'receiving',
                     child: Text(copy('receiving')),
@@ -1097,7 +1164,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                   ),
               ],
             ),
-          if (!compact && widget.onOpenReceiving != null)
+          if (!compact &&
+              widget.onOpenReceiving != null &&
+              actor['can_receive'] != false)
             TextButton(
               onPressed: unavailable ? null : widget.onOpenReceiving,
               child: Text(copy('receiving')),
@@ -1266,6 +1335,12 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                           ),
                           items: [
                             DropdownMenuItem(
+                              value: 'all',
+                              child: Text(
+                                t('전체 기간', 'All time', 'Toàn bộ thời gian'),
+                              ),
+                            ),
+                            DropdownMenuItem(
                               value: 'recent',
                               child: Text(copy('recentMonth')),
                             ),
@@ -1401,6 +1476,23 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                   copy('requestOverview'),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
+                if (widget.approvalView) ...[
+                  Text(
+                    t(
+                      "미결 ${_data['approval_counts']?['pending'] ?? 0} · 결재 가능 ${_data['approval_counts']?['actionable'] ?? 0} · 보류 ${_data['approval_counts']?['blocked'] ?? 0}",
+                      "Pending ${_data['approval_counts']?['pending'] ?? 0} · Actionable ${_data['approval_counts']?['actionable'] ?? 0} · Blocked ${_data['approval_counts']?['blocked'] ?? 0}",
+                      "Chờ xử lý ${_data['approval_counts']?['pending'] ?? 0} · Có thể duyệt ${_data['approval_counts']?['actionable'] ?? 0} · Bị chặn ${_data['approval_counts']?['blocked'] ?? 0}",
+                    ),
+                  ),
+                  FilterChip(
+                    label: Text(t('내 결재 대기', 'My approvals', 'Chờ tôi duyệt')),
+                    selected: _query['request_scope'] == 'mine',
+                    onSelected: unavailable
+                        ? null
+                        : (value) =>
+                              _filter('request_scope', value ? 'mine' : 'all'),
+                  ),
+                ],
                 if (widget.loadPage != null)
                   Wrap(
                     spacing: 8,
@@ -1421,7 +1513,13 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(
-                      '${copy('period')}: ${_query['created_from']} ~ ${_query['created_to']}',
+                      _period == 'all'
+                          ? t(
+                              '전체 기간의 미결 요청',
+                              'Pending requests from all time',
+                              'Yêu cầu chờ xử lý trong toàn bộ thời gian',
+                            )
+                          : '${copy('period')}: ${_query['created_from']} ~ ${_query['created_to']}',
                     ),
                   ),
                 Text(

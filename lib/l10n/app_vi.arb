@@ -4283,4 +4283,11 @@
   "printerDiagnosticGeneric": "Kết nối in thất bại. Kiểm tra địa chỉ và lỗi bên dưới.",
   "printerDiagnosticPartial": "Dữ liệu có thể đã được gửi; đã dừng tự động thử lại. Kiểm tra bản in trước khi thử lại.",
   "printerDiagnosticAccepted": "Đã kết nối hoặc gửi dữ liệu. Kiểm tra bản in thực tế tại máy in."
+,
+  "storeSetupProcurementReadiness": "Trạng thái kết nối mua hàng",
+  "storeSetupProcurementRequester": "Người lập PR",
+  "storeSetupProcurementManager": "Quản lý cửa hàng",
+  "storeSetupProcurementReceiver": "Người nhận hàng",
+  "storeSetupProcurementAccounting": "Kế toán",
+  "storeSetupProcurementOffice": "Kết nối Office"
 }

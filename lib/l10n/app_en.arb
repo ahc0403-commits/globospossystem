@@ -4284,4 +4284,11 @@
   "printerDiagnosticGeneric": "Printing connection failed. Check the endpoint and error below.",
   "printerDiagnosticPartial": "Some data may already have been sent; automatic retry stopped. Check paper output before testing again.",
   "printerDiagnosticAccepted": "Connection or data transfer completed. Confirm physical output at the printer."
+,
+  "storeSetupProcurementReadiness": "Procurement connections",
+  "storeSetupProcurementRequester": "PR requester",
+  "storeSetupProcurementManager": "Store manager",
+  "storeSetupProcurementReceiver": "Receiver",
+  "storeSetupProcurementAccounting": "Accounting",
+  "storeSetupProcurementOffice": "Office connection"
 }
