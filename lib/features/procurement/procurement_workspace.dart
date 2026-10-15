@@ -295,6 +295,13 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     final action = p['action'];
     setState(() {
       _pending = null;
+      if (action == 'store_approve') {
+        _notice = t(
+          '매장 승인 완료 · 구매팀 검토 대기입니다. 내 결재 이력에서 확인할 수 있습니다.',
+          'Store approved · Awaiting purchase review. View it in My approval history.',
+          'Cửa hàng đã duyệt · Chờ bộ phận mua hàng. Xem tại Lịch sử tôi duyệt.',
+        );
+      }
       if ([
         'create_request',
         'save_request',
@@ -344,6 +351,15 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       }
       if (widget.approvalView && key == 'request_group') {
         _query['request_scope'] = value == 'pending' ? 'mine' : 'all';
+      }
+      if (widget.approvalView && key == 'request_scope') {
+        if (value == 'history') {
+          _query.remove('request_group');
+          _query['request_sort'] = 'updated';
+        } else {
+          _query['request_group'] = 'pending';
+          _query['request_sort'] = 'submitted';
+        }
       }
       _resetPages();
       _selectedId = null;
@@ -1500,8 +1516,22 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                         : (value) =>
                               _filter('request_scope', value ? 'mine' : 'all'),
                   ),
+                  FilterChip(
+                    key: const Key('procurement_approval_history'),
+                    label: Text(
+                      t('내 결재 이력', 'My approval history', 'Lịch sử tôi duyệt'),
+                    ),
+                    selected: _query['request_scope'] == 'history',
+                    onSelected: unavailable
+                        ? null
+                        : (value) => _filter(
+                            'request_scope',
+                            value ? 'history' : 'mine',
+                          ),
+                  ),
                 ],
-                if (widget.loadPage != null)
+                if (widget.loadPage != null &&
+                    _query['request_scope'] != 'history')
                   Wrap(
                     spacing: 8,
                     children: [
@@ -1523,9 +1553,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                     child: Text(
                       _period == 'all'
                           ? t(
-                              '전체 기간의 미결 요청',
-                              'Pending requests from all time',
-                              'Yêu cầu chờ xử lý trong toàn bộ thời gian',
+                              '전체 기간의 구매요청',
+                              'Purchase requests from all time',
+                              'Yêu cầu mua hàng trong toàn bộ thời gian',
                             )
                           : '${copy('period')}: ${_query['created_from']} ~ ${_query['created_to']}',
                     ),

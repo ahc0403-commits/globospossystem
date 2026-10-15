@@ -67,6 +67,59 @@ void main() {
       refresh.dispose();
     },
   );
+  testWidgets(
+    'approval history includes Office review and clears the pending filter',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final queries = <Map<String, dynamic>>[];
+      final request = <String, dynamic>{
+        'id': 'approved-by-store',
+        'request_no': 'PR-HANDOFF',
+        'status': 'office_review',
+        'row_version': 3,
+        'reason': 'Restock',
+        'created_at': '2026-10-15T08:40:00Z',
+        'requested_delivery_date': '2026-10-16',
+        'allowed_actions': [],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProcurementWorkspacePage(
+            approvalView: true,
+            load: () async => workspace(),
+            loadPage: (q) async {
+              queries.add({...q});
+              return {
+                ...workspace(),
+                'requests': q['request_scope'] == 'history' ? [request] : [],
+                'request_counts': {'pending': 1, 'approved': 0, 'cancelled': 0},
+              };
+            },
+            execute: (a, b, c, d, e) async => {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('PR-HANDOFF'), findsNothing);
+      await tester.ensureVisible(
+        find.byKey(const Key('procurement_approval_history')),
+      );
+      await tester.tap(find.byKey(const Key('procurement_approval_history')));
+      await tester.pumpAndSettle();
+      expect(queries.last['request_scope'], 'history');
+      expect(queries.last.containsKey('request_group'), isFalse);
+      expect(queries.last['request_sort'], 'updated');
+      expect(find.textContaining('PR-HANDOFF'), findsOneWidget);
+      expect(find.text('Drafts / pending (1)'), findsNothing);
+      await tester.tap(find.text('My approvals'));
+      await tester.pumpAndSettle();
+      expect(queries.last['request_scope'], 'mine');
+      expect(queries.last['request_group'], 'pending');
+      expect(queries.last['request_sort'], 'submitted');
+      expect(find.textContaining('PR-HANDOFF'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('disabled store cannot create requests', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(
