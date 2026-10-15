@@ -25,6 +25,7 @@ BEGIN
   IF v_old IS NOT NULL AND v_old IS DISTINCT FROM v_code AND EXISTS(SELECT 1 FROM store_fixed_account_requirements WHERE store_id=p_id) THEN RAISE EXCEPTION 'ABBREVIATION_ALREADY_IN_USE'; END IF;
   UPDATE restaurants SET short_code=v_code WHERE id=p_id;
  ELSE RAISE EXCEPTION 'ABBREVIATION_KIND_INVALID'; END IF;
+ IF v_old IS DISTINCT FROM v_code THEN INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,details) VALUES(auth.uid(),'registration_abbreviation_updated',CASE p_kind WHEN 'brand' THEN 'brands' ELSE 'restaurants' END,p_id,jsonb_build_object('previous',v_old,'short_code',v_code)); END IF;
  RETURN v_code;
 EXCEPTION WHEN unique_violation THEN RAISE EXCEPTION 'ABBREVIATION_EXISTS';
 END $$;
@@ -63,7 +64,7 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS public.store_account_onboarding_jobs(
  id uuid PRIMARY KEY, store_id uuid NOT NULL UNIQUE REFERENCES public.restaurants(id),
- actor_id uuid NOT NULL REFERENCES public.users(id), input jsonb NOT NULL,
+ actor_id uuid NOT NULL REFERENCES public.users(id), input jsonb NOT NULL, accounts jsonb NOT NULL CHECK(jsonb_typeof(accounts)='array' AND jsonb_array_length(accounts) BETWEEN 1 AND 50),
  status text NOT NULL DEFAULT 'pending' CHECK(status IN('pending','running','partial','complete')),
  lease_id uuid,lease_until timestamptz, attempts integer NOT NULL DEFAULT 0,
  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now()
@@ -97,7 +98,7 @@ GRANT EXECUTE ON FUNCTION public.admin_preview_store_accounts_v1(uuid,text,text[
 
 CREATE OR REPLACE FUNCTION public.admin_create_store_onboarding_v1(p_request_id uuid,p_name text,p_address text,p_code text,p_brand_id uuid,p_tax_entity_id uuid,p_floors text[],p_operation_mode text DEFAULT 'standard',p_per_person_charge numeric DEFAULT NULL)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth AS $$
-DECLARE v_input jsonb; v_job public.store_account_onboarding_jobs; v_store public.restaurants; v_brand_code text; v_code text:=upper(btrim(p_code)); v_floors text[];
+DECLARE v_input jsonb; v_job public.store_account_onboarding_jobs; v_store public.restaurants; v_brand_code text; v_code text:=upper(btrim(p_code)); v_floors text[]; v_accounts jsonb;
 BEGIN
  PERFORM public.require_brand_admin_v1();
  IF p_request_id IS NULL THEN RAISE EXCEPTION 'REQUEST_ID_REQUIRED'; END IF;
@@ -115,11 +116,12 @@ BEGIN
  SELECT short_code INTO v_brand_code FROM brands WHERE id=p_brand_id FOR UPDATE;
  IF v_brand_code IS NULL THEN RAISE EXCEPTION 'BRAND_ABBREVIATION_REQUIRED'; END IF;
  IF EXISTS(SELECT 1 FROM restaurants WHERE upper(short_code)=v_code) THEN RAISE EXCEPTION 'ABBREVIATION_EXISTS'; END IF;
+ v_accounts:=public.admin_preview_store_accounts_v1(p_brand_id,v_code,v_floors);
  v_store:=public.admin_create_restaurant_v2(p_name,'store-'||p_request_id,p_operation_mode,p_tax_entity_id,p_brand_id,p_address,p_per_person_charge);
  UPDATE restaurants SET short_code=v_code WHERE id=v_store.id;
- INSERT INTO store_account_onboarding_jobs(id,store_id,actor_id,input) SELECT p_request_id,v_store.id,id,v_input FROM users WHERE auth_id=auth.uid();
+ INSERT INTO store_account_onboarding_jobs(id,store_id,actor_id,input,accounts) SELECT p_request_id,v_store.id,id,v_input,v_accounts FROM users WHERE auth_id=auth.uid();
  INSERT INTO store_fixed_account_requirements(store_id,account_code,account_type,role,display_name,scope)
- SELECT v_store.id,t.account_code,t.account_type,t.role,p_name||' '||t.display_name,t.scope FROM jsonb_to_recordset(public.admin_preview_store_accounts_v1(p_brand_id,v_code,v_floors)) t(account_code text,account_type text,role text,display_name text,scope text);
+ SELECT v_store.id,t.account_code,t.account_type,t.role,p_name||' '||t.display_name,t.scope FROM jsonb_to_recordset(v_accounts) t(account_code text,account_type text,role text,display_name text,scope text);
  IF (SELECT count(*) FROM store_fixed_account_requirements WHERE store_id=v_store.id)>50 THEN RAISE EXCEPTION 'ACCOUNT_LIMIT'; END IF;
  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,details) VALUES(auth.uid(),'admin_create_store_onboarding_v1','restaurants',v_store.id,jsonb_build_object('request_id',p_request_id,'short_code',v_code,'floors',v_floors));
  RETURN v_store.id;
@@ -149,6 +151,17 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.admin_store_onboarding_for_store_v1(uuid) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.admin_store_onboarding_for_store_v1(uuid) TO authenticated;
+
+-- Freeze master-approved identity/scope templates. Later workforce edits cannot
+-- cause a background master job to create additional or elevated identities.
+CREATE OR REPLACE FUNCTION public.store_onboarding_manifest_matches_v1(p_store_id uuid,p_accounts jsonb)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
+ WITH actual AS MATERIALIZED(SELECT account_code,account_type,role,scope FROM store_fixed_account_requirements WHERE store_id=p_store_id AND is_active),
+ expected AS MATERIALIZED(SELECT * FROM jsonb_to_recordset(p_accounts) t(account_code text,account_type text,role text,scope text))
+ SELECT NOT EXISTS(SELECT 1 FROM actual a FULL JOIN expected e USING(account_code) WHERE a.account_code IS NULL OR e.account_code IS NULL OR a.account_type IS DISTINCT FROM e.account_type OR a.role IS DISTINCT FROM e.role OR a.scope IS DISTINCT FROM e.scope);
+$$;
+REVOKE ALL ON FUNCTION public.store_onboarding_manifest_matches_v1(uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+
 -- Only the worker may lease jobs. One indexed, bounded batch preloads Auth and profiles.
 CREATE OR REPLACE FUNCTION public.claim_store_onboarding_v1(p_job_id uuid DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth AS $$
@@ -157,6 +170,10 @@ BEGIN
  UPDATE store_account_onboarding_jobs j SET status='partial',lease_id=NULL,lease_until=NULL,updated_at=now() WHERE status IN('pending','running') AND (lease_until IS NULL OR lease_until<now()) AND (attempts>=3 OR NOT EXISTS(SELECT 1 FROM restaurants r WHERE r.id=j.store_id AND r.is_active) OR NOT EXISTS(SELECT 1 FROM users actor WHERE actor.id=j.actor_id AND actor.is_active AND actor.role='super_admin')); 
  SELECT * INTO v_job FROM store_account_onboarding_jobs WHERE (p_job_id IS NULL OR id=p_job_id) AND status IN('pending','running') AND (lease_until IS NULL OR lease_until<now()) AND attempts<3 AND EXISTS(SELECT 1 FROM restaurants r WHERE r.id=store_id AND r.is_active) AND EXISTS(SELECT 1 FROM users actor WHERE actor.id=actor_id AND actor.is_active AND actor.role='super_admin') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1;
  IF NOT FOUND THEN RETURN NULL; END IF;
+ IF NOT public.store_onboarding_manifest_matches_v1(v_job.store_id,v_job.accounts) THEN
+  UPDATE store_account_onboarding_jobs SET status='partial',lease_id=NULL,lease_until=NULL,updated_at=now() WHERE id=v_job.id;
+  RETURN NULL;
+ END IF;
  UPDATE store_account_onboarding_jobs SET status='running',lease_id=gen_random_uuid(),lease_until=now()+interval '120 seconds',attempts=attempts+1,updated_at=now() WHERE id=v_job.id RETURNING * INTO v_job;
  SELECT jsonb_agg(jsonb_build_object('account_code',q.account_code,'display_name',q.display_name,'role',q.role,'account_type',q.account_type,'scope',q.scope,'owner_id',CASE q.scope WHEN 'brand' THEN r.brand_id ELSE r.id END,'auth_exists',a.id IS NOT NULL) ORDER BY q.account_code) INTO v_items
  FROM store_fixed_account_requirements q JOIN restaurants r ON r.id=q.store_id
@@ -169,8 +186,12 @@ CREATE OR REPLACE FUNCTION public.finish_store_onboarding_v1(p_job_id uuid,p_lea
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth AS $$
 DECLARE v_job public.store_account_onboarding_jobs; v_count integer; v_affected uuid[];
 BEGIN
+ -- Serialize against normal workforce edits and store closure during reconciliation.
+ PERFORM 1 FROM restaurants r JOIN store_account_onboarding_jobs j ON j.store_id=r.id WHERE j.id=p_job_id FOR UPDATE OF r;
+ PERFORM 1 FROM store_fixed_account_requirements q JOIN store_account_onboarding_jobs j ON j.store_id=q.store_id WHERE j.id=p_job_id FOR UPDATE OF q;
  SELECT * INTO v_job FROM store_account_onboarding_jobs WHERE id=p_job_id AND lease_id=p_lease_id AND lease_until>now() AND status='running' AND EXISTS(SELECT 1 FROM restaurants r WHERE r.id=store_id AND r.is_active) AND EXISTS(SELECT 1 FROM users actor WHERE actor.id=actor_id AND actor.is_active AND actor.role='super_admin') FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'JOB_LEASE_INVALID'; END IF;
+ IF NOT public.store_onboarding_manifest_matches_v1(v_job.store_id,v_job.accounts) THEN RAISE EXCEPTION 'JOB_REQUIREMENTS_CHANGED'; END IF;
  -- No client-supplied user IDs or roles. Reconcile lost Auth responses by exact email
  -- and a server-only app_metadata ownership marker; existing profiles must match scope.
  WITH eligible AS MATERIALIZED (
@@ -209,7 +230,7 @@ BEGIN
  brands AS(SELECT user_id,jsonb_agg(brand_id) ids FROM brand_scope GROUP BY user_id),
  entity_scope AS(SELECT ea.user_id,ea.tax_entity_id FROM user_tax_entity_access ea JOIN affected u ON u.id=ea.user_id WHERE ea.is_active UNION SELECT s.user_id,r.tax_entity_id FROM store_scope s JOIN restaurants r ON r.id=s.store_id WHERE r.tax_entity_id IS NOT NULL),
  entities AS(SELECT user_id,jsonb_agg(tax_entity_id) ids FROM entity_scope GROUP BY user_id)
- UPDATE auth.users a SET raw_app_meta_data=coalesce(a.raw_app_meta_data,'{}')||jsonb_build_object('role',u.role,'primary_store_id',u.primary_store_id,'accessible_store_ids',coalesce(s.ids,'[]'),'brand_ids',coalesce(b.ids,'[]'),'accessible_tax_entity_ids',coalesce(e.ids,'[]')) FROM affected u LEFT JOIN stores s ON s.user_id=u.id LEFT JOIN brands b ON b.user_id=u.id LEFT JOIN entities e ON e.user_id=u.id WHERE a.id=u.auth_id;
+ UPDATE auth.users a SET raw_app_meta_data=coalesce(a.raw_app_meta_data,'{}')||jsonb_build_object('role',u.role,'primary_store_id',coalesce(u.primary_store_id,u.restaurant_id),'accessible_store_ids',coalesce(s.ids,'[]'),'brand_ids',coalesce(b.ids,'[]'),'accessible_tax_entity_ids',coalesce(e.ids,'[]')) FROM affected u LEFT JOIN stores s ON s.user_id=u.id LEFT JOIN brands b ON b.user_id=u.id LEFT JOIN entities e ON e.user_id=u.id WHERE a.id=u.auth_id;
  SELECT count(*) INTO v_count FROM store_fixed_account_requirements WHERE store_id=v_job.store_id AND is_active AND provisioned_user_id IS NULL;
  UPDATE store_account_onboarding_jobs SET status=CASE WHEN v_count=0 THEN 'complete' WHEN attempts>=3 THEN 'partial' ELSE 'pending' END,lease_id=NULL,lease_until=NULL,updated_at=now() WHERE id=p_job_id;
  RETURN jsonb_build_object('job_id',p_job_id,'store_id',v_job.store_id,'remaining',v_count,'status',CASE WHEN v_count=0 THEN 'complete' WHEN v_job.attempts>=3 THEN 'partial' ELSE 'pending' END);

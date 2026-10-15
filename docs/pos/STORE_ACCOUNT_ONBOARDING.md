@@ -26,6 +26,10 @@ same UUID/input returns the same store; a different input is rejected. Preview
 and insertion use the same template function. New registrations preserve the
 existing Office store-linking contract.
 
+The job freezes the master-approved identity/role/scope manifest. Later workforce
+edits cannot broaden a background job; reconciliation locks the store and its
+requirements and rejects a changed manifest.
+
 The Edge worker leases one job, creates missing Auth identities with server-only
 ownership metadata, then reconciles profiles/access in one SQL transaction.
 Unrelated Auth emails, mismatched roles, disabled profiles and disabled grants

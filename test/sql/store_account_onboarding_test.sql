@@ -40,13 +40,24 @@ SET ROLE authenticated;
 SELECT admin_create_store_onboarding_v1('60000000-0000-4000-8000-000000000002','Second store','address','JG02','50000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',ARRAY['1F']);
 RESET ROLE;
 SELECT brand_assert((SELECT count(DISTINCT account_code)=1 FROM store_fixed_account_requirements WHERE scope='brand'),'BM identity shared');
+-- A mutable workforce template cannot broaden the frozen master job.
+UPDATE store_fixed_account_requirements SET account_type='brand_manager',role='brand_admin',scope='brand' WHERE account_code='jg02_sm1';
+SET ROLE service_role;
+SELECT brand_assert(claim_store_onboarding_v1('60000000-0000-4000-8000-000000000002') IS NULL,'changed role/scope blocks Auth creation');
+RESET ROLE;
+SELECT brand_assert((SELECT status='partial' FROM store_account_onboarding_jobs WHERE id='60000000-0000-4000-8000-000000000002'),'changed manifest requires explicit recovery');
+UPDATE store_fixed_account_requirements SET account_type='store_manager',role='store_admin',scope='store' WHERE account_code='jg02_sm1';
+SET ROLE authenticated;
+SELECT admin_store_onboarding_status_v1('60000000-0000-4000-8000-000000000002',true);
+RESET ROLE;
 -- Explicit brand access is authoritative even when the legacy primary brand is unset.
-UPDATE users SET brand_id=NULL WHERE fixed_account_code='jg_bm1';
+UPDATE users SET brand_id=NULL,primary_store_id=NULL WHERE fixed_account_code='jg_bm1';
 SET ROLE service_role;
 SELECT claim_store_onboarding_v1('60000000-0000-4000-8000-000000000002') claim3 \gset
 SELECT finish_store_onboarding_v1('60000000-0000-4000-8000-000000000002',(:'claim3'::jsonb->>'lease_id')::uuid);
 RESET ROLE;
 SELECT brand_assert((SELECT count(*)=1 FROM users WHERE fixed_account_code='jg_bm1'),'shared BM has one profile');
+SELECT brand_assert((SELECT a.raw_app_meta_data->>'primary_store_id'=u.restaurant_id::text FROM users u JOIN auth.users a ON a.id=u.auth_id WHERE u.fixed_account_code='jg_bm1'),'primary store claim preserves legacy fallback');
 SELECT brand_assert((SELECT count(*)=2 FROM user_store_access sa JOIN users u ON u.id=sa.user_id WHERE u.fixed_account_code='jg_bm1'),'BM gets both stores');
 SELECT brand_assert((SELECT count(*)=1 FROM user_store_access sa JOIN users u ON u.id=sa.user_id WHERE u.fixed_account_code='jgbt_sm1'),'store manager remains store scoped');
 -- Initial brand abbreviation setup must work for legacy brands with issued IDs.
