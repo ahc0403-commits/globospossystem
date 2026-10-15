@@ -4,12 +4,11 @@ begin;
 -- One employee / <=92 ICT dates, one statement snapshot, no per-record queries.
 create or replace function public.office_photo_payroll_inputs(
   p_store_id uuid, p_employee_id uuid, p_from date, p_to date
-) returns jsonb language plpgsql stable security invoker set search_path='' as $$
+) returns jsonb language plpgsql stable security definer set search_path='' as $$
 declare result jsonb;
 begin
-  if current_user <> 'service_role' then
-    raise exception 'PAYROLL_INPUT_FORBIDDEN';
-  end if;
+  -- EXECUTE is service-only below. The owner reads the protected workforce
+  -- tables without granting the caller direct table access.
   if p_store_id is null or p_employee_id is null or p_from is null or p_to is null
     or not isfinite(p_from) or not isfinite(p_to) or p_to < p_from or p_to-p_from > 91 then
     raise exception 'PAYROLL_INPUT_QUERY_INVALID';
@@ -65,4 +64,14 @@ begin
 end; $$;
 revoke all on function public.office_photo_payroll_inputs(uuid,uuid,date,date) from public,anon,authenticated;
 grant execute on function public.office_photo_payroll_inputs(uuid,uuid,date,date) to service_role;
+
+-- The separate allowance list needs only these columns; keep its source table
+-- protected and expose the same service-only read boundary as the directory.
+create or replace view public.v_office_employee_daily_allowances
+with (security_barrier=true) as
+select id,store_id,employee_id,work_date,is_split_shift,
+  meal_allowance_amount,parking_allowance_amount,updated_at
+from public.employee_daily_allowances;
+revoke all on public.v_office_employee_daily_allowances from public,anon,authenticated;
+grant select on public.v_office_employee_daily_allowances to service_role;
 commit;

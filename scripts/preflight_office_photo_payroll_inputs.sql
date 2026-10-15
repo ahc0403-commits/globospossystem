@@ -2,6 +2,9 @@ do $$ begin
   if to_regprocedure('public.office_photo_payroll_inputs(uuid,uuid,date,date)') is not null then
     raise exception 'Payroll input RPC already exists; investigate history before applying';
   end if;
+  if to_regclass('public.v_office_employee_daily_allowances') is not null then
+    raise exception 'Office allowance read view already exists; investigate history before applying';
+  end if;
   if to_regclass('public.store_employees') is null or to_regclass('public.attendance_logs') is null
     or to_regclass('public.employee_hourly_pay_rules') is null
     or to_regclass('public.employee_daily_allowances') is null
