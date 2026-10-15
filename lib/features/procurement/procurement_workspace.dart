@@ -1,3 +1,5 @@
+import 'procurement_request_card.dart';
+import 'procurement_stock_dialog.dart';
 import 'procurement_product_picker.dart';
 import 'procurement_metrics.dart';
 import 'procurement_catalog_dialog.dart';
@@ -102,8 +104,10 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     super.initState();
     if (widget.approvalView) {
       _period = 'all';
-      _query['request_scope'] = 'mine';
-      _query['request_sort'] = 'submitted';
+      _query['request_scope'] = 'all';
+      _query['request_sort'] = 'created';
+      _query['approval_view'] = true;
+      _query['request_summary_only'] = true;
     } else {
       _query.addAll(procurementRecentMonth());
       _query['request_sort'] = 'created';
@@ -295,6 +299,13 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     final action = p['action'];
     setState(() {
       _pending = null;
+      if (action == 'store_approve') {
+        _notice = t(
+          '매장 승인 완료 · 구매팀 검토 대기입니다. 승인완료 탭에서 확인할 수 있습니다.',
+          'Store approved · Awaiting purchase review. View it in Approved.',
+          'Cửa hàng đã duyệt · Chờ bộ phận mua hàng. Xem tại Đã duyệt.',
+        );
+      }
       if ([
         'create_request',
         'save_request',
@@ -343,7 +354,8 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
         _query[key] = value;
       }
       if (widget.approvalView && key == 'request_group') {
-        _query['request_scope'] = value == 'pending' ? 'mine' : 'all';
+        _query['request_scope'] = 'all';
+        _query['request_sort'] = 'created';
       }
       _resetPages();
       _selectedId = null;
@@ -476,6 +488,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
           'include_shortages': true,
           'catalog_only': true,
         });
+        _data['products'] = rows(page['products']);
+        _data['supplier_items'] = rows(page['supplier_items']);
+        _data['catalog_has_more'] = page['catalog_has_more'] == true;
         final shortages = rows(map(page['shortages'])['rows']);
         if (shortages.isNotEmpty) {
           initial = {'lines': procurementCarryoverLines(shortages)};
@@ -702,6 +717,11 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       _selectedOrderId = null;
     });
     if (widget.loadPage != null) await _load();
+    if (widget.approvalView && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+      });
+    }
   }
 
   Future<void> _selectOrder(String id) async {
@@ -1128,6 +1148,132 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     }
   }
 
+  List<Widget> _filterFields(bool unavailable) => [
+    if (widget.loadPage != null)
+      SizedBox(
+        width: 190,
+        child: DropdownButtonFormField<String>(
+          isExpanded: true,
+          key: ValueKey('procurement_category:${_query['purchase_category']}'),
+          initialValue: _query['purchase_category']?.toString() ?? '',
+          decoration: InputDecoration(labelText: copy('category')),
+          items: [
+            for (final category in [
+              '',
+              'raw_material',
+              'tools',
+              'beverage',
+              'other',
+            ])
+              DropdownMenuItem(
+                value: category,
+                child: Text(copy(category.isEmpty ? 'all' : category)),
+              ),
+          ],
+          onChanged: unavailable
+              ? null
+              : (value) => _filter('purchase_category', value),
+        ),
+      ),
+    if (widget.loadPage != null)
+      SizedBox(
+        width: 240,
+        child: TextField(
+          controller: _search,
+          decoration: InputDecoration(labelText: copy('searchRecords')),
+          onSubmitted: unavailable
+              ? null
+              : (value) => _filter('search', value.trim()),
+        ),
+      ),
+    if (widget.loadPage != null)
+      SizedBox(
+        width: 190,
+        child: DropdownButtonFormField<String>(
+          isExpanded: true,
+          key: ValueKey(
+            'procurement_period:$_period:${_query['created_from']}:${_query['created_to']}',
+          ),
+          initialValue: _period,
+          decoration: InputDecoration(labelText: copy('period')),
+          items: [
+            DropdownMenuItem(
+              value: 'all',
+              child: Text(t('전체 기간', 'All time', 'Toàn bộ thời gian')),
+            ),
+            DropdownMenuItem(value: 'recent', child: Text(copy('recentMonth'))),
+            DropdownMenuItem(
+              value: 'custom',
+              child: Text(copy('customPeriod')),
+            ),
+          ],
+          onChanged: unavailable ? null : _choosePeriod,
+        ),
+      ),
+  ];
+
+  Widget _approvalToolbar(bool unavailable) {
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.end,
+      children: [
+        OutlinedButton.icon(
+          key: const Key('procurement_stock_lookup'),
+          onPressed: unavailable || widget.loadPage == null
+              ? null
+              : () => showDialog<void>(
+                  context: context,
+                  builder: (_) =>
+                      ProcurementStockDialog(load: widget.loadPage!),
+                ),
+          icon: const Icon(Icons.inventory_2_outlined),
+          label: Text(copy('stockLookup')),
+        ),
+        if (actor['can_create'] == true)
+          FilledButton.icon(
+            key: const Key('procurement_create_request'),
+            onPressed:
+                enabled &&
+                    !unavailable &&
+                    map(_data['policy'])['new_requests_enabled'] != false
+                ? _editRequest
+                : null,
+            icon: const Icon(Icons.add),
+            label: Text(t('구매요청 작성', 'New request', 'Tạo yêu cầu')),
+          ),
+      ],
+    );
+    final filters = Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      children: _filterFields(unavailable),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 1120 &&
+            MediaQuery.textScalerOf(context).scale(1) <= 1.4) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: filters),
+              const SizedBox(width: 16),
+              actions,
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            filters,
+            const SizedBox(height: 12),
+            Align(alignment: Alignment.centerRight, child: actions),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final requests = rows(_data['requests']);
@@ -1136,9 +1282,29 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
         ? detail
         : requests.where((r) => r['id'] == _selectedId).firstOrNull;
     final unavailable = _busy || _pending != null;
+    final detailView = widget.approvalView && _selectedId != null;
     final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
+        leading: detailView
+            ? IconButton(
+                key: const Key('procurement_detail_back'),
+                tooltip: copy('backToRequests'),
+                icon: const Icon(Icons.arrow_back),
+                onPressed: unavailable
+                    ? null
+                    : () {
+                        setState(() {
+                          _selectedId = null;
+                          _selectedOrderId = null;
+                          _data.remove('request_detail');
+                        });
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+                        });
+                      },
+              )
+            : null,
         title: Text(
           copy(
             widget.approvalView
@@ -1189,6 +1355,17 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
               onPressed: unavailable ? null : widget.onLogout,
               icon: const Icon(Icons.logout),
               tooltip: copy('logout'),
+            ),
+          if (widget.approvalView)
+            PopupMenuButton<String>(
+              tooltip: copy('moreHistory'),
+              onSelected: (_) => _filter('request_group', 'cancelled'),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'cancelled',
+                  child: Text(copy('cancelledHistory')),
+                ),
+              ],
             ),
           IconButton(
             onPressed: _busy ? null : _load,
@@ -1279,130 +1456,64 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                       'Quy trình mới chưa được bật cho cửa hàng.',
                     ),
                   ),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    if (widget.loadPage != null)
-                      SizedBox(
-                        width: 190,
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          key: ValueKey(
-                            'procurement_category:${_query['purchase_category']}',
+                if (!detailView) ...[
+                  if (widget.approvalView)
+                    _approvalToolbar(unavailable)
+                  else
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        ..._filterFields(unavailable),
+                        if (!requesterView &&
+                            actor['can_office_approve'] == true)
+                          TextButton(
+                            onPressed: unavailable || !enabled
+                                ? null
+                                : _saveProduct,
+                            child: Text(copy('catalogSetup')),
                           ),
-                          initialValue:
-                              _query['purchase_category']?.toString() ?? '',
-                          decoration: InputDecoration(
-                            labelText: copy('category'),
+                        if (actor['can_create'] == true)
+                          FilledButton.icon(
+                            key: const Key('procurement_create_request'),
+                            onPressed:
+                                enabled &&
+                                    !unavailable &&
+                                    map(
+                                          _data['policy'],
+                                        )['new_requests_enabled'] !=
+                                        false
+                                ? _editRequest
+                                : null,
+                            icon: const Icon(Icons.add),
+                            label: Text(
+                              t('구매요청 작성', 'New request', 'Tạo yêu cầu'),
+                            ),
                           ),
-                          items: [
-                            for (final category in [
-                              '',
-                              'raw_material',
-                              'tools',
-                              'beverage',
-                              'other',
-                            ])
-                              DropdownMenuItem(
-                                value: category,
-                                child: Text(
-                                  copy(category.isEmpty ? 'all' : category),
-                                ),
-                              ),
-                          ],
-                          onChanged: unavailable
-                              ? null
-                              : (value) => _filter('purchase_category', value),
-                        ),
-                      ),
-                    if (widget.loadPage != null)
-                      SizedBox(
-                        width: 240,
-                        child: TextField(
-                          controller: _search,
-                          decoration: InputDecoration(
-                            labelText: copy('searchRecords'),
-                          ),
-                          onSubmitted: unavailable
-                              ? null
-                              : (value) => _filter('search', value.trim()),
-                        ),
-                      ),
-                    if (widget.loadPage != null)
-                      SizedBox(
-                        width: 190,
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          key: ValueKey(
-                            'procurement_period:$_period:${_query['created_from']}:${_query['created_to']}',
-                          ),
-                          initialValue: _period,
-                          decoration: InputDecoration(
-                            labelText: copy('period'),
-                          ),
-                          items: [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text(
-                                t('전체 기간', 'All time', 'Toàn bộ thời gian'),
+                        if (actor['can_manage'] == true && enabled)
+                          TextButton(
+                            onPressed: unavailable ? null : _toggleNewRequests,
+                            child: Text(
+                              copy(
+                                map(_data['policy'])['new_requests_enabled'] ==
+                                        false
+                                    ? 'resumeNew'
+                                    : 'pauseNew',
                               ),
                             ),
-                            DropdownMenuItem(
-                              value: 'recent',
-                              child: Text(copy('recentMonth')),
-                            ),
-                            DropdownMenuItem(
-                              value: 'custom',
-                              child: Text(copy('customPeriod')),
-                            ),
-                          ],
-                          onChanged: unavailable ? null : _choosePeriod,
-                        ),
-                      ),
-                    if (!requesterView && actor['can_office_approve'] == true)
-                      TextButton(
-                        onPressed: unavailable || !enabled
-                            ? null
-                            : _saveProduct,
-                        child: Text(copy('catalogSetup')),
-                      ),
-                    if (actor['can_create'] == true)
-                      FilledButton.icon(
-                        key: const Key('procurement_create_request'),
-                        onPressed:
-                            enabled &&
-                                !unavailable &&
-                                map(_data['policy'])['new_requests_enabled'] !=
-                                    false
-                            ? _editRequest
-                            : null,
-                        icon: const Icon(Icons.add),
-                        label: Text(t('구매요청 작성', 'New request', 'Tạo yêu cầu')),
-                      ),
-                    if (actor['can_manage'] == true && enabled)
-                      TextButton(
-                        onPressed: unavailable ? null : _toggleNewRequests,
-                        child: Text(
-                          copy(
-                            map(_data['policy'])['new_requests_enabled'] ==
-                                    false
-                                ? 'resumeNew'
-                                : 'pauseNew',
                           ),
-                        ),
-                      ),
-                    if (actor['can_manage'] == true)
-                      OutlinedButton(
-                        onPressed: unavailable ? null : _configure,
-                        child: Text(
-                          t('구매 정책', 'Purchase policy', 'Chính sách mua'),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (!requesterView)
+                        if (actor['can_manage'] == true)
+                          OutlinedButton(
+                            onPressed: unavailable ? null : _configure,
+                            child: Text(
+                              t('구매 정책', 'Purchase policy', 'Chính sách mua'),
+                            ),
+                          ),
+                      ],
+                    ),
+                  const SizedBox(height: 16),
+                ],
+                if (!requesterView && !widget.approvalView)
                   ExpansionTile(
                     title: Text(copy('operatingMetrics')),
                     onExpansionChanged: (v) {
@@ -1418,7 +1529,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                       ),
                     ],
                   ),
-                if (!requesterView)
+                if (!requesterView && !widget.approvalView)
                   ExpansionTile(
                     initiallyExpanded: _query['include_evidence'] == true,
                     onExpansionChanged: (v) {
@@ -1439,7 +1550,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                     ],
                   ),
 
-                if (widget.loadPage != null && actor['can_view_prices'] == true)
+                if (!widget.approvalView &&
+                    widget.loadPage != null &&
+                    actor['can_view_prices'] == true)
                   TextButton(
                     onPressed: unavailable
                         ? null
@@ -1480,35 +1593,24 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                           : null,
                     ),
                   ),
-                Text(
-                  copy('requestOverview'),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                if (widget.approvalView) ...[
+                if (!widget.approvalView)
                   Text(
-                    t(
-                      "미결 ${_data['approval_counts']?['pending'] ?? 0} · 결재 가능 ${_data['approval_counts']?['actionable'] ?? 0} · 보류 ${_data['approval_counts']?['blocked'] ?? 0}",
-                      "Pending ${_data['approval_counts']?['pending'] ?? 0} · Actionable ${_data['approval_counts']?['actionable'] ?? 0} · Blocked ${_data['approval_counts']?['blocked'] ?? 0}",
-                      "Chờ xử lý ${_data['approval_counts']?['pending'] ?? 0} · Có thể duyệt ${_data['approval_counts']?['actionable'] ?? 0} · Bị chặn ${_data['approval_counts']?['blocked'] ?? 0}",
-                    ),
+                    copy('requestOverview'),
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  FilterChip(
-                    label: Text(t('내 결재 대기', 'My approvals', 'Chờ tôi duyệt')),
-                    selected: _query['request_scope'] == 'mine',
-                    onSelected: unavailable
-                        ? null
-                        : (value) =>
-                              _filter('request_scope', value ? 'mine' : 'all'),
-                  ),
-                ],
-                if (widget.loadPage != null)
+                if (widget.loadPage != null && !detailView)
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      for (final group in ['pending', 'approved', 'cancelled'])
+                      for (final group
+                          in widget.approvalView
+                              ? ['pending', 'approved', 'returned']
+                              : ['pending', 'approved', 'cancelled'])
                         ChoiceChip(
+                          key: ValueKey('procurement_group_$group'),
                           label: Text(
-                            '${copy('group_$group')} (${map(_data['request_counts'])[group] ?? 0})',
+                            '${copy(widget.approvalView ? 'approval_$group' : 'group_$group')} (${map(_data['request_counts'])[group] ?? 0})',
                           ),
                           selected: _query['request_group'] == group,
                           onSelected: unavailable
@@ -1517,50 +1619,68 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                         ),
                     ],
                   ),
-                if (widget.loadPage != null)
+                if (widget.loadPage != null && !widget.approvalView)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(
                       _period == 'all'
                           ? t(
-                              '전체 기간의 미결 요청',
-                              'Pending requests from all time',
-                              'Yêu cầu chờ xử lý trong toàn bộ thời gian',
+                              '전체 기간의 구매요청',
+                              'Purchase requests from all time',
+                              'Yêu cầu mua hàng trong toàn bộ thời gian',
                             )
                           : '${copy('period')}: ${_query['created_from']} ~ ${_query['created_to']}',
                     ),
                   ),
-                Text(
-                  copy('requestList'),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                if (requests.isEmpty)
+                if (!detailView) ...[
+                  if (widget.approvalView) const SizedBox(height: 12),
+                  if (widget.approvalView &&
+                      _query['request_group'] == 'cancelled')
+                    Text(
+                      copy('cancelledHistory'),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   Text(
-                    t(
-                      '구매요청이 없습니다.',
-                      'No purchase requests.',
-                      'Chưa có yêu cầu mua hàng.',
-                    ),
+                    widget.approvalView
+                        ? '${copy('requestList')} (${map(_data['request_counts'])[_query['request_group']] ?? requests.length})'
+                        : copy('requestList'),
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                for (final r in requests)
-                  Card(
-                    child: ListTile(
-                      selected: _selectedId == r['id'],
-                      title: Text(
-                        '${r['request_no']} · ${label(r['status'].toString())}',
+                  if (requests.isEmpty)
+                    Text(
+                      t(
+                        '구매요청이 없습니다.',
+                        'No purchase requests.',
+                        'Chưa có yêu cầu mua hàng.',
                       ),
-                      subtitle: Text(
-                        '${copy('requestDate')} ${procurementDate(r['created_at'])} / ${copy('requiredDate')} ${procurementDate(r['requested_delivery_date'])}\n${r['reason']} · ${copy(r['purchase_category']?.toString() ?? 'raw_material')} · ${r['line_count'] ?? rows(r['lines']).length} ${copy('itemCount')}',
-                      ),
-                      isThreeLine: true,
-                      onTap: () => _selectRequest(r['id'].toString()),
                     ),
-                  ),
-                if (_data['request_has_more'] == true)
-                  TextButton(
-                    onPressed: unavailable ? null : () => _next('request'),
-                    child: Text(copy('nextRequests')),
-                  ),
+                  for (final r in requests)
+                    if (widget.approvalView)
+                      ProcurementRequestCard(
+                        request: r,
+                        selected: _selectedId == r['id'],
+                        onOpen: () => _selectRequest(r['id'].toString()),
+                      )
+                    else
+                      Card(
+                        child: ListTile(
+                          selected: _selectedId == r['id'],
+                          title: Text(
+                            '${r['request_no']} · ${label(r['status'].toString())}',
+                          ),
+                          subtitle: Text(
+                            '${copy('requestDate')} ${procurementDate(r['created_at'])} / ${copy('requiredDate')} ${procurementDate(r['requested_delivery_date'])}\n${r['reason']} · ${copy(r['purchase_category']?.toString() ?? 'raw_material')} · ${r['line_count'] ?? rows(r['lines']).length} ${copy('itemCount')}',
+                          ),
+                          isThreeLine: true,
+                          onTap: () => _selectRequest(r['id'].toString()),
+                        ),
+                      ),
+                  if (_data['request_has_more'] == true)
+                    TextButton(
+                      onPressed: unavailable ? null : () => _next('request'),
+                      child: Text(copy('nextRequests')),
+                    ),
+                ],
                 if (selected != null) ...[
                   Text(
                     '${copy('requestDate')} ${procurementDate(selected['created_at'])} / ${copy('requiredDate')} ${procurementDate(selected['requested_delivery_date'])}',
@@ -1630,187 +1750,194 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                     ],
                   ),
                 ],
-                const Divider(),
-                if (!requesterView || _selectedId != null)
-                  Text(
-                    t('발주 진행', 'Purchase orders', 'Tiến độ đơn mua'),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                for (final order in rows(_data['orders']))
-                  Card(
-                    child: ListTile(
-                      onTap: () => _selectOrder(order['id'].toString()),
+                if (!widget.approvalView ||
+                    detailView ||
+                    _selectedOrderId != null) ...[
+                  const Divider(),
+                  if (!requesterView || _selectedId != null)
+                    Text(
+                      t('발주 진행', 'Purchase orders', 'Tiến độ đơn mua'),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  for (final order in rows(_data['orders']))
+                    Card(
+                      child: ListTile(
+                        onTap: () => _selectOrder(order['id'].toString()),
+                        title: Text(
+                          '${order['purchase_order_no']} · ${label(order['procurement_status'].toString())}',
+                        ),
+                        subtitle: Text(
+                          '${order['supplier_name']} · ${order['requested_delivery_date']}\n${_dates(order)}${order['receiving_outcome'] == 'partial_transferred' ? '\n${t('일부 입고 · 부족분 다음 PO 이관', 'Partial receipt · shortage transferred', 'Nhập một phần · thiếu chuyển PO sau')}' : ''}',
+                        ),
+                        trailing: widget.onOpenOrder == null
+                            ? null
+                            : IconButton(
+                                onPressed: () =>
+                                    widget.onOpenOrder!(order['id'].toString()),
+                                icon: const Icon(Icons.inventory_2_outlined),
+                              ),
+                      ),
+                    ),
+                  if (map(_data['order_detail']).isNotEmpty)
+                    _accountingStatus(map(_data['order_detail'])),
+                  if (_data['order_has_more'] == true)
+                    TextButton(
+                      onPressed: unavailable ? null : () => _next('order'),
+                      child: Text(copy('nextOrders')),
+                    ),
+                  if (_data['receipt_has_more'] == true)
+                    TextButton(
+                      onPressed: unavailable
+                          ? null
+                          : () => _nextEvidence('receipt'),
+                      child: Text(copy('nextReceipts')),
+                    ),
+                  for (final returned in rows(_data['returns']))
+                    ListTile(
                       title: Text(
-                        '${order['purchase_order_no']} · ${label(order['procurement_status'].toString())}',
+                        '${label('return_goods')} · ${returned['quantity_base']}',
                       ),
                       subtitle: Text(
-                        '${order['supplier_name']} · ${order['requested_delivery_date']}\n${_dates(order)}${order['receiving_outcome'] == 'partial_transferred' ? '\n${t('일부 입고 · 부족분 다음 PO 이관', 'Partial receipt · shortage transferred', 'Nhập một phần · thiếu chuyển PO sau')}' : ''}',
+                        '${returned['created_at']} · ${returned['reason']} · ${returned['evidence_reference']}',
                       ),
-                      trailing: widget.onOpenOrder == null
-                          ? null
-                          : IconButton(
-                              onPressed: () =>
-                                  widget.onOpenOrder!(order['id'].toString()),
-                              icon: const Icon(Icons.inventory_2_outlined),
+                    ),
+                  for (final receipt in rows(_data['receipts']))
+                    _receiptCard(receipt, unavailable),
+                  for (final report in rows(_data['receipt_reports']))
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              report['kind'] == 'complete'
+                                  ? t(
+                                      '전량 입고 확인서',
+                                      'Complete delivery confirmation',
+                                      'Xác nhận nhập đủ hàng',
+                                    )
+                                  : t(
+                                      'PO 대비 입고 수량 차이서',
+                                      'Delivery discrepancy report',
+                                      'Biên bản chênh lệch nhập hàng',
+                                    ),
                             ),
-                    ),
-                  ),
-                if (map(_data['order_detail']).isNotEmpty)
-                  _accountingStatus(map(_data['order_detail'])),
-                if (_data['order_has_more'] == true)
-                  TextButton(
-                    onPressed: unavailable ? null : () => _next('order'),
-                    child: Text(copy('nextOrders')),
-                  ),
-                if (_data['receipt_has_more'] == true)
-                  TextButton(
-                    onPressed: unavailable
-                        ? null
-                        : () => _nextEvidence('receipt'),
-                    child: Text(copy('nextReceipts')),
-                  ),
-                for (final returned in rows(_data['returns']))
-                  ListTile(
-                    title: Text(
-                      '${label('return_goods')} · ${returned['quantity_base']}',
-                    ),
-                    subtitle: Text(
-                      '${returned['created_at']} · ${returned['reason']} · ${returned['evidence_reference']}',
-                    ),
-                  ),
-                for (final receipt in rows(_data['receipts']))
-                  _receiptCard(receipt, unavailable),
-                for (final report in rows(_data['receipt_reports']))
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            report['kind'] == 'complete'
-                                ? t(
-                                    '전량 입고 확인서',
-                                    'Complete delivery confirmation',
-                                    'Xác nhận nhập đủ hàng',
-                                  )
-                                : t(
-                                    'PO 대비 입고 수량 차이서',
-                                    'Delivery discrepancy report',
-                                    'Biên bản chênh lệch nhập hàng',
-                                  ),
-                          ),
-                          Text(
-                            report['sent_at'] == null
-                                ? t(
-                                    '업체 전달 대기',
-                                    'Awaiting supplier delivery',
-                                    'Chờ gửi nhà cung cấp',
-                                  )
-                                : '${t('업체 전달 완료', 'Sent to supplier', 'Đã gửi nhà cung cấp')} · ${procurementDate(report['sent_at'], includeTime: true)}',
-                          ),
-                          Wrap(
-                            spacing: 8,
-                            children: [
-                              if (widget.exportDocument != null)
-                                OutlinedButton(
-                                  onPressed: unavailable
-                                      ? null
-                                      : () => _export('receipt', {
-                                          ...report,
-                                          'id': report['receipt_id'],
-                                        }, 'supplier'),
-                                  child: Text(
-                                    t('PDF 저장', 'Save PDF', 'Lưu PDF'),
-                                  ),
-                                ),
-                              if (report['file_hash'] != null)
-                                OutlinedButton(
-                                  onPressed: unavailable
-                                      ? null
-                                      : () async {
-                                          final evidence = await _fields(
-                                            t(
-                                              '업체 전달 기록',
-                                              'Record supplier delivery',
-                                              'Ghi nhận gửi nhà cung cấp',
-                                            ),
-                                            {
-                                              'channel': t(
-                                                '전달 채널',
-                                                'Channel',
-                                                'Kênh gửi',
-                                              ),
-                                              'delivery_reference': t(
-                                                '수신처·전달 증빙',
-                                                'Recipient / delivery evidence',
-                                                'Người nhận / bằng chứng gửi',
-                                              ),
-                                            },
-                                          );
-                                          if (evidence == null) return;
-                                          await _execute(
-                                            'mark_receipt_report_sent',
-                                            {
-                                              ...report,
-                                              'id': report['receipt_id'],
-                                              'row_version': 0,
-                                            },
-                                            {
-                                              ...evidence,
-                                              'file_hash': report['file_hash'],
-                                            },
-                                          );
-                                        },
-                                  child: Text(
-                                    t(
-                                      '전달 완료 기록',
-                                      'Record sent',
-                                      'Ghi nhận đã gửi',
+                            Text(
+                              report['sent_at'] == null
+                                  ? t(
+                                      '업체 전달 대기',
+                                      'Awaiting supplier delivery',
+                                      'Chờ gửi nhà cung cấp',
+                                    )
+                                  : '${t('업체 전달 완료', 'Sent to supplier', 'Đã gửi nhà cung cấp')} · ${procurementDate(report['sent_at'], includeTime: true)}',
+                            ),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                if (widget.exportDocument != null)
+                                  OutlinedButton(
+                                    onPressed: unavailable
+                                        ? null
+                                        : () => _export('receipt', {
+                                            ...report,
+                                            'id': report['receipt_id'],
+                                          }, 'supplier'),
+                                    child: Text(
+                                      t('PDF 저장', 'Save PDF', 'Lưu PDF'),
                                     ),
                                   ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                const Divider(),
-                if (_data['event_has_more'] == true)
-                  TextButton(
-                    onPressed: unavailable
-                        ? null
-                        : () => _nextEvidence('event'),
-                    child: Text(copy('nextEvents')),
-                  ),
-                Text(
-                  t('처리 이력', 'History', 'Lịch sử'),
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                for (final kind in ['issue', 'return', 'quote'])
-                  if (_data['${kind}_has_more'] == true)
-                    TextButton(
-                      onPressed: unavailable ? null : () => _nextEvidence(kind),
-                      child: Text(
-                        copy(
-                          'next${kind[0].toUpperCase()}${kind.substring(1)}s',
+                                if (report['file_hash'] != null)
+                                  OutlinedButton(
+                                    onPressed: unavailable
+                                        ? null
+                                        : () async {
+                                            final evidence = await _fields(
+                                              t(
+                                                '업체 전달 기록',
+                                                'Record supplier delivery',
+                                                'Ghi nhận gửi nhà cung cấp',
+                                              ),
+                                              {
+                                                'channel': t(
+                                                  '전달 채널',
+                                                  'Channel',
+                                                  'Kênh gửi',
+                                                ),
+                                                'delivery_reference': t(
+                                                  '수신처·전달 증빙',
+                                                  'Recipient / delivery evidence',
+                                                  'Người nhận / bằng chứng gửi',
+                                                ),
+                                              },
+                                            );
+                                            if (evidence == null) return;
+                                            await _execute(
+                                              'mark_receipt_report_sent',
+                                              {
+                                                ...report,
+                                                'id': report['receipt_id'],
+                                                'row_version': 0,
+                                              },
+                                              {
+                                                ...evidence,
+                                                'file_hash':
+                                                    report['file_hash'],
+                                              },
+                                            );
+                                          },
+                                    child: Text(
+                                      t(
+                                        '전달 완료 기록',
+                                        'Record sent',
+                                        'Ghi nhận đã gửi',
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                for (final e in rows(_data['events']).where(
-                  (e) =>
-                      _selectedId == null ||
-                      e['record_id'] == _selectedId ||
-                      e['record_id'] == _selectedOrderId,
-                ))
-                  ListTile(
-                    dense: true,
-                    title: Text(label(e['action'].toString())),
-                    subtitle: Text(
-                      '${procurementDate(e['created_at'], includeTime: true)} · ${map(e['actor'])['display_name'] ?? map(e['actor'])['role'] ?? map(e['actor'])['system']}\n${e['reason'] ?? ''}',
+                  const Divider(),
+                  if (_data['event_has_more'] == true)
+                    TextButton(
+                      onPressed: unavailable
+                          ? null
+                          : () => _nextEvidence('event'),
+                      child: Text(copy('nextEvents')),
                     ),
+                  Text(
+                    t('처리 이력', 'History', 'Lịch sử'),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
+                  for (final kind in ['issue', 'return', 'quote'])
+                    if (_data['${kind}_has_more'] == true)
+                      TextButton(
+                        onPressed: unavailable
+                            ? null
+                            : () => _nextEvidence(kind),
+                        child: Text(
+                          copy(
+                            'next${kind[0].toUpperCase()}${kind.substring(1)}s',
+                          ),
+                        ),
+                      ),
+                  for (final e in rows(_data['events']).where(
+                    (e) =>
+                        _selectedId == null ||
+                        e['record_id'] == _selectedId ||
+                        e['record_id'] == _selectedOrderId,
+                  ))
+                    ListTile(
+                      dense: true,
+                      title: Text(label(e['action'].toString())),
+                      subtitle: Text(
+                        '${procurementDate(e['created_at'], includeTime: true)} · ${map(e['actor'])['display_name'] ?? map(e['actor'])['role'] ?? map(e['actor'])['system']}\n${e['reason'] ?? ''}',
+                      ),
+                    ),
+                ],
               ],
             ),
     );

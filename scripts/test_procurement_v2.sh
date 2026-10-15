@@ -133,6 +133,8 @@ run_sql "$INVENTORY_ROOT/supabase/tests/procurement_onboarding_fixture.sql" >/de
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261014080000_procurement_approval_inbox.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261014081000_procurement_store_onboarding.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261015070000_procurement_requester_catalog_entry.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261015090000_procurement_approval_history.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_approval_inbox.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_approval_history.test.sql"
 
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_inbox_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"

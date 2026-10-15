@@ -19,7 +19,7 @@ void main() {
     'supplier_items': [],
   };
   testWidgets(
-    'SM inbox starts with all-time submitted cursor and keeps refreshes received in flight',
+    'SM inbox starts with all-time latest request cursor and keeps refreshes received in flight',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final refresh = ValueNotifier<int>(0);
@@ -37,6 +37,11 @@ void main() {
                   ? first.future
                   : Future.value({
                       ...workspace(),
+                      'request_counts': {
+                        'pending': 12,
+                        'approved': 0,
+                        'returned': 0,
+                      },
                       'approval_counts': {
                         'pending': 12,
                         'actionable': 12,
@@ -49,8 +54,8 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(queries.single['request_scope'], 'mine');
-      expect(queries.single['request_sort'], 'submitted');
+      expect(queries.single['request_scope'], 'all');
+      expect(queries.single['request_sort'], 'created');
       expect(queries.single.containsKey('created_from'), false);
       refresh.value++;
       refresh.value++;
@@ -62,11 +67,72 @@ void main() {
         2,
         reason: 'In-flight signals merge into one follow-up read',
       );
-      expect(find.textContaining('Actionable 12'), findsOneWidget);
+      expect(find.text('Awaiting approval (12)'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       refresh.dispose();
     },
   );
+  testWidgets('approved tab retains Office review separately from pending', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final queries = <Map<String, dynamic>>[];
+    final request = <String, dynamic>{
+      'id': 'approved-by-store',
+      'request_no': 'PR-HANDOFF',
+      'status': 'office_review',
+      'row_version': 3,
+      'reason': 'Restock',
+      'created_at': '2026-10-15T08:40:00Z',
+      'requested_delivery_date': '2026-10-16',
+      'allowed_actions': [],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProcurementWorkspacePage(
+          approvalView: true,
+          load: () async => workspace(),
+          loadPage: (q) async {
+            queries.add({...q});
+            return {
+              ...workspace(),
+              'requests': q['request_group'] == 'approved'
+                  ? [
+                      {
+                        ...request,
+                        'approval_group': 'approved',
+                        'requester_name': 'PR team',
+                        'line_count': 3,
+                      },
+                    ]
+                  : [],
+              'request_counts': {'pending': 1, 'approved': 1, 'returned': 0},
+            };
+          },
+          execute: (a, b, c, d, e) async => {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('PR-HANDOFF'), findsNothing);
+    await tester.tap(find.byKey(const Key('procurement_group_approved')));
+    await tester.pumpAndSettle();
+    expect(queries.last['approval_view'], true);
+    expect(queries.last['request_summary_only'], true);
+    expect(queries.last['request_sort'], 'created');
+    expect(find.text('PR-HANDOFF'), findsOneWidget);
+    expect(
+      find.text('Store approved · Awaiting purchase review'),
+      findsOneWidget,
+    );
+    expect(find.text('My approvals'), findsNothing);
+    expect(find.text('My approval history'), findsNothing);
+    await tester.tap(find.byKey(const Key('procurement_group_pending')));
+    await tester.pumpAndSettle();
+    expect(queries.last['request_group'], 'pending');
+    expect(find.text('PR-HANDOFF'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('disabled store cannot create requests', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(

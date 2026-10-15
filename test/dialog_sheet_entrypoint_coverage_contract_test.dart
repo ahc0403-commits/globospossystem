@@ -211,10 +211,11 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/procurement/procurement_workspace.dart',
-    directCalls: 7,
+    directCalls: 8,
     test: 'test/features/procurement/procurement_workspace_test.dart',
     additionalTests: [
       'test/features/procurement/procurement_product_picker_test.dart',
+      'test/features/procurement/procurement_approval_layout_test.dart',
     ],
     markers: [
       'opens request editor',
@@ -224,6 +225,7 @@ const _coverage = <_OperationalCoverage>[
       'purchase item dialog validates fields',
       'policy activation dialog requires explicit confirmation',
       'search stays above scrolling results and returns the selected code',
+      'stock is read on demand',
     ],
   ),
   _OperationalCoverage(
@@ -472,7 +474,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 165 dialog and sheet entrypoints map to operational tests', () {
+  test('all 166 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -484,10 +486,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 162);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 163);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      165,
+      166,
     );
 
     final inventory = File(
