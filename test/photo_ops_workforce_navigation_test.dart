@@ -1,6 +1,9 @@
 import 'dart:typed_data';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +54,8 @@ class _PhotoOpsNotifier extends PhotoOpsNotifier {
 }
 
 class _AttendanceService extends AttendanceService {
+  int uploads = 0;
+  Object? uploadError;
   String? uploadedEmployeeNumber;
   String? recordedPhotoUrl;
 
@@ -61,6 +66,8 @@ class _AttendanceService extends AttendanceService {
     required XFile originalFile,
     required String type,
   }) async {
+    uploads++;
+    if (uploadError != null) throw uploadError!;
     uploadedEmployeeNumber = employeeNumber;
     return 'https://example.test/attendance.jpg';
   }
@@ -133,7 +140,12 @@ Future<GoRouter> _pumpPhotoOps(
     routes: [
       GoRoute(
         path: '/photo-ops',
-        builder: (_, __) => Scaffold(body: screen),
+        builder: (_, __) => Scaffold(
+          body: RepaintBoundary(
+            key: const Key('photo_ops_capture'),
+            child: screen,
+          ),
+        ),
       ),
       GoRoute(
         path: '/admin',
@@ -245,6 +257,64 @@ void main() {
 
     expect(service.uploadedEmployeeNumber, 'PO-001');
     expect(service.recordedPhotoUrl, 'https://example.test/attendance.jpg');
+  });
+
+  testWidgets('Photo attendance retains the photograph after upload failure', (
+    tester,
+  ) async {
+    final service = _AttendanceService()
+      ..uploadError = const StorageException(
+        'private SQL error',
+        statusCode: '400',
+      );
+    var captures = 0;
+    await _pumpPhotoOps(
+      tester,
+      'photo_objet_store_operator',
+      photoOpsState: PhotoOpsState(
+        data: _dashboardData(),
+        lastLoadedStoreId: _storeId,
+      ),
+      physicalSize: const Size(900, 1200),
+      screen: PhotoOpsScreen(
+        attendanceServiceOverride: service,
+        attendancePhotoPickerOverride: () async {
+          captures++;
+          return XFile.fromData(
+            Uint8List.fromList([1]),
+            name: 'attendance.jpg',
+          );
+        },
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const Key('photo_ops_employee_number_field')),
+      'PO-001',
+    );
+    await tester.tap(find.byKey(const Key('photo_ops_employee_clock_in')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('photo_ops_attendance_retry')), findsOneWidget);
+    expect(find.textContaining('private SQL'), findsNothing);
+    expect(service.recordedPhotoUrl, isNull);
+    final screenshot = Platform.environment['ATTENDANCE_SCREENSHOT_PATH'];
+    if (screenshot != null) {
+      await tester.runAsync(() async {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(const Key('photo_ops_capture')),
+        );
+        final image = await boundary.toImage();
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        await File(screenshot).writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+    service.uploadError = null;
+    await tester.tap(find.byKey(const Key('photo_ops_attendance_retry')));
+    await tester.pumpAndSettle();
+    expect(captures, 1);
+    expect(service.uploads, 2);
+    expect(service.recordedPhotoUrl, isNotNull);
+    expect(find.byKey(const Key('photo_ops_attendance_retry')), findsNothing);
   });
 
   testWidgets('Photo payroll can be calculated and downloaded as Excel', (

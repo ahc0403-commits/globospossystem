@@ -16,6 +16,7 @@ import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'attendance_kiosk_provider.dart';
+import 'attendance_error_message.dart';
 
 typedef AttendancePhotoPicker = Future<XFile?> Function();
 
@@ -41,6 +42,8 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   String? _pendingType;
   XFile? _capturedPhoto;
   Uint8List? _capturedPhotoBytes;
+  String? _capturedStoreId;
+  bool _capturingPhoto = false;
 
   @override
   void initState() {
@@ -70,6 +73,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       _pendingType = null;
       _capturedPhoto = null;
       _capturedPhotoBytes = null;
+      _capturedStoreId = null;
       _viewState = _KioskViewState.idle;
     });
     _employeeNumberFocus.requestFocus();
@@ -92,6 +96,9 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   }
 
   Future<void> _capturePhoto(String type) async {
+    if (_capturingPhoto) return;
+    final captureStoreId = ref.read(authProvider).storeId;
+    setState(() => _capturingPhoto = true);
     try {
       final photo =
           await (widget.photoPickerOverride?.call() ??
@@ -109,24 +116,38 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       }
       final bytes = await photo.readAsBytes();
       if (!mounted) return;
+      if (ref.read(authProvider).storeId != captureStoreId) {
+        _reset();
+        return;
+      }
       setState(() {
+        ref.read(attendanceKioskProvider.notifier).clearResult();
         _pendingType = type;
         _capturedPhoto = photo;
         _capturedPhotoBytes = bytes;
+        _capturedStoreId = captureStoreId;
         _viewState = _KioskViewState.preview;
       });
     } catch (_) {
       if (mounted) {
         showErrorToast(context, context.l10n.attendancePhotoCaptureFailed);
       }
+    } finally {
+      if (mounted) setState(() => _capturingPhoto = false);
     }
   }
 
   Future<void> _submit() async {
+    if (_viewState == _KioskViewState.submitting) return;
     final storeId = ref.read(authProvider).storeId;
     final employeeNumber = _employeeNumberController.text.trim();
     final type = _pendingType;
     final photo = _capturedPhoto;
+    if (_capturedStoreId != storeId) {
+      _reset();
+      showErrorToast(context, context.l10n.attendancePhotoRequired);
+      return;
+    }
     if (storeId == null ||
         employeeNumber.isEmpty ||
         type == null ||
@@ -148,9 +169,8 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
 
     if (!recorded) {
       final errorCode = ref.read(attendanceKioskProvider).errorCode;
-      showErrorToast(context, _localizedAttendanceError(errorCode));
-      setState(() => _viewState = _KioskViewState.idle);
-      _employeeNumberFocus.requestFocus();
+      showErrorToast(context, attendanceErrorMessage(context.l10n, errorCode));
+      setState(() => _viewState = _KioskViewState.preview);
       return;
     }
 
@@ -159,19 +179,6 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       if (mounted) _reset();
     });
   }
-
-  String _localizedAttendanceError(String? code) => switch (code) {
-    'EMPLOYEE_NOT_FOUND' => context.l10n.attendanceEmployeeNotFound,
-    'EMPLOYEE_INACTIVE' => context.l10n.attendanceEmployeeInactive,
-    'ATTENDANCE_ALREADY_CLOCKED_IN_TODAY' =>
-      context.l10n.attendanceAlreadyClockedInToday,
-    'ATTENDANCE_ALREADY_CLOCKED_OUT_TODAY' =>
-      context.l10n.attendanceAlreadyClockedOutToday,
-    'ATTENDANCE_CLOCK_IN_REQUIRED' => context.l10n.attendanceClockInRequired,
-    'ATTENDANCE_FORBIDDEN' => context.l10n.attendanceEmployeeForbidden,
-    'ATTENDANCE_PHOTO_FAILED' => context.l10n.attendancePhotoUploadFailed,
-    _ => context.l10n.attendanceRecordFailed,
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -267,6 +274,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   }
 
   Widget _buildIdle(bool isOnline) {
+    final canCapture = isOnline && !_capturingPhoto;
     return ToastResponsiveBody(
       maxWidth: 720,
       padding: EdgeInsets.zero,
@@ -307,7 +315,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9_-]')),
                   ],
                   onSubmitted: (_) =>
-                      isOnline ? _beginAttendance('clock_in') : null,
+                      canCapture ? _beginAttendance('clock_in') : null,
                   decoration: InputDecoration(
                     labelText: context.l10n.attendanceEmployeeNumber,
                     hintText: context.l10n.attendanceEmployeeNumberHint,
@@ -325,7 +333,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     Expanded(
                       child: FilledButton(
                         key: const Key('attendance_employee_clock_in'),
-                        onPressed: isOnline
+                        onPressed: canCapture
                             ? () => _beginAttendance('clock_in')
                             : null,
                         style: FilledButton.styleFrom(
@@ -346,7 +354,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     Expanded(
                       child: OutlinedButton(
                         key: const Key('attendance_employee_clock_out'),
-                        onPressed: isOnline
+                        onPressed: canCapture
                             ? () => _beginAttendance('clock_out')
                             : null,
                         style: OutlinedButton.styleFrom(
@@ -384,6 +392,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   }
 
   Widget _buildPreview() {
+    final submission = ref.watch(attendanceKioskProvider);
     final bytes = _capturedPhotoBytes;
     final type = _pendingType;
     if (bytes == null || type == null) {
@@ -419,12 +428,21 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              if (submission.errorCode != null) ...[
+                Text(
+                  attendanceErrorMessage(context.l10n, submission.errorCode),
+                  key: const Key('attendance_retry_error'),
+                ),
+                const SizedBox(height: 12),
+              ],
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       key: const Key('attendance_retake_photo'),
-                      onPressed: () => _capturePhoto(type),
+                      onPressed: submission.needsVerification
+                          ? null
+                          : () => _capturePhoto(type),
                       icon: const Icon(Icons.camera_alt_outlined),
                       label: Text(context.l10n.attendanceRetakePhoto),
                       style: OutlinedButton.styleFrom(
@@ -438,7 +456,13 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                       key: const Key('attendance_confirm_photo'),
                       onPressed: _submit,
                       icon: const Icon(Icons.check_circle_outline),
-                      label: Text(context.l10n.attendanceConfirmPhoto),
+                      label: Text(
+                        submission.needsVerification
+                            ? attendanceVerifyResultLabel(context.l10n)
+                            : submission.errorCode != null
+                            ? context.l10n.retry
+                            : context.l10n.attendanceConfirmPhoto,
+                      ),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(58),
                         backgroundColor: AppColors.amber500,
@@ -447,6 +471,11 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     ),
                   ),
                 ],
+              ),
+              TextButton(
+                key: const Key('attendance_cancel_photo'),
+                onPressed: _reset,
+                child: Text(context.l10n.cancel),
               ),
             ],
           ),

@@ -12,6 +12,12 @@ import 'rpc_compat.dart';
 const attendanceScreenRecordLimit = 10;
 const attendanceManagementRecordLimit = 500;
 
+class AttendancePhotoSigningException implements Exception {
+  const AttendancePhotoSigningException(this.path);
+
+  final String path;
+}
+
 class AttendanceService {
   AttendanceService({SupabaseClient? client}) : _client = client;
 
@@ -23,7 +29,7 @@ class AttendanceService {
     required String type,
     String? photoUrl,
   }) async {
-    final response = await supabase.rpc(
+    final response = await (_client ?? supabase).rpc(
       photoUrl == null
           ? 'record_employee_attendance'
           : 'record_employee_attendance_with_photo',
@@ -92,7 +98,7 @@ class AttendanceService {
     final safeSubjectId = subjectId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     final path = '$storeId/$safeSubjectId/$dateStr/${ts}_$type.jpg';
 
-    await supabase.storage
+    await (_client ?? supabase).storage
         .from('attendance-photos')
         .uploadBinary(
           path,
@@ -100,12 +106,19 @@ class AttendanceService {
           fileOptions: const FileOptions(contentType: 'image/jpeg'),
         );
 
-    final signedUrl = await supabase.storage
-        .from('attendance-photos')
-        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
-
-    return signedUrl;
+    try {
+      return await signEmployeeAttendancePhoto(path);
+    } catch (_) {
+      // Retain only the successfully uploaded path, so signing can be retried
+      // without uploading the same photograph again.
+      throw AttendancePhotoSigningException(path);
+    }
   }
+
+  Future<String> signEmployeeAttendancePhoto(String path) =>
+      (_client ?? supabase).storage
+          .from('attendance-photos')
+          .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
 
   Future<void> upsertFingerprintTemplate({
     required String userId,

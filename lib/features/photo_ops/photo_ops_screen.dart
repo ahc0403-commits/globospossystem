@@ -10,6 +10,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/attendance_service.dart';
+import '../attendance/attendance_kiosk_provider.dart';
+import '../attendance/attendance_error_message.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/services/payroll_service.dart';
@@ -1242,14 +1244,32 @@ class _EmployeeAttendanceActionsState
   final _employeeNumber = TextEditingController();
   bool _submitting = false;
   String? _error;
+  late final _submission = AttendanceKioskNotifier(
+    service: widget.attendanceService,
+  );
+  XFile? _photo;
+  (String, String, String)? _photoScope;
+
+  @override
+  void didUpdateWidget(covariant _EmployeeAttendanceActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.storeId != widget.storeId) {
+      _photo = null;
+      _photoScope = null;
+      _error = null;
+      _submission.clearResult();
+    }
+  }
 
   @override
   void dispose() {
+    _submission.dispose();
     _employeeNumber.dispose();
     super.dispose();
   }
 
   Future<void> _record(String type) async {
+    if (_submitting) return;
     if (_employeeNumber.text.trim().isEmpty) {
       setState(() => _error = context.l10n.attendanceEmployeeNumberRequired);
       return;
@@ -1258,8 +1278,16 @@ class _EmployeeAttendanceActionsState
       _submitting = true;
       _error = null;
     });
+    final employeeNumber = _employeeNumber.text.trim().toUpperCase();
+    final scope = (widget.storeId, employeeNumber, type);
+    var capturingPhoto = true;
     try {
+      if (_photoScope != scope) {
+        _photo = null;
+        _submission.clearResult();
+      }
       final photo =
+          _photo ??
           await (widget.photoPicker?.call() ??
               ImagePicker().pickImage(
                 source: ImageSource.camera,
@@ -1273,40 +1301,45 @@ class _EmployeeAttendanceActionsState
         }
         return;
       }
-
-      final photoUrl = await widget.attendanceService
-          .uploadEmployeeAttendancePhoto(
-            storeId: widget.storeId,
-            employeeNumber: _employeeNumber.text,
-            originalFile: photo,
-            type: type,
-          );
-      if (photoUrl == null || photoUrl.isEmpty) {
-        throw StateError('ATTENDANCE_PHOTO_FAILED');
-      }
-
-      await widget.attendanceService.recordEmployeeAttendance(
-        storeId: widget.storeId,
-        employeeNumber: _employeeNumber.text,
+      if (!mounted || widget.storeId != scope.$1) return;
+      _photo = photo;
+      _photoScope = scope;
+      capturingPhoto = false;
+      final recorded = await _submission.recordAttendance(
+        storeId: scope.$1,
+        employeeNumber: employeeNumber,
         type: type,
-        photoUrl: photoUrl,
+        photoFile: photo,
       );
-      await widget.onRecorded();
-      if (!mounted) return;
+      if (!mounted || widget.storeId != scope.$1) return;
+      if (!recorded) {
+        setState(
+          () => _error = attendanceErrorMessage(
+            context.l10n,
+            _submission.currentState.errorCode,
+          ),
+        );
+        return;
+      }
+      _photo = null;
+      _photoScope = null;
+      _submission.clearResult();
       _employeeNumber.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.photoOpsAttendanceRecorded)),
       );
-    } catch (error) {
+      // A dashboard refresh failure must not turn a committed event into a
+      // failed submission and invite another attendance event.
+      try {
+        await widget.onRecorded();
+      } catch (_) {
+        /* Refresh separately. */
+      }
+    } catch (_) {
       if (mounted) {
-        final message = '$error';
         setState(() {
-          _error = message.contains('ATTENDANCE_ALREADY_CLOCKED_IN_TODAY')
-              ? context.l10n.attendanceAlreadyClockedInToday
-              : message.contains('ATTENDANCE_ALREADY_CLOCKED_OUT_TODAY')
-              ? context.l10n.attendanceAlreadyClockedOutToday
-              : message.contains('ATTENDANCE_CLOCK_IN_REQUIRED')
-              ? context.l10n.attendanceClockInRequired
+          _error = capturingPhoto
+              ? context.l10n.attendancePhotoCaptureFailed
               : context.l10n.attendanceRecordFailed;
         });
       }
@@ -1333,19 +1366,64 @@ class _EmployeeAttendanceActionsState
         TextField(
           key: const Key('photo_ops_employee_number_field'),
           controller: _employeeNumber,
+          enabled: !_submitting && !_submission.currentState.needsVerification,
           textCapitalization: TextCapitalization.characters,
           decoration: InputDecoration(
             labelText: context.l10n.attendanceEmployeeNumber,
             errorText: _error,
+            errorMaxLines: 4,
           ),
         ),
         const SizedBox(height: 10),
+        if (_error != null && _photo != null) ...[
+          TextButton(
+            key: const Key('photo_ops_attendance_retry'),
+            onPressed: _submitting ? null : () => _record(_photoScope!.$3),
+            child: Text(
+              _submission.currentState.needsVerification
+                  ? attendanceVerifyResultLabel(context.l10n)
+                  : context.l10n.retry,
+            ),
+          ),
+          TextButton(
+            key: const Key('photo_ops_attendance_retake'),
+            onPressed: _submitting || _submission.currentState.needsVerification
+                ? null
+                : () {
+                    setState(() {
+                      _photo = null;
+                      _photoScope = null;
+                      _error = null;
+                      _submission.clearResult();
+                    });
+                  },
+            child: Text(context.l10n.attendanceRetakePhoto),
+          ),
+          TextButton(
+            key: const Key('photo_ops_attendance_cancel'),
+            onPressed: _submitting
+                ? null
+                : () {
+                    setState(() {
+                      _photo = null;
+                      _photoScope = null;
+                      _error = null;
+                      _employeeNumber.clear();
+                      _submission.clearResult();
+                    });
+                  },
+            child: Text(context.l10n.cancel),
+          ),
+        ],
         Row(
           children: [
             Expanded(
               child: FilledButton(
                 key: const Key('photo_ops_employee_clock_in'),
-                onPressed: _submitting ? null : () => _record('clock_in'),
+                onPressed:
+                    _submitting || _submission.currentState.needsVerification
+                    ? null
+                    : () => _record('clock_in'),
                 child: Text(context.l10n.clockIn),
               ),
             ),
@@ -1353,7 +1431,10 @@ class _EmployeeAttendanceActionsState
             Expanded(
               child: OutlinedButton(
                 key: const Key('photo_ops_employee_clock_out'),
-                onPressed: _submitting ? null : () => _record('clock_out'),
+                onPressed:
+                    _submitting || _submission.currentState.needsVerification
+                    ? null
+                    : () => _record('clock_out'),
                 child: Text(context.l10n.clockOut),
               ),
             ),
