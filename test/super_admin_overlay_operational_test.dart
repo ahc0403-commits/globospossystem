@@ -243,11 +243,13 @@ void main() {
       expect(tester.takeException(), isNull);
       final inactive = find.byKey(const Key('super_admin_activity_inactive'));
       await tester.ensureVisible(inactive);
+      await tester.pumpAndSettle();
       await tester.tap(inactive);
       await tester.pumpAndSettle();
       expect(notifier.state.selectedActivity, 'inactive');
       final active = find.byKey(const Key('super_admin_activity_active'));
       await tester.ensureVisible(active);
+      await tester.pumpAndSettle();
       await tester.tap(active);
       await tester.pumpAndSettle();
       if (size.width == 390) {

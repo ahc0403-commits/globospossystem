@@ -13,6 +13,9 @@ dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
 flutter test
 
+printf 'CHECK_REPO_STEP=independent_brand_sql\n'
+bash test/independent_brand_sql_test.sh
+
 printf 'CHECK_REPO_STEP=deliberry_retirement\n'
 bash test/deliberry_retirement_sql_test.sh
 deno fmt --check \

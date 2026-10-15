@@ -4290,5 +4290,36 @@
   "storeSetupProcurementManager": "Store manager",
   "storeSetupProcurementReceiver": "Receiver",
   "storeSetupProcurementAccounting": "Accounting",
-  "storeSetupProcurementOffice": "Office connection"
+  "storeSetupProcurementOffice": "Office connection",
+  "brandAdd": "Add brand",
+  "brandManagement": "Manage brands",
+  "brandName": "Brand name",
+  "brandCode": "Brand code",
+  "brandGroup": "Organization group",
+  "brandGroupRequired": "Select an organization group.",
+  "brandNoGroups": "No organization groups are available. Ask an administrator to configure one.",
+  "brandIndependentHint": "Register a brand without a store. Link legal entities now or later.",
+  "brandNameRequired": "Enter a brand name.",
+  "brandCodeHint": "2–64: a–z, 0–9, _ or -.",
+  "brandCodeInvalid": "Enter a 2–64 character code starting with a letter or digit.",
+  "brandCodeExists": "This brand code is already in use. Link the existing brand or choose another code.",
+  "brandLinkEntities": "Link legal entities",
+  "brandEntityHint": "Legal entity links are optional until a store is added. Existing links are retained.",
+  "brandNoEntities": "No legal entities are registered. Save the brand and link one after registration.",
+  "brandUnlinked": "No linked legal entities",
+  "brandStoreCount": "{count} stores",
+  "brandListEmpty": "No brands match your search.",
+  "brandLoadMore": "Load more",
+  "brandSaving": "Saving…",
+  "brandForbidden": "Only active master administrators can register or link brands.",
+  "brandRequestConflict": "This request already registered a brand. Check the brand list.",
+  "brandEntityInvalid": "Check the selected legal entities and try again.",
+  "brandOperationFailed": "Could not process brand information. Check your connection and retry.",
+  "@brandStoreCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

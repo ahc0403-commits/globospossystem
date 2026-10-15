@@ -33,7 +33,7 @@ void main() {
     expect(screen, contains('l10n.superAdminBrandRequiredBeforeStore'));
     expect(
       screen,
-      contains('state.selectedBrandId == kUnclassifiedBrandFilter'),
+      contains('sheetState.selectedBrandId == kUnclassifiedBrandFilter'),
     );
     expect(screen, contains('availableBrands.length == 1'));
     expect(screen, contains('final brandId = selectedBrandId!;'));

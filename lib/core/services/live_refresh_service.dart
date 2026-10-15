@@ -78,6 +78,10 @@ class PosLiveEvent {
         (value) => value == '*' || domains.contains(value),
       );
 
+  bool onlySourceTables(Set<String> tables) =>
+      !isFallback &&
+      _changeKinds.every((change) => tables.contains(change.sourceTable));
+
   PosLiveEvent merge(PosLiveEvent other) => PosLiveEvent._merged(
     domain: domain == other.domain ? domain : '*',
     sourceTable: sourceTable == other.sourceTable ? sourceTable : '*',

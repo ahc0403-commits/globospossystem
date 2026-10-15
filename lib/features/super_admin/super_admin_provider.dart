@@ -346,6 +346,97 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
 
   final _catalogLoads = <String, Future<void>>{};
   final _catalogRefreshQueues = <String, CoalescedRefresh>{};
+  int _brandRevision = 0;
+  final _brandMutations =
+      <String, ({int revision, Map<String, dynamic> brand})>{};
+
+  List<Map<String, dynamic>> _mergeBrands(
+    List<Map<String, dynamic>> rows,
+    int revision,
+  ) {
+    final updates = _brandMutations.values.where((m) => m.revision > revision);
+    final merged = {for (final row in rows) row['id'].toString(): row};
+    for (final update in updates) {
+      final brand = update.brand;
+      merged[brand['id'].toString()] = {
+        'id': brand['id'],
+        'name': brand['name'],
+        'code': brand['code'],
+      };
+    }
+    return merged.values.toList()
+      ..sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
+  }
+
+  List<SuperTaxEntityBrand> _mergeBrandLinks(
+    Iterable<SuperTaxEntityBrand> rows,
+    int revision,
+  ) {
+    final updates = {
+      for (final entry in _brandMutations.entries)
+        if (entry.value.revision > revision) entry.key: entry.value.brand,
+    };
+    return [
+      ...rows.where((row) => !updates.containsKey(row.brandId)),
+      for (final brand in updates.values)
+        for (final entity in brand['tax_entity_ids'] as List)
+          SuperTaxEntityBrand(
+            taxEntityId: entity.toString(),
+            brandId: brand['id'].toString(),
+          ),
+    ];
+  }
+
+  /// Publish the committed brand and all returned links without reloading stores.
+  void applyBrandMutation(Map<String, dynamic> brand) {
+    _brandRevision++;
+    final id = brand['id'].toString();
+    _brandMutations[id] = (
+      revision: _brandRevision,
+      brand: {
+        ...brand,
+        'tax_entity_ids': List<String>.from(brand['tax_entity_ids'] as List),
+      },
+    );
+    final brands = [
+      ...state.brands.where((row) => row['id']?.toString() != id),
+      {'id': id, 'name': brand['name'], 'code': brand['code']},
+    ]..sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
+    state = state.copyWith(
+      brands: brands,
+      taxEntityBrands: [
+        ...state.taxEntityBrands.where((link) => link.brandId != id),
+        for (final entityId in brand['tax_entity_ids'] as List)
+          SuperTaxEntityBrand(taxEntityId: entityId.toString(), brandId: id),
+      ],
+    );
+  }
+
+  Future<void> loadBrandLinks({bool force = false}) => _catalogLoad(
+    'brandLinks',
+    () async {
+      final revision = _brandRevision;
+      try {
+        final rows = await fetchCompleteCatalog(
+          () => (_reportClient ?? supabase)
+              .from('tax_entity_brands')
+              .select('tax_entity_id, brand_id'),
+          keys: const ['tax_entity_id', 'brand_id'],
+        );
+        if (mounted) {
+          state = state.copyWith(
+            taxEntityBrands: _mergeBrandLinks(
+              rows.map(SuperTaxEntityBrand.fromJson),
+              revision,
+            ),
+          );
+        }
+      } catch (_) {
+        if (mounted) state = state.copyWith(error: 'BRAND_CATALOG_LOAD_FAILED');
+      }
+    },
+    force: force,
+  );
 
   Future<void> _catalogLoad(
     String key,
@@ -400,23 +491,28 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
 
   Future<void> loadBrands({bool force = false}) =>
       _catalogLoad('brands', () async {
+        final revision = _brandRevision;
         try {
           final response = await fetchCompleteCatalog(
             () => (_reportClient ?? supabase)
                 .from('brands')
                 .select('id, code, name'),
           );
-          response.sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
-          if (mounted) state = state.copyWith(brands: response);
+          if (mounted) {
+            state = state.copyWith(brands: _mergeBrands(response, revision));
+          }
         } catch (_) {
-          // Filters are optional; never retain a partially loaded list.
-          if (mounted) state = state.copyWith(brands: []);
+          // Keep the last complete catalog and surface failure separately.
+          if (mounted && revision == _brandRevision) {
+            state = state.copyWith(error: 'BRAND_CATALOG_LOAD_FAILED');
+          }
         }
       }, force: force);
 
   Future<void> loadLegalEntityStructure({
     bool force = false,
   }) => _catalogLoad('legal', () async {
+    final revision = _brandRevision;
     try {
       final client = _reportClient ?? supabase;
       final responses = await Future.wait([
@@ -445,9 +541,10 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         ..sort((a, b) => a.name.compareTo(b.name));
       state = state.copyWith(
         taxEntities: entities,
-        taxEntityBrands: responses[1]
-            .map(SuperTaxEntityBrand.fromJson)
-            .toList(),
+        taxEntityBrands: _mergeBrandLinks(
+          responses[1].map(SuperTaxEntityBrand.fromJson),
+          revision,
+        ),
         legalEntityAccountingRequirements: responses[2],
       );
     } catch (error) {

@@ -26,6 +26,7 @@ import '../photo_sales_import/photo_sales_import_screen.dart';
 import '../qc/qc_provider.dart';
 import '../restaurant_sales_export/restaurant_sales_export_screen.dart';
 import 'super_admin_provider.dart';
+import 'brand_dialog.dart';
 
 const _superAdminScrollPadding = EdgeInsets.only(bottom: 96);
 const _superAdminScrollPhysics = AlwaysScrollableScrollPhysics(
@@ -106,6 +107,23 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
           return;
         }
         Future.microtask(() async {
+          if (event.onlySourceTables({'brands', 'tax_entity_brands'}) &&
+              !event.includesChange(
+                domain: 'settings',
+                sourceTable: 'brands',
+                eventType: 'UPDATE',
+              ) &&
+              !event.includesChange(
+                domain: 'settings',
+                sourceTable: 'brands',
+                eventType: 'DELETE',
+              )) {
+            await Future.wait([
+              notifier.loadBrands(force: true),
+              notifier.loadBrandLinks(force: true),
+            ]);
+            return;
+          }
           if (event.affects({'settings', 'staff'})) {
             await Future.wait([
               notifier.loadBrands(force: true),
@@ -1098,6 +1116,21 @@ class _RestaurantsTab extends StatelessWidget {
                       icon: const Icon(Icons.business),
                       label: Text(l10n.superAdminGoToOfficeSystem),
                     ),
+                    OutlinedButton.icon(
+                      key: const Key('super_admin_manage_brands_action'),
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => const BrandManagementDialog(),
+                      ),
+                      icon: const Icon(Icons.sell_outlined),
+                      label: Text(l10n.brandManagement),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('super_admin_add_brand_action'),
+                      onPressed: () => showBrandEditor(context),
+                      icon: const Icon(Icons.add),
+                      label: Text(l10n.brandAdd),
+                    ),
                     FilledButton.icon(
                       key: const Key('super_admin_add_store_action'),
                       onPressed: () =>
@@ -1571,6 +1604,7 @@ class _RestaurantsTab extends StatelessWidget {
     required SuperAdminNotifier notifier,
     SuperRestaurant? initial,
   }) async {
+    var sheetState = state;
     final isEdit = initial != null;
     final l10n = context.l10n;
     final nameController = TextEditingController(text: initial?.name ?? '');
@@ -1584,20 +1618,22 @@ class _RestaurantsTab extends StatelessWidget {
     String operationMode = initial?.operationMode ?? 'standard';
     String? selectedTaxEntityId =
         initial?.taxEntityId ??
-        state.selectedTaxEntityId ??
-        (state.filteredTaxEntities.length == 1
-            ? state.filteredTaxEntities.first.id
+        sheetState.selectedTaxEntityId ??
+        (sheetState.filteredTaxEntities.length == 1
+            ? sheetState.filteredTaxEntities.first.id
             : null);
     if (selectedTaxEntityId != null &&
-        !state.taxEntities.any((entity) => entity.id == selectedTaxEntityId)) {
+        !sheetState.taxEntities.any(
+          (entity) => entity.id == selectedTaxEntityId,
+        )) {
       selectedTaxEntityId = null;
     }
     var availableBrands = selectedTaxEntityId == null
         ? const <Map<String, dynamic>>[]
-        : state.brandsForTaxEntity(selectedTaxEntityId);
-    final filterBrandId = state.selectedBrandId == kUnclassifiedBrandFilter
+        : sheetState.brandsForTaxEntity(selectedTaxEntityId);
+    final filterBrandId = sheetState.selectedBrandId == kUnclassifiedBrandFilter
         ? null
-        : state.selectedBrandId;
+        : sheetState.selectedBrandId;
     String? selectedBrandId =
         initial?.brandId ??
         filterBrandId ??
@@ -1697,274 +1733,315 @@ class _RestaurantsTab extends StatelessWidget {
       useSafeArea: true,
       backgroundColor: AppColors.surface1,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return SingleChildScrollView(
-              key: const Key('super_admin_store_sheet'),
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isEdit ? l10n.superAdminEditStore : l10n.superAdminAddStore,
-                    style: AppFonts.system(
-                      color: AppColors.amber500,
-                      fontSize: 30,
-                    ),
+        return Consumer(
+          builder: (context, ref, _) {
+            sheetState = ref.watch(superAdminProvider);
+            return StatefulBuilder(
+              builder: (context, setModalState) {
+                availableBrands = selectedTaxEntityId == null
+                    ? const <Map<String, dynamic>>[]
+                    : sheetState.brandsForTaxEntity(selectedTaxEntityId!);
+                return SingleChildScrollView(
+                  key: const Key('super_admin_store_sheet'),
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 16,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 16,
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: nameController,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: l10n.superAdminStoreName,
-                    ),
-                    onChanged: (value) {
-                      if (!isEdit && slugController.text.trim().isEmpty) {
-                        slugController.text = _slugify(value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: addressController,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: l10n.superAdminStoreAddress,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: slugController,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: l10n.superAdminStoreSlug,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: operationMode,
-                    isExpanded: true,
-                    dropdownColor: AppColors.surface1,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: l10n.superAdminOperationMode,
-                    ),
-                    items: [
-                      DropdownMenuItem(
-                        value: 'standard',
-                        child: Text(l10n.superAdminOperationModeStandard),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isEdit
+                            ? l10n.superAdminEditStore
+                            : l10n.superAdminAddStore,
+                        style: AppFonts.system(
+                          color: AppColors.amber500,
+                          fontSize: 30,
+                        ),
                       ),
-                      DropdownMenuItem(
-                        value: 'buffet',
-                        child: Text(l10n.superAdminOperationModeBuffet),
-                      ),
-                      DropdownMenuItem(
-                        value: 'hybrid',
-                        child: Text(l10n.superAdminOperationModeHybrid),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setModalState(() => operationMode = value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String?>(
-                    key: ValueKey(selectedTaxEntityId),
-                    initialValue: selectedTaxEntityId,
-                    isExpanded: true,
-                    dropdownColor: AppColors.surface1,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: l10n.superAdminLegalEntity,
-                      hintText: l10n.superAdminSelectLegalEntity,
-                    ),
-                    items: state.filteredTaxEntities
-                        .map(
-                          (entity) => DropdownMenuItem<String?>(
-                            value: entity.id,
-                            child: Text(
-                              entity.name,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      setModalState(() {
-                        selectedTaxEntityId = value;
-                        availableBrands = value == null
-                            ? const <Map<String, dynamic>>[]
-                            : state.brandsForTaxEntity(value);
-                        selectedBrandId = availableBrands.length == 1
-                            ? availableBrands.first['id']?.toString()
-                            : null;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String?>(
-                    key: ValueKey(
-                      '${selectedTaxEntityId ?? 'none'}-${selectedBrandId ?? 'none'}',
-                    ),
-                    initialValue: selectedBrandId,
-                    isExpanded: true,
-                    dropdownColor: AppColors.surface1,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: l10n.superAdminBrand,
-                      hintText: l10n.superAdminSelectBrand,
-                      helperText: l10n.superAdminBrandRequiredBeforeStore,
-                    ),
-                    items: [
-                      ...availableBrands.map((brand) {
-                        final id = brand['id']?.toString();
-                        final name = brand['name']?.toString() ?? '-';
-                        final code = brand['code']?.toString() ?? '-';
-                        return DropdownMenuItem<String?>(
-                          value: id,
-                          child: Text(
-                            '$name ($code)',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }),
-                    ],
-                    onChanged: (value) {
-                      setModalState(() => selectedBrandId = value);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    l10n.superAdminOfficeIntegration,
-                    style: AppFonts.system(
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    selectedTaxEntityId == null
-                        ? l10n.superAdminSelectLegalEntityFirst
-                        : state.taxEntities
-                              .firstWhere(
-                                (entity) => entity.id == selectedTaxEntityId,
-                              )
-                              .isInternal
-                        ? l10n.superAdminOfficeLinkedDerived
-                        : l10n.superAdminOfficeNotLinkedDerived,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                  ),
-                  if (operationMode == 'buffet' ||
-                      operationMode == 'hybrid') ...[
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: chargeController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      style: AppFonts.system(color: AppColors.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: l10n.superAdminPerPersonCharge,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: save,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.amber500,
-                        foregroundColor: AppColors.surface0,
-                      ),
-                      child: Text(l10n.superAdminSaveUpper),
-                    ),
-                  ),
-                  if (isEdit && initial.isActive) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          final success = await notifier.deactivateRestaurant(
-                            initial.id,
-                          );
-                          if (success && context.mounted) {
-                            showSuccessToast(
-                              context,
-                              l10n.superAdminStoreDeactivated,
-                            );
-                            Navigator.of(context).pop();
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('store_name'),
+                        controller: nameController,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: l10n.superAdminStoreName,
+                        ),
+                        onChanged: (value) {
+                          if (!isEdit && slugController.text.trim().isEmpty) {
+                            slugController.text = _slugify(value);
                           }
                         },
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(
-                            color: AppColors.statusCancelled,
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        key: const Key('store_address'),
+                        controller: addressController,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: l10n.superAdminStoreAddress,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        key: const Key('store_slug'),
+                        controller: slugController,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: l10n.superAdminStoreSlug,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: operationMode,
+                        isExpanded: true,
+                        dropdownColor: AppColors.surface1,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: l10n.superAdminOperationMode,
+                        ),
+                        items: [
+                          DropdownMenuItem(
+                            value: 'standard',
+                            child: Text(l10n.superAdminOperationModeStandard),
                           ),
-                          foregroundColor: AppColors.statusCancelled,
-                        ),
-                        child: Text(l10n.superAdminDeactivateStore),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        key: const Key('super_admin_close_store_button'),
-                        onPressed: () =>
-                            _confirmAndCloseStore(context, notifier, initial),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.statusCancelled,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: Text(l10n.superAdminCloseStore),
-                      ),
-                    ),
-                  ] else if (isEdit) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.statusCancelled.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.statusCancelled.withValues(
-                            alpha: 0.45,
+                          DropdownMenuItem(
+                            value: 'buffet',
+                            child: Text(l10n.superAdminOperationModeBuffet),
                           ),
+                          DropdownMenuItem(
+                            value: 'hybrid',
+                            child: Text(l10n.superAdminOperationModeHybrid),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setModalState(() => operationMode = value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String?>(
+                        key: ValueKey(selectedTaxEntityId),
+                        initialValue: selectedTaxEntityId,
+                        isExpanded: true,
+                        dropdownColor: AppColors.surface1,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: l10n.superAdminLegalEntity,
+                          hintText: l10n.superAdminSelectLegalEntity,
+                        ),
+                        items: sheetState.filteredTaxEntities
+                            .map(
+                              (entity) => DropdownMenuItem<String?>(
+                                value: entity.id,
+                                child: Text(
+                                  entity.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setModalState(() {
+                            selectedTaxEntityId = value;
+                            availableBrands = value == null
+                                ? const <Map<String, dynamic>>[]
+                                : sheetState.brandsForTaxEntity(value);
+                            selectedBrandId = availableBrands.length == 1
+                                ? availableBrands.first['id']?.toString()
+                                : null;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String?>(
+                        key: ValueKey(
+                          '${selectedTaxEntityId ?? 'none'}-${selectedBrandId ?? 'none'}',
+                        ),
+                        initialValue: selectedBrandId,
+                        isExpanded: true,
+                        dropdownColor: AppColors.surface1,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: l10n.superAdminBrand,
+                          hintText: l10n.superAdminSelectBrand,
+                          helperText: l10n.superAdminBrandRequiredBeforeStore,
+                        ),
+                        items: [
+                          ...availableBrands.map((brand) {
+                            final id = brand['id']?.toString();
+                            final name = brand['name']?.toString() ?? '-';
+                            final code = brand['code']?.toString() ?? '-';
+                            return DropdownMenuItem<String?>(
+                              value: id,
+                              child: Text(
+                                '$name ($code)',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }),
+                        ],
+                        onChanged: (value) {
+                          setModalState(() => selectedBrandId = value);
+                        },
+                      ),
+                      TextButton.icon(
+                        key: const Key('store_add_brand'),
+                        onPressed: () async {
+                          final result = await showBrandEditor(
+                            context,
+                            taxEntityId: selectedTaxEntityId,
+                          );
+                          if (!context.mounted || result == null) return;
+                          setModalState(() {
+                            final links = result['tax_entity_ids'] as List;
+                            if (links.contains(selectedTaxEntityId)) {
+                              selectedBrandId = result['id'].toString();
+                            }
+                          });
+                        },
+                        icon: const Icon(Icons.add),
+                        label: Text(l10n.brandAdd),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        l10n.superAdminOfficeIntegration,
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      child: Text(
-                        l10n.superAdminInactiveStoreNotice,
+                      const SizedBox(height: 4),
+                      Text(
+                        selectedTaxEntityId == null
+                            ? l10n.superAdminSelectLegalEntityFirst
+                            : sheetState.taxEntities
+                                  .firstWhere(
+                                    (entity) =>
+                                        entity.id == selectedTaxEntityId,
+                                  )
+                                  .isInternal
+                            ? l10n.superAdminOfficeLinkedDerived
+                            : l10n.superAdminOfficeNotLinkedDerived,
                         style: AppFonts.system(color: AppColors.textPrimary),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        key: const Key('super_admin_purge_store_button'),
-                        onPressed: () =>
-                            _confirmAndPurgeStore(context, notifier, initial),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.statusCancelled,
-                          foregroundColor: Colors.white,
+                      if (operationMode == 'buffet' ||
+                          operationMode == 'hybrid') ...[
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: chargeController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          style: AppFonts.system(color: AppColors.textPrimary),
+                          decoration: InputDecoration(
+                            labelText: l10n.superAdminPerPersonCharge,
+                          ),
                         ),
-                        child: Text(l10n.superAdminPurgeStore),
+                      ],
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: save,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.amber500,
+                            foregroundColor: AppColors.surface0,
+                          ),
+                          child: Text(l10n.superAdminSaveUpper),
+                        ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
+                      if (isEdit && initial.isActive) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              final success = await notifier
+                                  .deactivateRestaurant(initial.id);
+                              if (success && context.mounted) {
+                                showSuccessToast(
+                                  context,
+                                  l10n.superAdminStoreDeactivated,
+                                );
+                                Navigator.of(context).pop();
+                              }
+                            },
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                color: AppColors.statusCancelled,
+                              ),
+                              foregroundColor: AppColors.statusCancelled,
+                            ),
+                            child: Text(l10n.superAdminDeactivateStore),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            key: const Key('super_admin_close_store_button'),
+                            onPressed: () => _confirmAndCloseStore(
+                              context,
+                              notifier,
+                              initial,
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.statusCancelled,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Text(l10n.superAdminCloseStore),
+                          ),
+                        ),
+                      ] else if (isEdit) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.statusCancelled.withValues(
+                              alpha: 0.1,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.statusCancelled.withValues(
+                                alpha: 0.45,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            l10n.superAdminInactiveStoreNotice,
+                            style: AppFonts.system(
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            key: const Key('super_admin_purge_store_button'),
+                            onPressed: () => _confirmAndPurgeStore(
+                              context,
+                              notifier,
+                              initial,
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.statusCancelled,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Text(l10n.superAdminPurgeStore),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
             );
           },
         );

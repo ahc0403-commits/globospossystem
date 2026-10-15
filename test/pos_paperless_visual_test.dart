@@ -29,8 +29,16 @@ const _captureRoot =
     '../.design/2026-08-pos-print-paperless-receipts/screenshots';
 const _linuxGoldenRoot =
     '../.design/2026-08-pos-print-paperless-receipts/goldens/linux';
+const _macosGoldenRoot =
+    '../.design/2026-08-pos-print-paperless-receipts/goldens/macos';
 
-String get _goldenRoot => Platform.isLinux ? _linuxGoldenRoot : _captureRoot;
+// Native font rasterization differs across hosts. Keep exact comparisons and
+// independent reviewed baselines instead of weakening pixel tolerances.
+String get _goldenRoot => Platform.isLinux
+    ? _linuxGoldenRoot
+    : Platform.isMacOS
+    ? _macosGoldenRoot
+    : _captureRoot;
 
 class _VisualEmergencyNotifier extends EmergencyFulfillmentNotifier {
   _VisualEmergencyNotifier(EmergencyFulfillmentState value) {
