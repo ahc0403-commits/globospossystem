@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:pos_payroll/pos_payroll.dart';
+
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -18,7 +20,7 @@ class AttendancePhotoSigningException implements Exception {
   final String path;
 }
 
-class AttendanceService {
+class AttendanceService implements PayrollDataSource {
   AttendanceService({SupabaseClient? client}) : _client = client;
 
   final SupabaseClient? _client;
@@ -177,6 +179,7 @@ class AttendanceService {
 
   /// Payroll needs the complete period, independently of display/API row caps.
   /// The final page verifies the first page's revision before any result is used.
+  @override
   Future<List<Map<String, dynamic>>> fetchPayrollLogs({
     required String storeId,
     required DateTime from,
@@ -266,6 +269,7 @@ class AttendanceService {
     }
   }
 
+  @override
   Future<List<Map<String, dynamic>>> fetchStaffList(
     String storeId, {
     String? employeeId,
@@ -375,6 +379,7 @@ class AttendanceService {
 
   /// Bounded batches with explicit coverage, including employees without a rule.
   /// A failed batch never returns partial payroll inputs.
+  @override
   Future<Map<String, Map<String, dynamic>?>> fetchHourlyPayRules({
     required String storeId,
     required Iterable<String> employeeIds,
@@ -413,6 +418,7 @@ class AttendanceService {
     return rules;
   }
 
+  @override
   Future<Set<DateTime>> fetchVietnamPublicHolidays({
     required DateTime from,
     required DateTime to,
@@ -429,6 +435,7 @@ class AttendanceService {
         .toSet();
   }
 
+  @override
   Future<List<Map<String, dynamic>>> fetchDailyAllowances({
     required String storeId,
     required DateTime from,

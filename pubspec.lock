@@ -1188,6 +1188,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.2"
+  pos_payroll:
+    dependency: "direct main"
+    description:
+      path: "packages/pos_payroll"
+      relative: true
+    source: path
+    version: "1.0.0"
   postgrest:
     dependency: transitive
     description:

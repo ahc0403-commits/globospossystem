@@ -38,7 +38,12 @@ void main() {
   });
 
   test('Flutter cashier and kitchen use the same exclusive UTC window', () {
-    final timeUtils = File('lib/core/utils/time_utils.dart').readAsStringSync();
+    final timeUtilsExport = File(
+      'lib/core/utils/time_utils.dart',
+    ).readAsStringSync();
+    final timeUtils = File(
+      'packages/pos_payroll/lib/src/time_utils.dart',
+    ).readAsStringSync();
     final cashier = File(
       'lib/features/payment/payment_provider.dart',
     ).readAsStringSync();
@@ -46,6 +51,10 @@ void main() {
       'lib/features/kitchen/kitchen_provider.dart',
     ).readAsStringSync();
 
+    expect(
+      timeUtilsExport,
+      contains("export 'package:pos_payroll/time_utils.dart'"),
+    );
     expect(timeUtils, contains('currentVietnamBusinessDay'));
     expect(timeUtils, contains('Asia/Ho_Chi_Minh'));
     for (final source in [cashier, kitchen]) {
