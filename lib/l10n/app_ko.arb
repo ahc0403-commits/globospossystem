@@ -4320,5 +4320,24 @@
         "type": "int"
       }
     }
-  }
+  },
+  "brandAbbreviation": "브랜드 약어",
+  "storeAbbreviation": "매장 약어",
+  "abbreviationHint": "영문자로 시작하는 영문·숫자 2~6자 (예: JGBT). 발급한 ID는 유지됩니다.",
+  "abbreviationError": "약어 형식·중복 여부를 확인하세요. ID에 사용된 약어는 변경할 수 없습니다.",
+  "onboardingFloors": "사용층 (시스템 층 코드)",
+  "onboardingPreview": "자동 생성 ID 미리보기",
+  "onboardingAccounts": "계정 자동 생성",
+  "onboardingPasswordHint": "신규 계정에는 지정한 초기 비밀번호를 적용하고 첫 로그인에서 변경합니다. 기존 계정 비밀번호는 유지됩니다.",
+  "onboardingSharedHint": "브랜드매니저는 브랜드 내에서 공용으로 사용합니다. 기존 법인 회계·Office 구매 담당 계정을 연결하며, 미등록 공용 계정은 별도로 설정해야 합니다.",
+  "onboardingBrandCodeRequired": "브랜드 관리에서 브랜드 약어를 먼저 설정하세요.",
+  "onboardingFailed": "매장은 저장되었습니다. 계정 생성이 미완료되었습니다. 아래에서 재시도하거나 매장 수정의 계정 자동 생성에서 이어서 진행하세요.",
+  "onboardingReady": "생성 완료",
+  "onboardingPending": "대기 / 계정 충돌 확인",
+  "onboardingNone": "이 매장에는 자동 생성 작업이 없습니다. 기존 계정은 매장 설정에서 관리합니다.",
+  "onboardingCopyIds": "로그인 ID 복사",
+  "onboardingProcurement": "발주 연결 상태",
+  "onboardingAccounting": "법인 회계",
+  "onboardingBuyer": "Office 구매 담당",
+  "onboardingNeedsSetup": "설정 필요"
 }

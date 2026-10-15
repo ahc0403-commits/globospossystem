@@ -34,7 +34,10 @@ void main() {
     }
     expect(settings, contains("Key('settings_store_opening_setup')"));
     expect(superAdmin, contains('super_admin_store_setup_'));
-    expect(superAdmin, contains("Key('super_admin_continue_store_setup')"));
+    expect(
+      File('lib/features/super_admin/store_onboarding.dart').readAsStringSync(),
+      contains("Key('super_admin_continue_store_setup')"),
+    );
     expect(onboarding, contains("Key('onboarding_continue_store_setup')"));
   });
 

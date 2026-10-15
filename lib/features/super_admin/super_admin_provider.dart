@@ -60,6 +60,7 @@ class SuperRestaurant {
     required this.perPersonCharge,
     required this.isActive,
     required this.createdAt,
+    this.shortCode,
     this.storeType = 'direct',
     this.brandId,
     this.brandName,
@@ -73,6 +74,7 @@ class SuperRestaurant {
   final String id;
   final String name;
   final String slug;
+  final String? shortCode;
   final String address;
   final String operationMode;
   final double? perPersonCharge;
@@ -103,6 +105,7 @@ class SuperRestaurant {
       id: json['id'].toString(),
       name: json['name']?.toString() ?? '',
       slug: json['slug']?.toString() ?? '',
+      shortCode: json['short_code']?.toString(),
       address: json['address']?.toString() ?? '',
       operationMode:
           json['operation_mode']?.toString().toLowerCase() ?? 'standard',
@@ -362,6 +365,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         'id': brand['id'],
         'name': brand['name'],
         'code': brand['code'],
+        'short_code': brand['short_code'],
       };
     }
     return merged.values.toList()
@@ -400,7 +404,12 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     );
     final brands = [
       ...state.brands.where((row) => row['id']?.toString() != id),
-      {'id': id, 'name': brand['name'], 'code': brand['code']},
+      {
+        'id': id,
+        'name': brand['name'],
+        'code': brand['code'],
+        'short_code': brand['short_code'],
+      },
     ]..sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
     state = state.copyWith(
       brands: brands,
@@ -465,8 +474,8 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         () => (_reportClient ?? supabase)
             .from('restaurants')
             .select(
-              'id, name, slug, address, operation_mode, per_person_charge, is_active, created_at, '
-              'store_type, brand_id, tax_entity_id, brands(name, code), tax_entity(name, tax_code, owner_type)',
+              'id, name, slug, short_code, address, operation_mode, per_person_charge, is_active, created_at, '
+              'store_type, brand_id, tax_entity_id, brands(name, code, short_code), tax_entity(name, tax_code, owner_type)',
             ),
       );
       if (!mounted) return;
@@ -496,7 +505,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
           final response = await fetchCompleteCatalog(
             () => (_reportClient ?? supabase)
                 .from('brands')
-                .select('id, code, name'),
+                .select('id, code, name, short_code'),
           );
           if (mounted) {
             state = state.copyWith(brands: _mergeBrands(response, revision));

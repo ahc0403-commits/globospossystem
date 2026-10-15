@@ -117,11 +117,8 @@ void main() {
     expect(setupService, contains("'rotate_password': false"));
     expect(setupUi, contains("Key('store_setup_add_account_template')"));
     expect(setupUi, contains("RegExp(r'^[A-Z0-9]{2,6}\$')"));
-    expect(setupUi, contains("Key('store_setup_provision_password')"));
-    expect(
-      setupUi,
-      contains("Key('store_setup_provision_password_confirmation')"),
-    );
+    expect(setupUi, contains('onboardingPasswordHint'));
+    expect(setupUi, isNot(contains("Key('store_setup_provision_password')")));
     expect(setupProvider, isNot(contains('final String? password')));
     expect(setupModels, isNot(contains('final String? password')));
     expect(setupUi, contains('WorkforcePresetCatalog.photo'));
@@ -145,7 +142,7 @@ void main() {
         'storeSetupWorkforceTitle',
         'storeSetupConfigureWorkforce',
         'storeSetupProvisionAccount',
-        'storeSetupConfirmPassword',
+        'onboardingPasswordHint',
         'photoOpsPartTimerAttendanceTitle',
         'photoOpsInventoryAdjustmentType',
       };

@@ -116,8 +116,10 @@ serve(async (req) => {
       typeof body.legal_entity_requirement_id === "string"
         ? body.legal_entity_requirement_id
         : "";
-    const password = typeof body.password === "string" ? body.password : "";
     const rotatePassword = body.rotate_password === true;
+    const password = rotatePassword
+      ? (typeof body.password === "string" ? body.password : "")
+      : (Deno.env.get("STORE_ONBOARDING_INITIAL_PASSWORD") ?? "");
     if (!requirementId && !legalEntityRequirementId) {
       return response(400, { error: "REQUIREMENT_ID_REQUIRED" });
     }
@@ -196,11 +198,22 @@ serve(async (req) => {
     ) {
       return response(409, { error: "FIXED_ACCOUNT_IDENTITY_CONFLICT" });
     }
+    if (profile && !profile.is_active) {
+      return response(409, { error: "FIXED_ACCOUNT_INACTIVE" });
+    }
     if (profile && !authUser) {
       return response(409, { error: "FIXED_ACCOUNT_AUTH_MISSING" });
     }
     if (authUser && authUser.email?.toLowerCase() !== email) {
       return response(409, { error: "FIXED_ACCOUNT_EMAIL_CONFLICT" });
+    }
+    if (!authUser && rotatePassword) {
+      return response(409, {
+        error: "PASSWORD_ROTATION_REQUIRES_EXISTING_ACCOUNT",
+      });
+    }
+    if (authUser && !profile) {
+      return response(409, { error: "FIXED_ACCOUNT_AUTH_OWNERSHIP_CONFLICT" });
     }
     if (!authUser && !password) {
       return response(400, { error: "INITIAL_PASSWORD_REQUIRED" });
@@ -251,14 +264,6 @@ serve(async (req) => {
       }
       profile = data;
       createdProfile = true;
-    } else if (!profile.is_active) {
-      const { data, error } = await serviceClient.from("users")
-        .update({ is_active: true })
-        .eq("id", profile.id)
-        .select("id, auth_id, role, account_type, is_active")
-        .single();
-      if (error || !data) throw error ?? new Error("PROFILE_REACTIVATE_FAILED");
-      profile = data;
     }
 
     if (rotatePassword) {

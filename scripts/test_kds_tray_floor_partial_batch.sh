@@ -38,6 +38,43 @@ run_sql < supabase/migrations/20260919010000_kds_tray_floor_partial_batch.sql \
   >/dev/null
 run_sql < scripts/verify_kds_tray_floor_partial_batch.sql >/dev/null
 run_sql < supabase/tests/kds_tray_floor_partial_batch_test.sql >/dev/null
+
+# Apply the actual onboarding floor extension to the predecessor KDS contract.
+# Re-run its stale/idempotency scenarios on 3F and reject a 1F -> 3F allocation.
+run_sql <<'SQL' >/dev/null
+CREATE TABLE public.kds_shadow_health(floor_key text CHECK(floor_key IN('','1F','2F')));
+CREATE TABLE public.kds_change_log(target_floor_label text CHECK(target_floor_label IS NULL OR target_floor_label IN('1F','2F')));
+ALTER TABLE public.emergency_order_queue ADD CHECK(floor_label IN('1F','2F'));
+DO $$ BEGIN
+ EXECUTE replace(pg_get_functiondef('public.kds_dispatch_tray_floor_batch_v1(uuid,text,jsonb)'::regprocedure),'FUNCTION public.kds_dispatch_tray_floor_batch_v1(', 'FUNCTION public.kds_dispatch_tray_floor_loop_backup_v1(');
+END $$;
+SQL
+python3 - <<'PYFLOOR' | run_sql >/dev/null
+from pathlib import Path
+s=Path('supabase/migrations/20261015150000_store_account_onboarding.sql').read_text()
+a=s.index('DO $floors$');b=s.index('END $floors$;',a)+len('END $floors$;');print(s[a:b])
+PYFLOOR
+run_sql <<'SQL' >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ BEGIN
+  PERFORM public.kds_dispatch_tray_floor_batch_v1(gen_random_uuid(),'3F','[{"item_id":"10000000-0000-0000-0000-000000000008","queue_id":"10000000-0000-0000-0000-000000000007","source_kind":"base","quantity":1}]'::jsonb);
+  RAISE EXCEPTION 'CROSS_FLOOR_DISPATCH_ALLOWED';
+ EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'KDS_TRAY_FLOOR_BATCH_STALE' THEN RAISE; END IF; END;
+ IF pg_get_functiondef('public.kds_dispatch_tray_floor_loop_backup_v1(uuid,text,jsonb)'::regprocedure) NOT LIKE '%''3F''%' THEN RAISE EXCEPTION 'LEGACY_GUARD_NOT_EXTENDED'; END IF;
+END $$;
+ROLLBACK;
+UPDATE public.emergency_order_queue SET floor_label='3F';
+SQL
+python3 - <<'PYFLOOR' | run_sql >/dev/null
+from pathlib import Path
+print(Path('supabase/tests/kds_tray_floor_partial_batch_test.sql').read_text().replace("'1F'","'3F'"))
+PYFLOOR
+run_sql <<'SQL' >/dev/null
+UPDATE public.emergency_order_queue SET floor_label='1F';
+SQL
+printf 'KDS_THIRD_FLOOR_ISOLATION=PASS\n'
 run_sql < scripts/rollback_kds_tray_floor_partial_batch.sql >/dev/null
 run_sql < scripts/preflight_kds_tray_floor_partial_batch.sql >/dev/null
 run_sql < supabase/migrations/20260919010000_kds_tray_floor_partial_batch.sql \

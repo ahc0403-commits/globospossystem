@@ -58,6 +58,7 @@ void main() {
             'id': 'brand',
             'name': 'New brand',
             'code': 'new_brand',
+            'short_code': 'NB',
             'tax_entity_ids': ['entity-1'],
           }),
         );
@@ -103,7 +104,7 @@ void main() {
       final created = await service.create(
         id: 'brand',
         name: 'New brand',
-        code: 'new_brand',
+        code: 'NB',
         groupId: 'group',
         taxEntityIds: [],
       );
@@ -112,14 +113,20 @@ void main() {
       expect(admin.state.brandsForTaxEntity('entity-1').single['id'], 'brand');
       final linked = await service.link(
         brandId: 'brand',
+        code: 'NB',
         taxEntityIds: ['entity-1'],
       );
       admin.applyBrandMutation(linked);
+      expect(requests.last.body['p_code'], 'NB');
+      expect(requests.first.path, endsWith('admin_create_brand_v2'));
       expect(requests, hasLength(2));
       expect(admin.state.brands, hasLength(1));
       expect(admin.state.taxEntityBrands, hasLength(1));
       expect(requests.first.body['p_tax_entity_ids'], isEmpty);
-      expect(requests.last.path, endsWith('admin_link_brand_tax_entities_v1'));
+      expect(
+        requests.last.path,
+        endsWith('admin_update_brand_registration_v2'),
+      );
     },
   );
 
@@ -143,6 +150,7 @@ void main() {
         'id': 'brand',
         'name': 'New brand',
         'code': 'new_brand',
+        'short_code': 'NB',
         'tax_entity_ids': ['entity-1'],
       });
       block!.complete();
@@ -168,6 +176,7 @@ void main() {
         'id': 'brand',
         'name': 'New brand',
         'code': 'new_brand',
+        'short_code': 'NB',
         'tax_entity_ids': [],
       });
       fail = true;

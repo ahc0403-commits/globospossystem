@@ -51,7 +51,7 @@ class BrandService {
     required List<String> taxEntityIds,
   }) async => Map<String, dynamic>.from(
     await client.rpc(
-          'admin_create_brand_v1',
+          'admin_create_brand_v2',
           params: {
             'p_brand_id': id,
             'p_name': name,
@@ -66,10 +66,15 @@ class BrandService {
   Future<Map<String, dynamic>> link({
     required String brandId,
     required List<String> taxEntityIds,
+    String? code,
   }) async => Map<String, dynamic>.from(
     await client.rpc(
-          'admin_link_brand_tax_entities_v1',
-          params: {'p_brand_id': brandId, 'p_tax_entity_ids': taxEntityIds},
+          'admin_update_brand_registration_v2',
+          params: {
+            'p_brand_id': brandId,
+            'p_code': code,
+            'p_tax_entity_ids': taxEntityIds,
+          },
         )
         as Map,
   );

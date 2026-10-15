@@ -11,6 +11,7 @@ import 'super_admin_provider.dart';
 
 String _brandError(AppLocalizations l10n, Object error) {
   final message = error.toString();
+  if (message.contains('ABBREVIATION')) return l10n.abbreviationError;
   if (message.contains('BRAND_CODE_EXISTS')) return l10n.brandCodeExists;
   if (message.contains('BRAND_ADMIN_FORBIDDEN')) return l10n.brandForbidden;
   if (message.contains('BRAND_REQUEST_CONFLICT')) {
@@ -162,7 +163,9 @@ class _BrandManagementState extends ConsumerState<BrandManagementDialog> {
                         );
                         return ListTile(
                           key: ValueKey('brand_row_${row['id']}'),
-                          title: Text('${row['name']} (${row['code']})'),
+                          title: Text(
+                            '${row['name']} (${row['short_code'] ?? '-'})',
+                          ),
                           subtitle: Text(
                             '${l10n.brandStoreCount(row['store_count'] as int)}\n${names.isEmpty ? l10n.brandUnlinked : names}',
                           ),
@@ -232,6 +235,7 @@ class _BrandEditorState extends ConsumerState<_BrandEditor> {
   @override
   void initState() {
     super.initState();
+    _code.text = widget.brand?['short_code']?.toString() ?? '';
     _selected.addAll(
       (widget.brand?['tax_entity_ids'] as List? ?? []).map((id) => '$id'),
     );
@@ -272,12 +276,13 @@ class _BrandEditorState extends ConsumerState<_BrandEditor> {
       final result = _isLink
           ? await service.link(
               brandId: widget.brand!['id'].toString(),
+              code: _code.text.trim().toUpperCase(),
               taxEntityIds: _selected.toList(),
             )
           : await service.create(
               id: _requestId,
               name: _name.text.trim(),
-              code: _code.text.trim(),
+              code: _code.text.trim().toUpperCase(),
               groupId: _group!,
               taxEntityIds: _selected.toList(),
             );
@@ -338,24 +343,6 @@ class _BrandEditorState extends ConsumerState<_BrandEditor> {
                           : null,
                     ),
                     const SizedBox(height: 12),
-                    TextFormField(
-                      key: const Key('brand_code'),
-                      controller: _code,
-                      maxLength: 64,
-                      enabled: !_saving,
-                      decoration: InputDecoration(
-                        labelText: l10n.brandCode,
-                        helperText: l10n.brandCodeHint,
-                        helperMaxLines: 3,
-                      ),
-                      validator: (value) =>
-                          RegExp(
-                            r'^[a-z0-9][a-z0-9_-]{1,63}$',
-                          ).hasMatch((value ?? '').trim().toLowerCase())
-                          ? null
-                          : l10n.brandCodeInvalid,
-                    ),
-                    const SizedBox(height: 12),
                     if (_loading) const LinearProgressIndicator(),
                     DropdownButtonFormField<String>(
                       key: ValueKey('brand_group_$_group'),
@@ -381,6 +368,24 @@ class _BrandEditorState extends ConsumerState<_BrandEditor> {
                     ),
                     if (!_loading && _groups.isEmpty) Text(l10n.brandNoGroups),
                   ],
+                  TextFormField(
+                    key: const Key('brand_code'),
+                    controller: _code,
+                    maxLength: 6,
+                    enabled: !_saving,
+                    decoration: InputDecoration(
+                      labelText: l10n.brandAbbreviation,
+                      helperText: l10n.abbreviationHint,
+                      helperMaxLines: 3,
+                    ),
+                    validator: (value) =>
+                        RegExp(
+                          r'^[A-Z][A-Z0-9]{1,5}$',
+                        ).hasMatch((value ?? '').trim().toUpperCase())
+                        ? null
+                        : l10n.abbreviationError,
+                  ),
+                  const SizedBox(height: 12),
                   const SizedBox(height: 16),
                   Text(
                     l10n.brandLinkEntities,

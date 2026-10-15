@@ -385,8 +385,6 @@ class WorkforceSetupCard extends StatelessWidget {
   ) async {
     final requirementId = account['requirement_id']?.toString() ?? '';
     final email = account['email']?.toString() ?? '-';
-    final passwordController = TextEditingController();
-    final confirmationController = TextEditingController();
     String? validation;
     var isSubmitting = false;
 
@@ -400,27 +398,7 @@ class WorkforceSetupCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(context.l10n.storeSetupProvisionPasswordHint),
-              const SizedBox(height: 12),
-              TextField(
-                key: const Key('store_setup_provision_password'),
-                controller: passwordController,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: InputDecoration(labelText: context.l10n.password),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                key: const Key('store_setup_provision_password_confirmation'),
-                controller: confirmationController,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: InputDecoration(
-                  labelText: context.l10n.storeSetupConfirmPassword,
-                ),
-              ),
+              Text(context.l10n.onboardingPasswordHint),
               if (validation != null) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -443,33 +421,16 @@ class WorkforceSetupCard extends StatelessWidget {
               onPressed: isSubmitting
                   ? null
                   : () async {
-                      final password = passwordController.text;
-                      if (requirementId.isEmpty || password.length < 12) {
-                        setDialogState(
-                          () => validation =
-                              context.l10n.storeSetupPasswordMinimum,
-                        );
-                        return;
-                      }
-                      if (password != confirmationController.text) {
-                        setDialogState(
-                          () => validation =
-                              context.l10n.storeSetupPasswordMismatch,
-                        );
-                        return;
-                      }
                       setDialogState(() {
                         isSubmitting = true;
                         validation = null;
                       });
                       final provisioned = await onProvision(
                         requirementId: requirementId,
-                        password: password,
+                        password: '',
                       );
                       if (!dialogContext.mounted) return;
                       if (provisioned) {
-                        passwordController.clear();
-                        confirmationController.clear();
                         Navigator.of(dialogContext).pop();
                         return;
                       }
@@ -491,11 +452,7 @@ class WorkforceSetupCard extends StatelessWidget {
       ),
     );
 
-    passwordController.clear();
-    confirmationController.clear();
     await Future<void>.delayed(kThemeAnimationDuration);
-    passwordController.dispose();
-    confirmationController.dispose();
   }
 }
 

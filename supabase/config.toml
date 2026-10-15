@@ -26,3 +26,7 @@ verify_jwt = false
 # Handler verifies the bearer token through Auth before any lookup claim.
 [functions.company-tax-lookup]
 verify_jwt = false
+
+# Handler verifies active master Auth or the existing internal cron secret.
+[functions.store-account-onboarding]
+verify_jwt = false
