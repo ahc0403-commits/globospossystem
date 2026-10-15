@@ -24,6 +24,12 @@ class _OperationalCoverage {
 
 const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
+    source: 'lib/features/super_admin/brand_dialog.dart',
+    directCalls: 1,
+    test: 'test/independent_brand_widget_test.dart',
+    markers: ['brand_editor_dialog'],
+  ),
+  _OperationalCoverage(
     source: 'lib/features/settings/printer_diagnostic_view.dart',
     directCalls: 1,
     test: 'test/registered_receipt_printer_panel_test.dart',
@@ -230,8 +236,9 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/super_admin/super_admin_screen.dart',
-    directCalls: 6,
+    directCalls: 7,
     test: 'test/super_admin_overlay_operational_test.dart',
+    additionalTests: ['test/independent_brand_widget_test.dart'],
     markers: [
       'super_admin_store_sheet',
       'super_admin_global_template_sheet',
@@ -239,6 +246,7 @@ const _coverage = <_OperationalCoverage>[
       'super_admin_purge_store_dialog',
       'super_admin_continue_store_setup_dialog',
       'legal_entity_accounting_dialog',
+      'brand_management_dialog',
     ],
   ),
   _OperationalCoverage(
@@ -474,7 +482,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 166 dialog and sheet entrypoints map to operational tests', () {
+  test('all 168 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -486,10 +494,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 163);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 165);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      166,
+      168,
     );
 
     final inventory = File(

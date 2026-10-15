@@ -4289,5 +4289,36 @@
   "storeSetupProcurementManager": "Quản lý cửa hàng",
   "storeSetupProcurementReceiver": "Người nhận hàng",
   "storeSetupProcurementAccounting": "Kế toán",
-  "storeSetupProcurementOffice": "Kết nối Office"
+  "storeSetupProcurementOffice": "Kết nối Office",
+  "brandAdd": "Thêm thương hiệu",
+  "brandManagement": "Quản lý thương hiệu",
+  "brandName": "Tên thương hiệu",
+  "brandCode": "Mã thương hiệu",
+  "brandGroup": "Nhóm tổ chức",
+  "brandGroupRequired": "Chọn nhóm tổ chức.",
+  "brandNoGroups": "Chưa có nhóm tổ chức. Vui lòng liên hệ quản trị viên.",
+  "brandIndependentHint": "Có thể đăng ký thương hiệu mà chưa có cửa hàng. Liên kết pháp nhân ngay hoặc sau.",
+  "brandNameRequired": "Nhập tên thương hiệu.",
+  "brandCodeHint": "2–64 ký tự: a–z, 0–9, _ hoặc -.",
+  "brandCodeInvalid": "Nhập mã 2–64 ký tự, bắt đầu bằng chữ cái hoặc chữ số.",
+  "brandCodeExists": "Mã thương hiệu đã được sử dụng. Liên kết thương hiệu hiện có hoặc nhập mã khác.",
+  "brandLinkEntities": "Liên kết pháp nhân",
+  "brandEntityHint": "Có thể liên kết pháp nhân sau, nhưng phải liên kết trước khi thêm cửa hàng. Giữ nguyên các liên kết hiện có.",
+  "brandNoEntities": "Chưa có pháp nhân. Có thể lưu thương hiệu và liên kết sau khi đăng ký pháp nhân.",
+  "brandUnlinked": "Chưa liên kết pháp nhân",
+  "brandStoreCount": "{count} cửa hàng",
+  "brandListEmpty": "Không có thương hiệu phù hợp.",
+  "brandLoadMore": "Xem thêm",
+  "brandSaving": "Đang lưu…",
+  "brandForbidden": "Chỉ quản trị viên cấp cao đang hoạt động mới có thể đăng ký hoặc liên kết thương hiệu.",
+  "brandRequestConflict": "Yêu cầu này đã đăng ký thương hiệu. Vui lòng kiểm tra danh sách.",
+  "brandEntityInvalid": "Kiểm tra pháp nhân đã chọn và thử lại.",
+  "brandOperationFailed": "Không thể xử lý thông tin thương hiệu. Kiểm tra kết nối và thử lại.",
+  "@brandStoreCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
