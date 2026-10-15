@@ -80,9 +80,9 @@ def main():
             if not catalog.get('procurement_policy', {}).get('enabled'):
                 raise RuntimeError(f'{code}: procurement is disabled')
             query = {'request_view': True, 'request_group': 'pending', 'limit': 20,
-                     'request_sort': 'submitted' if role == 'store_admin' else 'created'}
+                     'request_sort': 'created'}
             if role == 'store_admin':
-                query['request_scope'] = 'mine'
+                query.update({'request_scope': 'all', 'approval_view': True, 'request_summary_only': True})
             page = request('/rest/v1/rpc/procurement_workspace_page',
                 {'p_store_id': store, 'p_query': query}, token)
             actor = page['actor']
@@ -105,6 +105,20 @@ def main():
                     raise RuntimeError('Store manager detail does not allow approval')
                 summary['detail'] = 'passed'
                 summary['selected_line_count'] = len(detail['request_detail']['lines'])
+                if page.get('products') or page.get('supplier_items'):
+                    raise RuntimeError('Manager summary unexpectedly includes the product catalog')
+                approved = request('/rest/v1/rpc/procurement_workspace_page',
+                    {'p_store_id': store, 'p_query': {**query, 'request_group': 'approved'}}, token)
+                returned = request('/rest/v1/rpc/procurement_workspace_page',
+                    {'p_store_id': store, 'p_query': {**query, 'request_group': 'returned'}}, token)
+                summary['request_counts'] = page['request_counts']
+                summary['approved_history_rows'] = len(approved['requests'])
+                summary['returned_rows'] = len(returned['requests'])
+                if any(row['status'] == 'returned' for row in approved['requests']):
+                    raise RuntimeError('Returned PR leaked into the approved tab')
+                if any(row['status'] != 'returned' for row in returned['requests']):
+                    raise RuntimeError('Returned tab includes another stage')
+
         finally:
             if token:
                 request('/auth/v1/logout?scope=local', token=token, method='POST')

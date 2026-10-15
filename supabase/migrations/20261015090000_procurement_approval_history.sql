@@ -11,6 +11,7 @@ RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,au
 DECLARE actor jsonb;policy jsonb;prices boolean;estimates boolean;lim integer;result jsonb;requests jsonb;orders jsonb;catalog jsonb;request_counts jsonb;
  created_sort boolean:=p_query->>'request_sort'='created';
  submitted_sort boolean:=p_query->>'request_sort'='submitted';
+ approval_view boolean:=COALESCE((p_query->>'approval_view')::boolean,false);
  rid uuid:=NULLIF(p_query->>'request_id','')::uuid;oid uuid:=NULLIF(p_query->>'order_id','')::uuid;
 BEGIN
  actor:=public.procurement_inbox_actor(p_store_id,p_office_actor);prices:=COALESCE((actor->>'can_view_prices')::boolean,false);
@@ -20,7 +21,8 @@ BEGIN
  IF p_query->'selected_product_ids' IS NOT NULL AND EXISTS(SELECT 1 FROM jsonb_array_elements_text(p_query->'selected_product_ids') selected LEFT JOIN public.inventory_products p ON p.id=selected::uuid AND p.restaurant_id=p_store_id AND p.is_active AND p.is_orderable WHERE p.id IS NULL) THEN RAISE EXCEPTION 'PROCUREMENT_PRODUCT_INVALID'; END IF;
  IF NULLIF(p_query->>'purchase_category','') IS NOT NULL AND p_query->>'purchase_category' NOT IN ('raw_material','tools','stationery','beverage','other') THEN RAISE EXCEPTION 'PROCUREMENT_FILTER_INVALID'; END IF;
  IF NULLIF(p_query->>'request_scope','') IS NOT NULL AND p_query->>'request_scope' NOT IN ('mine','history','all') THEN RAISE EXCEPTION 'PROCUREMENT_FILTER_INVALID'; END IF;
- IF NULLIF(p_query->>'request_group','') IS NOT NULL AND p_query->>'request_group' NOT IN ('pending','approved','cancelled') THEN RAISE EXCEPTION 'PROCUREMENT_FILTER_INVALID'; END IF;
+ IF approval_view AND NOT COALESCE((actor->>'can_store_approve')::boolean,false) THEN RAISE EXCEPTION 'PROCUREMENT_SCOPE_FORBIDDEN'; END IF;
+ IF NULLIF(p_query->>'request_group','') IS NOT NULL AND NOT(p_query->>'request_group' IN ('pending','approved','cancelled') OR approval_view AND p_query->>'request_group'='returned') THEN RAISE EXCEPTION 'PROCUREMENT_FILTER_INVALID'; END IF;
  IF NULLIF(p_query->>'created_from','') IS NOT NULL AND NULLIF(p_query->>'created_to','') IS NOT NULL AND (p_query->>'created_from')::date>(p_query->>'created_to')::date THEN RAISE EXCEPTION 'PROCUREMENT_FILTER_INVALID'; END IF;
  lim:=greatest(1,least(50,COALESCE((p_query->>'limit')::integer,20)));
  IF COALESCE((p_query->>'catalog_only')::boolean,false) THEN
@@ -40,11 +42,17 @@ BEGIN
  END IF;
  WITH processed AS MATERIALIZED (
    SELECT DISTINCT ev.record_id FROM public.procurement_events ev
-   WHERE p_query->>'request_scope'='history' AND ev.restaurant_id=p_store_id
+   WHERE (approval_view OR p_query->>'request_scope'='history') AND ev.restaurant_id=p_store_id
      AND ev.actor->>'system'=workspace.actor->>'system' AND ev.actor->>'subject_id'=workspace.actor->>'subject_id'
      AND ev.action IN ('store_approve','brand_approve','office_approve','senior_approve','return_request')
- ), filtered AS MATERIALIZED (SELECT r.*,public.procurement_allowed_actions(r,actor) inbox_actions FROM public.inventory_purchase_requests r WHERE r.restaurant_id=p_store_id
-   AND(NULLIF(p_query->>'request_scope','') IS NULL OR p_query->>'request_scope'='all' OR p_query->>'request_scope'='mine' AND public.procurement_inbox_stage(r,actor)
+ ), filtered AS MATERIALIZED (SELECT r.*,public.procurement_allowed_actions(r,actor) inbox_actions,
+   CASE WHEN r.status='cancelled' THEN 'cancelled'
+     WHEN r.status='returned' AND r.id IN(SELECT record_id FROM processed) THEN 'returned'
+     WHEN r.status NOT IN ('draft','returned','submitted','cancelled')
+       AND r.store_approved_actor->>'system'=actor->>'system' AND r.store_approved_actor->>'subject_id'=actor->>'subject_id' THEN 'approved'
+     WHEN public.procurement_inbox_stage(r,actor) THEN 'pending' END manager_group
+   FROM public.inventory_purchase_requests r WHERE r.restaurant_id=p_store_id
+   AND(approval_view OR NULLIF(p_query->>'request_scope','') IS NULL OR p_query->>'request_scope'='all' OR p_query->>'request_scope'='mine' AND public.procurement_inbox_stage(r,actor)
      OR p_query->>'request_scope'='history' AND r.id IN (SELECT record_id FROM processed))
    AND(NULLIF(p_query->>'purchase_category','') IS NULL OR r.purchase_category=p_query->>'purchase_category'
      OR p_query->>'purchase_category'='tools' AND r.purchase_category='stationery')
@@ -53,10 +61,11 @@ BEGIN
    AND(NULLIF(p_query->>'created_to','') IS NULL OR r.created_at < (((p_query->>'created_to')::date+1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'))
  ), page AS (SELECT r.* FROM filtered r
    WHERE(NULLIF(p_query->>'request_status','') IS NULL OR r.status=p_query->>'request_status')
-   AND(NULLIF(p_query->>'request_group','') IS NULL
+   AND(approval_view AND r.manager_group=COALESCE(NULLIF(p_query->>'request_group',''),'pending')
+     OR NOT approval_view AND (NULLIF(p_query->>'request_group','') IS NULL
      OR p_query->>'request_group'='pending' AND r.status IN ('draft','returned','submitted','brand_review','office_review','senior_review')
      OR p_query->>'request_group'='approved' AND r.status IN ('approved','allocated')
-     OR p_query->>'request_group'='cancelled' AND r.status='cancelled')
+     OR p_query->>'request_group'='cancelled' AND r.status='cancelled'))
    AND (NULLIF(p_query->>'request_before','') IS NULL
      OR submitted_sort AND (COALESCE(r.submitted_at,r.created_at),r.id)>((p_query->>'request_before')::timestamptz,(p_query->>'request_before_id')::uuid)
      OR NOT submitted_sort AND (CASE WHEN created_sort THEN r.created_at ELSE r.updated_at END,r.id)<((p_query->>'request_before')::timestamptz,(p_query->>'request_before_id')::uuid))
@@ -67,10 +76,14 @@ BEGIN
  SELECT COALESCE(jsonb_agg(jsonb_build_object('id',p.id,'request_no',p.request_no,'status',p.status,'row_version',p.row_version,'reason',p.reason,
    'created_at',p.created_at,'updated_at',p.updated_at,'submitted_at',p.submitted_at,'requested_delivery_date',p.requested_delivery_date,
    'purchase_category',p.purchase_category,'purchase_channel',p.purchase_channel,'approval_policy_version',p.approval_policy_version,
+   'requester_name',p.created_actor->>'display_name','requester_role',p.created_actor->>'role','approval_group',p.manager_group,
    'line_count',COALESCE(c.line_count,0),'allowed_actions',CASE WHEN COALESCE((policy->>'enabled')::boolean,false) THEN p.inbox_actions ELSE '[]' END,
    'lines','[]'::jsonb,'quotes','[]'::jsonb) ORDER BY CASE WHEN submitted_sort THEN COALESCE(p.submitted_at,p.created_at) END ASC,CASE WHEN NOT submitted_sort THEN CASE WHEN created_sort THEN p.created_at ELSE p.updated_at END END DESC,CASE WHEN submitted_sort THEN p.id END ASC,CASE WHEN NOT submitted_sort THEN p.id END DESC),'[]'),
-   (SELECT jsonb_build_object('pending',count(*) FILTER(WHERE status IN ('draft','returned','submitted','brand_review','office_review','senior_review')),
-    'approved',count(*) FILTER(WHERE status IN ('approved','allocated')),'cancelled',count(*) FILTER(WHERE status='cancelled')) FROM filtered)
+   (SELECT CASE WHEN approval_view THEN jsonb_build_object(
+      'pending',count(*) FILTER(WHERE manager_group='pending'),'approved',count(*) FILTER(WHERE manager_group='approved'),
+      'returned',count(*) FILTER(WHERE manager_group='returned'),'cancelled',count(*) FILTER(WHERE manager_group='cancelled'))
+    ELSE jsonb_build_object('pending',count(*) FILTER(WHERE status IN ('draft','returned','submitted','brand_review','office_review','senior_review')),
+    'approved',count(*) FILTER(WHERE status IN ('approved','allocated')),'cancelled',count(*) FILTER(WHERE status='cancelled')) END FROM filtered)
  INTO requests,request_counts FROM page p LEFT JOIN counts c ON c.request_id=p.id;
  WITH page AS (SELECT po.* FROM public.inventory_purchase_orders po WHERE po.restaurant_id=p_store_id AND po.workflow_version=2
    AND(NOT COALESCE((p_query->>'request_view')::boolean,false) OR rid IS NOT NULL)
@@ -84,6 +97,7 @@ BEGIN
    'issued_at',p.commercial_terms->'issued_at','accounting_status',to_jsonb(a)||jsonb_build_object('stale',a.observed_at<now()-interval '10 minutes' OR a.source_order_version<>p.row_version),'allowed_actions',CASE WHEN COALESCE((policy->>'enabled')::boolean,false) AND COALESCE((actor->>'can_office_approve')::boolean,false)
      THEN CASE p.procurement_status WHEN 'issued' THEN '["send_po"]'::jsonb WHEN 'sent' THEN '["confirm_po"]'::jsonb ELSE '[]'::jsonb END ELSE '[]'::jsonb END) ORDER BY p.created_at DESC,p.id DESC),'[]')
  INTO orders FROM page p LEFT JOIN public.inventory_suppliers s ON s.id=p.supplier_id LEFT JOIN public.procurement_accounting_status a ON a.purchase_order_id=p.id;
+ IF NOT COALESCE((p_query->>'request_summary_only')::boolean,false) THEN
  WITH products AS (SELECT p.*,it.current_stock,it.updated_at stock_updated_at FROM public.inventory_products p
    LEFT JOIN public.inventory_items it ON it.id=p.inventory_item_id AND it.restaurant_id=p_store_id
    WHERE p.restaurant_id=p_store_id AND p.is_active AND p.is_orderable
@@ -96,6 +110,7 @@ BEGIN
      (CASE WHEN estimates THEN to_jsonb(si) ELSE to_jsonb(si)-'unit_price'-'tax_rate' END)||jsonb_build_object('supplier_name',s.supplier_name,'product_name',p.name,'payment_terms',s.payment_terms) ORDER BY si.product_id,si.id)
      FROM public.inventory_supplier_items si JOIN (SELECT * FROM products LIMIT 200) p ON p.id=si.product_id JOIN public.inventory_suppliers s ON s.id=si.supplier_id
      WHERE si.is_active AND s.status='active' AND (s.brand_id IS NULL OR s.brand_id=(SELECT brand_id FROM public.restaurants WHERE id=p_store_id))),'[]')) INTO catalog;
+ ELSE catalog:='{"products":[],"supplier_items":[],"catalog_has_more":false}'::jsonb; END IF;
  result:=jsonb_build_object('contract_version',2,'read_contract','paged','store_id',p_store_id,'enabled',COALESCE((policy->>'enabled')::boolean,false),
    'actor',actor-'identity_people','policy',policy,'requests',COALESCE((SELECT jsonb_agg(x) FROM jsonb_array_elements(requests) WITH ORDINALITY a(x,n) WHERE n<=lim),'[]'),
    'orders',COALESCE((SELECT jsonb_agg(x) FROM jsonb_array_elements(orders) WITH ORDINALITY a(x,n) WHERE n<=lim),'[]'),
@@ -167,6 +182,8 @@ END $$;
 
 DO $$ BEGIN
  IF position('processed AS MATERIALIZED' IN pg_get_functiondef('public.procurement_workspace_page_core(uuid,jsonb,jsonb)'::regprocedure))=0
+ OR position('manager_group' IN pg_get_functiondef('public.procurement_workspace_page_core(uuid,jsonb,jsonb)'::regprocedure))=0
+ OR position('request_summary_only' IN pg_get_functiondef('public.procurement_workspace_page_core(uuid,jsonb,jsonb)'::regprocedure))=0
  OR to_regclass('public.procurement_events_actor_decisions') IS NULL
  OR has_function_privilege('anon','public.procurement_workspace_page(uuid,jsonb,jsonb)','EXECUTE')
  THEN RAISE EXCEPTION 'PROCUREMENT_HISTORY_CONTRACT_INVALID'; END IF;

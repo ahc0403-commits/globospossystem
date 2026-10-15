@@ -54,6 +54,45 @@ const procurementDocumentLabelKeys = [
 
 String procurementProcessLabel(String key, String languageCode) {
   final values = {
+    'approval_pending': ['승인대기', 'Awaiting approval', 'Chờ duyệt'],
+    'approval_approved': ['승인완료', 'Approved', 'Đã duyệt'],
+    'approval_returned': ['반려', 'Returned', 'Trả lại'],
+    'storeApprovedAwaitingBuyer': [
+      '매장 승인 완료 · 구매팀 검토 대기',
+      'Store approved · Awaiting purchase review',
+      'Cửa hàng đã duyệt · Chờ bộ phận mua hàng',
+    ],
+    'stockLookup': ['재고 조회', 'Stock lookup', 'Tra cứu tồn kho'],
+    'searchProducts': [
+      '품목명·코드 검색',
+      'Search product name / code',
+      'Tìm tên / mã mặt hàng',
+    ],
+    'noProducts': [
+      '조회할 품목이 없습니다.',
+      'No products found.',
+      'Không tìm thấy mặt hàng.',
+    ],
+    'nextProducts': ['다음 품목', 'Next products', 'Mặt hàng tiếp theo'],
+    'lastStockUpdate': ['재고 갱신', 'Stock updated', 'Cập nhật tồn kho'],
+    'stockLoadFailed': [
+      '재고를 조회하지 못했습니다. 다시 조회해 주세요.',
+      'Could not load stock. Please search again.',
+      'Không tải được tồn kho. Vui lòng tìm lại.',
+    ],
+    'close': ['닫기', 'Close', 'Đóng'],
+    'viewDetails': ['상세 보기', 'View details', 'Xem chi tiết'],
+    'requestReason': ['요청 사유', 'Reason', 'Lý do'],
+    'unavailableRequester': [
+      '요청자 정보 없음',
+      'Requester unavailable',
+      'Chưa có người yêu cầu',
+    ],
+    'requesterRole': ['구매요청 담당', 'Requester', 'Người yêu cầu mua'],
+    'storeManagerRole': ['매장 관리자', 'Store Manager', 'Quản lý cửa hàng'],
+    'administratorRole': ['관리자', 'Administrator', 'Quản trị viên'],
+    'moreHistory': ['추가 이력', 'More history', 'Lịch sử khác'],
+    'cancelledHistory': ['취소 이력', 'Cancelled requests', 'Yêu cầu đã hủy'],
     'approvalInbox': ['PR 결재함', 'PR approvals', 'Duyệt yêu cầu mua hàng'],
     'carryShortage': ['이전 PO 부족분', 'Previous PO shortage', 'Thiếu từ PO trước'],
     'store': ['매장', 'Store', 'Cửa hàng'],

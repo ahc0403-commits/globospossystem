@@ -21,6 +21,12 @@ BEGIN
  ASSERT (SELECT count(*) FROM jsonb_array_elements(page->'requests') x WHERE x->>'id'=rid::text)=1,'Store approval remains in history during Office review';
  ASSERT EXISTS(SELECT 1 FROM jsonb_array_elements(page->'events') e WHERE e->>'action'='store_approve'),'Approval evidence remains readable';
  ASSERT NOT(page->'request_detail'->'allowed_actions' ? 'store_approve'),'History never grants repeat approval';
+ page:=public.procurement_workspace_page(test_uuid(101),jsonb_build_object('approval_view',true,'request_group','approved','request_sort','created','request_view',true,'request_summary_only',true,'search',approval->>'request_no'));
+ ASSERT jsonb_array_length(page->'requests')=1 AND page->'requests'->0->>'status'='office_review','Approved tab includes store-approved PR before final Office approval';
+ ASSERT page->'request_counts'->>'approved'='1' AND page->'request_counts'->>'pending'='0','Tab counts use the same current stage and search scope';
+ ASSERT jsonb_array_length(page->'products')=0 AND jsonb_array_length(page->'supplier_items')=0,'Inbox summary omits unused catalog';
+ ASSERT NULLIF(page->'requests'->0->>'requester_name','') IS NOT NULL,'Requester account label comes from the recorded actor';
+
  PERFORM public.test_expect_error(format('SELECT public.procurement_workspace_page(%L,%L::jsonb)',test_uuid(102),'{"request_scope":"history"}'),'PROCUREMENT_SCOPE_FORBIDDEN');
  PERFORM public.test_expect_error(format('SELECT public.procurement_workspace_page(%L,%L::jsonb)',test_uuid(101),'{"request_scope":"unknown"}'),'PROCUREMENT_FILTER_INVALID');
  PERFORM set_config('request.jwt.claim.sub',test_uuid(3)::text,true);
@@ -40,6 +46,29 @@ BEGIN
  PERFORM set_config('request.jwt.claim.sub',test_uuid(2)::text,true);
  page:=public.procurement_workspace_page(test_uuid(101),'{"request_scope":"history","request_view":true}');
  ASSERT EXISTS(SELECT 1 FROM jsonb_array_elements(page->'requests') x WHERE x->>'id'=rid::text AND x->>'status'='approved'),'Store history survives later buyer approval';
+
+ -- Same timestamps use a stable descending ID cursor; returned/cancelled are distinct.
+ PERFORM set_config('app.procurement_write','true',true);
+ INSERT INTO public.inventory_purchase_requests(id,restaurant_id,source,requested_delivery_date,reason,created_actor,status,approval_policy_version,created_at,submitted_at)
+ SELECT test_uuid(15010+n),test_uuid(101),'pos',current_date,'Layout cursor fixture',jsonb_build_object('system','pos','subject_id',test_uuid(1),'display_name','Recorded requester','role','inventory_orderer'),'submitted',3,
+   CASE WHEN n=1 THEN now()-interval '1 day' ELSE now() END,now() FROM generate_series(1,3) n;
+ page:=public.procurement_workspace_page(test_uuid(101),'{"approval_view":true,"request_group":"pending","request_sort":"created","request_view":true,"request_summary_only":true,"search":"Layout cursor fixture","limit":2}');
+ ASSERT page->'requests'->0->>'id'=test_uuid(15013)::text AND page->'requests'->1->>'id'=test_uuid(15012)::text,'Latest request date then ID descending';
+ ASSERT page->'request_counts'->>'pending'='3' AND (page->>'request_has_more')::boolean;
+ inbox:=public.procurement_workspace_page(test_uuid(101),jsonb_build_object('approval_view',true,'request_group','pending','request_sort','created','request_view',true,'request_summary_only',true,'search','Layout cursor fixture','limit',2,'request_before',page->'requests'->1->>'created_at','request_before_id',page->'requests'->1->>'id'));
+ ASSERT jsonb_array_length(inbox->'requests')=1 AND inbox->'requests'->0->>'id'=test_uuid(15011)::text,'Latest cursor neither repeats nor omits equal timestamps';
+ PERFORM set_config('request.jwt.claim.sub',test_uuid(1)::text,true);
+ r:=public.procurement_command(test_uuid(101),'create_request',NULL,0,'layout-return-create',jsonb_build_object('reason','Returned layout fixture','requested_delivery_date',current_date+2,'lines',jsonb_build_array(jsonb_build_object('product_id',test_uuid(301),'quantity',10,'unit','g'))));rid:=(r->>'id')::uuid;
+ r:=public.procurement_command(test_uuid(101),'submit_request',rid,1,'layout-return-submit');
+ PERFORM set_config('request.jwt.claim.sub',test_uuid(2)::text,true);
+ r:=public.procurement_command(test_uuid(101),'return_request',rid,2,'layout-return','{"reason":"Adjust quantity"}');
+ page:=public.procurement_workspace_page(test_uuid(101),'{"approval_view":true,"request_group":"returned","request_view":true,"request_summary_only":true,"search":"Returned layout fixture"}');
+ ASSERT jsonb_array_length(page->'requests')=1 AND page->'request_counts'->>'returned'='1' AND page->'request_counts'->>'pending'='0','Actual return appears only in returned tab';
+ PERFORM set_config('request.jwt.claim.sub',test_uuid(1)::text,true);
+ r:=public.procurement_command(test_uuid(101),'submit_request',rid,3,'layout-return-resubmit');
+ PERFORM set_config('request.jwt.claim.sub',test_uuid(2)::text,true);
+ page:=public.procurement_workspace_page(test_uuid(101),'{"approval_view":true,"request_group":"pending","request_view":true,"request_summary_only":true,"search":"Returned layout fixture"}');
+ ASSERT jsonb_array_length(page->'requests')=1 AND page->'request_counts'->>'returned'='0' AND page->'request_counts'->>'pending'='1','Resubmission moves current revision to pending without erasing old return';
  RAISE NOTICE 'PASS: real store approval -> history -> actionable Office inbox -> final buyer approval; retry and identity/store isolation';
 END $test$;
 ROLLBACK;

@@ -19,7 +19,7 @@ void main() {
     'supplier_items': [],
   };
   testWidgets(
-    'SM inbox starts with all-time submitted cursor and keeps refreshes received in flight',
+    'SM inbox starts with all-time latest request cursor and keeps refreshes received in flight',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final refresh = ValueNotifier<int>(0);
@@ -37,6 +37,11 @@ void main() {
                   ? first.future
                   : Future.value({
                       ...workspace(),
+                      'request_counts': {
+                        'pending': 12,
+                        'approved': 0,
+                        'returned': 0,
+                      },
                       'approval_counts': {
                         'pending': 12,
                         'actionable': 12,
@@ -49,8 +54,8 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(queries.single['request_scope'], 'mine');
-      expect(queries.single['request_sort'], 'submitted');
+      expect(queries.single['request_scope'], 'all');
+      expect(queries.single['request_sort'], 'created');
       expect(queries.single.containsKey('created_from'), false);
       refresh.value++;
       refresh.value++;
@@ -62,7 +67,7 @@ void main() {
         2,
         reason: 'In-flight signals merge into one follow-up read',
       );
-      expect(find.textContaining('Actionable 12'), findsOneWidget);
+      expect(find.text('Awaiting approval (12)'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       refresh.dispose();
     },
@@ -91,8 +96,17 @@ void main() {
               queries.add({...q});
               return {
                 ...workspace(),
-                'requests': q['request_scope'] == 'history' ? [request] : [],
-                'request_counts': {'pending': 1, 'approved': 0, 'cancelled': 0},
+                'requests': q['request_group'] == 'approved'
+                    ? [
+                        {
+                          ...request,
+                          'approval_group': 'approved',
+                          'requester_name': 'PR team',
+                          'line_count': 3,
+                        },
+                      ]
+                    : [],
+                'request_counts': {'pending': 1, 'approved': 1, 'returned': 0},
               };
             },
             execute: (a, b, c, d, e) async => {},
@@ -101,22 +115,22 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('PR-HANDOFF'), findsNothing);
-      await tester.ensureVisible(
-        find.byKey(const Key('procurement_approval_history')),
+      await tester.tap(find.byKey(const Key('procurement_group_approved')));
+      await tester.pumpAndSettle();
+      expect(queries.last['approval_view'], true);
+      expect(queries.last['request_summary_only'], true);
+      expect(queries.last['request_sort'], 'created');
+      expect(find.text('PR-HANDOFF'), findsOneWidget);
+      expect(
+        find.text('Store approved · Awaiting purchase review'),
+        findsOneWidget,
       );
-      await tester.tap(find.byKey(const Key('procurement_approval_history')));
+      expect(find.text('My approvals'), findsNothing);
+      expect(find.text('My approval history'), findsNothing);
+      await tester.tap(find.byKey(const Key('procurement_group_pending')));
       await tester.pumpAndSettle();
-      expect(queries.last['request_scope'], 'history');
-      expect(queries.last.containsKey('request_group'), isFalse);
-      expect(queries.last['request_sort'], 'updated');
-      expect(find.textContaining('PR-HANDOFF'), findsOneWidget);
-      expect(find.text('Drafts / pending (1)'), findsNothing);
-      await tester.tap(find.text('My approvals'));
-      await tester.pumpAndSettle();
-      expect(queries.last['request_scope'], 'mine');
       expect(queries.last['request_group'], 'pending');
-      expect(queries.last['request_sort'], 'submitted');
-      expect(find.textContaining('PR-HANDOFF'), findsNothing);
+      expect(find.text('PR-HANDOFF'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

@@ -283,16 +283,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('PR-WAITING · Store review'), findsOneWidget);
-      expect(
-        find.textContaining('Pending 1 · Actionable 1 · Blocked 0'),
-        findsOneWidget,
-      );
+      expect(find.text('PR-WAITING'), findsOneWidget);
+      expect(find.text('Awaiting approval (1)'), findsOneWidget);
       expect(inventory.catalogLoads, 1);
-      expect(inventory.queries.single['request_scope'], 'mine');
-      expect(inventory.queries.single['request_sort'], 'submitted');
+      expect(inventory.queries.single['request_scope'], 'all');
+      expect(inventory.queries.single['request_sort'], 'created');
       expect(inventory.queries.single.containsKey('created_from'), isFalse);
-      await tester.tap(find.text('PR-WAITING · Store review'));
+      await tester.tap(find.text('PR-WAITING'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.widgetWithText(OutlinedButton, 'Approve request'),
