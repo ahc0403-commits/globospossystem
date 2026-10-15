@@ -86,7 +86,9 @@ class ProcurementRequestCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(
-          color: selected ? colors.primary : colors.outlineVariant,
+          color: selected
+              ? colors.primary
+              : colors.outline.withValues(alpha: 0.18),
         ),
       ),
       child: InkWell(

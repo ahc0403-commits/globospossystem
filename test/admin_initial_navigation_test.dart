@@ -307,6 +307,14 @@ void main() {
       );
       expect(inventory.queries.length, 2);
       expect(inventory.queries.last['request_id'], 'submitted-pr');
+      await tester.tap(find.byKey(const Key('procurement_detail_back')));
+      await tester.pumpAndSettle();
+      expect(find.text('PR-WAITING'), findsOneWidget);
+      expect(
+        inventory.queries.length,
+        2,
+        reason: 'Back uses the current list snapshot',
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();

@@ -54,6 +54,7 @@ const procurementDocumentLabelKeys = [
 
 String procurementProcessLabel(String key, String languageCode) {
   final values = {
+    'backToRequests': ['구매요청 목록으로', 'Back to requests', 'Về danh sách yêu cầu'],
     'approval_pending': ['승인대기', 'Awaiting approval', 'Chờ duyệt'],
     'approval_approved': ['승인완료', 'Approved', 'Đã duyệt'],
     'approval_returned': ['반려', 'Returned', 'Trả lại'],
