@@ -50,6 +50,18 @@ UPDATE store_fixed_account_requirements SET account_type='store_manager',role='s
 SET ROLE authenticated;
 SELECT admin_store_onboarding_status_v1('60000000-0000-4000-8000-000000000002',true);
 RESET ROLE;
+-- The legacy store mutation endpoint cannot redirect a queued job to another brand.
+SET ROLE authenticated;
+SELECT admin_create_brand_v2('50000000-0000-4000-8000-000000000099','Other brand','OT','30000000-0000-4000-8000-000000000001',ARRAY['40000000-0000-4000-8000-000000000001']::uuid[]);
+RESET ROLE;
+UPDATE restaurants SET brand_id='50000000-0000-4000-8000-000000000099' WHERE short_code='JG02';
+SET ROLE service_role;
+SELECT brand_assert(claim_store_onboarding_v1('60000000-0000-4000-8000-000000000002') IS NULL,'changed parent brand blocks account issuance');
+RESET ROLE;
+UPDATE restaurants SET brand_id='50000000-0000-4000-8000-000000000001' WHERE short_code='JG02';
+SET ROLE authenticated;
+SELECT admin_store_onboarding_status_v1('60000000-0000-4000-8000-000000000002',true);
+RESET ROLE;
 -- Explicit brand access is authoritative even when the legacy primary brand is unset.
 UPDATE users SET brand_id=NULL,primary_store_id=NULL WHERE fixed_account_code='jg_bm1';
 SET ROLE service_role;

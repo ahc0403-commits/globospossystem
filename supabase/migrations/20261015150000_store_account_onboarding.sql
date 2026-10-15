@@ -158,7 +158,11 @@ CREATE OR REPLACE FUNCTION public.store_onboarding_manifest_matches_v1(p_store_i
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
  WITH actual AS MATERIALIZED(SELECT account_code,account_type,role,scope FROM store_fixed_account_requirements WHERE store_id=p_store_id AND is_active),
  expected AS MATERIALIZED(SELECT * FROM jsonb_to_recordset(p_accounts) t(account_code text,account_type text,role text,scope text))
- SELECT NOT EXISTS(SELECT 1 FROM actual a FULL JOIN expected e USING(account_code) WHERE a.account_code IS NULL OR e.account_code IS NULL OR a.account_type IS DISTINCT FROM e.account_type OR a.role IS DISTINCT FROM e.role OR a.scope IS DISTINCT FROM e.scope);
+ SELECT NOT EXISTS(SELECT 1 FROM actual a FULL JOIN expected e USING(account_code) WHERE a.account_code IS NULL OR e.account_code IS NULL OR a.account_type IS DISTINCT FROM e.account_type OR a.role IS DISTINCT FROM e.role OR a.scope IS DISTINCT FROM e.scope)
+ AND EXISTS(SELECT 1 FROM store_account_onboarding_jobs j JOIN restaurants r ON r.id=j.store_id
+  WHERE j.store_id=p_store_id AND j.accounts=p_accounts
+   AND r.brand_id=(j.input->>'brand')::uuid AND r.tax_entity_id=(j.input->>'entity')::uuid
+   AND r.short_code=j.input->>'code');
 $$;
 REVOKE ALL ON FUNCTION public.store_onboarding_manifest_matches_v1(uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
 
