@@ -156,7 +156,12 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       _lastError = state.error;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
-          showErrorToast(context, state.error!);
+          showErrorToast(
+            context,
+            state.error == 'BRAND_CATALOG_LOAD_FAILED'
+                ? l10n.brandOperationFailed
+                : state.error!,
+          );
         }
       });
     }
