@@ -12,6 +12,9 @@ void main() {
     final payrollService = readRepoFile(
       'lib/core/services/payroll_service.dart',
     );
+    final calculator = readRepoFile(
+      'packages/pos_payroll/lib/pos_payroll.dart',
+    );
     final pinService = readRepoFile('lib/core/services/pin_service.dart');
 
     expect(
@@ -41,10 +44,8 @@ void main() {
     expect(attendanceTab, contains('attendanceRecognizedOvertimeHours'));
     expect(attendanceTab, contains('attendanceExportEmployeeMonthlyPayroll'));
 
-    expect(
-      payrollService,
-      contains('Future<List<StaffPayroll>> calculatePayroll'),
-    );
+    expect(calculator, contains('Future<List<StaffPayroll>> calculatePayroll'));
+    expect(payrollService, contains('extends PosPayrollCalculator'));
     expect(payrollService, contains('Future<List<int>> exportToExcel'));
     expect(payrollService, contains("excel.rename('Sheet1', 'Summary')"));
     expect(payrollService, contains("final details = excel['Daily Details']"));
