@@ -1139,7 +1139,15 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
-        title: Text(copy(widget.requesterView ? 'management' : 'historyTitle')),
+        title: Text(
+          copy(
+            widget.approvalView
+                ? 'approvalInbox'
+                : widget.requesterView
+                ? 'management'
+                : 'historyTitle',
+          ),
+        ),
         actions: [
           if (compact &&
               (widget.onOpenReceiving != null &&

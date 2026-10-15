@@ -25,6 +25,8 @@ import 'tabs/tables_tab.dart';
 import '../delivery/screens/delivery_settlement_tab.dart';
 import 'tabs/einvoice_tab.dart';
 import '../inventory_purchase/inventory_purchase_screen.dart';
+import '../inventory_purchase/inventory_order_workflow_screen.dart';
+import '../procurement/procurement_process_labels.dart';
 import '../photo_inventory/photo_inventory_screen.dart';
 import 'providers/admin_audit_provider.dart';
 import 'providers/admin_scope_provider.dart';
@@ -57,12 +59,12 @@ class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({
     super.key,
     this.overrideRestaurantId,
-    this.initialTabIndex = 0,
+    this.initialTabIndex,
   });
 
   /// super_admin이 특정 레스토랑 admin 화면을 볼 때 사용
   final String? overrideRestaurantId;
-  final int initialTabIndex;
+  final int? initialTabIndex;
 
   @override
   ConsumerState<AdminScreen> createState() => _AdminScreenState();
@@ -78,7 +80,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialTabIndex;
+    _currentIndex = widget.initialTabIndex ?? 0;
   }
 
   @override
@@ -129,6 +131,22 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     );
     final tabScope = '${auth.user?.id}:$liveStoreId:$role:$isPhotoObjetContext';
     if (_tabScope != tabScope) {
+      if (_tabScope == null) {
+        final hasInbox = _hasManagerInbox(role, isPhotoObjetContext);
+        final tabCount = _tabsForRole(
+          role,
+          isPhotoObjetContext,
+          overrideStoreContext?.name,
+          overrideStoreContext?.brandId,
+        ).length;
+        // Preserve explicit legacy links, including their previous clamping.
+        _currentIndex = widget.initialTabIndex == null && hasInbox
+            ? tabCount - 1
+            : (widget.initialTabIndex ?? 0).clamp(
+                0,
+                tabCount - 1 - (hasInbox ? 1 : 0),
+              );
+      }
       _tabScope = tabScope;
       _visitedTabs.clear();
       _domainLiveRevisions.clear();
@@ -188,6 +206,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                 // Inventory Purchase refreshes its providers in place so live
                 // reconnect ticks cannot reset the operator to its dashboard.
                 InventoryPurchaseScreen() => 0,
+                InventoryOrderWorkflowScreen() => 0,
                 PhotoInventoryScreen() => _revisionForDomains({'inventory', 'menu', 'photo_ops'}),
                 QcTab() => _revisionForDomains({'qc'}),
                 // Settings contains editable dialogs. Keep its element stable
@@ -203,6 +222,16 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           ),
     ];
   }
+
+  bool _hasManagerInbox(String? role, bool photoContext) =>
+      role == 'store_admin' &&
+      !photoContext &&
+      widget.overrideRestaurantId == null;
+
+  String get _approvalInboxLabel => procurementProcessLabel(
+    'approvalInbox',
+    Localizations.localeOf(context).languageCode,
+  );
 
   List<Widget> _tabsForRole(
     String? role,
@@ -232,6 +261,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     }
 
     tabs.add(const EinvoiceTab());
+    // Append so existing explicit tab links keep their positional indices.
+    if (_hasManagerInbox(role, isPhotoObjetContext)) {
+      tabs.add(const InventoryOrderWorkflowScreen());
+    }
     return tabs;
   }
 
@@ -341,6 +374,18 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         ),
       ToastSidebarGroup(title: l10n.adminWorkflowBackOffice, items: backOffice),
       ToastSidebarGroup(title: l10n.adminWorkflowExceptions, items: exceptions),
+      if (_hasManagerInbox(role, isPhotoObjetContext))
+        ToastSidebarGroup(
+          title: _approvalInboxLabel,
+          items: [
+            ToastSidebarItem(
+              icon: Icons.approval_outlined,
+              label: _approvalInboxLabel,
+              urgency: ToastSidebarUrgency.live,
+              itemKey: const Key('nav_procurement_approvals'),
+            ),
+          ],
+        ),
     ];
   }
 

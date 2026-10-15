@@ -30,6 +30,10 @@ import '../auth/auth_provider.dart';
 import 'inventory_purchase_document_service.dart';
 import 'supplier_price_excel_import.dart';
 
+final inventoryWorkflowServiceProvider = Provider<InventoryService>(
+  (ref) => inventoryService,
+);
+
 enum _WorkflowSection { orders, receiving, prices }
 
 class InventoryOrderWorkflowScreen extends ConsumerStatefulWidget {
@@ -51,7 +55,8 @@ class InventoryOrderWorkflowScreen extends ConsumerStatefulWidget {
 class _InventoryOrderWorkflowScreenState
     extends ConsumerState<InventoryOrderWorkflowScreen>
     with WidgetsBindingObserver {
-  InventoryService get _service => widget.service ?? inventoryService;
+  InventoryService get _service =>
+      widget.service ?? ref.read(inventoryWorkflowServiceProvider);
   final _receiptControllers = <String, TextEditingController>{};
   final _receiptPriceControllers = <String, TextEditingController>{};
   final _orderSearchController = TextEditingController();

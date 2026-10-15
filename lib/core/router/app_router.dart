@@ -427,8 +427,8 @@ GoRouter buildAppRouter(ProviderContainer container) {
   );
 }
 
-int _tabIndexFromQuery(String? value) {
-  if (value == null) return 0;
+int? _tabIndexFromQuery(String? value) {
+  if (value == null) return null;
   return switch (value.toLowerCase()) {
     'tables' => 0,
     'menu' => 1,

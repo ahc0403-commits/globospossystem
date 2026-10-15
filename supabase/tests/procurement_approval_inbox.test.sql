@@ -1,6 +1,6 @@
 BEGIN;
 DO $test$
-DECLARE page jsonb;next_page jsonb;r jsonb;record public.inventory_purchase_requests;seen bigint;
+DECLARE page jsonb;catalog jsonb;next_page jsonb;r jsonb;record public.inventory_purchase_requests;seen bigint;
  sa uuid:=gen_random_uuid();sb uuid:=gen_random_uuid();buyer uuid:=gen_random_uuid();pr_auth uuid:=gen_random_uuid();pr_id uuid:=gen_random_uuid();sm_auth uuid:=gen_random_uuid();sm_id uuid:=gen_random_uuid();rc_auth uuid:=gen_random_uuid();rc_id uuid:=gen_random_uuid();rid uuid;role_name text;matrix_auth uuid;matrix_profile uuid;matrix_count integer:=0;matrix_actor jsonb;
 BEGIN
  PERFORM set_config('app.procurement_write','true',true);
@@ -58,6 +58,16 @@ BEGIN
  PERFORM public.test_expect_error(format('SELECT public.admin_configure_store_workforce(%L,%L,%L,1,%L::jsonb)',sb,'N2','store_managed','[{"account_code":"n1_sm1","account_type":"store_manager","role":"store_admin","display_name":"collision","scope":"store"}]'),'STORE_ACCOUNT_CODE_ALREADY_ASSIGNED');
  PERFORM set_config('request.jwt.claim.role','authenticated',true);PERFORM set_config('request.jwt.claim.sub',pr_auth::text,true);
  ASSERT NOT public.can_create_inventory_purchase_order(sa),'Configured requester does not inherit receiving authority from a shared role name';
+ catalog:=public.get_inventory_order_catalog(sa);
+ ASSERT (catalog->'procurement_policy'->>'enabled')::boolean,'Requester can bootstrap the real PR screen';
+ ASSERT NOT (public.procurement_actor(sa,NULL)->>'can_receive')::boolean,'Catalog read never grants receiving';
+ PERFORM public.test_expect_error(format('SELECT public.get_inventory_order_catalog(%L)',sb),'INVENTORY_PURCHASE_FORBIDDEN');
+ UPDATE public.users SET is_active=false WHERE id=pr_id;
+ PERFORM public.test_expect_error(format('SELECT public.get_inventory_order_catalog(%L)',sa),'INVENTORY_PURCHASE_FORBIDDEN');
+ UPDATE public.users SET is_active=true WHERE id=pr_id;
+ PERFORM set_config('request.jwt.claim.sub',sm_auth::text,true);
+ catalog:=public.get_inventory_order_catalog(sa);
+ ASSERT (catalog->'procurement_policy'->>'enabled')::boolean,'SM bootstraps the inbox with the same catalog';
  PERFORM set_config('request.jwt.claim.sub',rc_auth::text,true);
  ASSERT public.can_create_inventory_purchase_order(sa),'Only the registered receiver has the receiving capability';
  PERFORM set_config('request.jwt.claim.role','service_role',true);

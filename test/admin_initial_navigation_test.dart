@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
+import 'package:globos_pos_system/core/services/inventory_service.dart';
+import 'package:globos_pos_system/features/inventory_purchase/inventory_order_workflow_screen.dart';
 import 'package:globos_pos_system/core/services/live_refresh_service.dart';
 import 'package:globos_pos_system/features/admin/admin_screen.dart';
 import 'package:globos_pos_system/features/admin/providers/admin_audit_provider.dart';
@@ -44,6 +46,59 @@ class _Menu extends MenuNotifier {
   Future<void> fetchAll() async {}
 }
 
+class _ProcurementInventory extends InventoryService {
+  int catalogLoads = 0;
+  final queries = <Map<String, dynamic>>[];
+  @override
+  Future<Map<String, dynamic>> fetchInventoryOrderCatalog(
+    String storeId,
+  ) async {
+    catalogLoads++;
+    return {
+      'procurement_policy': {'enabled': true, 'two_stage_required': true},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchProcurementPage(
+    String storeId,
+    Map<String, dynamic> query,
+  ) async {
+    queries.add({...query});
+    final request = <String, dynamic>{
+      'id': 'submitted-pr',
+      'request_no': 'PR-WAITING',
+      'status': 'submitted',
+      'created_at': '2026-10-01',
+      'submitted_at': '2026-10-02',
+      'requested_delivery_date': '2026-10-16',
+      'reason': 'Weekly order',
+      'row_version': 2,
+      'allowed_actions': ['store_approve', 'return_request'],
+      'lines': <Map<String, dynamic>>[],
+    };
+    return {
+      'contract_version': 2,
+      'store_id': storeId,
+      'enabled': true,
+      'actor': {
+        'system': 'pos',
+        'subject_id': 'manager',
+        'role': 'store_admin',
+        'can_store_approve': true,
+        'can_view_prices': true,
+      },
+      'requests': [request],
+      'request_counts': {'pending': 1, 'approved': 0, 'cancelled': 0},
+      'approval_counts': {'pending': 1, 'actionable': 1, 'blocked': 0},
+      if (query['request_id'] != null) 'request_detail': request,
+      'orders': [],
+      'products': [],
+      'supplier_items': [],
+    };
+  }
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -71,7 +126,12 @@ void main() {
       final tables = <String, _Tables>{};
       var menuLoads = 0;
       final router = GoRouter(
-        routes: [GoRoute(path: '/', builder: (_, _) => const AdminScreen())],
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const AdminScreen(initialTabIndex: 0),
+          ),
+        ],
       );
       addTearDown(router.dispose);
       await tester.pumpWidget(
@@ -179,6 +239,82 @@ void main() {
       await tester.pump();
     },
   );
+
+  for (final width in [390.0, 1440.0]) {
+    testWidgets('store manager /admin opens PR inbox by default at $width', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 1100);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final inventory = _ProcurementInventory();
+      final router = GoRouter(
+        initialLocation: '/admin',
+        routes: [
+          GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => _Auth()),
+            inventoryWorkflowServiceProvider.overrideWithValue(inventory),
+            serviceConnectivityProvider.overrideWith(
+              (ref) => Stream.value(
+                const ServiceConnectivityState(
+                  kind: ServiceConnectivityKind.online,
+                ),
+              ),
+            ),
+            posLiveEventsProvider.overrideWith(
+              (ref, store) => const Stream.empty(),
+            ),
+            adminAuditTraceProvider.overrideWith((ref, store) async => []),
+            tablesProvider.overrideWith((ref, store) => _Tables(store)),
+          ],
+          child: MaterialApp.router(
+            routerConfig: router,
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('PR-WAITING · Store review'), findsOneWidget);
+      expect(
+        find.textContaining('Pending 1 · Actionable 1 · Blocked 0'),
+        findsOneWidget,
+      );
+      expect(inventory.catalogLoads, 1);
+      expect(inventory.queries.single['request_scope'], 'mine');
+      expect(inventory.queries.single['request_sort'], 'submitted');
+      expect(inventory.queries.single.containsKey('created_from'), isFalse);
+      await tester.tap(find.text('PR-WAITING · Store review'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.widgetWithText(OutlinedButton, 'Approve request'),
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byType(InventoryOrderWorkflowScreen),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(
+        find.widgetWithText(OutlinedButton, 'Approve request'),
+        findsOneWidget,
+      );
+      expect(inventory.queries.length, 2);
+      expect(inventory.queries.last['request_id'], 'submitted-pr');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
+  }
 
   testWidgets('login dismisses input focus before waiting for authentication', (
     tester,
