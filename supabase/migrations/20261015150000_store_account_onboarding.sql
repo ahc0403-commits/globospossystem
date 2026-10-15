@@ -171,7 +171,7 @@ CREATE OR REPLACE FUNCTION public.claim_store_onboarding_v1(p_job_id uuid DEFAUL
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth AS $$
 DECLARE v_job public.store_account_onboarding_jobs; v_items jsonb;
 BEGIN
- UPDATE store_account_onboarding_jobs j SET status='partial',lease_id=NULL,lease_until=NULL,updated_at=now() WHERE status IN('pending','running') AND (lease_until IS NULL OR lease_until<now()) AND (attempts>=3 OR NOT EXISTS(SELECT 1 FROM restaurants r WHERE r.id=j.store_id AND r.is_active) OR NOT EXISTS(SELECT 1 FROM users actor WHERE actor.id=j.actor_id AND actor.is_active AND actor.role='super_admin')); 
+ UPDATE store_account_onboarding_jobs j SET status='partial',lease_id=NULL,lease_until=NULL,updated_at=now() WHERE status IN('pending','running') AND (lease_until IS NULL OR lease_until<now()) AND (attempts>=3 OR NOT EXISTS(SELECT 1 FROM restaurants r WHERE r.id=j.store_id AND r.is_active) OR NOT EXISTS(SELECT 1 FROM users actor WHERE actor.id=j.actor_id AND actor.is_active AND actor.role='super_admin'));
  SELECT * INTO v_job FROM store_account_onboarding_jobs WHERE (p_job_id IS NULL OR id=p_job_id) AND status IN('pending','running') AND (lease_until IS NULL OR lease_until<now()) AND attempts<3 AND EXISTS(SELECT 1 FROM restaurants r WHERE r.id=store_id AND r.is_active) AND EXISTS(SELECT 1 FROM users actor WHERE actor.id=actor_id AND actor.is_active AND actor.role='super_admin') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1;
  IF NOT FOUND THEN RETURN NULL; END IF;
  IF NOT public.store_onboarding_manifest_matches_v1(v_job.store_id,v_job.accounts) THEN
