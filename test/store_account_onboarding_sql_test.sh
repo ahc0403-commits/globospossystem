@@ -48,4 +48,10 @@ run_sql <<'SQL'
 SELECT brand_assert((SELECT count(*)=1 FROM restaurants WHERE short_code='JG03'),'concurrent abbreviation has one store');
 SELECT brand_assert((SELECT count(*)=1 FROM store_account_onboarding_jobs j JOIN restaurants r ON r.id=j.store_id WHERE r.short_code='JG03'),'concurrent abbreviation has one job');
 SELECT 'STORE_ACCOUNT_ONBOARDING_CONCURRENCY=PASS';
+BEGIN;
+SELECT id AS purged_store_id FROM restaurants WHERE short_code='JG03' \gset
+DELETE FROM store_fixed_account_requirements WHERE store_id=:'purged_store_id'::uuid;
+DELETE FROM restaurants WHERE id=:'purged_store_id'::uuid;
+SELECT brand_assert(NOT EXISTS(SELECT 1 FROM store_account_onboarding_jobs WHERE store_id=:'purged_store_id'::uuid),'onboarding history does not obstruct an authorized store purge');
+ROLLBACK;
 SQL

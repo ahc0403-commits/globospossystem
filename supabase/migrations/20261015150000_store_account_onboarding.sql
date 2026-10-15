@@ -63,7 +63,7 @@ BEGIN
 END $$;
 
 CREATE TABLE IF NOT EXISTS public.store_account_onboarding_jobs(
- id uuid PRIMARY KEY, store_id uuid NOT NULL UNIQUE REFERENCES public.restaurants(id),
+ id uuid PRIMARY KEY, store_id uuid NOT NULL UNIQUE REFERENCES public.restaurants(id) ON DELETE CASCADE,
  actor_id uuid NOT NULL REFERENCES public.users(id), input jsonb NOT NULL, accounts jsonb NOT NULL CHECK(jsonb_typeof(accounts)='array' AND jsonb_array_length(accounts) BETWEEN 1 AND 50),
  status text NOT NULL DEFAULT 'pending' CHECK(status IN('pending','running','partial','complete')),
  lease_id uuid,lease_until timestamptz, attempts integer NOT NULL DEFAULT 0,
