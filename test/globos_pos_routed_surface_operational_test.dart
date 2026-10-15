@@ -337,7 +337,7 @@ final _routeSurfaces = <_RouteSurface>[
     location: '/admin',
     pattern: '/admin',
     widgetType: AdminScreen,
-    builder: () => const AdminScreen(),
+    builder: () => const AdminScreen(initialTabIndex: 0),
     label: (l10n, _) => l10n.tables,
   ),
   _RouteSurface(

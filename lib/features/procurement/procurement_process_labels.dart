@@ -54,6 +54,7 @@ const procurementDocumentLabelKeys = [
 
 String procurementProcessLabel(String key, String languageCode) {
   final values = {
+    'approvalInbox': ['PR 결재함', 'PR approvals', 'Duyệt yêu cầu mua hàng'],
     'carryShortage': ['이전 PO 부족분', 'Previous PO shortage', 'Thiếu từ PO trước'],
     'store': ['매장', 'Store', 'Cửa hàng'],
     'submittedAt': ['제출일시', 'Submitted at', 'Thời gian gửi'],
