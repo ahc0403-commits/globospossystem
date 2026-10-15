@@ -27,7 +27,11 @@ docker run --detach --rm --name "$fixture_name" \
   --env POSTGRES_PASSWORD=menu-fixture --env POSTGRES_DB=menu_fixture \
   postgres:15 >/dev/null
 for attempt in $(seq 1 60); do
-  if docker exec "$fixture_name" pg_isready -U postgres -d menu_fixture >/dev/null 2>&1; then break; fi
+  # The image's temporary init server accepts Unix connections before it has
+  # created POSTGRES_DB. TCP plus a real query waits for the final server.
+  if docker exec --env PGPASSWORD=menu-fixture "$fixture_name" \
+    psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d menu_fixture \
+    -Atqc 'SELECT 1' >/dev/null 2>&1; then break; fi
   if [[ "$attempt" == 60 ]]; then exit 1; fi
   sleep 1
 done
