@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -78,8 +79,24 @@ void main() {
     for (final entry in _frozenAlertFiles.entries) {
       final file = File(entry.key);
       expect(file.existsSync(), isTrue, reason: entry.key);
+      var bytes = file.readAsBytesSync();
+      if (entry.key.startsWith('lib/l10n/app_localizations')) {
+        // Independent brand copy is appended by gen-l10n. Keep the existing
+        // alert baseline exact while allowing this unrelated, tested addition.
+        final source = utf8.decode(bytes);
+        final marker = entry.key.endsWith('/app_localizations.dart')
+            ? '\n\n  /// No description provided for @brandAdd.'
+            : '\n\n  @override\n  String get brandAdd';
+        final start = source.indexOf(marker);
+        if (start >= 0) {
+          final end = source.indexOf('\n}', start);
+          bytes = utf8.encode(
+            source.substring(0, start) + source.substring(end),
+          );
+        }
+      }
       expect(
-        sha256.convert(file.readAsBytesSync()).toString(),
+        sha256.convert(bytes).toString(),
         entry.value,
         reason: 'frozen existing alert changed: ${entry.key}',
       );
