@@ -179,18 +179,18 @@ BEGIN
  LEFT JOIN users u ON u.auth_id=a.id OR u.fixed_account_code=q.account_code
  WHERE q.store_id=v_job.store_id AND q.is_active AND r.is_active
  AND ((u.id IS NULL AND a.raw_app_meta_data->'store_onboarding'=jsonb_build_object('code',q.account_code,'role',q.role,'type',q.account_type,'scope',q.scope,'owner_id',CASE q.scope WHEN 'brand' THEN r.brand_id ELSE r.id END))
- OR (u.auth_id=a.id AND u.fixed_account_code=q.account_code AND u.role=q.role AND u.account_type=q.account_type AND u.is_active AND ((q.scope='brand' AND u.brand_id=r.brand_id AND EXISTS(SELECT 1 FROM user_brand_access ba WHERE ba.user_id=u.id AND ba.brand_id=r.brand_id AND ba.is_active)) OR (q.scope='store' AND u.restaurant_id=r.id)))))
+ OR (u.auth_id=a.id AND u.fixed_account_code=q.account_code AND u.role=q.role AND u.account_type=q.account_type AND u.is_active AND ((q.scope='brand' AND EXISTS(SELECT 1 FROM user_brand_access ba WHERE ba.user_id=u.id AND ba.brand_id=r.brand_id AND ba.is_active)) OR (q.scope='store' AND u.restaurant_id=r.id)))))
  INSERT INTO users(auth_id,restaurant_id,primary_store_id,brand_id,role,full_name,is_active,account_type,fixed_account_code)
  SELECT auth_id,store_id,store_id,brand_id,role,display_name,true,account_type,account_code FROM eligible
  ON CONFLICT(auth_id) DO NOTHING;
  -- All writes below are limited to validated active profiles, never reactivating an identity.
  WITH matched AS MATERIALIZED (
  SELECT u.id,q.scope,r.brand_id FROM store_fixed_account_requirements q JOIN restaurants r ON r.id=q.store_id JOIN users u ON u.fixed_account_code=q.account_code JOIN auth.users a ON a.id=u.auth_id AND a.email=q.account_code||'@globos.world'
- WHERE q.store_id=v_job.store_id AND q.is_active AND u.is_active AND u.role=q.role AND u.account_type=q.account_type AND ((q.scope='brand' AND u.brand_id=r.brand_id) OR (q.scope='store' AND u.restaurant_id=r.id)))
+ WHERE q.store_id=v_job.store_id AND q.is_active AND u.is_active AND u.role=q.role AND u.account_type=q.account_type AND ((q.scope='brand' AND (u.brand_id=r.brand_id OR EXISTS(SELECT 1 FROM user_brand_access ba WHERE ba.user_id=u.id AND ba.brand_id=r.brand_id AND ba.is_active))) OR (q.scope='store' AND u.restaurant_id=r.id)))
  INSERT INTO user_brand_access(user_id,brand_id,is_active,granted_by) SELECT id,brand_id,true,v_job.actor_id FROM matched WHERE scope='brand' ON CONFLICT(user_id,brand_id) DO NOTHING;
  WITH matched AS MATERIALIZED (
  SELECT u.id,q.scope,r.brand_id FROM store_fixed_account_requirements q JOIN restaurants r ON r.id=q.store_id JOIN users u ON u.fixed_account_code=q.account_code JOIN auth.users a ON a.id=u.auth_id AND a.email=q.account_code||'@globos.world'
- WHERE q.store_id=v_job.store_id AND q.is_active AND u.is_active AND u.role=q.role AND u.account_type=q.account_type AND ((q.scope='brand' AND u.brand_id=r.brand_id AND EXISTS(SELECT 1 FROM user_brand_access ba WHERE ba.user_id=u.id AND ba.brand_id=r.brand_id AND ba.is_active)) OR (q.scope='store' AND u.restaurant_id=r.id)))
+ WHERE q.store_id=v_job.store_id AND q.is_active AND u.is_active AND u.role=q.role AND u.account_type=q.account_type AND ((q.scope='brand' AND EXISTS(SELECT 1 FROM user_brand_access ba WHERE ba.user_id=u.id AND ba.brand_id=r.brand_id AND ba.is_active)) OR (q.scope='store' AND u.restaurant_id=r.id)))
  INSERT INTO user_store_access(user_id,store_id,is_primary,is_active,source_type,granted_by)
  SELECT m.id,r.id,m.scope='store',true,'direct',v_job.actor_id FROM matched m JOIN restaurants r ON (m.scope='brand' AND r.brand_id=m.brand_id OR m.scope='store' AND r.id=v_job.store_id) AND r.is_active
  ON CONFLICT(user_id,store_id,source_type) DO NOTHING;

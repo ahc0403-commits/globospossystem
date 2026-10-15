@@ -40,6 +40,8 @@ SET ROLE authenticated;
 SELECT admin_create_store_onboarding_v1('60000000-0000-4000-8000-000000000002','Second store','address','JG02','50000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',ARRAY['1F']);
 RESET ROLE;
 SELECT brand_assert((SELECT count(DISTINCT account_code)=1 FROM store_fixed_account_requirements WHERE scope='brand'),'BM identity shared');
+-- Explicit brand access is authoritative even when the legacy primary brand is unset.
+UPDATE users SET brand_id=NULL WHERE fixed_account_code='jg_bm1';
 SET ROLE service_role;
 SELECT claim_store_onboarding_v1('60000000-0000-4000-8000-000000000002') claim3 \gset
 SELECT finish_store_onboarding_v1('60000000-0000-4000-8000-000000000002',(:'claim3'::jsonb->>'lease_id')::uuid);
