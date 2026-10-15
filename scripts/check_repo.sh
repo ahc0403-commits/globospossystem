@@ -31,6 +31,9 @@ bash test/pos_receipt_ledger_sql_test.sh
 printf 'CHECK_REPO_STEP=migration_version_uniqueness\n'
 bash test/migration_version_uniqueness_test.sh
 
+printf 'CHECK_REPO_STEP=attendance_storage_policy\n'
+bash scripts/test_attendance_storage_policy.sh
+
 printf 'CHECK_REPO_STEP=office_store_batch_sql\n'
 bash scripts/test_office_store_batch_reads.sh
 
