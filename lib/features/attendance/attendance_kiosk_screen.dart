@@ -42,6 +42,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   String? _pendingType;
   XFile? _capturedPhoto;
   Uint8List? _capturedPhotoBytes;
+  String? _capturedStoreId;
   bool _capturingPhoto = false;
 
   @override
@@ -72,6 +73,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       _pendingType = null;
       _capturedPhoto = null;
       _capturedPhotoBytes = null;
+      _capturedStoreId = null;
       _viewState = _KioskViewState.idle;
     });
     _employeeNumberFocus.requestFocus();
@@ -95,6 +97,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
 
   Future<void> _capturePhoto(String type) async {
     if (_capturingPhoto) return;
+    final captureStoreId = ref.read(authProvider).storeId;
     setState(() => _capturingPhoto = true);
     try {
       final photo =
@@ -113,11 +116,16 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       }
       final bytes = await photo.readAsBytes();
       if (!mounted) return;
+      if (ref.read(authProvider).storeId != captureStoreId) {
+        _reset();
+        return;
+      }
       setState(() {
         ref.read(attendanceKioskProvider.notifier).clearResult();
         _pendingType = type;
         _capturedPhoto = photo;
         _capturedPhotoBytes = bytes;
+        _capturedStoreId = captureStoreId;
         _viewState = _KioskViewState.preview;
       });
     } catch (_) {
@@ -135,6 +143,11 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     final employeeNumber = _employeeNumberController.text.trim();
     final type = _pendingType;
     final photo = _capturedPhoto;
+    if (_capturedStoreId != storeId) {
+      _reset();
+      showErrorToast(context, context.l10n.attendancePhotoRequired);
+      return;
+    }
     if (storeId == null ||
         employeeNumber.isEmpty ||
         type == null ||
