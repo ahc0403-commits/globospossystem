@@ -4289,5 +4289,9 @@
   "storeSetupProcurementManager": "스토어 매니저",
   "storeSetupProcurementReceiver": "입고 담당자",
   "storeSetupProcurementAccounting": "회계",
-  "storeSetupProcurementOffice": "Office 연결"
+  "storeSetupProcurementOffice": "Office 연결",
+  "attendanceResultUnconfirmed": "응답이 끊겨 저장 여부를 확인하지 못했습니다. 다시 입력하기 전에 저장 결과를 확인하거나 관리자에게 근태 기록 확인을 요청하세요.",
+  "attendanceVerifyResult": "저장 결과 확인",
+  "attendancePhotoLinkFailed": "사진은 업로드됐지만 근태에 연결하지 못했습니다. 재촬영 없이 다시 시도하세요.",
+  "attendanceNetworkFailed": "사진을 전송하지 못했습니다. 네트워크 연결을 확인하고 다시 시도하세요. 근태는 저장되지 않았습니다."
 }
