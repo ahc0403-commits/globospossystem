@@ -1381,7 +1381,7 @@ class _EmployeeAttendanceActionsState
             onPressed: _submitting ? null : () => _record(_photoScope!.$3),
             child: Text(
               _submission.currentState.needsVerification
-                  ? context.l10n.attendanceVerifyResult
+                  ? attendanceVerifyResultLabel(context.l10n)
                   : context.l10n.retry,
             ),
           ),

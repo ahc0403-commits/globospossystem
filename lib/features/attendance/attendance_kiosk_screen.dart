@@ -458,7 +458,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                       icon: const Icon(Icons.check_circle_outline),
                       label: Text(
                         submission.needsVerification
-                            ? context.l10n.attendanceVerifyResult
+                            ? attendanceVerifyResultLabel(context.l10n)
                             : submission.errorCode != null
                             ? context.l10n.retry
                             : context.l10n.attendanceConfirmPhoto,

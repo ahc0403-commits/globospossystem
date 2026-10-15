@@ -4289,9 +4289,5 @@
   "storeSetupProcurementManager": "Quản lý cửa hàng",
   "storeSetupProcurementReceiver": "Người nhận hàng",
   "storeSetupProcurementAccounting": "Kế toán",
-  "storeSetupProcurementOffice": "Kết nối Office",
-  "attendanceResultUnconfirmed": "Phản hồi bị gián đoạn. Chấm công có thể đã được lưu. Hãy kiểm tra kết quả trước khi nhập lại hoặc nhờ quản lý kiểm tra bản ghi.",
-  "attendanceVerifyResult": "Kiểm tra kết quả lưu",
-  "attendancePhotoLinkFailed": "Ảnh đã được tải lên nhưng chưa thể dùng để chấm công. Hãy thử lại, không cần chụp ảnh mới.",
-  "attendanceNetworkFailed": "Không thể gửi ảnh. Hãy kiểm tra kết nối mạng rồi thử lại. Chấm công chưa được lưu."
+  "storeSetupProcurementOffice": "Kết nối Office"
 }
