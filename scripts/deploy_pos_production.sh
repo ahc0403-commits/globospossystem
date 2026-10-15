@@ -400,8 +400,8 @@ run_onboarding_edge_only_flow() {
   run_auth_check
   run_checks
   bash "$ROOT_DIR/test/store_account_onboarding_sql_test.sh"
-  deno check "$ROOT_DIR/supabase/functions/store-account-onboarding/index.ts"
-  deno test "$ROOT_DIR/supabase/functions/store-account-onboarding/worker_test.ts"
+  deno check --config "$ROOT_DIR/supabase/functions/store-account-onboarding/deno.json" "$ROOT_DIR/supabase/functions/store-account-onboarding/index.ts"
+  deno test --config "$ROOT_DIR/supabase/functions/store-account-onboarding/deno.json" "$ROOT_DIR/supabase/functions/store-account-onboarding/worker_test.ts"
   [[ -n "${STORE_ONBOARDING_SECRET_ENV_FILE:-}" && -f "$STORE_ONBOARDING_SECRET_ENV_FILE" ]] || fail "Dedicated onboarding secret env file is required."
   # Parse without sourcing and never print the value. Only this dedicated secret
   # may be changed by the scoped release; preserve every other deployed secret.

@@ -18,8 +18,8 @@ bash test/store_account_onboarding_sql_test.sh
 bash test/store_account_onboarding_deploy_contract_test.sh
 deno fmt --check supabase/functions/store-account-onboarding
 deno lint supabase/functions/store-account-onboarding
-deno check supabase/functions/store-account-onboarding/index.ts
-deno test supabase/functions/store-account-onboarding/worker_test.ts
+deno check --config supabase/functions/store-account-onboarding/deno.json supabase/functions/store-account-onboarding/index.ts
+deno test --config supabase/functions/store-account-onboarding/deno.json supabase/functions/store-account-onboarding/worker_test.ts
 
 printf 'CHECK_REPO_STEP=independent_brand_sql\n'
 bash test/independent_brand_sql_test.sh
