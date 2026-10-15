@@ -229,6 +229,8 @@ serve(async (req) => {
       if (error) throw error;
     }
 
+    if (!authUser) throw new Error("AUTH_CREATE_FAILED");
+
     if (!profile) {
       const { data, error } = await serviceClient.from("users").insert({
         auth_id: authUser.id,
