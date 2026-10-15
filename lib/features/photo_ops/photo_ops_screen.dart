@@ -1371,6 +1371,7 @@ class _EmployeeAttendanceActionsState
           decoration: InputDecoration(
             labelText: context.l10n.attendanceEmployeeNumber,
             errorText: _error,
+            errorMaxLines: 4,
           ),
         ),
         const SizedBox(height: 10),
@@ -1397,6 +1398,21 @@ class _EmployeeAttendanceActionsState
                     });
                   },
             child: Text(context.l10n.attendanceRetakePhoto),
+          ),
+          TextButton(
+            key: const Key('photo_ops_attendance_cancel'),
+            onPressed: _submitting
+                ? null
+                : () {
+                    setState(() {
+                      _photo = null;
+                      _photoScope = null;
+                      _error = null;
+                      _employeeNumber.clear();
+                      _submission.clearResult();
+                    });
+                  },
+            child: Text(context.l10n.cancel),
           ),
         ],
         Row(

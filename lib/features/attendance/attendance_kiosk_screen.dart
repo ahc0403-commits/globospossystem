@@ -261,7 +261,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   }
 
   Widget _buildIdle(bool isOnline) {
-    isOnline = isOnline && !_capturingPhoto;
+    final canCapture = isOnline && !_capturingPhoto;
     return ToastResponsiveBody(
       maxWidth: 720,
       padding: EdgeInsets.zero,
@@ -302,7 +302,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9_-]')),
                   ],
                   onSubmitted: (_) =>
-                      isOnline ? _beginAttendance('clock_in') : null,
+                      canCapture ? _beginAttendance('clock_in') : null,
                   decoration: InputDecoration(
                     labelText: context.l10n.attendanceEmployeeNumber,
                     hintText: context.l10n.attendanceEmployeeNumberHint,
@@ -320,7 +320,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     Expanded(
                       child: FilledButton(
                         key: const Key('attendance_employee_clock_in'),
-                        onPressed: isOnline
+                        onPressed: canCapture
                             ? () => _beginAttendance('clock_in')
                             : null,
                         style: FilledButton.styleFrom(
@@ -341,7 +341,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     Expanded(
                       child: OutlinedButton(
                         key: const Key('attendance_employee_clock_out'),
-                        onPressed: isOnline
+                        onPressed: canCapture
                             ? () => _beginAttendance('clock_out')
                             : null,
                         style: OutlinedButton.styleFrom(
