@@ -8,7 +8,9 @@ their existing navigation. Live events preserve the mounted inbox and edits.
 
 The requester catalog migration changes only the catalog read guard. It checks
 the active workflow role and actual store access independently of PO creation
-and receiver membership. Requesters retain price redaction and cannot receive
+and receiver membership. The role is resolved once and reused for all catalog
+items instead of querying the profile per supplier item. Requesters retain
+price redaction and cannot receive
 stock merely by reading the catalog. No identity, password, access grant,
 approval or issued document is modified.
 

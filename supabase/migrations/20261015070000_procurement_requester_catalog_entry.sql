@@ -32,7 +32,7 @@ BEGIN
         'is_active',i.is_active,
         'product',jsonb_build_object('id',p.id,'name',p.name,'is_active',p.is_active,'is_orderable',p.is_orderable),
         'supplier',jsonb_build_object('supplier_name',s.supplier_name,'status',s.status))
-      || CASE WHEN public.inventory_purchase_actor_role()='inventory_orderer' THEN '{}'::jsonb
+      || CASE WHEN actor_role='inventory_orderer' THEN '{}'::jsonb
          ELSE to_jsonb(i) END
       ORDER BY p.name,i.id)
       FROM public.inventory_supplier_items i JOIN public.inventory_products p ON p.id=i.product_id
