@@ -4,7 +4,7 @@ import {
   createClient,
   type SupabaseClient,
   type User,
-} from "https://esm.sh/@supabase/supabase-js@2";
+} from "https://esm.sh/@supabase/supabase-js@2.110.7";
 
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
   .split(",")
@@ -228,8 +228,6 @@ serve(async (req) => {
       );
       if (error) throw error;
     }
-
-    if (!authUser) throw new Error("AUTH_CREATE_FAILED");
 
     if (!profile) {
       const { data, error } = await serviceClient.from("users").insert({
