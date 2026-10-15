@@ -27,6 +27,7 @@ import '../qc/qc_provider.dart';
 import '../restaurant_sales_export/restaurant_sales_export_screen.dart';
 import 'super_admin_provider.dart';
 import 'brand_dialog.dart';
+import 'store_onboarding.dart';
 
 const _superAdminScrollPadding = EdgeInsets.only(bottom: 96);
 const _superAdminScrollPhysics = AlwaysScrollableScrollPhysics(
@@ -1375,7 +1376,7 @@ class _RestaurantsTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '${restaurant.slug} • ${restaurant.address}',
+            '${restaurant.shortCode ?? '-'} • ${restaurant.address}',
             style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -1609,20 +1610,27 @@ class _RestaurantsTab extends StatelessWidget {
     required SuperAdminNotifier notifier,
     SuperRestaurant? initial,
   }) async {
+    if (initial == null) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const StoreOnboardingDialog(),
+      );
+      return;
+    }
     var sheetState = state;
-    final isEdit = initial != null;
     final l10n = context.l10n;
-    final nameController = TextEditingController(text: initial?.name ?? '');
-    final addressController = TextEditingController(
-      text: initial?.address ?? '',
+    final nameController = TextEditingController(text: initial.name);
+    final addressController = TextEditingController(text: initial.address);
+    final abbreviationController = TextEditingController(
+      text: initial.shortCode ?? '',
     );
-    final slugController = TextEditingController(text: initial?.slug ?? '');
     final chargeController = TextEditingController(
-      text: initial?.perPersonCharge?.toString() ?? '',
+      text: initial.perPersonCharge?.toString() ?? '',
     );
-    String operationMode = initial?.operationMode ?? 'standard';
+    String operationMode = initial.operationMode;
     String? selectedTaxEntityId =
-        initial?.taxEntityId ??
+        initial.taxEntityId ??
         sheetState.selectedTaxEntityId ??
         (sheetState.filteredTaxEntities.length == 1
             ? sheetState.filteredTaxEntities.first.id
@@ -1640,7 +1648,7 @@ class _RestaurantsTab extends StatelessWidget {
         ? null
         : sheetState.selectedBrandId;
     String? selectedBrandId =
-        initial?.brandId ??
+        initial.brandId ??
         filterBrandId ??
         (availableBrands.length == 1
             ? availableBrands.first['id']?.toString()
@@ -1654,9 +1662,11 @@ class _RestaurantsTab extends StatelessWidget {
 
     Future<void> save() async {
       final name = nameController.text.trim();
-      final slug = slugController.text.trim();
+      final abbreviation = abbreviationController.text.trim().toUpperCase();
       final address = addressController.text.trim();
-      if (name.isEmpty || slug.isEmpty) {
+      if (name.isEmpty ||
+          !RegExp(r'^[A-Z][A-Z0-9]{1,5}$').hasMatch(abbreviation)) {
+        showErrorToast(context, l10n.abbreviationError);
         return;
       }
       if (selectedTaxEntityId == null || selectedTaxEntityId!.isEmpty) {
@@ -1673,62 +1683,27 @@ class _RestaurantsTab extends StatelessWidget {
           ? parseDecimalInput(chargeController.text)
           : null;
 
-      final success = isEdit
-          ? await notifier.updateRestaurant(
-              id: initial.id,
-              name: name,
-              address: address,
-              slug: slug,
-              operationMode: operationMode,
-              perPersonCharge: charge,
-              taxEntityId: taxEntityId,
-              brandId: brandId,
-            )
-          : await notifier.addRestaurant(
-              name: name,
-              address: address,
-              slug: slug,
-              operationMode: operationMode,
-              perPersonCharge: charge,
-              taxEntityId: taxEntityId,
-              brandId: brandId,
-            );
-
-      if (success && context.mounted) {
-        final createdStoreId = isEdit
-            ? initial.id
-            : notifier.restaurantIdForSlug(slug);
-        showSuccessToast(
-          context,
-          isEdit ? l10n.superAdminStoreUpdated : l10n.superAdminStoreCreated,
+      try {
+        await supabase.rpc(
+          'admin_update_store_registration_v1',
+          params: {
+            'p_store_id': initial.id,
+            'p_name': name,
+            'p_address': address,
+            'p_code': abbreviation,
+            'p_operation_mode': operationMode,
+            'p_per_person_charge': charge,
+            'p_tax_entity_id': taxEntityId,
+            'p_brand_id': brandId,
+          },
         );
-        Navigator.of(context).pop();
-        if (!isEdit && createdStoreId != null) {
-          await Future<void>.delayed(Duration.zero);
-          if (!context.mounted) return;
-          final continueSetup = await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              key: const Key('super_admin_continue_store_setup_dialog'),
-              title: Text(l10n.storeSetupTitle),
-              content: Text(l10n.storeSetupTemplateDescription),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: Text(l10n.close),
-                ),
-                FilledButton(
-                  key: const Key('super_admin_continue_store_setup'),
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: Text(l10n.storeSetupNext),
-                ),
-              ],
-            ),
-          );
-          if (continueSetup == true && context.mounted) {
-            context.go('/store-setup/$createdStoreId');
-          }
+        await notifier.loadAllRestaurants(force: true);
+        if (context.mounted) {
+          showSuccessToast(context, l10n.superAdminStoreUpdated);
+          Navigator.of(context).pop();
         }
+      } catch (_) {
+        if (context.mounted) showErrorToast(context, l10n.abbreviationError);
       }
     }
 
@@ -1759,9 +1734,7 @@ class _RestaurantsTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isEdit
-                            ? l10n.superAdminEditStore
-                            : l10n.superAdminAddStore,
+                        l10n.superAdminEditStore,
                         style: AppFonts.system(
                           color: AppColors.amber500,
                           fontSize: 30,
@@ -1775,11 +1748,6 @@ class _RestaurantsTab extends StatelessWidget {
                         decoration: InputDecoration(
                           labelText: l10n.superAdminStoreName,
                         ),
-                        onChanged: (value) {
-                          if (!isEdit && slugController.text.trim().isEmpty) {
-                            slugController.text = _slugify(value);
-                          }
-                        },
                       ),
                       const SizedBox(height: 10),
                       TextField(
@@ -1792,11 +1760,13 @@ class _RestaurantsTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       TextField(
-                        key: const Key('store_slug'),
-                        controller: slugController,
+                        key: const Key('store_abbreviation'),
+                        controller: abbreviationController,
                         style: AppFonts.system(color: AppColors.textPrimary),
                         decoration: InputDecoration(
-                          labelText: l10n.superAdminStoreSlug,
+                          labelText: l10n.storeAbbreviation,
+                          helperText: l10n.abbreviationHint,
+                          helperMaxLines: 3,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -1960,7 +1930,15 @@ class _RestaurantsTab extends StatelessWidget {
                           child: Text(l10n.superAdminSaveUpper),
                         ),
                       ),
-                      if (isEdit && initial.isActive) ...[
+                      TextButton(
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          builder: (_) =>
+                              StoreOnboardingDialog(storeId: initial.id),
+                        ),
+                        child: Text(l10n.onboardingAccounts),
+                      ),
+                      if (initial.isActive) ...[
                         const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,
@@ -2002,7 +1980,7 @@ class _RestaurantsTab extends StatelessWidget {
                             child: Text(l10n.superAdminCloseStore),
                           ),
                         ),
-                      ] else if (isEdit) ...[
+                      ] else ...[
                         const SizedBox(height: 12),
                         Container(
                           width: double.infinity,
@@ -2056,7 +2034,7 @@ class _RestaurantsTab extends StatelessWidget {
     await Future<void>.delayed(kThemeAnimationDuration);
     nameController.dispose();
     addressController.dispose();
-    slugController.dispose();
+    abbreviationController.dispose();
     chargeController.dispose();
   }
 
@@ -2272,14 +2250,6 @@ class _RestaurantsTab extends StatelessWidget {
         : l10n.superAdminPurgeStoreFailed;
     showErrorToast(context, message);
   }
-
-  String _slugify(String input) {
-    return input
-        .toLowerCase()
-        .trim()
-        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
-        .replaceAll(RegExp(r'\s+'), '-');
-  }
 }
 
 class _LegalEntityAccountingDialog extends StatefulWidget {
@@ -2301,7 +2271,6 @@ class _LegalEntityAccountingDialogState
   late String _taxEntityId;
   late final TextEditingController _accountCodeController;
   late final TextEditingController _displayNameController;
-  late final TextEditingController _passwordController;
   bool _busy = false;
   String? _error;
 
@@ -2311,7 +2280,6 @@ class _LegalEntityAccountingDialogState
     _taxEntityId = widget.state.taxEntities.first.id;
     _accountCodeController = TextEditingController();
     _displayNameController = TextEditingController();
-    _passwordController = TextEditingController();
     _syncFields();
   }
 
@@ -2319,7 +2287,6 @@ class _LegalEntityAccountingDialogState
   void dispose() {
     _accountCodeController.dispose();
     _displayNameController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
@@ -2345,14 +2312,12 @@ class _LegalEntityAccountingDialogState
     _displayNameController.text =
         requirement?['display_name']?.toString() ??
         '${_entity.name} Inventory Accounting';
-    _passwordController.clear();
     _error = null;
   }
 
   Future<void> _submit() async {
     final code = _accountCodeController.text.trim().toLowerCase();
     final displayName = _displayNameController.text.trim();
-    final password = _passwordController.text;
     if (!RegExp(r'^[a-z][a-z0-9_]{1,31}$').hasMatch(code)) {
       setState(() {
         _error = _legalAccountingText(
@@ -2364,13 +2329,13 @@ class _LegalEntityAccountingDialogState
       });
       return;
     }
-    if (displayName.isEmpty || (!_provisioned && password.length < 12)) {
+    if (displayName.isEmpty) {
       setState(() {
         _error = _legalAccountingText(
           context,
-          ko: '표시 이름과 12자 이상의 초기 비밀번호를 입력하세요.',
-          en: 'Enter a display name and an initial password of at least 12 characters.',
-          vi: 'Nhập tên hiển thị và mật khẩu ban đầu ít nhất 12 ký tự.',
+          ko: '표시 이름을 입력하세요.',
+          en: 'Enter a display name.',
+          vi: 'Nhập tên hiển thị.',
         );
       });
       return;
@@ -2396,7 +2361,7 @@ class _LegalEntityAccountingDialogState
     if (!_provisioned) {
       final provisioned = await widget.notifier.provisionLegalEntityAccounting(
         requirementId: requirementId,
-        password: password,
+        password: '',
       );
       if (!mounted) return;
       if (!provisioned) {
@@ -2496,28 +2461,7 @@ class _LegalEntityAccountingDialogState
                 ),
               ),
               if (!_provisioned) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  key: const Key('legal_entity_accounting_password_field'),
-                  controller: _passwordController,
-                  enabled: !_busy,
-                  obscureText: true,
-                  autofillHints: const [AutofillHints.newPassword],
-                  decoration: InputDecoration(
-                    labelText: _legalAccountingText(
-                      context,
-                      ko: '초기 비밀번호',
-                      en: 'Initial password',
-                      vi: 'Mật khẩu ban đầu',
-                    ),
-                    helperText: _legalAccountingText(
-                      context,
-                      ko: '12자 이상',
-                      en: 'At least 12 characters',
-                      vi: 'Ít nhất 12 ký tự',
-                    ),
-                  ),
-                ),
+                Text(context.l10n.onboardingPasswordHint),
               ] else ...[
                 const SizedBox(height: 12),
                 Chip(

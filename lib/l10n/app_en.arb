@@ -4321,5 +4321,24 @@
         "type": "int"
       }
     }
-  }
+  },
+  "brandAbbreviation": "Brand abbreviation",
+  "storeAbbreviation": "Store abbreviation",
+  "abbreviationHint": "2–6 letters/digits, starting with a letter (e.g. JGBT). Issued IDs are preserved.",
+  "abbreviationError": "Check the abbreviation: it may be invalid, already used, or locked by issued IDs.",
+  "onboardingFloors": "Floors used (internal floor codes)",
+  "onboardingPreview": "Preview automatic IDs",
+  "onboardingAccounts": "Automatic account creation",
+  "onboardingPasswordHint": "New accounts use the configured initial password and require a password change at first login. Existing account passwords are preserved.",
+  "onboardingSharedHint": "Brand managers are shared across the brand. Existing legal accounting and Office buyer accounts are linked; configure missing shared accounts separately.",
+  "onboardingBrandCodeRequired": "Set the brand abbreviation in Brand management first.",
+  "onboardingFailed": "The store is saved. Account creation is incomplete; retry below or reopen Automatic account creation from Edit store.",
+  "onboardingReady": "Ready",
+  "onboardingPending": "Pending / check account conflict",
+  "onboardingNone": "This store has no automatic creation job. Existing accounts are managed in Store setup.",
+  "onboardingCopyIds": "Copy login IDs",
+  "onboardingProcurement": "Procurement connection",
+  "onboardingAccounting": "Legal accounting",
+  "onboardingBuyer": "Office buyer",
+  "onboardingNeedsSetup": "Needs configuration"
 }

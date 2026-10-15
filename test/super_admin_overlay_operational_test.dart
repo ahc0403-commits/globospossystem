@@ -411,27 +411,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('super_admin_add_store_action')));
     await tester.pumpAndSettle();
-    final createSheet = find.byKey(const Key('super_admin_store_sheet'));
-    expect(createSheet, findsOneWidget);
-    final createFields = find.descendant(
-      of: createSheet,
-      matching: find.byType(TextField),
-    );
-    await tester.enterText(createFields.at(0), 'GLOBOS Thảo Điền');
-    await tester.enterText(createFields.at(1), '2 Xuân Thủy, Thủ Đức');
-    await tester.enterText(createFields.at(2), 'globos-thao-dien');
-    await tester.tap(
-      find.descendant(of: createSheet, matching: find.byType(FilledButton)),
-    );
-    await tester.pumpAndSettle();
-    const continueDialog = Key('super_admin_continue_store_setup_dialog');
-    expect(find.byKey(continueDialog), findsOneWidget);
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(continueDialog),
-        matching: find.byType(TextButton),
-      ),
-    );
+    final createDialog = find.byKey(const Key('store_onboarding_dialog'));
+    expect(createDialog, findsOneWidget);
+    expect(find.byKey(const Key('onboarding_preview')), findsOneWidget);
+    Navigator.of(tester.element(createDialog)).pop();
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

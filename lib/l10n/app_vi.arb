@@ -4320,5 +4320,24 @@
         "type": "int"
       }
     }
-  }
+  },
+  "brandAbbreviation": "Mã viết tắt thương hiệu",
+  "storeAbbreviation": "Mã viết tắt cửa hàng",
+  "abbreviationHint": "2–6 chữ/số, bắt đầu bằng chữ (VD: JGBT). ID đã cấp được giữ nguyên.",
+  "abbreviationError": "Kiểm tra mã viết tắt: không hợp lệ, trùng hoặc đã dùng để cấp ID.",
+  "onboardingFloors": "Tầng sử dụng (mã tầng hệ thống)",
+  "onboardingPreview": "Xem trước ID tự động",
+  "onboardingAccounts": "Tạo tài khoản tự động",
+  "onboardingPasswordHint": "Tài khoản mới dùng mật khẩu ban đầu đã cấu hình và phải đổi khi đăng nhập lần đầu. Giữ mật khẩu tài khoản hiện có.",
+  "onboardingSharedHint": "Quản lý thương hiệu dùng chung. Liên kết tài khoản kế toán pháp nhân và mua hàng Office hiện có; cần cấu hình riêng tài khoản dùng chung còn thiếu.",
+  "onboardingBrandCodeRequired": "Đặt mã viết tắt thương hiệu trong quản lý thương hiệu trước.",
+  "onboardingFailed": "Đã lưu cửa hàng. Tạo tài khoản chưa hoàn tất; thử lại hoặc mở Tạo tài khoản tự động trong Sửa cửa hàng.",
+  "onboardingReady": "Sẵn sàng",
+  "onboardingPending": "Đang chờ / kiểm tra xung đột",
+  "onboardingNone": "Cửa hàng không có tác vụ tạo tự động. Quản lý tài khoản cũ trong thiết lập cửa hàng.",
+  "onboardingCopyIds": "Sao chép ID đăng nhập",
+  "onboardingProcurement": "Kết nối mua hàng",
+  "onboardingAccounting": "Kế toán pháp nhân",
+  "onboardingBuyer": "Mua hàng Office",
+  "onboardingNeedsSetup": "Cần cấu hình"
 }

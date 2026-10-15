@@ -32,7 +32,15 @@ void main() {
       File('lib/features/store_setup/store_setup_localization.dart'),
       File('lib/features/print_station/print_station_screen.dart'),
     ].map((file) => file.readAsStringSync()).join('\n');
-    for (final key in keys) {
+    // Manual initial password entry was replaced by a server-owned bootstrap
+    // secret. Keep historical translations without requiring obsolete controls.
+    const retiredManualPasswordKeys = {
+      'storeSetupProvisionPasswordHint',
+      'storeSetupConfirmPassword',
+      'storeSetupPasswordMinimum',
+      'storeSetupPasswordMismatch',
+    };
+    for (final key in keys.difference(retiredManualPasswordKeys)) {
       expect(consumed, contains('l10n.$key'), reason: '$key is not consumed');
     }
   });

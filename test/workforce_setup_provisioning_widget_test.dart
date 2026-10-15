@@ -4,7 +4,7 @@ import 'package:globos_pos_system/features/store_setup/widgets/workforce_setup_c
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 
 void main() {
-  testWidgets('provisioning success closes the transient password dialog', (
+  testWidgets('provisioning success closes the server password confirmation', (
     tester,
   ) async {
     var receivedExpectedInput = false;
@@ -12,7 +12,7 @@ void main() {
       tester,
       onProvision: ({required requirementId, required password}) async {
         receivedExpectedInput =
-            requirementId == 'requirement-1' && password.length == 14;
+            requirementId == 'requirement-1' && password.isEmpty;
         return true;
       },
     );
@@ -21,14 +21,6 @@ void main() {
       find.byKey(const ValueKey('store_setup_provision_requirement-1')),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('store_setup_provision_password')),
-      'valid-password',
-    );
-    await tester.enterText(
-      find.byKey(const Key('store_setup_provision_password_confirmation')),
-      'valid-password',
-    );
     await tester.tap(find.byKey(const Key('store_setup_provision_submit')));
     await tester.pumpAndSettle();
 
@@ -52,14 +44,6 @@ void main() {
       find.byKey(const ValueKey('store_setup_provision_requirement-1')),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('store_setup_provision_password')),
-      'valid-password',
-    );
-    await tester.enterText(
-      find.byKey(const Key('store_setup_provision_password_confirmation')),
-      'valid-password',
-    );
     await tester.tap(find.byKey(const Key('store_setup_provision_submit')));
     await tester.pumpAndSettle();
 

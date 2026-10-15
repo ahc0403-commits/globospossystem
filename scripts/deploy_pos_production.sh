@@ -34,6 +34,7 @@ REQUIRE_CLEAN_GIT="${REQUIRE_CLEAN_GIT:-1}"
 ROLLBACK_HIERARCHY=0
 DB_ONLY=0
 WEB_ONLY=0
+ONBOARDING_EDGE_ONLY=0
 MIGRATION_OPTION_SET=0
 
 # shellcheck source=scripts/lib/production_migration_gate.sh
@@ -65,6 +66,8 @@ Options:
   --db-only          Run the required migration gates without Auth or Vercel work.
                      Requires --migration and all checks; incompatible with
                      remote mode, skip options, and rollback.
+  --onboarding-edge-only  Deploy only automatic account provisioning endpoints.
+                     Requires STORE_ONBOARDING_SECRET_ENV_FILE and all source/CI/test gates.
   --web-only         Deploy POS web/mobile browser UI; no DB or Edge changes.
                      Requires every source, CI, Auth, test and login gate.
   --mode MODE        prebuilt (default) or remote.
@@ -285,6 +288,9 @@ parse_args() {
       --db-only)
         DB_ONLY=1
         ;;
+      --onboarding-edge-only)
+        ONBOARDING_EDGE_ONLY=1
+        ;;
       --web-only)
         WEB_ONLY=1
         ;;
@@ -380,6 +386,39 @@ validate_web_only_options() {
     fail "--web-only requires Auth readiness and login smoke."
   [[ "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" && "$SKIP_VERCEL" == "0" ]] ||
     fail "--web-only is incompatible with skip options."
+}
+
+validate_onboarding_edge_only_options() {
+  [[ "$ONBOARDING_EDGE_ONLY" == "1" ]] || return 0
+  [[ "$DB_ONLY" == "0" && "$WEB_ONLY" == "0" && "$ROLLBACK_HIERARCHY" == "0" && "$MIGRATION_OPTION_SET" == "0" && -z "$MIGRATION_FILE" ]] || fail "Onboarding Edge-only scope cannot be combined with other release modes."
+  [[ "$SKIP_CHECKS" == "0" && -n "$TEST_TARGETS" && "$SKIP_AUTH_CHECK" == "0" && "$SKIP_LOGIN_SMOKE" == "0" && "$SKIP_SMOKE_TESTS" == "0" && "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" && "$SKIP_VERCEL" == "0" ]] || fail "Onboarding Edge-only scope requires all applicable gates; skip flags are forbidden."
+}
+
+run_onboarding_edge_only_flow() {
+  load_env
+  verify_allowed_production_origins
+  run_auth_check
+  run_checks
+  bash "$ROOT_DIR/test/store_account_onboarding_sql_test.sh"
+  deno check --config "$ROOT_DIR/supabase/functions/store-account-onboarding/deno.json" "$ROOT_DIR/supabase/functions/store-account-onboarding/index.ts"
+  deno test --config "$ROOT_DIR/supabase/functions/store-account-onboarding/deno.json" "$ROOT_DIR/supabase/functions/store-account-onboarding/worker_test.ts"
+  [[ -n "${STORE_ONBOARDING_SECRET_ENV_FILE:-}" && -f "$STORE_ONBOARDING_SECRET_ENV_FILE" ]] || fail "Dedicated onboarding secret env file is required."
+  # Parse without sourcing and never print the value. Only this dedicated secret
+  # may be changed by the scoped release; preserve every other deployed secret.
+  python3 - "$STORE_ONBOARDING_SECRET_ENV_FILE" <<'PYSECRET'
+import os,stat,sys
+p=sys.argv[1]
+if stat.S_IMODE(os.stat(p).st_mode) != 0o600:
+    raise SystemExit('Onboarding secret file must have mode 0600')
+lines=[x for x in open(p).read().splitlines() if x.strip() and not x.startswith('#')]
+if len(lines)!=1 or not lines[0].startswith('STORE_ONBOARDING_INITIAL_PASSWORD=') or len(lines[0].split('=',1)[1])<12:
+    raise SystemExit('Dedicated onboarding secret env file is invalid')
+PYSECRET
+  run supabase secrets set --env-file "$STORE_ONBOARDING_SECRET_ENV_FILE" --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy store-account-onboarding --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy provision-fixed-pos-account --project-ref "$POS_PROJECT_REF"
+  run_login_smoke
+  log "Onboarding Edge release completed; Vercel UI and DB are separately gated."
 }
 
 preflight() {
@@ -986,6 +1025,7 @@ deploy_pos_edge_functions() {
   run supabase functions deploy create_staff_user --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy provision-fixed-pos-account \
     --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy store-account-onboarding --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy meinvoice-dispatcher \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy company-tax-lookup \
@@ -1211,9 +1251,14 @@ main() {
   readonly WEB_ONLY
   validate_web_only_options
   validate_db_only_options
+  validate_onboarding_edge_only_options
   cd "$ROOT_DIR"
   confirm_production
   preflight
+  if [[ "$ONBOARDING_EDGE_ONLY" == "1" ]]; then
+    run_onboarding_edge_only_flow
+    return 0
+  fi
   if [[ "$DB_ONLY" == "1" ]]; then
     run_db_only_flow
     return 0

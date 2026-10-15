@@ -110,6 +110,7 @@ class _Brands extends BrandService {
       'id': id,
       'name': name,
       'code': code.toLowerCase(),
+      'short_code': code.toUpperCase(),
       'brand_master_id': groupId,
       'tax_entity_ids': taxEntityIds,
       'tax_entity_names': <String>[],
@@ -122,6 +123,7 @@ class _Brands extends BrandService {
   @override
   Future<Map<String, dynamic>> link({
     required String brandId,
+    String? code,
     required List<String> taxEntityIds,
   }) async {
     final row = rows.singleWhere((r) => r['id'] == brandId);
@@ -189,7 +191,7 @@ Future<void> _tap(WidgetTester tester, String key) async {
 
 Future<void> _fill(WidgetTester tester) async {
   await tester.enterText(find.byKey(const Key('brand_name')), 'JeonGabok');
-  await tester.enterText(find.byKey(const Key('brand_code')), 'JEONGABOK');
+  await tester.enterText(find.byKey(const Key('brand_code')), 'JG');
 }
 
 void main() {
@@ -263,7 +265,7 @@ void main() {
         Navigator.pop(dialogContext);
         await tester.pumpAndSettle();
         await _tap(tester, 'super_admin_add_store_action');
-        expect(find.text('JeonGabok (jeongabok)'), findsOneWidget);
+        expect(find.text('JeonGabok (JG)'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -281,7 +283,10 @@ void main() {
         find.byKey(const Key('store_address')),
         '29A Nguyen Gia Tri',
       );
-      await tester.enterText(find.byKey(const Key('store_slug')), 'binh-thanh');
+      await tester.enterText(
+        find.byKey(const Key('store_abbreviation')),
+        'JGBT',
+      );
       await _tap(tester, 'store_add_brand');
       await _fill(tester);
       expect(
@@ -293,27 +298,27 @@ void main() {
         isTrue,
       );
       await _tap(tester, 'brand_save');
-      expect(find.text('JeonGabok (jeongabok)'), findsOneWidget);
+      expect(find.text('JeonGabok (JG)'), findsOneWidget);
       expect(
         tester
-            .widget<TextField>(find.byKey(const Key('store_name')))
+            .widget<TextFormField>(find.byKey(const Key('store_name')))
             .controller!
             .text,
         'Binh Thanh',
       );
       expect(
         tester
-            .widget<TextField>(find.byKey(const Key('store_address')))
+            .widget<TextFormField>(find.byKey(const Key('store_address')))
             .controller!
             .text,
         '29A Nguyen Gia Tri',
       );
       expect(
         tester
-            .widget<TextField>(find.byKey(const Key('store_slug')))
+            .widget<TextFormField>(find.byKey(const Key('store_abbreviation')))
             .controller!
             .text,
-        'binh-thanh',
+        'JGBT',
       );
       expect(admin.snapshot.restaurants, isEmpty);
       expect(tester.takeException(), isNull);
