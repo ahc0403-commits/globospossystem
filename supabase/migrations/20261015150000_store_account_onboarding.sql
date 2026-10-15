@@ -216,8 +216,10 @@ BEGIN
  WITH matched AS MATERIALIZED (
  SELECT u.id,q.scope,r.brand_id FROM store_fixed_account_requirements q JOIN restaurants r ON r.id=q.store_id JOIN users u ON u.fixed_account_code=q.account_code JOIN auth.users a ON a.id=u.auth_id AND a.email=q.account_code||'@globos.world'
  WHERE q.store_id=v_job.store_id AND q.is_active AND u.is_active AND u.role=q.role AND u.account_type=q.account_type AND ((q.scope='brand' AND EXISTS(SELECT 1 FROM user_brand_access ba WHERE ba.user_id=u.id AND ba.brand_id=r.brand_id AND ba.is_active)) OR (q.scope='store' AND u.restaurant_id=r.id)))
- INSERT INTO user_store_access(user_id,store_id,is_primary,is_active,source_type,granted_by)
- SELECT m.id,r.id,m.scope='store',true,'direct',v_job.actor_id FROM matched m JOIN restaurants r ON (m.scope='brand' AND r.brand_id=m.brand_id OR m.scope='store' AND r.id=v_job.store_id) AND r.is_active
+ INSERT INTO user_store_access(user_id,store_id,is_primary,is_active,source_type,source_brand_access_id,granted_by)
+ SELECT m.id,r.id,m.scope='store',true,CASE m.scope WHEN 'brand' THEN 'brand_inherited' ELSE 'direct' END,ba.id,v_job.actor_id
+ FROM matched m JOIN restaurants r ON (m.scope='brand' AND r.brand_id=m.brand_id OR m.scope='store' AND r.id=v_job.store_id) AND r.is_active
+ LEFT JOIN user_brand_access ba ON m.scope='brand' AND ba.user_id=m.id AND ba.brand_id=m.brand_id AND ba.is_active
  ON CONFLICT(user_id,store_id,source_type) DO NOTHING;
  UPDATE store_fixed_account_requirements q SET provisioned_user_id=u.id,updated_at=now() FROM users u JOIN user_store_access sa ON sa.user_id=u.id AND sa.store_id=v_job.store_id AND sa.is_active
  WHERE q.store_id=v_job.store_id AND q.is_active AND u.fixed_account_code=q.account_code AND u.is_active AND u.role=q.role AND u.account_type=q.account_type AND ((q.scope='store' AND u.restaurant_id=v_job.store_id) OR (q.scope='brand' AND EXISTS(SELECT 1 FROM restaurants r JOIN user_brand_access ba ON ba.brand_id=r.brand_id AND ba.user_id=u.id AND ba.is_active WHERE r.id=v_job.store_id))) AND q.provisioned_user_id IS DISTINCT FROM u.id;

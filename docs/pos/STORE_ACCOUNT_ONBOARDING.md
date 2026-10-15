@@ -55,6 +55,10 @@ native Office buyers. Policy 3 remains requester → Store Manager → buyer →
 Missing shared accounting or Office scope is displayed as Needs configuration;
 account creation alone does not claim procurement readiness.
 
+Brand-derived store grants retain `brand_inherited` and their originating brand
+access ID, so the existing revocation sync can remove them. Direct store grants
+remain separate.
+
 Claims are refreshed in a set-based statement with explicit, legal-entity and
 fallback scopes matching the existing accessible-scope contracts. Auth metadata
 outside the affected claim keys is preserved.

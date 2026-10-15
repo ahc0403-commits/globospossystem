@@ -17,6 +17,7 @@ run_sql < test/fixtures/store_account_onboarding_setup.sql >/dev/null
 python3 - <<'PY' | run_sql >/dev/null
 from pathlib import Path
 s=Path('supabase/migrations/20260711090000_legal_entity_brand_store_hierarchy.sql').read_text();a=s.index('CREATE OR REPLACE FUNCTION public.admin_create_restaurant_v2(');b=s.index('CREATE OR REPLACE FUNCTION public.admin_update_restaurant_v2(',a);print(s[a:b])
+s=Path('supabase/migrations/20260414000004_add_multi_access_sync_functions.sql').read_text();a=s.index('CREATE OR REPLACE FUNCTION public.sync_user_store_access(');b=s.index('CREATE OR REPLACE FUNCTION public.sync_brand_store_access(',a);print(s[a:b])
 s=Path('supabase/migrations/20261014081000_procurement_store_onboarding.sql').read_text();a=s.index('CREATE FUNCTION public.connect_procurement_stores(');b=s.index('CREATE FUNCTION public.procurement_onboarding_page',a);print(s[a:b])
 PY
 run_sql < supabase/migrations/20261015100000_independent_brand_registration.sql >/dev/null

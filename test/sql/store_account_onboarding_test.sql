@@ -72,6 +72,13 @@ SELECT brand_assert((SELECT count(*)=1 FROM users WHERE fixed_account_code='jg_b
 SELECT brand_assert((SELECT a.raw_app_meta_data->>'primary_store_id'=u.restaurant_id::text FROM users u JOIN auth.users a ON a.id=u.auth_id WHERE u.fixed_account_code='jg_bm1'),'primary store claim preserves legacy fallback');
 SELECT brand_assert((SELECT count(*)=2 FROM user_store_access sa JOIN users u ON u.id=sa.user_id WHERE u.fixed_account_code='jg_bm1'),'BM gets both stores');
 SELECT brand_assert((SELECT count(*)=1 FROM user_store_access sa JOIN users u ON u.id=sa.user_id WHERE u.fixed_account_code='jgbt_sm1'),'store manager remains store scoped');
+SELECT brand_assert(NOT EXISTS(SELECT 1 FROM user_store_access sa JOIN users u ON u.id=sa.user_id WHERE u.fixed_account_code='jg_bm1' AND (sa.source_type<>'brand_inherited' OR sa.source_brand_access_id IS NULL)),'brand grants retain inherited source for revocation');
+BEGIN;
+UPDATE user_brand_access SET is_active=false WHERE user_id=(SELECT id FROM users WHERE fixed_account_code='jg_bm1');
+SELECT sync_user_store_access((SELECT id FROM users WHERE fixed_account_code='jg_bm1'));
+SELECT brand_assert(NOT EXISTS(SELECT 1 FROM user_store_access sa JOIN users u ON u.id=sa.user_id WHERE u.fixed_account_code='jg_bm1' AND sa.is_active),'actual canonical sync revokes inherited store grants');
+SELECT brand_assert((SELECT count(*)=1 FROM user_store_access sa JOIN users u ON u.id=sa.user_id WHERE u.fixed_account_code='jgbt_sm1' AND sa.is_active AND sa.source_type='direct'),'brand revocation preserves unrelated direct store grant');
+ROLLBACK;
 -- Initial brand abbreviation setup must work for legacy brands with issued IDs.
 UPDATE brands SET short_code=NULL WHERE id='50000000-0000-4000-8000-000000000001';
 SET ROLE authenticated;
