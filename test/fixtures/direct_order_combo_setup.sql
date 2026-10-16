@@ -3,7 +3,7 @@ ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_combo boolean NOT NULL DEFAUL
  ADD COLUMN IF NOT EXISTS effective_vat_rate numeric NOT NULL DEFAULT 8,
  ADD COLUMN IF NOT EXISTS fulfillment_route text NOT NULL DEFAULT 'kitchen_tray_floor';
 ALTER TABLE menu_categories ADD COLUMN IF NOT EXISTS system_key text;
-CREATE TABLE IF NOT EXISTS menu_combo_components(id uuid DEFAULT gen_random_uuid(),restaurant_id uuid,combo_menu_item_id uuid,component_menu_item_id uuid,quantity integer,sort_order integer DEFAULT 0);
+CREATE TABLE IF NOT EXISTS menu_combo_components(id uuid DEFAULT gen_random_uuid(),restaurant_id uuid,combo_menu_item_id uuid,component_menu_item_id uuid,quantity integer,sort_order integer DEFAULT 0,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
 ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS floor_direct_beverages_enabled boolean DEFAULT false;
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS combo_components jsonb NOT NULL DEFAULT '[]',
  ADD COLUMN IF NOT EXISTS is_takeout boolean NOT NULL DEFAULT false,
