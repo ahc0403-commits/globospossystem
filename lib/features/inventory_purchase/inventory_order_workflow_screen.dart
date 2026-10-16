@@ -1030,6 +1030,9 @@ class _InventoryOrderWorkflowScreenState
                       : null,
                   child: ListTile(
                     selected: selected,
+                    selectedColor: Theme.of(
+                      context,
+                    ).colorScheme.onPrimaryContainer,
                     onTap: () => _selectOrder(_id(order)),
                     title: Text(
                       _string(order['purchase_order_no'], fallback: '-'),
