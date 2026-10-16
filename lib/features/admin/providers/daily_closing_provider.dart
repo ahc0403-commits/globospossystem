@@ -162,13 +162,22 @@ class DailyClosingRecord {
 
   bool get isClosed => closeSource == 'manual';
 
-  double get depositTotal =>
+  double get countedDepositTotal =>
       isClosed ? countedCashAmount - openingCashAmount : 0;
+  double get expectedDepositTotal => expectedCashBalance(
+    openingCash: 0,
+    cashSales: paymentsCash,
+    cashRefunds: directOrderCashRefunds,
+    cashPaid: deliveryCashPaid,
+    cashRecovered: deliveryCashRecovered,
+  );
+  double get depositTotal => isClosed ? expectedDepositTotal : 0;
   double? get confirmedDeposit => isClosed ? depositTotal : null;
   String get depositDate => nextDepositDate(closingDate);
   bool get depositNeedsReview =>
       isClosed &&
       (depositTotal < 0 ||
+          countedDepositTotal < 0 ||
           cashVariance != 0 ||
           reconciliationDelta != 0 ||
           cashLedgerChanged);

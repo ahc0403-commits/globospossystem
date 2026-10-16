@@ -40,6 +40,10 @@ class DirectOrderCopy {
     'Grab fee is included. Do not pay the driver again.',
   );
   String get menu => _pick('메뉴', 'Thực đơn', 'Menu');
+  String get menuSearch =>
+      _pick('메뉴 이름 검색', 'Tìm tên món', 'Search menu names');
+  String get menuSearchEmpty =>
+      _pick('검색 결과가 없습니다.', 'Không tìm thấy món.', 'No matching menu items.');
   String get address => _pick('배송지', 'Địa chỉ', 'Address');
   String get orderStatus => _pick('주문 현황', 'Trạng thái', 'Order status');
   String get copyOrderLink =>

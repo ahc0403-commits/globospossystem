@@ -4225,6 +4225,14 @@
     }
   },
   "salesDepositExpectedAmount": "Tiền mặt dự kiến nộp: {amount}",
+  "salesDepositCountedAmount": "Tiền kiểm đếm trừ quỹ đầu ca: {amount}",
+  "@salesDepositCountedAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "@salesDepositExpectedAmount": {
     "placeholders": {
       "amount": {

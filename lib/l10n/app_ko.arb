@@ -4225,6 +4225,14 @@
     }
   },
   "salesDepositExpectedAmount": "예상 현금 입금액: {amount}",
+  "salesDepositCountedAmount": "실사 현금 − 시재: {amount}",
+  "@salesDepositCountedAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "@salesDepositExpectedAmount": {
     "placeholders": {
       "amount": {

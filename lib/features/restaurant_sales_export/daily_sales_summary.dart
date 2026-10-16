@@ -103,9 +103,13 @@ class DailySalesSummary {
   bool get cashDepositConfirmed =>
       pendingBunsikStores == 0 &&
       bunsikShortfallStores == 0 &&
-      (bunsikStoreCount == 0 || bunsikClosedDeposit != null);
-  double? get cashDeposit =>
-      cashDepositConfirmed ? (bunsikClosedDeposit ?? 0) : null;
+      (bunsikStoreCount == 0 ||
+          (bunsikClosedDeposit != null && bunsikExpectedDeposit != null));
+  // Cash counts reconcile the ledger; their variance must not change the
+  // amount due for deposit, including the final dong.
+  double? get cashDeposit => cashDepositConfirmed
+      ? (bunsikStoreCount == 0 ? 0 : bunsikExpectedDeposit)
+      : null;
   bool get cashNeedsReview =>
       (bunsikVarianceStores ?? 0) > 0 ||
       (bunsikLateLedgerStores ?? 0) > 0 ||

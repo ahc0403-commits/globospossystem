@@ -1,3 +1,36 @@
+import 'package:intl/intl.dart';
+
+String receivingProductName(Map<String, dynamic> row, String locale) {
+  final product = row['product'] is Map ? row['product'] as Map : const {};
+  final localized = product['name_$locale'];
+  if (localized is String && localized.trim().isNotEmpty) return localized;
+  final name = (product['name'] ?? row['product_name'] ?? '—').toString();
+  if (locale == 'ko') {
+    final korean = RegExp(
+      r'^(.*?)\s*\(([^)]*[가-힣][^)]*)\)\s*$',
+    ).firstMatch(name);
+    if (korean != null) return '${korean[2]} (${korean[1]!.trim()})';
+  }
+  return name;
+}
+
+String receivingQuantityDifference(
+  double expected,
+  double? actual,
+  String unit,
+  String locale,
+) {
+  if (actual == null) return '';
+  final delta = ((actual - expected) * 1000).round() / 1000;
+  if (delta == 0) return '';
+  final amount = NumberFormat('#,##0.###').format(delta.abs());
+  return switch (locale) {
+    'ko' => '발주 대비 $amount $unit ${delta < 0 ? '부족' : '초과'}',
+    'vi' => '${delta < 0 ? 'Thiếu' : 'Thừa'} $amount $unit so với đơn đặt',
+    _ => '$amount $unit ${delta < 0 ? 'short' : 'over'} ordered quantity',
+  };
+}
+
 /// Shared UI/query contract. Every known status remains discoverable.
 enum InventoryOrderGroup {
   pending(['draft', 'submitted', 'store_approved', 'office_returned']),

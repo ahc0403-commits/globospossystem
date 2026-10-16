@@ -587,5 +587,16 @@ PYGUIDE
 
 fi
 PHOTO_PAYMENT_HASH_AFTER="$(docker exec "$PHOTO_CONTAINER" psql -X -U postgres -d codex_direct_photo -Atqc "select md5(pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure))")"
+if [[ "${DIRECT_ORDER_OPERATIONS_TEST:-0}" == "1" ]]; then
+ python3 - "$PHOTO_ROOT" "$PHOTO_TMP" <<'PYOPS'
+from pathlib import Path
+import sys
+root,tmp=map(Path,sys.argv[1:])
+source=(root/'supabase/migrations/20261016090000_pos_receiving_and_balance_guidance.sql').read_text()
+(tmp/'balance_guidance.sql').write_text(source.split('-- A bounded capability response')[0]+'\nCOMMIT;\n')
+PYOPS
+ run_sql "$PHOTO_TMP/balance_guidance.sql" >/dev/null
+ run_sql "$PHOTO_ROOT/supabase/tests/pos_balance_guidance.test.sql"
+fi
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

@@ -3652,13 +3652,16 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
         FinancialAmountCardData(
           id: 'closing_deposit_${record.closingDate}',
           title: context.l10n.salesDepositPreview,
-          amount: record.isClosed && record.depositTotal >= 0
+          amount:
+              record.isClosed &&
+                  record.depositTotal >= 0 &&
+                  record.countedDepositTotal >= 0
               ? record.confirmedDeposit
               : null,
           bank: record.bank,
           status: !record.isClosed
               ? context.l10n.salesDepositPending
-              : record.depositTotal < 0
+              : record.depositTotal < 0 || record.countedDepositTotal < 0
               ? context.l10n.salesDepositShortfall
               : record.depositNeedsReview
               ? context.l10n.salesDepositReview
@@ -3667,9 +3670,9 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
           details: [
             context.l10n.salesDepositSourceDate(record.closingDate),
             context.l10n.salesDepositDate(record.depositDate),
-            if (record.isClosed && record.depositTotal < 0)
-              context.l10n.salesDepositKnownAmount(
-                _formatVnd(currency, record.depositTotal),
+            if (record.isClosed)
+              context.l10n.salesDepositCountedAmount(
+                _formatVnd(currency, record.countedDepositTotal),
               ),
             if (record.bank == null) context.l10n.salesDepositNoAccount,
           ],
@@ -4212,13 +4215,15 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
     (sum, denomination) => sum + (denomination * _countFor(denomination)),
   );
 
-  double get _expectedCash => expectedCashBalance(
-    openingCash: widget.openingCash,
+  double get _expectedDeposit => expectedCashBalance(
+    openingCash: 0,
     cashSales: widget.cashSales,
     cashRefunds: widget.cashRefunds,
     cashPaid: widget.cashPaid,
     cashRecovered: widget.cashRecovered,
   );
+
+  double get _expectedCash => widget.openingCash + _expectedDeposit;
 
   @override
   void dispose() {
@@ -4366,7 +4371,7 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
                     id: 'daily_closing_deposit_preview',
                     title: l10n.salesDepositPreview,
                     amount: _countedCash >= widget.openingCash
-                        ? _countedCash - widget.openingCash
+                        ? _expectedDeposit
                         : null,
                     status: _countedCash < widget.openingCash
                         ? l10n.salesDepositShortfall
@@ -4374,6 +4379,12 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
                     warning: _countedCash < widget.openingCash,
                     bank: widget.bank,
                     details: [
+                      l10n.salesDepositCountedAmount(
+                        _formatVnd(
+                          _currency,
+                          _countedCash - widget.openingCash,
+                        ),
+                      ),
                       l10n.salesDepositDate(
                         nextDepositDate(widget.closingDate),
                       ),

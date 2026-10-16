@@ -83,7 +83,17 @@ void main() {
       if (entry.key.startsWith('lib/l10n/app_localizations')) {
         // Independent brand copy is appended by gen-l10n. Keep the existing
         // alert baseline exact while allowing this unrelated, tested addition.
-        final source = utf8.decode(bytes);
+        // The new counted-cash label has its own ko/vi/en responsive tests.
+        // Removing exactly that generated member retains the original alert
+        // byte baseline, including every existing translated alert.
+        final countedMember = entry.key.endsWith('/app_localizations.dart')
+            ? RegExp(
+                r'\n  /// No description provided for @salesDepositCountedAmount\.[\s\S]*?\n  String salesDepositCountedAmount\(String amount\);\n',
+              )
+            : RegExp(
+                r'\n  @override\n  String salesDepositCountedAmount\(String amount\) \{\n.*?\n  \}\n',
+              );
+        final source = utf8.decode(bytes).replaceFirst(countedMember, '');
         final marker = entry.key.endsWith('/app_localizations.dart')
             ? '\n\n  /// No description provided for @brandAdd.'
             : '\n\n  @override\n  String get brandAdd';
