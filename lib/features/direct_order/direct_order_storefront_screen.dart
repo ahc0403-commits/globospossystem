@@ -1998,7 +1998,12 @@ class _DirectOrderStorefrontScreenState
     final storefront = _storefront!;
     final query = _menuSearchController.text;
     final matching = storefront.items
-        .where((item) => directOrderMenuMatches(item, query))
+        .where(
+          (item) =>
+              (_selectedCategoryId == null ||
+                  item.categoryId == _selectedCategoryId) &&
+              directOrderMenuMatches(item, query),
+        )
         .toList();
     return Stack(
       children: [
@@ -2071,11 +2076,7 @@ class _DirectOrderStorefrontScreenState
                 child: Text(_copy.menuSearchEmpty),
               ),
             for (final category in _menuCategories.where(
-              (c) =>
-                  (query.trim().isNotEmpty ||
-                      _selectedCategoryId == null ||
-                      c.id == _selectedCategoryId) &&
-                  matching.any((item) => item.categoryId == c.id),
+              (c) => matching.any((item) => item.categoryId == c.id),
             )) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
