@@ -984,6 +984,46 @@ void main() {
     vatCategory: 'beverage',
     sortOrder: 2,
   );
+  testWidgets(
+    'menu search and category selection compose without server reads',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(1000, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final service = _StorefrontFixtureService(
+        extraItems: [tea],
+        extraCategories: [drinks],
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      final reads = service.fetchStorefrontCalls;
+      final input = find.byKey(const Key('direct_menu_search'));
+      await tester.enterText(input, 't');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsOneWidget);
+      expect(find.byKey(const Key('direct_add_tea')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('direct_category_drinks')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsNothing);
+      expect(find.byKey(const Key('direct_add_tea')), findsOneWidget);
+      await tester.enterText(input, 'tteokbokki');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('direct_category_drinks')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsNothing);
+      expect(find.text(DirectOrderCopy('ko').menuSearchEmpty), findsOneWidget);
+      await tester.tap(find.byKey(const Key('direct_category_all')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsOneWidget);
+      expect(find.text(DirectOrderCopy('ko').menuSearchEmpty), findsNothing);
+      expect(service.fetchStorefrontCalls, reads);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   DirectOrderStatus quoted() => DirectOrderStatus(
     requestId: 'proof-request',
     referenceCode: 'DPROOF01',
