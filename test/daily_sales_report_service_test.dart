@@ -75,7 +75,7 @@ void main() {
       expect(export.grossSales, 205 * 10800);
     },
   );
-  test('counted deposit remains confirmed with a variance warning', () {
+  test('ledger deposit remains confirmed with a separate count variance', () {
     final source = row()
       ..addAll({'closing_complete': true, 'closing_deposit': 200000});
     expect(
@@ -96,7 +96,7 @@ void main() {
     );
     expect(
       DailySalesSummary.fromJson('2026-10-08', source).cashDeposit,
-      195000,
+      200000,
     );
   });
   test('changed receipt count requires refresh', () async {

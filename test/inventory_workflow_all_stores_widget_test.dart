@@ -34,8 +34,9 @@ class _Auth extends AuthNotifier {
 }
 
 class _Inventory extends InventoryService {
-  _Inventory({this.prEnabled = false});
+  _Inventory({this.prEnabled = false, this.receivingOnly = false});
   final bool prEnabled;
+  final bool receivingOnly;
   final prQueries = <Map<String, dynamic>>[];
   @override
   Future<Map<String, dynamic>> fetchProcurementPage(
@@ -173,6 +174,7 @@ class _Inventory extends InventoryService {
   Future<Map<String, dynamic>> fetchInventoryOrderCatalog(
     String storeId,
   ) async => {
+    'actor': {'receiving_only': receivingOnly},
     'items': [],
     'suppliers': [],
     'procurement_policy': {
@@ -301,6 +303,37 @@ void main() {
     );
   });
   tearDownAll(() => Supabase.instance.dispose());
+
+  testWidgets(
+    'receiver opens receiving directly and hides purchasing surfaces',
+    (tester) async {
+      final service = _Inventory(prEnabled: true, receivingOnly: true);
+      final events = StreamController<PosLiveEvent>.broadcast();
+      addTearDown(events.close);
+      final router = await _mount(tester, service, events);
+      addTearDown(router.dispose);
+      await tester.pumpAndSettle();
+      expect(find.text('Ingredient receiving'), findsOneWidget);
+      expect(
+        find.byKey(const Key('inventory_receiving_status')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('inventory_procurement_workspace')),
+        findsNothing,
+      );
+      expect(find.text('승인 발주서'), findsNothing);
+      expect(service.prQueries, isEmpty);
+      expect(
+        find.byKey(const Key('inventory_receipt_note_line-0')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Received'));
+      await tester.pumpAndSettle();
+      expect(find.text('No purchase orders.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'PR account opens actual requests and keeps receiving and historical orders accessible',

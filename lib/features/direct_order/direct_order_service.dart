@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../main.dart';
 import 'direct_order_models.dart';
+import 'direct_order_cart_draft.dart';
 import 'direct_order_requirements.dart';
 
 typedef DirectOrderInvoker =
@@ -90,6 +91,7 @@ class DirectOrderService {
        _proofUploader = proofUploader;
 
   static const _sessionKeyPrefix = 'direct_order_session_v1_';
+  static const _cartKeyPrefix = 'direct_order_cart_v1_';
   static const _addressKeyPrefix = 'direct_order_address_v1_';
   static const _requestKeyPrefix = 'direct_order_request_v1_';
   static const _pendingSubmitKeyPrefix = 'direct_order_pending_submit_v1_';
@@ -98,6 +100,49 @@ class DirectOrderService {
   static const _seenAlertKeyPrefix = 'direct_order_seen_alerts_v1_';
   final DirectOrderInvoker? _invoker;
   final DirectOrderProofUploader? _proofUploader;
+
+  Future<DirectOrderCartDraft?> loadCartDraft(String slug) async {
+    final key = '$_cartKeyPrefix$slug';
+    SharedPreferences? preferences;
+    try {
+      preferences = await SharedPreferences.getInstance();
+      final raw = preferences.getString(key);
+      if (raw == null) return null;
+      final draft = DirectOrderCartDraft.fromJson(
+        Map<String, dynamic>.from(jsonDecode(raw) as Map),
+      );
+      final age = DateTime.now().toUtc().difference(draft.savedAt.toUtc());
+      if (age.isNegative || age > const Duration(hours: 24)) {
+        await preferences.remove(key);
+        return null;
+      }
+      return draft;
+    } catch (_) {
+      try {
+        await preferences?.remove(key);
+      } catch (_) {
+        // A private-browser storage failure must not block the menu.
+      }
+      return null;
+    }
+  }
+
+  Future<void> saveCartDraft(String slug, DirectOrderCartDraft? draft) async {
+    final preferences = await SharedPreferences.getInstance();
+    if (draft == null || draft.cart.isEmpty) {
+      await preferences.remove('$_cartKeyPrefix$slug');
+    } else {
+      await preferences.setString(
+        '$_cartKeyPrefix$slug',
+        jsonEncode(draft.toJson()),
+      );
+    }
+  }
+
+  Future<String?> loadOrderAccess(String slug, String requestId) async =>
+      (await SharedPreferences.getInstance()).getString(
+        '$_accessKeyPrefix${slug}_$requestId',
+      );
 
   Future<Object?> _invokeValue(Map<String, dynamic> body) async {
     try {

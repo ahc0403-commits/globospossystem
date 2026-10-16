@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/core/payments/vietqr_payload.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_cart_draft.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_customer_push_service.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_requirements.dart';
@@ -36,9 +37,19 @@ class _StorefrontFixtureService extends DirectOrderService {
     this.defaultMenu = true,
     this.proofHandler,
     this.orderScoped = false,
+    this.restoreDrafts = false,
   });
 
   final bool orderScoped;
+  final bool restoreDrafts;
+  @override
+  Future<DirectOrderCartDraft?> loadCartDraft(String slug) async =>
+      restoreDrafts ? await super.loadCartDraft(slug) : null;
+  @override
+  Future<void> saveCartDraft(String slug, DirectOrderCartDraft? draft) async {
+    if (restoreDrafts) await super.saveCartDraft(slug, draft);
+  }
+
   final DirectOrderAddress? savedAddress;
   DirectOrderStatus? activeStatus;
   int? submittedDinerCount;
@@ -416,6 +427,23 @@ class _CustomerPushFixture extends DirectOrderCustomerPushService {
   }
 }
 
+Future<void> _revealMenu(WidgetTester tester, Finder target) async {
+  if (target.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      target,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const PageStorageKey('direct_menu_list')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+  }
+  await Scrollable.ensureVisible(tester.element(target), alignment: .25);
+  await tester.pumpAndSettle();
+}
+
 Future<void> _openAddress(WidgetTester tester, {bool fillDiners = true}) async {
   await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
   await tester.pump();
@@ -432,6 +460,63 @@ Future<void> _openAddress(WidgetTester tester, {bool fillDiners = true}) async {
 }
 
 void main() {
+  testWidgets('cart survives closing and reopening the storefront', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      _fixtureApp(service: _StorefrontFixtureService(restoreDrafts: true)),
+    );
+    await tester.pumpAndSettle();
+    final add = find.byKey(const Key('direct_add_tteokbokki'));
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      _fixtureApp(service: _StorefrontFixtureService(restoreDrafts: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('direct_view_cart')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('direct_view_cart')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('direct_cart_sheet')),
+        matching: find.text('Tokbokki cay'),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets(
+    'menu search uses current names without additional server calls',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final service = _StorefrontFixtureService();
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      final reads = service.fetchStorefrontCalls;
+      await tester.enterText(
+        find.byKey(const Key('direct_menu_search')),
+        'Tokbokki',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('direct_menu_search')),
+        'no-match',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_add_tteokbokki')), findsNothing);
+      expect(find.text(DirectOrderCopy('ko').menuSearchEmpty), findsOneWidget);
+      expect(service.fetchStorefrontCalls, reads);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   for (final count in [1, 2]) {
     testWidgets(
       'combo selects $count drinks and retains distinct choices across quantities',
@@ -496,6 +581,10 @@ void main() {
         );
         expect(find.textContaining('콜라 × 1'), findsOneWidget);
         await _captureCustomerUi(tester, 'combo-selected-$count');
+        await _revealMenu(
+          tester,
+          find.byKey(const Key('direct_combo_edit_combo')),
+        );
         await tester.tap(find.byKey(const Key('direct_combo_edit_combo')));
         await tester.pumpAndSettle();
         expect(
@@ -1370,7 +1459,8 @@ void main() {
             );
             await tester.pump();
           }
-          await tester.ensureVisible(
+          await _revealMenu(
+            tester,
             find.byKey(const Key('direct_add_tteokbokki')),
           );
           await tester.pumpAndSettle();
@@ -2118,6 +2208,82 @@ void main() {
     },
   );
 
+  testWidgets('shortfall QR prefills bank, exact 47628 VND and its reference', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final service = _StorefrontFixtureService(
+      activeStatus: mobileQuote(
+        total: 52920,
+        state: 'awaiting_payment_review',
+        quoteState: 'locked',
+        support: {
+          'version': 2,
+          'chat_open': true,
+          'food_received': 5292,
+          'food_due': 47628,
+          'charges': [
+            {
+              'id': balanceId,
+              'kind': 'food_balance',
+              'status': 'pending',
+              'amount': 47628,
+              'received': 0,
+            },
+          ],
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('ko')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('direct_customer_pinned_amount')))
+          .data,
+      mobileMoney.format(47628),
+    );
+    final inline = find.byKey(const ValueKey('direct_balance_inline_qr:47628'));
+    await tester.scrollUntilVisible(
+      inline,
+      150,
+      scrollable: statusScrollable(),
+    );
+    await tester.pumpAndSettle();
+    final paint = tester.widget<CustomPaint>(
+      find.descendant(of: inline, matching: find.byType(CustomPaint)),
+    );
+    final actual = await tester.runAsync(
+      () => (paint.painter! as QrPainter).toImageData(210),
+    );
+    final expected = await tester.runAsync(
+      () => QrPainter(
+        data: VietQrPayload.bankTransfer(
+          bankBin: '970436',
+          accountNumber: '123456789',
+          amount: 47628,
+          purpose: 'A1024 11111111',
+        ),
+        version: QrVersions.auto,
+        gapless: true,
+      ).toImageData(210),
+    );
+    expect(actual!.buffer.asUint8List(), expected!.buffer.asUint8List());
+    await _captureCustomerUi(tester, 'exact-shortfall-47628');
+    await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const ValueKey(
+          'direct_payment_qr:11111111-1111-4111-8111-111111111111:47628',
+        ),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final chargeState in ['pending', 'review', 'paid', 'none']) {
     testWidgets(
       'mobile underpayment uses outstanding amount and charge state $chargeState',
@@ -2200,7 +2366,10 @@ void main() {
             find.byKey(const Key('direct_customer_check_amount')),
           );
           await tester.pumpAndSettle();
-          expect(find.byType(QrImageView), findsNothing);
+          expect(
+            find.byType(QrImageView),
+            chargeState == 'none' ? findsNWidgets(2) : findsNothing,
+          );
         }
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -2368,7 +2537,13 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('direct_customer_check_amount')));
         await tester.pumpAndSettle();
-        expect(find.byType(QrImageView), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('direct_customer_quote_sheet')),
+            matching: find.byType(QrImageView),
+          ),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -2918,6 +3093,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('direct_add_tteokbokki')));
       await tester.pumpAndSettle();
+      await _revealMenu(
+        tester,
+        find.byKey(const Key('direct_menu_request_tteokbokki')),
+      );
       await tester.tap(find.byKey(const Key('direct_menu_request_tteokbokki')));
       await tester.pumpAndSettle();
       await tester.enterText(

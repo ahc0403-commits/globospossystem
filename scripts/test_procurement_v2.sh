@@ -138,3 +138,14 @@ run_sql "$INVENTORY_ROOT/supabase/tests/procurement_approval_inbox.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_approval_history.test.sql"
 
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_inbox_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
+
+# The direct-order half is exercised with its real foundation by the direct
+# ordering integration runner. This fixture validates the full atomic DDL and
+# existing procurement readers without replacing production business functions.
+psql -X -h 127.0.0.1 -p "$INVENTORY_PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+CREATE FUNCTION public.direct_order_record_receipt(uuid,uuid,uuid,uuid,numeric,text)
+RETURNS jsonb LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'UNUSED_DIRECT_ORDER_FIXTURE'; END $$;
+SQL
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261016090000_pos_receiving_and_balance_guidance.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_pos_receiving_and_balance_guidance.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/pos_receiving_guidance.test.sql"

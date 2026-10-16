@@ -378,6 +378,7 @@ class DirectOrderAttachmentButton extends StatefulWidget {
     this.proofOnly = false,
     this.enabled = true,
     this.compact = false,
+    this.pickFile,
   });
   final String storeId, requestId;
   final Future<void> Function(
@@ -389,6 +390,7 @@ class DirectOrderAttachmentButton extends StatefulWidget {
   upload;
   final Future<void> Function() onSent;
   final bool proofOnly, enabled, compact;
+  final Future<XFile?> Function()? pickFile;
   @override
   State<DirectOrderAttachmentButton> createState() =>
       _DirectOrderAttachmentButtonState();
@@ -433,20 +435,22 @@ class _DirectOrderAttachmentButtonState
     );
     try {
       if (_bytes == null) {
-        final file = await openFile(
-          acceptedTypeGroups: [
-            XTypeGroup(
-              label: 'Attachments',
-              extensions: [
-                'jpg',
-                'jpeg',
-                'png',
-                'webp',
-                if (!widget.proofOnly) 'pdf',
-              ],
-            ),
-          ],
-        );
+        final file =
+            await (widget.pickFile?.call() ??
+                openFile(
+                  acceptedTypeGroups: [
+                    XTypeGroup(
+                      label: 'Attachments',
+                      extensions: [
+                        'jpg',
+                        'jpeg',
+                        'png',
+                        'webp',
+                        if (!widget.proofOnly) 'pdf',
+                      ],
+                    ),
+                  ],
+                ));
         if (file == null || !mounted || revision != _scopeRevision) return;
         final bytes = await file.readAsBytes();
         if (!mounted || revision != _scopeRevision) return;
@@ -498,6 +502,9 @@ class _DirectOrderAttachmentButtonState
       if (!_uploaded) await upload(_path!, _filename!, _mime!, _bytes!);
       if (!mounted || revision != _scopeRevision) return;
       _uploaded = true;
+      // The message is committed. A failed refresh must not keep the previous
+      // attachment as the only available action in this conversation.
+      _clearDraft();
       await onSent();
       if (!mounted || revision != _scopeRevision) return;
       _clearDraft();

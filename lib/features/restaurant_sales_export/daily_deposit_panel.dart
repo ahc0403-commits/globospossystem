@@ -25,7 +25,8 @@ class DailyDepositPanel extends StatelessWidget {
         ? l.salesDepositShortfall
         : s.cashDepositConfirmed
         ? (s.cashNeedsReview ? l.salesDepositReview : l.salesDepositConfirmed)
-        : s.pendingBunsikStores == null
+        : s.pendingBunsikStores == null ||
+              (s.pendingBunsikStores == 0 && s.bunsikExpectedDeposit == null)
         ? l.salesDepositUnavailable
         : l.salesDepositPending;
     return Column(
@@ -74,8 +75,8 @@ class DailyDepositPanel extends StatelessWidget {
                 due,
                 if (s.bunsikCash != null)
                   '${l.reportsCashSales}: ${money(s.bunsikCash!)}',
-                if (!s.cashDepositConfirmed && s.bunsikClosedDeposit != null)
-                  l.salesDepositKnownAmount(money(s.bunsikClosedDeposit!)),
+                if (s.bunsikClosedDeposit != null)
+                  l.salesDepositCountedAmount(money(s.bunsikClosedDeposit!)),
                 if (!s.cashDepositConfirmed && s.bunsikExpectedDeposit != null)
                   l.salesDepositExpectedAmount(money(s.bunsikExpectedDeposit!)),
                 if ((s.pendingBunsikStores ?? 0) > 0)

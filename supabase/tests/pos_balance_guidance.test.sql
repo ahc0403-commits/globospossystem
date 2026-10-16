@@ -1,0 +1,43 @@
+DO $test$
+DECLARE f jsonb;s uuid;r uuid;q uuid;proof uuid;c uuid;v jsonb;due numeric;
+BEGIN
+ PERFORM set_config('request.jwt.claim.role','authenticated',true);
+ PERFORM set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
+ PERFORM set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+ f:=photo_test.create_request(true,'customer_direct');
+ s:=(f->>'store_id')::uuid;r:=(f->>'request_id')::uuid;q:=(f->>'quote_id')::uuid;proof:=(f->>'proof_id')::uuid;
+ v:=public.direct_order_record_receipt(s,r,q,proof,5292,'OPERATIONS-PARTIAL');
+ due:=(SELECT final_total FROM public.direct_order_quotes WHERE id=q)-5292;
+ ASSERT (v->>'food_due')::numeric=due,'Exact outstanding amount';
+ SELECT id INTO c FROM public.direct_order_payment_charges WHERE request_id=r AND kind='food_balance' AND status='pending';
+ ASSERT c IS NOT NULL,'Partial receipt immediately creates its payment guide';
+ ASSERT (SELECT amount FROM public.direct_order_payment_charges WHERE id=c)=due;
+ PERFORM public.direct_order_record_receipt(s,r,q,proof,5292,'OPERATIONS-PARTIAL');
+ ASSERT (SELECT count(*) FROM public.direct_order_payment_charges WHERE request_id=r AND kind='food_balance')=1,'Lost-response replay does not duplicate guides';
+ PERFORM photo_test.assert_empty_graph(r);
+ v:=public.direct_order_commit_attachment(r,s,'customer',NULL,s::text||'/'||r::text||'/'||gen_random_uuid()::text||'.png','topup.png',c);
+ proof:=(v->>'message_id')::uuid;
+ v:=public.direct_order_record_receipt(s,r,q,proof,50000,'OPERATIONS-PARTIAL-TOPUP');
+ due:=due-50000;
+ ASSERT (v->>'food_due')::numeric=due,'Second partial receipt refreshes the same QR balance';
+ ASSERT (SELECT status FROM public.direct_order_payment_charges WHERE id=c)='pending';
+ ASSERT (SELECT count(*) FROM public.direct_order_payment_charges WHERE request_id=r AND kind='food_balance')=1;
+ PERFORM photo_test.assert_empty_graph(r);
+ v:=public.direct_order_commit_attachment(r,s,'customer',NULL,s::text||'/'||r::text||'/'||gen_random_uuid()::text||'.png','final-topup.png',c);
+ proof:=(v->>'message_id')::uuid;
+ v:=public.direct_order_record_receipt(s,r,q,proof,due,'OPERATIONS-TOPUP');
+ ASSERT (v->>'food_due')::numeric=0;
+ ASSERT (SELECT status FROM public.direct_order_payment_charges WHERE id=c)='paid';
+ PERFORM photo_test.assert_single_graph(r);
+ ASSERT (SELECT count(*) FROM public.direct_order_payment_receipts WHERE request_id=r)=3;
+
+ f:=photo_test.create_request(true,'customer_direct');
+ s:=(f->>'store_id')::uuid;r:=(f->>'request_id')::uuid;q:=(f->>'quote_id')::uuid;proof:=(f->>'proof_id')::uuid;
+ PERFORM public.direct_order_record_receipt(s,r,q,proof,5000,'OPERATIONS-CANCELLED');
+ UPDATE public.direct_order_payment_charges SET status='void' WHERE request_id=r;
+ UPDATE public.direct_order_requests SET state='cancelled' WHERE id=r;
+ PERFORM public.direct_order_record_receipt(s,r,q,proof,5000,'OPERATIONS-CANCELLED');
+ ASSERT NOT EXISTS(SELECT 1 FROM public.direct_order_payment_charges WHERE request_id=r AND status IN ('pending','review')),'Replay cannot reopen a cancelled payment';
+ ASSERT NOT has_function_privilege('anon','public.direct_order_record_receipt(uuid,uuid,uuid,uuid,numeric,text)','EXECUTE');
+ RAISE NOTICE 'POS_BALANCE_GUIDANCE=PASS calls_per_receipt=1';
+END $test$;

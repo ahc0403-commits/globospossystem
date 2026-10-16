@@ -8,7 +8,7 @@ import 'daily_sales_report_service_test.dart' as fixtures;
 
 void main() {
   test(
-    'accepted deposit example uses counted cash, never the bank-transfer portion',
+    'deposit uses the cash ledger while counted cash and variance stay separate',
     () {
       final row = fixtures.row()
         ..addAll({
@@ -32,14 +32,43 @@ void main() {
         ),
         6800000,
       );
-      expect(s.cashDeposit, 1750000);
-      expect(s.nextDeposit, 11750000);
+      expect(s.cashDeposit, 1800000);
+      expect(s.bunsikClosedDeposit, 1750000);
+      expect(s.nextDeposit, 11800000);
       expect(s.restaurantBankTransfer, 3000000);
       expect(s.cashNeedsReview, isTrue);
       expect(s.depositConfirmed, isTrue);
       expect(s.depositDate, '2026-10-13');
     },
   );
+  test('cash deposit preserves the last dong despite a higher cash count', () {
+    final s = DailySalesSummary.fromJson(
+      '2026-10-15',
+      fixtures.row()..addAll({
+        'photo_gross': 10000001,
+        'restaurant_cash': 1622160,
+        'bunsik_cash': 1622160,
+        'bunsik_expected_deposit': 1622160,
+        'bunsik_closed_deposit': 1623000,
+        'bunsik_variance': 840,
+        'bunsik_variance_store_count': 1,
+      }),
+    );
+    expect(s.cashDeposit, 1622160);
+    expect(s.nextDeposit, 11622161);
+    expect(s.bunsikClosedDeposit, 1623000);
+    expect(s.bunsikVariance, 840);
+    expect(s.cashNeedsReview, isTrue);
+  });
+  test('missing ledger deposit cannot fall back to the counted cash', () {
+    final s = DailySalesSummary.fromJson(
+      '2026-10-15',
+      fixtures.row()..remove('bunsik_expected_deposit'),
+    );
+    expect(s.cashDepositConfirmed, isFalse);
+    expect(s.cashDeposit, isNull);
+    expect(s.nextDeposit, isNull);
+  });
   test('Photo missing cannot hide a counted cash deposit', () {
     final s = DailySalesSummary.fromJson(
       '2026-10-12',
@@ -108,11 +137,13 @@ void main() {
         'close_source': 'manual',
         'counted_cash_amount': 6750000,
         'opening_cash_amount': 5000000,
+        'payments_cash': 1750000,
         'cash_variance': 0,
         'reconciliation_delta': 0,
         'cash_ledger_changed': true,
       });
       expect(record.confirmedDeposit, 1750000);
+      expect(record.countedDepositTotal, 1750000);
       expect(record.depositNeedsReview, isTrue);
     },
   );

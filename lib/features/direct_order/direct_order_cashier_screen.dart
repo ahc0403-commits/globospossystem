@@ -2855,7 +2855,15 @@ class _DirectOrderCashierScreenState
                           supportMap(_detail?['support'])['chat_open'] == false
                       ? null
                       : _sendMessage,
-                  icon: const Icon(Icons.send),
+                  icon: Icon(
+                    Icons.send,
+                    color:
+                        _busy ||
+                            supportMap(_detail?['support'])['chat_open'] ==
+                                false
+                        ? null
+                        : Colors.white,
+                  ),
                 ),
               ],
             ),

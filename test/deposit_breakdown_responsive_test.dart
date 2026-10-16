@@ -26,15 +26,15 @@ void main() {
           await tester.binding.setSurfaceSize(Size(width, 1100));
           addTearDown(() => tester.binding.setSurfaceSize(null));
           final s = DailySalesSummary.fromJson(
-            '2026-10-12',
+            '2026-10-15',
             fixtures.row()..addAll({
               'photo_gross': 10000000,
               'restaurant_bank_transfer': 3000000,
-              'bunsik_closed_deposit': 1750000,
-              'bunsik_cash': 2000000,
-              'bunsik_expected_deposit': 1800000,
+              'bunsik_closed_deposit': 1623000,
+              'bunsik_cash': 1622160,
+              'bunsik_expected_deposit': 1622160,
               'bunsik_variance_store_count': 1,
-              'bunsik_variance': -50000,
+              'bunsik_variance': 840,
               'bank': {
                 'bin': '970426',
                 'label': 'MSB',
@@ -81,8 +81,11 @@ void main() {
           }
           expect(find.text('3.000.000 VND'), findsOneWidget);
           expect(find.text('10.000.000 VND'), findsOneWidget);
-          expect(find.text('1.750.000 VND'), findsOneWidget);
-          expect(find.textContaining('2026-10-13'), findsNWidgets(2));
+          expect(find.text('1.622.160 VND'), findsOneWidget);
+          expect(find.textContaining('1.623.000 VND'), findsOneWidget);
+          expect(find.textContaining('840 VND'), findsOneWidget);
+          expect(find.textContaining('11.622.160 VND'), findsOneWidget);
+          expect(find.textContaining('2026-10-16'), findsNWidgets(2));
           final bankY = tester
               .getTopLeft(find.byKey(const Key('sales_deposit_bank')))
               .dy;

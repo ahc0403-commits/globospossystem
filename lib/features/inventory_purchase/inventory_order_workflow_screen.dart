@@ -59,6 +59,9 @@ class _InventoryOrderWorkflowScreenState
       widget.service ?? ref.read(inventoryWorkflowServiceProvider);
   final _receiptControllers = <String, TextEditingController>{};
   final _receiptPriceControllers = <String, TextEditingController>{};
+  final _receiptNoteControllers = <String, TextEditingController>{};
+  bool _receivingOnly = false;
+  bool _receivingCompleted = false;
   final _orderSearchController = TextEditingController();
   String _orderSearch = '';
   bool _receiptDirty = false;
@@ -95,6 +98,7 @@ class _InventoryOrderWorkflowScreenState
   bool _showLegacyOrders = false;
   final _prRefresh = ValueNotifier<int>(0);
   bool get _primaryPr =>
+      !_receivingOnly &&
       ['inventory_orderer', 'store_admin', 'super_admin'].contains(_role) &&
       (_procurementPolicy['two_stage_required'] == true ||
           _procurementPolicy['three_stage_required'] == true) &&
@@ -130,6 +134,9 @@ class _InventoryOrderWorkflowScreenState
     for (final controller in _receiptPriceControllers.values) {
       controller.dispose();
     }
+    for (final controller in _receiptNoteControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -154,7 +161,7 @@ class _InventoryOrderWorkflowScreenState
       PermissionUtils.canManageInventorySupplierPrices(_role);
   String get _scopeKey => '${ref.read(authProvider).user?.id}:$_role:$_storeId';
   String get _queryKey =>
-      '$_scopeKey:$_section:$_orderGroup:$_mineOnly:$_selectedAccountingStoreId:$_orderSearch';
+      '$_scopeKey:$_section:$_orderGroup:$_mineOnly:$_selectedAccountingStoreId:$_orderSearch:$_receivingCompleted';
 
   void _applyOrderSearch() {
     final query = _orderSearchController.text.trim();
@@ -196,7 +203,7 @@ class _InventoryOrderWorkflowScreenState
     }
     final storeId = _storeId;
     final scope = _scopeKey;
-    final query = _queryKey;
+    var query = _queryKey;
     if (storeId == null && !_isAccounting) {
       if (mounted) {
         setState(() {
@@ -215,10 +222,28 @@ class _InventoryOrderWorkflowScreenState
     }
     try {
       Map<String, dynamic>? catalog;
-      if (['inventory_orderer', 'store_admin', 'super_admin'].contains(_role) &&
+      if (!_isAccounting && (!background || _loadedScope != scope)) {
+        catalog = await _service.fetchInventoryOrderCatalog(storeId!);
+        if (!mounted || scope != _scopeKey || query != _queryKey) return;
+        final receivingOnly =
+            _role == 'inventory_orderer' &&
+            _map(catalog['actor'])['receiving_only'] == true;
+        if (receivingOnly != _receivingOnly) {
+          setState(() {
+            _receivingOnly = receivingOnly;
+            _receivingCompleted = false;
+            _section = receivingOnly
+                ? _WorkflowSection.receiving
+                : _WorkflowSection.orders;
+          });
+          query = _queryKey;
+        }
+      }
+      if (!_receivingOnly &&
+          ['inventory_orderer', 'store_admin', 'super_admin'].contains(_role) &&
           _section == _WorkflowSection.orders &&
           !_showLegacyOrders) {
-        catalog = await _service.fetchInventoryOrderCatalog(storeId!);
+        catalog ??= await _service.fetchInventoryOrderCatalog(storeId!);
         if (!mounted || scope != _scopeKey || query != _queryKey) return;
         if (_map(catalog['procurement_policy'])['two_stage_required'] == true ||
             _map(catalog['procurement_policy'])['three_stage_required'] ==
@@ -246,7 +271,15 @@ class _InventoryOrderWorkflowScreenState
         final next = await _service.fetchInventoryWorkflowPage(
           storeId: _isAccounting ? _selectedAccountingStoreId : storeId,
           statuses: receiving
-              ? InventoryOrderGroup.placed.statuses
+              ? _receivingOnly
+                    ? (_receivingCompleted
+                          ? ['received']
+                          : [
+                              'ordered',
+                              'partially_received',
+                              'office_approved',
+                            ])
+                    : InventoryOrderGroup.placed.statuses
               : _orderGroup.statuses,
           mineOnly: !receiving && _mineOnly,
           offset: (append ? _orders.length : 0) + rows.length,
@@ -356,11 +389,13 @@ class _InventoryOrderWorkflowScreenState
     for (final c in [
       ..._receiptControllers.values,
       ..._receiptPriceControllers.values,
+      ..._receiptNoteControllers.values,
     ]) {
       c.dispose();
     }
     _receiptControllers.clear();
     _receiptPriceControllers.clear();
+    _receiptNoteControllers.clear();
     _receiptErrors.clear();
     _receiptDirty = false;
     _formOrderId = null;
@@ -392,6 +427,9 @@ class _InventoryOrderWorkflowScreenState
     for (final line in _maps(detail?['lines'])) {
       final id = _id(line);
       final row = drafts[id];
+      _receiptNoteControllers[id] = TextEditingController(
+        text: _string(row?['discrepancy_reason']),
+      );
       final value =
           _number(
             row?[finalReview
@@ -515,22 +553,27 @@ class _InventoryOrderWorkflowScreenState
         appBar: AppBar(
           title: Text(
             _text(
-              ko: '원재료 발주·입고',
-              en: 'Ingredient purchasing & receiving',
-              vi: 'Đặt và nhập nguyên liệu',
+              ko: _receivingOnly ? '원재료 입고 관리' : '원재료 발주·입고',
+              en: _receivingOnly
+                  ? 'Ingredient receiving'
+                  : 'Ingredient purchasing & receiving',
+              vi: _receivingOnly
+                  ? 'Quản lý nhập nguyên liệu'
+                  : 'Đặt và nhập nguyên liệu',
             ),
           ),
           actions: [
-            IconButton(
-              key: const Key('inventory_procurement_workspace'),
-              tooltip: _text(
-                ko: '구매요청·발주',
-                en: 'Purchase requests',
-                vi: 'Yêu cầu mua hàng',
+            if (!_receivingOnly)
+              IconButton(
+                key: const Key('inventory_procurement_workspace'),
+                tooltip: _text(
+                  ko: '구매요청·발주',
+                  en: 'Purchase requests',
+                  vi: 'Yêu cầu mua hàng',
+                ),
+                icon: const Icon(Icons.playlist_add_check),
+                onPressed: _busy ? null : _openProcurement,
               ),
-              icon: const Icon(Icons.playlist_add_check),
-              onPressed: _busy ? null : _openProcurement,
-            ),
             IconButton(
               tooltip: _text(ko: '새로고침', en: 'Refresh', vi: 'Làm mới'),
               onPressed: _refreshInPlace,
@@ -584,6 +627,41 @@ class _InventoryOrderWorkflowScreenState
   }
 
   Widget _buildSectionBar() {
+    if (_receivingOnly) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: SegmentedButton<bool>(
+          key: const Key('inventory_receiving_status'),
+          segments: [
+            ButtonSegment(
+              value: false,
+              label: Text(
+                _text(ko: '입고 대기', en: 'Awaiting receipt', vi: 'Chờ nhập kho'),
+              ),
+            ),
+            ButtonSegment(
+              value: true,
+              label: Text(
+                _text(ko: '입고 완료', en: 'Received', vi: 'Đã nhập kho'),
+              ),
+            ),
+          ],
+          selected: {_receivingCompleted},
+          onSelectionChanged: _busy
+              ? null
+              : (values) async {
+                  if (!await _leaveReceipt() || !mounted) return;
+                  setState(() {
+                    _receivingCompleted = values.single;
+                    _selectedOrderId = null;
+                    _detail = null;
+                    _orders = [];
+                  });
+                  await _load(preserveSelection: false);
+                },
+        ),
+      );
+    }
     if (_isAccounting) {
       return Material(
         color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -1058,7 +1136,7 @@ class _InventoryOrderWorkflowScreenState
             const SizedBox(height: 16),
             _buildDocumentPanel(order, lines, documents),
           ],
-          if (receivingMode) ...[
+          if (receivingMode && !_receivingOnly) ...[
             const SizedBox(height: 16),
             _buildDocumentPanel(order, lines, documents),
           ],
@@ -1548,7 +1626,7 @@ class _InventoryOrderWorkflowScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${_productName(line)}\n${_string(line['product_code'], fallback: '—')}',
+          '${receivingProductName(line, Localizations.localeOf(context).languageCode)}\n${_string(line['product_code'], fallback: '—')}',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         Text(
@@ -1558,6 +1636,10 @@ class _InventoryOrderWorkflowScreenState
         ),
         Text(
           '${_text(ko: '누적 입고 / 부족', en: 'Received total / short', vi: 'Tổng nhập / thiếu')}: ${_quantity(_number(line['cumulative_quantity_base']) / _conversion(line))} / ${_quantity(_number(line['remaining_quantity_base']) / _conversion(line))} ${_string(line['order_unit'])}',
+        ),
+        Text(
+          '${_text(ko: '현재 재고', en: 'Current stock', vi: 'Tồn kho hiện tại')}: '
+          '${line['current_stock_base'] == null ? '—' : _quantity(_number(line['current_stock_base']) / _conversion(line))} ${_string(line['order_unit'])}',
         ),
         const SizedBox(height: 10),
         Wrap(
@@ -1610,6 +1692,34 @@ class _InventoryOrderWorkflowScreenState
             if (error != null)
               Text(
                 error,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            SizedBox(
+              width: 260,
+              child: TextField(
+                key: ValueKey('inventory_receipt_note_$lineId'),
+                controller: _receiptNoteControllers.putIfAbsent(
+                  lineId,
+                  TextEditingController.new,
+                ),
+                enabled: enabled && !_busy,
+                maxLength: 500,
+                decoration: InputDecoration(
+                  labelText: _text(ko: '비고', en: 'Note', vi: 'Ghi chú'),
+                  counterText: '',
+                ),
+                onChanged: (_) => _markReceiptDirty(lineId),
+              ),
+            ),
+            if (quantityController.text.isNotEmpty)
+              Text(
+                receivingQuantityDifference(
+                  _number(line['remaining_quantity_base']) / _conversion(line),
+                  parseInventoryQuantity(quantityController.text),
+                  _string(line['order_unit']),
+                  Localizations.localeOf(context).languageCode,
+                ),
+                key: ValueKey('inventory_receipt_difference_$lineId'),
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
           ],
@@ -1961,6 +2071,7 @@ class _InventoryOrderWorkflowScreenState
         initial: initial,
         input: _statementInput,
         requireDiscrepancyReason: requireDiscrepancyReason,
+        showStatementNumber: !_receivingOnly,
       ),
     );
   }
@@ -1989,7 +2100,9 @@ class _InventoryOrderWorkflowScreenState
         'purchase_order_line_id': id,
         'received_quantity_base': qty * _conversion(line),
         if (_role != 'inventory_orderer') 'actual_unit_price': price,
-        'discrepancy_reason': null,
+        'discrepancy_reason': _nullable(
+          _receiptNoteControllers[id]?.text ?? '',
+        ),
       });
     }
     if (_receiptErrors.isNotEmpty) {
@@ -3805,8 +3918,10 @@ class _StatementDialog extends StatefulWidget {
     required this.initial,
     this.input,
     this.requireDiscrepancyReason = false,
+    this.showStatementNumber = true,
   });
   final bool requireDiscrepancyReason;
+  final bool showStatementNumber;
   final Map<String, dynamic> initial;
   final _StatementInput? input;
   @override
@@ -3920,16 +4035,17 @@ class _StatementDialogState extends State<_StatementDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _numberController,
-                decoration: InputDecoration(
-                  labelText: _t(
-                    '명세서 번호 (선택)',
-                    'Statement number (optional)',
-                    'Số chứng từ (tùy chọn)',
+              if (widget.showStatementNumber)
+                TextField(
+                  controller: _numberController,
+                  decoration: InputDecoration(
+                    labelText: _t(
+                      '명세서 번호 (선택)',
+                      'Statement number (optional)',
+                      'Số chứng từ (tùy chọn)',
+                    ),
                   ),
                 ),
-              ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(

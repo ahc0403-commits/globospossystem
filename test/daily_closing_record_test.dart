@@ -2,35 +2,78 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/admin/providers/daily_closing_provider.dart';
 
 void main() {
-  test('deposit total uses counted cash minus the opening cash float', () {
-    final record = DailyClosingRecord(
-      id: 'closing-id',
-      closingDate: '2026-08-09',
-      closedByName: 'Manager',
-      ordersTotal: 4,
-      ordersCompleted: 4,
-      ordersCancelled: 0,
-      itemsCancelled: 0,
-      paymentsCount: 4,
-      paymentsTotal: 5617056,
-      paymentsCash: 2035496,
-      paymentsCard: 0,
-      paymentsPay: 0,
-      paymentsBankTransfer: 3581560,
-      deliveryCashPayout: 0,
-      openingCashAmount: 5000000,
-      expectedCashAmount: 7035496,
-      countedCashAmount: 7512000,
-      cashVariance: 476504,
-      serviceCount: 0,
-      serviceTotal: 0,
-      lowStockCount: 0,
-      closeSource: 'manual',
-      createdAt: DateTime(2026, 8, 9),
-    );
+  test(
+    'deposit total uses cash sales and preserves the separate cash count',
+    () {
+      final record = DailyClosingRecord(
+        id: 'closing-id',
+        closingDate: '2026-08-09',
+        closedByName: 'Manager',
+        ordersTotal: 4,
+        ordersCompleted: 4,
+        ordersCancelled: 0,
+        itemsCancelled: 0,
+        paymentsCount: 4,
+        paymentsTotal: 5617056,
+        paymentsCash: 2035496,
+        paymentsCard: 0,
+        paymentsPay: 0,
+        paymentsBankTransfer: 3581560,
+        deliveryCashPayout: 0,
+        openingCashAmount: 5000000,
+        expectedCashAmount: 7035496,
+        countedCashAmount: 7512000,
+        cashVariance: 476504,
+        serviceCount: 0,
+        serviceTotal: 0,
+        lowStockCount: 0,
+        closeSource: 'manual',
+        createdAt: DateTime(2026, 8, 9),
+      );
 
-    expect(record.depositTotal, 2512000);
-  });
+      expect(record.depositTotal, 2035496);
+      expect(record.countedDepositTotal, 2512000);
+    },
+  );
+
+  test(
+    'closing deposit preserves each dong instead of using a higher count',
+    () {
+      final record = DailyClosingRecord.fromJson({
+        'closing_date': '2026-10-15',
+        'close_source': 'manual',
+        'payments_cash': 1622160,
+        'opening_cash_amount': 5000000,
+        'counted_cash_amount': 6623000,
+        'expected_cash_amount': 6622160,
+        'cash_variance': 840,
+      });
+      expect(record.depositTotal, 1622160);
+      expect(record.confirmedDeposit, 1622160);
+      expect(record.countedDepositTotal, 1623000);
+      expect(record.cashVariance, 840);
+      expect(record.depositNeedsReview, isTrue);
+    },
+  );
+
+  test(
+    'closing deposit reconciles refunds and cash movements exactly once',
+    () {
+      final record = DailyClosingRecord.fromJson({
+        'close_source': 'manual',
+        'payments_cash': 2000007,
+        'direct_order_cash_refunds': 100001,
+        'delivery_cash_paid': 150003,
+        'delivery_cash_recovered': 50002,
+        'opening_cash_amount': 5000000,
+        'counted_cash_amount': 6750000,
+        'cash_variance': -50005,
+      });
+      expect(record.depositTotal, 1800005);
+      expect(record.countedDepositTotal, 1750000);
+      expect(record.cashVariance, -50005);
+    },
+  );
 
   test('deposit total remains zero until the date is closed', () {
     final record = DailyClosingRecord(

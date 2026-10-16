@@ -1,4 +1,6 @@
 import 'direct_order_translation.dart';
+import 'direct_order_menu_search.dart';
+import 'direct_order_cart_draft.dart';
 import 'direct_order_requirements.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -66,7 +68,11 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
 class _DirectOrderStorefrontScreenState
     extends State<DirectOrderStorefrontScreen>
     with WidgetsBindingObserver {
-  final String _submitDraftId = const Uuid().v4();
+  String _submitDraftId = const Uuid().v4();
+  final _menuSearchController = TextEditingController();
+  Timer? _cartSaveTimer;
+  Future<void> _cartWrite = Future.value();
+  bool _draftSubmitted = false;
   final _cart = <String, int>{};
   final _itemNotes = <String, String>{};
   final _comboDrinkChoices = <String, List<String>>{};
@@ -141,6 +147,7 @@ class _DirectOrderStorefrontScreenState
     super.initState();
     _pollRandom = widget.pollRandom ?? math.Random();
     _pushService = widget.pushService ?? DirectOrderCustomerPushService();
+    _dinerController.addListener(_scheduleCartSave);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
@@ -148,6 +155,15 @@ class _DirectOrderStorefrontScreenState
   @override
   void didUpdateWidget(covariant DirectOrderStorefrontScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.slug != widget.slug) {
+      _cartSaveTimer?.cancel();
+      _cart.clear();
+      _itemNotes.clear();
+      _comboDrinkChoices.clear();
+      _menuSearchController.clear();
+      _submitDraftId = const Uuid().v4();
+      _draftSubmitted = false;
+    }
     if (oldWidget.slug != widget.slug ||
         oldWidget.requestId != widget.requestId ||
         oldWidget.accessKey != widget.accessKey) {
@@ -162,6 +178,9 @@ class _DirectOrderStorefrontScreenState
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _cartSaveTimer?.cancel();
+    _persistCart();
+    _menuSearchController.dispose();
     _statusTimer?.cancel();
     _hoursTimer?.cancel();
     _pushService.dispose();
@@ -236,6 +255,8 @@ class _DirectOrderStorefrontScreenState
       unawaited(_refreshStorefrontAvailability());
       if (_session != null) unawaited(_refreshStatusAfterResume());
     } else {
+      _cartSaveTimer?.cancel();
+      _persistCart();
       _statusTimer?.cancel();
       _statusTimer = null;
       _hoursTimer?.cancel();
@@ -293,7 +314,13 @@ class _DirectOrderStorefrontScreenState
           : await widget.service.resumeOrder(
               slug: widget.slug,
               requestId: widget.requestId!,
-              accessKey: widget.accessKey ?? '',
+              accessKey:
+                  widget.accessKey ??
+                  await widget.service.loadOrderAccess(
+                    widget.slug,
+                    widget.requestId!,
+                  ) ??
+                  '',
             );
       _accessKey = widget.accessKey;
       DirectOrderStorefront storefront;
@@ -329,6 +356,7 @@ class _DirectOrderStorefrontScreenState
           ? values[2] as List<DirectOrderSummary>
           : [DirectOrderSummary.fromStatus(scopedStatus)];
       final alertsEnabled = values[3] as bool;
+      final draft = await widget.service.loadCartDraft(widget.slug);
       final activeOrders = orders.where((order) => !order.isTerminal).toList();
       final selectedId =
           orders.any((order) => order.requestId == savedRequestId)
@@ -357,6 +385,7 @@ class _DirectOrderStorefrontScreenState
         _orders = orders;
         _paymentAlertsEnabled = alertsEnabled;
         _status = status;
+        if (status == null && draft != null) _restoreCart(draft, storefront);
         _view = status == null ? _CustomerView.menu : _CustomerView.status;
         _loading = false;
       });
@@ -548,6 +577,63 @@ class _DirectOrderStorefrontScreenState
         if (choices != null) _comboDrinkChoices[itemId] = choices;
       }
     });
+    _scheduleCartSave();
+  }
+
+  void _scheduleCartSave() {
+    if (_loading || _draftSubmitted) return;
+    _cartSaveTimer?.cancel();
+    _cartSaveTimer = Timer(const Duration(milliseconds: 250), _persistCart);
+  }
+
+  void _persistCart() {
+    if (_loading || _draftSubmitted) return;
+    final slug = widget.slug;
+    final draft = DirectOrderCartDraft(
+      id: _submitDraftId,
+      savedAt: DateTime.now().toUtc(),
+      cart: Map.of(_cart),
+      itemNotes: Map.of(_itemNotes),
+      comboChoices: _comboDrinkChoices.map(
+        (k, v) => MapEntry(k, List<String>.of(v)),
+      ),
+      pickup: _isPickup,
+      dinerCount: (int.tryParse(_dinerController.text) ?? 1).clamp(1, 100),
+      utensilsRequested: _utensilsRequested,
+    );
+    _cartWrite = _cartWrite
+        .then((_) => widget.service.saveCartDraft(slug, draft))
+        .catchError((Object _) {
+          /* Optional local recovery must not close ordering. */
+        });
+  }
+
+  void _restoreCart(
+    DirectOrderCartDraft draft,
+    DirectOrderStorefront storefront,
+  ) {
+    if (_cart.isNotEmpty) return;
+    _submitDraftId = draft.id;
+    for (final item in storefront.items) {
+      final quantity = draft.cart[item.id];
+      if (quantity == null) continue;
+      final choices = draft.comboChoices[item.id] ?? const <String>[];
+      if (item.comboDrinkChoiceCount > 0 &&
+          (choices.length != item.comboDrinkChoiceCount * quantity ||
+              choices.any(
+                (id) => !item.comboDrinkOptions.any((o) => o.menuItemId == id),
+              ))) {
+        continue;
+      }
+      _cart[item.id] = quantity;
+      if (draft.itemNotes[item.id] case final note?) _itemNotes[item.id] = note;
+      if (choices.isNotEmpty) _comboDrinkChoices[item.id] = choices;
+    }
+    _fulfillmentType = draft.pickup
+        ? DirectOrderFulfillmentType.pickup
+        : DirectOrderFulfillmentType.delivery;
+    _dinerController.text = '${draft.dinerCount}';
+    _utensilsRequested = draft.utensilsRequested;
   }
 
   String _comboChoiceSummary(DirectOrderMenuItem item) {
@@ -617,6 +703,7 @@ class _DirectOrderStorefrontScreenState
           _itemNotes[item.id] = note;
         }
       });
+      _scheduleCartSave();
     }
   }
 
@@ -835,6 +922,14 @@ class _DirectOrderStorefrontScreenState
         dinerCount: dinerCount,
         utensilsRequested: _utensilsRequested,
       );
+      _draftSubmitted = true;
+      _cartSaveTimer?.cancel();
+      await _cartWrite;
+      try {
+        await widget.service.saveCartDraft(widget.slug, null);
+      } catch (_) {
+        // Optional recovery storage must not interrupt a submitted order.
+      }
       final status = await widget.service.fetchStatus(
         session: session,
         requestId: submission.requestId,
@@ -1227,7 +1322,7 @@ class _DirectOrderStorefrontScreenState
           ? _copy.additionalPaymentReview
           : _copy.additionalPaymentPending;
     }
-    if (_hasUnderpayment(status)) return _copy.additionalPaymentPreparing;
+    if (_hasUnderpayment(status)) return _copy.additionalPaymentPending;
     if (status.state == 'approved') return _copy.paymentCompleted;
     if (status.proofReview?.canResubmit == true) return _copy.replaceProof;
     if (status.state == 'awaiting_payment_review' ||
@@ -1670,6 +1765,8 @@ class _DirectOrderStorefrontScreenState
     _statusMutationRevision += 1;
     setState(() {
       _status = null;
+      _draftSubmitted = false;
+      _submitDraftId = const Uuid().v4();
       _cart.clear();
       _itemNotes.clear();
       _comboDrinkChoices.clear();
@@ -1680,6 +1777,7 @@ class _DirectOrderStorefrontScreenState
       _view = _CustomerView.menu;
       if (_savedAddress != null) _populateAddress(_savedAddress!);
     });
+    _scheduleCartSave();
     if (_hasPendingUpdates) _startStatusPolling();
   }
 
@@ -1898,6 +1996,10 @@ class _DirectOrderStorefrontScreenState
 
   Widget _buildMenu() {
     final storefront = _storefront!;
+    final query = _menuSearchController.text;
+    final matching = storefront.items
+        .where((item) => directOrderMenuMatches(item, query))
+        .toList();
     return Stack(
       children: [
         ListView(
@@ -1905,6 +2007,23 @@ class _DirectOrderStorefrontScreenState
           controller: _menuScroll,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 156),
           children: [
+            TextField(
+              key: const Key('direct_menu_search'),
+              controller: _menuSearchController,
+              decoration: InputDecoration(
+                hintText: _copy.menuSearch,
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: _copy.close,
+                        onPressed: () => setState(_menuSearchController.clear),
+                        icon: const Icon(Icons.clear),
+                      ),
+              ),
+              onChanged: (_) => setState(() => _selectedCategoryId = null),
+            ),
+            const SizedBox(height: 12),
             SegmentedButton<DirectOrderFulfillmentType>(
               key: const Key('direct_fulfillment_type'),
               segments: [
@@ -1922,8 +2041,10 @@ class _DirectOrderStorefrontScreenState
               selected: {_fulfillmentType},
               onSelectionChanged: _submitting
                   ? null
-                  : (values) =>
-                        setState(() => _fulfillmentType = values.single),
+                  : (values) {
+                      setState(() => _fulfillmentType = values.single);
+                      _scheduleCartSave();
+                    },
             ),
             if (_isPickup)
               Padding(
@@ -1944,8 +2065,17 @@ class _DirectOrderStorefrontScreenState
                 child: Text(_copy.refresh),
               ),
             ],
+            if (query.trim().isNotEmpty && matching.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(_copy.menuSearchEmpty),
+              ),
             for (final category in _menuCategories.where(
-              (c) => _selectedCategoryId == null || c.id == _selectedCategoryId,
+              (c) =>
+                  (query.trim().isNotEmpty ||
+                      _selectedCategoryId == null ||
+                      c.id == _selectedCategoryId) &&
+                  matching.any((item) => item.categoryId == c.id),
             )) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
@@ -1954,7 +2084,7 @@ class _DirectOrderStorefrontScreenState
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              ...storefront.items
+              ...matching
                   .where((item) => item.categoryId == category.id)
                   .map((item) => _menuCard(item)),
             ],
@@ -2201,8 +2331,10 @@ class _DirectOrderStorefrontScreenState
             ButtonSegment(value: false, label: Text(_copy.utensilsNone)),
           ],
           selected: {_utensilsRequested},
-          onSelectionChanged: (values) =>
-              setState(() => _utensilsRequested = values.single),
+          onSelectionChanged: (values) {
+            setState(() => _utensilsRequested = values.single);
+            _scheduleCartSave();
+          },
         ),
         Text(
           _copy.packagingProvided,
@@ -2295,7 +2427,10 @@ class _DirectOrderStorefrontScreenState
           icon: _submitting
               ? const SizedBox.square(
                   dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Icon(Icons.request_quote_outlined),
           label: Text(_isPickup ? _copy.submitForPickup : _copy.submitForQuote),
@@ -2580,7 +2715,7 @@ class _DirectOrderStorefrontScreenState
                   chargeId: charge['id'].toString(),
                 );
               } else if (_hasUnderpayment(status)) {
-                _showQuoteSheet(status, payment: false, balance: true);
+                _showQuoteSheet(status, payment: true, balance: true);
               } else if (_canShowPaymentDetails(status)) {
                 _showPaymentDetails(status);
               } else {
@@ -3133,7 +3268,9 @@ class _DirectOrderStorefrontScreenState
         available &&
         (charge != null
             ? _canPayCharge(status!, charge)
-            : !balance && _canShowPaymentDetails(status!));
+            : balance
+            ? _hasUnderpayment(status!)
+            : _canShowPaymentDetails(status!));
     final additional = balance || chargeId != null;
     final amount = !available
         ? 0.0
@@ -3143,7 +3280,9 @@ class _DirectOrderStorefrontScreenState
         ? supportNumber(status!.support['food_due'])
         : status!.quote!.finalTotal;
     final reference = chargeId == null
-        ? status?.referenceCode ?? ''
+        ? balance
+              ? '${status?.referenceCode} B${status?.support['version'] ?? 1}'
+              : status?.referenceCode ?? ''
         : '${status?.referenceCode} ${chargeId.substring(0, math.min(8, chargeId.length))}';
     final supportCopy = DirectOrderSupportCopy(_copy.languageCode);
     return Column(
@@ -3301,7 +3440,7 @@ class _DirectOrderStorefrontScreenState
               ),
             ),
           )
-        else if (payment && canPay)
+        else if (payment && canPay && !balance)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: SizedBox(
@@ -3497,7 +3636,9 @@ class _DirectOrderStorefrontScreenState
     Map<String, dynamic>? charge,
   }) {
     final food = charge == null || charge['kind'] == 'food_balance';
-    final canPay = charge != null && _canPayCharge(status, charge);
+    final canPay = charge != null
+        ? _canPayCharge(status, charge)
+        : _hasUnderpayment(status) && status.support['chat_open'] != false;
     final amount = charge == null
         ? supportNumber(status.support['food_due'])
         : charge['status'] == 'paid'
@@ -3553,10 +3694,33 @@ class _DirectOrderStorefrontScreenState
             if (charge?['reason'] != null) Text(charge!['reason'].toString()),
             Text(
               charge == null
-                  ? _copy.additionalPaymentPreparing
+                  ? _copy.additionalPaymentPending
                   : _chargeStatusLabel(status, charge),
             ),
             const SizedBox(height: 12),
+            if (canPay && _storefront != null) ...[
+              Text(_copy.transferInstruction),
+              const SizedBox(height: 8),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  color: Colors.white,
+                  child: QrImageView(
+                    key: ValueKey('direct_balance_inline_qr:${amount.round()}'),
+                    data: VietQrPayload.bankTransfer(
+                      bankBin: _storefront!.bank.bin,
+                      accountNumber: _storefront!.bank.accountNumber,
+                      amount: amount.round(),
+                      purpose: charge == null
+                          ? '${status.referenceCode} B${status.support['version'] ?? 1}'
+                          : '${status.referenceCode} ${charge['id'].toString().substring(0, math.min(8, charge['id'].toString().length))}',
+                    ),
+                    size: 200,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 Expanded(
@@ -3583,11 +3747,14 @@ class _DirectOrderStorefrontScreenState
                   const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton(
-                      key: ValueKey('direct_charge_payment:${charge['id']}'),
+                      key: ValueKey(
+                        'direct_charge_payment:${charge?['id'] ?? 'balance'}',
+                      ),
                       onPressed: () => _showQuoteSheet(
                         status,
                         payment: true,
-                        chargeId: charge['id'].toString(),
+                        chargeId: charge?['id']?.toString(),
+                        balance: charge == null,
                       ),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 48),
@@ -3662,9 +3829,17 @@ class _DirectOrderStorefrontScreenState
           icon: _sendingMessage
               ? const SizedBox.square(
                   dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
-              : const Icon(Icons.send_rounded),
+              : Icon(
+                  Icons.send_rounded,
+                  color: status.support['chat_open'] == false
+                      ? null
+                      : Colors.white,
+                ),
         ),
       ],
     ),
