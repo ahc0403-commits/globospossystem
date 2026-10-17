@@ -10,15 +10,14 @@ import '../../core/payments/collection_bank.dart';
 class CashDepositQrDialog extends StatefulWidget {
   const CashDepositQrDialog({
     super.key,
-    required this.brandName,
-    required this.storeName,
-    required this.storeId,
+    required this.scopeLabel,
+    required this.purpose,
     required this.loadBank,
     required this.reportDate,
     required this.amount,
   });
 
-  final String brandName, storeName, storeId;
+  final String scopeLabel, purpose;
   final Future<CollectionBank> Function() loadBank;
   final DateTime reportDate;
   final int amount;
@@ -28,12 +27,6 @@ class CashDepositQrDialog extends StatefulWidget {
 }
 
 class _CashDepositQrDialogState extends State<CashDepositQrDialog> {
-  late final _shortPurpose = cashDepositShortPurpose(
-    brandName: widget.brandName,
-    storeName: widget.storeName,
-    storeId: widget.storeId,
-    depositDate: widget.reportDate,
-  );
   late Future<CollectionBank> _bank = widget.loadBank();
   bool _generated = false;
   bool _copied = false;
@@ -52,7 +45,7 @@ class _CashDepositQrDialogState extends State<CashDepositQrDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('${widget.brandName} · ${widget.storeName}'),
+            Text(widget.scopeLabel),
             const SizedBox(height: 8),
             Text(
               '${l.cashDepositToday}: ${DateFormat('dd/MM/yyyy').format(widget.reportDate)}',
@@ -68,7 +61,7 @@ class _CashDepositQrDialogState extends State<CashDepositQrDialog> {
             Text(l.cashDepositQrPurpose),
             const SizedBox(height: 6),
             SelectableText(
-              _shortPurpose,
+              widget.purpose,
               key: const Key('cash_deposit_short_purpose'),
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -80,7 +73,7 @@ class _CashDepositQrDialogState extends State<CashDepositQrDialog> {
               child: TextButton.icon(
                 key: const Key('cash_deposit_copy_purpose'),
                 onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: _shortPurpose));
+                  await Clipboard.setData(ClipboardData(text: widget.purpose));
                   if (mounted) setState(() => _copied = true);
                 },
                 icon: Icon(_copied ? Icons.check : Icons.copy_outlined),
@@ -136,7 +129,7 @@ class _CashDepositQrDialogState extends State<CashDepositQrDialog> {
                             data: cashDepositQrPayload(
                               bank: bank,
                               amount: widget.amount,
-                              purpose: _shortPurpose,
+                              purpose: widget.purpose,
                             ),
                             size: qrSize,
                             backgroundColor: Colors.white,

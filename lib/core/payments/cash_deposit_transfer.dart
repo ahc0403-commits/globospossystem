@@ -88,6 +88,13 @@ String cashDepositShortPurpose({
   return purpose.length <= 25 ? purpose : '$brandCode $storeCode C $day/$month';
 }
 
+/// The Photo total spans stores; its memo identifies the brand and query date.
+String photoCashDepositPurpose(DateTime reportDate) {
+  final day = reportDate.day.toString().padLeft(2, '0');
+  final month = reportDate.month.toString().padLeft(2, '0');
+  return 'PO Cash Doanh thu $day/$month';
+}
+
 String _asciiName(String value) {
   const vowels = {
     'a': 'àáạảãâầấậẩẫăằắặẳẵ',

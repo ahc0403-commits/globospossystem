@@ -1089,9 +1089,13 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     await showDialog<void>(
       context: context,
       builder: (_) => CashDepositQrDialog(
-        storeId: storeId,
-        brandName: brandName,
-        storeName: storeName,
+        scopeLabel: '$brandName · $storeName',
+        purpose: cashDepositShortPurpose(
+          brandName: brandName,
+          storeName: storeName,
+          storeId: storeId,
+          depositDate: report.startDate,
+        ),
         reportDate: report.startDate,
         amount: amount,
         loadBank: () => collectionBankService.load(storeId),

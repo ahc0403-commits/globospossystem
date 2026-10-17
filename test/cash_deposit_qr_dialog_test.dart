@@ -41,9 +41,8 @@ Widget app({
         onPressed: () => showDialog<void>(
           context: context,
           builder: (_) => CashDepositQrDialog(
-            brandName: 'Bunsikclub',
-            storeName: 'Binh Thanh',
-            storeId: 'fixture-store',
+            scopeLabel: 'Bunsikclub · Binh Thanh',
+            purpose: 'BC BT Cash Doanhthu 16/10',
             loadBank: loadBank,
             // Historical query date is passed as a calendar date, not today.
             reportDate: DateTime(2026, 10, 16),
