@@ -56,6 +56,37 @@ double? salesExportNumber(Object? value) {
   return n != null && n.isFinite ? n : null;
 }
 
+/// Keeps the first spelling and order, including invalid addresses for validation.
+List<String> normalizeMisaEmailAddresses(Object? value) {
+  final seen = <String>{};
+  return [
+    for (final part in '${value ?? ''}'.split(';'))
+      if (part.trim().isNotEmpty && seen.add(part.trim().toLowerCase()))
+        part.trim(),
+  ];
+}
+
+bool isValidMisaEmailAddress(String address) {
+  if (address.length > 254) return false;
+  final parts = address.split('@');
+  if (parts.length != 2 || parts[0].length > 64) return false;
+  // Accept a mailbox address, without display names, whitespace or separators.
+  if (!RegExp(
+    r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*$",
+  ).hasMatch(parts[0])) {
+    return false;
+  }
+  final labels = parts[1].split('.');
+  return labels.length >= 2 &&
+      labels.every(
+        (label) =>
+            label.length <= 63 &&
+            RegExp(
+              r'^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$',
+            ).hasMatch(label),
+      );
+}
+
 List<SalesExportIssue> validateSalesExportJobs(
   List<Map<String, dynamic>> jobs,
 ) {
@@ -65,14 +96,14 @@ List<SalesExportIssue> validateSalesExportJobs(
     final source = '${job['source_system'] ?? ''}';
     final photo = source == 'photo_objet_moers';
     final receiptId = '${job['receipt_id'] ?? job['id'] ?? ''}';
-    final number = '${job['receipt_number'] ?? receiptId}';
+    final number = '${job['receipt_number'] ?? ''}'.trim();
     final soldAt = '${job['created_at'] ?? ''}';
     final sale = DateTime.tryParse(soldAt);
     var currentLine = 0;
     void add(Map line, String field, String code) => issues.add(
       SalesExportIssue(
         receiptId: receiptId,
-        receiptNumber: number,
+        receiptNumber: number.isEmpty ? receiptId : number,
         source: source,
         itemId: '${line['order_item_id'] ?? ''}',
         itemName: '${line['invoice_name_vi'] ?? line['display_name'] ?? ''}',
@@ -94,6 +125,26 @@ List<SalesExportIssue> validateSalesExportJobs(
       add({}, 'receipt_id', 'SALES_EXPORT_DUPLICATE_RECEIPT');
     }
     if (sale == null) add({}, 'created_at', 'SALES_EXPORT_SALE_DATE_REQUIRED');
+    final buyer = job['buyer_snapshot'];
+    final emails = normalizeMisaEmailAddresses(
+      buyer is Map ? buyer['email'] : null,
+    );
+    for (var index = 0; index < emails.length; index++) {
+      if (!isValidMisaEmailAddress(emails[index])) {
+        add(
+          {},
+          'buyer_snapshot.email[${index + 1}]',
+          'MISA_EXPORT_INVALID_EMAIL',
+        );
+      }
+    }
+    if (emails.join(';').length > 255) {
+      add(
+        {},
+        'buyer_snapshot.email',
+        'MISA_EXPORT_DELIVERY_EMAILS_TOO_LONG_255',
+      );
+    }
     final raw = job['line_items_snapshot'];
     if (raw is! List || raw.isEmpty) {
       add({}, 'line_items', 'MISA_EXPORT_EMPTY_LINES');

@@ -112,6 +112,7 @@ List<int> buildMisaPendingInvoiceWorkbook(
   final sheet = workbook['Hóa đơn GTGT'];
   final ledger = workbook['POS Ledger'];
   final mapping = workbook['Invoice Mapping'];
+  final deliveryRows = <List<CellValue>>[];
   mapping.appendRow(
     const [
       'invoice_sequence',
@@ -162,6 +163,15 @@ List<int> buildMisaPendingInvoiceWorkbook(
   for (var invoiceIndex = 0; invoiceIndex < ordered.length; invoiceIndex++) {
     final job = ordered[invoiceIndex];
     final buyer = _map(job['buyer_snapshot']);
+    final emails = normalizeMisaEmailAddresses(buyer['email']);
+    final importEmail = emails.isEmpty ? '' : emails.first;
+    if (emails.length > 1) {
+      deliveryRows.add([
+        TextCellValue((invoiceIndex + 1).toString()),
+        TextCellValue(importEmail),
+        TextCellValue(emails.join(';')),
+      ]);
+    }
     final lines = _maps(job['line_items_snapshot']);
     final isPhoto = _text(job['source_system']) == 'photo_objet_moers';
     final legalName = _firstText([
@@ -203,7 +213,7 @@ List<int> buildMisaPendingInvoiceWorkbook(
           ),
           TextCellValue(_text(buyer['address'])),
           TextCellValue(buyerName),
-          TextCellValue(_text(buyer['email'])),
+          TextCellValue(importEmail),
           TextCellValue(_text(buyer['phone'])),
           TextCellValue(_text(buyer['buyer_id'])),
           TextCellValue(
@@ -308,6 +318,17 @@ List<int> buildMisaPendingInvoiceWorkbook(
   }.entries) {
     contract.appendRow([TextCellValue(entry.key), TextCellValue(entry.value)]);
   }
+  if (deliveryRows.isNotEmpty) {
+    final delivery = workbook['Email Delivery'];
+    delivery.appendRow(_emailDeliveryHeaders.map(TextCellValue.new).toList());
+    for (final row in deliveryRows) {
+      delivery.appendRow(row);
+    }
+    delivery.setColumnWidth(0, 18);
+    delivery.setColumnWidth(1, 36);
+    delivery.setColumnWidth(2, 80);
+  }
+  validateMisaEmailDeliveryWorkbook(workbook);
   for (var index = 0; index < _headers.length; index++) {
     sheet.setColumnWidth(index, switch (index) {
       2 || 4 || 5 || 10 => 28,
@@ -349,6 +370,95 @@ List<int> buildMisaPendingInvoiceWorkbook(
     fixed.addFile(ArchiveFile(file.name, bytes.length, bytes));
   }
   return ZipEncoder().encode(fixed)!;
+}
+
+const _emailDeliveryHeaders = [
+  'Invoice sequence',
+  'Import email',
+  'Delivery emails',
+];
+
+/// Checks invoice-level links while allowing A to repeat on item continuations.
+/// Errors identify the sequence/row without including customer email addresses.
+void validateMisaEmailDeliveryWorkbook(Excel workbook) {
+  final invoiceSheet = workbook.tables['Hóa đơn GTGT'];
+  if (invoiceSheet == null) {
+    throw const FormatException('MISA_EMAIL_INVOICE_SHEET_REQUIRED');
+  }
+  String cell(List<Data?> row, int index) =>
+      index < row.length ? row[index]?.value?.toString() ?? '' : '';
+  Never reject(String code, String sequence, int row) => throw FormatException(
+    '$code: invoice_sequence=$sequence, excel_row=$row',
+  );
+  final invoices = <String, String>{};
+  String? previousSequence;
+  final invoiceRows = invoiceSheet.rows;
+  for (var index = 8; index < invoiceRows.length; index++) {
+    final row = invoiceRows[index];
+    final sequence = cell(row, 0);
+    if (sequence.isEmpty || row[0]?.value is! TextCellValue) {
+      reject('MISA_EMAIL_INVOICE_SEQUENCE_TEXT_REQUIRED', sequence, index + 1);
+    }
+    if (sequence == previousSequence) {
+      if (row.skip(1).take(9).any((c) => _text(c?.value).isNotEmpty)) {
+        reject('MISA_EMAIL_DUPLICATE_INVOICE_SEQUENCE', sequence, index + 1);
+      }
+      continue;
+    }
+    if (invoices.containsKey(sequence)) {
+      reject('MISA_EMAIL_DUPLICATE_INVOICE_SEQUENCE', sequence, index + 1);
+    }
+    final email = cell(row, 6);
+    if (email.isNotEmpty && !isValidMisaEmailAddress(email)) {
+      reject('MISA_EMAIL_IMPORT_EMAIL_INVALID', sequence, index + 1);
+    }
+    invoices[sequence] = email;
+    previousSequence = sequence;
+  }
+  final delivery = workbook.tables['Email Delivery'];
+  if (delivery == null) return;
+  final rows = delivery.rows;
+  if (delivery.maxColumns != 3 ||
+      rows.isEmpty ||
+      List.generate(3, (i) => cell(rows.first, i)).join('\n') !=
+          _emailDeliveryHeaders.join('\n')) {
+    throw const FormatException('MISA_EMAIL_DELIVERY_HEADERS_INVALID');
+  }
+  final seen = <String>{};
+  for (var index = 1; index < rows.length; index++) {
+    final row = rows[index];
+    final sequence = cell(row, 0);
+    if (sequence.isEmpty || row[0]?.value is! TextCellValue) {
+      reject('MISA_EMAIL_INVOICE_SEQUENCE_TEXT_REQUIRED', sequence, index + 1);
+    }
+    if (!seen.add(sequence)) {
+      reject('MISA_EMAIL_DUPLICATE_DELIVERY_SEQUENCE', sequence, index + 1);
+    }
+    if (!invoices.containsKey(sequence)) {
+      reject('MISA_EMAIL_UNKNOWN_INVOICE_SEQUENCE', sequence, index + 1);
+    }
+    final importEmail = cell(row, 1);
+    if (importEmail != invoices[sequence]) {
+      reject('MISA_EMAIL_IMPORT_EMAIL_MISMATCH', sequence, index + 1);
+    }
+    final rawEmails = cell(row, 2);
+    if (rawEmails.length > 255) {
+      reject('MISA_EXPORT_DELIVERY_EMAILS_TOO_LONG_255', sequence, index + 1);
+    }
+    final emails = normalizeMisaEmailAddresses(rawEmails);
+    if (importEmail.isEmpty || !emails.contains(importEmail)) {
+      reject(
+        'MISA_EMAIL_IMPORT_EMAIL_MISSING_FROM_DELIVERY',
+        sequence,
+        index + 1,
+      );
+    }
+    if (emails.length < 2 ||
+        emails.join(';') != rawEmails ||
+        emails.any((email) => !isValidMisaEmailAddress(email))) {
+      reject('MISA_EMAIL_DELIVERY_LIST_INVALID', sequence, index + 1);
+    }
+  }
 }
 
 List<
