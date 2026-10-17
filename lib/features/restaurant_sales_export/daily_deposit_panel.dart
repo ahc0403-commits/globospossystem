@@ -10,11 +10,12 @@ class DailyDepositPanel extends StatelessWidget {
     super.key,
     required this.summary,
     this.onPhoto,
+    this.onPhotoQr,
     this.onClosing,
     this.onBank,
   });
   final DailySalesSummary summary;
-  final VoidCallback? onPhoto, onClosing, onBank;
+  final VoidCallback? onPhoto, onPhotoQr, onClosing, onBank;
   @override
   Widget build(BuildContext context) {
     final l = context.l10n, s = summary;
@@ -62,6 +63,9 @@ class DailyDepositPanel extends StatelessWidget {
               ],
               actionLabel: l.salesDepositOpenPhoto,
               onAction: onPhoto,
+              secondaryActionLabel: l.cashDepositQrTitle,
+              onSecondaryAction: onPhotoQr,
+              onTap: onPhotoQr,
             ),
             FinancialAmountCardData(
               id: 'sales_deposit_cash',

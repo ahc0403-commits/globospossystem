@@ -49,7 +49,7 @@ String cashDepositPurpose({
   return (brand, store);
 }
 
-/// Brand, store, cash revenue, and ddMM fit the VietQR purpose field.
+/// Brand, store, cash revenue, and dd/MM fit the VietQR purpose field.
 String cashDepositShortPurpose({
   required String brandName,
   required String storeName,
@@ -84,8 +84,15 @@ String cashDepositShortPurpose({
   }
   final day = depositDate.day.toString().padLeft(2, '0');
   final month = depositDate.month.toString().padLeft(2, '0');
-  final purpose = '$brandCode $storeCode Cash Doanh thu $day$month';
-  return purpose.length <= 25 ? purpose : '$brandCode $storeCode C $day$month';
+  final purpose = '$brandCode $storeCode Cash Doanhthu $day/$month';
+  return purpose.length <= 25 ? purpose : '$brandCode $storeCode C $day/$month';
+}
+
+/// The Photo total spans stores; its memo identifies the brand and query date.
+String photoCashDepositPurpose(DateTime reportDate) {
+  final day = reportDate.day.toString().padLeft(2, '0');
+  final month = reportDate.month.toString().padLeft(2, '0');
+  return 'PO Cash Doanh thu $day/$month';
 }
 
 String _asciiName(String value) {
@@ -118,7 +125,7 @@ String cashDepositQrPayload({
   required int amount,
   required String purpose,
 }) {
-  if (!RegExp(r'^[A-Za-z0-9 ]{1,25}$').hasMatch(purpose) ||
+  if (!RegExp(r'^[A-Za-z0-9 /]{1,25}$').hasMatch(purpose) ||
       purpose.trim() != purpose ||
       purpose.contains('  ')) {
     throw const FormatException('CASH_DEPOSIT_PURPOSE_INVALID');
@@ -128,18 +135,18 @@ String cashDepositQrPayload({
     accountNumber: bank.accountNumber,
     amount: amount,
     purpose: purpose,
+    preservePurposeSlashes: true,
   );
 }
 
-int? parseCashDepositAmount(String input) {
-  final text = input.trim();
-  if (!RegExp(
-    r'^(?:[0-9]+|[0-9]{1,3}(?:\.[0-9]{3})+|[0-9]{1,3}(?:,[0-9]{3})+)$',
-  ).hasMatch(text)) {
+/// Report money must remain exact; never round or invent a manual amount.
+int? cashDepositReportAmount(num? value) {
+  if (value == null ||
+      !value.isFinite ||
+      value <= 0 ||
+      value > 9999999999999 ||
+      value != value.truncateToDouble()) {
     return null;
   }
-  final amount = int.tryParse(text.replaceAll(RegExp(r'[.,]'), ''));
-  return amount != null && amount > 0 && amount <= 9999999999999
-      ? amount
-      : null;
+  return value.toInt();
 }

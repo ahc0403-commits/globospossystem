@@ -16,15 +16,17 @@ class FinancialAmountCardData {
     this.actionLabel,
     this.onAction,
     this.onTap,
+    this.secondaryActionLabel,
+    this.onSecondaryAction,
     this.warning = false,
   });
   final String id, title;
   final double? amount;
-  final String? status, actionLabel;
+  final String? status, actionLabel, secondaryActionLabel;
   final List<String> details;
   final CollectionBank? bank;
   final VoidCallback? onAction;
-  final VoidCallback? onTap;
+  final VoidCallback? onTap, onSecondaryAction;
   final bool warning;
 }
 
@@ -128,6 +130,16 @@ class _AmountCard extends StatelessWidget {
               child: TextButton(
                 onPressed: card.onAction,
                 child: Text(card.actionLabel!),
+              ),
+            ),
+          if (card.secondaryActionLabel != null &&
+              card.onSecondaryAction != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                key: ValueKey('${card.id}_secondary_action'),
+                onPressed: card.onSecondaryAction,
+                child: Text(card.secondaryActionLabel!),
               ),
             ),
         ],

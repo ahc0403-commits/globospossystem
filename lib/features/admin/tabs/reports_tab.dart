@@ -16,6 +16,7 @@ import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/layout/adaptive_layout.dart';
 import '../../../core/payments/payment_method_contract.dart';
 import '../../../core/payments/cash_deposit.dart';
+import '../../../core/payments/cash_deposit_transfer.dart';
 import '../../../core/payments/collection_bank.dart';
 import '../../../widgets/financial_amount_cards.dart';
 import '../../../widgets/bank_transfer_ledger_dialog.dart';
@@ -781,8 +782,12 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
           'brand_admin',
           'super_admin',
         }.contains(ref.watch(authProvider).role);
-    final VoidCallback? openCashDeposit = canCreateCashDeposit
-        ? () => _openCashDepositQr(storeId)
+    final VoidCallback? openCashDeposit =
+        canCreateCashDeposit &&
+            summary != null &&
+            !reportState.isLoading &&
+            reportState.error == null
+        ? () => _openCashDepositQr(storeId, reportState)
         : null;
     final totalRevenue = summary == null
         ? '—'
@@ -1053,7 +1058,21 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     );
   }
 
-  Future<void> _openCashDepositQr(String storeId) async {
+  Future<void> _openCashDepositQr(String storeId, ReportState report) async {
+    // Capture the applied report snapshot, never pending picker values or today.
+    if (!DateUtils.isSameDay(report.startDate, report.endDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.cashDepositSingleDayRequired)),
+      );
+      return;
+    }
+    final amount = cashDepositReportAmount(report.summary?.cashTotal);
+    if (amount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.cashDepositInvalidAmount)),
+      );
+      return;
+    }
     final stores = ref
         .read(authProvider)
         .accessibleStores
@@ -1070,9 +1089,15 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     await showDialog<void>(
       context: context,
       builder: (_) => CashDepositQrDialog(
-        storeId: storeId,
-        brandName: brandName,
-        storeName: storeName,
+        scopeLabel: '$brandName · $storeName',
+        purpose: cashDepositShortPurpose(
+          brandName: brandName,
+          storeName: storeName,
+          storeId: storeId,
+          depositDate: report.startDate,
+        ),
+        reportDate: report.startDate,
+        amount: amount,
         loadBank: () => collectionBankService.load(storeId),
       ),
     );

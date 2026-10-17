@@ -9,6 +9,7 @@ import 'package:globos_pos_system/features/admin/tabs/reports_tab.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/report/menu_sales_analytics.dart';
+import 'package:globos_pos_system/features/report/cash_deposit_qr_dialog.dart';
 import 'package:globos_pos_system/features/report/report_provider.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:http/http.dart' as http;
@@ -43,13 +44,33 @@ class _Auth extends AuthNotifier {
 }
 
 class _Report extends ReportNotifier {
-  _Report() {
-    // Deliberately a historical range: the deposit still uses today's date.
+  _Report({
+    double cash = 1622160,
+    bool hasSummary = true,
+    bool loading = false,
+    bool multiDay = false,
+  }) {
     state = ReportState(
-      startDate: DateTime(2025),
-      endDate: DateTime(2025, 1, 2),
+      startDate: DateTime(2026, 10, 16),
+      endDate: DateTime(2026, 10, multiDay ? 17 : 16, 23, 59),
+      isLoading: loading,
+      summary: hasSummary
+          ? ReportSummary(
+              dineInRevenue: cash,
+              deliveryRevenue: 0,
+              serviceTotal: 0,
+              totalRevenue: cash,
+              totalOrders: 1,
+              completedOrders: 1,
+              paidOrders: 1,
+              openOrders: 0,
+              dailyBreakdown: const [],
+              cashTotal: cash,
+            )
+          : null,
     );
   }
+  bool get isLoading => state.isLoading;
   int loads = 0;
   @override
   Future<void> loadReport(String storeId) async {
@@ -97,10 +118,11 @@ void main() {
     String role, {
     String? override,
     bool hasBrand = true,
+    _Report? reportFixture,
   }) async {
     await tester.binding.setSurfaceSize(const Size(1024, 1100));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final report = _Report();
+    final report = reportFixture ?? _Report();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -121,7 +143,12 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (report.isLoading) {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    } else {
+      await tester.pumpAndSettle();
+    }
     return report;
   }
 
@@ -152,24 +179,31 @@ void main() {
             )
             .data,
         startsWith(
-          role == 'brand_admin' ? 'OB OtherStore C ' : 'BC BT Cash Doanh thu ',
+          role == 'brand_admin' ? 'OB OtherStore C ' : 'BC BT Cash Doanhthu ',
         ),
       );
+      final dialog = tester.widget<CashDepositQrDialog>(
+        find.byType(CashDepositQrDialog),
+      );
+      expect(dialog.reportDate, DateTime(2026, 10, 16));
+      expect(dialog.amount, 1622160);
+      expect(find.textContaining('조회일: 16/10/2026'), findsOneWidget);
       expect(
         tester
             .widget<SelectableText>(
-              find.byKey(const Key('cash_deposit_purpose')),
+              find.byKey(const Key('cash_deposit_amount')),
             )
             .data,
-        startsWith(
-          role == 'brand_admin'
-              ? 'Other Brand Other Store Cash Doanh thu'
-              : 'BC BT Cash Doanh thu',
-        ),
+        '1.622.160 VND',
       );
-      await tester.enterText(
-        find.byKey(const Key('cash_deposit_amount')),
-        '1622160',
+      expect(find.byType(TextFormField), findsNothing);
+      expect(
+        tester
+            .widget<SelectableText>(
+              find.byKey(const Key('cash_deposit_short_purpose')),
+            )
+            .data,
+        endsWith('16/10'),
       );
       final generate = find.byKey(const Key('cash_deposit_generate_qr'));
       await tester.ensureVisible(generate);
@@ -179,6 +213,56 @@ void main() {
       expect(requests, hasLength(1));
       expect(report.loads, 1);
       expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'unapplied picker edits keep the displayed report date and amount',
+    (tester) async {
+      await mount(tester, 'store_admin');
+      final startPicker = find.widgetWithIcon(
+        OutlinedButton,
+        Icons.event_outlined,
+      );
+      await tester.ensureVisible(startPicker);
+      await tester.tap(startPicker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('15').last);
+      await tester.tap(find.text('확인'));
+      await tester.pumpAndSettle();
+      final cashCard = find.byKey(const Key('reports_payment_cash'));
+      await tester.ensureVisible(cashCard);
+      await tester.tap(
+        find.descendant(of: cashCard, matching: find.text('현금')),
+      );
+      await tester.pumpAndSettle();
+      final dialog = tester.widget<CashDepositQrDialog>(
+        find.byType(CashDepositQrDialog),
+      );
+      expect(dialog.reportDate, DateTime(2026, 10, 16));
+      expect(dialog.amount, 1622160);
+    },
+  );
+
+  for (final invalid in <String, _Report Function()>{
+    'no query result': () => _Report(hasSummary: false),
+    'loading result': () => _Report(loading: true),
+    'multi-day range': () => _Report(multiDay: true),
+    'zero amount': () => _Report(cash: 0),
+    'fractional amount': () => _Report(cash: 1.5),
+  }.entries) {
+    testWidgets('${invalid.key} cannot generate a guessed transfer', (
+      tester,
+    ) async {
+      await mount(tester, 'store_admin', reportFixture: invalid.value());
+      final cashCard = find.byKey(const Key('reports_payment_cash'));
+      await tester.ensureVisible(cashCard);
+      await tester.tap(
+        find.descendant(of: cashCard, matching: find.text('현금')),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(CashDepositQrDialog), findsNothing);
+      expect(requests, isEmpty);
     });
   }
 

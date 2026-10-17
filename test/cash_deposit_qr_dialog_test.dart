@@ -41,12 +41,12 @@ Widget app({
         onPressed: () => showDialog<void>(
           context: context,
           builder: (_) => CashDepositQrDialog(
-            brandName: 'Bunsikclub',
-            storeName: 'Binh Thanh',
-            storeId: 'fixture-store',
+            scopeLabel: 'Bunsikclub · Binh Thanh',
+            purpose: 'BC BT Cash Doanhthu 16/10',
             loadBank: loadBank,
-            // Vietnam is already on the next day.
-            now: DateTime.utc(2026, 10, 16, 18),
+            // Historical query date is passed as a calendar date, not today.
+            reportDate: DateTime(2026, 10, 16),
+            amount: 1622160,
           ),
         ),
         child: const Text('Open'),
@@ -75,7 +75,7 @@ Future<void> expectQrAmount(WidgetTester tester, int amount) async {
       data: cashDepositQrPayload(
         bank: bank,
         amount: amount,
-        purpose: 'BC BT Cash Doanh thu 1710',
+        purpose: 'BC BT Cash Doanhthu 16/10',
       ),
       version: QrVersions.auto,
       gapless: true,
@@ -114,12 +114,14 @@ void main() {
           );
           await tester.tap(find.byKey(const Key('open')));
           await tester.pumpAndSettle();
-          expect(find.textContaining('17/10/2026'), findsOneWidget);
-          expect(find.text('BC BT Cash Doanh thu 1710'), findsOneWidget);
-          expect(find.text('BC BT Cash Doanh thu 17/10'), findsOneWidget);
-          await tester.enterText(
-            find.byKey(const Key('cash_deposit_amount')),
-            '1.622.160',
+          expect(find.textContaining('16/10/2026'), findsOneWidget);
+          expect(find.text('BC BT Cash Doanhthu 16/10'), findsOneWidget);
+          expect(find.byType(TextFormField), findsNothing);
+          expect(
+            tester
+                .widgetList<EditableText>(find.byType(EditableText))
+                .every((field) => field.readOnly),
+            isTrue,
           );
           await generate(tester);
           await expectQrAmount(tester, 1622160);
@@ -152,68 +154,60 @@ void main() {
     }
   }
 
-  testWidgets('invalid amounts, copy, and edits never keep a stale QR', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(768, 1100));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    String? copied;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String;
-        }
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+  testWidgets(
+    'copy and rebuild preserve the fixed report amount and exact QR memo',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(768, 1100));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
-        null,
-      ),
-    );
-    var loads = 0;
-    await tester.pumpWidget(
-      app(
-        loadBank: () async {
-          loads++;
-          return bank;
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String;
+          }
+          return null;
         },
-      ),
-    );
-    await tester.tap(find.byKey(const Key('open')));
-    await tester.pumpAndSettle();
-    await generate(tester);
-    expect(find.byType(QrImageView), findsNothing);
-    expect(find.textContaining('정수 금액'), findsOneWidget);
-    await tester.enterText(
-      find.byKey(const Key('cash_deposit_amount')),
-      '1622160',
-    );
-    await generate(tester);
-    expect(find.byType(QrImageView), findsOneWidget);
-    await tester.ensureVisible(
-      find.byKey(const Key('cash_deposit_copy_purpose')),
-    );
-    await tester.tap(find.byKey(const Key('cash_deposit_copy_purpose')));
-    await tester.pumpAndSettle();
-    expect(copied, 'BC BT Cash Doanh thu 17/10');
-    expect(find.text('적요 복사됨'), findsOneWidget);
-    await tester.enterText(find.byKey(const Key('cash_deposit_amount')), '0');
-    await tester.pump();
-    expect(find.byType(QrImageView), findsNothing);
-    await generate(tester);
-    expect(find.byType(QrImageView), findsNothing);
-    await tester.enterText(
-      find.byKey(const Key('cash_deposit_amount')),
-      '1623000',
-    );
-    await generate(tester);
-    await expectQrAmount(tester, 1623000);
-    expect(loads, 1);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      var loads = 0;
+      await tester.pumpWidget(
+        app(
+          loadBank: () async {
+            loads++;
+            return bank;
+          },
+        ),
+      );
+      await tester.tap(find.byKey(const Key('open')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widgetList<EditableText>(find.byType(EditableText))
+            .every((field) => field.readOnly),
+        isTrue,
+      );
+      await generate(tester);
+      await expectQrAmount(tester, 1622160);
+      await tester.ensureVisible(
+        find.byKey(const Key('cash_deposit_copy_purpose')),
+      );
+      await tester.tap(find.byKey(const Key('cash_deposit_copy_purpose')));
+      await tester.pumpAndSettle();
+      expect(copied, 'BC BT Cash Doanhthu 16/10');
+      expect(find.text('적요 복사됨'), findsOneWidget);
+      await generate(tester);
+      await expectQrAmount(tester, 1622160);
+      expect(find.text('1.622.160 VND'), findsOneWidget);
+      expect(loads, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('bank failures block generation and retry only on request', (
     tester,
@@ -231,10 +225,6 @@ void main() {
     await tester.tap(find.byKey(const Key('open')));
     await tester.pump();
     expect(find.byKey(const Key('cash_deposit_generate_qr')), findsNothing);
-    await tester.enterText(
-      find.byKey(const Key('cash_deposit_amount')),
-      '1000',
-    );
     response.completeError(const FormatException('fixture bank unavailable'));
     await tester.pumpAndSettle();
     expect(loads, 1);

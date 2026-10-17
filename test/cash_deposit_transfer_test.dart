@@ -55,9 +55,9 @@ void main() {
             brandName: brand,
             storeName: store,
             storeId: 'fixture-store',
-            depositDate: DateTime(2026, 10, 17),
+            depositDate: DateTime(2026, 10, 16),
           );
-          expect(purpose, 'BC BT Cash Doanh thu 1710');
+          expect(purpose, 'BC BT Cash Doanhthu 16/10');
           expect(purpose.length, 25);
         }
       }
@@ -68,7 +68,7 @@ void main() {
           storeId: 'fixture-store',
           depositDate: DateTime(2026, 1, 5),
         ),
-        'BC BT Cash Doanh thu 0501',
+        'BC BT Cash Doanhthu 05/01',
       );
     },
   );
@@ -87,30 +87,29 @@ void main() {
         expect(purpose('store-a'), isNot(purpose('store-b')));
         expect(purpose('store-a').length, lessThanOrEqualTo(25));
         expect(purpose('store-a'), startsWith('OB '));
-        expect(purpose('store-a'), endsWith(' C 3112'));
-        expect(RegExp(r'^[A-Za-z0-9 ]+$').hasMatch(purpose('store-a')), isTrue);
+        expect(purpose('store-a'), endsWith(' C 31/12'));
+        expect(
+          RegExp(r'^[A-Za-z0-9 /]+$').hasMatch(purpose('store-a')),
+          isTrue,
+        );
       }
     },
   );
 
-  test('accepts exact dong amounts and unambiguous grouping', () {
-    for (final input in ['1622160', '1.622.160', '1,622,160', ' 1622160 ']) {
-      expect(parseCashDepositAmount(input), 1622160);
+  test('uses only exact positive reported dong amounts without rounding', () {
+    for (final amount in [1, 1622160.0, 9999999999999]) {
+      expect(cashDepositReportAmount(amount), amount.toInt());
     }
-    expect(parseCashDepositAmount('1'), 1);
-    expect(parseCashDepositAmount('9999999999999'), 9999999999999);
-    for (final input in [
-      '',
-      '0',
-      '-1000',
-      '1.5',
-      '1,5',
-      '1,622.160',
-      '1e6',
-      'abc100',
-      '10000000000000',
+    for (final amount in [
+      null,
+      0,
+      -1,
+      1.5,
+      double.nan,
+      double.infinity,
+      10000000000000,
     ]) {
-      expect(parseCashDepositAmount(input), isNull, reason: input);
+      expect(cashDepositReportAmount(amount), isNull);
     }
   });
 
@@ -125,7 +124,7 @@ void main() {
           label: 'Fixture Bank',
         ),
         amount: 1622160,
-        purpose: 'BC BT Cash Doanh thu 1710',
+        purpose: 'BC BT Cash Doanhthu 16/10',
       );
       final fields = <String, String>{};
       for (var offset = 0; offset < payload.length;) {
@@ -137,7 +136,7 @@ void main() {
       expect(fields['38'], contains('0006970426011112345678901'));
       expect(fields['54'], '1622160');
       expect(fields['53'], '704');
-      expect(fields['62'], '0825BC BT Cash Doanh thu 1710');
+      expect(fields['62'], '0825BC BT Cash Doanhthu 16/10');
       // Independently check the CRC, including its tag and length.
       var crc = 0xFFFF;
       for (final byte in payload.substring(0, payload.length - 4).codeUnits) {

@@ -1,5 +1,7 @@
 import '../../widgets/error_toast.dart';
 import 'daily_deposit_panel.dart';
+import '../report/cash_deposit_qr_dialog.dart';
+import '../../core/payments/cash_deposit_transfer.dart';
 import '../photo_sales_import/photo_sales_import_screen.dart';
 import '../admin/tabs/reports_tab.dart' show DailyClosingScreen;
 import '../../widgets/bank_transfer_ledger_dialog.dart';
@@ -418,6 +420,9 @@ class _RestaurantSalesExportScreenState
                   ),
                 ),
           onPhoto: _isDownloading ? null : _openPhotoImport,
+          onPhotoQr: _isLoading || _isDownloading
+              ? null
+              : () => _openPhotoCashQr(summary),
           onClosing: _isDownloading || summary.bunsikStores.isEmpty
               ? null
               : () => _openClosing(summary),
@@ -536,6 +541,36 @@ class _RestaurantSalesExportScreenState
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _openPhotoCashQr(DailySalesSummary summary) async {
+    final amount = cashDepositReportAmount(summary.photoDeposit);
+    if (amount == null) {
+      showErrorToast(
+        context,
+        summary.photoComplete
+            ? context.l10n.cashDepositInvalidAmount
+            : context.l10n.salesDepositPhotoMissing,
+      );
+      return;
+    }
+    final bank = summary.bank;
+    if (bank == null) {
+      showErrorToast(context, context.l10n.collectionBankUnavailable);
+      return;
+    }
+    final reportDate = DateTime.parse(summary.businessDate);
+    await showDialog<void>(
+      context: context,
+      builder: (_) => CashDepositQrDialog(
+        scopeLabel: 'Photo Objet · ${summary.sellerLegalName}',
+        purpose: photoCashDepositPurpose(reportDate),
+        reportDate: reportDate,
+        amount: amount,
+        // The summary already carries the selected entity's scoped account.
+        loadBank: () async => bank,
+      ),
     );
   }
 
