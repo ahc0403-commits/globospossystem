@@ -4347,5 +4347,16 @@
   "onboardingProcurement": "발주 연결 상태",
   "onboardingAccounting": "법인 회계",
   "onboardingBuyer": "Office 구매 담당",
-  "onboardingNeedsSetup": "설정 필요"
+  "onboardingNeedsSetup": "설정 필요",
+  "cashDepositQrTitle": "현금이체 QR 생성",
+  "cashDepositToday": "입금일",
+  "cashDepositAmount": "당일 입금 금액",
+  "cashDepositInvalidAmount": "1~9,999,999,999,999 VND의 정수 금액을 입력하세요.",
+  "cashDepositPurpose": "전체 적요 (참고)",
+  "cashDepositMemoHelp": "QR을 스캔하면 계좌·금액·위 적요가 자동 입력됩니다. 마지막 4자리는 일월(ddmm)입니다.",
+  "cashDepositCopyPurpose": "전체 적요 복사",
+  "cashDepositCopied": "적요 복사됨",
+  "cashDepositGenerateQr": "QR 코드 생성",
+  "cashDepositStoreUnavailable": "선택한 매장의 브랜드명과 매장명을 확인할 수 없습니다. 관리자에게 문의하세요.",
+  "cashDepositQrPurpose": "QR에 자동 입력되는 적요"
 }

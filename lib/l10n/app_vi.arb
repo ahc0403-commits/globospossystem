@@ -4347,5 +4347,16 @@
   "onboardingProcurement": "Kết nối mua hàng",
   "onboardingAccounting": "Kế toán pháp nhân",
   "onboardingBuyer": "Mua hàng Office",
-  "onboardingNeedsSetup": "Cần cấu hình"
+  "onboardingNeedsSetup": "Cần cấu hình",
+  "cashDepositQrTitle": "Tạo QR nộp tiền mặt",
+  "cashDepositToday": "Ngày nộp tiền",
+  "cashDepositAmount": "Số tiền nộp hôm nay",
+  "cashDepositInvalidAmount": "Nhập số tiền nguyên từ 1 đến 9.999.999.999.999 VND.",
+  "cashDepositPurpose": "Nội dung đầy đủ (tham khảo)",
+  "cashDepositMemoHelp": "Quét QR để tự điền tài khoản, số tiền và nội dung ở trên. 4 chữ số cuối là ngày và tháng (ddmm).",
+  "cashDepositCopyPurpose": "Sao chép toàn bộ nội dung",
+  "cashDepositCopied": "Đã sao chép nội dung",
+  "cashDepositGenerateQr": "Tạo mã QR",
+  "cashDepositStoreUnavailable": "Không xác định được tên thương hiệu và cửa hàng đã chọn. Vui lòng liên hệ quản trị viên.",
+  "cashDepositQrPurpose": "Nội dung tự điền từ QR"
 }

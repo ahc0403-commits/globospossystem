@@ -4348,5 +4348,16 @@
   "onboardingProcurement": "Procurement connection",
   "onboardingAccounting": "Legal accounting",
   "onboardingBuyer": "Office buyer",
-  "onboardingNeedsSetup": "Needs configuration"
+  "onboardingNeedsSetup": "Needs configuration",
+  "cashDepositQrTitle": "Cash deposit QR",
+  "cashDepositToday": "Deposit date",
+  "cashDepositAmount": "Today's deposit amount",
+  "cashDepositInvalidAmount": "Enter a whole amount from 1 to 9,999,999,999,999 VND.",
+  "cashDepositPurpose": "Full memo (reference)",
+  "cashDepositMemoHelp": "Scan the QR to fill in the account, amount, and memo above. The last four digits are the day and month (ddmm).",
+  "cashDepositCopyPurpose": "Copy full memo",
+  "cashDepositCopied": "Memo copied",
+  "cashDepositGenerateQr": "Generate QR code",
+  "cashDepositStoreUnavailable": "The selected store’s brand and store names are unavailable. Contact an administrator.",
+  "cashDepositQrPurpose": "Memo included in QR"
 }

@@ -15,6 +15,7 @@ class FinancialAmountCardData {
     this.bank,
     this.actionLabel,
     this.onAction,
+    this.onTap,
     this.warning = false,
   });
   final String id, title;
@@ -23,6 +24,7 @@ class FinancialAmountCardData {
   final List<String> details;
   final CollectionBank? bank;
   final VoidCallback? onAction;
+  final VoidCallback? onTap;
   final bool warning;
 }
 
@@ -65,67 +67,80 @@ class _AmountCard extends StatelessWidget {
   const _AmountCard({required this.card});
   final FinancialAmountCardData card;
   @override
-  Widget build(BuildContext context) => Container(
-    key: ValueKey(card.id),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: PosColors.surface,
-      border: Border.all(
-        color: card.warning ? PosColors.warning : PosColors.border,
-      ),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          card.title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+  Widget build(BuildContext context) {
+    final content = Container(
+      key: ValueKey(card.id),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        border: Border.all(
+          color: card.warning ? PosColors.warning : PosColors.border,
         ),
-        const SizedBox(height: 8),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            card.amount == null
-                ? '—'
-                : '${NumberFormat('#,##0', 'vi_VN').format(card.amount)} VND',
-            key: ValueKey('${card.id}_amount'),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            card.title,
             style: Theme.of(
               context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
           ),
-        ),
-        if (card.status != null) ...[
           const SizedBox(height: 8),
-          Text(
-            card.status!,
-            style: TextStyle(
-              color: card.warning ? PosColors.warning : PosColors.textSecondary,
-            ),
-          ),
-        ],
-        for (final detail in card.details) ...[
-          const SizedBox(height: 6),
-          Text(detail),
-        ],
-        if (card.bank case final bank?) ...[
-          const SizedBox(height: 8),
-          SelectableText(
-            '${bank.label} · ${bank.accountNumber}\n${bank.accountHolder}',
-          ),
-        ],
-        if (card.actionLabel != null && card.onAction != null)
-          Align(
+          FittedBox(
+            fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: card.onAction,
-              child: Text(card.actionLabel!),
+            child: Text(
+              card.amount == null
+                  ? '—'
+                  : '${NumberFormat('#,##0', 'vi_VN').format(card.amount)} VND',
+              key: ValueKey('${card.id}_amount'),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
             ),
           ),
-      ],
-    ),
-  );
+          if (card.status != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              card.status!,
+              style: TextStyle(
+                color: card.warning
+                    ? PosColors.warning
+                    : PosColors.textSecondary,
+              ),
+            ),
+          ],
+          for (final detail in card.details) ...[
+            const SizedBox(height: 6),
+            Text(detail),
+          ],
+          if (card.bank case final bank?) ...[
+            const SizedBox(height: 8),
+            SelectableText(
+              '${bank.label} · ${bank.accountNumber}\n${bank.accountHolder}',
+            ),
+          ],
+          if (card.actionLabel != null && card.onAction != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: card.onAction,
+                child: Text(card.actionLabel!),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (card.onTap == null) return content;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: card.onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: content,
+      ),
+    );
+  }
 }
