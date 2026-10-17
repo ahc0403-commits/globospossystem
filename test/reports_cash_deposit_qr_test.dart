@@ -179,7 +179,7 @@ void main() {
             )
             .data,
         startsWith(
-          role == 'brand_admin' ? 'OB OtherStore C ' : 'BC BT Cash Doanhthu ',
+          role == 'brand_admin' ? 'OB OtherStore C ' : 'BC BT C Doanh thu ',
         ),
       );
       final dialog = tester.widget<CashDepositQrDialog>(

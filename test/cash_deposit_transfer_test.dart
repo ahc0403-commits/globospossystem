@@ -57,8 +57,8 @@ void main() {
             storeId: 'fixture-store',
             depositDate: DateTime(2026, 10, 16),
           );
-          expect(purpose, 'BC BT Cash Doanhthu 16/10');
-          expect(purpose.length, 25);
+          expect(purpose, 'BC BT C Doanh thu 16/10');
+          expect(purpose.length, 23);
         }
       }
       expect(
@@ -68,7 +68,7 @@ void main() {
           storeId: 'fixture-store',
           depositDate: DateTime(2026, 1, 5),
         ),
-        'BC BT Cash Doanhthu 05/01',
+        'BC BT C Doanh thu 05/01',
       );
     },
   );
@@ -124,7 +124,7 @@ void main() {
           label: 'Fixture Bank',
         ),
         amount: 1622160,
-        purpose: 'BC BT Cash Doanhthu 16/10',
+        purpose: 'BC BT C Doanh thu 16/10',
       );
       final fields = <String, String>{};
       for (var offset = 0; offset < payload.length;) {
@@ -136,7 +136,7 @@ void main() {
       expect(fields['38'], contains('0006970426011112345678901'));
       expect(fields['54'], '1622160');
       expect(fields['53'], '704');
-      expect(fields['62'], '0825BC BT Cash Doanhthu 16/10');
+      expect(fields['62'], '0823BC BT C Doanh thu 16/10');
       // Independently check the CRC, including its tag and length.
       var crc = 0xFFFF;
       for (final byte in payload.substring(0, payload.length - 4).codeUnits) {

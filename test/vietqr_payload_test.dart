@@ -45,11 +45,11 @@ void main() {
         bankBin: '970426',
         accountNumber: '12345678901',
         amount: 1622160,
-        purpose: 'BC BT Cash Doanhthu 16/10',
+        purpose: 'BC BT C Doanh thu 16/10',
         preservePurposeSlashes: slashes,
       );
-      expect(payload(slashes: true), contains('BC BT Cash Doanhthu 16/10'));
-      expect(payload(), contains('BC BT Cash Doanhthu 1610'));
+      expect(payload(slashes: true), contains('BC BT C Doanh thu 16/10'));
+      expect(payload(), contains('BC BT C Doanh thu 1610'));
     },
   );
 

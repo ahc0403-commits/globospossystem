@@ -84,8 +84,12 @@ String cashDepositShortPurpose({
   }
   final day = depositDate.day.toString().padLeft(2, '0');
   final month = depositDate.month.toString().padLeft(2, '0');
-  final purpose = '$brandCode $storeCode Cash Doanhthu $day/$month';
-  return purpose.length <= 25 ? purpose : '$brandCode $storeCode C $day/$month';
+  final purpose = '$brandCode $storeCode Cash Doanh thu $day/$month';
+  if (purpose.length <= 25) return purpose;
+  final shortCash = '$brandCode $storeCode C Doanh thu $day/$month';
+  return shortCash.length <= 25
+      ? shortCash
+      : '$brandCode $storeCode C $day/$month';
 }
 
 /// The Photo total spans stores; its memo identifies the brand and query date.

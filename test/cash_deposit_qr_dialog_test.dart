@@ -42,7 +42,7 @@ Widget app({
           context: context,
           builder: (_) => CashDepositQrDialog(
             scopeLabel: 'Bunsikclub · Binh Thanh',
-            purpose: 'BC BT Cash Doanhthu 16/10',
+            purpose: 'BC BT C Doanh thu 16/10',
             loadBank: loadBank,
             // Historical query date is passed as a calendar date, not today.
             reportDate: DateTime(2026, 10, 16),
@@ -75,7 +75,7 @@ Future<void> expectQrAmount(WidgetTester tester, int amount) async {
       data: cashDepositQrPayload(
         bank: bank,
         amount: amount,
-        purpose: 'BC BT Cash Doanhthu 16/10',
+        purpose: 'BC BT C Doanh thu 16/10',
       ),
       version: QrVersions.auto,
       gapless: true,
@@ -115,7 +115,7 @@ void main() {
           await tester.tap(find.byKey(const Key('open')));
           await tester.pumpAndSettle();
           expect(find.textContaining('16/10/2026'), findsOneWidget);
-          expect(find.text('BC BT Cash Doanhthu 16/10'), findsOneWidget);
+          expect(find.text('BC BT C Doanh thu 16/10'), findsOneWidget);
           expect(find.byType(TextFormField), findsNothing);
           expect(
             tester
@@ -199,7 +199,7 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('cash_deposit_copy_purpose')));
       await tester.pumpAndSettle();
-      expect(copied, 'BC BT Cash Doanhthu 16/10');
+      expect(copied, 'BC BT C Doanh thu 16/10');
       expect(find.text('적요 복사됨'), findsOneWidget);
       await generate(tester);
       await expectQrAmount(tester, 1622160);
