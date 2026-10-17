@@ -21,6 +21,7 @@ import '../../../widgets/financial_amount_cards.dart';
 import '../../../widgets/bank_transfer_ledger_dialog.dart';
 import '../../restaurant_sales_export/daily_sales_report_service.dart';
 import '../../../core/services/daily_closing_service.dart';
+import '../../../core/services/collection_bank_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/permission_utils.dart';
@@ -30,6 +31,7 @@ import '../../auth/auth_provider.dart';
 import '../../report/bm_menu_exception_history.dart';
 import '../../report/menu_sales_analytics.dart';
 import '../../report/report_provider.dart';
+import '../../report/cash_deposit_qr_dialog.dart';
 import '../../report/revenue_forecast/revenue_forecast_engine.dart';
 import '../report_analysis_screens.dart';
 import '../providers/admin_audit_provider.dart';
@@ -771,6 +773,17 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     bool showBmHistoryEntry = true,
   }) {
     final l10n = context.l10n;
+    final canCreateCashDeposit =
+        storeId != null &&
+        const {
+          'admin',
+          'store_admin',
+          'brand_admin',
+          'super_admin',
+        }.contains(ref.watch(authProvider).role);
+    final VoidCallback? openCashDeposit = canCreateCashDeposit
+        ? () => _openCashDepositQr(storeId)
+        : null;
     final totalRevenue = summary == null
         ? '—'
         : _formatVnd(currency, summary.totalRevenue);
@@ -993,6 +1006,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 id: 'reports_payment_cash',
                 title: l10n.reportsCash,
                 amount: summary?.cashTotal,
+                actionLabel: l10n.cashDepositQrTitle,
+                onAction: openCashDeposit,
+                onTap: openCashDeposit,
               ),
               FinancialAmountCardData(
                 id: 'reports_payment_bank',
@@ -1033,6 +1049,31 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openCashDepositQr(String storeId) async {
+    final stores = ref
+        .read(authProvider)
+        .accessibleStores
+        .where((store) => store.id == storeId);
+    final store = stores.isEmpty ? null : stores.first;
+    final brandName = store?.brandName?.trim() ?? '';
+    final storeName = (widget.overrideStoreName ?? store?.name)?.trim() ?? '';
+    if (brandName.isEmpty || storeName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.cashDepositStoreUnavailable)),
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (_) => CashDepositQrDialog(
+        storeId: storeId,
+        brandName: brandName,
+        storeName: storeName,
+        loadBank: () => collectionBankService.load(storeId),
       ),
     );
   }
