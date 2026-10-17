@@ -4350,14 +4350,15 @@
   "onboardingBuyer": "Office buyer",
   "onboardingNeedsSetup": "Needs configuration",
   "cashDepositQrTitle": "Cash deposit QR",
-  "cashDepositToday": "Deposit date",
-  "cashDepositAmount": "Today's deposit amount",
-  "cashDepositInvalidAmount": "Enter a whole amount from 1 to 9,999,999,999,999 VND.",
+  "cashDepositToday": "Report date",
+  "cashDepositAmount": "Reported cash deposit amount",
+  "cashDepositInvalidAmount": "The reported cash amount must be a whole amount from 1 to 9,999,999,999,999 VND to generate a QR.",
   "cashDepositPurpose": "Full memo (reference)",
-  "cashDepositMemoHelp": "Scan the QR to fill in the account, amount, and memo above. The last four digits are the day and month (ddmm).",
-  "cashDepositCopyPurpose": "Copy full memo",
+  "cashDepositMemoHelp": "The QR uses the applied report date (dd/mm) and cash amount automatically. Scan it to fill in the account, amount, and memo above.",
+  "cashDepositCopyPurpose": "Copy memo",
   "cashDepositCopied": "Memo copied",
   "cashDepositGenerateQr": "Generate QR code",
   "cashDepositStoreUnavailable": "The selected store’s brand and store names are unavailable. Contact an administrator.",
-  "cashDepositQrPurpose": "Memo included in QR"
+  "cashDepositQrPurpose": "Memo included in QR",
+  "cashDepositSingleDayRequired": "Query a single day before generating a cash deposit QR."
 }

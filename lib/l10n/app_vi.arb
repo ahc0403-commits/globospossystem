@@ -4349,14 +4349,15 @@
   "onboardingBuyer": "Mua hàng Office",
   "onboardingNeedsSetup": "Cần cấu hình",
   "cashDepositQrTitle": "Tạo QR nộp tiền mặt",
-  "cashDepositToday": "Ngày nộp tiền",
-  "cashDepositAmount": "Số tiền nộp hôm nay",
-  "cashDepositInvalidAmount": "Nhập số tiền nguyên từ 1 đến 9.999.999.999.999 VND.",
+  "cashDepositToday": "Ngày báo cáo",
+  "cashDepositAmount": "Số tiền mặt nộp theo báo cáo",
+  "cashDepositInvalidAmount": "Số tiền mặt trong báo cáo phải là số nguyên từ 1 đến 9.999.999.999.999 VND để tạo QR.",
   "cashDepositPurpose": "Nội dung đầy đủ (tham khảo)",
-  "cashDepositMemoHelp": "Quét QR để tự điền tài khoản, số tiền và nội dung ở trên. 4 chữ số cuối là ngày và tháng (ddmm).",
-  "cashDepositCopyPurpose": "Sao chép toàn bộ nội dung",
+  "cashDepositMemoHelp": "QR tự lấy ngày đã tra cứu (dd/mm) và số tiền mặt trong báo cáo. Quét để điền tài khoản, số tiền và nội dung ở trên.",
+  "cashDepositCopyPurpose": "Sao chép nội dung",
   "cashDepositCopied": "Đã sao chép nội dung",
   "cashDepositGenerateQr": "Tạo mã QR",
   "cashDepositStoreUnavailable": "Không xác định được tên thương hiệu và cửa hàng đã chọn. Vui lòng liên hệ quản trị viên.",
-  "cashDepositQrPurpose": "Nội dung tự điền từ QR"
+  "cashDepositQrPurpose": "Nội dung tự điền từ QR",
+  "cashDepositSingleDayRequired": "Vui lòng tra cứu một ngày trước khi tạo QR nộp tiền mặt."
 }

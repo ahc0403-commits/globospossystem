@@ -38,6 +38,21 @@ void main() {
     expect(RegExp(r'[0-9A-F]{4}$').hasMatch(first), isTrue);
   });
 
+  test(
+    'cash-deposit date slash is opt-in and customer normalization is unchanged',
+    () {
+      String payload({bool slashes = false}) => VietQrPayload.bankTransfer(
+        bankBin: '970426',
+        accountNumber: '12345678901',
+        amount: 1622160,
+        purpose: 'BC BT Cash Doanhthu 16/10',
+        preservePurposeSlashes: slashes,
+      );
+      expect(payload(slashes: true), contains('BC BT Cash Doanhthu 16/10'));
+      expect(payload(), contains('BC BT Cash Doanhthu 1610'));
+    },
+  );
+
   test('rejects invalid or non-positive transfer details', () {
     expect(
       () => VietQrPayload.bankTransfer(
