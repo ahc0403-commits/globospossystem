@@ -1,0 +1,16 @@
+name: Restaurant finalization SQL
+on:
+  pull_request:
+    paths: ['supabase/migrations/*restaurant*finalization*.sql', 'supabase/tests/*restaurant*finalization*.sql', 'supabase/tests/fixtures/restaurant_sales_finalization.sql', 'scripts/test_restaurant_finalizations.sh', '.github/workflows/restaurant_finalization.yml']
+  push:
+    branches: [main]
+    paths: ['supabase/migrations/*restaurant*finalization*.sql', 'supabase/tests/*restaurant*finalization*.sql', 'supabase/tests/fixtures/restaurant_sales_finalization.sql', 'scripts/test_restaurant_finalizations.sh', '.github/workflows/restaurant_finalization.yml']
+permissions:
+  contents: read
+jobs:
+  restaurant-finalization-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - run: bash scripts/test_restaurant_finalizations.sh
