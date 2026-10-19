@@ -184,7 +184,18 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
     }
 
     if (_receiptOnly && destination.purpose != 'receipt') {
-      throw StateError('PRINT_STATION_RECEIPT_ROUTING_VIOLATION');
+      // A destination can be edited after the atomic claim. Acknowledge the
+      // failed job so it and the remaining batch cannot become stuck printing.
+      await _backend.completeJob(
+        job.id,
+        ok: false,
+        error: 'PAPERLESS_CASHIER_ONLY',
+      );
+      return PrintJobAgentResult(
+        jobId: job.id,
+        result: PrintResult.noAllowedEndpoint,
+        error: 'PAPERLESS_CASHIER_ONLY',
+      );
     }
 
     final ticketBytes = await _buildBytes(job);

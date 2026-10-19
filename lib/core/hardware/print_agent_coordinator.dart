@@ -149,6 +149,7 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
       );
       await _scheduleReconcile();
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         preferenceLoaded: true,
         enabled: false,
