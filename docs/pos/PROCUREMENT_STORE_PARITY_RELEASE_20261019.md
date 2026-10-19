@@ -3,8 +3,11 @@
 Release scope: database configuration only. JeonGabok Binh Thanh has no procurement
 policy, while the two BunsikClub stores have an enabled policy-3 purchasing flow.
 The migration aligns every active store with an active ordering-account requirement
-to BunsikClub BT, including all eight policy settings. Accounts, native role/receiver
-assignments, access scopes, stock and historical documents stay unchanged.
+to BunsikClub BT, including all eight policy settings. It also adds the reference's
+missing combined-confirmation stage only for existing active shared receivers whose
+native account, fixed-account requirement and primary store all match. It does not
+provision identities or widen native store access. Stock and historical documents
+stay unchanged. Every added assignment has separate migration audit evidence.
 
 The original workspace is based on September 17 and contains later work from many
 tasks. Release preparation starts from current `origin/main` and includes only the

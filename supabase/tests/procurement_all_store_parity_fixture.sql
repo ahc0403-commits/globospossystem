@@ -38,6 +38,20 @@ INSERT INTO public.store_fixed_account_requirements (
   (test_uuid(18101), 'other_pos', 'device_pos', 'cashier', 'POS only', 'store', true),
   (test_uuid(18102), 'paused_order', 'inventory_orderer', 'inventory_orderer', 'Inactive requirement', 'store', false);
 
+-- Reproduce the real receiver distinction: reference already has both stages,
+-- while JeonGabok has only receiving. The PR identity is separate.
+UPDATE public.users SET fixed_account_code=CASE id WHEN test_uuid(1) THEN 'bt_order' ELSE 'jgbt_order' END,
+  account_type='inventory_orderer', primary_store_id=restaurant_id WHERE id IN (test_uuid(1),test_uuid(5));
+UPDATE public.store_fixed_account_requirements SET provisioned_user_id=CASE store_id WHEN test_uuid(101) THEN test_uuid(1) ELSE test_uuid(5) END
+WHERE account_code IN ('bt_order','jgbt_order');
+INSERT INTO public.procurement_role_roster(restaurant_id,system,subject_id,person_id,account_kind,stage,display_name,valid_from,valid_until,reason,assigned_by)
+VALUES (test_uuid(101),'pos',test_uuid(1),NULL,'shared_role','receiver','BT receiver',now()-interval '1 day',now()+interval '1 year','Fixture','{}'),
+ (test_uuid(101),'pos',test_uuid(1),NULL,'shared_role','verifier','BT receiver',now()-interval '1 day',now()+interval '1 year','Fixture','{}'),
+ (test_uuid(102),'pos',test_uuid(5),NULL,'shared_role','receiver','JG receiver',now()-interval '1 day',now()+interval '1 year','Fixture','{}')
+ON CONFLICT(restaurant_id,system,subject_id,stage) DO UPDATE SET account_kind='shared_role',person_id=NULL,
+ valid_from=EXCLUDED.valid_from,valid_until=EXCLUDED.valid_until;
+DELETE FROM public.procurement_role_roster WHERE restaurant_id=test_uuid(102) AND subject_id=test_uuid(5) AND stage='verifier';
+
 CREATE TABLE public.test_procurement_parity_before AS
 SELECT
   (SELECT jsonb_agg(to_jsonb(u) ORDER BY id) FROM public.users u) AS users,

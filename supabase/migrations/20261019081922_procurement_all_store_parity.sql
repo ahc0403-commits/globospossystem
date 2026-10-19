@@ -6,6 +6,7 @@ SET LOCAL statement_timeout = '30s';
 -- Scope by active ordering-account requirements, never by tenant UUID or name.
 -- No identities, permissions, stock, historical requests or POs are rewritten.
 LOCK TABLE public.procurement_store_policies IN SHARE ROW EXCLUSIVE MODE;
+LOCK TABLE public.procurement_role_roster IN SHARE ROW EXCLUSIVE MODE;
 
 DO $$
 BEGIN
@@ -73,6 +74,51 @@ SELECT c.restaurant_id, c.restaurant_id, 'align_procurement_policy',
   t.previous_state, to_jsonb(c)
 FROM changed c JOIN targets t ON t.id = c.restaurant_id;
 
+-- Match the reference's combined receiving assignment for existing native
+-- shared receivers. This never provisions an identity or widens store scope.
+WITH eligible AS MATERIALIZED (
+  SELECT receiver.*
+  FROM public.procurement_role_roster receiver
+  JOIN public.restaurants r ON r.id = receiver.restaurant_id AND r.is_active
+  JOIN public.users u ON u.auth_id = receiver.subject_id AND u.is_active
+    AND u.role = 'inventory_orderer' AND u.restaurant_id = r.id AND u.primary_store_id = r.id
+  JOIN auth.users a ON a.id = u.auth_id
+  WHERE receiver.system = 'pos' AND receiver.stage = 'receiver'
+    AND receiver.account_kind = 'shared_role' AND receiver.person_id IS NULL
+    AND receiver.valid_from <= now() AND receiver.valid_until > now()
+    AND EXISTS (SELECT 1 FROM public.store_fixed_account_requirements q
+      WHERE q.store_id = r.id AND q.is_active AND q.role = 'inventory_orderer'
+        AND q.provisioned_user_id = u.id)
+    AND EXISTS (
+      SELECT 1 FROM public.restaurants reference
+      JOIN public.brands b ON b.id = reference.brand_id
+      JOIN public.procurement_role_roster rr ON rr.restaurant_id = reference.id
+      JOIN public.procurement_role_roster rv ON rv.restaurant_id = rr.restaurant_id
+        AND rv.system = rr.system AND rv.subject_id = rr.subject_id
+      WHERE b.code = 'bunsikclub' AND reference.short_code = 'BT' AND reference.is_active
+        AND rr.system = 'pos' AND rr.stage = 'receiver' AND rv.stage = 'verifier'
+        AND rr.account_kind = 'shared_role' AND rv.account_kind = 'shared_role'
+        AND rr.valid_from <= now() AND rr.valid_until > now()
+        AND rv.valid_from <= now() AND rv.valid_until > now()
+    )
+), assigned AS (
+  INSERT INTO public.procurement_role_roster (
+    restaurant_id, system, subject_id, person_id, account_kind, stage,
+    display_name, valid_from, valid_until, reason, assigned_by
+  )
+  SELECT restaurant_id, system, subject_id, NULL, 'shared_role', 'verifier',
+    display_name, now(), valid_until, 'Owner-requested BunsikClub receiving parity',
+    '{"system":"migration","subject_id":"20261019081922"}'::jsonb
+  FROM eligible
+  ON CONFLICT (restaurant_id, system, subject_id, stage) DO NOTHING
+  RETURNING *
+)
+INSERT INTO public.procurement_events (
+  restaurant_id, record_id, action, actor, reason, previous_state, next_state
+)
+SELECT restaurant_id, restaurant_id, 'align_procurement_receiver', assigned_by,
+  reason, NULL, to_jsonb(assigned) FROM assigned;
+
 DO $$
 BEGIN
   IF EXISTS (
@@ -94,5 +140,12 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'PROCUREMENT_PARITY_VERIFICATION_FAILED';
   END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.procurement_events e
+    LEFT JOIN public.procurement_role_roster r ON r.restaurant_id=e.restaurant_id
+      AND r.system='pos' AND r.stage='verifier' AND r.subject_id=(e.next_state->>'subject_id')::uuid
+    WHERE e.action='align_procurement_receiver' AND e.actor->>'subject_id'='20261019081922'
+      AND to_jsonb(r) IS DISTINCT FROM e.next_state
+  ) THEN RAISE EXCEPTION 'PROCUREMENT_RECEIVER_PARITY_VERIFICATION_FAILED'; END IF;
 END $$;
 COMMIT;

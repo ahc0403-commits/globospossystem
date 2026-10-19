@@ -16,6 +16,9 @@ BEGIN
   ASSERT (SELECT count(*) = 2 FROM public.procurement_events WHERE action = 'align_procurement_policy'), 'One event per changed store, never one per account';
   ASSERT EXISTS (SELECT 1 FROM public.procurement_events WHERE action = 'align_procurement_policy' AND restaurant_id = test_uuid(102) AND previous_state->>'enabled' = 'false' AND next_state->>'enabled' = 'true');
   ASSERT EXISTS (SELECT 1 FROM public.procurement_events WHERE action = 'align_procurement_policy' AND restaurant_id = test_uuid(103) AND previous_state IS NULL);
+  ASSERT (SELECT count(*)=1 FROM public.procurement_events WHERE action='align_procurement_receiver');
+  ASSERT EXISTS(SELECT 1 FROM public.procurement_role_roster WHERE restaurant_id=test_uuid(102) AND subject_id=test_uuid(5) AND stage='verifier' AND account_kind='shared_role' AND person_id IS NULL);
+  ASSERT NOT EXISTS(SELECT 1 FROM public.procurement_role_roster WHERE subject_id IN (test_uuid(2),test_uuid(3),test_uuid(6),test_uuid(7),test_uuid(9)) AND stage='verifier' AND assigned_by->>'subject_id'='20261019081922');
 
   -- Exercise the real paged API under each existing requester/SM/BM identity.
   PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
@@ -29,6 +32,7 @@ BEGIN
     ASSERT (page->>'store_id')::uuid = test_uuid(store_number);
   END LOOP;
   PERFORM set_config('request.jwt.claim.sub', test_uuid(5)::text, true);
+  ASSERT public.can_receive_and_confirm_inventory_receipt(test_uuid(102)), 'JeonGabok receiver has the same combined confirmation capability';
   request := public.procurement_command(test_uuid(102), 'create_request', NULL, 0, 'parity-create',
     jsonb_build_object('reason', 'Parity verification', 'requested_delivery_date', current_date + 1,
       'lines', jsonb_build_array(jsonb_build_object('product_id', test_uuid(302), 'quantity', 1, 'unit', 'g'))));

@@ -169,5 +169,7 @@ DO $$ BEGIN
  ASSERT (SELECT NOT enabled AND stock_freshness_hours=72 FROM public.procurement_store_policies WHERE restaurant_id=test_uuid(102));
  ASSERT NOT EXISTS(SELECT 1 FROM public.procurement_store_policies WHERE restaurant_id=test_uuid(103));
  ASSERT (SELECT count(*)=2 FROM public.procurement_events WHERE action='restore_procurement_policy');
+ ASSERT NOT EXISTS(SELECT 1 FROM public.procurement_role_roster WHERE restaurant_id=test_uuid(102) AND subject_id=test_uuid(5) AND stage='verifier');
+ ASSERT (SELECT count(*)=1 FROM public.procurement_events WHERE action='restore_procurement_receiver');
 END $$;
 SQL
