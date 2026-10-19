@@ -103,6 +103,18 @@ void main() {
     );
     await harness.close(tester);
   });
+
+  testWidgets('web setup can still queue tests for a separate native station', (
+    tester,
+  ) async {
+    final harness = _Harness(supported: false);
+    await harness.open(tester);
+    expect(harness.driver.startedStores, isEmpty);
+    expect(harness.runButton(tester).onPressed, isNotNull);
+    await harness.run(tester);
+    expect(harness.backend.enqueuedStores, ['store-b']);
+    await harness.close(tester);
+  });
 }
 
 class _Harness {
@@ -110,10 +122,11 @@ class _Harness {
     String? activeStore = 'store-a',
     bool enabled = true,
     bool failStart = false,
+    bool supported = true,
     List<String> accessibleStores = const ['store-a', 'store-b', 'store-c'],
   }) {
     auth = _Auth(activeStore, accessibleStores);
-    driver = _Driver(failStart: failStart);
+    driver = _Driver(failStart: failStart, supported: supported);
     container = ProviderContainer(
       overrides: [
         authProvider.overrideWith((_) => auth),
@@ -206,11 +219,12 @@ class _Preferences implements PrintAgentPreferenceStore {
 }
 
 class _Driver implements PrintAgentDriver {
-  _Driver({required this.failStart});
+  _Driver({required this.failStart, required this.supported});
   final bool failStart;
+  final bool supported;
   final startedStores = <String>[];
   @override
-  bool get isSupported => true;
+  bool get isSupported => supported;
   @override
   Future<void> startPollingSafely(String storeId) async {
     if (failStart) throw StateError('start failed');

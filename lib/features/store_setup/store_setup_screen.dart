@@ -453,18 +453,23 @@ class _TestsStep extends ConsumerWidget {
     final agent = ref.watch(printAgentCoordinatorProvider);
     final runningForStore =
         agent.isRunning && agent.activeStoreId == state.draft.storeId;
+    // Web setup can queue tests for a separate Windows station. On a supported
+    // native station, require this device's agent to consume the selected store.
+    final localAgentRequired = ref
+        .read(printAgentCoordinatorProvider.notifier)
+        .isSupported;
+    final agentReady = !localAgentRequired || runningForStore;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!runningForStore)
+        if (!agentReady)
           Text(
             '${context.l10n.storeSetupStepAgent}: '
             '${context.l10n.storeSetupPrintAgentStopped}',
           ),
         FilledButton.icon(
           key: const Key('store_setup_run_five_tests'),
-          onPressed:
-              state.applyResult == null || state.isBusy || !runningForStore
+          onPressed: state.applyResult == null || state.isBusy || !agentReady
               ? null
               : () => unawaited(onRun()),
           icon: const Icon(Icons.print_outlined),
@@ -473,7 +478,7 @@ class _TestsStep extends ConsumerWidget {
         const SizedBox(height: 12),
         PrintTestChecklist(
           jobs: state.testJobs,
-          enabled: runningForStore && !state.isBusy,
+          enabled: agentReady && !state.isBusy,
           onConfirm: onConfirm,
           onRetry: (label) => unawaited(onRetry(label)),
         ),
