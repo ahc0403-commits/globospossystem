@@ -1,7 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:globos_pos_system/core/hardware/print_agent_coordinator_provider.dart';
+import 'package:globos_pos_system/core/hardware/print_station_mode.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -115,6 +121,7 @@ Future<void> _pump(
   PosAuthState authState = _storeAuth,
   List<Override> overrides = const [],
   Size physicalSize = const Size(1280, 900),
+  Locale locale = const Locale('vi'),
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = physicalSize;
@@ -133,7 +140,7 @@ Future<void> _pump(
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.build(),
-        locale: const Locale('vi'),
+        locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -157,7 +164,9 @@ void _expectButtonDisabled(WidgetTester tester, Finder finder) {
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({
+      'print_station_mode_v1': 'printer',
+    });
     await Supabase.initialize(
       url: 'http://localhost:54321',
       anonKey: 'test-anon-key',
@@ -167,6 +176,135 @@ void main() {
   tearDown(() {
     FocusManager.instance.primaryFocus?.unfocus();
   });
+
+  for (final language in ['ko', 'vi', 'en']) {
+    testWidgets(
+      'Print station mode selection limits setup to cashier ($language)',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        SharedPreferences.setMockInitialValues({});
+        final font = FontLoader('Pretendard')
+          ..addFont(rootBundle.load('assets/fonts/PretendardVariable.ttf'));
+        await font.load();
+        await _pump(
+          tester,
+          locale: Locale(language),
+          physicalSize: const Size(1280, 1200),
+          child: const RepaintBoundary(
+            key: Key('station_capture'),
+            child: PrintStationScreen(isSupportedOverride: true),
+          ),
+          overrides: [
+            serviceConnectivityProvider.overrideWith(
+              (_) => Stream.value(
+                const ServiceConnectivityState(
+                  kind: ServiceConnectivityKind.online,
+                ),
+              ),
+            ),
+            printerDestinationsProvider.overrideWith(
+              (ref, storeId) => _PrinterDestinationsNotifier(
+                PrinterDestinationsState(
+                  destinations: [
+                    for (final purpose in [
+                      'kitchen',
+                      'floor',
+                      'tray',
+                      'receipt',
+                    ])
+                      PrinterDestinationConfig(
+                        id: purpose,
+                        storeId: _storeId,
+                        name: 'Printer $purpose',
+                        ip: '192.168.1.50',
+                        port: 9100,
+                        purpose: purpose,
+                        isActive: true,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            printStationJobsProvider.overrideWith(
+              (ref, storeId) async => const <FailedPrintJob>[],
+            ),
+            failedPrintJobsProvider.overrideWith(
+              (ref, storeId) async => const <FailedPrintJob>[],
+            ),
+          ],
+        );
+        await tester.pumpAndSettle();
+        _expectButtonDisabled(
+          tester,
+          find.byKey(const Key('print_station_start')),
+        );
+        await tester.tap(find.byKey(const Key('print_station_mode_paperless')));
+        await tester.pumpAndSettle();
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(PrintStationScreen)),
+        );
+        expect(
+          container.read(printAgentCoordinatorProvider).mode,
+          PrintStationMode.paperless,
+        );
+        expect(find.text('Printer receipt'), findsOneWidget);
+        expect(find.text('Printer kitchen'), findsNothing);
+        expect(find.text('Printer floor'), findsNothing);
+        expect(find.text('Printer tray'), findsNothing);
+        if (Platform.environment['CAPTURE_PRINT_STATION_MODE_UI'] == '1') {
+          await tester.runAsync(() async {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(const Key('station_capture')),
+            );
+            final picture = await boundary.toImage();
+            final bytes = await picture.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final dir = Directory('outputs/print-station-paperless-20261019')
+              ..createSync(recursive: true);
+            File(
+              '${dir.path}/paperless_$language.png',
+            ).writeAsBytesSync(bytes!.buffer.asUint8List());
+            picture.dispose();
+          });
+        }
+        await tester.ensureVisible(
+          find.byKey(const Key('print_station_destination_add')),
+        );
+        await tester.tap(
+          find.byKey(const Key('print_station_destination_add')),
+        );
+        await tester.pumpAndSettle();
+        final purpose = tester.widget<DropdownButton<String>>(
+          find.descendant(
+            of: find.byKey(const Key('print_station_destination_purpose')),
+            matching: find.byType(DropdownButton<String>),
+          ),
+        );
+        expect(purpose.items!.map((item) => item.value), ['receipt']);
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(PrintStationScreen)),
+        )!;
+        await tester.tap(find.text(l10n.cancel).last);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const Key('print_station_mode_printer')),
+        );
+        await tester.tap(find.byKey(const Key('print_station_mode_printer')));
+        await tester.pumpAndSettle();
+        for (final purpose in ['kitchen', 'floor', 'tray', 'receipt']) {
+          expect(find.text('Printer $purpose'), findsOneWidget);
+        }
+        tester.view.physicalSize = const Size(390, 844);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        SharedPreferences.setMockInitialValues({
+          'print_station_mode_v1': 'printer',
+        });
+      },
+    );
+  }
 
   testWidgets('Login executes explicit error and disabled loading states', (
     tester,

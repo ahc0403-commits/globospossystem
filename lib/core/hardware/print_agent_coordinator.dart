@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'print_job_agent_service.dart';
+import 'print_station_mode.dart';
 import 'printer_service.dart';
 import 'printer_diagnostics.dart';
 
@@ -19,6 +20,8 @@ enum PrintAgentStatus {
 class PrintAgentState {
   const PrintAgentState({
     this.preferenceLoaded = false,
+    this.mode,
+    this.isChangingMode = false,
     this.enabled = false,
     this.status = PrintAgentStatus.stopped,
     this.activeStoreId,
@@ -28,6 +31,8 @@ class PrintAgentState {
   });
 
   final bool preferenceLoaded;
+  final PrintStationMode? mode;
+  final bool isChangingMode;
   final bool enabled;
   final PrintAgentStatus status;
   final String? activeStoreId;
@@ -39,6 +44,8 @@ class PrintAgentState {
 
   PrintAgentState copyWith({
     bool? preferenceLoaded,
+    PrintStationMode? mode,
+    bool? isChangingMode,
     bool? enabled,
     PrintAgentStatus? status,
     String? activeStoreId,
@@ -50,6 +57,8 @@ class PrintAgentState {
   }) {
     return PrintAgentState(
       preferenceLoaded: preferenceLoaded ?? this.preferenceLoaded,
+      mode: mode ?? this.mode,
+      isChangingMode: isChangingMode ?? this.isChangingMode,
       enabled: enabled ?? this.enabled,
       status: status ?? this.status,
       activeStoreId: clearStore ? null : (activeStoreId ?? this.activeStoreId),
@@ -61,6 +70,8 @@ class PrintAgentState {
 }
 
 abstract class PrintAgentPreferenceStore {
+  Future<PrintStationMode?> readMode();
+  Future<void> writeMode(PrintStationMode mode);
   Future<bool> readEnabled();
   Future<void> writeEnabled(bool enabled);
 }
@@ -68,6 +79,21 @@ abstract class PrintAgentPreferenceStore {
 class SharedPreferencesPrintAgentPreferenceStore
     implements PrintAgentPreferenceStore {
   static const preferenceKey = 'print_agent_enabled_v1';
+  static const modeKey = 'print_station_mode_v1';
+
+  @override
+  Future<PrintStationMode?> readMode() async {
+    final preferences = await SharedPreferences.getInstance();
+    return PrintStationMode.fromValue(preferences.getString(modeKey));
+  }
+
+  @override
+  Future<void> writeMode(PrintStationMode mode) async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setString(modeKey, mode.name)) {
+      throw StateError('PRINT_STATION_MODE_SAVE_FAILED');
+    }
+  }
 
   @override
   Future<bool> readEnabled() async {
@@ -114,7 +140,13 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
   Future<void> initialize() async {
     try {
       final enabled = await _preferenceStore.readEnabled();
-      state = state.copyWith(preferenceLoaded: true, enabled: enabled);
+      final mode = await _preferenceStore.readMode();
+      if (!mounted) return;
+      state = state.copyWith(
+        preferenceLoaded: true,
+        enabled: enabled,
+        mode: mode,
+      );
       await _scheduleReconcile();
     } catch (_) {
       state = state.copyWith(
@@ -134,6 +166,33 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
       clearError: true,
     );
     await _scheduleReconcile();
+  }
+
+  Future<bool> setMode(PrintStationMode mode) async {
+    if (!state.preferenceLoaded || state.isChangingMode) return false;
+    state = state.copyWith(
+      isChangingMode: true,
+      status: PrintAgentStatus.stopped,
+      clearError: true,
+    );
+    try {
+      // Stop and drain the old batch before changing its routing policy.
+      await _agent.stopSafely();
+      await _preferenceStore.writeMode(mode);
+      if (!mounted) return false;
+      state = state.copyWith(mode: mode, status: PrintAgentStatus.stopped);
+      return true;
+    } catch (_) {
+      if (mounted) {
+        state = state.copyWith(lastError: 'PRINT_STATION_MODE_SAVE_FAILED');
+      }
+      return false;
+    } finally {
+      if (mounted) {
+        state = state.copyWith(isChangingMode: false);
+        await _scheduleReconcile();
+      }
+    }
   }
 
   Future<void> syncSession({
@@ -163,7 +222,7 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
   }
 
   Future<void> _reconcile() async {
-    if (!state.preferenceLoaded) return;
+    if (!state.preferenceLoaded || state.isChangingMode) return;
     if (!_agent.isSupported) {
       await _agent.stopSafely();
       state = state.copyWith(
@@ -175,6 +234,7 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
 
     final canStart =
         state.enabled &&
+        state.mode != null &&
         _authenticated &&
         roleCanRun(_role) &&
         _storeId != null &&
@@ -198,7 +258,10 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
     );
     try {
       await _agent.stopSafely();
-      await _agent.startPollingSafely(_storeId!);
+      await _agent.startPollingSafely(
+        _storeId!,
+        receiptOnly: state.mode == PrintStationMode.paperless,
+      );
       state = state.copyWith(
         status: PrintAgentStatus.running,
         activeStoreId: _storeId,
@@ -216,7 +279,9 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
 
   Future<List<PrintJobAgentResult>> processOnce() async {
     final storeId = state.activeStoreId;
-    if (storeId == null || !state.isRunning) return const [];
+    if (storeId == null || !state.isRunning || state.isChangingMode) {
+      return const [];
+    }
     try {
       final results = await _agent.processOnce(storeId);
       final successful = results

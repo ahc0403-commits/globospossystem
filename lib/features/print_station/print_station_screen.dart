@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/hardware/print_agent_coordinator.dart';
+import '../../core/hardware/print_station_mode.dart';
 import '../../core/hardware/print_agent_coordinator_provider.dart';
 import '../../core/hardware/network_capability_service.dart';
 import '../../core/hardware/printer_service.dart';
@@ -200,7 +201,10 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
           ? 'G'
           : displayFloorLabel(destination.floorLabel ?? '1F'),
     );
-    var purpose = destination?.purpose ?? 'kitchen';
+    final receiptOnly =
+        ref.read(printAgentCoordinatorProvider).mode ==
+        PrintStationMode.paperless;
+    var purpose = receiptOnly ? 'receipt' : destination?.purpose ?? 'kitchen';
 
     await showDialog<void>(
       context: context,
@@ -288,18 +292,21 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                       labelText: l10n.settingsPrintDestinationPurpose,
                     ),
                     items: [
-                      DropdownMenuItem(
-                        value: 'kitchen',
-                        child: Text(l10n.settingsPrintDestinationKitchen),
-                      ),
-                      DropdownMenuItem(
-                        value: 'floor',
-                        child: Text(l10n.settingsPrintDestinationFloor),
-                      ),
-                      DropdownMenuItem(
-                        value: 'tray',
-                        child: Text(l10n.settingsPrintDestinationTray),
-                      ),
+                      if (!receiptOnly)
+                        DropdownMenuItem(
+                          value: 'kitchen',
+                          child: Text(l10n.settingsPrintDestinationKitchen),
+                        ),
+                      if (!receiptOnly)
+                        DropdownMenuItem(
+                          value: 'floor',
+                          child: Text(l10n.settingsPrintDestinationFloor),
+                        ),
+                      if (!receiptOnly)
+                        DropdownMenuItem(
+                          value: 'tray',
+                          child: Text(l10n.settingsPrintDestinationTray),
+                        ),
                       DropdownMenuItem(
                         value: 'receipt',
                         child: Text(l10n.settingsPrintDestinationReceipt),
@@ -513,19 +520,83 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
 
     final destinationState = ref.watch(printerDestinationsProvider(storeId));
     final printJobs = ref.watch(printStationJobsProvider(storeId));
+    final mode = agentState.mode;
+    final destinations = destinationState.destinations
+        .where((d) => mode?.allowsPurpose(d.purpose) ?? false)
+        .toList();
     final failedJobs = ref.watch(failedPrintJobsProvider(storeId));
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _PrintStationSection(
+            key: const Key('print_station_mode'),
+            title: l10n.printStationModeTitle,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    for (final option in PrintStationMode.values)
+                      ChoiceChip(
+                        key: ValueKey('print_station_mode_${option.name}'),
+                        label: Text(
+                          option == PrintStationMode.paperless
+                              ? l10n.printStationModePaperless
+                              : l10n.printStationModePrinter,
+                        ),
+                        selected: mode == option,
+                        onSelected:
+                            !agentState.preferenceLoaded ||
+                                agentState.isChangingMode ||
+                                _testingDestinationIds.isNotEmpty ||
+                                destinationState.isSaving
+                            ? null
+                            : (_) async {
+                                final saved = await coordinator.setMode(option);
+                                if (!mounted) return;
+                                if (!saved) {
+                                  showErrorToast(
+                                    context,
+                                    l10n.printStationModeSaveFailed,
+                                  );
+                                }
+                              },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  mode == null
+                      ? l10n.printStationModeChoose
+                      : mode == PrintStationMode.paperless
+                      ? l10n.printStationModePaperlessDetail
+                      : l10n.printStationModePrinterDetail,
+                  style: AppFonts.system(color: AppColors.textSecondary),
+                ),
+                if (agentState.lastError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.printStationModeStartFailed,
+                    style: AppFonts.system(color: PosColors.warning),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
           ToastWorkSurface(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  l10n.printStationSubtitle,
+                  mode == PrintStationMode.paperless
+                      ? l10n.printStationCashierPrinter
+                      : l10n.printStationSubtitle,
                   style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 13,
@@ -539,7 +610,9 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                   children: [
                     FilledButton.icon(
                       key: const Key('print_station_start'),
-                      onPressed: _togglePolling,
+                      onPressed: mode == null || agentState.isChangingMode
+                          ? null
+                          : _togglePolling,
                       icon: Icon(
                         agentState.enabled
                             ? Icons.stop_circle_outlined
@@ -554,7 +627,10 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                     ),
                     OutlinedButton.icon(
                       key: const Key('print_station_process_once'),
-                      onPressed: _isProcessingOnce
+                      onPressed:
+                          _isProcessingOnce ||
+                              !agentState.isRunning ||
+                              agentState.isChangingMode
                           ? null
                           : () => unawaited(_processOnce(storeId)),
                       icon: _isProcessingOnce
@@ -602,7 +678,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                     ),
                     ToastMetric(
                       label: l10n.printStationDestinations,
-                      value: '${destinationState.destinations.length}',
+                      value: '${destinations.length}',
                       tone: PosColors.info,
                     ),
                     ToastMetric(
@@ -646,6 +722,14 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                 icon: Icons.warning_amber_outlined,
               ),
               data: (jobs) {
+                jobs = jobs
+                    .where(
+                      (job) =>
+                          mode == PrintStationMode.printer ||
+                          (mode == PrintStationMode.paperless &&
+                              job.copyType == 'receipt'),
+                    )
+                    .toList();
                 if (jobs.isEmpty) {
                   return PosExceptionAlert(
                     label: l10n.kitchenNoFailedPrintJobs,
@@ -662,7 +746,9 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
           ),
           const SizedBox(height: 14),
           _PrintStationSection(
-            title: l10n.printStationDestinations,
+            title: mode == PrintStationMode.paperless
+                ? l10n.printStationCashierPrinter
+                : l10n.printStationDestinations,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -670,7 +756,10 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                   alignment: Alignment.centerRight,
                   child: OutlinedButton.icon(
                     key: const Key('print_station_destination_add'),
-                    onPressed: destinationState.isSaving
+                    onPressed:
+                        destinationState.isSaving ||
+                            mode == null ||
+                            agentState.isChangingMode
                         ? null
                         : () => _showPrinterDestinationDialog(storeId: storeId),
                     icon: const Icon(Icons.add, size: 18),
@@ -700,6 +789,14 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                 icon: Icons.warning_amber_outlined,
               ),
               data: (jobs) {
+                jobs = jobs
+                    .where(
+                      (job) =>
+                          mode == PrintStationMode.printer ||
+                          (mode == PrintStationMode.paperless &&
+                              job.copyType == 'receipt'),
+                    )
+                    .toList();
                 if (jobs.isEmpty) {
                   return PosExceptionAlert(
                     label: l10n.kitchenNoFailedPrintJobs,
@@ -745,10 +842,16 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
       );
     }
 
-    if (state.destinations.isEmpty) {
+    final mode = ref.watch(printAgentCoordinatorProvider).mode;
+    final destinations = state.destinations
+        .where((d) => mode?.allowsPurpose(d.purpose) ?? false)
+        .toList();
+    if (destinations.isEmpty) {
       return PosExceptionAlert(
         label: l10n.settingsPrintRoutingEmptyTitle,
-        detail: l10n.settingsPrintRoutingEmptyDetail,
+        detail: mode == PrintStationMode.paperless
+            ? l10n.printStationModeCashierMissing
+            : l10n.settingsPrintRoutingEmptyDetail,
         color: PosColors.info,
         icon: Icons.print_outlined,
       );
@@ -757,7 +860,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     return Column(
       key: const Key('print_station_destination_test'),
       children: [
-        for (final destination in state.destinations)
+        for (final destination in destinations)
           _DestinationTile(
             destination: destination,
             isSaving: state.isSaving,
