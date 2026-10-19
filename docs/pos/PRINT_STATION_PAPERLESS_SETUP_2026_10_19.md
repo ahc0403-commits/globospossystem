@@ -9,6 +9,10 @@ Each physical printer can use Windows USB, wired LAN or Wi-Fi. For USB, enter th
 
 Mode selection follows `restaurant_settings.fulfillment_mode`. A change of mode uses the existing Super Admin RPC, audit log and KDS session/draining rules. Other authorized admins may configure the current mode. Existing printer routes and print history are preserved when switching to paperless.
 
+Opening Store Setup selects its authorized active store for the app-root print agent, including when entering directly from the Super Admin store list. On a native station, queue tests and retries require that device's agent to be running for the selected store. Web setup can still queue tests for a separate native station. The advanced destination test sends directly to the printer; the opening checklist queues jobs so it also verifies the operational agent path. Enable the agent on the connected Windows PC before running the checklist.
+
+For a Super Admin whose login claims omit the target store, setup resolves that single active restaurant through server RLS before selecting it locally. This is an explicit setup-only path; ordinary selection and other roles retain their existing scope rules. The lookup is limited to one requested store, shared while selection is in progress, and skipped after the store is resolved. Account roles and server claims are unchanged. Missing/closed stores, denied/offline reads and session/role changes during the read fail closed.
+
 ## Release dependency
 
 The Windows artifact does not apply the server migration. Before installing it for operational use, the release must include `supabase/migrations/20261019160000_store_opening_printer_modes.sql` through `scripts/deploy_pos_production.sh` and the exact-main GitHub release gate. The old setup RPCs remain available to installed clients.
