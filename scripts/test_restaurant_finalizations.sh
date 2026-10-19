@@ -5,7 +5,7 @@ SALES_CONTAINER="pos-finalization-test-$$"
 trap 'docker rm -f "$SALES_CONTAINER" >/dev/null 2>&1 || true' EXIT
 docker run --rm -d --name "$SALES_CONTAINER" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine >/dev/null
 for attempt in {1..30}; do
- if docker exec "$SALES_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then break; fi
+ if docker exec "$SALES_CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then break; fi
  sleep 1
 done
 SALES_PSQL=(docker exec -i "$SALES_CONTAINER" psql -X -U postgres -v ON_ERROR_STOP=1)
