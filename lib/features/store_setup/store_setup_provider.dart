@@ -481,23 +481,32 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
       clearError: true,
     );
     try {
-      final jobs = <String, StoreSetupTestJob>{};
+      final destinationsById = <String, LogicalDestinationDraft>{};
       for (final destination in state.draft.destinations) {
         final destinationId = _destinationId(destination);
         if (destinationId == null) {
           throw StateError('STORE_SETUP_DESTINATION_NOT_APPLIED');
         }
-        final job = await _backend.enqueueTest(
-          storeId: state.draft.storeId,
-          destination: destination,
-          destinationId: destinationId,
-        );
+        destinationsById[destinationId] = destination;
+      }
+      final returnedJobs = await _backend.enqueueTests(
+        storeId: state.draft.storeId,
+        destinationsById: destinationsById,
+      );
+      final jobs = <String, StoreSetupTestJob>{};
+      for (final job in returnedJobs) {
         if (job.jobId.isEmpty) {
           throw StateError('STORE_SETUP_TEST_JOB_ID_MISSING');
         }
-        jobs[destination.label] = job;
-        state = state.copyWith(testJobs: Map.unmodifiable(jobs));
+        jobs[job.label] = job;
       }
+      if (jobs.length != destinationsById.length ||
+          !state.draft.destinations.every(
+            (destination) => jobs.containsKey(destination.label),
+          )) {
+        throw StateError('STORE_SETUP_TEST_JOB_ID_MISSING');
+      }
+      state = state.copyWith(testJobs: Map.unmodifiable(jobs));
       _pollDeadline = DateTime.now().add(_pollingTimeout);
       await pollTestJobs();
       _pollTimer?.cancel();

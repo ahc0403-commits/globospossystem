@@ -743,6 +743,72 @@ BEGIN
 END;
 $$;
 
+-- A complete setup test is one bounded, idempotent queue transaction.
+CREATE UNIQUE INDEX IF NOT EXISTS print_jobs_setup_request_destination
+  ON public.print_jobs(restaurant_id, (payload->>'setup_request_id'), destination_id)
+  WHERE payload->>'setup_request_id' IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.admin_enqueue_store_opening_tests(
+  p_store_id uuid, p_destination_ids uuid[], p_request_id uuid
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, auth, pg_catalog
+AS $$
+DECLARE
+  v_count int;
+  v_jobs jsonb;
+BEGIN
+  PERFORM public.require_admin_actor_for_restaurant(p_store_id);
+  IF p_request_id IS NULL OR COALESCE(cardinality(p_destination_ids), 0) NOT BETWEEN 1 AND 20
+    OR EXISTS(SELECT 1 FROM unnest(p_destination_ids) id WHERE id IS NULL)
+    OR (SELECT count(DISTINCT id) FROM unnest(p_destination_ids) id) <> cardinality(p_destination_ids) THEN
+    RAISE EXCEPTION 'STORE_SETUP_CONFIG_INVALID';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('setup-tests:' || p_store_id::text || p_request_id::text, 0));
+  PERFORM 1 FROM public.printer_destinations WHERE restaurant_id = p_store_id
+    AND id = ANY(p_destination_ids) AND is_active ORDER BY id FOR UPDATE;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count <> cardinality(p_destination_ids) THEN
+    RAISE EXCEPTION 'STORE_SETUP_DESTINATION_NOT_APPLIED';
+  END IF;
+  IF EXISTS(SELECT 1 FROM public.print_jobs WHERE restaurant_id = p_store_id
+    AND payload->>'setup_request_id' = p_request_id::text AND NOT destination_id = ANY(p_destination_ids)) THEN
+    RAISE EXCEPTION 'STORE_SETUP_CONFIG_INVALID';
+  END IF;
+  WITH inserted AS (
+    INSERT INTO public.print_jobs(restaurant_id, order_id, copy_type, batch_no,
+      destination_id, payload, status, last_error)
+    SELECT p_store_id, NULL, d.purpose, 1, d.id,
+      jsonb_build_object('ticket', d.purpose, 'floor_label', COALESCE(NULLIF(d.floor_label,''),'TEST'),
+        'table_number', d.name, 'ticket_code', 'TEST', 'batch_no', 1,
+        'printed_reason', 'test_print', 'setup_request_id', p_request_id,
+        'at', to_char(now() AT TIME ZONE 'Asia/Ho_Chi_Minh','YYYY-MM-DD"T"HH24:MI:SS"+07:00"'),
+        'items', jsonb_build_array(jsonb_build_object('label','Printer route test','qty',1,'notes',NULL,'supplemental',false)),
+        'order_notes','Print destination test'), 'pending', NULL
+    FROM public.printer_destinations d WHERE d.restaurant_id = p_store_id
+      AND d.id = ANY(p_destination_ids) AND d.is_active
+    ON CONFLICT (restaurant_id, (payload->>'setup_request_id'), destination_id)
+      WHERE payload->>'setup_request_id' IS NOT NULL DO NOTHING
+    RETURNING id, destination_id, status, last_error
+  ), audited AS (
+    INSERT INTO public.audit_logs(actor_id, action, entity_type, entity_id, details)
+    SELECT auth.uid(), 'admin_enqueue_store_opening_tests', 'print_jobs', id,
+      jsonb_build_object('store_id',p_store_id,'destination_id',destination_id,'request_id',p_request_id)
+    FROM inserted
+  ), all_jobs AS (
+    SELECT * FROM inserted
+    UNION ALL
+    SELECT id, destination_id, status, last_error FROM public.print_jobs
+    WHERE restaurant_id = p_store_id AND payload->>'setup_request_id' = p_request_id::text
+      AND destination_id = ANY(p_destination_ids)
+  )
+  SELECT COALESCE(jsonb_agg(to_jsonb(all_jobs) ORDER BY destination_id),'[]') INTO v_jobs FROM all_jobs;
+  RETURN v_jobs;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.admin_enqueue_store_opening_tests(uuid,uuid[],uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_enqueue_store_opening_tests(uuid,uuid[],uuid) TO authenticated, service_role;
+
 REVOKE ALL ON FUNCTION public.admin_validate_store_opening_config_v2(uuid,jsonb,jsonb,text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.admin_apply_store_opening_config_v2(uuid,jsonb,jsonb,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_validate_store_opening_config_v2(uuid,jsonb,jsonb,text) TO authenticated, service_role;

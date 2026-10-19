@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../main.dart';
 import 'store_setup_models.dart';
@@ -45,6 +46,11 @@ abstract class StoreSetupBackend {
     required String storeId,
     required LogicalDestinationDraft destination,
     required String destinationId,
+  });
+
+  Future<List<StoreSetupTestJob>> enqueueTests({
+    required String storeId,
+    required Map<String, LogicalDestinationDraft> destinationsById,
   });
 
   Future<Map<String, Map<String, dynamic>>> fetchTestJobs(
@@ -198,6 +204,37 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
       throw Exception(message ?? 'FIXED_ACCOUNT_PROVISION_FAILED');
     }
     return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  @override
+  Future<List<StoreSetupTestJob>> enqueueTests({
+    required String storeId,
+    required Map<String, LogicalDestinationDraft> destinationsById,
+  }) async {
+    final response = await _client.rpc(
+      'admin_enqueue_store_opening_tests',
+      params: {
+        'p_store_id': storeId,
+        'p_destination_ids': destinationsById.keys.toList(growable: false),
+        'p_request_id': const Uuid().v4(),
+      },
+    );
+    return (response as List)
+        .whereType<Map>()
+        .map((row) {
+          final id = row['destination_id']?.toString() ?? '';
+          final destination = destinationsById[id];
+          if (destination == null)
+            throw StateError('STORE_SETUP_DESTINATION_NOT_APPLIED');
+          return StoreSetupTestJob(
+            label: destination.label,
+            destinationId: id,
+            jobId: row['id']?.toString() ?? '',
+            status: row['status']?.toString() ?? 'pending',
+            error: row['last_error']?.toString(),
+          );
+        })
+        .toList(growable: false);
   }
 
   @override

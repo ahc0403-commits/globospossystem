@@ -264,6 +264,22 @@ class _FakeStoreSetupBackend implements StoreSetupBackend {
   }
 
   @override
+  Future<List<StoreSetupTestJob>> enqueueTests({
+    required String storeId,
+    required Map<String, LogicalDestinationDraft> destinationsById,
+  }) async {
+    enqueueCalls += destinationsById.length;
+    return [
+      for (final entry in destinationsById.entries)
+        StoreSetupTestJob(
+          label: entry.value.label,
+          destinationId: entry.key,
+          jobId: 'job-${entry.value.label}',
+        ),
+    ];
+  }
+
+  @override
   Future<StoreSetupTestJob> enqueueTest({
     required String storeId,
     required LogicalDestinationDraft destination,

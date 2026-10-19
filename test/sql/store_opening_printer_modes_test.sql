@@ -90,6 +90,18 @@ SELECT setup_assert(jsonb_array_length(admin_get_store_opening_readiness('200000
 SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000002',false);
 SELECT setup_assert((admin_validate_store_opening_config_v2('20000000-0000-4000-8000-000000000001',tables,receipt,'paperless')->>'valid')::boolean,'store admin can configure current operation mode') FROM setup_inputs;
 SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',false);
+DO $$ DECLARE ids uuid[]; request_id uuid := gen_random_uuid(); first_jobs jsonb; again_jobs jsonb; count_before int; BEGIN
+ SELECT array_agg(id ORDER BY id) INTO ids FROM printer_destinations WHERE restaurant_id='20000000-0000-4000-8000-000000000001' AND is_active;
+ first_jobs := admin_enqueue_store_opening_tests('20000000-0000-4000-8000-000000000001',ids,request_id);
+ again_jobs := admin_enqueue_store_opening_tests('20000000-0000-4000-8000-000000000001',ids,request_id);
+ PERFORM setup_assert(jsonb_array_length(first_jobs)=5 AND first_jobs=again_jobs,'batch test enqueue is idempotent and returns every job ID');
+ SELECT count(*) INTO count_before FROM print_jobs;
+ BEGIN
+  PERFORM admin_enqueue_store_opening_tests('20000000-0000-4000-8000-000000000001',ids || gen_random_uuid(),gen_random_uuid());
+  RAISE EXCEPTION 'invalid batch destination accepted';
+ EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'STORE_SETUP_DESTINATION_NOT_APPLIED' THEN RAISE; END IF; END;
+ PERFORM setup_assert((SELECT count(*)=count_before FROM print_jobs),'invalid destination rolls back entire batch enqueue');
+END $$;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 SELECT pg_stat_statements_reset();
 \timing on

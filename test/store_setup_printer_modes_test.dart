@@ -165,6 +165,47 @@ void main() {
     },
   );
 
+  test(
+    'five test destinations enqueue through one RPC and return five IDs',
+    () async {
+      var calls = 0;
+      final client = SupabaseClient(
+        'https://setup.invalid',
+        'fixture-anon',
+        httpClient: MockClient((request) async {
+          calls++;
+          expect(
+            request.url.path,
+            '/rest/v1/rpc/admin_enqueue_store_opening_tests',
+          );
+          final payload = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(payload['p_destination_ids'], hasLength(5));
+          expect(payload['p_request_id'], isNotEmpty);
+          return http.Response(
+            jsonEncode([
+              for (final id in payload['p_destination_ids'] as List)
+                {'id': 'job-$id', 'destination_id': id, 'status': 'pending'},
+            ]),
+            200,
+            request: request,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+      addTearDown(client.dispose);
+      final routes = StoreOpeningTemplate.deriveDestinations(
+        StoreOpeningTemplate.defaultPrinters(),
+      );
+      final jobs = await SupabaseStoreSetupBackend(client).enqueueTests(
+        storeId: 'store',
+        destinationsById: {for (final route in routes) route.label: route},
+      );
+      expect(calls, 1);
+      expect(jobs.map((job) => job.label), routes.map((route) => route.label));
+      expect(jobs.map((job) => job.jobId).toSet(), hasLength(5));
+    },
+  );
+
   for (final width in [390.0, 1200.0]) {
     testWidgets('paperless/physical USB setup works at width $width', (
       tester,
