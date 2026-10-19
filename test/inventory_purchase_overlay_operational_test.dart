@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
+import 'package:globos_pos_system/features/admin/providers/admin_scope_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/inventory/ingredient_excel_import.dart';
 import 'package:globos_pos_system/features/inventory/inventory_provider.dart';
@@ -463,6 +464,10 @@ void main() {
     await tester.tap(receiptAction);
     await tester.pumpAndSettle();
     expect(find.text('Receipt workflow purchase-order-1'), findsOneWidget);
+    expect(
+      router.routeInformationProvider.value.uri.queryParameters['storeId'],
+      _storeId,
+    );
     router.go('/inventory-purchase');
     await tester.pumpAndSettle();
 
@@ -557,6 +562,60 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'admin inventory navigation carries the selected store into purchasing',
+    (tester) async {
+      tester.view.physicalSize = const Size(1600, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final router = GoRouter(
+        initialLocation: '/inventory-purchase',
+        routes: [
+          GoRoute(
+            path: '/inventory-purchase',
+            builder: (_, _) =>
+                const Scaffold(body: InventoryPurchaseScreen(autoLoad: false)),
+          ),
+          GoRoute(
+            path: '/inventory-orders',
+            builder: (_, state) => Scaffold(
+              body: Text(
+                'Selected store ${state.uri.queryParameters['storeId']}',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => _AuthNotifier()),
+            adminScopedStoreIdProvider.overrideWithValue('selected-store'),
+          ],
+          child: MaterialApp.router(
+            routerConfig: router,
+            locale: const Locale('en'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final link = find.byKey(const Key('inventory_order_workflow_link'));
+      await tester.ensureVisible(link);
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      expect(find.text('Selected store selected-store'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<void> _selectSection(WidgetTester tester, int index) async {

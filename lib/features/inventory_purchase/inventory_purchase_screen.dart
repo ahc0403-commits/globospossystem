@@ -25,6 +25,7 @@ import '../inventory/inventory_provider.dart';
 import '../inventory/recipe_excel_import.dart';
 import 'inventory_purchase_document_service.dart';
 import 'inventory_safety_stock.dart';
+import 'inventory_workflow_route.dart';
 import 'stock_audit_excel_import.dart';
 import 'stock_audit_dated_dialogs.dart';
 
@@ -445,7 +446,11 @@ class _InventoryPurchaseScreenState
           icon: Icons.approval_outlined,
         ),
         selected: false,
-        onTap: () => context.go('/inventory-orders'),
+        onTap: () => context.go(
+          inventoryWorkflowLocation(
+            storeId: ref.read(adminScopedStoreIdProvider),
+          ),
+        ),
       ),
     ];
 
@@ -1355,7 +1360,10 @@ class _InventoryPurchaseScreenState
                       : PosActionDisabledReason.upstreamPending,
                   onPressed: canConfirmReceipt && detail.selectedOrderId != null
                       ? () => context.go(
-                          '/inventory-orders/${detail.selectedOrderId}',
+                          inventoryWorkflowLocation(
+                            storeId: storeId,
+                            orderId: detail.selectedOrderId,
+                          ),
                         )
                       : null,
                   compact: true,

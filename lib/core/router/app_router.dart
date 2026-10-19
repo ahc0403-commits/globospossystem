@@ -322,12 +322,15 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
       GoRoute(
         path: '/inventory-orders',
-        builder: (_, __) => const InventoryOrderWorkflowScreen(),
+        builder: (_, state) => InventoryOrderWorkflowScreen(
+          overrideStoreId: state.uri.queryParameters['storeId'],
+        ),
       ),
       GoRoute(
         path: '/inventory-orders/:orderId',
         builder: (_, state) => InventoryOrderWorkflowScreen(
           initialOrderId: state.pathParameters['orderId'],
+          overrideStoreId: state.uri.queryParameters['storeId'],
         ),
       ),
       GoRoute(
