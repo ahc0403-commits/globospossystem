@@ -605,7 +605,14 @@ class _InventoryOrderWorkflowScreenState
               'inventory_accounting',
             }.contains(_role))
               TextButton.icon(
-                onPressed: () => context.go('/admin?tab=inventory'),
+                onPressed: () => context.go(
+                  Uri(
+                    path: _role == 'super_admin' && _storeId != null
+                        ? '/admin/$_storeId'
+                        : '/admin',
+                    queryParameters: const {'tab': 'inventory'},
+                  ).toString(),
+                ),
                 icon: const Icon(Icons.dashboard_outlined),
                 label: Text(_text(ko: '재고 관리', en: 'Inventory', vi: 'Kho')),
               ),
