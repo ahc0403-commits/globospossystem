@@ -88,6 +88,7 @@ run_sql "$INVENTORY_ROOT/supabase/migrations/20261005042000_procurement_shared_r
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261005043000_procurement_employee_payment_owners.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/scripts/verify_procurement_employee_payment_owners.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_upgrade_compatibility.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261019140000_procurement_document_retry_identity.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_process_contract.test.sql"
 
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_paged_reads.test.sql"
@@ -111,6 +112,7 @@ run_sql "$INVENTORY_ROOT/supabase/migrations/20261007095000_procurement_pr_accou
 run_sql "$INVENTORY_ROOT/scripts/verify_procurement_pr_account.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_pr_account.test.sql"
 # Existing Office reads, approvals and combined receiving survive the PR changes.
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261019140000_procurement_document_retry_identity.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_process_contract.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_paged_reads.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_combined_receiving.test.sql"
