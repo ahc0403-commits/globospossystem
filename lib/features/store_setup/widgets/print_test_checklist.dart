@@ -10,11 +10,13 @@ class PrintTestChecklist extends StatelessWidget {
     required this.jobs,
     required this.onConfirm,
     required this.onRetry,
+    this.enabled = true,
   });
 
   final Map<String, StoreSetupTestJob> jobs;
   final void Function(String label, bool confirmed) onConfirm;
   final ValueChanged<String> onRetry;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +56,7 @@ class PrintTestChecklist extends StatelessWidget {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: OutlinedButton(
-                        onPressed: () => onRetry(entry.key),
+                        onPressed: enabled ? () => onRetry(entry.key) : null,
                         child: Text(context.l10n.storeSetupRetryTest),
                       ),
                     ),
