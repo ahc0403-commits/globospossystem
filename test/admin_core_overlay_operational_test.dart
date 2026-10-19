@@ -2050,6 +2050,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     final field = find.byType(TextField).first;
+    await tester.tap(field);
+    final controller = tester.widget<TextField>(field).controller!;
+    const selection = TextSelection(baseOffset: 2, extentOffset: 5);
+    controller.selection = selection;
+    settings.refreshName('GLOBOS Nguyễn Huệ');
+    await tester.pump();
+    expect(controller.selection, selection);
     await tester.enterText(field, 'Unsaved store edit');
     final focusBefore = FocusManager.instance.primaryFocus;
     settings.refreshName('Updated server store name');

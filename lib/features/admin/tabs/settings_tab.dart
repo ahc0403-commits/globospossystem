@@ -437,7 +437,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         String? oldValue,
         String value,
       ) {
-        if (newScope || controller.text == oldValue) controller.text = value;
+        if ((newScope || controller.text == oldValue) &&
+            controller.text != value) {
+          controller.text = value;
+        }
       }
 
       sync(
@@ -469,7 +472,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       });
     }
 
-    if (_formPrinterIp == null || _printerIpController.text == _formPrinterIp) {
+    if ((_formPrinterIp == null ||
+            _printerIpController.text == _formPrinterIp) &&
+        _printerIpController.text != printerState.printerIp) {
       _printerIpController.text = printerState.printerIp;
       _printerIpController.selection = TextSelection.fromPosition(
         TextPosition(offset: _printerIpController.text.length),
