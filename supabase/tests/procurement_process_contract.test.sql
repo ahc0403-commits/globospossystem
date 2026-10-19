@@ -64,6 +64,9 @@ BEGIN
  path:=test_uuid(101)||'/procurement/po/'||(po->>'id')||'/supplier/'||(doc->>'source_hash')||'/'||repeat('a',64)||'.pdf';
  INSERT INTO storage.objects(bucket_id,name,metadata) VALUES('inventory-purchase-documents',path,'{"size":120,"mimetype":"application/pdf"}');
  PERFORM public.record_procurement_document(test_uuid(101),'po',(po->>'id')::uuid,'supplier',doc->>'source_hash',path,repeat('a',64),120,buyer);
+ ASSERT (public.record_procurement_document(test_uuid(101),'po',(po->>'id')::uuid,'supplier',doc->>'source_hash',path,repeat('a',64),120,buyer)->>'replayed')::boolean,'Exact document retry must report replay';
+ ASSERT (SELECT count(*) FROM public.procurement_document_exports WHERE record_id=(po->>'id')::uuid)=1,'Document retry duplicated the exported artifact';
+ ASSERT (SELECT count(*) FROM public.procurement_events WHERE record_id=(po->>'id')::uuid AND action='document_generated')=1,'Document retry duplicated the generated event';
  path:=test_uuid(101)||'/procurement/po/'||(po->>'id')||'/supplier/'||(doc->>'source_hash')||'/'||repeat('b',64)||'.pdf';
  INSERT INTO storage.objects(bucket_id,name,metadata) VALUES('inventory-purchase-documents',path,'{"size":120,"mimetype":"application/pdf"}');
  PERFORM public.record_procurement_document(test_uuid(101),'po',(po->>'id')::uuid,'supplier',doc->>'source_hash',path,repeat('b',64),120,buyer);
