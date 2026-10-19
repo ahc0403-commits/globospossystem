@@ -63,7 +63,16 @@ class SettingsState {
 }
 
 class SettingsNotifier extends StateNotifier<SettingsState> {
-  SettingsNotifier() : super(const SettingsState());
+  SettingsNotifier({SupabaseClient? client})
+    : _client = client,
+      super(const SettingsState());
+
+  final SupabaseClient? _client;
+
+  Future<void>? _load;
+  String? _loadScope;
+  String? _loadedScope;
+  int _loadGeneration = 0;
 
   String _mapSettingsError(Object error, String fallback) {
     if (error is! PostgrestException) {
@@ -93,16 +102,50 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     return fallback;
   }
 
-  Future<void> loadSettings(String storeId, String authUid) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+  Future<void> loadSettings(
+    String storeId,
+    String authUid, {
+    bool showLoading = true,
+  }) {
+    final scope = '$storeId:$authUid';
+    if (_loadScope == scope && _load != null) return _load!;
+    _loadScope = scope;
+    final generation = ++_loadGeneration;
+    return _load =
+        _fetchSettings(
+          storeId,
+          authUid,
+          scope,
+          generation,
+          showLoading: showLoading,
+        ).whenComplete(() {
+          if (generation == _loadGeneration) _load = null;
+        });
+  }
+
+  Future<void> _fetchSettings(
+    String storeId,
+    String authUid,
+    String scope,
+    int generation, {
+    required bool showLoading,
+  }) async {
+    // A different store/account never displays the previous scope's settings.
+    if (_loadedScope != scope) {
+      state = SettingsState(isLoading: true, storeId: storeId);
+    } else if (showLoading) {
+      state = state.copyWith(clearError: true);
+    }
     try {
-      final restaurantData = await supabase
+      final client = _client ?? supabase;
+      final restaurantData = await client
           .from('restaurants')
-          .select()
+          .select('id, name, address, operation_mode, per_person_charge')
           .eq('id', storeId)
           .single();
 
-      final userData = await supabase
+      if (!mounted || generation != _loadGeneration) return;
+      final userData = await client
           .from('users')
           .select('full_name, role')
           .eq('auth_id', authUid)
@@ -115,6 +158,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         _ => null,
       };
 
+      if (!mounted || generation != _loadGeneration) return;
+      _loadedScope = scope;
       state = state.copyWith(
         isLoading: false,
         storeId: restaurantData['id']?.toString(),
@@ -129,7 +174,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         clearError: true,
       );
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: 'Failed to load settings.');
+      if (!mounted || generation != _loadGeneration) return;
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to load settings.',
+      );
     }
   }
 

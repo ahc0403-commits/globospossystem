@@ -23,9 +23,11 @@ final _time0 = DateTime.utc(2026, 8, 21, 12);
 
 // Procurement readiness adds independent locale copy; arrival scenarios below
 // remain unchanged. Cashier clear/review widgets have operational coverage.
+// 2026-10-19: terminal auth and printer mode copy have browser/native
+// isolation, profile recovery and settings refresh behavior coverage.
 const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
-      '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
+      '15ac13aca78a5c93b1da511c7bbe82116658c4e19cdfe76fd4548c58b99a46e2',
   // Corporate collection account has cashier/customer display coverage.
   // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   // Scheduled delivery closure has cashier overlay coverage; alert paths stay unchanged.
@@ -63,13 +65,13 @@ const _frozenAlertFiles = <String, String>{
   // Printer diagnosis copy has ko/vi/en registered-receipt widget coverage.
   // Arrival behavior remains covered below.
   'lib/l10n/app_localizations.dart':
-      '7e45dc85baf44ca34879bd182ea930a7ef3d3f7ecad379c727ac880b40918477',
+      '3a32d67edb2ccdd9a88dc33acbae97740a7937ec4a4c1d36ce93574da75b7fdf',
   'lib/l10n/app_localizations_ko.dart':
-      '529c362bcd9581c8d782cdceb3f1735bd38663ea65bf877c02698deb0818432d',
+      'a04483e516da3d475b5fbc363497849058aefa2fa87a5a9aac2fc72f69a34f9f',
   'lib/l10n/app_localizations_vi.dart':
-      'b058dcefcbb61bbe3309768b94a898f4a14c3cf7accdfa2707491caeb71ba2de',
+      '1d3d36266d9ed19c0942d6e6c042faec9421f45748fbdcfcb1cf53db0602cf0a',
   'lib/l10n/app_localizations_en.dart':
-      'c7b2347ed0165a805dca394f27d6c18f9778fa18dbe9a94b812324f9ca1e7c6f',
+      '57ecfe38c23b1a560b89f232c286d2425f534bf51525d0c9fc2bd80497d9c229',
 };
 
 void main() {

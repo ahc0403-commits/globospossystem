@@ -4369,5 +4369,7 @@
   "cashDepositGenerateQr": "Tạo mã QR",
   "cashDepositStoreUnavailable": "Không xác định được tên thương hiệu và cửa hàng đã chọn. Vui lòng liên hệ quản trị viên.",
   "cashDepositQrPurpose": "Nội dung tự điền từ QR",
-  "cashDepositSingleDayRequired": "Vui lòng tra cứu một ngày trước khi tạo QR nộp tiền mặt."
+  "cashDepositSingleDayRequired": "Vui lòng tra cứu một ngày trước khi tạo QR nộp tiền mặt.",
+  "loginTerminalTitle": "Đăng nhập riêng cho từng màn hình",
+  "loginTerminalCustomerDisplay": "Màn hình khách hàng"
 }

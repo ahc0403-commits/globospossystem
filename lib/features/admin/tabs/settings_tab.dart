@@ -50,6 +50,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   String? _initializedRestaurantId;
   String? _lastError;
   String? _lastPrinterError;
+  SettingsState? _formSettings;
+  String? _formPrinterIp;
   bool? _hasPayrollPin;
   bool? _hasDiscountManagerPin;
   bool _isSavingPayrollPin = false;
@@ -427,21 +429,33 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     }
 
     if (!settingsState.isLoading && settingsState.restaurantName.isNotEmpty) {
-      if (_restaurantNameController.text != settingsState.restaurantName) {
-        _restaurantNameController.text = settingsState.restaurantName;
+      final previous = _formSettings;
+      final newScope =
+          previous == null || previous.storeId != settingsState.storeId;
+      void sync(
+        TextEditingController controller,
+        String? oldValue,
+        String value,
+      ) {
+        if (newScope || controller.text == oldValue) controller.text = value;
       }
-      if (_addressController.text != settingsState.address) {
-        _addressController.text = settingsState.address;
+
+      sync(
+        _restaurantNameController,
+        previous?.restaurantName,
+        settingsState.restaurantName,
+      );
+      sync(_addressController, previous?.address, settingsState.address);
+      sync(
+        _perPersonController,
+        previous?.perPersonCharge?.toString() ?? '',
+        settingsState.perPersonCharge?.toString() ?? '',
+      );
+      sync(_fullNameController, previous?.fullName, settingsState.fullName);
+      if (newScope || _operationMode == previous.operationMode) {
+        _operationMode = settingsState.operationMode;
       }
-      if (settingsState.perPersonCharge != null &&
-          _perPersonController.text !=
-              settingsState.perPersonCharge!.toString()) {
-        _perPersonController.text = settingsState.perPersonCharge!.toString();
-      }
-      if (_fullNameController.text != settingsState.fullName) {
-        _fullNameController.text = settingsState.fullName;
-      }
-      _operationMode = settingsState.operationMode;
+      _formSettings = settingsState;
     }
 
     if (settingsState.error != null &&
@@ -455,12 +469,13 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       });
     }
 
-    if (_printerIpController.text != printerState.printerIp) {
+    if (_formPrinterIp == null || _printerIpController.text == _formPrinterIp) {
       _printerIpController.text = printerState.printerIp;
       _printerIpController.selection = TextSelection.fromPosition(
         TextPosition(offset: _printerIpController.text.length),
       );
     }
+    _formPrinterIp = printerState.printerIp;
 
     if (printerState.error != null &&
         printerState.error!.isNotEmpty &&

@@ -8,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_constants.dart';
+import 'core/auth/terminal_auth.dart';
 import 'core/hardware/print_agent_coordinator_provider.dart';
 import 'core/i18n/locale_controller.dart';
 import 'core/layout/platform_info.dart';
@@ -20,7 +21,7 @@ import 'l10n/app_localizations.dart';
 
 export 'core/ui/app_theme.dart';
 
-Future<void> main() async {
+Future<void> main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
   // Prefer local env files when they are available, then fall back to
   // dart-defines. Web deployments inject Supabase config via dart-define so
@@ -42,9 +43,14 @@ Future<void> main() async {
       // Try the next local env source before falling back to dart-defines.
     }
   }
+  final terminalAuth = await TerminalAuth.create(
+    AppConstants.supabaseUrl,
+    args,
+  );
   await Supabase.initialize(
     url: AppConstants.supabaseUrl,
     anonKey: AppConstants.supabaseAnonKey,
+    authOptions: terminalAuth.options,
   );
   final container = ProviderContainer();
   final router = buildAppRouter(container);

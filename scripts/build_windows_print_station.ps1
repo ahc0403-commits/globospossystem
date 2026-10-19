@@ -106,6 +106,10 @@ try {
     "test/print_routing_contract_test.dart",
     "test/windows_print_station_build_contract_test.dart",
     "test/print_agent_coordinator_test.dart",
+    "test/terminal_auth_storage_test.dart",
+    "test/auth_initialization_test.dart",
+    "test/print_station_live_refresh_test.dart",
+    "test/settings_background_refresh_test.dart",
     "test/print_station_receipt_claim_test.dart",
     "test/printer_network_endpoint_contract_test.dart",
     "test/cashier_receipt_print_contract_test.dart",
@@ -148,12 +152,19 @@ try {
   if ($LASTEXITCODE -ne 0 -or $sourceSha -notmatch '^[0-9a-f]{40}$') {
     throw "Could not identify the Windows package source commit."
   }
+  Copy-Item -Path "scripts\windows_launchers\*.cmd" -Destination $releaseDirectory -Force
   @"
 GLOBOS POS Windows print station x64
 Source commit: $sourceSha
 
 Close the old app before installing. Extract this complete ZIP to a new folder.
 Keep globos_print_station.exe, all DLLs and the data folder together.
+Use Start Cashier.cmd, Start Print Station.cmd, or Start Customer Display.cmd.
+Each launcher keeps its own login. Logging out one does not log out the others.
+Opening the EXE directly uses the Print Station login space.
+Sign in once after this update; old shared sessions are not copied or revoked.
+For browser/PWA screens, choose Cashier, Print station or Customer display on
+the login page, then install that screen as an app. Each has its own login.
 Open Print Station and choose Paperless or Printer output.
 Paperless: configure only the cashier printer for bills and receipts.
 Printer output: configure kitchen, floor, tray and cashier printers.

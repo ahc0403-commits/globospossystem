@@ -49,6 +49,13 @@
 
   <title>GLOBOS POS</title>
   <link rel="manifest" href="manifest.json">
+  <script>
+    // Installed terminal apps reopen their own persistent login space.
+    const terminal = new URLSearchParams(window.location.search).get('terminal');
+    if (['cashier', 'print_station', 'customer_display'].includes(terminal)) {
+      document.querySelector('link[rel="manifest"]').href = `manifest-${terminal}.json`;
+    }
+  </script>
   <style>
     html {
       height: 100%;

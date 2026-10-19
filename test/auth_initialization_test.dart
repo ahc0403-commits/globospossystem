@@ -13,6 +13,8 @@ const _storeId = '00000000-0000-0000-0000-000000000002';
 
 class _AuthApi {
   int profileCalls = 0;
+  bool failProfile = false;
+  int logoutCalls = 0;
   int consentCalls = 0;
   int storeCalls = 0;
   bool consentAccepted = true;
@@ -59,6 +61,14 @@ class _AuthApi {
         };
       case '/rest/v1/users':
         profileCalls++;
+        if (failProfile) {
+          return http.Response(
+            jsonEncode({'message': 'temporary unavailable', 'code': '503'}),
+            503,
+            headers: {'content-type': 'application/json'},
+            request: request,
+          );
+        }
         if (!profileStarted.isCompleted) profileStarted.complete();
         await profileGate?.future;
         response = {
@@ -80,6 +90,7 @@ class _AuthApi {
         if (!consentStarted.isCompleted) consentStarted.complete();
         response = consentAccepted;
       case '/auth/v1/logout':
+        logoutCalls++;
         return http.Response('', 204);
       default:
         throw StateError('Unexpected request: ${request.url.path}');
@@ -177,4 +188,35 @@ void main() {
     expect(auth.state.user, isNull);
     expect(auth.state.errorMessage, authErrorAccountDeactivated);
   });
+  test(
+    'temporary profile failure preserves existing login and recovers',
+    () async {
+      final api = _AuthApi();
+      final auth = AuthNotifier(client: api.client);
+      addTearDown(auth.dispose);
+      addTearDown(api.client.dispose);
+      await auth.login('test@example.test', 'test-password');
+      final session = api.client.auth.currentSession;
+      api.failProfile = true;
+      await auth.refreshProfile();
+      expect(auth.state.user?.id, _userId);
+      expect(auth.state.role, 'store_admin');
+      expect(auth.state.storeId, _storeId);
+      expect(
+        auth.state.errorMessage,
+        startsWith(authErrorProfileLookupFailedPrefix),
+      );
+      expect(api.client.auth.currentSession, same(session));
+      expect(api.logoutCalls, 0);
+      api.failProfile = false;
+      await auth.refreshProfile();
+      expect(auth.state.errorMessage, isNull);
+      expect(auth.state.user?.id, _userId);
+      api.active = false;
+      await auth.refreshProfile();
+      expect(auth.state.user, isNull);
+      expect(auth.state.errorMessage, authErrorAccountDeactivated);
+      expect(api.logoutCalls, 1);
+    },
+  );
 }

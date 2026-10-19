@@ -4370,5 +4370,7 @@
   "cashDepositGenerateQr": "Generate QR code",
   "cashDepositStoreUnavailable": "The selected store’s brand and store names are unavailable. Contact an administrator.",
   "cashDepositQrPurpose": "Memo included in QR",
-  "cashDepositSingleDayRequired": "Query a single day before generating a cash deposit QR."
+  "cashDepositSingleDayRequired": "Query a single day before generating a cash deposit QR.",
+  "loginTerminalTitle": "Keep each screen signed in separately",
+  "loginTerminalCustomerDisplay": "Customer display"
 }

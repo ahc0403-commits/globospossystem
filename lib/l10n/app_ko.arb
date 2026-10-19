@@ -4369,5 +4369,7 @@
   "cashDepositGenerateQr": "QR 코드 생성",
   "cashDepositStoreUnavailable": "선택한 매장의 브랜드명과 매장명을 확인할 수 없습니다. 관리자에게 문의하세요.",
   "cashDepositQrPurpose": "QR에 자동 입력되는 적요",
-  "cashDepositSingleDayRequired": "하루만 조회한 뒤 현금이체 QR을 생성하세요."
+  "cashDepositSingleDayRequired": "하루만 조회한 뒤 현금이체 QR을 생성하세요.",
+  "loginTerminalTitle": "화면별 독립 로그인",
+  "loginTerminalCustomerDisplay": "고객 화면"
 }

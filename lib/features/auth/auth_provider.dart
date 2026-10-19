@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'
         AuthChangeEvent,
         AuthException,
         PostgrestException,
+        SignOutScope,
         SupabaseClient,
         User;
 import '../../core/services/navigation_history_service.dart';
@@ -188,7 +189,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       if (!_isCurrentProfile(generation)) return;
       state = state.copyWith(
         isLoading: false,
-        clearUser: true,
+        clearUser: state.user?.id != user.id,
         errorMessage: authErrorProfileLoadFailed,
       );
     }
@@ -241,21 +242,21 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
     state = state.copyWith(
       isLoading: false,
-      clearUser: true,
+      clearUser: state.user?.id != _client.auth.currentUser?.id,
       errorMessage: '$authErrorProfileLookupFailedPrefix ${error.message}',
     );
   }
 
   Future<void> _signOutWithError(String message) async {
     _pendingSignedOutErrorMessage = message;
-    await _client.auth.signOut();
+    await _client.auth.signOut(scope: SignOutScope.local);
     if (!mounted) return;
     state = PosAuthState(errorMessage: message);
   }
 
   Future<void> logout() async {
     _invalidateProfileLoad();
-    await _client.auth.signOut();
+    await _client.auth.signOut(scope: SignOutScope.local);
     if (!mounted) return;
     NavigationHistoryService.instance.clear();
     state = const PosAuthState();

@@ -427,10 +427,17 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
         next,
       ) {
         next.whenData((event) {
-          if (!event.affects({'print', 'settings', 'orders'})) return;
-          ref.invalidate(printerDestinationsProvider(storeId));
-          ref.invalidate(printStationJobsProvider(storeId));
-          ref.invalidate(failedPrintJobsProvider(storeId));
+          if (event.affectsSourceTables(printerConfigurationTables)) {
+            unawaited(
+              ref
+                  .read(printerDestinationsProvider(storeId).notifier)
+                  .fetchDestinations(showLoading: false),
+            );
+          }
+          if (event.affects({'print', 'orders'})) {
+            ref.invalidate(printStationJobsProvider(storeId));
+            ref.invalidate(failedPrintJobsProvider(storeId));
+          }
         });
       });
     }
@@ -833,7 +840,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
       );
     }
 
-    if (state.error != null) {
+    if (state.error != null && state.destinations.isEmpty) {
       return PosExceptionAlert(
         label: l10n.settingsPrintRoutingNeedsReview,
         detail: _printerDestinationErrorDetail(state.error!),
@@ -860,6 +867,13 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     return Column(
       key: const Key('print_station_destination_test'),
       children: [
+        if (state.error != null)
+          PosExceptionAlert(
+            label: l10n.settingsPrintRoutingNeedsReview,
+            detail: _printerDestinationErrorDetail(state.error!),
+            color: PosColors.warning,
+            icon: Icons.warning_amber_outlined,
+          ),
         for (final destination in destinations)
           _DestinationTile(
             destination: destination,

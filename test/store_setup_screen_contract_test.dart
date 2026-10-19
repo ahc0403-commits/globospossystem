@@ -70,6 +70,15 @@ void main() {
     expect(screen, isNot(contains('PrintJobAgentService()')));
     expect(coordinator, contains("'print_agent_enabled_v1'"));
     expect(coordinator, contains('await _agent.stopSafely()'));
-    expect(coordinator, contains('await _agent.startPollingSafely(_storeId!)'));
+    expect(
+      RegExp(
+        r'await _agent\.startPollingSafely\(\s*_storeId!,',
+      ).hasMatch(coordinator),
+      isTrue,
+    );
+    expect(
+      coordinator,
+      contains('receiptOnly: state.mode == PrintStationMode.paperless'),
+    );
   });
 }
