@@ -224,8 +224,9 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
         .map((row) {
           final id = row['destination_id']?.toString() ?? '';
           final destination = destinationsById[id];
-          if (destination == null)
+          if (destination == null) {
             throw StateError('STORE_SETUP_DESTINATION_NOT_APPLIED');
+          }
           return StoreSetupTestJob(
             label: destination.label,
             destinationId: id,
