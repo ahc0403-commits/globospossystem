@@ -147,5 +147,20 @@ BEGIN
     WHERE e.action='align_procurement_receiver' AND e.actor->>'subject_id'='20261019081922'
       AND to_jsonb(r) IS DISTINCT FROM e.next_state
   ) THEN RAISE EXCEPTION 'PROCUREMENT_RECEIVER_PARITY_VERIFICATION_FAILED'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.procurement_role_roster receiver
+    JOIN public.restaurants r ON r.id=receiver.restaurant_id AND r.is_active
+    JOIN public.users u ON u.auth_id=receiver.subject_id AND u.is_active AND u.role='inventory_orderer'
+      AND u.restaurant_id=r.id AND u.primary_store_id=r.id
+    JOIN auth.users a ON a.id=u.auth_id
+    WHERE receiver.system='pos' AND receiver.stage='receiver' AND receiver.account_kind='shared_role'
+      AND receiver.valid_from<=now() AND receiver.valid_until>now()
+      AND EXISTS(SELECT 1 FROM public.store_fixed_account_requirements q WHERE q.store_id=r.id
+        AND q.is_active AND q.role='inventory_orderer' AND q.provisioned_user_id=u.id)
+      AND NOT EXISTS(SELECT 1 FROM public.procurement_role_roster verifier
+        WHERE verifier.restaurant_id=r.id AND verifier.system='pos' AND verifier.subject_id=u.auth_id
+          AND verifier.stage='verifier' AND verifier.account_kind='shared_role'
+          AND verifier.valid_from<=now() AND verifier.valid_until>now())
+  ) THEN RAISE EXCEPTION 'PROCUREMENT_RECEIVER_PARITY_VERIFICATION_FAILED'; END IF;
 END $$;
 COMMIT;
