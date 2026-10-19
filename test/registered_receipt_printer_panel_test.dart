@@ -320,6 +320,8 @@ class _Driver implements PrintAgentDriver, DiagnosticPrintAgent {
   }
 
   @override
+  Future<void> configureReceiptOnly(bool value) async {}
+  @override
   Future<void> stopSafely() async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

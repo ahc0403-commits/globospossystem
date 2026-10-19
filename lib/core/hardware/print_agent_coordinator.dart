@@ -240,7 +240,9 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
         _storeId != null &&
         _storeId!.isNotEmpty;
     if (!canStart) {
-      await _agent.stopSafely();
+      await _agent.configureReceiptOnly(
+        state.mode == PrintStationMode.paperless,
+      );
       state = state.copyWith(
         status: state.enabled
             ? PrintAgentStatus.stopped

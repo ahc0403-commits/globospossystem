@@ -157,6 +157,7 @@ void main() {
         storeId: 'store-1',
       );
       expect(coordinator.state.mode, PrintStationMode.paperless);
+      expect(driver.receiptOnly, isTrue);
       await coordinator.setMode(PrintStationMode.printer);
       expect(driver.startedStores, isEmpty);
       await coordinator.setEnabled(true);
@@ -213,6 +214,13 @@ class _FakeDriver implements PrintAgentDriver {
   final bool supported;
   final List<String> startedStores = [];
   final List<bool> receiptOnlyStarts = [];
+  bool receiptOnly = false;
+  @override
+  Future<void> configureReceiptOnly(bool value) async {
+    await stopSafely();
+    receiptOnly = value;
+  }
+
   final List<String> events = [];
 
   @override

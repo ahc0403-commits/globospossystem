@@ -14,6 +14,7 @@ abstract class PrintAgentDriver {
   bool get isSupported;
   Future<void> startPollingSafely(String storeId, {bool receiptOnly = false});
   Future<void> stopSafely();
+  Future<void> configureReceiptOnly(bool receiptOnly);
   Future<List<PrintJobAgentResult>> processOnce(String storeId, {int limit});
   Future<PrintResult> testPrintDestination(String destinationId);
 }
@@ -99,6 +100,12 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
         unawaited(processOnce(storeId, limit: limit));
       }
     });
+  }
+
+  @override
+  Future<void> configureReceiptOnly(bool receiptOnly) async {
+    await stopSafely();
+    _receiptOnly = receiptOnly;
   }
 
   @override
