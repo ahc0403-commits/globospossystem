@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:globos_pos_system/core/router/app_router.dart';
 import 'package:globos_pos_system/core/services/inventory_service.dart';
 import 'package:globos_pos_system/core/services/live_refresh_service.dart';
 import 'package:globos_pos_system/core/utils/permission_utils.dart';
@@ -38,11 +39,15 @@ class _Inventory extends InventoryService {
   final bool prEnabled;
   final bool receivingOnly;
   final prQueries = <Map<String, dynamic>>[];
+  final catalogStores = <String>[];
+  final prStores = <String>[];
+  String? forbiddenStoreId;
   @override
   Future<Map<String, dynamic>> fetchProcurementPage(
     String storeId,
     Map<String, dynamic> query,
   ) async {
+    prStores.add(storeId);
     prQueries.add({...query});
     return {
       'contract_version': 2,
@@ -173,15 +178,20 @@ class _Inventory extends InventoryService {
   @override
   Future<Map<String, dynamic>> fetchInventoryOrderCatalog(
     String storeId,
-  ) async => {
-    'actor': {'receiving_only': receivingOnly},
-    'items': [],
-    'suppliers': [],
-    'procurement_policy': {
-      'enabled': prEnabled,
-      'three_stage_required': prEnabled,
-    },
-  };
+  ) async {
+    catalogStores.add(storeId);
+    if (storeId == forbiddenStoreId) throw StateError('STORE_SCOPE_FORBIDDEN');
+    return {
+      'actor': {'receiving_only': receivingOnly},
+      'items': [],
+      'suppliers': [],
+      'procurement_policy': {
+        'enabled': prEnabled,
+        'three_stage_required': prEnabled,
+      },
+    };
+  }
+
   @override
   Future<Map<String, dynamic>> fetchInventoryWorkflowDetail(
     String orderId,
@@ -292,6 +302,49 @@ Future<GoRouter> _mount(
   return router;
 }
 
+Future<GoRouter> _mountScopedApp(
+  WidgetTester tester,
+  _Inventory service, {
+  String role = 'super_admin',
+}) async {
+  tester.view.physicalSize = const Size(1440, 1100);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final events = StreamController<PosLiveEvent>.broadcast();
+  addTearDown(events.close);
+  final container = ProviderContainer(
+    overrides: [
+      authProvider.overrideWith((ref) => _Auth(role)),
+      inventoryWorkflowServiceProvider.overrideWithValue(service),
+      for (final store in ['operating-store', 'selected-store', 'next-store'])
+        posLiveEventsProvider(store).overrideWith((ref) => events.stream),
+    ],
+  );
+  addTearDown(container.dispose);
+  final router = buildAppRouter(container);
+  addTearDown(router.dispose);
+  router.go('/inventory-orders?storeId=selected-store');
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        routerConfig: router,
+        locale: const Locale('en'),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return router;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -303,6 +356,44 @@ void main() {
     );
   });
   tearDownAll(() => Supabase.instance.dispose());
+
+  testWidgets(
+    'manager route preserves the selected store and changes scope safely',
+    (tester) async {
+      final service = _Inventory(prEnabled: true);
+      final router = await _mountScopedApp(tester, service);
+      expect(service.catalogStores, ['selected-store']);
+      expect(service.prStores, isNotEmpty);
+      expect(service.prStores.toSet(), {'selected-store'});
+      router.go('/inventory-orders?storeId=next-store');
+      await tester.pumpAndSettle();
+      expect(service.catalogStores.last, 'next-store');
+      expect(service.prStores.last, 'next-store');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('fixed ordering account ignores another store in the route', (
+    tester,
+  ) async {
+    final service = _Inventory(prEnabled: true);
+    await _mountScopedApp(tester, service, role: 'inventory_orderer');
+    expect(service.catalogStores.toSet(), {'operating-store'});
+    expect(service.prStores.toSet(), {'operating-store'});
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('denied selected store never falls back to the primary store', (
+    tester,
+  ) async {
+    final service = _Inventory(prEnabled: true)
+      ..forbiddenStoreId = 'selected-store';
+    await _mountScopedApp(tester, service);
+    expect(service.catalogStores, ['selected-store']);
+    expect(service.prStores, isEmpty);
+    expect(find.text('PR-ROOT'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'receiver opens receiving directly and hides purchasing surfaces',
