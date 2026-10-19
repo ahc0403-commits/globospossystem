@@ -48,8 +48,8 @@ void main() {
     final provider = File(
       'lib/features/store_setup/store_setup_provider.dart',
     ).readAsStringSync();
-    expect(service, contains("'admin_validate_store_opening_config'"));
-    expect(service, contains("'admin_apply_store_opening_config'"));
+    expect(service, contains("'admin_validate_store_opening_config_v2'"));
+    expect(service, contains("'admin_apply_store_opening_config_v2'"));
     expect(service, contains("'admin_get_store_opening_readiness'"));
     expect(service, contains("'admin_enqueue_printer_test_job'"));
     expect(provider, contains('job.jobId.isEmpty'));

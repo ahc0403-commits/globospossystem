@@ -11,7 +11,7 @@ import '../auth/auth_provider.dart';
 import 'store_setup_localization.dart';
 import 'store_setup_models.dart';
 import 'store_setup_provider.dart';
-import 'widgets/physical_printer_form.dart';
+import 'widgets/printer_setup_step.dart';
 import 'widgets/print_test_checklist.dart';
 import 'widgets/readiness_summary.dart';
 import 'widgets/route_preview.dart';
@@ -145,10 +145,12 @@ class StoreSetupScreen extends ConsumerWidget {
                       Step(
                         title: Text(context.l10n.storeSetupStepPrinters),
                         isActive: state.step >= 2,
-                        content: _PrinterStep(
+                        content: StoreSetupPrinterStep(
                           draft: state.draft,
                           onPrinterChanged: notifier.updatePrinter,
                           onFloor1Changed: notifier.setFloor1Slot,
+                          onOperationChanged: notifier.setOperation,
+                          enabled: !state.isBusy,
                         ),
                       ),
                       Step(
@@ -269,68 +271,6 @@ class _StoreTemplateStep extends StatelessWidget {
           onSave: onSaveWorkforce,
           onRefresh: onRefreshWorkforce,
           onProvision: onProvisionAccount,
-        ),
-      ],
-    );
-  }
-}
-
-class _PrinterStep extends StatelessWidget {
-  const _PrinterStep({
-    required this.draft,
-    required this.onPrinterChanged,
-    required this.onFloor1Changed,
-  });
-
-  final StoreOpeningDraft draft;
-  final ValueChanged<PhysicalPrinterDraft> onPrinterChanged;
-  final ValueChanged<PhysicalPrinterSlot> onFloor1Changed;
-
-  @override
-  Widget build(BuildContext context) {
-    String title(PhysicalPrinterSlot slot) =>
-        localizePhysicalPrinterSlot(context.l10n, slot);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 760 ? 2 : 1;
-            final width = columns == 2
-                ? (constraints.maxWidth - 12) / 2
-                : constraints.maxWidth;
-            return Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final slot in PhysicalPrinterSlot.values)
-                  SizedBox(
-                    width: width,
-                    child: PhysicalPrinterForm(
-                      key: ValueKey(slot),
-                      title: title(slot),
-                      printer: draft.printers[slot]!,
-                      onChanged: onPrinterChanged,
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-        Text(context.l10n.storeSetupFloor1Share),
-        DropdownButton<PhysicalPrinterSlot>(
-          key: const Key('store_setup_floor1_physical_slot'),
-          value: draft.floor1Slot,
-          isExpanded: true,
-          items: [
-            for (final slot in PhysicalPrinterSlot.values)
-              DropdownMenuItem(value: slot, child: Text(title(slot))),
-          ],
-          onChanged: (value) {
-            if (value != null) onFloor1Changed(value);
-          },
         ),
       ],
     );

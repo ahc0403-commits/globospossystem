@@ -8,11 +8,13 @@ class StoreSetupExistingConfig {
     required this.store,
     required this.tables,
     required this.destinations,
+    this.operation = StorePrinterOperation.posPrint,
   });
 
   final Map<String, dynamic> store;
   final List<StoreSetupTableDraft> tables;
   final List<Map<String, dynamic>> destinations;
+  final StorePrinterOperation operation;
 }
 
 abstract class StoreSetupBackend {
@@ -75,13 +77,24 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
           .order('table_number'),
       _client
           .from('printer_destinations')
-          .select('id, name, ip, port, purpose, floor_label, is_active')
+          .select(
+            'id, name, ip, port, purpose, floor_label, is_active, physical_printer_id, '
+            'physical_printers(name, printer_endpoints(endpoint_type, ip, port, device_name, priority, is_active))',
+          )
           .eq('restaurant_id', storeId)
           .order('purpose'),
+      _client
+          .from('restaurant_settings')
+          .select('fulfillment_mode')
+          .eq('restaurant_id', storeId)
+          .maybeSingle(),
     ]);
 
     return StoreSetupExistingConfig(
       store: Map<String, dynamic>.from(responses[0] as Map),
+      operation: (responses[3] as Map?)?['fulfillment_mode'] == 'paperless'
+          ? StorePrinterOperation.paperless
+          : StorePrinterOperation.posPrint,
       tables: (responses[1] as List)
           .whereType<Map>()
           .map(
@@ -98,6 +111,7 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
 
   Map<String, dynamic> _payload(StoreOpeningDraft draft) => {
     'p_store_id': draft.storeId,
+    'p_mode': draft.operation.code,
     'p_tables': draft.tables.map((table) => table.toJson()).toList(),
     'p_destinations': draft.destinations
         .map((destination) => destination.toJson())
@@ -107,7 +121,7 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
   @override
   Future<StoreSetupValidationResult> validate(StoreOpeningDraft draft) async {
     final response = await _client.rpc(
-      'admin_validate_store_opening_config',
+      'admin_validate_store_opening_config_v2',
       params: _payload(draft),
     );
     return StoreSetupValidationResult.fromJson(
@@ -118,7 +132,7 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
   @override
   Future<Map<String, dynamic>> apply(StoreOpeningDraft draft) async {
     final response = await _client.rpc(
-      'admin_apply_store_opening_config',
+      'admin_apply_store_opening_config_v2',
       params: _payload(draft),
     );
     return Map<String, dynamic>.from(response as Map);

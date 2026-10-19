@@ -16,7 +16,9 @@ class StoreSetupRoutePreview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          context.l10n.storeSetupRoutePreview,
+          destinations.length == 1
+              ? context.l10n.storeSetupPaperlessRoutePreview
+              : context.l10n.storeSetupRoutePreview,
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
@@ -32,7 +34,7 @@ class StoreSetupRoutePreview extends StatelessWidget {
                 '${context.l10n.storeSetupRoutePurpose}: '
                 '${localizeStoreSetupRoutePurpose(context.l10n, destination.purpose)}'
                 '${destination.floorLabel == null ? '' : '/${displayFloorLabel(destination.floorLabel!)}'}\n'
-                '${destination.ip}:${destination.port}',
+                '${destination.endpointLabel}',
               ),
               trailing: Text(
                 '${context.l10n.storeSetupRoutePhysical}\n'

@@ -166,6 +166,15 @@ abstract final class WorkforcePresetCatalog {
 
 enum PhysicalPrinterSlot { cashier, kitchen, floor2, floor3 }
 
+enum StorePrinterOperation { paperless, posPrint }
+
+extension StorePrinterOperationCode on StorePrinterOperation {
+  String get code =>
+      this == StorePrinterOperation.paperless ? 'paperless' : 'pos_print';
+}
+
+enum SetupPrinterConnection { wired, wireless, usb }
+
 extension PhysicalPrinterSlotCode on PhysicalPrinterSlot {
   String get code => switch (this) {
     PhysicalPrinterSlot.cashier => 'cashier',
@@ -181,6 +190,8 @@ class PhysicalPrinterDraft {
     required this.name,
     this.ip = '',
     this.port = 9100,
+    this.connection = SetupPrinterConnection.wired,
+    this.usbPrinterName = '',
   });
 
   final PhysicalPrinterSlot slot;
@@ -188,12 +199,23 @@ class PhysicalPrinterDraft {
   final String ip;
   final int port;
 
-  PhysicalPrinterDraft copyWith({String? name, String? ip, int? port}) {
+  final SetupPrinterConnection connection;
+  final String usbPrinterName;
+
+  PhysicalPrinterDraft copyWith({
+    String? name,
+    String? ip,
+    int? port,
+    SetupPrinterConnection? connection,
+    String? usbPrinterName,
+  }) {
     return PhysicalPrinterDraft(
       slot: slot,
       name: name ?? this.name,
       ip: ip ?? this.ip,
       port: port ?? this.port,
+      connection: connection ?? this.connection,
+      usbPrinterName: usbPrinterName ?? this.usbPrinterName,
     );
   }
 }
@@ -261,6 +283,9 @@ class LogicalDestinationDraft {
     this.floorLabel,
     required this.physicalSlot,
     this.existingId,
+    this.physicalName,
+    this.connection = SetupPrinterConnection.wired,
+    this.usbPrinterName = '',
   });
 
   final String label;
@@ -271,6 +296,13 @@ class LogicalDestinationDraft {
   final String? floorLabel;
   final PhysicalPrinterSlot physicalSlot;
   final String? existingId;
+  final String? physicalName;
+  final SetupPrinterConnection connection;
+  final String usbPrinterName;
+
+  String get endpointLabel => connection == SetupPrinterConnection.usb
+      ? 'USB · $usbPrinterName'
+      : '$ip:$port';
 
   String get routeKey =>
       '$purpose/${purpose == 'floor' ? normalizeFloorLabel(floorLabel ?? '') : ''}';
@@ -280,6 +312,10 @@ class LogicalDestinationDraft {
     'ip': ip.trim(),
     'port': port,
     'purpose': purpose,
+    'physical_slot': physicalSlot.code,
+    'physical_name': (physicalName ?? name).trim(),
+    'connection': connection.name,
+    'usb_printer_name': usbPrinterName.trim(),
     'floor_label': purpose == 'floor'
         ? normalizeFloorLabel(floorLabel ?? '')
         : null,
@@ -314,6 +350,7 @@ class StoreOpeningTemplate {
   static List<LogicalDestinationDraft> deriveDestinations(
     Map<PhysicalPrinterSlot, PhysicalPrinterDraft> printers, {
     PhysicalPrinterSlot floor1Slot = PhysicalPrinterSlot.cashier,
+    StorePrinterOperation operation = StorePrinterOperation.posPrint,
   }) {
     PhysicalPrinterDraft printer(PhysicalPrinterSlot slot) => printers[slot]!;
 
@@ -333,6 +370,9 @@ class StoreOpeningTemplate {
         purpose: purpose,
         floorLabel: floor,
         physicalSlot: slot,
+        physicalName: target.name,
+        connection: target.connection,
+        usbPrinterName: target.usbPrinterName,
       );
     }
 
@@ -343,33 +383,35 @@ class StoreOpeningTemplate {
         purpose: 'receipt',
         slot: PhysicalPrinterSlot.cashier,
       ),
-      route(
-        label: 'TEST-KITCHEN',
-        name: printer(PhysicalPrinterSlot.kitchen).name,
-        purpose: 'kitchen',
-        slot: PhysicalPrinterSlot.kitchen,
-      ),
-      route(
-        label: 'TEST-1F',
-        name: '1F via ${printer(floor1Slot).name}',
-        purpose: 'floor',
-        floor: '1F',
-        slot: floor1Slot,
-      ),
-      route(
-        label: 'TEST-2F',
-        name: printer(PhysicalPrinterSlot.floor2).name,
-        purpose: 'floor',
-        floor: '2F',
-        slot: PhysicalPrinterSlot.floor2,
-      ),
-      route(
-        label: 'TEST-3F',
-        name: printer(PhysicalPrinterSlot.floor3).name,
-        purpose: 'floor',
-        floor: '3F',
-        slot: PhysicalPrinterSlot.floor3,
-      ),
+      if (operation == StorePrinterOperation.posPrint) ...[
+        route(
+          label: 'TEST-KITCHEN',
+          name: printer(PhysicalPrinterSlot.kitchen).name,
+          purpose: 'kitchen',
+          slot: PhysicalPrinterSlot.kitchen,
+        ),
+        route(
+          label: 'TEST-1F',
+          name: '1F via ${printer(floor1Slot).name}',
+          purpose: 'floor',
+          floor: '1F',
+          slot: floor1Slot,
+        ),
+        route(
+          label: 'TEST-2F',
+          name: printer(PhysicalPrinterSlot.floor2).name,
+          purpose: 'floor',
+          floor: '2F',
+          slot: PhysicalPrinterSlot.floor2,
+        ),
+        route(
+          label: 'TEST-3F',
+          name: printer(PhysicalPrinterSlot.floor3).name,
+          purpose: 'floor',
+          floor: '3F',
+          slot: PhysicalPrinterSlot.floor3,
+        ),
+      ],
     ];
   }
 }
@@ -459,6 +501,7 @@ class StoreOpeningDraft {
     this.tables = const [],
     required this.printers,
     this.floor1Slot = PhysicalPrinterSlot.cashier,
+    this.operation = StorePrinterOperation.posPrint,
   });
 
   final String storeId;
@@ -467,15 +510,26 @@ class StoreOpeningDraft {
   final List<StoreSetupTableDraft> tables;
   final Map<PhysicalPrinterSlot, PhysicalPrinterDraft> printers;
   final PhysicalPrinterSlot floor1Slot;
+  final StorePrinterOperation operation;
+
+  List<PhysicalPrinterSlot> get requiredPrinterSlots =>
+      operation == StorePrinterOperation.paperless
+      ? const [PhysicalPrinterSlot.cashier]
+      : PhysicalPrinterSlot.values;
 
   List<LogicalDestinationDraft> get destinations =>
-      StoreOpeningTemplate.deriveDestinations(printers, floor1Slot: floor1Slot);
+      StoreOpeningTemplate.deriveDestinations(
+        printers,
+        floor1Slot: floor1Slot,
+        operation: operation,
+      );
 
   StoreOpeningDraft copyWith({
     List<String>? floors,
     List<StoreSetupTableDraft>? tables,
     Map<PhysicalPrinterSlot, PhysicalPrinterDraft>? printers,
     PhysicalPrinterSlot? floor1Slot,
+    StorePrinterOperation? operation,
   }) {
     return StoreOpeningDraft(
       storeId: storeId,
@@ -484,6 +538,7 @@ class StoreOpeningDraft {
       tables: tables ?? this.tables,
       printers: printers ?? this.printers,
       floor1Slot: floor1Slot ?? this.floor1Slot,
+      operation: operation ?? this.operation,
     );
   }
 }
