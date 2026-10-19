@@ -358,17 +358,62 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     }
   }
 
-  Future<void> setActiveStore(String storeId) async {
+  Future<void> setActiveStore(String storeId) => _selectActiveStore(storeId);
+
+  Future<void> setActiveStoreForSetup(String storeId) =>
+      _selectActiveStore(storeId, resolveSuperAdminStore: true);
+
+  Future<void> _selectActiveStore(
+    String storeId, {
+    bool resolveSuperAdminStore = false,
+  }) async {
     final user = state.user;
     if (user == null) return;
 
-    final isAccessible = state.accessibleStores.any(
-      (store) => store.id == storeId,
-    );
+    var stores = state.accessibleStores;
+    var isAccessible = stores.any((store) => store.id == storeId);
+    // Super Admin setup can target a store created after login or omitted from
+    // store-scoped claims. Resolve that one active store through server RLS;
+    // claims and permissions remain unchanged, and other roles keep their scope.
+    if (!isAccessible &&
+        resolveSuperAdminStore &&
+        state.role == 'super_admin') {
+      final generation = _sessionGeneration;
+      Map<String, dynamic>? row;
+      try {
+        row = await _client
+            .from('restaurants')
+            .select('id, name, brand_id, brands(name)')
+            .eq('id', storeId)
+            .eq('is_active', true)
+            .maybeSingle();
+      } catch (_) {
+        return;
+      }
+      if (!mounted ||
+          generation != _sessionGeneration ||
+          state.user?.id != user.id ||
+          state.role != 'super_admin' ||
+          row == null ||
+          row['id'] != storeId) {
+        return;
+      }
+      final brand = row['brands'];
+      stores = [
+        ...state.accessibleStores,
+        AccessibleStore(
+          id: storeId,
+          name: row['name']?.toString() ?? storeId,
+          brandId: row['brand_id']?.toString(),
+          brandName: brand is Map ? brand['name']?.toString() : null,
+        ),
+      ];
+      isAccessible = true;
+    }
     if (!isAccessible) return;
 
     _invalidateProfileLoad();
-    state = state.copyWith(storeId: storeId);
+    state = state.copyWith(storeId: storeId, accessibleStores: stores);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('$_activeStorePrefsPrefix${user.id}', storeId);
   }

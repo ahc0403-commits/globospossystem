@@ -114,6 +114,7 @@ try {
     "test/store_setup_localization_contract_test.dart",
     "test/store_setup_printer_modes_test.dart",
     "test/store_setup_print_agent_scope_test.dart",
+    "test/store_setup_active_store_test.dart",
     "test/print_station_connection_regression_test.dart",
     "test/registered_receipt_printer_panel_test.dart"
   )

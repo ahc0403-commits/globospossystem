@@ -27,6 +27,8 @@ class StoreSetupScreen extends ConsumerStatefulWidget {
 }
 
 class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
+  bool _storeSelectionInFlight = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,12 +51,22 @@ class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final auth = ref.read(authProvider);
-      if (auth.user != null && auth.storeId != widget.storeId) {
-        unawaited(
-          ref.read(authProvider.notifier).setActiveStore(widget.storeId),
-        );
+      if (!_storeSelectionInFlight &&
+          auth.user != null &&
+          auth.storeId != widget.storeId) {
+        unawaited(_selectStore(widget.storeId));
       }
     });
+  }
+
+  Future<void> _selectStore(String storeId) async {
+    _storeSelectionInFlight = true;
+    try {
+      await ref.read(authProvider.notifier).setActiveStoreForSetup(storeId);
+    } finally {
+      _storeSelectionInFlight = false;
+      if (mounted && widget.storeId != storeId) _scheduleStoreSelection();
+    }
   }
 
   @override

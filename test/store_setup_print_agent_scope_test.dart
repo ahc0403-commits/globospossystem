@@ -67,7 +67,10 @@ void main() {
   testWidgets(
     'an agent running for another store does not enable setup tests',
     (tester) async {
-      final harness = _Harness(accessibleStores: const ['store-a']);
+      final harness = _Harness(
+        accessibleStores: const ['store-a'],
+        role: 'store_admin',
+      );
       await harness.open(tester);
       expect(harness.auth.state.storeId, 'store-a');
       expect(harness.driver.startedStores, ['store-a']);
@@ -104,6 +107,17 @@ void main() {
     await harness.close(tester);
   });
 
+  testWidgets('Super Admin setup resolves a store omitted from login claims', (
+    tester,
+  ) async {
+    final harness = _Harness(accessibleStores: const ['store-a']);
+    await harness.open(tester);
+    expect(harness.auth.state.storeId, 'store-b');
+    expect(harness.driver.startedStores.last, 'store-b');
+    expect(harness.runButton(tester).onPressed, isNotNull);
+    await harness.close(tester);
+  });
+
   testWidgets('web setup can still queue tests for a separate native station', (
     tester,
   ) async {
@@ -123,9 +137,10 @@ class _Harness {
     bool enabled = true,
     bool failStart = false,
     bool supported = true,
+    String role = 'super_admin',
     List<String> accessibleStores = const ['store-a', 'store-b', 'store-c'],
   }) {
-    auth = _Auth(activeStore, accessibleStores);
+    auth = _Auth(activeStore, accessibleStores, role);
     driver = _Driver(failStart: failStart, supported: supported);
     container = ProviderContainer(
       overrides: [
@@ -180,7 +195,7 @@ class _Harness {
 }
 
 class _Auth extends StateNotifier<PosAuthState> implements AuthNotifier {
-  _Auth(String? storeId, List<String> stores)
+  _Auth(String? storeId, List<String> stores, String role)
     : super(
         PosAuthState(
           user: User(
@@ -190,7 +205,7 @@ class _Auth extends StateNotifier<PosAuthState> implements AuthNotifier {
             aud: 'authenticated',
             createdAt: '2026-10-19',
           ),
-          role: 'super_admin',
+          role: role,
           storeId: storeId,
           accessibleStores: [
             for (final id in stores) AccessibleStore(id: id, name: id),
@@ -199,8 +214,16 @@ class _Auth extends StateNotifier<PosAuthState> implements AuthNotifier {
       );
 
   @override
-  Future<void> setActiveStore(String storeId) async {
-    if (state.accessibleStores.any((store) => store.id == storeId)) {
+  Future<void> setActiveStoreForSetup(String storeId) =>
+      setActiveStore(storeId, resolveSuperAdminStore: true);
+
+  @override
+  Future<void> setActiveStore(
+    String storeId, {
+    bool resolveSuperAdminStore = false,
+  }) async {
+    if (state.accessibleStores.any((store) => store.id == storeId) ||
+        (resolveSuperAdminStore && state.role == 'super_admin')) {
       state = state.copyWith(storeId: storeId);
     }
   }
