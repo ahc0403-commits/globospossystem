@@ -9,11 +9,13 @@ class PhysicalPrinterForm extends StatefulWidget {
     required this.title,
     required this.printer,
     required this.onChanged,
+    this.enabled = true,
   });
 
   final String title;
   final PhysicalPrinterDraft printer;
   final ValueChanged<PhysicalPrinterDraft> onChanged;
+  final bool enabled;
 
   @override
   State<PhysicalPrinterForm> createState() => _PhysicalPrinterFormState();
@@ -23,6 +25,7 @@ class _PhysicalPrinterFormState extends State<PhysicalPrinterForm> {
   late final TextEditingController _name;
   late final TextEditingController _ip;
   late final TextEditingController _port;
+  late final TextEditingController _usbName;
 
   @override
   void initState() {
@@ -30,6 +33,7 @@ class _PhysicalPrinterFormState extends State<PhysicalPrinterForm> {
     _name = TextEditingController(text: widget.printer.name);
     _ip = TextEditingController(text: widget.printer.ip);
     _port = TextEditingController(text: '${widget.printer.port}');
+    _usbName = TextEditingController(text: widget.printer.usbPrinterName);
   }
 
   @override
@@ -41,6 +45,9 @@ class _PhysicalPrinterFormState extends State<PhysicalPrinterForm> {
       if (_port.text != '${widget.printer.port}') {
         _port.text = '${widget.printer.port}';
       }
+      if (_usbName.text != widget.printer.usbPrinterName) {
+        _usbName.text = widget.printer.usbPrinterName;
+      }
     }
   }
 
@@ -49,6 +56,7 @@ class _PhysicalPrinterFormState extends State<PhysicalPrinterForm> {
     _name.dispose();
     _ip.dispose();
     _port.dispose();
+    _usbName.dispose();
     super.dispose();
   }
 
@@ -58,6 +66,7 @@ class _PhysicalPrinterFormState extends State<PhysicalPrinterForm> {
         name: _name.text,
         ip: _ip.text,
         port: int.tryParse(_port.text) ?? 0,
+        usbPrinterName: _usbName.text,
       ),
     );
   }
@@ -74,29 +83,77 @@ class _PhysicalPrinterFormState extends State<PhysicalPrinterForm> {
             const SizedBox(height: 12),
             TextField(
               controller: _name,
+              enabled: widget.enabled,
               onChanged: (_) => _emit(),
               decoration: InputDecoration(
                 labelText: context.l10n.storeSetupPrinterName,
               ),
             ),
             const SizedBox(height: 8),
-            TextField(
-              key: Key('store_setup_ip_${widget.printer.slot.code}'),
-              controller: _ip,
-              onChanged: (_) => _emit(),
+            DropdownButtonFormField<SetupPrinterConnection>(
+              key: Key('store_setup_connection_${widget.printer.slot.code}'),
+              initialValue: widget.printer.connection,
               decoration: InputDecoration(
-                labelText: context.l10n.storeSetupPrinterIp,
+                labelText: context.l10n.storeSetupConnection,
               ),
+              items: [
+                DropdownMenuItem(
+                  value: SetupPrinterConnection.wired,
+                  child: Text(context.l10n.settingsPrinterWired),
+                ),
+                DropdownMenuItem(
+                  value: SetupPrinterConnection.wireless,
+                  child: Text(context.l10n.settingsPrinterWireless),
+                ),
+                DropdownMenuItem(
+                  value: SetupPrinterConnection.usb,
+                  child: Text(context.l10n.settingsPrinterUsb),
+                ),
+              ],
+              onChanged: !widget.enabled
+                  ? null
+                  : (value) {
+                      if (value != null) {
+                        widget.onChanged(
+                          widget.printer.copyWith(connection: value),
+                        );
+                      }
+                    },
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _port,
-              keyboardType: TextInputType.number,
-              onChanged: (_) => _emit(),
-              decoration: InputDecoration(
-                labelText: context.l10n.storeSetupPrinterPort,
+            if (widget.printer.connection == SetupPrinterConnection.usb)
+              TextField(
+                key: Key('store_setup_usb_${widget.printer.slot.code}'),
+                controller: _usbName,
+                enabled: widget.enabled,
+                onChanged: (_) => _emit(),
+                decoration: InputDecoration(
+                  labelText: context.l10n.storeSetupUsbName,
+                  helperText: context.l10n.storeSetupUsbHelp,
+                  helperMaxLines: 3,
+                ),
+              )
+            else ...[
+              TextField(
+                key: Key('store_setup_ip_${widget.printer.slot.code}'),
+                controller: _ip,
+                enabled: widget.enabled,
+                onChanged: (_) => _emit(),
+                decoration: InputDecoration(
+                  labelText: context.l10n.storeSetupPrinterIp,
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _port,
+                enabled: widget.enabled,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => _emit(),
+                decoration: InputDecoration(
+                  labelText: context.l10n.storeSetupPrinterPort,
+                ),
+              ),
+            ],
           ],
         ),
       ),

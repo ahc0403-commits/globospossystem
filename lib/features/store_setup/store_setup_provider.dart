@@ -54,12 +54,17 @@ class StoreSetupState {
       phase == StoreSetupPhase.applying;
 
   bool get allTestJobsDone =>
-      testJobs.length == 5 &&
-      testJobs.values.every((job) => job.status == 'done');
+      _hasRequiredTests && testJobs.values.every((job) => job.status == 'done');
 
   bool get allPhysicalOutputsConfirmed =>
-      testJobs.length == 5 &&
+      _hasRequiredTests &&
       testJobs.values.every((job) => job.physicallyConfirmed);
+
+  bool get _hasRequiredTests {
+    final labels = draft.destinations.map((route) => route.label).toSet();
+    return testJobs.length == labels.length &&
+        labels.every(testJobs.containsKey);
+  }
 
   bool get operationallyReady =>
       readiness?['ready'] == true &&
@@ -141,8 +146,18 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
   DateTime? _pollDeadline;
   bool _operationInFlight = false;
   bool _pollInFlight = false;
+  int _configurationRevision = 0;
+
+  void _invalidateTests() {
+    _configurationRevision++;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _pollDeadline = null;
+  }
 
   Future<void> loadExisting() async {
+    if (_operationInFlight) return;
+    _invalidateTests();
     state = state.copyWith(
       phase: StoreSetupPhase.loadingExisting,
       clearError: true,
@@ -157,8 +172,12 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
         draft: state.draft.copyWith(
           tables: existing.tables,
           printers: printers,
+          operation: existing.operation,
+          floor1Slot: _floor1SlotFromExisting(existing.destinations),
         ),
         clearValidation: true,
+        testJobs: const {},
+        clearApplyResult: true,
         clearError: true,
       );
       await refreshReadiness(silent: true);
@@ -189,10 +208,29 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
 
     void assign(PhysicalPrinterSlot slot, Map<String, dynamic>? row) {
       if (row == null) return;
+      final physical = row['physical_printers'] as Map?;
+      final endpoints =
+          (physical?['printer_endpoints'] as List? ?? const [])
+              .whereType<Map>()
+              .where((endpoint) => endpoint['is_active'] == true)
+              .toList()
+            ..sort(
+              (a, b) => ((a['priority'] as num?)?.toInt() ?? 100).compareTo(
+                (b['priority'] as num?)?.toInt() ?? 100,
+              ),
+            );
+      final endpoint = endpoints.isEmpty ? null : endpoints.first;
+      final type = endpoint?['endpoint_type']?.toString();
       result[slot] = result[slot]!.copyWith(
-        name: row['name']?.toString(),
-        ip: row['ip']?.toString(),
-        port: row['port'] is num ? (row['port'] as num).toInt() : null,
+        name: physical?['name']?.toString() ?? row['name']?.toString(),
+        ip: type == 'usb' ? '' : (endpoint?['ip'] ?? row['ip'])?.toString(),
+        port: ((endpoint?['port'] ?? row['port']) as num?)?.toInt(),
+        connection: type == 'usb'
+            ? SetupPrinterConnection.usb
+            : type == 'wireless'
+            ? SetupPrinterConnection.wireless
+            : SetupPrinterConnection.wired,
+        usbPrinterName: endpoint?['device_name']?.toString() ?? '',
       );
     }
 
@@ -203,12 +241,76 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
     return result;
   }
 
+  PhysicalPrinterSlot _floor1SlotFromExisting(List<Map<String, dynamic>> rows) {
+    final active = rows.where((row) => row['is_active'] == true).toList();
+    final floor1 = active
+        .where(
+          (row) =>
+              row['purpose'] == 'floor' &&
+              normalizeFloorLabel(row['floor_label']?.toString() ?? '') == '1F',
+        )
+        .firstOrNull;
+    final printerId = floor1?['physical_printer_id'];
+    if (printerId == null) return PhysicalPrinterSlot.cashier;
+    for (final slot in PhysicalPrinterSlot.values) {
+      if (slot == PhysicalPrinterSlot.cashier &&
+              active.any(
+                (row) =>
+                    row['purpose'] == 'receipt' &&
+                    row['physical_printer_id'] == printerId,
+              ) ||
+          slot == PhysicalPrinterSlot.kitchen &&
+              active.any(
+                (row) =>
+                    row['purpose'] == 'kitchen' &&
+                    row['physical_printer_id'] == printerId,
+              ) ||
+          slot == PhysicalPrinterSlot.floor2 &&
+              active.any(
+                (row) =>
+                    row['purpose'] == 'floor' &&
+                    row['floor_label'] == '2F' &&
+                    row['physical_printer_id'] == printerId,
+              ) ||
+          slot == PhysicalPrinterSlot.floor3 &&
+              active.any(
+                (row) =>
+                    row['purpose'] == 'floor' &&
+                    row['floor_label'] == '3F' &&
+                    row['physical_printer_id'] == printerId,
+              )) {
+        return slot;
+      }
+    }
+    return PhysicalPrinterSlot.cashier;
+  }
+
+  void setOperation(StorePrinterOperation operation) {
+    if (state.isBusy ||
+        _operationInFlight ||
+        state.draft.operation == operation) {
+      return;
+    }
+    _invalidateTests();
+    state = state.copyWith(
+      phase: StoreSetupPhase.editing,
+      draft: state.draft.copyWith(operation: operation),
+      testJobs: const {},
+      clearValidation: true,
+      clearApplyResult: true,
+      clearReadiness: true,
+      clearError: true,
+    );
+  }
+
   void goToStep(int step) {
     if (step < 0 || step > 5 || state.isBusy) return;
     state = state.copyWith(step: step, clearError: true);
   }
 
   void addTables(Iterable<StoreSetupTableDraft> tables) {
+    if (state.isBusy || _operationInFlight) return;
+    _invalidateTests();
     final merged = [...state.draft.tables, ...tables];
     state = state.copyWith(
       phase: StoreSetupPhase.editing,
@@ -217,22 +319,30 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
       clearApplyResult: true,
       clearReadiness: true,
       clearError: true,
+      testJobs: const {},
     );
   }
 
   void removeTableAt(int index) {
+    if (state.isBusy || _operationInFlight) return;
     if (index < 0 || index >= state.draft.tables.length) return;
     final table = state.draft.tables[index];
     if (table.existingId != null || table.isProtected) return;
+    _invalidateTests();
     final updated = [...state.draft.tables]..removeAt(index);
     state = state.copyWith(
       phase: StoreSetupPhase.editing,
       draft: state.draft.copyWith(tables: updated),
       clearValidation: true,
+      testJobs: const {},
+      clearApplyResult: true,
+      clearReadiness: true,
     );
   }
 
   void reassignTables(Set<int> indexes, String floorLabel) {
+    if (state.isBusy || _operationInFlight) return;
+    _invalidateTests();
     final updated = [...state.draft.tables];
     for (final index in indexes) {
       if (index < 0 || index >= updated.length || updated[index].isProtected) {
@@ -246,10 +356,15 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
       phase: StoreSetupPhase.editing,
       draft: state.draft.copyWith(tables: updated),
       clearValidation: true,
+      testJobs: const {},
+      clearApplyResult: true,
+      clearReadiness: true,
     );
   }
 
   void updatePrinter(PhysicalPrinterDraft printer) {
+    if (state.isBusy || _operationInFlight) return;
+    _invalidateTests();
     state = state.copyWith(
       phase: StoreSetupPhase.editing,
       draft: state.draft.copyWith(
@@ -259,14 +374,20 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
       clearApplyResult: true,
       clearReadiness: true,
       clearError: true,
+      testJobs: const {},
     );
   }
 
   void setFloor1Slot(PhysicalPrinterSlot slot) {
+    if (state.isBusy || _operationInFlight) return;
+    _invalidateTests();
     state = state.copyWith(
       phase: StoreSetupPhase.editing,
       draft: state.draft.copyWith(floor1Slot: slot),
       clearValidation: true,
+      clearApplyResult: true,
+      clearReadiness: true,
+      testJobs: const {},
     );
   }
 
@@ -360,30 +481,41 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
       clearError: true,
     );
     try {
-      final jobs = <String, StoreSetupTestJob>{};
+      final destinationsById = <String, LogicalDestinationDraft>{};
       for (final destination in state.draft.destinations) {
         final destinationId = _destinationId(destination);
         if (destinationId == null) {
           throw StateError('STORE_SETUP_DESTINATION_NOT_APPLIED');
         }
-        final job = await _backend.enqueueTest(
-          storeId: state.draft.storeId,
-          destination: destination,
-          destinationId: destinationId,
-        );
+        destinationsById[destinationId] = destination;
+      }
+      final returnedJobs = await _backend.enqueueTests(
+        storeId: state.draft.storeId,
+        destinationsById: destinationsById,
+      );
+      final jobs = <String, StoreSetupTestJob>{};
+      for (final job in returnedJobs) {
         if (job.jobId.isEmpty) {
           throw StateError('STORE_SETUP_TEST_JOB_ID_MISSING');
         }
-        jobs[destination.label] = job;
-        state = state.copyWith(testJobs: Map.unmodifiable(jobs));
+        jobs[job.label] = job;
       }
+      if (jobs.length != destinationsById.length ||
+          !state.draft.destinations.every(
+            (destination) => jobs.containsKey(destination.label),
+          )) {
+        throw StateError('STORE_SETUP_TEST_JOB_ID_MISSING');
+      }
+      state = state.copyWith(testJobs: Map.unmodifiable(jobs));
       _pollDeadline = DateTime.now().add(_pollingTimeout);
       await pollTestJobs();
       _pollTimer?.cancel();
-      _pollTimer = Timer.periodic(
-        _pollingInterval,
-        (_) => unawaited(pollTestJobs()),
-      );
+      if (state.testJobs.values.any((job) => !job.isTerminal)) {
+        _pollTimer = Timer.periodic(
+          _pollingInterval,
+          (_) => unawaited(pollTestJobs()),
+        );
+      }
     } catch (_) {
       state = state.copyWith(
         phase: StoreSetupPhase.applied,
@@ -403,11 +535,13 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
       return;
     }
     _pollInFlight = true;
+    final revision = _configurationRevision;
     try {
       final rows = await _backend.fetchTestJobs(
         state.draft.storeId,
         state.testJobs.values.map((job) => job.jobId),
       );
+      if (revision != _configurationRevision || !mounted) return;
       final jobs = <String, StoreSetupTestJob>{};
       for (final entry in state.testJobs.entries) {
         final row = rows[entry.value.jobId];
@@ -423,6 +557,7 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
         _pollTimer?.cancel();
         _pollTimer = null;
         await refreshReadiness(silent: true);
+        if (revision != _configurationRevision || !mounted) return;
         state = state.copyWith(
           phase: state.operationallyReady
               ? StoreSetupPhase.ready
@@ -430,7 +565,9 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
         );
       }
     } catch (_) {
-      state = state.copyWith(errorCode: 'STORE_SETUP_TEST_POLL_FAILED');
+      if (revision == _configurationRevision && mounted) {
+        state = state.copyWith(errorCode: 'STORE_SETUP_TEST_POLL_FAILED');
+      }
     } finally {
       _pollInFlight = false;
     }
@@ -484,8 +621,10 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
   }
 
   Future<void> refreshReadiness({bool silent = false}) async {
+    final revision = _configurationRevision;
     try {
       final readiness = await _backend.readiness(state.draft.storeId);
+      if (revision != _configurationRevision || !mounted) return;
       state = state.copyWith(readiness: readiness, clearError: silent);
     } catch (_) {
       if (!silent) {

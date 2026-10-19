@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../main.dart';
 import 'store_setup_models.dart';
@@ -8,11 +9,13 @@ class StoreSetupExistingConfig {
     required this.store,
     required this.tables,
     required this.destinations,
+    this.operation = StorePrinterOperation.posPrint,
   });
 
   final Map<String, dynamic> store;
   final List<StoreSetupTableDraft> tables;
   final List<Map<String, dynamic>> destinations;
+  final StorePrinterOperation operation;
 }
 
 abstract class StoreSetupBackend {
@@ -45,6 +48,11 @@ abstract class StoreSetupBackend {
     required String destinationId,
   });
 
+  Future<List<StoreSetupTestJob>> enqueueTests({
+    required String storeId,
+    required Map<String, LogicalDestinationDraft> destinationsById,
+  });
+
   Future<Map<String, Map<String, dynamic>>> fetchTestJobs(
     String storeId,
     Iterable<String> jobIds,
@@ -75,13 +83,24 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
           .order('table_number'),
       _client
           .from('printer_destinations')
-          .select('id, name, ip, port, purpose, floor_label, is_active')
+          .select(
+            'id, name, ip, port, purpose, floor_label, is_active, physical_printer_id, '
+            'physical_printers(name, printer_endpoints(endpoint_type, ip, port, device_name, priority, is_active))',
+          )
           .eq('restaurant_id', storeId)
           .order('purpose'),
+      _client
+          .from('restaurant_settings')
+          .select('fulfillment_mode')
+          .eq('restaurant_id', storeId)
+          .maybeSingle(),
     ]);
 
     return StoreSetupExistingConfig(
       store: Map<String, dynamic>.from(responses[0] as Map),
+      operation: (responses[3] as Map?)?['fulfillment_mode'] == 'paperless'
+          ? StorePrinterOperation.paperless
+          : StorePrinterOperation.posPrint,
       tables: (responses[1] as List)
           .whereType<Map>()
           .map(
@@ -98,6 +117,7 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
 
   Map<String, dynamic> _payload(StoreOpeningDraft draft) => {
     'p_store_id': draft.storeId,
+    'p_mode': draft.operation.code,
     'p_tables': draft.tables.map((table) => table.toJson()).toList(),
     'p_destinations': draft.destinations
         .map((destination) => destination.toJson())
@@ -107,7 +127,7 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
   @override
   Future<StoreSetupValidationResult> validate(StoreOpeningDraft draft) async {
     final response = await _client.rpc(
-      'admin_validate_store_opening_config',
+      'admin_validate_store_opening_config_v2',
       params: _payload(draft),
     );
     return StoreSetupValidationResult.fromJson(
@@ -118,7 +138,7 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
   @override
   Future<Map<String, dynamic>> apply(StoreOpeningDraft draft) async {
     final response = await _client.rpc(
-      'admin_apply_store_opening_config',
+      'admin_apply_store_opening_config_v2',
       params: _payload(draft),
     );
     return Map<String, dynamic>.from(response as Map);
@@ -184,6 +204,38 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
       throw Exception(message ?? 'FIXED_ACCOUNT_PROVISION_FAILED');
     }
     return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  @override
+  Future<List<StoreSetupTestJob>> enqueueTests({
+    required String storeId,
+    required Map<String, LogicalDestinationDraft> destinationsById,
+  }) async {
+    final response = await _client.rpc(
+      'admin_enqueue_store_opening_tests',
+      params: {
+        'p_store_id': storeId,
+        'p_destination_ids': destinationsById.keys.toList(growable: false),
+        'p_request_id': const Uuid().v4(),
+      },
+    );
+    return (response as List)
+        .whereType<Map>()
+        .map((row) {
+          final id = row['destination_id']?.toString() ?? '';
+          final destination = destinationsById[id];
+          if (destination == null) {
+            throw StateError('STORE_SETUP_DESTINATION_NOT_APPLIED');
+          }
+          return StoreSetupTestJob(
+            label: destination.label,
+            destinationId: id,
+            jobId: row['id']?.toString() ?? '',
+            status: row['status']?.toString() ?? 'pending',
+            error: row['last_error']?.toString(),
+          );
+        })
+        .toList(growable: false);
   }
 
   @override

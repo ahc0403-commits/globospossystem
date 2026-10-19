@@ -63,13 +63,13 @@ const _frozenAlertFiles = <String, String>{
   // Printer diagnosis copy has ko/vi/en registered-receipt widget coverage.
   // Arrival behavior remains covered below.
   'lib/l10n/app_localizations.dart':
-      '7e45dc85baf44ca34879bd182ea930a7ef3d3f7ecad379c727ac880b40918477',
+      '969f16714b850fd922ef9b7ed7329556940f839211a25f4d7c30f188cdd5a649',
   'lib/l10n/app_localizations_ko.dart':
-      '529c362bcd9581c8d782cdceb3f1735bd38663ea65bf877c02698deb0818432d',
+      '82d81c0e3c5e4b298d024175cda81683763f1b3fd9e38dd5f4108c001b04937a',
   'lib/l10n/app_localizations_vi.dart':
-      'b058dcefcbb61bbe3309768b94a898f4a14c3cf7accdfa2707491caeb71ba2de',
+      'a797d508a1c99130c3bef803c55eb692dd8eabea07f0c4b6266c56dccfbb68ae',
   'lib/l10n/app_localizations_en.dart':
-      'c7b2347ed0165a805dca394f27d6c18f9778fa18dbe9a94b812324f9ca1e7c6f',
+      '3204bde930830cec0389f592d628b5cb93c57c634874f1ebbb315148a1461318',
 };
 
 void main() {
@@ -104,6 +104,27 @@ void main() {
             source.substring(0, start) + source.substring(end),
           );
         }
+      }
+      if (entry.key.startsWith('lib/l10n/app_localizations')) {
+        // Only these independent printer-setup members changed. Normalize
+        // them against the pre-change generated baseline; retain every alert
+        // member and every other existing member in the frozen manifest.
+        var source = utf8.decode(bytes);
+        for (final key in const [
+          'storeSetupStepPrinters',
+          'storeSetupTemplateName',
+          'storeSetupTemplateDescription',
+          'storeSetupRunFiveTests',
+        ]) {
+          final member = entry.key.endsWith('/app_localizations.dart')
+              ? RegExp(
+                  '\n  /// No description provided for @$key\\.[\\s\\S]*?\n  String get $key;\n',
+                )
+              : RegExp('\n  @override\n  String get $key =>[\\s\\S]*?;\n');
+          expect(member.allMatches(source), hasLength(1), reason: key);
+          source = source.replaceFirst(member, '');
+        }
+        bytes = utf8.encode(source);
       }
       expect(
         sha256.convert(bytes).toString(),

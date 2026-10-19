@@ -1,0 +1,18 @@
+CREATE TABLE public.brands(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), management_model text);
+CREATE TABLE public.restaurants(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, address text, is_active boolean DEFAULT true, brand_id uuid REFERENCES brands(id));
+CREATE TABLE public.users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), auth_id uuid, role text, account_type text, is_active boolean DEFAULT true);
+CREATE TABLE public.fixture_store_access(auth_id uuid, store_id uuid);
+CREATE FUNCTION public.user_accessible_stores(uuid) RETURNS SETOF uuid LANGUAGE sql STABLE AS $$ SELECT store_id FROM fixture_store_access WHERE auth_id = $1 $$;
+CREATE FUNCTION public.is_super_admin() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT EXISTS(SELECT 1 FROM users WHERE auth_id=auth.uid() AND role='super_admin' AND is_active) $$;
+CREATE TABLE public.tables(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid REFERENCES restaurants(id), table_number text, seat_count int, status text DEFAULT 'available', floor_label text NOT NULL DEFAULT '1F', layout_x numeric(6,4), layout_y numeric(6,4), layout_w numeric, layout_h numeric, layout_rotation int, layout_shape text, layout_sort_order int, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), UNIQUE(restaurant_id,table_number));
+CREATE TABLE public.printer_destinations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid REFERENCES restaurants(id), name text, ip text, port int DEFAULT 9100, purpose text, floor_label text, is_active boolean DEFAULT true, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+CREATE TABLE public.print_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid REFERENCES restaurants(id), destination_id uuid REFERENCES printer_destinations(id), copy_type text, order_id uuid, batch_no int, payload jsonb DEFAULT '{}', status text DEFAULT 'pending', last_error text, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+CREATE INDEX ON public.print_jobs(restaurant_id,destination_id,created_at DESC);
+CREATE TABLE public.audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), actor_id uuid, action text, entity_type text, entity_id uuid, details jsonb);
+CREATE TABLE public.restaurant_settings(restaurant_id uuid PRIMARY KEY REFERENCES restaurants(id), fulfillment_mode text DEFAULT 'pos_print' CHECK(fulfillment_mode IN('pos_print','paperless')), updated_at timestamptz DEFAULT now());
+CREATE TABLE public.fulfillment_mode_changes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), request_id uuid UNIQUE, restaurant_id uuid, previous_mode text, next_mode text, reason text, actor_user_id uuid);
+CREATE TABLE public.emergency_fulfillment_sessions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid, reason text, activated_by uuid, status text DEFAULT 'active', closed_by uuid, closed_at timestamptz, close_reason text, close_resolution text, force_closed boolean DEFAULT false, updated_at timestamptz DEFAULT now());
+CREATE TABLE public.emergency_fulfillment_items(session_id uuid, ordered_quantity int, floor_served_quantity int, is_cancelled boolean DEFAULT false);
+CREATE TABLE public.emergency_floor_direct_items(LIKE emergency_fulfillment_items);
+CREATE FUNCTION public.setup_assert(boolean,text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF $1 IS DISTINCT FROM true THEN RAISE EXCEPTION 'FAIL: %',$2; END IF; RAISE NOTICE 'PASS: %',$2; END $$;
+GRANT USAGE ON SCHEMA public TO authenticated;

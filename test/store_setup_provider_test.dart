@@ -6,6 +6,88 @@ import 'package:globos_pos_system/features/store_setup/store_setup_provider.dart
 import 'package:globos_pos_system/features/store_setup/store_setup_service.dart';
 
 void main() {
+  test(
+    'paperless USB store loads, applies and completes one receipt test',
+    () async {
+      final backend = _FakeStoreSetupBackend()
+        ..operation = StorePrinterOperation.paperless
+        ..usbName = 'XP-80C';
+      final notifier = StoreSetupNotifier(storeId: 'store-1', backend: backend);
+      await _flush();
+      expect(notifier.state.draft.operation, StorePrinterOperation.paperless);
+      final printer =
+          notifier.state.draft.printers[PhysicalPrinterSlot.cashier]!;
+      expect(printer.connection, SetupPrinterConnection.usb);
+      expect(printer.usbPrinterName, 'XP-80C');
+      expect(printer.ip, isEmpty);
+      expect(await notifier.validate(), isTrue);
+      expect(await notifier.apply(), isTrue);
+      await notifier.runAllTests();
+      expect(backend.enqueueCalls, 1);
+      expect(notifier.state.allTestJobsDone, isTrue);
+      expect(notifier.state.operationallyReady, isFalse);
+      notifier.confirmPhysicalOutput('TEST-RECEIPT', true);
+      expect(notifier.state.operationallyReady, isTrue);
+      await notifier.loadExisting();
+      expect(
+        notifier
+            .state
+            .draft
+            .printers[PhysicalPrinterSlot.cashier]!
+            .usbPrinterName,
+        'XP-80C',
+      );
+      expect(notifier.state.allPhysicalOutputsConfirmed, isFalse);
+      notifier.dispose();
+    },
+  );
+
+  test(
+    'mode switch clears tests and an in-flight poll cannot revive old evidence',
+    () async {
+      final backend = _FakeStoreSetupBackend();
+      final notifier = StoreSetupNotifier(storeId: 'store-1', backend: backend);
+      await _flush();
+      await notifier.apply();
+      await notifier.runAllTests();
+      for (final label in notifier.state.testJobs.keys.toList()) {
+        notifier.confirmPhysicalOutput(label, true);
+      }
+      expect(notifier.state.operationallyReady, isTrue);
+      backend.fetchCompleter = Completer<Map<String, Map<String, dynamic>>>();
+      final oldPoll = notifier.pollTestJobs();
+      notifier.setOperation(StorePrinterOperation.paperless);
+      backend.fetchCompleter!.complete({});
+      await oldPoll;
+      expect(notifier.state.testJobs, isEmpty);
+      expect(notifier.state.validation, isNull);
+      expect(notifier.state.applyResult, isNull);
+      expect(notifier.state.readiness, isNull);
+      expect(notifier.state.allPhysicalOutputsConfirmed, isFalse);
+      expect(notifier.state.draft.destinations, hasLength(1));
+      notifier.dispose();
+    },
+  );
+
+  test('editing USB name invalidates the completed receipt test', () async {
+    final backend = _FakeStoreSetupBackend()
+      ..operation = StorePrinterOperation.paperless;
+    final notifier = StoreSetupNotifier(storeId: 'store-1', backend: backend);
+    await _flush();
+    await notifier.apply();
+    await notifier.runAllTests();
+    notifier.confirmPhysicalOutput('TEST-RECEIPT', true);
+    notifier.updatePrinter(
+      notifier.state.draft.printers[PhysicalPrinterSlot.cashier]!.copyWith(
+        connection: SetupPrinterConnection.usb,
+        usbPrinterName: 'XP-80C',
+      ),
+    );
+    expect(notifier.state.testJobs, isEmpty);
+    expect(notifier.state.operationallyReady, isFalse);
+    notifier.dispose();
+  });
+
   test('provider prevents concurrent validation', () async {
     final backend = _FakeStoreSetupBackend();
     final notifier = StoreSetupNotifier(storeId: 'store-1', backend: backend);
@@ -134,6 +216,9 @@ void main() {
 Future<void> _flush() => Future<void>.delayed(Duration.zero);
 
 class _FakeStoreSetupBackend implements StoreSetupBackend {
+  StorePrinterOperation operation = StorePrinterOperation.posPrint;
+  String usbName = '';
+  Completer<Map<String, Map<String, dynamic>>>? fetchCompleter;
   int validateCalls = 0;
   int enqueueCalls = 0;
   int provisionCalls = 0;
@@ -146,6 +231,7 @@ class _FakeStoreSetupBackend implements StoreSetupBackend {
   List<Map<String, dynamic>> get destinations => [
     for (final route in StoreOpeningTemplate.deriveDestinations(
       StoreOpeningTemplate.defaultPrinters(),
+      operation: operation,
     ))
       {
         'id': 'destination-${route.label}',
@@ -155,13 +241,43 @@ class _FakeStoreSetupBackend implements StoreSetupBackend {
         'purpose': route.purpose,
         'floor_label': route.floorLabel,
         'is_active': true,
+        if (usbName.isNotEmpty)
+          'physical_printers': {
+            'name': 'Cashier',
+            'printer_endpoints': [
+              {
+                'endpoint_type': 'usb',
+                'device_name': usbName,
+                'port': 9100,
+                'priority': 5,
+                'is_active': true,
+              },
+            ],
+          },
       },
   ];
 
   @override
-  Future<Map<String, dynamic>> apply(StoreOpeningDraft draft) async => {
-    'store_id': draft.storeId,
-  };
+  Future<Map<String, dynamic>> apply(StoreOpeningDraft draft) async {
+    operation = draft.operation;
+    return {'store_id': draft.storeId};
+  }
+
+  @override
+  Future<List<StoreSetupTestJob>> enqueueTests({
+    required String storeId,
+    required Map<String, LogicalDestinationDraft> destinationsById,
+  }) async {
+    enqueueCalls += destinationsById.length;
+    return [
+      for (final entry in destinationsById.entries)
+        StoreSetupTestJob(
+          label: entry.value.label,
+          destinationId: entry.key,
+          jobId: 'job-${entry.value.label}',
+        ),
+    ];
+  }
 
   @override
   Future<StoreSetupTestJob> enqueueTest({
@@ -182,9 +298,11 @@ class _FakeStoreSetupBackend implements StoreSetupBackend {
   Future<Map<String, Map<String, dynamic>>> fetchTestJobs(
     String storeId,
     Iterable<String> jobIds,
-  ) async => {
-    for (final id in jobIds) id: {'id': id, 'status': 'done'},
-  };
+  ) async => fetchCompleter != null
+      ? fetchCompleter!.future
+      : {
+          for (final id in jobIds) id: {'id': id, 'status': 'done'},
+        };
 
   @override
   Future<StoreSetupExistingConfig> loadExisting(String storeId) async {
@@ -200,6 +318,7 @@ class _FakeStoreSetupBackend implements StoreSetupBackend {
         ),
       ],
       destinations: destinations,
+      operation: operation,
     );
   }
 
