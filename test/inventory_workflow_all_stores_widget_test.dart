@@ -260,6 +260,7 @@ Future<GoRouter> _mount(
   StreamController<PosLiveEvent> events, {
   String role = 'inventory_orderer',
   String? initialOrderId,
+  String? overrideStoreId,
 }) async {
   tester.view.physicalSize = const Size(1440, 1100);
   tester.view.devicePixelRatio = 1;
@@ -273,6 +274,17 @@ Future<GoRouter> _mount(
         builder: (_, _) => InventoryOrderWorkflowScreen(
           service: service,
           initialOrderId: initialOrderId,
+          overrideStoreId: overrideStoreId,
+        ),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (_, _) => const Scaffold(body: Text('Primary inventory')),
+      ),
+      GoRoute(
+        path: '/admin/:storeId',
+        builder: (_, state) => Scaffold(
+          body: Text('Inventory ${state.pathParameters['storeId']}'),
         ),
       ),
     ],
@@ -284,6 +296,10 @@ Future<GoRouter> _mount(
         posLiveEventsProvider(
           'operating-store',
         ).overrideWith((ref) => events.stream),
+        if (overrideStoreId != null)
+          posLiveEventsProvider(
+            overrideStoreId,
+          ).overrideWith((ref) => events.stream),
       ],
       child: MaterialApp.router(
         routerConfig: router,
@@ -356,6 +372,54 @@ void main() {
     );
   });
   tearDownAll(() => Supabase.instance.dispose());
+
+  for (final selectedStore in ['selected-store', null]) {
+    testWidgets('super admin returns to inventory for $selectedStore', (
+      tester,
+    ) async {
+      final events = StreamController<PosLiveEvent>.broadcast();
+      addTearDown(events.close);
+      final router = await _mount(
+        tester,
+        _Inventory(),
+        events,
+        role: 'super_admin',
+        overrideStoreId: selectedStore,
+      );
+      addTearDown(router.dispose);
+      await tester.tap(find.widgetWithText(TextButton, 'Inventory'));
+      await tester.pumpAndSettle();
+      final expectedStore = selectedStore ?? 'operating-store';
+      expect(
+        router.routeInformationProvider.value.uri.toString(),
+        '/admin/$expectedStore?tab=inventory',
+      );
+      expect(find.text('Inventory $expectedStore'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('native manager returns to the native inventory route', (
+    tester,
+  ) async {
+    final events = StreamController<PosLiveEvent>.broadcast();
+    addTearDown(events.close);
+    final router = await _mount(
+      tester,
+      _Inventory(),
+      events,
+      role: 'store_admin',
+    );
+    addTearDown(router.dispose);
+    await tester.tap(find.widgetWithText(TextButton, 'Inventory'));
+    await tester.pumpAndSettle();
+    expect(
+      router.routeInformationProvider.value.uri.toString(),
+      '/admin?tab=inventory',
+    );
+    expect(find.text('Primary inventory'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'manager route preserves the selected store and changes scope safely',
