@@ -154,6 +154,12 @@ Source commit: $sourceSha
 
 Close the old app before installing. Extract this complete ZIP to a new folder.
 Keep globos_print_station.exe, all DLLs and the data folder together.
+Open Print Station and choose Paperless or Printer output.
+Paperless: configure only the cashier printer for bills and receipts.
+Printer output: configure kitchen, floor, tray and cashier printers.
+The choice is saved on this PC; store KDS routing is configured separately.
+Paperless automatic printing requires the server cashier-only claim migration.
+If the server update is missing, paperless polling stays stopped safely.
 Open Settings > Receipt and use the registered store receipt printer.
 Manual IP tests apply only to this PC and do not update store printer routing.
 Connection diagnostics show the attempted IP:port or Windows printer name.

@@ -5,7 +5,7 @@ station_db="pos-station-receipt-test-$$"
 trap 'docker rm -f "$station_db" >/dev/null 2>&1 || true' EXIT
 docker run --detach --rm --name "$station_db" --env POSTGRES_PASSWORD=station-fixture --env POSTGRES_DB=station_test public.ecr.aws/supabase/postgres:17.6.1.104 >/dev/null
 for attempt in $(seq 1 45); do
- if docker exec "$station_db" psql -X -U postgres -d station_test -Atqc "SELECT 1" >/dev/null 2>&1; then break; fi
+ if docker exec "$station_db" psql -X -h 127.0.0.1 -U postgres -d station_test -Atqc "SELECT 1" >/dev/null 2>&1; then break; fi
  if [[ "$attempt" == 45 ]]; then exit 1; fi
  sleep 1
 done
