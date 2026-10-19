@@ -1,3 +1,7 @@
+import '../../auth/auth_provider.dart';
+import '../widgets/invoice_profile_editor.dart';
+import '../../../core/payments/beverage_tax.dart';
+import '../widgets/beverage_tax_editor.dart';
 import '../../../core/i18n/menu_localization.dart';
 import 'dart:typed_data';
 
@@ -11,6 +15,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/i18n/excel_import_localization.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
@@ -193,6 +198,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       onTogglePublicVisibility: menuNotifier.togglePublicVisibility,
       onEditItem: (item) =>
           _showEditItemDialog(context, item, allItems, menuNotifier),
+      onDeleteItem: (item) =>
+          _showDeleteItemDialog(context, item, menuNotifier),
     );
 
     return Scaffold(
@@ -592,7 +599,17 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       }
     } on MenuImportValidationException catch (error) {
       if (mounted) {
-        await _showMenuImportValidationErrors(context, error.issues);
+        await _showMenuImportValidationErrors(
+          context,
+          error.decodeFailure == null
+              ? error.issues
+              : [
+                  excelWorkbookDecodeMessage(
+                    context.l10n,
+                    error.decodeFailure!,
+                  ),
+                ],
+        );
       }
     } catch (_) {
       if (mounted) {
@@ -930,6 +947,75 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     );
   }
 
+  Future<void> _showDeleteItemDialog(
+    BuildContext context,
+    Map<String, dynamic> item,
+    MenuNotifier menuNotifier,
+  ) async {
+    final l10n = context.l10n;
+    final itemId = item['id']?.toString() ?? '';
+    final name = context.menuName(item);
+    if (itemId.isEmpty) return;
+
+    var isDeleting = false;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => PopScope(
+          canPop: !isDeleting,
+          child: AlertDialog(
+            key: const Key('admin_menu_delete_item_dialog'),
+            backgroundColor: AppColors.surface1,
+            title: Text(l10n.menuDeleteItemTitle),
+            content: Text(l10n.menuDeleteItemConfirm(name)),
+            actions: [
+              TextButton(
+                onPressed: isDeleting
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                key: const Key('admin_menu_delete_item_confirm'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.statusCancelled,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: isDeleting
+                    ? null
+                    : () async {
+                        setDialogState(() => isDeleting = true);
+                        final success = await menuNotifier.archiveMenuItem(
+                          itemId,
+                        );
+                        if (!dialogContext.mounted) return;
+                        if (!success) {
+                          setDialogState(() => isDeleting = false);
+                          return;
+                        }
+                        Navigator.of(dialogContext).pop();
+                        if (mounted) {
+                          showSuccessToast(context, l10n.menuItemDeleted(name));
+                        }
+                      },
+                child: isDeleting
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(l10n.menuDelete),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showAddItemDialog(
     BuildContext context,
     String? categoryId,
@@ -946,6 +1032,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final paperlessNameViController = TextEditingController();
     final nameEnController = TextEditingController();
     final priceController = TextEditingController();
+    var beverageTax = const BeverageTax();
     XFile? selectedPhoto;
     Uint8List? selectedPreviewBytes;
     var isCombo = false;
@@ -1011,6 +1098,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     keyboardType: TextInputType.number,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  BeverageTaxEditor(
+                    value: beverageTax,
+                    onChanged: (value) =>
+                        setDialogState(() => beverageTax = value),
                   ),
                   const SizedBox(height: 16),
                   _ComboMenuEditor(
@@ -1084,6 +1177,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                     return;
                   }
+                  if (!beverageTax.isValid ||
+                      (isCombo && beverageTax.isApplicable)) {
+                    showErrorToast(context, l10n.menuTaxInvalid);
+                    return;
+                  }
                   if (isCombo && comboQuantities.isEmpty) {
                     showErrorToast(context, l10n.menuComboComponentRequired);
                     return;
@@ -1099,6 +1197,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           paperlessNameVi: paperlessNameVi.isEmpty
                               ? null
                               : paperlessNameVi,
+                          beverageTax: beverageTax,
                           price: price,
                           isCombo: isCombo,
                           comboComponents: comboComponents,
@@ -1112,6 +1211,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           paperlessNameVi: paperlessNameVi.isEmpty
                               ? null
                               : paperlessNameVi,
+                          beverageTax: beverageTax,
                           price: price,
                           photo: photo,
                           isCombo: isCombo,
@@ -1163,6 +1263,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       text: originalPaperlessNameVi,
     );
     final nameEnController = TextEditingController(text: originalNameEn);
+    final originalBeverageTax = BeverageTax.fromJson(item);
+    var beverageTax = originalBeverageTax;
     final rawPrice = item['price'];
     final initialPrice = switch (rawPrice) {
       num value => value.toDouble(),
@@ -1254,6 +1356,20 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     ),
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  if (ref.read(authProvider).role == 'super_admin') ...[
+                    InvoiceProfileEditor(
+                      item: item,
+                      onSaved: menuNotifier.fetchAll,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  BeverageTaxEditor(
+                    value: beverageTax,
+                    vatCategory: item['vat_category']?.toString(),
+                    onChanged: (value) =>
+                        setDialogState(() => beverageTax = value),
                   ),
                   const SizedBox(height: 16),
                   _ComboMenuEditor(
@@ -1363,6 +1479,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                     return;
                   }
+                  if (!beverageTax.isValid ||
+                      (isCombo && beverageTax.isApplicable)) {
+                    showErrorToast(context, l10n.menuTaxInvalid);
+                    return;
+                  }
                   if (isCombo && comboQuantities.isEmpty) {
                     showErrorToast(context, l10n.menuComboComponentRequired);
                     return;
@@ -1372,7 +1493,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       nameVi != originalNameVi ||
                       paperlessNameVi != originalPaperlessNameVi ||
                       nameEn != originalNameEn ||
-                      price != initialPrice;
+                      price != initialPrice ||
+                      beverageTax.sugarClass !=
+                          originalBeverageTax.sugarClass ||
+                      beverageTax.sugarGrams !=
+                          originalBeverageTax.sugarGrams ||
+                      beverageTax.basisNote != originalBeverageTax.basisNote;
                   final photoChanged =
                       selectedPhoto != null || removeExistingPhoto;
                   final comboChanged =
@@ -1400,6 +1526,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       paperlessNameVi: paperlessNameVi.isEmpty
                           ? null
                           : paperlessNameVi,
+                      beverageTax: beverageTax,
                       price: price,
                     );
                     if (!detailsSaved) return;
@@ -2054,6 +2181,7 @@ class _ItemsPanel extends StatelessWidget {
     required this.onToggleAvailability,
     required this.onTogglePublicVisibility,
     required this.onEditItem,
+    required this.onDeleteItem,
     this.scrollable = true,
   });
 
@@ -2065,6 +2193,7 @@ class _ItemsPanel extends StatelessWidget {
   final Future<bool> Function(String itemId, bool isVisiblePublic)
   onTogglePublicVisibility;
   final ValueChanged<Map<String, dynamic>> onEditItem;
+  final ValueChanged<Map<String, dynamic>> onDeleteItem;
   final bool scrollable;
 
   @override
@@ -2157,7 +2286,7 @@ class _ItemsPanel extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '₫${numberFormat.format(priceValue)}',
+                                    '₫${numberFormat.format(priceValue)} · ${isCombo ? l10n.menuComboVat : 'VAT ${BeverageTax.fromJson(item).vatRate(vatCategory: item['vat_category']?.toString()).toInt()}%'}',
                                     style: AppFonts.system(
                                       color: AppColors.textSecondary,
                                       fontSize: 13,
@@ -2305,6 +2434,17 @@ class _ItemsPanel extends StatelessWidget {
                                 color: AppColors.textSecondary,
                               ),
                               tooltip: l10n.menuEditMenu,
+                            ),
+                            IconButton(
+                              key: Key('admin_menu_delete_item_$itemId'),
+                              onPressed: itemId.isEmpty
+                                  ? null
+                                  : () => onDeleteItem(item),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: AppColors.statusCancelled,
+                              ),
+                              tooltip: l10n.menuDeleteItem,
                             ),
                           ],
                         );

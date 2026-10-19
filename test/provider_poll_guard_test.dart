@@ -7,7 +7,8 @@ void main() {
     'kitchen_provider': 'lib/features/kitchen/kitchen_provider.dart',
     'table_provider': 'lib/features/table/table_provider.dart',
     'payment_provider': 'lib/features/payment/payment_provider.dart',
-    'admin/tables_provider': 'lib/features/admin/providers/tables_provider.dart',
+    'admin/tables_provider':
+        'lib/features/admin/providers/tables_provider.dart',
   };
 
   group('poll guard: _ensureAutoRefresh checks _realtimeConnected', () {
@@ -39,7 +40,7 @@ void main() {
     }
   });
 
-  group('poll guard: fallback interval is >= 10s', () {
+  group('poll guard: fallback interval is >= 30s and jittered', () {
     for (final entry in providers.entries) {
       test('${entry.key} uses _fallbackPollInterval', () {
         final content = File(entry.value).readAsStringSync();
@@ -52,15 +53,20 @@ void main() {
 
       test('${entry.key} fallback interval >= 10 seconds', () {
         final content = File(entry.value).readAsStringSync();
-        final match =
-            RegExp(r'_fallbackPollInterval\s*=\s*Duration\(seconds:\s*(\d+)\)')
-                .firstMatch(content);
+        final match = RegExp(
+          r'_fallbackPollInterval\s*=\s*Duration\(seconds:\s*(\d+)\)',
+        ).firstMatch(content);
         expect(match, isNotNull, reason: '${entry.key} must define interval');
         final seconds = int.parse(match!.group(1)!);
         expect(
           seconds,
-          greaterThanOrEqualTo(10),
-          reason: 'Fallback poll interval must be >= 10s (was ${seconds}s)',
+          greaterThanOrEqualTo(30),
+          reason: 'Fallback poll interval must be >= 30s (was ${seconds}s)',
+        );
+        expect(
+          content,
+          contains('jitteredPollDelay(_fallbackPollInterval)'),
+          reason: '${entry.key} must spread fallback reads across devices',
         );
       });
     }

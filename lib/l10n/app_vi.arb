@@ -1,4 +1,5 @@
 {
+  "deliberryRetiredMessage": "Tích hợp Deliberry đã ngừng hoạt động.",
   "@@locale": "vi",
   "appTitle": "GLOBOS POS",
   "back": "Quay lại",
@@ -41,6 +42,14 @@
   "refresh": "Làm mới",
   "offline": "Ngoại tuyến",
   "offlineConnectionMessage": "Kết nối internet đã bị mất. Các thao tác chỉ dùng khi online có thể tạm thời không khả dụng.",
+  "connectivityServerDelayed": "Máy chủ phản hồi chậm",
+  "connectivityServerDelayedMessage": "Internet vẫn được kết nối nhưng máy chủ phản hồi chậm. Yêu cầu sẽ được thử lại an toàn.",
+  "connectivitySignInRequired": "Cần đăng nhập lại",
+  "connectivitySignInRequiredMessage": "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại trước khi tiếp tục thao tác được bảo vệ.",
+  "connectivityRealtimeDelayed": "Cập nhật trực tiếp bị chậm",
+  "connectivityRealtimeDelayedMessage": "Đang kết nối lại cập nhật trực tiếp. Đối soát nền an toàn vẫn tiếp tục.",
+  "connectivityLastSuccess": "Kết nối thành công gần nhất: {time}",
+  "@connectivityLastSuccess": {"placeholders": {"time": {"type": "String"}}},
   "email": "Email",
   "password": "Mật khẩu",
   "pinEnterTitle": "Nhập PIN",
@@ -297,6 +306,12 @@
   "menuCategoryDeleted": "Đã xóa danh mục \"{name}\".",
   "@menuCategoryDeleted": {"placeholders": {"name": {"type": "String"}}},
   "menuDelete": "Xóa",
+  "menuDeleteItem": "Xóa món",
+  "menuDeleteItemTitle": "Xóa món này?",
+  "menuDeleteItemConfirm": "Xóa \"{name}\" khỏi các đơn hàng mới? Lịch sử đơn hàng và doanh thu trước đây vẫn được giữ lại.",
+  "@menuDeleteItemConfirm": {"placeholders": {"name": {"type": "String"}}},
+  "menuItemDeleted": "Đã xóa món \"{name}\".",
+  "@menuItemDeleted": {"placeholders": {"name": {"type": "String"}}},
   "menuAddMenu": "Thêm món",
   "menuExportExcel": "Xuất Excel",
   "menuExportInProgress": "Đang tạo Excel thực đơn…",
@@ -944,6 +959,10 @@
   "cashierNonRevenueReason": "Lý do chi tiết",
   "cashierNonRevenueRequired": "Nhập tên nhân viên và lý do chi tiết bắt buộc.",
   "cashierNonRevenueComplete": "Đóng dưới dạng không doanh thu",
+  "cashierNonRevenueAmountChangedTitle": "Số tiền đơn hàng đã thay đổi",
+  "cashierNonRevenueAmountChangedMessage": "Có món mới được thêm trong khi bạn nhập thông tin thanh toán. Hãy kiểm tra số tiền hiện tại và xác nhận lại.",
+  "cashierNonRevenuePreviousAmount": "Số tiền trước đó",
+  "cashierNonRevenueConfirmUpdatedAmount": "Xác nhận số tiền hiện tại",
   "cashierDiscountAction": "Áp dụng giảm giá",
   "cashierDiscountTitle": "Áp dụng giảm giá",
   "cashierDiscountType": "Loại giảm giá",
@@ -1152,7 +1171,7 @@
   "photoOpsSalaryTitle": "Lương",
   "photoOpsSalarySubtitle": "Ước tính lương hiện tại cho cửa hàng đang hoạt động.",
   "photoOpsStoreScopeTitle": "Phạm vi cửa hàng",
-  "photoOpsStoreScopeSubtitle": "Photo Objet chỉ xử lý vận hành văn phòng trong khi đối soát Deliberry vẫn ở luồng quản trị.",
+  "photoOpsStoreScopeSubtitle": "Quản lý vận hành văn phòng Photo Objet.",
   "photoOpsHeroTitle": "Quản lý doanh số, chấm công, tồn kho và lương trong một không gian liên kết văn phòng mà không có tác vụ đối soát giao hàng hoặc hóa đơn đỏ.",
   "photoOpsContextSubtitle": "Photo Ops giúp HQ nắm tình trạng cửa hàng trực tiếp mà không thay thế quy trình cấp cửa hàng.",
   "photoOpsMetaRole": "Vai trò",
@@ -2806,7 +2825,7 @@
   "settingsPromotionMenuCount": "Đã chọn {count} món",
   "@settingsPromotionMenuCount": {"placeholders": {"count": {"type": "int"}}},
   "settingsQrTakeoutTitle": "Đơn mang đi qua QR",
-  "settingsQrTakeoutSummary": "Hiện hoặc ẩn lựa chọn mang đi trên menu QR của khách trong thời gian khuyến mãi.",
+  "settingsQrTakeoutSummary": "Hiện hoặc ẩn lựa chọn mang đi trên menu QR của khách.",
   "settingsQrTakeoutEnabled": "Đang mở",
   "settingsQrTakeoutDisabled": "Tạm dừng",
   "settingsQrTakeoutResumeAt": "Tự động mở lại lúc {date}",
@@ -4102,5 +4121,153 @@
   "revenueForecastSourceSavedProfile": "Thiết lập đã lưu",
   "revenueForecastSourceManualAssumption": "Giả định nhập thủ công",
   "revenueForecastSourceUnavailable": "Không có lịch sử đo · cần nhập",
-  "revenueForecastSourceProxy": "chỉ số thay thế theo sự kiện giao dịch"
+  "revenueForecastSourceProxy": "chỉ số thay thế theo sự kiện giao dịch",
+  "menuBeverageTax": "VAT theo lượng đường của đồ uống",
+  "menuTaxNotApplicable": "Không thuộc quy định đường của nước giải khát",
+  "menuSugarAtMostFive": "Không quá 5 g/100ml · VAT 8%",
+  "menuSugarAboveFive": "Trên 5 g/100ml · VAT 10%",
+  "menuSugarGrams": "Đường tổng số trên nhãn (g/100ml, tùy chọn)",
+  "menuTaxBasis": "Căn cứ nhãn / sản phẩm hoặc phân loại",
+  "menuSugarTaxHelp": "Năm 2026: trên 5 g/100ml áp dụng 10%; đúng 5 áp dụng 8%. Nếu chưa rõ số lượng, chọn nhóm đã xác minh và nhập căn cứ.",
+  "menuTaxInvalid": "Kiểm tra lượng đường, phân loại và căn cứ.",
+  "menuComboVat": "VAT theo thành phần",
+  "excelImportInvalidContainer": "Không đọc được tệp Excel. Tệp có thể bị hỏng, được mã hóa hoặc có định dạng không được hỗ trợ.",
+  "excelImportInvalidXml": "Không đọc được dữ liệu bên trong tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập.",
+  "excelImportUnsupportedNumberFormat": "Không xử lý được một số định dạng ô trong tệp. Hãy dán các giá trị vào mẫu nhập và lưu lại.",
+  "excelImportDecodeFailed": "Không xử lý được tệp Excel. Hãy lưu lại hoặc dán các giá trị vào mẫu nhập.",
+  "collectionBankUnavailable": "Không thể xác nhận tài khoản thu tiền của công ty. Vui lòng liên hệ quản trị viên.",
+  "salesDepositBankTitle": "Doanh thu chuyển khoản của khách",
+  "salesDepositBankNote": "Ghi nhận thu tiền POS · không cộng vào tiền mặt cần nộp",
+  "salesDepositPhotoTitle": "Photo · tiền nộp tài khoản pháp nhân ngày hôm sau",
+  "salesDepositCashTitle": "Tiền mặt BunsikClub · nộp tài khoản pháp nhân ngày hôm sau",
+  "salesDepositDate": "Ngày dự kiến nộp: {date}",
+  "@salesDepositDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositSourceDate": "Ngày doanh thu / chốt: {date}",
+  "@salesDepositSourceDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositTotalTitle": "Tổng tiền nộp pháp nhân ngày hôm sau",
+  "salesDepositConfirmed": "Đã chốt kiểm đếm",
+  "salesDepositPending": "Chưa chốt · tạm tính",
+  "salesDepositPhotoComplete": "Đã nhập đủ doanh thu Photo",
+  "salesDepositPhotoMissing": "Cần xác nhận nhập doanh thu Photo",
+  "salesDepositReview": "Đã chốt · cần kiểm tra chênh lệch",
+  "salesDepositShortfall": "Thiếu tiền quỹ · cần kiểm tra",
+  "salesDepositUnavailable": "Cần xác nhận thông tin tiền nộp",
+  "salesDepositKnownAmount": "Số tiền đã ghi nhận: {amount}",
+  "@salesDepositKnownAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositExpectedAmount": "Tiền mặt dự kiến nộp: {amount}",
+  "salesDepositCountedAmount": "Tiền kiểm đếm trừ quỹ đầu ca: {amount}",
+  "@salesDepositCountedAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "@salesDepositExpectedAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositMissingStores": "Chi nhánh Photo cần xác nhận: {count}",
+  "@salesDepositMissingStores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "salesDepositPendingStores": "Chi nhánh chưa chốt: {count}",
+  "@salesDepositPendingStores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "salesDepositNoAccount": "Cần thiết lập tài khoản pháp nhân",
+  "salesDepositPreview": "Tiền nộp pháp nhân sau khi chốt",
+  "salesDepositOpenPhoto": "Kiểm tra nhập Photo",
+  "salesDepositOpenClosing": "Kiểm tra chốt ngày",
+  "salesDepositOpenBank": "Xem giao dịch chuyển khoản",
+  "salesDepositAsOf": "Cập nhật: {time}",
+  "@salesDepositAsOf": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositNextPage": "Trang tiếp theo",
+  "salesDepositImportAmount": "Số tiền trong tệp đã nhập: {amount}",
+  "@salesDepositImportAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositImportCompleteness": "Kiểm tra tổng hợp doanh thu pháp nhân để xác nhận tất cả cửa hàng Photo đã đăng ký và số tiền dự kiến nộp.",
+  "brandAdd": "Thêm thương hiệu",
+  "brandManagement": "Quản lý thương hiệu",
+  "brandName": "Tên thương hiệu",
+  "brandCode": "Mã thương hiệu",
+  "brandGroup": "Nhóm tổ chức",
+  "brandGroupRequired": "Chọn nhóm tổ chức.",
+  "brandNoGroups": "Chưa có nhóm tổ chức. Vui lòng liên hệ quản trị viên.",
+  "brandIndependentHint": "Có thể đăng ký thương hiệu mà chưa có cửa hàng. Liên kết pháp nhân ngay hoặc sau.",
+  "brandNameRequired": "Nhập tên thương hiệu.",
+  "brandCodeHint": "2–64 ký tự: a–z, 0–9, _ hoặc -.",
+  "brandCodeInvalid": "Nhập mã 2–64 ký tự, bắt đầu bằng chữ cái hoặc chữ số.",
+  "brandCodeExists": "Mã thương hiệu đã được sử dụng. Liên kết thương hiệu hiện có hoặc nhập mã khác.",
+  "brandLinkEntities": "Liên kết pháp nhân",
+  "brandEntityHint": "Có thể liên kết pháp nhân sau, nhưng phải liên kết trước khi thêm cửa hàng. Giữ nguyên các liên kết hiện có.",
+  "brandNoEntities": "Chưa có pháp nhân. Có thể lưu thương hiệu và liên kết sau khi đăng ký pháp nhân.",
+  "brandUnlinked": "Chưa liên kết pháp nhân",
+  "brandStoreCount": "{count} cửa hàng",
+  "brandListEmpty": "Không có thương hiệu phù hợp.",
+  "brandLoadMore": "Xem thêm",
+  "brandSaving": "Đang lưu…",
+  "brandForbidden": "Chỉ quản trị viên cấp cao đang hoạt động mới có thể đăng ký hoặc liên kết thương hiệu.",
+  "brandRequestConflict": "Yêu cầu này đã đăng ký thương hiệu. Vui lòng kiểm tra danh sách.",
+  "brandEntityInvalid": "Kiểm tra pháp nhân đã chọn và thử lại.",
+  "brandOperationFailed": "Không thể xử lý thông tin thương hiệu. Kiểm tra kết nối và thử lại.",
+  "@brandStoreCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cashDepositQrTitle": "Tạo QR nộp tiền mặt",
+  "cashDepositToday": "Ngày báo cáo",
+  "cashDepositAmount": "Số tiền mặt nộp theo báo cáo",
+  "cashDepositInvalidAmount": "Số tiền mặt trong báo cáo phải là số nguyên từ 1 đến 9.999.999.999.999 VND để tạo QR.",
+  "cashDepositPurpose": "Nội dung đầy đủ (tham khảo)",
+  "cashDepositMemoHelp": "QR tự lấy ngày đã tra cứu (dd/mm) và số tiền mặt trong báo cáo. Quét để điền tài khoản, số tiền và nội dung ở trên.",
+  "cashDepositCopyPurpose": "Sao chép nội dung",
+  "cashDepositCopied": "Đã sao chép nội dung",
+  "cashDepositGenerateQr": "Tạo mã QR",
+  "cashDepositStoreUnavailable": "Không xác định được tên thương hiệu và cửa hàng đã chọn. Vui lòng liên hệ quản trị viên.",
+  "cashDepositQrPurpose": "Nội dung tự điền từ QR",
+  "cashDepositSingleDayRequired": "Vui lòng tra cứu một ngày trước khi tạo QR nộp tiền mặt."
 }

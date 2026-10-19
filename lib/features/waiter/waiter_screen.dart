@@ -1141,7 +1141,13 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
-    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
+    final isOnline =
+        ref
+            .watch(serviceConnectivityProvider)
+            .asData
+            ?.value
+            .canAttemptOnlineWork ??
+        true;
 
     _ensureRestaurantLoaded(storeId);
 

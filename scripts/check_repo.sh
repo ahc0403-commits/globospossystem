@@ -13,8 +13,31 @@ dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
 flutter test
 
+printf 'CHECK_REPO_STEP=independent_brand_sql\n'
+bash test/independent_brand_sql_test.sh
+
+printf 'CHECK_REPO_STEP=deliberry_retirement\n'
+bash test/deliberry_retirement_sql_test.sh
+deno fmt --check \
+  supabase/functions/_shared/retired_deliberry.ts \
+  supabase/functions/_shared/retired_deliberry_test.ts \
+  supabase/functions/deliberry-webhook/index.ts \
+  supabase/functions/deliberry-dispatcher/index.ts \
+  supabase/functions/generate-settlement/index.ts \
+  supabase/functions/generate_delivery_settlement/index.ts
+deno test --no-config supabase/functions/_shared/retired_deliberry_test.ts
+
+printf 'CHECK_REPO_STEP=direct_order_translation\n'
+deno fmt --check supabase/functions/direct-order-translation-dispatcher
+deno lint supabase/functions/direct-order-translation-dispatcher
+deno check --config supabase/functions/direct-order-translation-dispatcher/deno.json supabase/functions/direct-order-translation-dispatcher/index.ts
+deno test --config supabase/functions/direct-order-translation-dispatcher/deno.json supabase/functions/direct-order-translation-dispatcher/index_test.ts
+
 printf 'CHECK_REPO_STEP=menu_localization_sql\n'
 bash scripts/test_menu_localization.sh
+
+printf 'CHECK_REPO_STEP=beverage_sugar_vat_sql\n'
+bash test/beverage_sugar_vat_sql_test.sh
 
 printf 'CHECK_REPO_STEP=qr_menu_category_auto_sync_sql\n'
 bash test/qr_menu_category_auto_sync_sql_test.sh
@@ -35,6 +58,14 @@ bash scripts/test_financial_inputs_postgrest.sh
 printf 'CHECK_REPO_STEP=restaurant_report_ready_sql\n'
 bash test/restaurant_sales_report_ready_sql_test.sh
 
+printf 'CHECK_REPO_STEP=corporate_sales_ledger_sql\n'
+bash test/corporate_sales_export_sql_test.sh
+printf 'CHECK_REPO_STEP=receipt_collection_bank_sql\n'
+bash test/receipt_collection_bank_sql_test.sh
+deno fmt --check supabase/functions/_shared/meinvoice.ts \
+  supabase/functions/_shared/meinvoice_ledger_test.ts
+deno test supabase/functions/_shared/meinvoice_ledger_test.ts
+
 printf 'CHECK_REPO_STEP=promotion_sync_sql\n'
 bash scripts/test_promotion_sync_sql.sh
 
@@ -43,6 +74,9 @@ SCALE_INDEX_ONLY=1 bash scripts/test_scalability_isolated.sh
 
 printf 'CHECK_REPO_STEP=direct_order_edge_contracts\n'
 bash test/direct_delivery_manual_addresses_sql_test.sh
+bash test/direct_order_photo_approval_sql_test.sh
+bash test/direct_order_customer_experience_sql_test.sh
+bash test/direct_order_support_sql_test.sh
 deno fmt --check \
   supabase/functions/direct-order-public/index.ts \
   supabase/functions/direct-order-public/index_test.ts \
@@ -55,7 +89,38 @@ deno check --config supabase/functions/direct-order-public/deno.json \
   supabase/functions/direct-order-public/index_test.ts
 deno test --config supabase/functions/direct-order-public/deno.json \
   supabase/functions/direct-order-public/index_test.ts
+deno fmt --check supabase/functions/_shared/direct_order_push.ts \
+  supabase/functions/direct-order-notification-dispatcher
+deno lint supabase/functions/_shared/direct_order_push.ts \
+  supabase/functions/direct-order-notification-dispatcher
+deno check --config supabase/functions/direct-order-notification-dispatcher/deno.json \
+  supabase/functions/direct-order-notification-dispatcher/index.ts
+deno test --config supabase/functions/direct-order-notification-dispatcher/deno.json \
+  supabase/functions/direct-order-notification-dispatcher/index_test.ts
 
+printf 'CHECK_REPO_STEP=fixed_procurement_account_authority\n'
+printf 'CHECK_REPO_STEP=company_tax_lookup\n'
+deno fmt --check supabase/functions/company-tax-lookup
+deno lint --config supabase/functions/company-tax-lookup/deno.json supabase/functions/company-tax-lookup
+deno check --config supabase/functions/company-tax-lookup/deno.json supabase/functions/company-tax-lookup/index.ts
+deno test --config supabase/functions/company-tax-lookup/deno.json supabase/functions/company-tax-lookup/handler_test.ts
+python3 scripts/tests/company_tax_lookup_sql.py
+deno fmt --check supabase/functions/provision-fixed-pos-account/policy.ts supabase/functions/provision-fixed-pos-account/policy_test.ts
+deno lint supabase/functions/provision-fixed-pos-account/policy.ts supabase/functions/provision-fixed-pos-account/policy_test.ts
+deno check supabase/functions/provision-fixed-pos-account/index.ts
+deno test supabase/functions/provision-fixed-pos-account/policy_test.ts
+printf 'CHECK_REPO_STEP=bounded_data_access_sql_and_dispatch_ownership\n'
+bounded_data_evidence="${TMPDIR:-/tmp}/pos-bounded-check-$$"
+python3 scripts/tests/data_access/verify_bounded_reads.py "$bounded_data_evidence/reads"
+python3 scripts/tests/data_access/verify_dispatch_claims.py "$bounded_data_evidence/claims"
+deno check supabase/functions/meinvoice-dispatcher/index.ts \
+  supabase/functions/emergency-fulfillment-dispatcher/index.ts \
+  supabase/functions/provision-fixed-pos-account/index.ts \
+  supabase/functions/sepay-webhook/index.ts
+deno run --no-config --import-map=scripts/tests/data_access/edge/import_map.json \
+  --allow-env --allow-read scripts/tests/data_access/edge/probe.ts > "$bounded_data_evidence/edge-results.json"
+deno run --no-config --import-map=scripts/tests/data_access/edge/import_map.json \
+  --allow-env --allow-read scripts/tests/data_access/edge/sepay_probe.ts > "$bounded_data_evidence/sepay-results.json"
 printf 'CHECK_REPO_STEP=node_contracts\n'
 (
   cd scripts
@@ -66,9 +131,13 @@ printf 'CHECK_REPO_STEP=node_contracts\n'
 )
 
 printf 'CHECK_REPO_STEP=deploy_shell_syntax\n'
-bash -n scripts/deploy_pos_production.sh
+bash -n scripts/deploy_pos_production.sh scripts/release_payment_qr_deposit.sh
+printf 'CHECK_REPO_STEP=payment_deposit_release_scope\n'
+bash test/pos_payment_deposit_release_test.sh
 printf 'CHECK_REPO_STEP=deploy_clean_worktree_contract\n'
 bash test/pos_deploy_clean_worktree_checks_test.sh
+printf 'CHECK_REPO_STEP=deliberry_retirement_deploy_contract\n'
+bash test/deliberry_retirement_deploy_contract_test.sh
 printf 'CHECK_REPO_STEP=deploy_git_history_contract\n'
 bash test/pos_deploy_git_history_guard_test.sh
 printf 'CHECK_REPO_STEP=production_migration_gate_contract\n'
@@ -84,10 +153,16 @@ bash test/photo_objet_sales_collection_retirement_sql_test.sh
 printf 'CHECK_REPO_STEP=photo_manual_import_contract\n'
 bash test/photo_sales_manual_import_sql_test.sh
 
+printf 'CHECK_REPO_STEP=order_links_final_amount_and_verified_delivery\n'
+bash test/direct_order_integrated_sql_test.sh
+printf 'CHECK_REPO_STEP=cashier_item_move_and_partial_cancel\n'
+bash test/cashier_item_edit_sql_test.sh
+
 printf 'CHECK_REPO_STEP=restaurant_vat_integrity\n'
 bash test/restaurant_vat_integrity_sql_test.sh
 
 printf 'CHECK_REPO_STEP=flutter_web_release_build\n'
+bash scripts/build_photo_import_worker.sh
 flutter build web --release
 printf 'CHECK_REPO_STEP=git_whitespace_contract\n'
 git diff --check

@@ -619,53 +619,15 @@ void main() {
       expect(sql, isNot(contains('DROP TABLE public.restaurants')));
     });
 
-    test(
-      'external webhook and dispatcher functions expose vendor boundary',
-      () {
-        final webhook = readRepoFile(
-          'supabase/functions/deliberry-webhook/index.ts',
-        );
-        final dispatcher = readRepoFile(
-          'supabase/functions/deliberry-dispatcher/index.ts',
-        );
-
-        expect(webhook, contains('DELIBERRY_WEBHOOK_SECRET'));
-        expect(webhook, contains('x-deliberry-signature'));
-        expect(webhook, contains('x-deliberry-timestamp'));
-        expect(webhook, contains('DELIBERRY_WEBHOOK_REPLAY_WINDOW_SECONDS'));
-        expect(webhook, contains('crypto.subtle.importKey'));
-        expect(webhook, contains('receive_deliberry_operational_order'));
-        expect(webhook, contains('apply_deliberry_operational_order_event'));
-        expect(webhook, contains('DELIBERRY_ORDER_RECEIVED'));
-        expect(webhook, contains('DELIBERRY_ORDER_DELIVERED'));
-        expect(webhook, contains('DELIBERRY_ORDER_CUSTOMER_CANCELLED'));
-        expect(webhook, contains('event_sequence'));
-        expect(webhook, contains('trace_id'));
-        expect(webhook, isNot(contains('console.log')));
-
-        expect(dispatcher, contains('CRON_SECRET'));
-        expect(dispatcher, contains('DELIBERRY_OPERATIONAL_EVENT_ENDPOINT'));
-        expect(dispatcher, contains('DELIBERRY_API_BASE_URL'));
-        expect(dispatcher, contains('DELIBERRY_API_TOKEN'));
-        expect(dispatcher, contains('DELIBERRY_OUTBOUND_SECRET'));
-        expect(
-          dispatcher,
-          contains('get_deliberry_operational_order_events_for_retry'),
-        );
-        expect(
-          dispatcher,
-          contains('mark_deliberry_operational_event_processed'),
-        );
-        expect(dispatcher, contains('mark_deliberry_operational_event_failed'));
-        expect(dispatcher, contains('"x-pos-idempotency-key"'));
-        expect(dispatcher, contains('DELIBERRY_ORDER_ACCEPTED'));
-        expect(dispatcher, contains('DELIBERRY_ORDER_REJECTED'));
-        expect(dispatcher, contains('DELIBERRY_ORDER_READY'));
-        expect(dispatcher, contains('"pending", "failed"'));
-        expect(dispatcher, contains('p_dead_after_attempts'));
-        expect(dispatcher, isNot(contains('console.log')));
-      },
-    );
+    test('retired vendor endpoints only return the closed response', () {
+      for (final name in ['deliberry-webhook', 'deliberry-dispatcher']) {
+        final source = readRepoFile('supabase/functions/$name/index.ts');
+        expect(source, contains('Deno.serve(retiredDeliberryResponse)'));
+        expect(source, isNot(contains('createClient')));
+        expect(source, isNot(contains('fetch(')));
+        expect(source, isNot(contains('.rpc(')));
+      }
+    });
 
     test('external sale payloads classify merchant-collected offline', () {
       final byMode = DeliberryExternalSale.fromJson({
@@ -762,61 +724,16 @@ void main() {
       },
     );
 
-    test(
-      'delivery settlement function excludes offline collection from payout',
-      () {
-        final source = readRepoFile(
-          'supabase/functions/generate_delivery_settlement/index.ts',
-        );
-
-        expect(
-          source,
-          contains(".select('restaurant_id, gross_amount, payload')"),
-        );
-        expect(source, contains('function isMerchantCollectedOffline'));
-        expect(
-          source,
-          contains(
-            "settlement_collection_mode === 'merchant_collected_offline'",
-          ),
-        );
-        expect(source, contains('offline_collection_acknowledgment'));
-        expect(source, contains('merchantOfflineCollection'));
-        expect(source, contains('platformPayableGross'));
-        expect(
-          source,
-          contains('(platformPayableGross * PLATFORM_COMMISSION_RATE)'),
-        );
-        expect(
-          source,
-          contains('(platformPayableGross * ESTIMATED_PAYMENT_FEE_RATE)'),
-        );
-        expect(source, contains("item_type: 'merchant_offline_collection'"));
-        expect(source, contains('reference_base: platformPayableGross'));
-      },
-    );
-
-    test('legacy generate-settlement remains idempotent for a period', () {
-      final source = readRepoFile(
-        'supabase/functions/generate-settlement/index.ts',
-      );
-
-      expect(source, contains('.from("delivery_settlements")'));
-      expect(source, contains('.eq("source_system", "deliberry")'));
-      expect(source, contains('.eq("period_label", periodLabel)'));
-      expect(source, contains('SETTLEMENT_ALREADY_EXISTS'));
-      expect(source, contains('.select("id, gross_amount, payload")'));
-      expect(source, contains('function isMerchantCollectedOffline'));
-      expect(
-        source,
-        contains('settlement_collection_mode === "merchant_collected_offline"'),
-      );
-      expect(source, contains('offline_collection_acknowledgment'));
-      expect(source, contains('merchantOfflineCollection'));
-      expect(source, contains('platformPayableGross'));
-      expect(source, contains('Math.round(platformPayableGross * 0.015)'));
-      expect(source, contains('item_type: "merchant_offline_collection"'));
-      expect(source, contains('reference_base: platformPayableGross'));
+    test('both old settlement endpoints reject new generation', () {
+      for (final name in [
+        'generate-settlement',
+        'generate_delivery_settlement',
+      ]) {
+        final source = readRepoFile('supabase/functions/$name/index.ts');
+        expect(source, contains('Deno.serve(retiredDeliberryResponse)'));
+        expect(source, isNot(contains('createClient')));
+        expect(source, isNot(contains('.from(')));
+      }
     });
   });
 }

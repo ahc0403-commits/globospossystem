@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/tables_service.dart';
 import '../../../core/utils/live_sync_scope.dart';
+import '../../../core/utils/polling_utils.dart';
 import '../../../main.dart';
 
 class TableOrderSummary {
@@ -57,7 +58,7 @@ class TablesNotifier extends StateNotifier<TablesState> {
   }
 
   final String storeId;
-  static const _fallbackPollInterval = Duration(seconds: 15);
+  static const _fallbackPollInterval = Duration(seconds: 30);
   RealtimeChannel? _channel;
   Timer? _pollTimer;
   bool _realtimeConnected = false;
@@ -209,9 +210,13 @@ class TablesNotifier extends StateNotifier<TablesState> {
       return;
     }
 
-    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+    _pollTimer = Timer(jitteredPollDelay(_fallbackPollInterval), () async {
+      _pollTimer = null;
       if (mounted) {
-        unawaited(fetchTables(showLoading: false));
+        await fetchTables(showLoading: false);
+      }
+      if (mounted && !_realtimeConnected) {
+        _ensureAutoRefresh();
       }
     });
   }

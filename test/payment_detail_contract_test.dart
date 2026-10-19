@@ -56,7 +56,8 @@ void main() {
       contains("LiveSyncScope.entityFilter('id', widget.paymentId)"),
     );
     expect(screen, contains("LiveSyncScope.entityFilter('order_id', orderId)"));
-    expect(screen, contains('Timer.periodic(_autoRefreshInterval'));
+    expect(screen, contains('Timer(jitteredPollDelay(_autoRefreshInterval)'));
+    expect(screen, isNot(contains('Timer.periodic(_autoRefreshInterval')));
     expect(screen, contains("table: 'payment_adjustments'"));
     expect(screen, contains("table: 'meinvoice_jobs'"));
     expect(
@@ -151,7 +152,11 @@ void main() {
     expect(screen, contains("Key('payment_detail_print_receipt')"));
     expect(screen, contains('ReceiptBuilder.buildPaymentReceipt'));
     expect(screen, contains('printerProvider'));
-    expect(screen, contains('_receiptItems(order'));
+    expect(screen, contains('items: _receiptItems('));
+    expect(
+      screen,
+      contains("deliveryFeeItemId: packing?['delivery_fee_item_id']"),
+    );
 
     expect(
       paymentService,
@@ -171,7 +176,7 @@ void main() {
     expect(paymentService, contains("'p_adjustment_type': adjustmentType"));
     expect(paymentService, contains("'p_reason': reason"));
     expect(paymentService, contains('restaurant_name'));
-    expect(paymentService, contains('label, unit_price, quantity'));
+    expect(paymentService, contains('label, notes, unit_price, quantity'));
     expect(einvoiceService, isNot(contains('resendInvoiceEmail')));
     expect(screen, isNot(contains('requestRedInvoice(')));
     expect(screen, isNot(contains('resendInvoiceEmail')));

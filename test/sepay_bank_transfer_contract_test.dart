@@ -175,7 +175,10 @@ void main() {
       expect(main, contains("auth.role == 'cashier'"));
       expect(main, contains('storeId: alertStoreId'));
       expect(main, isNot(contains('syncStore(')));
-      expect(coordinator, contains('Timer.periodic('));
+      expect(coordinator, contains('Duration(seconds: 30)'));
+      expect(coordinator, contains('_schedulePoll(storeId, generation)'));
+      expect(coordinator, contains('_pollRandom.nextInt'));
+      expect(coordinator, isNot(contains('Timer.periodic(')));
       expect(coordinator, contains('posLiveEventsProvider(storeId)'));
       expect(coordinator, contains('_drain(storeId)'));
       expect(coordinator, contains('cursor.isBefore(alert)'));

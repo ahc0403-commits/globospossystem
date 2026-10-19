@@ -27,9 +27,9 @@ void main() {
   });
 
   test('KDS snapshot retries back off without requiring another sign-in', () {
-    expect(emergencySnapshotRetryDelay(1), const Duration(seconds: 2));
-    expect(emergencySnapshotRetryDelay(2), const Duration(seconds: 5));
-    expect(emergencySnapshotRetryDelay(3), const Duration(seconds: 15));
-    expect(emergencySnapshotRetryDelay(20), const Duration(seconds: 15));
+    expect(emergencySnapshotRetryDelay(1), const Duration(seconds: 5));
+    expect(emergencySnapshotRetryDelay(2), const Duration(seconds: 15));
+    expect(emergencySnapshotRetryDelay(3), const Duration(seconds: 30));
+    expect(emergencySnapshotRetryDelay(20), const Duration(seconds: 30));
   });
 }

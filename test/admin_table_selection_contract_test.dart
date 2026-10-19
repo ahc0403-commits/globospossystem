@@ -40,7 +40,13 @@ void main() {
       expect(adminTables, isNot(contains('onProcessPayment:')));
       expect(
         adminTables,
-        isNot(contains("import '../../payment/payment_provider.dart';")),
+        contains('final paymentState = ref.watch(paymentProvider);'),
+        reason: 'the command header may show a read-only payment aggregate',
+      );
+      expect(
+        adminTables,
+        isNot(contains('paymentProvider.notifier).process')),
+        reason: 'admin tables must not execute payments',
       );
     },
   );

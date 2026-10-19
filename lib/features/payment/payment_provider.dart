@@ -9,12 +9,15 @@ import '../../core/models/fulfillment_mode.dart';
 import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
-import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/coalesced_refresh.dart';
+import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../core/utils/time_utils.dart';
 import '../../l10n/app_localizations.dart';
 import '../../main.dart';
 import '../order/order_model.dart';
+
+const nonRevenueAmountChangedError = 'NON_REVENUE_AMOUNT_CHANGED';
 
 class CashierOrder {
   const CashierOrder({
@@ -409,8 +412,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   PaymentService get _payments => _paymentSource ?? paymentService;
 
   static const _autoRefreshInterval = Duration(seconds: 2);
-  static const _fallbackPollInterval = Duration(seconds: 15);
+  static const _fallbackPollInterval = Duration(seconds: 30);
 
+  String? _displayedOrderId;
   final _refreshQueue = CoalescedRefresh();
   int _scopeGeneration = 0;
   String? _channelStoreId;
@@ -452,7 +456,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await _db
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
+            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, vat_profile_snapshot, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -665,7 +669,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await _db
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
+          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, vat_profile_snapshot, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -767,6 +771,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       clearPaymentSuccess: true,
       clearError: true,
     );
+  }
+
+  void clearError() {
+    state = state.copyWith(clearError: true);
   }
 
   Future<CashierOrderSearchResult?> searchActiveOrderForCashier({
@@ -922,6 +930,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           },
         },
       );
+      _displayedOrderId = order.orderId;
       return true;
     } catch (error) {
       state = state.copyWith(error: 'Failed to show customer display: $error');
@@ -1273,9 +1282,19 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       );
       return payment;
     } catch (error) {
+      final amountChanged =
+          error is PostgrestException &&
+          ((error.message == 'PAYMENT_AMOUNT_MISMATCH' &&
+                  error.details == 'SERVICE_TOTAL_CHANGED') ||
+              error.message == 'PAYMENT_AMOUNT_EXCEEDS_REMAINING');
+      if (amountChanged) {
+        await loadOrders(storeId);
+      }
       state = state.copyWith(
         isProcessing: false,
-        error: _mapPaymentError(error, 'Failed to close non-revenue order'),
+        error: amountChanged
+            ? nonRevenueAmountChangedError
+            : _mapPaymentError(error, 'Failed to close non-revenue order'),
       );
       return null;
     }
@@ -1391,6 +1410,112 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         isProcessing: false,
         error: _mapPaymentError(error, 'Failed to cancel order'),
       );
+    }
+  }
+
+  Future<bool> cancelItemQuantity({
+    required String storeId,
+    required OrderItem item,
+    required int newQuantity,
+    required String operationId,
+  }) async {
+    return _runItemMutation(storeId, () async {
+      await orderService.cancelItemQuantity(
+        storeId: storeId,
+        itemId: item.id,
+        expectedQuantity: item.quantity,
+        newQuantity: newQuantity,
+        operationId: operationId,
+      );
+    });
+  }
+
+  Future<bool> restoreItemQuantity(String storeId, String operationId) =>
+      _runItemMutation(
+        storeId,
+        () => orderService.restoreItemQuantity(
+          storeId: storeId,
+          operationId: operationId,
+        ),
+      );
+  Future<bool> moveOrderItems({
+    required String storeId,
+    required String orderId,
+    required String targetTableId,
+    required List<Map<String, dynamic>> items,
+    required String operationId,
+  }) async {
+    String? targetOrderId;
+    final wasDisplayed = _displayedOrderId == orderId;
+    final moved = await _runItemMutation(storeId, () async {
+      final result = await orderService.moveOrderItems(
+        storeId: storeId,
+        orderId: orderId,
+        targetTableId: targetTableId,
+        items: items,
+        operationId: operationId,
+      );
+      targetOrderId = result['target_order_id'] as String;
+    });
+    if (moved) {
+      final destination = state.orders
+          .where((order) => order.orderId == targetOrderId)
+          .firstOrNull;
+      if (destination != null) {
+        selectOrder(destination);
+        if (wasDisplayed) {
+          await showOnCustomerDisplay(storeId: storeId, order: destination);
+        }
+      }
+    }
+    return moved;
+  }
+
+  Future<bool> _runItemMutation(
+    String storeId,
+    Future<void> Function() operation,
+  ) async {
+    if (state.isProcessing) return false;
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await operation();
+      await loadOrders(storeId);
+      if (state.error != null) {
+        state = state.copyWith(isProcessing: false);
+        return false;
+      }
+      if (_displayedOrderId != null &&
+          state.selectedOrder?.orderId == _displayedOrderId) {
+        await showOnCustomerDisplay(
+          storeId: storeId,
+          order: state.selectedOrder!,
+        );
+      }
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } catch (error) {
+      await loadOrders(storeId);
+      state = state.copyWith(
+        isProcessing: false,
+        error:
+            error is PostgrestException &&
+                const {
+                  'CASHIER_ITEM_CHANGED',
+                  'CASHIER_OPERATION_CHANGED',
+                  'CASHIER_MOVE_CANCELLED_SPLIT',
+                  'CASHIER_COMBO_QUANTITY_CHANGED',
+                  'CASHIER_TARGET_ORDER_AMBIGUOUS',
+                  'CASHIER_TARGET_INCOMPATIBLE',
+                  'ORDER_HAS_PAYMENTS_USE_ADJUSTMENT',
+                  'DIRECT_ORDER_FINAL_AMOUNT_LOCKED',
+                }.contains(error.message)
+            ? error.message
+            : _mapPaymentError(
+                error,
+                'Refresh the order and retry the item change',
+              ),
+      );
+      return false;
     }
   }
 
@@ -1629,9 +1754,13 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+    _pollTimer = Timer(jitteredPollDelay(_fallbackPollInterval), () async {
+      _pollTimer = null;
       if (mounted && _restaurantId == storeId) {
-        unawaited(loadOrders(storeId));
+        await loadOrders(storeId);
+      }
+      if (mounted && !_realtimeConnected && _restaurantId == storeId) {
+        _ensureAutoRefresh(storeId);
       }
     });
   }
@@ -1869,6 +1998,12 @@ PaymentQuoteLine _paymentQuoteLineFromRow(
     },
     vatCategory: row['vat_category']?.toString() ?? vatCategory,
     vatRate: _nullableDoubleValue(row['vat_rate']),
+    vatProfile:
+        (row['vat_profile_snapshot'] as List?)
+            ?.whereType<Map>()
+            .map((part) => Map<String, dynamic>.from(part))
+            .toList() ??
+        const [],
     payingAmountIncTax: _nullableDoubleValue(row['paying_amount_inc_tax']),
     discountAmount: lineDiscounts?[row['id']?.toString() ?? ''] ?? 0,
   );

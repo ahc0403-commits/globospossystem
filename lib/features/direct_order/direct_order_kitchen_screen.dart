@@ -1,9 +1,13 @@
+import 'direct_order_translation.dart';
+import 'direct_order_requirements.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/language_switcher.dart';
 import '../auth/auth_provider.dart';
@@ -27,6 +31,7 @@ class _DirectOrderKitchenScreenState
   String? _error;
   bool _loading = true;
   final Set<String> _busyTickets = {};
+  Timer? _liveRefreshTimer;
 
   DirectOrderCopy get _copy =>
       DirectOrderCopy(Localizations.localeOf(context).languageCode);
@@ -35,16 +40,31 @@ class _DirectOrderKitchenScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-    _timer = Timer.periodic(
-      const Duration(seconds: 7),
-      (_) => _load(silent: true),
-    );
+    _scheduleSafetyRefresh();
+  }
+
+  void _scheduleSafetyRefresh() {
+    _timer?.cancel();
+    _timer = Timer(jitteredPollDelay(const Duration(seconds: 30)), () async {
+      _timer = null;
+      await _load(silent: true);
+      if (mounted) _scheduleSafetyRefresh();
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _liveRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _handleLiveEvent(PosLiveEvent event) {
+    if (!event.affects({'direct_delivery_status'})) return;
+    _liveRefreshTimer?.cancel();
+    _liveRefreshTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) unawaited(_load(silent: true));
+    });
   }
 
   Future<void> _load({bool silent = false}) async {
@@ -77,12 +97,20 @@ class _DirectOrderKitchenScreenState
     if (storeId == null || id.isEmpty || _busyTickets.contains(id)) return;
     setState(() => _busyTickets.add(id));
     try {
-      await directOrderStaffService.transitionTicket(
-        storeId: storeId,
-        ticketId: id,
-        expectedVersion: (ticket['version'] as num?)?.toInt() ?? 0,
-        nextStatus: next,
-      );
+      if (next == 'cooked') {
+        await directOrderStaffService.markCooked(
+          storeId: storeId,
+          ticketId: id,
+          expectedVersion: (ticket['version'] as num?)?.toInt() ?? 0,
+        );
+      } else {
+        await directOrderStaffService.transitionTicket(
+          storeId: storeId,
+          ticketId: id,
+          expectedVersion: (ticket['version'] as num?)?.toInt() ?? 0,
+          nextStatus: next,
+        );
+      }
       await _load(silent: true);
     } catch (_) {
       if (mounted) {
@@ -98,6 +126,15 @@ class _DirectOrderKitchenScreenState
 
   @override
   Widget build(BuildContext context) {
+    final storeId = ref.watch(authProvider).storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData(_handleLiveEvent);
+      });
+    }
     const filters = <String?>[
       null,
       'pending',
@@ -231,6 +268,10 @@ class _TicketCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = ticket['status']?.toString() ?? 'pending';
+    final delivery = ticket['delivery'] is Map
+        ? Map<String, dynamic>.from(ticket['delivery'] as Map)
+        : <String, dynamic>{};
+    final isPickup = delivery['method'] == 'pickup';
     final items = ticket['items'] is List
         ? (ticket['items'] as List)
               .whereType<Map>()
@@ -246,13 +287,24 @@ class _TicketCard extends StatelessWidget {
               .clamp(0, 999);
     final next = switch (status) {
       'pending' => 'preparing',
-      'preparing' => 'ready',
+      'preparing' =>
+        ticket['delivery_policy_version'] == 2 &&
+                ticket['cooking_complete'] != true &&
+                ticket['manual_cooking_available'] == true
+            ? 'cooked'
+            : 'ready',
       _ => null,
     };
     final actionLabel = switch (next) {
       'preparing' => copy.startPreparing,
+      'cooked' => copy.markCooked,
       'ready' => copy.markReady,
-      _ => copy.waitingForDispatch,
+      _ =>
+        isPickup
+            ? (status == 'completed'
+                  ? copy.pickupCompleted
+                  : copy.waitingForPickup)
+            : copy.waitingForDispatch,
     };
 
     return Semantics(
@@ -271,7 +323,7 @@ class _TicketCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      copy.paidDirect,
+                      isPickup ? copy.pickup : copy.paidDirect,
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 13,
@@ -304,6 +356,25 @@ class _TicketCard extends StatelessWidget {
                   ),
                   Chip(label: Text(copy.stateLabel(status))),
                 ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              child: Text(
+                copy.packingCount(
+                  (delivery['diner_count'] as num?)?.toInt(),
+                  utensilsRequested: delivery['utensils_requested'] != false,
+                ),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: DirectOrderConfirmedNotes(
+                text: ticket['confirmed_notes']?.toString(),
               ),
             ),
             const Divider(height: 1),
@@ -342,8 +413,14 @@ class _TicketCard extends StatelessWidget {
                               ),
                             ),
                             if ((item['note']?.toString() ?? '').isNotEmpty)
-                              Text(
-                                item['note'].toString(),
+                              DirectOrderTranslatedText(
+                                original: item['note'].toString(),
+                                translations: item['note_translations'] is Map
+                                    ? Map<String, dynamic>.from(
+                                        item['note_translations'] as Map,
+                                      )
+                                    : const {},
+                                status: item['translation_status']?.toString(),
                                 style: const TextStyle(
                                   color: PosColors.textSecondary,
                                 ),
@@ -361,7 +438,13 @@ class _TicketCard extends StatelessWidget {
               child: next == null
                   ? OutlinedButton(onPressed: null, child: Text(actionLabel))
                   : FilledButton(
-                      onPressed: busy ? null : () => onTransition(next),
+                      onPressed:
+                          busy ||
+                              (next == 'ready' &&
+                                  ticket['delivery_policy_version'] == 2 &&
+                                  ticket['cooking_complete'] != true)
+                          ? null
+                          : () => onTransition(next),
                       child: Text(actionLabel),
                     ),
             ),

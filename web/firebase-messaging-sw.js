@@ -1,4 +1,4 @@
-/* Background emergency alerts for the installed Flutter Web application.
+/* Background staff and customer alerts for the installed Flutter Web application.
  * Firebase configuration is supplied by the authenticated page at runtime;
  * no environment values or credentials are committed in this worker. */
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
@@ -14,16 +14,21 @@ function initializeMessaging(config) {
   messaging = firebase.messaging();
   messaging.onBackgroundMessage((payload) => {
     const data = payload.data || {};
-    if (data.type !== 'emergency_fulfillment' || payload.notification) return;
-    self.registration.showNotification(
-      'Đơn hàng khẩn cấp mới',
-      {
+    if (payload.notification) return; // FCM already displays notification payloads.
+    if (data.type === 'direct_order_customer') {
+      self.registration.showNotification(data.title || 'Order update', {
+        body: data.body || '',
+        tag: data.event_id,
+        data: { url: data.url },
+      });
+    } else if (data.type === 'emergency_fulfillment') {
+      self.registration.showNotification('Đơn hàng khẩn cấp mới', {
         body: 'Mở màn hình để kiểm tra đơn hàng.',
         tag: data.event_id || data.order_id || 'globos-emergency',
         renotify: true,
         data: { url: data.url || '/emergency', event_id: data.event_id },
-      },
-    );
+      });
+    }
   });
 }
 
@@ -57,7 +62,11 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/emergency';
+  const rawUrl = event.notification.data?.url || '/emergency';
+  const target = new URL(rawUrl, self.location.origin);
+  // Push messages may only navigate within this POS site.
+  if (target.origin !== self.location.origin) return;
+  const targetUrl = target.href;
   event.waitUntil((async () => {
     const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of windows) {

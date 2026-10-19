@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 
+import '../../core/utils/excel_workbook_decoder.dart';
+
 const supplierPriceSheetName = '단가변경';
 const supplierPriceImportMaxRows = 1000;
 const supplierPriceHeaders = <String>[
@@ -23,9 +25,13 @@ class SupplierPriceImportWorkbook {
 }
 
 class SupplierPriceImportValidationException implements Exception {
-  const SupplierPriceImportValidationException(this.issues);
+  const SupplierPriceImportValidationException(
+    this.issues, {
+    this.decodeFailure,
+  });
 
   final List<String> issues;
+  final ExcelWorkbookDecodeException? decodeFailure;
 
   @override
   String toString() => issues.join('\n');
@@ -82,12 +88,13 @@ SupplierPriceImportWorkbook parseSupplierPriceImportWorkbook(Uint8List bytes) {
 
   late final Excel workbook;
   try {
-    workbook = Excel.decodeBytes(bytes);
-  } catch (_) {
-    throw const SupplierPriceImportValidationException([
-      'Excel 파일을 읽을 수 없습니다. .xlsx 파일인지 확인하세요.',
-    ]);
+    workbook = decodeExcelWorkbook(bytes);
+  } on ExcelWorkbookDecodeException catch (error) {
+    throw SupplierPriceImportValidationException([
+      'Excel 파일을 읽지 못했습니다. 등록 양식에 값을 붙여넣어 다시 저장해 주세요.',
+    ], decodeFailure: error);
   }
+
   final sheet = workbook.tables[supplierPriceSheetName];
   if (sheet == null || sheet.rows.isEmpty) {
     throw const SupplierPriceImportValidationException([

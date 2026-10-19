@@ -2,16 +2,114 @@ import {
   clientAddress,
   createDirectOrderHandler,
   directOrderActionRegistry,
+  directOrderAttachmentSpec,
   type DirectOrderDependencies,
+  directOrderDinerCount,
   directOrderLocale,
+  directOrderPushSubscriptionArgs,
+  directOrderRequirementDecisionArgs,
   directOrderSecretKeyName,
+  type JsonObject,
   normalizeRpcError,
+  resolveOrderScopedRequest,
   resolveProjectSecretKey,
+  SafeHttpError,
   sqlDomainErrorRegistry,
+  validateChatAttachmentBytes,
   validateProofImage,
   validProofObjectPath,
   validProofPath,
+  verifyProofUpload,
 } from "./index.ts";
+
+Deno.test("proof verification retains files on list/download/read failures", async () => {
+  const path = "store/request/photo.png";
+  for (const stage of ["list", "download", "read"]) {
+    let removed = 0;
+    const brokenBlob = new Blob([new Uint8Array(24)]);
+    if (stage === "read") {
+      brokenBlob.arrayBuffer = () => Promise.reject(new Error("interrupted"));
+    }
+    const storage = {
+      list: () =>
+        Promise.resolve({
+          data: [{ name: "photo.png" }],
+          error: stage === "list" ? new Error("temporary") : null,
+        }),
+      download: () =>
+        Promise.resolve({
+          data: brokenBlob,
+          error: stage === "download" ? new Error("temporary") : null,
+        }),
+      remove: () => {
+        removed++;
+        return Promise.resolve({});
+      },
+    };
+    try {
+      await verifyProofUpload(storage, path);
+      throw new Error("expected failure");
+    } catch (error) {
+      assertEquals(
+        error instanceof SafeHttpError && error.status,
+        503,
+        `${stage} temporary status`,
+      );
+      assertEquals(
+        error instanceof SafeHttpError && error.code,
+        "PROOF_TEMPORARILY_UNAVAILABLE",
+        `${stage} public error`,
+      );
+    }
+    assertEquals(removed, 0, `${stage} must not delete valid/unknown bytes`);
+  }
+});
+
+Deno.test("proof verification distinguishes absent, invalid and valid objects", async () => {
+  for (const kind of ["absent", "invalid", "valid"]) {
+    let removed = 0;
+    let downloaded = 0;
+    const png = new Uint8Array(24);
+    png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    png.set([0, 0, 0, 1], 16);
+    png.set([0, 0, 0, 1], 20);
+    const storage = {
+      list: () =>
+        Promise.resolve({
+          data: kind === "absent" ? [] : [{ name: "photo.png" }],
+          error: null,
+        }),
+      download: () => {
+        downloaded++;
+        return Promise.resolve({
+          data: new Blob([kind === "valid" ? png : new Uint8Array(24)]),
+          error: null,
+        });
+      },
+      remove: () => {
+        removed++;
+        return Promise.resolve({});
+      },
+    };
+    let code: unknown = null;
+    try {
+      await verifyProofUpload(storage, "store/request/photo.png");
+    } catch (error) {
+      code = error instanceof SafeHttpError ? error.code : "unexpected";
+    }
+    assertEquals(
+      code,
+      kind === "absent"
+        ? "PROOF_UPLOAD_INCOMPLETE"
+        : kind === "invalid"
+        ? "INVALID_PROOF"
+        : null,
+      `${kind} result`,
+    );
+    assertEquals(removed, kind === "invalid" ? 1 : 0, `${kind} deletion`);
+    assertEquals(downloaded, kind === "absent" ? 0 : 1, `${kind} download`);
+  }
+});
 
 const origin = "https://globospossystem.vercel.app";
 
@@ -214,17 +312,42 @@ Deno.test("requires JSON and enforces the 64 KiB limit in UTF-8 bytes", async ()
   assertEquals(utf8Oversized.status, 413, "UTF-8 byte limit status");
 });
 
-Deno.test("action registry is exact and dispatches all 14 boundaries", async () => {
+Deno.test("action registry is exact and dispatches every boundary", async () => {
   assertEquals(
     Object.keys(directOrderActionRegistry),
     [
       "storefront",
       "create_session",
       "submit",
+      "submit_v3",
+      "status_v3",
+      "status_v4",
+      "status_v5",
+      "status_v6",
+      "decide_requirement",
+      "resume_storefront",
+      "resume_order",
+      "issue_order_access",
+      "decide_pickup",
       "status",
       "status_v2",
       "orders_v2",
+      "orders_v3",
+      "orders_v4",
+      "push_subscription",
       "message",
+      "charge_consent",
+      "refund_details",
+      "customer_attachment_upload",
+      "customer_attachment_commit",
+      "customer_attachment_url",
+      "customer_chat_attachment_upload",
+      "customer_chat_attachment_commit",
+      "staff_chat_attachment_upload",
+      "staff_chat_attachment_commit",
+      "staff_attachment_upload",
+      "staff_attachment_commit",
+      "staff_attachment_url",
       "cancel",
       "proof_upload_url",
       "proof_upload_url_v2",
@@ -362,8 +485,29 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    81,
+    182,
     "registered SQL error count",
+  );
+  for (
+    const [code, status] of [
+      ["DIRECT_ORDER_LINK_INPUT_INVALID", 400],
+      ["DIRECT_ORDER_LINK_RETRY_CHANGED", 409],
+      ["DIRECT_ORDER_PAYMENT_DOCUMENT_NOT_ALLOWED", 409],
+      ["DIRECT_ORDER_DOCUMENT_TOO_LARGE", 400],
+    ] as const
+  ) {
+    const result = normalizeRpcError(code);
+    assertEquals(result.status, status, "payment document error status");
+    assertEquals(result.code, code, "payment document error code");
+  }
+  const packingFailure = normalizeRpcError(
+    "DIRECT_ORDER_PACKING_CONTRACT_VERIFICATION_FAILED",
+  );
+  assertEquals(packingFailure.status, 503, "packing invariant failure status");
+  assertEquals(
+    packingFailure.code,
+    "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE",
+    "packing invariant sanitized",
   );
   const conflict = normalizeRpcError(
     "duplicate: DIRECT_ORDER_OPEN_REQUEST_EXISTS detail=private",
@@ -375,6 +519,13 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
     "conflict public code",
   );
   const forbidden = normalizeRpcError("DIRECT_ORDER_FORBIDDEN");
+  const changedPhoto = normalizeRpcError("DIRECT_ORDER_PAYMENT_REVIEW_CHANGED");
+  assertEquals(changedPhoto.status, 409, "changed payment photo status");
+  assertEquals(
+    changedPhoto.code,
+    "DIRECT_ORDER_PAYMENT_REVIEW_CHANGED",
+    "changed payment photo code",
+  );
   assertEquals(forbidden.status, 403, "forbidden status");
   assertEquals(forbidden.code, "REQUEST_FORBIDDEN", "forbidden public code");
   const proofReview = normalizeRpcError(
@@ -506,4 +657,270 @@ Deno.test("direct order locale accepts only ko vi en", () => {
       `rejected ${String(invalid)}`,
     );
   }
+});
+
+Deno.test("diner count accepts whole people and rejects missing or invalid values", () => {
+  for (const n of [1, 3, 100]) {
+    assertEquals(directOrderDinerCount(n), n, "valid count");
+  }
+  for (const n of [null, undefined, "3", 0, -1, 101, 1.5, NaN, Infinity]) {
+    let rejected = false;
+    try {
+      directOrderDinerCount(n);
+    } catch {
+      rejected = true;
+    }
+    assertEquals(rejected, true, "invalid count rejected");
+  }
+});
+
+Deno.test("customer push registration validates ownership arguments without forwarding raw secrets", async () => {
+  const body = {
+    session_id: "d1000000-0000-4000-8000-000000000001",
+    device_id: "d1000000-0000-4000-8000-000000000002",
+    secret: "s".repeat(43),
+    locale: "ko",
+    enabled: true,
+    token: "fixture_token_0123456789",
+  };
+  const args = await directOrderPushSubscriptionArgs(body);
+  assertEquals(args.p_session_id, body.session_id, "session identity");
+  assertEquals(String(args.p_secret_hash).length, 64, "hashed session proof");
+  assertEquals("secret" in args, false, "raw secret excluded");
+  assertEquals(args.p_token, body.token, "token bound to validated session");
+  assertEquals(
+    (await directOrderPushSubscriptionArgs({
+      ...body,
+      enabled: false,
+      token: undefined,
+    })).p_token,
+    null,
+    "unsubscribe needs no token",
+  );
+  for (
+    const invalid of [
+      { ...body, enabled: "true" },
+      { ...body, token: "short" },
+      { ...body, locale: "xx" },
+      { ...body, device_id: "bad" },
+    ]
+  ) {
+    let status = 0;
+    try {
+      await directOrderPushSubscriptionArgs(invalid);
+    } catch (error) {
+      if (error instanceof SafeHttpError) status = error.status;
+    }
+    assertEquals(status, 400, "invalid push input rejected");
+  }
+});
+
+Deno.test("chat attachments bind storage scope and permit staff PDFs only", () => {
+  const store = "11111111-1111-4111-8111-111111111111",
+    request = "22222222-2222-4222-8222-222222222222",
+    file = "33333333-3333-4333-8333-333333333333";
+  const pdf = {
+    filename: "../proof.pdf",
+    mime_type: "application/pdf",
+    path: `${store}/${request}/${file}.pdf`,
+  };
+  assertEquals(
+    directOrderAttachmentSpec(pdf, store, request, true).filename,
+    ".._proof.pdf",
+    "filename sanitized",
+  );
+  for (
+    const [body, staff] of [
+      [pdf, false],
+      [{
+        ...pdf,
+        path: `${store}/44444444-4444-4444-8444-444444444444/${file}.pdf`,
+      }, true],
+      [{ ...pdf, mime_type: "text/html" }, true],
+      [{ ...pdf, path: `${store}/${request}/../${file}.pdf` }, true],
+    ] as const
+  ) {
+    let code = "";
+    try {
+      directOrderAttachmentSpec(body, store, request, staff);
+    } catch (e) {
+      code = e instanceof SafeHttpError ? e.code : "unexpected";
+    }
+    assertEquals(
+      code,
+      "DIRECT_ORDER_ATTACHMENT_INVALID",
+      "unsafe file rejected before token issuance",
+    );
+  }
+  const jpeg = {
+    filename: "photo.jpeg",
+    mime_type: "image/jpeg",
+    path: `${store}/${request}/${file}.jpeg`,
+  };
+  assertEquals(
+    directOrderAttachmentSpec(jpeg, store, request, false).extension,
+    "jpeg",
+    "JPEG supported",
+  );
+});
+
+Deno.test("order links exchange credentials internally and reject broader access", async () => {
+  const order = "90000000-0000-4000-8000-000000000001";
+  const other = "90000000-0000-4000-8000-000000000002";
+  const original = "90000000-0000-4000-8000-000000000003";
+  const key = "a".repeat(43);
+  const calls: JsonObject[] = [];
+  const client = {
+    rpc: (_name: string, args: JsonObject) => {
+      calls.push(args);
+      return Promise.resolve({
+        data: {
+          session_id: original,
+          secret_hash: "b".repeat(64),
+          slug: "fixture",
+        },
+        error: null,
+      });
+    },
+  };
+  const input = {
+    order_scoped: true,
+    session_id: order,
+    secret: key,
+    request_id: order,
+  };
+  const result = await resolveOrderScopedRequest(client, "status_v3", input);
+  assertEquals(result.body.session_id, original, "internal original session");
+  assertEquals(result.requestId, order, "limited order");
+  assertEquals(result.body.secret, key, "no original secret returned");
+  assertEquals(calls[0].p_request_id, order, "order-scoped key lookup");
+  for (
+    const [action, body] of [
+      ["status_v3", { ...input, request_id: other }],
+      ["submit_v3", input],
+      ["staff_attachment_url", input],
+      ["issue_order_access", input],
+    ] as const
+  ) {
+    try {
+      await resolveOrderScopedRequest(client, action, body);
+      throw new Error("access escaped order scope");
+    } catch (error) {
+      if (!(error instanceof SafeHttpError) || error.status !== 403) {
+        throw error;
+      }
+    }
+  }
+  assertEquals(calls.length, 1, "forbidden actions never call backend");
+  for (const action of ["status_v5", "decide_requirement"]) {
+    const scoped = await resolveOrderScopedRequest(client, action, input);
+    assertEquals(scoped.requestId, order, "new actions retain order scope");
+  }
+});
+
+Deno.test("request agreement binds the exact reply, version and freeform followup", () => {
+  const id = "90000000-0000-4000-8000-000000000001";
+  const body = {
+    session_id: id,
+    request_id: id,
+    requirement_id: id,
+    reply_message_id: id,
+    expected_version: 2,
+    accept: true,
+  };
+  const accepted = directOrderRequirementDecisionArgs(body);
+  assertEquals(accepted.p_expected_version, 2, "optimistic version");
+  assertEquals(accepted.p_reply_message_id, id, "linked reply");
+  assertEquals(
+    accepted.p_body,
+    null,
+    "confirmation has no invented custom reply",
+  );
+  const followup = directOrderRequirementDecisionArgs({
+    ...body,
+    accept: false,
+    message: "소스를 별도로 주세요",
+  });
+  assertEquals(
+    followup.p_body,
+    "소스를 별도로 주세요",
+    "freeform text retained",
+  );
+  for (
+    const invalid of [
+      { ...body, expected_version: 1.5 },
+      { ...body, expected_version: 0 },
+      { ...body, accept: "yes" },
+      { ...body, message: "different agreement" },
+      { ...body, accept: false, message: "" },
+    ]
+  ) {
+    try {
+      directOrderRequirementDecisionArgs(invalid);
+      throw new Error("invalid agreement accepted");
+    } catch (error) {
+      if (!(error instanceof SafeHttpError) || error.status !== 400) {
+        throw error;
+      }
+    }
+  }
+});
+
+Deno.test("general customer PDFs have an explicit contract independent of payment proof", () => {
+  const store = "11111111-1111-4111-8111-111111111111",
+    order = "22222222-2222-4222-8222-222222222222";
+  const spec = directOrderAttachmentSpec(
+    {
+      filename: "address.pdf",
+      mime_type: "application/pdf",
+      path: `${store}/${order}/33333333-3333-4333-8333-333333333333.pdf`,
+    },
+    store,
+    order,
+    false,
+    true,
+  );
+  assertEquals(spec.mime, "application/pdf", "general PDF accepted");
+  const jpeg = new Uint8Array([
+    0xff,
+    0xd8,
+    0xff,
+    0xc0,
+    0,
+    8,
+    8,
+    0,
+    2,
+    0,
+    3,
+    0,
+    0xff,
+    0xd9,
+  ]);
+  assertEquals(
+    validateProofImage(jpeg, "jpeg"),
+    true,
+    "JPEG alias accepts a valid frame",
+  );
+  assertEquals(
+    validateChatAttachmentBytes(
+      new TextEncoder().encode("%PDF-1.7\n1 0 obj endobj\n%%EOF\n"),
+      "pdf",
+    ),
+    true,
+    "PDF bytes accepted",
+  );
+  assertEquals(
+    validateChatAttachmentBytes(
+      new TextEncoder().encode("%PDF-1.7<script>unsafe</script>"),
+      "pdf",
+    ),
+    false,
+    "truncated fake PDF rejected",
+  );
+  assertEquals(
+    normalizeRpcError("DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED").status,
+    409,
+    "recipient guard is recoverable",
+  );
 });

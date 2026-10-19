@@ -6,7 +6,147 @@ import 'package:globos_pos_system/features/digital_receipt/digital_receipt_model
 import 'package:pdf/pdf.dart';
 
 void main() {
+  test('digital receipt stores utensils separately from the diner count', () {
+    final receipt = DigitalReceipt.fromJson({
+      'diner_count': 3,
+      'utensils_requested': false,
+    });
+    expect(receipt.dinerCount, 3);
+    expect(receipt.packingUtensilLabelVi, 'Dụng cụ: Không cần');
+    expect(
+      DigitalReceipt.fromJson({'diner_count': 3}).packingUtensilLabelVi,
+      'Dụng cụ: 3 bộ',
+    );
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    '80mm PDF prints the saved courier payer without adding its fare',
+    () async {
+      final base = {
+        'restaurant_name': 'GLOBOS',
+        'direct_order_reference': 'DTEST1234',
+        'fulfillment_method': 'delivery',
+        'diner_count': 3,
+        'total_amount': 108000,
+        'items': <dynamic>[],
+      };
+      final direct = DigitalReceipt.fromJson({
+        ...base,
+        'delivery_payment_mode': 'customer_direct',
+      });
+      final prepaid = DigitalReceipt.fromJson({
+        ...base,
+        'delivery_payment_mode': 'store_prepaid',
+      });
+      double height(List<int> bytes) => double.parse(
+        RegExp(
+          r'/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]',
+        ).firstMatch(latin1.decode(bytes, allowInvalid: true))!.group(2)!,
+      );
+      expect(direct.totalAmount, prepaid.totalAmount);
+      expect(
+        height(await digitalReceiptPdfService.build(direct)),
+        greaterThan(height(await digitalReceiptPdfService.build(prepaid))),
+      );
+    },
+  );
+
+  test(
+    'digital receipt keeps order and menu requests with unchanged totals',
+    () async {
+      final json = <String, dynamic>{
+        'restaurant_name': 'GLOBOS',
+        'total_amount': 149040,
+        'order_notes': '  No steamed rice  ',
+        'items': [
+          {
+            'label': 'Soup',
+            'quantity': 1,
+            'unit_price': 59000,
+            'line_total': 59000,
+            'notes': 'No onion',
+          },
+          {
+            'label': 'Bibimbap',
+            'quantity': 1,
+            'unit_price': 79000,
+            'line_total': 79000,
+            'notes': '  ',
+          },
+        ],
+      };
+      final withNotes = DigitalReceipt.fromJson(json);
+      final withoutNotes = DigitalReceipt.fromJson({
+        ...json,
+        'order_notes': null,
+        'items': (json['items'] as List)
+            .map((item) => {...item, 'notes': null})
+            .toList(),
+      });
+      expect(withNotes.orderNotes, 'No steamed rice');
+      expect(withNotes.items.first.notes, 'No onion');
+      expect(withNotes.items.last.notes, isNull);
+      expect(withNotes.totalAmount, withoutNotes.totalAmount);
+      double height(List<int> bytes) => double.parse(
+        RegExp(
+          r'/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]',
+        ).firstMatch(latin1.decode(bytes, allowInvalid: true))!.group(2)!,
+      );
+      expect(
+        height(await digitalReceiptPdfService.build(withNotes)),
+        greaterThan(height(await digitalReceiptPdfService.build(withoutNotes))),
+      );
+    },
+  );
+
+  test(
+    'new direct snapshots preserve packing counts; older snapshots remain compatible',
+    () {
+      for (final count in [1, 3, 10, 100, null, 0, 101, 1.5]) {
+        final receipt = DigitalReceipt.fromJson({
+          'diner_count': count,
+          'fulfillment_method': 'pickup',
+          'direct_order_reference': 'D12345678',
+        });
+        expect(receipt.isDirectOrder, isTrue);
+        final valid = count is int && count >= 1 && count <= 100;
+        expect(receipt.dinerCount, valid ? count : null);
+        expect(
+          receipt.packingUtensilLabelVi,
+          valid ? 'Dụng cụ: $count bộ' : 'Dụng cụ: Cần nhân viên kiểm tra',
+        );
+      }
+      expect(
+        DigitalReceipt.fromJson({'guest_count': 100}).isDirectOrder,
+        isFalse,
+      );
+    },
+  );
+
+  test('packing block adds printable height to the 80mm PDF', () async {
+    final normal = DigitalReceipt.fromJson({
+      'restaurant_name': 'GLOBOS',
+      'paid_at': '2026-10-06T12:00:00Z',
+    });
+    final direct = DigitalReceipt.fromJson({
+      'restaurant_name': 'GLOBOS',
+      'paid_at': '2026-10-06T12:00:00Z',
+      'diner_count': 100,
+      'fulfillment_method': 'pickup',
+      'direct_order_reference': 'D12345678',
+    });
+    double height(List<int> bytes) => double.parse(
+      RegExp(
+        r'/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]',
+      ).firstMatch(latin1.decode(bytes, allowInvalid: true))!.group(2)!,
+    );
+    expect(
+      height(await digitalReceiptPdfService.build(direct)),
+      greaterThan(height(await digitalReceiptPdfService.build(normal))),
+    );
+  });
 
   test(
     'builds a content-height 80mm receipt instead of an A4 document',

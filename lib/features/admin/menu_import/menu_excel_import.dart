@@ -1,3 +1,4 @@
+import '../../../core/payments/beverage_tax.dart';
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
@@ -22,6 +23,7 @@ const _requiredHeaders = <String>[
 class MenuImportRow {
   const MenuImportRow({
     required this.sourceRow,
+    this.beverageTax,
     required this.storeCode,
     required this.categoryName,
     required this.categorySortOrder,
@@ -33,6 +35,7 @@ class MenuImportRow {
     required this.sortOrder,
   });
 
+  final BeverageTax? beverageTax;
   final int sourceRow;
   final String storeCode;
   final String categoryName;
@@ -46,6 +49,7 @@ class MenuImportRow {
 
   Map<String, dynamic> toJson() => {
     'source_row': sourceRow,
+    if (beverageTax != null) ...beverageTax!.toJson(),
     'store_code': storeCode,
     'category_name': categoryName,
     'category_sort_order': categorySortOrder,
@@ -75,9 +79,10 @@ class MenuImportWorkbook {
 }
 
 class MenuImportValidationException implements Exception {
-  const MenuImportValidationException(this.issues);
+  const MenuImportValidationException(this.issues, {this.decodeFailure});
 
   final List<String> issues;
+  final ExcelWorkbookDecodeException? decodeFailure;
 
   @override
   String toString() => issues.join('\n');
@@ -91,10 +96,10 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
   late final Excel workbook;
   try {
     workbook = decodeExcelWorkbook(bytes);
-  } catch (_) {
-    throw const MenuImportValidationException([
-      'Excel 파일을 읽을 수 없습니다. .xlsx 형식인지 확인하세요.',
-    ]);
+  } on ExcelWorkbookDecodeException catch (error) {
+    throw MenuImportValidationException([
+      'Excel 파일을 읽지 못했습니다. 등록 양식에 값을 붙여넣어 다시 저장해 주세요.',
+    ], decodeFailure: error);
   }
 
   final sheet = workbook.tables[menuImportSheetName];
@@ -173,6 +178,12 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
       issues.add('$sourceRow행: 메뉴명을 입력하세요.');
     }
 
+    final beverageTax = parseBeverageTaxExcelRow(
+      headerIndexes,
+      text,
+      sourceRow,
+      issues,
+    );
     final price = _parseNumber(rawPrice);
     if (price == null || price <= 0) {
       issues.add('$sourceRow행: 가격은 0보다 큰 숫자여야 합니다.');
@@ -219,6 +230,7 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
       rows.add(
         MenuImportRow(
           sourceRow: sourceRow,
+          beverageTax: beverageTax,
           storeCode: storeCode,
           categoryName: categoryName,
           categorySortOrder: categorySortOrder,
@@ -300,4 +312,37 @@ bool? _parseBool(String value) {
     'FALSE' || '0' || '아니오' || 'N' || 'NO' => false,
     _ => null,
   };
+}
+
+const beverageTaxExcelHeaders = <String>['음료당류분류', '총당류(g/100ml)', '세금분류근거'];
+
+BeverageTax? parseBeverageTaxExcelRow(
+  Map<String, int> headers,
+  String Function(String) text,
+  int row,
+  List<String> issues,
+) {
+  final present = beverageTaxExcelHeaders.where(headers.containsKey).length;
+  if (present == 0) return null;
+  if (present != beverageTaxExcelHeaders.length) {
+    issues.add('$row행: 음료당류분류, 총당류(g/100ml), 세금분류근거 열을 함께 포함하세요.');
+    return null;
+  }
+  final classification = text(beverageTaxExcelHeaders[0]);
+  final rawSugar = text(beverageTaxExcelHeaders[1]);
+  final basis = text(beverageTaxExcelHeaders[2]);
+  // Blank optional cells preserve the current tax profile during legacy edits.
+  if (classification.isEmpty && rawSugar.isEmpty && basis.isEmpty) return null;
+  final tax = BeverageTax(
+    sugarClass: classification,
+    sugarGrams: rawSugar.isEmpty
+        ? null
+        : double.tryParse(rawSugar.replaceAll(',', '.')) ?? double.nan,
+    basisNote: basis,
+  );
+  if (!tax.isValid) {
+    issues.add('$row행: 음료당류분류(not_applicable/lte_5/gt_5), 당류 수치 및 근거를 확인하세요.');
+    return null;
+  }
+  return tax;
 }

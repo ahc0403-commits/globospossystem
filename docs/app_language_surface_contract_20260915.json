@@ -4,6 +4,7 @@
   "routes": [
     {"path": "/qr/:token", "policy": "customer_selected"},
     {"path": "/order/:slug", "policy": "customer_selected"},
+    {"path": "/order/:slug/r/:requestId", "policy": "customer_selected"},
     {"path": "/receipt", "policy": "fixed_vi_customer_receipt"},
     {"path": "/login", "policy": "staff_selected"},
     {"path": "/change-initial-password", "policy": "staff_selected"},

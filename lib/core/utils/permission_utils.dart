@@ -1,3 +1,4 @@
+import '../config/integration_availability.dart';
 import 'photo_objet_utils.dart';
 
 class PermissionUtils {
@@ -33,7 +34,8 @@ class PermissionUtils {
   static bool canAccessPhotoOps(String? role) =>
       role == 'super_admin' || isPhotoObjetRole(role);
 
-  static bool canAccessDeliverySettlement(String? role) => isAdminLike(role);
+  static bool canAccessDeliverySettlement(String? role) =>
+      !IntegrationAvailability.deliberryRetired && isAdminLike(role);
 
   static bool hasPermission(
     String? role,

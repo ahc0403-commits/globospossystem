@@ -95,7 +95,7 @@ void main() {
         'supabase/migrations/300_security_remediation_minimal.sql',
       );
 
-      expect(service, contains(r'$paymentId/$objectId.jpg'));
+      expect(service, contains(r'${item.paymentId}/${item.jobId}.jpg'));
       expect(service, contains('upsert: false'));
       expect(
         migration,

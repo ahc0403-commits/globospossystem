@@ -13,7 +13,7 @@ final _range = (
 );
 
 Map<String, dynamic> _summary() => {
-  'version': 1,
+  'version': 2,
   'store_id': 'store-a',
   'from_date': '2026-08-01',
   'to_date': '2026-08-06',
@@ -82,7 +82,7 @@ void main() {
     var calls = 0;
     final client = _client((request) async {
       calls++;
-      expect(request.url.path, '/rest/v1/rpc/get_store_report_summary');
+      expect(request.url.path, '/rest/v1/rpc/get_store_report_summary_v2');
       expect(jsonDecode(request.body), {
         'p_store_id': 'store-a',
         'p_from_date': '2026-08-01',
@@ -115,7 +115,7 @@ void main() {
   });
 
   for (final invalid in [
-    {'version': 2},
+    {'version': 999},
     {'store_id': 'another-store'},
     {'from_date': '2026-07-01'},
     {'to_date': '2026-08-07'},

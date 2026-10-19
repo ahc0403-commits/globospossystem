@@ -1,7 +1,15 @@
+import '../procurement/procurement_receipt_report_pdf.dart';
+import '../../main.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show FileOptions, StorageException;
+import '../procurement/procurement_process_labels.dart';
+import '../procurement/procurement_document_pdf.dart';
+import 'package:file_saver/file_saver.dart';
+import 'package:crypto/crypto.dart';
+import '../../core/ui/app_fonts.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:file_saver/file_saver.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +19,7 @@ import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/excel_import_localization.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import 'inventory_workflow_state.dart';
@@ -75,6 +84,15 @@ class _InventoryOrderWorkflowScreenState
   bool _loading = true;
   bool _detailLoading = false;
   bool _busy = false;
+  bool _showLegacyOrders = false;
+  final _prRefresh = ValueNotifier<int>(0);
+  bool get _usesPrWorkspace =>
+      _role == 'inventory_orderer' ||
+      PermissionUtils.canManageInventorySupplierPrices(_role);
+  bool get _primaryPr =>
+      _usesPrWorkspace &&
+      _section == _WorkflowSection.orders &&
+      !_showLegacyOrders;
   Object? _error;
 
   @override
@@ -86,6 +104,7 @@ class _InventoryOrderWorkflowScreenState
       (_) => _refreshInPlace(),
     );
     _selectedOrderId = widget.initialOrderId;
+    _showLegacyOrders = widget.initialOrderId != null;
     if (_role == 'inventory_accounting') {
       _section = _WorkflowSection.receiving;
     }
@@ -96,6 +115,7 @@ class _InventoryOrderWorkflowScreenState
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _syncWatchdog?.cancel();
+    _prRefresh.dispose();
     for (final controller in _receiptControllers.values) {
       controller.dispose();
     }
@@ -134,6 +154,10 @@ class _InventoryOrderWorkflowScreenState
       _refreshAgain = true;
       return;
     }
+    if (_primaryPr) {
+      _prRefresh.value++;
+      return;
+    }
     unawaited(_load(background: true));
   }
 
@@ -166,6 +190,22 @@ class _InventoryOrderWorkflowScreenState
       });
     }
     try {
+      // Every purchasing account opens the same PR page. The paged PR API
+      // owns activation and allowed actions; a missing policy must not select
+      // the legacy direct-PO flow or require loading the entire item catalog.
+      if (_primaryPr) {
+        setState(() {
+          _loadedScope = scope;
+          _loading = false;
+          _error = null;
+          _orders = [];
+          _detail = null;
+          _selectedOrderId = null;
+          _lastSyncedAt = DateTime.now();
+        });
+        return;
+      }
+      Map<String, dynamic>? catalog;
       final receiving = _isAccounting || _section == _WorkflowSection.receiving;
       final targetCount = append
           ? 80
@@ -192,7 +232,6 @@ class _InventoryOrderWorkflowScreenState
           break;
         }
       } while (rows.length < targetCount);
-      Map<String, dynamic>? catalog;
       if (!_isAccounting && (!background || _loadedScope != scope)) {
         catalog = await _service.fetchInventoryOrderCatalog(storeId!);
       }
@@ -401,6 +440,7 @@ class _InventoryOrderWorkflowScreenState
           _statusCounts = {};
           _accessibleStores = [];
           _loadedScope = null;
+          _showLegacyOrders = false;
         });
         unawaited(_load());
       });
@@ -417,6 +457,9 @@ class _InventoryOrderWorkflowScreenState
           if (event.affects({'inventory'})) _refreshInPlace();
         });
       });
+    }
+    if (_primaryPr && _storeId != null && !scopeChanged) {
+      return _procurementWorkspace(_storeId!, standalone: true);
     }
     return PopScope(
       canPop: !_receiptDirty && !_busy,
@@ -444,48 +487,7 @@ class _InventoryOrderWorkflowScreenState
                 vi: 'Yêu cầu mua hàng',
               ),
               icon: const Icon(Icons.playlist_add_check),
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      final storeId = _isAccounting
-                          ? _selectedAccountingStoreId
-                          : _storeId;
-                      if (storeId == null ||
-                          !await _leaveReceipt() ||
-                          !context.mounted) {
-                        return;
-                      }
-                      await Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ProcurementWorkspacePage(
-                            load: () =>
-                                _service.fetchProcurementWorkspace(storeId),
-                            openEvidence: (receiptId, path) async {
-                              final url = await _service
-                                  .inventoryReceiptStatementUrl(path);
-                              if (!await launchUrl(
-                                Uri.parse(url),
-                                mode: LaunchMode.externalApplication,
-                              )) {
-                                throw StateError(
-                                  'PROCUREMENT_EVIDENCE_UNAVAILABLE',
-                                );
-                              }
-                            },
-                            execute: (action, id, version, key, payload) =>
-                                _service.executeProcurementCommand(
-                                  storeId: storeId,
-                                  action: action,
-                                  recordId: id,
-                                  version: version,
-                                  idempotencyKey: key,
-                                  payload: payload,
-                                ),
-                          ),
-                        ),
-                      );
-                      if (mounted) await _load();
-                    },
+              onPressed: _busy ? null : _openProcurement,
             ),
             IconButton(
               tooltip: _text(ko: '새로고침', en: 'Refresh', vi: 'Làm mới'),
@@ -622,8 +624,13 @@ class _InventoryOrderWorkflowScreenState
   }
 
   Widget _buildErrorBanner(Object error) {
+    final message =
+        error is SupplierPriceImportValidationException &&
+            error.decodeFailure != null
+        ? excelWorkbookDecodeMessage(context.l10n, error.decodeFailure!)
+        : _friendlyError(error);
     return MaterialBanner(
-      content: Text(_friendlyError(error)),
+      content: Text(message),
       leading: const Icon(Icons.error_outline),
       actions: [
         if (error.toString().contains('STALE_VERSION') ||
@@ -798,9 +805,15 @@ class _InventoryOrderWorkflowScreenState
               if (!receivableOnly &&
                   PermissionUtils.canCreateInventoryPurchaseOrder(_role))
                 FilledButton.icon(
-                  onPressed: _busy ? null : _createDraft,
+                  onPressed: _busy ? null : _openProcurement,
                   icon: const Icon(Icons.add),
-                  label: Text(_text(ko: '새 발주', en: 'New', vi: 'Tạo đơn')),
+                  label: Text(
+                    _text(
+                      ko: '새 구매요청',
+                      en: 'New purchase request',
+                      vi: 'Tạo yêu cầu mua hàng',
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -812,6 +825,7 @@ class _InventoryOrderWorkflowScreenState
             child: DropdownButtonFormField<String>(
               key: const Key('inventory_accounting_store_filter'),
               initialValue: _selectedAccountingStoreId ?? '',
+              isExpanded: true,
               decoration: InputDecoration(
                 isDense: true,
                 labelText: _text(
@@ -829,10 +843,19 @@ class _InventoryOrderWorkflowScreenState
                       en: 'All brands and stores',
                       vi: 'Tất cả thương hiệu và cửa hàng',
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 for (final entry in sortedAccountingStores)
-                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+                  DropdownMenuItem(
+                    value: entry.key,
+                    child: Text(
+                      entry.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
               ],
               onChanged: _loading
                   ? null
@@ -893,7 +916,15 @@ class _InventoryOrderWorkflowScreenState
                           spacing: 8,
                           runSpacing: 5,
                           children: [
-                            _StatusChip(status: _string(order['status'])),
+                            _StatusChip(
+                              status:
+                                  _map(
+                                        order['commercial_terms'],
+                                      )['receiving_outcome'] ==
+                                      'partial_transferred'
+                                  ? 'partial_transferred'
+                                  : _string(order['status']),
+                            ),
                             Text(_money(order['total_amount'])),
                           ],
                         ),
@@ -956,7 +987,16 @@ class _InventoryOrderWorkflowScreenState
           if (receivingMode)
             _buildReceiptPanel(order)
           else ...[
-            _buildApprovalTimeline(),
+            if (_map(order['commercial_terms'])['approval_policy_version'] == 3)
+              Text(
+                _text(
+                  ko: '스토어매니저 승인 → 구매담당자 최종 승인 → PO 발행',
+                  en: 'Store manager approval → buyer final approval → PO',
+                  vi: 'Quản lý cửa hàng duyệt → nhân viên mua hàng duyệt cuối → PO',
+                ),
+              )
+            else
+              _buildApprovalTimeline(),
             const SizedBox(height: 16),
             _buildDocumentPanel(order, lines, documents),
           ],
@@ -998,7 +1038,13 @@ class _InventoryOrderWorkflowScreenState
                     ),
                   ],
                 ),
-                _StatusChip(status: _string(order['status'])),
+                _StatusChip(
+                  status:
+                      _map(order['commercial_terms'])['receiving_outcome'] ==
+                          'partial_transferred'
+                      ? 'partial_transferred'
+                      : _string(order['status']),
+                ),
               ],
             ),
             const Divider(height: 26),
@@ -1205,6 +1251,46 @@ class _InventoryOrderWorkflowScreenState
     List<Map<String, dynamic>> lines,
     List<Map<String, dynamic>> documents,
   ) {
+    if (_integer(order['workflow_version'], fallback: 1) == 2) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _text(
+                  ko: '업체용 PO · 가격 미표시',
+                  en: 'Supplier PO · prices omitted',
+                  vi: 'PO nhà cung cấp · không hiển thị giá',
+                ),
+              ),
+              if (_canManagePrices)
+                OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => _runBusy(
+                          () => _exportProcurementDocument(
+                            _string(order['restaurant_id']),
+                            'po',
+                            order,
+                            'supplier',
+                          ),
+                        ),
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: Text(
+                    _text(
+                      ko: '업체용 PO PDF 저장',
+                      en: 'Save supplier PO PDF',
+                      vi: 'Lưu PDF PO nhà cung cấp',
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
     final status = _string(order['status']);
     final documentStatus = _string(order['document_status'], fallback: 'none');
     final documentStatusLabel = switch (documentStatus) {
@@ -1305,6 +1391,8 @@ class _InventoryOrderWorkflowScreenState
     Map<String, dynamic> order,
     List<Map<String, dynamic>> lines,
   ) {
+    final twoStage =
+        _map(order['commercial_terms'])['approval_policy_version'] == 3;
     final receivable = const {
       'ordered',
       'partially_received',
@@ -1322,11 +1410,19 @@ class _InventoryOrderWorkflowScreenState
           children: [
             Text(
               _text(
-                ko: _isAccounting ? '최종 승인 수량과 단가' : '실제 납품 수량과 단가',
-                en: _isAccounting
+                ko: twoStage
+                    ? '실제 입고 수량과 검수'
+                    : _isAccounting
+                    ? '최종 승인 수량과 단가'
+                    : '실제 납품 수량과 단가',
+                en: twoStage
+                    ? 'Delivered quantities and inspection'
+                    : _isAccounting
                     ? 'Final approved quantity & price'
                     : 'Actual delivered quantity & price',
-                vi: _isAccounting
+                vi: twoStage
+                    ? 'Số lượng thực nhận và kiểm tra'
+                    : _isAccounting
                     ? 'Số lượng & giá duyệt cuối'
                     : 'Số lượng & giá thực nhận',
               ),
@@ -1335,13 +1431,19 @@ class _InventoryOrderWorkflowScreenState
             const SizedBox(height: 5),
             Text(
               _text(
-                ko: _isAccounting
+                ko: twoStage
+                    ? '모든 품목의 실제 수량과 검수 결과를 입력한 뒤 확정하세요. 합격 수량을 재고에 반영하고, 수량 일치 여부에 따라 전량 입고 확인서 또는 수량 차이서를 생성합니다.'
+                    : _isAccounting
                     ? '주방의 실수령 내역과 거래명세서를 비교해 최종값을 조정하세요. 아래 확정 전에는 재고가 증가하지 않습니다.'
                     : '모든 품목을 입력한 뒤 확인을 눌러 한 번에 제출하세요. 회계 확정 후 재고가 증가합니다.',
-                en: _isAccounting
+                en: twoStage
+                    ? 'Enter actual quantities and inspection results for all items, then confirm. Accepted quantities are posted to stock and a complete-delivery or discrepancy document is generated.'
+                    : _isAccounting
                     ? 'Compare the kitchen receipt with the supplier statement and adjust final values. Stock does not increase before confirmation.'
                     : 'Enter all items, then confirm once to submit. Stock increases after accounting verification.',
-                vi: _isAccounting
+                vi: twoStage
+                    ? 'Nhập số lượng thực nhận và kết quả kiểm tra tất cả mặt hàng rồi xác nhận. Số lượng đạt được cộng kho và tạo xác nhận giao đủ hoặc biên bản chênh lệch.'
+                    : _isAccounting
                     ? 'Đối chiếu hàng bếp nhận với phiếu giao và chỉnh giá trị cuối. Tồn kho chưa tăng trước khi xác nhận.'
                     : 'Nhập tất cả mặt hàng rồi xác nhận một lần. Tồn kho tăng sau khi kế toán xác minh.',
               ),
@@ -1382,13 +1484,16 @@ class _InventoryOrderWorkflowScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _productName(line),
+          '${_productName(line)}\n${_string(line['product_code'], fallback: '—')}',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         Text(
           '${_text(ko: '발주', en: 'Ordered', vi: 'Đã đặt')}: '
           '${_quantity(_number(line['ordered_quantity_unit']))} '
           '${_string(line['order_unit'])}',
+        ),
+        Text(
+          '${_text(ko: '누적 입고 / 부족', en: 'Received total / short', vi: 'Tổng nhập / thiếu')}: ${_quantity(_number(line['cumulative_quantity_base']) / _conversion(line))} / ${_quantity(_number(line['remaining_quantity_base']) / _conversion(line))} ${_string(line['order_unit'])}',
         ),
         const SizedBox(height: 10),
         Wrap(
@@ -1417,26 +1522,27 @@ class _InventoryOrderWorkflowScreenState
                 onChanged: (_) => _markReceiptDirty(lineId),
               ),
             ),
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: priceController,
-                enabled: enabled && !_busy,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: InputDecoration(
-                  labelText: _text(
-                    ko: finalReview ? '최종 승인 단가' : '실제 단가',
-                    en: finalReview ? 'Final approved price' : 'Actual price',
-                    vi: finalReview ? 'Giá duyệt cuối' : 'Giá thực',
+            if (_role != 'inventory_orderer')
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: priceController,
+                  enabled: enabled && !_busy,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
                   ),
-                  suffixText: 'VND',
-                  border: const OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: _text(
+                      ko: finalReview ? '최종 승인 단가' : '실제 단가',
+                      en: finalReview ? 'Final approved price' : 'Actual price',
+                      vi: finalReview ? 'Giá duyệt cuối' : 'Giá thực',
+                    ),
+                    suffixText: 'VND',
+                    border: const OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => _markReceiptDirty(lineId),
                 ),
-                onChanged: (_) => _markReceiptDirty(lineId),
               ),
-            ),
             if (error != null)
               Text(
                 error,
@@ -1517,9 +1623,27 @@ class _InventoryOrderWorkflowScreenState
                 icon: const Icon(Icons.save_outlined),
                 label: Text(
                   _text(
-                    ko: '확인 · 입고 내역 제출',
-                    en: 'Confirm · submit receipt',
-                    vi: 'Xác nhận · gửi phiếu nhập',
+                    ko:
+                        _map(
+                              order['commercial_terms'],
+                            )['approval_policy_version'] ==
+                            3
+                        ? '검수 완료 · 입고·재고 반영'
+                        : '확인 · 입고 내역 제출',
+                    en:
+                        _map(
+                              order['commercial_terms'],
+                            )['approval_policy_version'] ==
+                            3
+                        ? 'Confirm inspection · post stock'
+                        : 'Confirm · submit receipt',
+                    vi:
+                        _map(
+                              order['commercial_terms'],
+                            )['approval_policy_version'] ==
+                            3
+                        ? 'Hoàn tất kiểm nhận · cộng kho'
+                        : 'Xác nhận · gửi phiếu nhập',
                   ),
                 ),
               ),
@@ -1581,11 +1705,44 @@ class _InventoryOrderWorkflowScreenState
                   _text(ko: '첨부 열기', en: 'Open attachment', vi: 'Mở tệp'),
                 ),
               ),
+            if (_map(order['commercial_terms'])['receiving_outcome'] ==
+                'partial_transferred')
+              Text(
+                _text(
+                  ko: '일부 입고 · 부족분 다음 PO 이관',
+                  en: 'Partial receipt · shortage transferred to next PO',
+                  vi: 'Nhập một phần · thiếu chuyển sang PO sau',
+                ),
+              ),
             for (final receipt in receipts.where(
               (r) => r['status'] == 'confirmed',
             ))
               ListTile(
                 leading: const Icon(Icons.check_circle_outline),
+                trailing:
+                    _map(
+                          order['commercial_terms'],
+                        )['approval_policy_version'] ==
+                        3
+                    ? IconButton(
+                        icon: const Icon(Icons.picture_as_pdf),
+                        tooltip: _text(
+                          ko: '업체 전달용 입고 문서',
+                          en: 'Supplier receipt document',
+                          vi: 'Chứng từ nhập gửi nhà cung cấp',
+                        ),
+                        onPressed: _busy
+                            ? null
+                            : () => _runBusy(
+                                () => _exportProcurementDocument(
+                                  _string(order['restaurant_id']),
+                                  'receipt',
+                                  {'id': _id(receipt)},
+                                  'supplier',
+                                ),
+                              ),
+                      )
+                    : null,
                 title: Text(
                   '${_string(receipt['inspector_name'], fallback: '-')} · ${_money(receipt['total_amount'])}',
                 ),
@@ -1743,7 +1900,7 @@ class _InventoryOrderWorkflowScreenState
       final price = parseInventoryQuantity(
         _receiptPriceControllers[id]?.text ?? '',
       );
-      if (qty == null || price == null) {
+      if (qty == null || (_role != 'inventory_orderer' && price == null)) {
         _receiptErrors[id] = _text(
           ko: '수량과 단가를 확인하세요. 미수령은 0을 입력하세요.',
           en: 'Enter valid quantity and price; use 0 for undelivered items.',
@@ -1754,7 +1911,7 @@ class _InventoryOrderWorkflowScreenState
       payload.add({
         'purchase_order_line_id': id,
         'received_quantity_base': qty * _conversion(line),
-        'actual_unit_price': price,
+        if (_role != 'inventory_orderer') 'actual_unit_price': price,
         'discrepancy_reason': null,
       });
     }
@@ -1788,13 +1945,17 @@ class _InventoryOrderWorkflowScreenState
     final changedLineIds = <String>{
       for (var i = 0; i < lines.length; i++)
         if ((_number(payload[i]['received_quantity_base']) -
-                        _number(lines[i]['ordered_quantity_base']))
+                        _number(
+                          lines[i]['remaining_quantity_base'] ??
+                              lines[i]['ordered_quantity_base'],
+                        ))
                     .abs() >
                 0.0001 ||
-            (_number(payload[i]['actual_unit_price']) -
-                        _number(lines[i]['unit_price']))
-                    .abs() >
-                0.01)
+            (payload[i]['actual_unit_price'] != null &&
+                (_number(payload[i]['actual_unit_price']) -
+                            _number(lines[i]['unit_price']))
+                        .abs() >
+                    0.01))
           _id(lines[i]),
     };
     final needsReason = changedLineIds.isNotEmpty;
@@ -1851,44 +2012,206 @@ class _InventoryOrderWorkflowScreenState
             : DateFormat('yyyy-MM-dd').format(input.date!),
         'p_memo': input.memo,
       };
-      await _service.submitInventoryReceiptBatch(_pendingReceiptSubmission!);
+      final twoStage =
+          _map(order['commercial_terms'])['approval_policy_version'] == 3;
+      final posted = twoStage
+          ? await _service.finalizeProcurementReceipt(
+              _pendingReceiptSubmission!,
+            )
+          : await _service.submitInventoryReceiptBatch(
+              _pendingReceiptSubmission!,
+            );
       if (!mounted) return;
       setState(() {
         _receiptDirty = false;
         _pendingReceiptSubmission = null;
       });
       await _loadDetail(_id(order), background: true);
+      if (twoStage) {
+        try {
+          await _exportProcurementDocument(
+            _string(order['restaurant_id']),
+            'receipt',
+            {'id': posted['receipt_id']},
+            'supplier',
+          );
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  _text(
+                    ko: '입고·재고 반영은 완료됐습니다. 입고 문서 버튼으로 파일 생성을 재시도하세요.',
+                    en: 'Stock was posted. Retry the file using the receipt document button.',
+                    vi: 'Đã cộng kho. Dùng nút chứng từ nhập để thử tạo tệp lại.',
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+      }
     });
   }
 
-  Future<void> _createDraft() async {
-    final input = await showDialog<InventoryPurchaseDraftOrderInput>(
-      context: context,
-      builder: (_) => InventoryPurchaseDraftOrderDialog(
-        key: const Key('inventory_order_create_draft_dialog'),
-        suppliers: _suppliers,
-        supplierItems: _supplierItems,
-        canEditPrice: _canManagePrices,
-        loadSupplierItems: (supplierId) async {
-          final catalog = await _service.fetchInventoryOrderCatalog(_storeId!);
-          return _maps(catalog['items'])
-              .where((item) => _string(item['supplier_id']) == supplierId)
-              .toList();
+  Widget _procurementWorkspace(String storeId, {bool standalone = false}) =>
+      ProcurementWorkspacePage(
+        key: ValueKey('procurement:$_scopeKey'),
+        requesterView: _role == 'inventory_orderer',
+        refreshListenable: _prRefresh,
+        onOpenReceiving: standalone
+            ? () {
+                setState(() {
+                  _section = _WorkflowSection.receiving;
+                });
+                _load(preserveSelection: false);
+              }
+            : null,
+        onOpenLegacy: standalone
+            ? () {
+                setState(() {
+                  _showLegacyOrders = true;
+                });
+                _load(preserveSelection: false);
+              }
+            : null,
+        onLogout: standalone
+            ? () async {
+                await ref.read(authProvider.notifier).logout();
+              }
+            : null,
+        onOpenOrder: (id) {
+          if (!standalone) Navigator.of(context).pop();
+          setState(() {
+            _section = _WorkflowSection.receiving;
+            _selectedOrderId = id;
+          });
+          _load();
         },
-      ),
-    );
-    if (input == null || _storeId == null) return;
-    await _runBusy(() async {
-      final order = await _service.createManualInventoryPurchaseOrder(
-        storeId: _storeId!,
-        supplierId: input.supplierId,
-        requestedDeliveryDate: input.deliveryDate,
-        memo: input.memo,
-        lines: input.lines,
+        load: () => _service.fetchProcurementWorkspace(storeId),
+        loadPage: (query) => _service.fetchProcurementPage(storeId, query),
+        exportDocument: (kind, record, audience) =>
+            _exportProcurementDocument(storeId, kind, record, audience),
+        openEvidence: (receiptId, path) async {
+          final url = await _service.inventoryReceiptStatementUrl(path);
+          if (!await launchUrl(
+            Uri.parse(url),
+            mode: LaunchMode.externalApplication,
+          )) {
+            throw StateError('PROCUREMENT_EVIDENCE_UNAVAILABLE');
+          }
+        },
+        execute: (action, id, version, key, payload) =>
+            _service.executeProcurementCommand(
+              storeId: storeId,
+              action: action,
+              recordId: id,
+              version: version,
+              idempotencyKey: key,
+              payload: payload,
+            ),
       );
-      _selectedOrderId = _id(order);
-      await _load();
-    });
+
+  Future<void> _exportProcurementDocument(
+    String storeId,
+    String kind,
+    Map<String, dynamic> record,
+    String audience,
+  ) async {
+    final language = Localizations.localeOf(context).languageCode;
+    final source = kind == 'receipt'
+        ? await _service.procurementReceiptReport(
+            storeId,
+            record['id'].toString(),
+          )
+        : await _service.procurementDocumentData(
+            storeId,
+            kind,
+            record['id'].toString(),
+            audience,
+          );
+    if (!context.mounted) return;
+    final bytes = kind == 'receipt'
+        ? await buildProcurementReceiptReportPdf(
+            source,
+            language: language,
+            fontAsset: AppFonts.assetPath,
+          )
+        : await buildProcurementDocumentPdf(
+            source,
+            labels: {
+              for (final key in procurementDocumentLabelKeys)
+                key: procurementProcessLabel(key, language),
+            },
+            fontAsset: AppFonts.assetPath,
+          );
+    final hash = source['source_hash'].toString();
+    final fileHash = sha256.convert(bytes).toString();
+    final path =
+        '$storeId/procurement/$kind/${record['id']}/$audience/$hash/$fileHash.pdf';
+    try {
+      await supabase.storage
+          .from('inventory-purchase-documents')
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(
+              contentType: 'application/pdf',
+              upsert: false,
+            ),
+          );
+    } on StorageException catch (e) {
+      if (e.statusCode != '409' &&
+          e.error != 'Duplicate' &&
+          e.error != 'ResourceAlreadyExists') {
+        rethrow;
+      }
+    }
+    await supabase.rpc(
+      kind == 'receipt'
+          ? 'procurement_record_receipt_report'
+          : 'record_procurement_document',
+      params: {
+        'p_store_id': storeId,
+        if (kind == 'receipt')
+          'p_receipt_id': record['id']
+        else ...{
+          'p_kind': kind,
+          'p_record_id': record['id'],
+          'p_audience': audience,
+        },
+        'p_source_hash': hash,
+        if (kind == 'receipt') ...{
+          'p_path': path,
+          'p_file_hash': fileHash,
+          'p_size': bytes.length,
+        } else ...{
+          'p_storage_path': path,
+          'p_sha256': fileHash,
+          'p_size_bytes': bytes.length,
+        },
+      },
+    );
+    await FileSaver.instance.saveFile(
+      name:
+          '${record['request_no'] ?? record['purchase_order_no'] ?? (source['data'] as Map)['purchase_order_no']}-${kind == 'receipt' ? source['kind'] : kind}-$audience',
+      bytes: bytes,
+      ext: 'pdf',
+      mimeType: MimeType.pdf,
+    );
+  }
+
+  Future<void> _openProcurement() async {
+    final storeId = _isAccounting ? _selectedAccountingStoreId : _storeId;
+    if (storeId == null || !await _leaveReceipt() || !mounted) return;
+    if (_primaryPr) {
+      _prRefresh.value++;
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => _procurementWorkspace(storeId)),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _editDraft(
@@ -3703,6 +4026,11 @@ String _statusLabel(String status, String languageCode) {
     'brand_approved': ['최종 승인·PDF 완료', 'Approved', 'Đã duyệt'],
     'ordered': ['발주 완료', 'Ordered', 'Đã đặt'],
     'partially_received': ['부분 입고', 'Partially received', 'Nhập một phần'],
+    'partial_transferred': [
+      '일부 입고 · 잔량 이관',
+      'Partial receipt · balance transferred',
+      'Nhập một phần · chuyển phần thiếu',
+    ],
     'received': ['입고 완료', 'Received', 'Đã nhập'],
     'cancelled': ['삭제/취소', 'Cancelled', 'Đã hủy'],
     'office_approved': ['기존 승인', 'Legacy approved', 'Đã duyệt cũ'],

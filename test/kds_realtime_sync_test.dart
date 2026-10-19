@@ -101,6 +101,13 @@ void main() {
   });
 
   group('KDS durable catch-up', () {
+    test('authoritative bootstrap resets a stale stored cursor', () {
+      expect(
+        resolveKdsBootstrapCursor(bootstrapRevision: 4, storedRevision: 99),
+        4,
+      );
+    });
+
     test(
       'applies pages in revision order and persists scanned cursor',
       () async {
@@ -165,6 +172,84 @@ void main() {
       expect(sync.cursor, 9);
       expect(errors.single, isA<StateError>());
     });
+
+    test('server revision rollback requests a fresh bootstrap', () async {
+      final gateway = _FakeGateway([
+        _batch(scanned: 9, current: 9, hasMore: false, revisions: const []),
+      ]);
+      var bootstrapCount = 0;
+      final errors = <Object>[];
+      final sync = _sync(
+        gateway: gateway,
+        onBootstrapRequired: () async => bootstrapCount += 1,
+        onError: (error, _) => errors.add(error),
+      )..seedCursorForTesting(10);
+
+      await sync.catchUp();
+
+      expect(bootstrapCount, 1);
+      expect(sync.cursor, 10);
+      expect(errors, isEmpty);
+    });
+
+    test('cross-store changes are rejected before state mutation', () async {
+      final gateway = _FakeGateway([
+        KdsDeltaBatch(
+          bootstrapRequired: false,
+          scannedThroughRevision: 5,
+          currentRevision: 5,
+          hasMore: false,
+          changes: [
+            KdsChangeEnvelope(
+              schemaVersion: 1,
+              restaurantId: 'store-2',
+              revision: 5,
+              eventId: 'event-5',
+              eventType: 'ticket_changed',
+              targetStations: const ['kitchen'],
+              payload: const {'kind': 'ticket_invalidated'},
+              occurredAt: DateTime.utc(2026, 8, 31),
+            ),
+          ],
+        ),
+      ]);
+      final applied = <int>[];
+      final errors = <Object>[];
+      final sync = _sync(
+        gateway: gateway,
+        onChange: (change) async => applied.add(change.revision),
+        onError: (error, _) => errors.add(error),
+      )..seedCursorForTesting(4);
+
+      await sync.catchUp();
+
+      expect(applied, isEmpty);
+      expect(sync.cursor, 4);
+      expect(errors.single.toString(), contains('STORE_SCOPE_MISMATCH'));
+    });
+
+    test(
+      'failed change application never advances the durable cursor',
+      () async {
+        final gateway = _FakeGateway([
+          _batch(scanned: 5, current: 5, hasMore: false, revisions: [5]),
+        ]);
+        final revisions = _MemoryRevisionStore();
+        final errors = <Object>[];
+        final sync = _sync(
+          gateway: gateway,
+          revisionStore: revisions,
+          onChange: (_) async => throw StateError('apply failed'),
+          onError: (error, _) => errors.add(error),
+        )..seedCursorForTesting(4);
+
+        await sync.catchUp();
+
+        expect(sync.cursor, 4);
+        expect(revisions.writes, isEmpty);
+        expect(errors.single.toString(), contains('apply failed'));
+      },
+    );
   });
 }
 

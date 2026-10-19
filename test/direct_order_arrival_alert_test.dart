@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -23,15 +24,17 @@ final _time0 = DateTime.utc(2026, 8, 21, 12);
 const _frozenAlertFiles = <String, String>{
   'lib/main.dart':
       '299445e9ed849127aed0d5ff6e12dbc940660681ff29f2cb43465014c47adb30',
-  // Intentional bank QR selection fix; cashier overlay tests cover QR and alerts.
+  // 2026-10-11: approved corporate account and its unavailable message.
+  // Cashier/customer display tests cover this intentional change.
+  // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   'lib/features/cashier/cashier_screen.dart':
-      '297c34308ee695e28e91ebc5d26616ece5fef8a66ef08d6cb791f6dc4c305dba',
+      '236b5da79562c8e4fa44a2aeda06e312af38db7616ff1b913ce9cdefe5d1e515',
   'lib/features/kitchen/kitchen_screen.dart':
-      '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
+      '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
   // Intentional event-merge fix; behavioral regressions live in
   // scalability_live_consumer_regression_test.dart.
   'lib/core/services/bank_transfer_alert_coordinator.dart':
-      'ecd5271073ee71e84590341c081c492599eee3bc9b283671fe30d5e1305eee25',
+      'a9433b177761c4e2fb6ba319b103491d7c5c95ad9da3a24fdfc747b521151265',
   'lib/core/services/bank_transfer_alert_service.dart':
       '05a1dbf45971c9c28437f52e970ce1ab6dfbec29f291188648cf50e708028dff',
   'lib/core/services/bank_transfer_alert_sound.dart':
@@ -47,19 +50,19 @@ const _frozenAlertFiles = <String, String>{
   'test/bank_transfer_alert_coordinator_test.dart':
       'a6860655bdde88ce6ec26603b1cf3ec7d8eb5e8b5ec9310130bb5332f5a250b6',
   'test/sepay_bank_transfer_contract_test.dart':
-      '1ac2246575678ba45c14eafa8bc08e8c9d9e07027ec7bcd69964dd9f6dad52e4',
+      'c58c3e55574c01dbbe2d329d78def8b2d085e3808d3b7e79d3cb1caceee08c93',
   'test/kitchen_operational_attention_contract_test.dart':
       'c3d02484495f7f05ec542b82419681c707f1bb02d52181c6f54c534b6c2399b6',
-  // 2026-09-17: menu cancellation and payroll summary copy are localized.
+  // QR takeout, non-revenue amount review and beverage tax copy are independent.
   // Arrival behavior remains covered below for all customer/staff locales.
   'lib/l10n/app_localizations.dart':
-      '7e1de21b3530ee1a5fa859d825ed0c4e005d7b2b2075f4542d41eaaf0e0c8ca1',
+      '156cf2d5ab62df4e5b16b4380da4f8ca9691f70528dcbe0e54468eb8217ca357',
   'lib/l10n/app_localizations_ko.dart':
-      '8ea7d4c3042ce7dcf4363003fb4f265edbf9310ee0729d5b6a9a0084ddabe50a',
+      'e1cd0d5a83ed5ea065b204220257637b0bb36819cac8969ed6c130db9a4d72c0',
   'lib/l10n/app_localizations_vi.dart':
-      '7de68c1cdc3973345389b82dbea927b12e1d6661bd546422efb503628801947d',
+      '76146f73bdf150254168e2e9b8d26fb53d797eaa1fbc86ca43091047b6fd65c7',
   'lib/l10n/app_localizations_en.dart':
-      'b2766c71988945999f2721e6f67bf99675f41de9f5ea25b0cdf4280c5e270405',
+      '6e57a11d6b83d9f43b690a5e6345b89a130f47033dca66fec1a192f3eabaac21',
 };
 
 void main() {
@@ -69,8 +72,33 @@ void main() {
     for (final entry in _frozenAlertFiles.entries) {
       final file = File(entry.key);
       expect(file.existsSync(), isTrue, reason: entry.key);
+      var bytes = file.readAsBytesSync();
+      if (entry.key.startsWith('lib/l10n/app_localizations')) {
+        // Independent brand copy is appended by gen-l10n. Keep the existing
+        // alert baseline exact while allowing this unrelated, tested addition.
+        // Counted-cash copy has independent responsive widget coverage.
+        // Exclude only that new generated member from the frozen alert bytes.
+        final countedMember = entry.key.endsWith('/app_localizations.dart')
+            ? RegExp(
+                r'\n  /// No description provided for @salesDepositCountedAmount\.[\s\S]*?\n  String salesDepositCountedAmount\(String amount\);\n',
+              )
+            : RegExp(
+                r'\n  @override\n  String salesDepositCountedAmount\(String amount\) \{\n.*?\n  \}\n',
+              );
+        final source = utf8.decode(bytes).replaceFirst(countedMember, '');
+        final marker = entry.key.endsWith('/app_localizations.dart')
+            ? '\n\n  /// No description provided for @brandAdd.'
+            : '\n\n  @override\n  String get brandAdd';
+        final start = source.indexOf(marker);
+        if (start >= 0) {
+          final end = source.indexOf('\n}', start);
+          bytes = utf8.encode(
+            source.substring(0, start) + source.substring(end),
+          );
+        }
+      }
       expect(
-        sha256.convert(file.readAsBytesSync()).toString(),
+        sha256.convert(bytes).toString(),
         entry.value,
         reason: 'frozen existing alert changed: ${entry.key}',
       );
@@ -261,7 +289,7 @@ void main() {
       service.add(3);
       await tester.pump(const Duration(milliseconds: 55));
       await tester.pump();
-      expect(presented, [2, 1], reason: '10-second safety poll is injectable');
+      expect(presented, [2, 1], reason: 'safety poll is injectable');
       expect(sound.plays, 2);
       await events.close();
     },

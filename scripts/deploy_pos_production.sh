@@ -32,6 +32,7 @@ SKIP_VERCEL="${SKIP_VERCEL:-0}"
 REQUIRE_CLEAN_GIT="${REQUIRE_CLEAN_GIT:-1}"
 ROLLBACK_HIERARCHY=0
 DB_ONLY=0
+WEB_ONLY=0
 MIGRATION_OPTION_SET=0
 
 # shellcheck source=scripts/lib/production_migration_gate.sh
@@ -63,6 +64,10 @@ Options:
   --db-only          Run the required migration gates without Auth or Vercel work.
                      Requires --migration and all checks; incompatible with
                      remote mode, skip options, and rollback.
+  --web-only         Deploy POS web (including mobile web) without DB migrations
+                     or Edge function deployments. Keeps clean exact-main,
+                     required CI, Auth, checks, live HTTP, and login gates.
+                     Incompatible with migrations, rollback, and skip options.
   --mode MODE        prebuilt (default) or remote.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
@@ -278,6 +283,9 @@ parse_args() {
       --db-only)
         DB_ONLY=1
         ;;
+      --web-only)
+        WEB_ONLY=1
+        ;;
       --mode)
         shift
         DEPLOY_MODE="${1:-}"
@@ -351,6 +359,21 @@ validate_db_only_options() {
     fail "--db-only is incompatible with --rollback-hierarchy."
 }
 
+validate_web_only_options() {
+  [[ "$WEB_ONLY" == "1" ]] || return 0
+  [[ "$DB_ONLY" == "0" ]] || fail "--web-only is incompatible with --db-only."
+  [[ "$MIGRATION_OPTION_SET" == "0" && -z "$MIGRATION_FILE" ]] ||
+    fail "--web-only cannot apply a migration."
+  [[ "$ROLLBACK_HIERARCHY" == "0" ]] ||
+    fail "--web-only is incompatible with --rollback-hierarchy."
+  [[ "$SKIP_CHECKS" == "0" && -n "$TEST_TARGETS" ]] ||
+    fail "--web-only requires static analysis and tests."
+  [[ "$SKIP_AUTH_CHECK" == "0" && "$SKIP_LOGIN_SMOKE" == "0" ]] ||
+    fail "--web-only requires Auth readiness and login smoke."
+  [[ "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" && "$SKIP_VERCEL" == "0" ]] ||
+    fail "--web-only is incompatible with skip options."
+}
+
 preflight() {
   log "Preflight"
   reject_target_overrides
@@ -392,6 +415,8 @@ preflight() {
       fail "Missing create_staff_user Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/provision-fixed-pos-account/index.ts" ]] ||
       fail "Missing provision-fixed-pos-account Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/company-tax-lookup/index.ts" ]] ||
+      fail "Missing company-tax-lookup Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/complete-initial-password-change/index.ts" ]] ||
       fail "Missing complete-initial-password-change Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/sepay-webhook/index.ts" ]] ||
@@ -402,6 +427,12 @@ preflight() {
       fail "Missing public-receipt Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/direct-order-public/index.ts" ]] ||
       fail "Missing direct-order-public Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/index.ts" ]] ||
+      fail "Missing direct-order-notification-dispatcher Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/index.ts" ]] ||
+      fail "Missing direct-order-translation-dispatcher Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/meinvoice-dispatcher/index.ts" ]] ||
+      fail "Missing meinvoice-dispatcher Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -483,6 +514,11 @@ run_checks() {
   log "Static analysis"
   run dart analyze
 
+  log "Deliberry retirement regression tests"
+  run bash "$ROOT_DIR/test/deliberry_retirement_sql_test.sh"
+  run deno test --no-config \
+    "$ROOT_DIR/supabase/functions/_shared/retired_deliberry_test.ts"
+
   log "Password lifecycle Edge tests"
   run deno test --allow-env=ALLOWED_ORIGINS \
     "$ROOT_DIR/supabase/functions/complete-initial-password-change/index_test.ts"
@@ -490,6 +526,10 @@ run_checks() {
   log "SePay webhook Edge tests"
   run deno test \
     "$ROOT_DIR/supabase/functions/sepay-webhook/index_test.ts"
+
+  log "MISA item ledger and VAT snapshot tests"
+  run deno check "$ROOT_DIR/supabase/functions/meinvoice-dispatcher/index.ts"
+  run deno test "$ROOT_DIR/supabase/functions/_shared/meinvoice_ledger_test.ts"
 
   log "Emergency fulfilment Edge tests"
   run deno test \
@@ -515,6 +555,22 @@ run_checks() {
   run deno test --config \
     "$ROOT_DIR/supabase/functions/direct-order-public/deno.json" \
     "$ROOT_DIR/supabase/functions/direct-order-public/index_test.ts"
+  run deno fmt --check \
+    "$ROOT_DIR/supabase/functions/_shared/direct_order_push.ts" \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher"
+  run deno lint \
+    "$ROOT_DIR/supabase/functions/_shared/direct_order_push.ts" \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher"
+  run deno check --config \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/deno.json" \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/index.ts"
+  run deno test --config \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/deno.json" \
+    "$ROOT_DIR/supabase/functions/direct-order-notification-dispatcher/index_test.ts"
+  run deno fmt --check "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher"
+  run deno lint "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher"
+  run deno check --config "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/deno.json" "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/index.ts"
+  run deno test --config "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/deno.json" "$ROOT_DIR/supabase/functions/direct-order-translation-dispatcher/index_test.ts"
 
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
@@ -575,7 +631,8 @@ verify_direct_order_secrets() {
   for required_secret in \
     SUPABASE_SECRET_KEYS \
     DIRECT_ORDER_RATE_LIMIT_SECRET \
-    DIRECT_ORDER_CLEANUP_SECRET; do
+    DIRECT_ORDER_CLEANUP_SECRET \
+    OPENAI_API_KEY; do
     grep -Fxq "$required_secret" <<<"$secret_names" ||
       fail "Missing required direct-order Edge secret: $required_secret"
   done
@@ -827,6 +884,7 @@ local_flutter_build() {
 
   log "Local Flutter web build precheck"
   ensure_flutter_env
+  run_masked "Build bounded Photo Excel worker" bash scripts/build_photo_import_worker.sh
   run_masked \
     "flutter build web --release --dart-define=SUPABASE_URL=<set> --dart-define=SUPABASE_ANON_KEY=<set> --dart-define=FIREBASE_*=<optional> --no-wasm-dry-run" \
     flutter build web --release \
@@ -894,6 +952,8 @@ deploy_pos_edge_functions() {
   run supabase functions deploy create_staff_user --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy provision-fixed-pos-account \
     --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy company-tax-lookup \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy complete-initial-password-change \
     --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy sepay-webhook --no-verify-jwt \
@@ -904,6 +964,47 @@ deploy_pos_edge_functions() {
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy direct-order-public \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy direct-order-notification-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy direct-order-translation-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy meinvoice-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  # Retired endpoints must replace any previously deployed active handlers.
+  run supabase functions deploy deliberry-webhook \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy deliberry-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy generate-settlement \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy generate_delivery_settlement \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+}
+
+verify_deliberry_retirement_readiness() {
+  log "Deliberry retirement endpoint verification"
+  local function_name status response_file
+  for function_name in deliberry-webhook deliberry-dispatcher \
+    generate-settlement generate_delivery_settlement; do
+    if [[ "$DRY_RUN" == "1" ]]; then
+      printf '+ POST %s without credentials; require HTTP 410\n' "$function_name"
+      continue
+    fi
+    response_file="$(mktemp)"
+    if ! status="$(curl -sS --max-time 30 -o "$response_file" -w '%{http_code}' \
+      -X POST "$SUPABASE_URL/functions/v1/$function_name" \
+      -H 'Content-Type: application/json' --data '{}')"; then
+      rm -f "$response_file"
+      fail "Could not verify retired endpoint $function_name."
+    fi
+    if [[ "$status" != "410" ]] || \
+      ! grep -q 'DELIBERRY_INTEGRATION_RETIRED' "$response_file"; then
+      rm -f "$response_file"
+      fail "Retired endpoint $function_name must return HTTP 410."
+    fi
+    rm -f "$response_file"
+    printf '%s: retired (HTTP 410).\n' "$function_name"
+  done
 }
 
 verify_emergency_dispatcher_readiness() {
@@ -923,11 +1024,28 @@ verify_emergency_dispatcher_readiness() {
   printf 'Emergency fulfilment dispatcher secrets and auth gate verified.\n'
 }
 
+verify_direct_order_dispatcher_readiness() {
+  log "Direct order customer notification dispatcher readiness"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '+ POST direct-order-notification-dispatcher without authorization; require HTTP 401\n'
+    return 0
+  fi
+  local status
+  status="$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -X POST \
+    "$SUPABASE_URL/functions/v1/direct-order-notification-dispatcher" \
+    -H 'Content-Type: application/json' --data '{}')" ||
+    fail "Could not reach direct order customer notification dispatcher."
+  [[ "$status" == "401" ]] ||
+    fail "Direct order notification dispatcher returned HTTP $status instead of 401."
+  printf 'Direct order customer notification dispatcher auth gate verified.\n'
+}
+
 verify_remote_allowed_origin() {
   log "POS Edge production origin verification"
   local function_name headers allowed
   for function_name in \
     provision-fixed-pos-account \
+    company-tax-lookup \
     complete-initial-password-change \
     public-receipt \
     direct-order-public; do
@@ -1004,6 +1122,8 @@ run_db_only_flow() {
 
 main() {
   parse_args "$@"
+  readonly WEB_ONLY
+  validate_web_only_options
   validate_db_only_options
   cd "$ROOT_DIR"
   confirm_production
@@ -1019,20 +1139,25 @@ main() {
   fi
   load_env
   ensure_flutter_env
+  validate_web_only_options
   verify_allowed_production_origins
   verify_vercel_firebase_web_env
   run_auth_check
   run_checks
-  verify_sepay_alert_secrets
-  verify_direct_order_secrets
-  # Deploy the compatibility-capable self-service endpoint before replacing the
-  # predecessor password trigger. If the DB gate fails, the endpoint remains
-  # safe against the predecessor schema; the web app is deployed only after the
-  # fail-closed migration and verification succeed.
-  deploy_pos_edge_functions
-  verify_remote_allowed_origin
-  verify_emergency_dispatcher_readiness
-  apply_migration
+  if [[ "$WEB_ONLY" == "1" ]]; then
+    log "Web-only release scope"
+    printf 'Edge function deployment: N/A. Database migration: N/A. Mobile web uses the same POS web release.\n'
+  else
+    verify_sepay_alert_secrets
+    verify_direct_order_secrets
+    # Deploy predecessor-compatible endpoints before any schema replacement.
+    deploy_pos_edge_functions
+    verify_deliberry_retirement_readiness
+    verify_remote_allowed_origin
+    verify_emergency_dispatcher_readiness
+    verify_direct_order_dispatcher_readiness
+    apply_migration
+  fi
   local_flutter_build
   deploy_vercel
   run_login_smoke

@@ -1,9 +1,6 @@
 import '../admin/einvoice_misa_workbook.dart';
 
-const _misaReconciledIssues = {'VAT_AMOUNT_MISMATCH', 'AMOUNT_MISMATCH'};
-
-bool _isBlockingRestaurantIssue(String issue) =>
-    !_misaReconciledIssues.contains(issue);
+bool _isBlockingRestaurantIssue(String issue) => issue.isNotEmpty;
 
 class RestaurantSalesLineItem {
   const RestaurantSalesLineItem({
@@ -14,6 +11,14 @@ class RestaurantSalesLineItem {
     required this.vatRate,
     required this.vatAmount,
     this.itemType = '',
+    this.orderItemId = '',
+    this.menuItemId = '',
+    this.invoiceName = '',
+    this.unitName = '',
+    this.approval = const {},
+    this.invoiceUnitPrice,
+    this.discountAmount,
+    this.sourceOrderItemId = '',
   });
 
   final String name;
@@ -23,9 +28,16 @@ class RestaurantSalesLineItem {
   final double vatRate;
   final double vatAmount;
   final String itemType;
+  final String orderItemId;
+  final String menuItemId;
+  final String invoiceName;
+  final String unitName;
+  final Map<String, dynamic> approval;
+  final double? invoiceUnitPrice, discountAmount;
+  final String sourceOrderItemId;
 
   double get grossAmount => supplyAmount + vatAmount;
-  double get misaUnitPrice => supplyAmount / quantity;
+  double get misaUnitPrice => invoiceUnitPrice ?? supplyAmount / quantity;
 }
 
 class RestaurantSalesReceipt {
@@ -46,11 +58,23 @@ class RestaurantSalesReceipt {
     required this.buyerPhone,
     required this.lineItems,
     required this.issues,
+    this.receiptNumber = '',
+    this.paymentMethods = const [],
+    this.snapshotVersion = 1,
+    this.sourceHash = '',
+    this.externallyReported = false,
   });
 
   final String storeId;
   final String storeName;
   final String receiptId;
+  final String receiptNumber;
+  final List<String> paymentMethods;
+  final int snapshotVersion;
+  final String sourceHash;
+  final bool externallyReported;
+  String get displayReceiptNumber =>
+      receiptNumber.isEmpty ? receiptId : receiptNumber;
   final String receiptSource;
   final String salesChannel;
   final double grossSales;
@@ -102,6 +126,28 @@ class RestaurantSalesExport {
   int get generalReceiptCount => receiptCount - redInvoiceCount;
   int get lineCount =>
       receipts.fold(0, (total, receipt) => total + receipt.lineItems.length);
+  int get sourceItemCount => receipts.fold(
+    0,
+    (n, r) =>
+        n +
+        r.lineItems
+            .map(
+              (l) => l.sourceOrderItemId.isEmpty
+                  ? l.orderItemId.split(':').first
+                  : l.sourceOrderItemId,
+            )
+            .toSet()
+            .length,
+  );
+  int get roundedLineGross => receipts.fold(
+    0,
+    (n, r) =>
+        n +
+        r.lineItems.fold(
+          0,
+          (n, l) => n + l.supplyAmount.round() + l.vatAmount.round(),
+        ),
+  );
   double get supplyAmount =>
       receipts.fold(0, (total, receipt) => total + receipt.supplyAmount);
   double get vatAmount =>
@@ -111,7 +157,8 @@ class RestaurantSalesExport {
     (total, receipt) =>
         total + receipt.issues.where(_isBlockingRestaurantIssue).length,
   );
-  bool get isReadyForDownload => receiptCount > 0 && blockingIssueCount == 0;
+  bool get isReadyForDownload =>
+      !isSampleEntity && receiptCount > 0 && blockingIssueCount == 0;
 }
 
 String restaurantHcmBusinessDate(DateTime value) {
@@ -251,7 +298,31 @@ RestaurantSalesExport createRestaurantSalesExport(
                   .map((rawLine) {
                     final line = Map<String, dynamic>.from(rawLine);
                     return RestaurantSalesLineItem(
+                      approval: {
+                        for (final k in [
+                          'invoice_profile_id',
+                          'invoice_approval_type',
+                          'invoice_mapping_version',
+                          'invoice_effective_from',
+                          'invoice_effective_to',
+                          'invoice_store_id',
+                          'invoice_source_reference',
+                        ])
+                          k: line[k],
+                      },
+                      sourceOrderItemId:
+                          line['source_order_item_id']?.toString() ?? '',
+                      invoiceUnitPrice: salesExportNumber(
+                        line['misa_unit_price'],
+                      ),
+                      discountAmount: salesExportNumber(
+                        line['misa_discount_amount'],
+                      ),
                       itemType: line['item_type']?.toString() ?? '',
+                      orderItemId: line['order_item_id']?.toString() ?? '',
+                      menuItemId: line['menu_item_id']?.toString() ?? '',
+                      invoiceName: line['invoice_name_vi']?.toString() ?? '',
+                      unitName: line['misa_unit_name']?.toString() ?? '',
                       name: _requiredText(
                         line['display_name'] ?? line['name'],
                         'RESTAURANT_EXPORT_INVALID_LINE_NAME:$receiptId',
@@ -286,7 +357,15 @@ RestaurantSalesExport createRestaurantSalesExport(
           'RESTAURANT_EXPORT_INVALID_RECEIPT_AMOUNT:$receiptId',
         );
         final issues = <String>[
+          if (row['externally_reported'] == true) 'EXTERNALLY_REPORTED',
           if (lines.isEmpty) 'MISSING_LINE_ITEMS',
+          if (lines.any(
+            (line) =>
+                line.invoiceName.isEmpty ||
+                line.unitName.isEmpty ||
+                line.orderItemId.isEmpty,
+          ))
+            'MISSING_APPROVED_INVOICE_METADATA',
           if (lines.any(
             (line) => !isMisaVatConsistent(
               line.supplyAmount,
@@ -295,6 +374,16 @@ RestaurantSalesExport createRestaurantSalesExport(
             ),
           ))
             'VAT_AMOUNT_MISMATCH',
+          if (!isMisaVatSummaryConsistent(
+            lines.map(
+              (line) => (
+                supply: line.supplyAmount,
+                rate: line.vatRate,
+                vat: line.vatAmount,
+              ),
+            ),
+          ))
+            'VAT_SUMMARY_MISMATCH',
           if (lines.any(
             (line) => line.itemType == 'wet_tissue_charge' && line.vatRate != 8,
           ))
@@ -331,6 +420,13 @@ RestaurantSalesExport createRestaurantSalesExport(
             'RESTAURANT_EXPORT_INVALID_STORE_NAME:$receiptId',
           ),
           receiptId: receiptId,
+          receiptNumber: row['receipt_number']?.toString() ?? '',
+          paymentMethods: (row['payment_methods'] as List? ?? const [])
+              .map((v) => v.toString())
+              .toList(),
+          snapshotVersion: (row['snapshot_version'] as num?)?.toInt() ?? 1,
+          sourceHash: row['source_hash']?.toString() ?? '',
+          externallyReported: row['externally_reported'] == true,
           receiptSource: receiptSource,
           salesChannel: row['sales_channel']?.toString() ?? '',
           grossSales: receiptGross,
@@ -459,70 +555,56 @@ List<RestaurantSalesExport> createRestaurantSalesExportsByTaxEntity(
 
 List<int> buildRestaurantSalesWorkbook(RestaurantSalesExport export) {
   if (!export.isReadyForDownload) {
-    throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
+    throw restaurantExportValidationException(export);
   }
 
   return buildMisaPendingInvoiceWorkbook(
-    export.receipts.map(buildRestaurantMisaJob).toList(),
+    export.receipts
+        .map(
+          (receipt) => {
+            ...buildRestaurantMisaJob(receipt),
+            'tax_entity_id': export.taxEntityId,
+          },
+        )
+        .toList(),
   );
 }
 
-/// Keep one invoice number per receipt, and one summary per actual tax rate.
-/// Reconcile each tax-rate group to the paid receipt total before MISA export.
+/// One invoice per receipt; every sold line keeps its original tax amounts.
 Map<String, dynamic> buildRestaurantMisaJob(RestaurantSalesReceipt receipt) {
-  if (receipt.lineItems.isEmpty ||
-      receipt.issues.any(_isBlockingRestaurantIssue)) {
-    throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
-  }
-  final groups = <double, List<RestaurantSalesLineItem>>{};
-  for (final line in receipt.lineItems) {
-    if (line.itemType == 'wet_tissue_charge' && line.vatRate != 8) {
-      throw const FormatException('MISA_EXPORT_VAT_MISMATCH');
-    }
-    groups.putIfAbsent(line.vatRate, () => []).add(line);
-  }
-  final sourceGross = <double, double>{
-    for (final entry in groups.entries)
-      entry.key: entry.value.fold<double>(
-        0,
-        (sum, line) => sum + line.grossAmount,
-      ),
-  };
-  final sourceGrossTotal = sourceGross.values.fold<double>(
-    0,
-    (sum, value) => sum + value,
-  );
   final lines = <Map<String, dynamic>>[];
-  var allocatedGross = 0.0;
-  final entries = groups.entries.toList(growable: false);
-  for (var index = 0; index < entries.length; index++) {
-    final entry = entries[index];
-    final rawRemainingGross = receipt.grossSales - allocatedGross;
-    final remainingGross = rawRemainingGross > 0 ? rawRemainingGross : 0.0;
-    final gross = index == entries.length - 1
-        ? remainingGross
-        : sourceGrossTotal == 0
-        ? 0.0
-        : ((receipt.grossSales *
-                          sourceGross[entry.key]! /
-                          sourceGrossTotal *
-                          100)
-                      .roundToDouble() /
-                  100)
-              .clamp(0, remainingGross)
-              .toDouble();
-    allocatedGross += gross;
+  for (final line in receipt.lineItems) {
     lines.add({
-      'display_name': 'Dịch vụ ăn uống',
-      'misa_unit_name': 'Lần',
-      'quantity': 1,
-      'paying_amount_inc_tax': gross,
-      'vat_rate': entry.key,
+      ...line.approval,
+      'source_order_item_id': line.sourceOrderItemId.isEmpty
+          ? line.orderItemId.split(':').first
+          : line.sourceOrderItemId,
+      'order_item_id': line.orderItemId,
+      'menu_item_id': line.menuItemId,
+      'display_name': line.invoiceName,
+      'invoice_name_vi': line.invoiceName,
+      'misa_unit_name': line.unitName,
+      'item_type': line.itemType,
+      'quantity': line.quantity,
+      'unit_price': line.unitPrice,
+      'misa_unit_price': line.invoiceUnitPrice,
+      'misa_discount_amount': line.discountAmount,
+      'total_amount_ex_tax': line.supplyAmount,
+      'vat_rate': line.vatRate,
+      'vat_amount': line.vatAmount,
+      'paying_amount_inc_tax': line.grossAmount,
     });
   }
   final buyerName = receipt.isRedInvoice ? receipt.buyerLegalName : '';
   return {
     'source_system': 'restaurant_pos',
+    'store_id': receipt.storeId,
+    'externally_reported': receipt.externallyReported,
+    'receipt_id': receipt.receiptId,
+    'receipt_number': receipt.displayReceiptNumber,
+    'snapshot_version': receipt.snapshotVersion,
+    if (receipt.sourceHash.isNotEmpty) 'source_hash': receipt.sourceHash,
+    'payment_methods': receipt.paymentMethods,
     'created_at': receipt.soldAt.toIso8601String(),
     'payment_method_snapshot': receipt.paymentMethod,
     'misa_buyer_person_name': receipt.isRedInvoice
@@ -533,8 +615,8 @@ Map<String, dynamic> buildRestaurantMisaJob(RestaurantSalesReceipt receipt) {
       'customer_name': buyerName,
       'tax_code': receipt.isRedInvoice ? receipt.buyerTaxCode : '',
       'address': receipt.isRedInvoice ? receipt.buyerAddress : '',
-      'email': receipt.isRedInvoice ? receipt.buyerEmail : '',
-      'phone': receipt.isRedInvoice ? receipt.buyerPhone : '',
+      'email': receipt.buyerEmail,
+      'phone': receipt.buyerPhone,
     },
     'line_items_snapshot': lines,
   };
@@ -573,4 +655,50 @@ double _positiveDouble(dynamic value, String error) {
   final parsed = _nonNegativeDouble(value, error);
   if (parsed <= 0) throw FormatException(error);
   return parsed;
+}
+
+SalesExportValidationException restaurantExportValidationException(
+  RestaurantSalesExport export,
+) {
+  final issues = validateSalesExportJobs(
+    export.receipts
+        .map(
+          (r) => {
+            ...buildRestaurantMisaJob(r),
+            'tax_entity_id': export.taxEntityId,
+          },
+        )
+        .toList(),
+  );
+  for (final r in export.receipts) {
+    for (final code in r.issues) {
+      issues.add(
+        SalesExportIssue(
+          receiptId: r.receiptId,
+          receiptNumber: r.displayReceiptNumber,
+          source: 'restaurant_pos',
+          itemId: '',
+          itemName: '',
+          field: 'receipt',
+          code: code,
+          soldAt: r.soldAt.toIso8601String(),
+        ),
+      );
+    }
+  }
+  if (issues.isEmpty) {
+    issues.add(
+      const SalesExportIssue(
+        receiptId: '',
+        receiptNumber: '',
+        source: '',
+        itemId: '',
+        itemName: '',
+        field: 'scope',
+        code: 'RESTAURANT_EXPORT_BLOCKING_ISSUES',
+        soldAt: '',
+      ),
+    );
+  }
+  return SalesExportValidationException(issues);
 }

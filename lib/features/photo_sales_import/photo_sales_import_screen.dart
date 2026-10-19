@@ -1,4 +1,5 @@
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/excel_import_localization.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -7,7 +8,11 @@ import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import 'photo_sales_import.dart';
+import 'photo_sales_import_worker.dart';
 import 'photo_sales_import_service.dart';
+import '../../core/payments/cash_deposit.dart';
+import '../../core/utils/time_utils.dart';
+import '../restaurant_sales_export/restaurant_sales_export_screen.dart';
 
 typedef PhotoSalesImportFilePicker = Future<XFile?> Function();
 typedef PhotoSalesRegistrar =
@@ -48,7 +53,7 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
   @override
   void initState() {
     super.initState();
-    final today = widget.todayOverride ?? DateTime.now();
+    final today = TimeUtils.toVietnam(widget.todayOverride ?? DateTime.now());
     _saleDate = DateTime(today.year, today.month, today.day);
   }
 
@@ -441,6 +446,34 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
             ),
           ),
           const SizedBox(height: ToastSpacingTokens.md),
+          if (result != null) ...[
+            Text(
+              context.l10n.salesDepositPhotoTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text(context.l10n.salesDepositSourceDate(result.saleDate)),
+            Text(
+              context.l10n.salesDepositDate(nextDepositDate(result.saleDate)),
+              key: const Key('photo_sales_next_deposit_date'),
+            ),
+            Text(
+              context.l10n.salesDepositImportAmount(
+                '${NumberFormat('#,##0', 'vi_VN').format(result.totalAmount)} VND',
+              ),
+            ),
+            Text(context.l10n.salesDepositImportCompleteness),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => RestaurantSalesExportScreen(
+                    initialBusinessDate: result.saleDate,
+                  ),
+                ),
+              ),
+              child: Text(context.l10n.salesDepositTotalTitle),
+            ),
+            const SizedBox(height: 8),
+          ],
           if (_isRegistering)
             Row(
               key: const Key('photo_sales_auto_saving'),
@@ -559,7 +592,7 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
   }
 
   Future<void> _chooseDate() async {
-    final today = widget.todayOverride ?? DateTime.now();
+    final today = TimeUtils.toVietnam(widget.todayOverride ?? DateTime.now());
     final selected = await showDatePicker(
       context: context,
       initialDate: _saleDate,
@@ -614,10 +647,15 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
       _statusIsError = false;
     });
     try {
-      final workbook = parsePhotoSalesImportWorkbook(await file.readAsBytes());
+      if (await file.length() > 10 * 1024 * 1024) {
+        throw const PhotoSalesImportValidationException([
+          'Excel 파일은 최대 10 MiB까지 읽을 수 있습니다.',
+        ]);
+      }
+      final workbook = await parsePhotoSalesOffThread(await file.readAsBytes());
       if (!mounted) return;
       final fileDate = _saleDateFromFileName(sourceName);
-      final today = widget.todayOverride ?? DateTime.now();
+      final today = TimeUtils.toVietnam(widget.todayOverride ?? DateTime.now());
       if (fileDate != null &&
           fileDate.isAfter(DateTime(today.year, today.month, today.day))) {
         throw const PhotoSalesImportValidationException([
@@ -641,7 +679,11 @@ class _PhotoSalesImportScreenState extends State<PhotoSalesImportScreen> {
         _workbook = null;
         _registrationResult = null;
         _sourceFileName = sourceName.isEmpty ? 'Moers Excel' : sourceName;
-        _statusMessage = error.toString();
+        _statusMessage =
+            error is PhotoSalesImportValidationException &&
+                error.decodeFailure != null
+            ? excelWorkbookDecodeMessage(context.l10n, error.decodeFailure!)
+            : error.toString();
         _statusIsError = true;
       });
     } finally {

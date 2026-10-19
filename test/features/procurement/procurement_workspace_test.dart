@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:globos_pos_system/features/procurement/procurement_workspace.dart';
+import 'package:globos_pos_system/features/procurement/procurement_catalog_dialog.dart';
 
 void main() {
   Map<String, dynamic> workspace({bool enabled = true}) => {
@@ -130,6 +131,154 @@ void main() {
     expect(find.byType(ProcurementRequestDialog), findsNothing);
     expect(calls, 0);
   });
+  testWidgets('purchase item dialog validates fields before saving', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(1200, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final data = workspace();
+    data['actor']['can_office_approve'] = true;
+    data['supplier_items'] = [
+      {'supplier_id': 'supplier-a', 'supplier_name': 'Supplier A'},
+    ];
+    final calls = <Map<String, dynamic>>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProcurementWorkspacePage(
+          load: () async => data,
+          execute: (a, b, c, d, e) async {
+            calls.add({'action': a, 'record_id': b, 'payload': e});
+            return {};
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final open = find.widgetWithText(TextButton, 'Set up purchase item');
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    expect(find.byType(ProcurementCatalogDialog), findsOneWidget);
+    await tester.tap(find.widgetWithIcon(TextButton, Icons.close));
+    await tester.pumpAndSettle();
+    expect(calls, isEmpty);
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithIcon(FilledButton, Icons.check));
+    await tester.pumpAndSettle();
+    expect(calls, isEmpty);
+    expect(find.byType(ProcurementCatalogDialog), findsOneWidget);
+    for (final entry in {
+      'Item': 'Cleaning gloves',
+      'Material code': 'GLOVE-01',
+      'Specification': 'Size M',
+      'Estimated unit price': '25000',
+      'VAT (%)': '8',
+    }.entries) {
+      await tester.enterText(
+        find.widgetWithText(TextFormField, entry.key),
+        entry.value,
+      );
+    }
+    await tester.tap(
+      find
+          .widgetWithText(DropdownButtonFormField<String>, 'Supplier PO PDF')
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Supplier A').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithIcon(FilledButton, Icons.check));
+    await tester.pumpAndSettle();
+    expect(calls, [
+      {
+        'action': 'save_product',
+        'record_id': null,
+        'payload': {
+          'name': 'Cleaning gloves',
+          'product_code': 'GLOVE-01',
+          'specification': 'Size M',
+          'base_unit': 'ea',
+          'stock_unit': 'ea',
+          'base_unit_factor': '1',
+          'unit_price': '25000',
+          'tax_rate': '8',
+          'supplier_id': 'supplier-a',
+          'receipt_classification': 'nonstock',
+        },
+      },
+    ]);
+  });
+  testWidgets('policy activation dialog requires explicit confirmation', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final data = workspace(enabled: false);
+    data['actor']['can_manage'] = true;
+    data['policy'] = {
+      'id': 'policy-a',
+      'row_version': 7,
+      'high_value_amount': 2000000,
+      'quantity_review_multiplier': 2,
+      'max_price_increase_percent': 10,
+      'stock_freshness_hours': 12,
+    };
+    final calls = <Map<String, dynamic>>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProcurementWorkspacePage(
+          load: () async => data,
+          execute: (a, b, c, d, e) async {
+            calls.add({
+              'action': a,
+              'record_id': b,
+              'version': c,
+              'payload': e,
+            });
+            return {};
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final confirm in [false, true]) {
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Purchase policy'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Apply request → store manager review/adjustment/approval → buyer final approval → PO.',
+        ),
+        findsOneWidget,
+      );
+      expect(calls, isEmpty);
+      await tester.tap(
+        confirm
+            ? find.widgetWithIcon(FilledButton, Icons.check)
+            : find.widgetWithIcon(TextButton, Icons.close),
+      );
+      await tester.pumpAndSettle();
+      if (!confirm) expect(calls, isEmpty);
+    }
+    expect(calls, [
+      {
+        'action': 'configure',
+        'record_id': 'policy-a',
+        'version': 7,
+        'payload': {
+          'enabled': true,
+          'three_stage_required': false,
+          'high_value_amount': 2000000.0,
+          'quantity_review_multiplier': 2.0,
+          'max_price_increase_percent': 10.0,
+          'stock_freshness_hours': 12,
+        },
+      },
+    ]);
+  });
   for (final action in ['return_request', 'submit_request']) {
     testWidgets(
       action == 'return_request'
@@ -142,7 +291,7 @@ void main() {
           {
             'id': 'pr-1',
             'request_no': 'PR-1',
-            'status': 'submitted',
+            'status': action == 'return_request' ? 'submitted' : 'draft',
             'reason': 'Gloves',
             'row_version': 2,
             'allowed_actions': [action],
@@ -161,9 +310,15 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('PR-1 · Store review'));
+        await tester.tap(
+          find.text(
+            action == 'return_request' ? 'PR-1 · Store review' : 'PR-1 · Draft',
+          ),
+        );
         await tester.pumpAndSettle();
-        final label = action == 'return_request' ? 'Return' : 'Submit';
+        final label = action == 'return_request'
+            ? 'Return'
+            : 'Submit for approval';
         await tester.tap(find.widgetWithText(OutlinedButton, label));
         await tester.pumpAndSettle();
         expect(calls, isEmpty);
@@ -187,4 +342,146 @@ void main() {
       },
     );
   }
+  testWidgets(
+    'draft deletion confirmation refreshes active list and selected detail',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(1440, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var deleted = false;
+      final queries = <Map<String, dynamic>>[];
+      final calls = <Map<String, dynamic>>[];
+      final draft = <String, dynamic>{
+        'id': 'draft',
+        'request_no': 'PR-DELETE',
+        'status': 'draft',
+        'row_version': 3,
+        'reason': 'Restock',
+        'created_at': '2026-10-07T00:00:00Z',
+        'requested_delivery_date': '2026-10-09',
+        'allowed_actions': ['cancel_request'],
+        'lines': [
+          {
+            'product_name': 'Eggs',
+            'requested_quantity': 1,
+            'requested_unit': 'box',
+            'current_stock_snapshot': 2,
+            'stock_updated_at': '2026-10-06T12:00:00.123456+00:00',
+          },
+        ],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProcurementWorkspacePage(
+            requesterView: true,
+            load: () async => {},
+            loadPage: (q) async {
+              queries.add({...q});
+              return {
+                ...workspace(),
+                'requests': deleted ? [] : [draft],
+                'request_counts': {
+                  'pending': deleted ? 0 : 1,
+                  'approved': 0,
+                  'cancelled': deleted ? 1 : 0,
+                },
+                if (q['request_id'] != null && !deleted)
+                  'request_detail': draft,
+              };
+            },
+            execute: (a, b, c, d, e) async {
+              calls.add({'action': a, 'id': b, 'version': c, 'payload': e});
+              deleted = true;
+              return {...draft, 'status': 'cancelled', 'row_version': 4};
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('PR-DELETE · Draft'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('2026-10-06T12:'), findsNothing);
+      final action = find.widgetWithText(OutlinedButton, 'Delete draft');
+      await tester.scrollUntilVisible(
+        action,
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(calls, isEmpty);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete draft'));
+      await tester.pumpAndSettle();
+      expect(calls.single['version'], 3);
+      expect(calls.single['payload'], {'reason': 'deleted_before_submit'});
+      expect(queries.last.containsKey('request_id'), isFalse);
+      expect(find.text('PR-DELETE · Draft'), findsNothing);
+      expect(find.textContaining('Eggs'), findsNothing);
+      expect(find.text('Drafts / pending (0)'), findsOneWidget);
+      expect(find.text('Cancelled (1)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'supplier transmission requires channel and delivery evidence for the selected file',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final commands = <Map<String, dynamic>>[];
+      final data = {
+        ...workspace(),
+        'receipt_reports': [
+          {
+            'receipt_id': 'receipt-a',
+            'kind': 'discrepancy',
+            'file_hash': 'selected-file-hash',
+          },
+        ],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProcurementWorkspacePage(
+            load: () async => data,
+            execute: (action, id, version, key, payload) async {
+              commands.add({'action': action, 'id': id, 'payload': payload});
+              return {'id': id};
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final record = find.text('Record sent');
+      await tester.ensureVisible(record);
+      await tester.tap(record);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+      await tester.pumpAndSettle();
+      expect(commands, isEmpty);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Channel'),
+        'Zalo',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Recipient / delivery evidence'),
+        'Supplier message 123',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+      await tester.pumpAndSettle();
+      expect(commands.single, {
+        'action': 'mark_receipt_report_sent',
+        'id': 'receipt-a',
+        'payload': {
+          'channel': 'Zalo',
+          'delivery_reference': 'Supplier message 123',
+          'file_hash': 'selected-file-hash',
+        },
+      });
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

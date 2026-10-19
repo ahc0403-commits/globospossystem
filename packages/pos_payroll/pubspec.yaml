@@ -1,0 +1,8 @@
+name: pos_payroll
+description: Existing GLOBOS POS payroll calculation shared with Office.
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+dependencies:
+  timezone: ^0.11.0

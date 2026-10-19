@@ -48,6 +48,30 @@ class RedInvoiceIntakeService {
     return RedInvoiceIntake.fromJson(Map<String, dynamic>.from(result as Map));
   }
 
+  Future<RedInvoiceIntake> saveBuyerInformation({
+    required String orderId,
+    required String storeId,
+    required int? expectedVersion,
+    required Map<String, dynamic> patch,
+    bool confirm = true,
+    String? source,
+    String? status,
+  }) async {
+    final result = await supabase.rpc(
+      'pos_save_buyer_information',
+      params: {
+        'p_order_id': orderId,
+        'p_store_id': storeId,
+        'p_expected_version': expectedVersion,
+        'p_patch': patch,
+        'p_confirm': confirm,
+        'p_source': source,
+        'p_intake_status': status,
+      },
+    );
+    return RedInvoiceIntake.fromJson(Map<String, dynamic>.from(result as Map));
+  }
+
   Future<String> uploadEvidence({
     required String intakeId,
     required String storeId,

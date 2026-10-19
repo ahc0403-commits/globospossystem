@@ -24,7 +24,7 @@ Future<List<DailyRevenue>> loadRevenueHistory(
   // Reuse the report's single-snapshot server aggregate and its sales rules.
   // The scalar JSON response is not truncated by PostgREST's outer row limit.
   final response = await client.rpc(
-    'get_store_report_summary',
+    'get_store_report_summary_v2',
     params: {
       'p_store_id': range.storeId,
       'p_from_date': startDate,
@@ -32,7 +32,7 @@ Future<List<DailyRevenue>> loadRevenueHistory(
     },
   );
   if (response is! Map ||
-      response['version'] != 1 ||
+      response['version'] != 2 ||
       response['store_id'] != range.storeId ||
       response['from_date'] != startDate ||
       response['to_date'] != endDate) {

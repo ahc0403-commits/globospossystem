@@ -51,6 +51,7 @@ void main() {
       itemNotes: const {},
       address: address,
       rememberAddress: false,
+      dinerCount: 3,
     );
 
     await expectLater(
@@ -157,6 +158,7 @@ void main() {
         itemNotes: const {},
         address: address,
         rememberAddress: false,
+        dinerCount: 3,
       );
     }
 

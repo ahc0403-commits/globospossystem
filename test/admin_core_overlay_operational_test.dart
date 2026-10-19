@@ -1,3 +1,4 @@
+import 'package:globos_pos_system/core/payments/beverage_tax.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -32,6 +33,7 @@ import 'package:globos_pos_system/features/admin/tabs/tables_tab.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/order/order_provider.dart';
+import 'package:globos_pos_system/features/payment/payment_provider.dart';
 import 'package:globos_pos_system/features/qc/qc_provider.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,6 +67,38 @@ class _AuthNotifier extends AuthNotifier {
 class _OrderNotifier extends OrderNotifier {
   @override
   void clearSession() {}
+}
+
+class _PaymentNotifier extends PaymentNotifier {
+  _PaymentNotifier() {
+    state = PaymentState(
+      orders: [
+        CashierOrder(
+          orderId: 'payment-order-id',
+          tableNumber: 'A1',
+          tableId: _tableId,
+          status: 'serving',
+          orderPurpose: 'customer',
+          orderSource: 'staff',
+          items: const [],
+          menuSubtotal: 125000,
+          serviceChargeTotal: 0,
+          serviceItemTotal: 0,
+          fixedChargeTotal: 0,
+          discountTotal: 0,
+          vatTotal: 0,
+          totalAmount: 125000,
+          paidTotal: 0,
+          paymentCount: 0,
+          remainingDue: 125000,
+          createdAt: DateTime(2026, 9, 19),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadOrders(String storeId) async {}
 }
 
 class _TablesNotifier extends TablesNotifier {
@@ -188,6 +222,7 @@ class _MenuNotifier extends MenuNotifier {
   int addCategoryCalls = 0;
   int editCategoryCalls = 0;
   int deleteCategoryCalls = 0;
+  int archiveItemCalls = 0;
   int addItemCalls = 0;
   int editItemCalls = 0;
   int reorderCategoryCalls = 0;
@@ -235,6 +270,18 @@ class _MenuNotifier extends MenuNotifier {
   }
 
   @override
+  Future<bool> archiveMenuItem(String itemId) async {
+    archiveItemCalls += 1;
+    final items = state.items.valueOrNull ?? const [];
+    state = state.copyWith(
+      items: AsyncValue.data(
+        items.where((item) => item['id']?.toString() != itemId).toList(),
+      ),
+    );
+    return true;
+  }
+
+  @override
   Future<bool> reorderCategories(List<Map<String, dynamic>> categories) async {
     reorderCategoryCalls += 1;
     state = state.copyWith(categories: AsyncValue.data(categories));
@@ -248,6 +295,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
@@ -268,6 +316,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
   }) async {
     editItemCalls += 1;
@@ -644,7 +693,10 @@ class _AttendanceService extends AttendanceService {
   String? lastManualManagerPin;
 
   @override
-  Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async => [
+  Future<List<Map<String, dynamic>>> fetchStaffList(
+    String storeId, {
+    String? employeeId,
+  }) async => [
     {
       'user_id': 'attendance-staff-1',
       'employee_number': 'BT1',
@@ -777,6 +829,7 @@ Future<void> _pump(
   PosAuthState authState = _authState,
   Size physicalSize = const Size(1440, 900),
   double textScale = 1,
+  Locale locale = const Locale('vi'),
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = physicalSize;
@@ -786,6 +839,7 @@ Future<void> _pump(
       overrides: [
         authProvider.overrideWith((ref) => _AuthNotifier(authState)),
         orderProvider.overrideWith((ref) => _OrderNotifier()),
+        paymentProvider.overrideWith((ref) => _PaymentNotifier()),
         adminAuditTraceProvider.overrideWith(
           (ref, storeId) => Future.value(const []),
         ),
@@ -794,7 +848,7 @@ Future<void> _pump(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.build(),
-        locale: const Locale('vi'),
+        locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -963,6 +1017,33 @@ void main() {
     expect(requestedStoreId, isNot(_authState.storeId));
   });
 
+  testWidgets('table header shows cashier queue total in a compact surface', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pump(
+      tester,
+      child: const TablesTab(),
+      locale: const Locale('ko'),
+      overrides: [
+        tablesProvider.overrideWith((ref, storeId) => _TablesNotifier()),
+      ],
+    );
+    await tester.pump();
+
+    expect(find.text('대기 총액'), findsOneWidget);
+    expect(find.text('₫125.000'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('admin_tables_command_header')))
+          .height,
+      lessThan(140),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('all six table dialog entrypoints execute real workflows', (
     tester,
   ) async {
@@ -1067,7 +1148,7 @@ void main() {
   });
 
   testWidgets(
-    'all seven menu dialog entrypoints and menu Excel export execute',
+    'all eight menu dialog entrypoints and menu Excel export execute',
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -1212,6 +1293,23 @@ void main() {
       await tester.tap(_dialogAction(editItemDialog, FilledButton));
       await tester.pumpAndSettle();
       expect(notifier.editItemCalls, 1);
+
+      await tester.tap(
+        find.byKey(const Key('admin_menu_delete_item_$_menuItemId')),
+      );
+      await tester.pumpAndSettle();
+      const deleteItemDialog = Key('admin_menu_delete_item_dialog');
+      expect(find.byKey(deleteItemDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, deleteItemDialog);
+      expect(find.textContaining('Lịch sử đơn hàng'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('admin_menu_delete_item_confirm')));
+      await tester.pumpAndSettle();
+      expect(notifier.archiveItemCalls, 1);
+      expect(
+        find.byKey(const Key('admin_menu_delete_item_$_menuItemId')),
+        findsNothing,
+      );
+      expect(find.text('Danh mục này chưa có món'), findsOneWidget);
 
       await tester.tap(
         find.byKey(const Key('admin_menu_edit_category_$_categoryId')),

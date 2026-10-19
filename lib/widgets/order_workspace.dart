@@ -1228,7 +1228,13 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
+    final isOnline =
+        ref
+            .watch(serviceConnectivityProvider)
+            .asData
+            ?.value
+            .canAttemptOnlineWork ??
+        true;
     final formatter = NumberFormat('#,###', 'vi_VN');
     final cartTotal = widget.state.cart.fold<double>(
       0,

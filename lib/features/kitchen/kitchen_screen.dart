@@ -286,7 +286,7 @@ class _KitchenOperationalScreenState
         next,
       ) {
         next.whenData((event) {
-          if (event.affects({'orders', 'print', 'settings'})) {
+          if (event.isFallback || event.affects({'print', 'settings'})) {
             Future.microtask(
               () => ref
                   .read(kitchenProvider.notifier)
@@ -1304,6 +1304,17 @@ class _KitchenTicketItemRow extends StatelessWidget {
               ),
             ],
           ),
+          if (item.notes?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 8),
+            Text(
+              item.notes!,
+              key: ValueKey('kitchen_menu_note_${item.itemId}'),
+              style: const TextStyle(
+                color: Colors.deepOrange,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
           if (item.comboComponents.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(

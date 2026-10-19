@@ -173,7 +173,7 @@ void main() {
       expect(provider, isNot(contains("from('tables')")));
 
       expect(service, contains('fetchInventoryPurchaseDashboard'));
-      expect(service, contains("'get_inventory_purchase_dashboard'"));
+      expect(service, contains("'get_inventory_purchase_dashboard_v2'"));
       expect(service, contains('fetchInventoryStockStatus'));
       expect(service, contains("'get_inventory_stock_status'"));
       expect(service, contains('runInventoryPurchaseRecommendation'));

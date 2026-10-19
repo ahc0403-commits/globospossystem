@@ -1,3 +1,4 @@
+import '../hardware/receipt_delivery_policy.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -79,7 +80,56 @@ class DigitalReceiptPdfService {
             _detailLine('Ngày / Giờ', timestamp),
             _detailLine('Thu ngân', receipt.cashierCode),
             _detailLine('Bàn', receipt.tableNumber, boldValue: true),
+            if (receipt.isDirectOrder) ...[
+              if (receipt.directOrderReference != null)
+                _detailLine(
+                  'Mã đơn',
+                  receipt.directOrderReference!,
+                  boldValue: true,
+                ),
+              if (receipt.fulfillmentMethod != null)
+                pw.Text(
+                  receipt.fulfillmentMethod == 'pickup'
+                      ? 'TỰ ĐẾN LẤY'
+                      : 'GIAO HÀNG',
+                ),
+              pw.SizedBox(height: 6),
+              pw.Text(
+                receipt.packingDinerLabelVi,
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text(
+                receipt.packingUtensilLabelVi,
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+            if (recipientPaysDelivery(
+              receipt.deliveryPaymentMode,
+              receipt.fulfillmentMethod,
+            ))
+              pw.Text(
+                recipientDeliveryNoticeVi,
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
             _dashedDivider(height: 15),
+            if (receipt.orderNotes != null) ...[
+              pw.Text(
+                'Ghi chú: ${receipt.orderNotes}',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              _dashedDivider(height: 15),
+            ],
+            for (final addendum in receipt.requestAddenda) ...[
+              pw.Text(
+                'Yêu cầu bổ sung đã thống nhất',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text(addendum),
+              _dashedDivider(height: 15),
+            ],
             _sectionHeader('MÓN', 'THÀNH TIỀN'),
             pw.SizedBox(height: 2),
             for (var index = 0; index < billableItems.length; index++) ...[
@@ -283,6 +333,11 @@ class DigitalReceiptPdfService {
           '${item.quantity} × ${currency.format(item.unitPrice)} VND',
           style: const pw.TextStyle(fontSize: 7.4, color: PdfColors.grey700),
         ),
+        if (item.notes != null)
+          pw.Text(
+            'Ghi chú: ${item.notes}',
+            style: const pw.TextStyle(fontSize: 8),
+          ),
       ],
     ),
   );

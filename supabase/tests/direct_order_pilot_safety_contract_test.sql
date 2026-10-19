@@ -24,28 +24,36 @@ DECLARE
 BEGIN
   SELECT store_id INTO v_store FROM direct_delivery_test.constants LIMIT 1;
 
-  -- An uploaded image is not bank evidence and cannot authorize fulfillment.
+  -- Photo upload does not approve automatically. A cashier may explicitly
+  -- approve that photo without any SePay transaction after the 2026-10-03 fix.
   v_unverified := direct_delivery_test.create_request('payment_review');
   v_unverified_request := (v_unverified->>'request_id')::uuid;
+  IF EXISTS (
+    SELECT 1 FROM public.direct_order_financials
+    WHERE request_id = v_unverified_request
+  ) THEN
+    RAISE EXCEPTION 'photo submission auto-approved';
+  END IF;
   PERFORM direct_delivery_test.set_actor();
-  BEGIN
-    PERFORM public.direct_order_approve_payment(
-      v_store,
-      v_unverified_request,
-      (v_unverified->>'final_total')::numeric,
-      'image-only'
-    );
-  EXCEPTION WHEN OTHERS THEN
-    v_error := SQLERRM;
-  END;
-  IF v_error <> 'DIRECT_ORDER_VERIFIED_PAYMENT_REQUIRED'
-     OR EXISTS (
-       SELECT 1 FROM public.direct_order_financials
-       WHERE request_id = v_unverified_request
-     ) THEN
-    RAISE EXCEPTION 'image-only approval was not blocked: %', v_error;
+  v_approval := public.direct_order_approve_photo_payment(
+    v_store, v_unverified_request,
+    (v_unverified->>'final_total')::numeric,
+    (v_unverified->>'quote_id')::uuid,
+    (SELECT message.id FROM public.direct_order_messages message
+     WHERE message.request_id = v_unverified_request
+       AND message.message_type = 'payment_proof'
+     ORDER BY message.created_at DESC, message.id DESC LIMIT 1)
+  );
+  IF NOT EXISTS (
+    SELECT 1 FROM public.direct_order_financials
+    WHERE request_id = v_unverified_request
+  ) THEN
+    RAISE EXCEPTION 'cashier photo approval failed without SePay';
   END IF;
 
+  -- Preserve the optional legacy verified-transfer contract independently.
+  v_unverified := direct_delivery_test.create_request('payment_review');
+  v_unverified_request := (v_unverified->>'request_id')::uuid;
   INSERT INTO public.sepay_transactions(
     sepay_transaction_id, restaurant_id, gateway, account_number,
     transfer_type, transfer_amount, payment_code, reference_code,

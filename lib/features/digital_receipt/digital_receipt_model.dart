@@ -5,6 +5,7 @@ class DigitalReceiptItem {
     required this.unitPrice,
     required this.lineTotal,
     required this.isServiceItem,
+    this.notes,
   });
 
   final String label;
@@ -12,6 +13,7 @@ class DigitalReceiptItem {
   final double unitPrice;
   final double lineTotal;
   final bool isServiceItem;
+  final String? notes;
 
   factory DigitalReceiptItem.fromJson(Map<String, dynamic> json) =>
       DigitalReceiptItem(
@@ -20,6 +22,7 @@ class DigitalReceiptItem {
         unitPrice: _asDouble(json['unit_price']),
         lineTotal: _asDouble(json['line_total']),
         isServiceItem: json['is_service_item'] == true,
+        notes: _optionalText(json['notes']),
       );
 }
 
@@ -59,6 +62,13 @@ class DigitalReceipt {
     required this.isService,
     this.legalName,
     this.taxCode,
+    this.dinerCount,
+    this.utensilsRequested = true,
+    this.fulfillmentMethod,
+    this.deliveryPaymentMode,
+    this.directOrderReference,
+    this.orderNotes,
+    this.requestAddenda = const [],
   });
 
   final String id;
@@ -82,6 +92,24 @@ class DigitalReceipt {
   final double changeAmount;
   final String paymentMethod;
   final bool isService;
+  final int? dinerCount;
+  final bool utensilsRequested;
+  final String? fulfillmentMethod;
+  final String? deliveryPaymentMode;
+  final String? directOrderReference;
+  final String? orderNotes;
+  final List<String> requestAddenda;
+  bool get isDirectOrder =>
+      fulfillmentMethod != null ||
+      directOrderReference != null ||
+      dinerCount != null;
+  String get packingDinerLabelVi =>
+      dinerCount == null ? 'Số người: Chưa nhập' : 'Số người: $dinerCount';
+  String get packingUtensilLabelVi => !utensilsRequested
+      ? 'Dụng cụ: Không cần'
+      : dinerCount == null
+      ? 'Dụng cụ: Cần nhân viên kiểm tra'
+      : 'Dụng cụ: $dinerCount bộ';
 
   factory DigitalReceipt.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
@@ -134,6 +162,19 @@ class DigitalReceipt {
       changeAmount: _asDouble(json['change_amount']),
       paymentMethod: json['payment_method']?.toString() ?? 'OTHER',
       isService: json['is_service'] == true,
+      dinerCount: _optionalDinerCount(json['diner_count']),
+      utensilsRequested: json['utensils_requested'] != false,
+      fulfillmentMethod: _optionalText(json['fulfillment_method']),
+      deliveryPaymentMode: _optionalText(json['delivery_payment_mode']),
+      directOrderReference: _optionalText(json['direct_order_reference']),
+      orderNotes: _optionalText(json['order_notes']),
+      requestAddenda: json['request_addenda'] is List
+          ? (json['request_addenda'] as List)
+                .whereType<Map>()
+                .map((row) => row['order_notes']?.toString() ?? '')
+                .where((text) => text.isNotEmpty)
+                .toList(growable: false)
+          : const [],
     );
   }
 }
@@ -170,4 +211,9 @@ int _asInt(Object? value) => switch (value) {
 String? _optionalText(Object? value) {
   final text = value?.toString().trim() ?? '';
   return text.isEmpty ? null : text;
+}
+
+int? _optionalDinerCount(Object? value) {
+  final number = value is num && value == value.toInt() ? value.toInt() : null;
+  return number != null && number >= 1 && number <= 100 ? number : null;
 }

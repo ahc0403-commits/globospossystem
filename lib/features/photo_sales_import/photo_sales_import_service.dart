@@ -1,6 +1,7 @@
 import '../../main.dart';
 import 'photo_sales_import.dart';
 import 'photo_sales_registered_export.dart';
+import '../restaurant_sales_export/daily_sales_report_service.dart';
 
 class PhotoSalesRegistrationBranch {
   const PhotoSalesRegistrationBranch({
@@ -86,6 +87,7 @@ class PhotoSalesImportService {
     if (response is! Map) {
       throw const FormatException('PHOTO_SALES_IMPORT_RESPONSE_INVALID');
     }
+    dailySalesReportService.invalidateSummary(_dateText(saleDate));
     return PhotoSalesRegistrationResult.fromJson(
       Map<String, dynamic>.from(response),
     );

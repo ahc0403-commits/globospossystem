@@ -59,53 +59,56 @@ void main() {
     expect(status.completedAt, DateTime.utc(2026, 9, 10, 10, 45));
   });
 
-  test('order history uses the V2 action and preserves each row', () async {
-    Map<String, dynamic>? request;
-    final service = DirectOrderService(
-      invoker: (body) async {
-        request = Map<String, dynamic>.from(body);
-        return [
-          {
-            'request_id': 'dd000000-0000-4000-8000-000000000411',
-            'reference_code': 'DORDERA1',
-            'state': 'quoted',
-            'created_at': '2026-09-10T10:00:00Z',
-            'item_count': 2,
-            'final_total': 240000,
-            'fulfillment_status': null,
-            'completed_at': null,
-            'has_open_proof_review': false,
-          },
-          {
-            'request_id': 'dd000000-0000-4000-8000-000000000412',
-            'reference_code': 'DORDERB2',
-            'state': 'approved',
-            'created_at': '2026-09-10T09:00:00Z',
-            'item_count': 1,
-            'final_total': 125000,
-            'fulfillment_status': 'completed',
-            'completed_at': '2026-09-10T09:45:00Z',
-            'has_open_proof_review': false,
-          },
-        ];
-      },
-    );
-    final session = DirectOrderSession(
-      id: 'dd000000-0000-4000-8000-000000000413',
-      secret: 'fixture-session-secret',
-      expiresAt: DateTime.now().add(const Duration(hours: 1)),
-    );
+  test(
+    'order history uses the versioned booking action and preserves each row',
+    () async {
+      Map<String, dynamic>? request;
+      final service = DirectOrderService(
+        invoker: (body) async {
+          request = Map<String, dynamic>.from(body);
+          return [
+            {
+              'request_id': 'dd000000-0000-4000-8000-000000000411',
+              'reference_code': 'DORDERA1',
+              'state': 'quoted',
+              'created_at': '2026-09-10T10:00:00Z',
+              'item_count': 2,
+              'final_total': 240000,
+              'fulfillment_status': null,
+              'completed_at': null,
+              'has_open_proof_review': false,
+            },
+            {
+              'request_id': 'dd000000-0000-4000-8000-000000000412',
+              'reference_code': 'DORDERB2',
+              'state': 'approved',
+              'created_at': '2026-09-10T09:00:00Z',
+              'item_count': 1,
+              'final_total': 125000,
+              'fulfillment_status': 'completed',
+              'completed_at': '2026-09-10T09:45:00Z',
+              'has_open_proof_review': false,
+            },
+          ];
+        },
+      );
+      final session = DirectOrderSession(
+        id: 'dd000000-0000-4000-8000-000000000413',
+        secret: 'fixture-session-secret',
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      );
 
-    final orders = await service.listOrders(session: session);
+      final orders = await service.listOrders(session: session);
 
-    expect(request?['action'], 'orders_v2');
-    expect(orders.map((order) => order.referenceCode), [
-      'DORDERA1',
-      'DORDERB2',
-    ]);
-    expect(orders.first.isTerminal, isFalse);
-    expect(orders.last.isTerminal, isTrue);
-  });
+      expect(request?['action'], 'orders_v4');
+      expect(orders.map((order) => order.referenceCode), [
+        'DORDERA1',
+        'DORDERB2',
+      ]);
+      expect(orders.first.isTerminal, isFalse);
+      expect(orders.last.isTerminal, isTrue);
+    },
+  );
 
   test(
     'payment alert events are emitted once and setting is persisted',

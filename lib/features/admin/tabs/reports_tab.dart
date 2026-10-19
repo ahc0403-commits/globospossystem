@@ -1,3 +1,5 @@
+import '../../direct_order/direct_order_support.dart'
+    show DirectOrderSupportCopy;
 // ignore_for_file: unused_element
 
 import 'dart:math' as math;
@@ -13,7 +15,14 @@ import 'package:intl/intl.dart';
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/layout/adaptive_layout.dart';
 import '../../../core/payments/payment_method_contract.dart';
+import '../../../core/payments/cash_deposit.dart';
+import '../../../core/payments/cash_deposit_transfer.dart';
+import '../../../core/payments/collection_bank.dart';
+import '../../../widgets/financial_amount_cards.dart';
+import '../../../widgets/bank_transfer_ledger_dialog.dart';
+import '../../restaurant_sales_export/daily_sales_report_service.dart';
 import '../../../core/services/daily_closing_service.dart';
+import '../../../core/services/collection_bank_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/permission_utils.dart';
@@ -23,6 +32,7 @@ import '../../auth/auth_provider.dart';
 import '../../report/bm_menu_exception_history.dart';
 import '../../report/menu_sales_analytics.dart';
 import '../../report/report_provider.dart';
+import '../../report/cash_deposit_qr_dialog.dart';
 import '../../report/revenue_forecast/revenue_forecast_engine.dart';
 import '../report_analysis_screens.dart';
 import '../providers/admin_audit_provider.dart';
@@ -203,7 +213,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               onTap: storeId == null
                   ? null
                   : () {
-                      final now = DateTime.now();
+                      final now = TimeUtils.toVietnam(DateTime.now());
                       applyQuickRange(
                         DateTime(now.year, now.month, now.day),
                         now,
@@ -215,7 +225,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               onTap: storeId == null
                   ? null
                   : () {
-                      final now = DateTime.now();
+                      final now = TimeUtils.toVietnam(DateTime.now());
                       final start = DateTime(
                         now.year,
                         now.month,
@@ -229,7 +239,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               onTap: storeId == null
                   ? null
                   : () {
-                      final now = DateTime.now();
+                      final now = TimeUtils.toVietnam(DateTime.now());
                       applyQuickRange(DateTime(now.year, now.month, 1), now);
                     },
             ),
@@ -295,7 +305,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                       label: l10n.reportsReloadToday,
                       icon: Icons.play_arrow_rounded,
                       onPressed: () {
-                        final now = DateTime.now();
+                        final now = TimeUtils.toVietnam(DateTime.now());
                         applyQuickRange(
                           DateTime(now.year, now.month, now.day),
                           now,
@@ -574,7 +584,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                                       ? null
                                                       : () {
                                                           final now =
-                                                              DateTime.now();
+                                                              TimeUtils.toVietnam(
+                                                                DateTime.now(),
+                                                              );
                                                           final start =
                                                               DateTime(
                                                                 now.year,
@@ -598,7 +610,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                                       ? null
                                                       : () {
                                                           final now =
-                                                              DateTime.now();
+                                                              TimeUtils.toVietnam(
+                                                                DateTime.now(),
+                                                              );
                                                           final weekdayOffset =
                                                               now.weekday - 1;
                                                           final start =
@@ -629,7 +643,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                                       ? null
                                                       : () {
                                                           final now =
-                                                              DateTime.now();
+                                                              TimeUtils.toVietnam(
+                                                                DateTime.now(),
+                                                              );
                                                           final start =
                                                               DateTime(
                                                                 now.year,
@@ -721,7 +737,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                   onReloadToday: storeId == null
                                       ? null
                                       : () {
-                                          final now = DateTime.now();
+                                          final now = TimeUtils.toVietnam(
+                                            DateTime.now(),
+                                          );
                                           final start = DateTime(
                                             now.year,
                                             now.month,
@@ -756,6 +774,21 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     bool showBmHistoryEntry = true,
   }) {
     final l10n = context.l10n;
+    final canCreateCashDeposit =
+        storeId != null &&
+        const {
+          'admin',
+          'store_admin',
+          'brand_admin',
+          'super_admin',
+        }.contains(ref.watch(authProvider).role);
+    final VoidCallback? openCashDeposit =
+        canCreateCashDeposit &&
+            summary != null &&
+            !reportState.isLoading &&
+            reportState.error == null
+        ? () => _openCashDepositQr(storeId, reportState)
+        : null;
     final totalRevenue = summary == null
         ? '—'
         : _formatVnd(currency, summary.totalRevenue);
@@ -874,7 +907,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                     context: context,
                     initialDate: _pendingStart ?? reportState.startDate,
                     firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
+                    lastDate: TimeUtils.toVietnam(DateTime.now()),
                   );
                   if (picked != null) {
                     setState(() => _pendingStart = picked);
@@ -891,7 +924,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                     context: context,
                     initialDate: _pendingEnd ?? reportState.endDate,
                     firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
+                    lastDate: TimeUtils.toVietnam(DateTime.now()),
                   );
                   if (picked != null) {
                     setState(() => _pendingEnd = picked);
@@ -970,7 +1003,102 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 ),
             ],
           ),
+          const SizedBox(height: 12),
+          FinancialAmountCards(
+            maxColumns: 4,
+            cards: [
+              FinancialAmountCardData(
+                id: 'reports_payment_cash',
+                title: l10n.reportsCash,
+                amount: summary?.cashTotal,
+                actionLabel: l10n.cashDepositQrTitle,
+                onAction: openCashDeposit,
+                onTap: openCashDeposit,
+              ),
+              FinancialAmountCardData(
+                id: 'reports_payment_bank',
+                title: l10n.salesDepositBankTitle,
+                amount: summary?.bankTransferTotal,
+                details: [l10n.salesDepositBankNote],
+                actionLabel: l10n.salesDepositOpenBank,
+                onAction: storeId == null || summary == null
+                    ? null
+                    : () => showDialog<void>(
+                        context: context,
+                        builder: (_) => BankTransferLedgerDialog(
+                          loadPage: (time, id) =>
+                              dailySalesReportService.bankTransfers(
+                                fromDate: DateFormat(
+                                  'yyyy-MM-dd',
+                                ).format(reportState.startDate),
+                                toDate: DateFormat(
+                                  'yyyy-MM-dd',
+                                ).format(reportState.endDate),
+                                storeId: storeId,
+                                afterTime: time,
+                                afterId: id,
+                              ),
+                        ),
+                      ),
+              ),
+              FinancialAmountCardData(
+                id: 'reports_payment_card',
+                title: l10n.cashierCardMethod,
+                amount: summary?.cardTotal,
+              ),
+              FinancialAmountCardData(
+                id: 'reports_payment_other',
+                title: l10n.reportsPay,
+                amount: summary?.payTotal,
+              ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openCashDepositQr(String storeId, ReportState report) async {
+    // Capture the applied report snapshot, never pending picker values or today.
+    if (!DateUtils.isSameDay(report.startDate, report.endDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.cashDepositSingleDayRequired)),
+      );
+      return;
+    }
+    final amount = cashDepositReportAmount(report.summary?.cashTotal);
+    if (amount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.cashDepositInvalidAmount)),
+      );
+      return;
+    }
+    final stores = ref
+        .read(authProvider)
+        .accessibleStores
+        .where((store) => store.id == storeId);
+    final store = stores.isEmpty ? null : stores.first;
+    final brandName = store?.brandName?.trim() ?? '';
+    final storeName = (widget.overrideStoreName ?? store?.name)?.trim() ?? '';
+    if (brandName.isEmpty || storeName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.cashDepositStoreUnavailable)),
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (_) => CashDepositQrDialog(
+        scopeLabel: '$brandName · $storeName',
+        purpose: cashDepositShortPurpose(
+          brandName: brandName,
+          storeName: storeName,
+          storeId: storeId,
+          depositDate: report.startDate,
+        ),
+        reportDate: report.startDate,
+        amount: amount,
+        loadBank: () => collectionBankService.load(storeId),
       ),
     );
   }
@@ -1015,7 +1143,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 top: Radius.circular(20),
               ),
               clipBehavior: Clip.antiAlias,
-              child: _ReportIssueDetailsView(
+              child: _ReportIssuePagedView(
+                storeId:
+                    widget.overrideStoreId ?? ref.read(authProvider).storeId,
                 kind: kind,
                 summary: summary,
                 startDate: startDate,
@@ -1232,6 +1362,190 @@ class _ReportIssueActionRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ReportIssuePagedView extends StatefulWidget {
+  const _ReportIssuePagedView({
+    required this.storeId,
+    required this.kind,
+    required this.summary,
+    required this.startDate,
+    required this.endDate,
+    required this.onOpenPayment,
+  });
+  final String? storeId;
+  final _ReportIssueKind kind;
+  final ReportSummary summary;
+  final DateTime startDate, endDate;
+  final ValueChanged<String> onOpenPayment;
+  @override
+  State<_ReportIssuePagedView> createState() => _ReportIssuePagedViewState();
+}
+
+class _ReportIssuePagedViewState extends State<_ReportIssuePagedView> {
+  List<Map<String, dynamic>> _rows = [];
+  final _cursors = <Map<String, dynamic>?>[null];
+  bool _loading = true, _more = false;
+  String? _error;
+  int _generation = 0;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.summary.issuesPaged) {
+      _load();
+    } else {
+      _loading = false;
+    }
+  }
+
+  Future<void> _load() async {
+    final generation = ++_generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final cursor = _cursors.last;
+      final response = await supabase.rpc(
+        'get_store_report_issue_page',
+        params: {
+          'p_store_id': widget.storeId,
+          'p_from_date': DateFormat('yyyy-MM-dd').format(widget.startDate),
+          'p_to_date': DateFormat('yyyy-MM-dd').format(widget.endDate),
+          'p_kind': widget.kind == _ReportIssueKind.missingProof
+              ? 'missing_proof'
+              : 'einvoice',
+          'p_after_at': cursor?['created_at'],
+          'p_after_id': cursor?['id'],
+          'p_limit': 50,
+        },
+      );
+      if (response is! Map ||
+          response['version'] != 1 ||
+          response['rows'] is! List ||
+          response['has_more'] is! bool ||
+          (response['rows'] as List).length > 50) {
+        throw const FormatException('STORE_REPORT_ISSUE_PAGE_INVALID');
+      }
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _rows = List<Map<String, dynamic>>.from(response['rows'] as List);
+        _more = response['has_more'] as bool;
+        _loading = false;
+      });
+    } catch (error) {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _error = error.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_error!),
+            TextButton(onPressed: _load, child: Text(context.l10n.refresh)),
+          ],
+        ),
+      );
+    }
+    final paged = widget.summary.issuesPaged;
+    final summary = !paged
+        ? widget.summary
+        : ReportSummary(
+            dineInRevenue: 0,
+            deliveryRevenue: 0,
+            serviceTotal: 0,
+            totalRevenue: 0,
+            totalOrders: 0,
+            completedOrders: 0,
+            paidOrders: 0,
+            openOrders: 0,
+            dailyBreakdown: const [],
+            missingProofIssues: widget.kind != _ReportIssueKind.missingProof
+                ? const []
+                : _rows
+                      .map(
+                        (r) => MissingProofIssue(
+                          paymentId: r['id'] as String,
+                          orderId: r['order_id']?.toString() ?? '',
+                          amount: (r['amount'] as num?)?.toDouble() ?? 0,
+                          method: r['method'] as String,
+                          createdAt: toHoChiMinhBusinessTime(
+                            DateTime.parse(r['created_at'] as String),
+                          ),
+                        ),
+                      )
+                      .toList(),
+            einvoiceReviewIssues: widget.kind != _ReportIssueKind.einvoice
+                ? const []
+                : _rows
+                      .map(
+                        (r) => EinvoiceReviewIssue(
+                          jobId: r['id'] as String,
+                          orderId: r['order_id']?.toString() ?? '',
+                          paymentId: r['payment_id'] as String?,
+                          status: r['status'] as String,
+                          detail: r['detail'] as String,
+                          createdAt: toHoChiMinhBusinessTime(
+                            DateTime.parse(r['created_at'] as String),
+                          ),
+                        ),
+                      )
+                      .toList(),
+          );
+    return Column(
+      children: [
+        Expanded(
+          child: _ReportIssueDetailsView(
+            kind: widget.kind,
+            summary: summary,
+            startDate: widget.startDate,
+            endDate: widget.endDate,
+            onOpenPayment: widget.onOpenPayment,
+          ),
+        ),
+        if (paged)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).previousPageTooltip,
+                onPressed: _cursors.length <= 1
+                    ? null
+                    : () {
+                        _cursors.removeLast();
+                        _load();
+                      },
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text('${_cursors.length}'),
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).nextPageTooltip,
+                onPressed: !_more || _rows.isEmpty
+                    ? null
+                    : () {
+                        _cursors.add({
+                          'id': _rows.last['id'],
+                          'created_at': _rows.last['created_at'],
+                        });
+                        _load();
+                      },
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+      ],
     );
   }
 }
@@ -3058,9 +3372,14 @@ class DailyClosingLauncher extends ConsumerWidget {
 }
 
 class DailyClosingScreen extends StatelessWidget {
-  const DailyClosingScreen({super.key, required this.storeId});
+  const DailyClosingScreen({
+    super.key,
+    required this.storeId,
+    this.closingDate,
+  });
 
   final String storeId;
+  final String? closingDate;
 
   @override
   Widget build(BuildContext context) {
@@ -3082,6 +3401,7 @@ class DailyClosingScreen extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 1040),
               child: DailyClosingSection(
                 storeId: storeId,
+                closingDate: closingDate,
                 presentation: DailyClosingPresentation.cards,
                 showHeading: false,
               ),
@@ -3099,11 +3419,13 @@ class DailyClosingSection extends ConsumerStatefulWidget {
     required this.storeId,
     this.presentation = DailyClosingPresentation.table,
     this.showHeading = true,
+    this.closingDate,
   });
 
   final String storeId;
   final DailyClosingPresentation presentation;
   final bool showHeading;
+  final String? closingDate;
 
   @override
   ConsumerState<DailyClosingSection> createState() =>
@@ -3141,6 +3463,18 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
       builder: (_) => _DailyClosingCashDialog(
         cashSales: _reportDouble(preview['payments_cash']),
         deliveryCashPayout: _reportDouble(preview['delivery_cash_payout']),
+        closingDate: record.closingDate,
+        openingCash: _reportDouble(preview['opening_cash_amount']),
+        bank: preview['bank'] is Map
+            ? CollectionBank.fromJson(
+                Map<String, dynamic>.from(preview['bank'] as Map),
+              )
+            : null,
+        cashRefunds: _reportDouble(preview['direct_order_cash_refunds']),
+        cashRecovered: _reportDouble(preview['delivery_cash_recovered']),
+        cashPaid: _reportDouble(
+          preview['delivery_cash_paid'] ?? preview['delivery_cash_payout'],
+        ),
       ),
     );
 
@@ -3154,7 +3488,13 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
         openingCashAmount: cashInput.openingCashAmount,
         cashDenominations: cashInput.denominations,
       );
-      ref.invalidate(dailyClosingHistoryProvider);
+      ref.invalidate(dailyClosingHistoryProvider(widget.storeId));
+      ref.invalidate(
+        dailyClosingDayProvider((
+          storeId: widget.storeId,
+          day: record.closingDate,
+        )),
+      );
       if (mounted) {
         setState(() => _closingSucceeded = true);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3179,7 +3519,14 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
 
   @override
   Widget build(BuildContext context) {
-    final historyAsync = ref.watch(dailyClosingHistoryProvider(widget.storeId));
+    final historyAsync = widget.closingDate == null
+        ? ref.watch(dailyClosingHistoryProvider(widget.storeId))
+        : ref.watch(
+            dailyClosingDayProvider((
+              storeId: widget.storeId,
+              day: widget.closingDate!,
+            )),
+          );
     final currency = NumberFormat('#,###', 'vi_VN');
 
     return Column(
@@ -3262,50 +3609,60 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
                     ),
                   ),
                 )
-              : widget.presentation == DailyClosingPresentation.cards
+              : widget.presentation == DailyClosingPresentation.cards ||
+                    MediaQuery.textScalerOf(context).scale(14) >= 18.2
               ? _closingCards(records: records, currency: currency)
-              : Container(
-                  height: 220,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface1,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SingleChildScrollView(
-                      key: const Key('daily_closing_table_horizontal_scroll'),
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: 1600,
-                        child: Column(
-                          children: [
-                            _closingTableHeader(),
-                            Expanded(
-                              child: ListView(
-                                children: records
-                                    .take(10)
-                                    .toList()
-                                    .asMap()
-                                    .entries
-                                    .map((entry) {
-                                      final index = entry.key;
-                                      final record = entry.value;
-                                      return _closingTableRow(
-                                        record: record,
-                                        currency: currency,
-                                        bgColor: index.isEven
-                                            ? AppColors.surface1
-                                            : AppColors.surface0,
-                                      );
-                                    })
-                                    .toList(),
-                              ),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _closingDepositCard(records.first, currency),
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 220,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface1,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SingleChildScrollView(
+                          key: const Key(
+                            'daily_closing_table_horizontal_scroll',
+                          ),
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: 1800,
+                            child: Column(
+                              children: [
+                                _closingTableHeader(),
+                                Expanded(
+                                  child: ListView(
+                                    children: records
+                                        .take(10)
+                                        .toList()
+                                        .asMap()
+                                        .entries
+                                        .map((entry) {
+                                          final index = entry.key;
+                                          final record = entry.value;
+                                          return _closingTableRow(
+                                            record: record,
+                                            currency: currency,
+                                            bgColor: index.isEven
+                                                ? AppColors.surface1
+                                                : AppColors.surface0,
+                                          );
+                                        })
+                                        .toList(),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
           loading: () => const SizedBox(
             height: 40,
@@ -3352,6 +3709,41 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
             ),
           )
           .toList(),
+    );
+  }
+
+  Widget _closingDepositCard(DailyClosingRecord record, NumberFormat currency) {
+    return FinancialAmountCards(
+      cards: [
+        FinancialAmountCardData(
+          id: 'closing_deposit_${record.closingDate}',
+          title: context.l10n.salesDepositPreview,
+          amount:
+              record.isClosed &&
+                  record.depositTotal >= 0 &&
+                  record.countedDepositTotal >= 0
+              ? record.confirmedDeposit
+              : null,
+          bank: record.bank,
+          status: !record.isClosed
+              ? context.l10n.salesDepositPending
+              : record.depositTotal < 0 || record.countedDepositTotal < 0
+              ? context.l10n.salesDepositShortfall
+              : record.depositNeedsReview
+              ? context.l10n.salesDepositReview
+              : context.l10n.salesDepositConfirmed,
+          warning: record.depositNeedsReview,
+          details: [
+            context.l10n.salesDepositSourceDate(record.closingDate),
+            context.l10n.salesDepositDate(record.depositDate),
+            if (record.isClosed)
+              context.l10n.salesDepositCountedAmount(
+                _formatVnd(currency, record.countedDepositTotal),
+              ),
+            if (record.bank == null) context.l10n.salesDepositNoAccount,
+          ],
+        ),
+      ],
     );
   }
 
@@ -3419,6 +3811,8 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _closingDepositCard(record, currency),
           const SizedBox(height: 10),
           PosExceptionAlert(
             key: ValueKey('daily_closing_basis_${record.closingDate}'),
@@ -3429,7 +3823,9 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
                 ? Icons.inventory_2_outlined
                 : Icons.sync_outlined,
           ),
-          if (record.isClosed && record.reconciliationDelta != 0) ...[
+          if (record.isClosed &&
+              (record.reconciliationDelta != 0 ||
+                  record.cashLedgerChanged)) ...[
             const SizedBox(height: 8),
             PosExceptionAlert(
               key: ValueKey(
@@ -3533,9 +3929,24 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
                         ),
                         _DailyClosingMetric(
                           label: context.l10n.reportsDeliveryCashPayout,
+                          value: _formatVnd(currency, -record.deliveryCashPaid),
+                        ),
+                        _DailyClosingMetric(
+                          label: DirectOrderSupportCopy(
+                            Localizations.localeOf(context).languageCode,
+                          ).text('driver_recovered'),
                           value: _formatVnd(
                             currency,
-                            -record.deliveryCashPayout,
+                            record.deliveryCashRecovered,
+                          ),
+                        ),
+                        _DailyClosingMetric(
+                          label: DirectOrderSupportCopy(
+                            Localizations.localeOf(context).languageCode,
+                          ).text('cash_refunds'),
+                          value: _formatVnd(
+                            currency,
+                            -record.directOrderCashRefunds,
                           ),
                         ),
                         _DailyClosingMetric(
@@ -3550,8 +3961,10 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
                           value: _formatVnd(currency, record.openingCashAmount),
                         ),
                         _DailyClosingMetric(
-                          label: context.l10n.reportsDepositTotal,
-                          value: _formatVnd(currency, record.depositTotal),
+                          label: context.l10n.salesDepositPreview,
+                          value: record.isClosed
+                              ? _formatVnd(currency, record.depositTotal)
+                              : '—',
                         ),
                       ],
                     ),
@@ -3600,7 +4013,8 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
           _hCell(context.l10n.reportsCountedCash),
           _hCell(context.l10n.reportsCashVariance),
           _hCell(context.l10n.reportsCashFloat),
-          _hCell(context.l10n.reportsDepositTotal),
+          _hCell(context.l10n.salesDepositPreview, flex: 2),
+          _hCell(context.l10n.salesDepositDate(''), flex: 2),
           _hCell(context.l10n.reportsClosingReconciliationDelta),
           _hCell(context.l10n.reportsAssignee),
           _hCell(context.l10n.reportsClosingStatus, flex: 2),
@@ -3636,7 +4050,11 @@ class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
           _dCell(_formatVnd(currency, record.countedCashAmount)),
           _dCell(_formatVnd(currency, record.cashVariance)),
           _dCell(_formatVnd(currency, record.openingCashAmount)),
-          _dCell(_formatVnd(currency, record.depositTotal)),
+          _dCell(
+            record.isClosed ? _formatVnd(currency, record.depositTotal) : '—',
+            flex: 2,
+          ),
+          _dCell(record.depositDate, flex: 2),
           _dCell(
             record.isClosed
                 ? _formatVnd(currency, record.reconciliationDelta)
@@ -3804,10 +4222,20 @@ class _DailyClosingCashDialog extends StatefulWidget {
   const _DailyClosingCashDialog({
     required this.cashSales,
     required this.deliveryCashPayout,
+    required this.closingDate,
+    required this.openingCash,
+    this.bank,
+    this.cashRefunds = 0,
+    this.cashRecovered = 0,
+    this.cashPaid = 0,
   });
 
+  final String closingDate;
+  final double openingCash;
+  final CollectionBank? bank;
   final double cashSales;
   final double deliveryCashPayout;
+  final double cashRefunds, cashRecovered, cashPaid;
 
   @override
   State<_DailyClosingCashDialog> createState() =>
@@ -3815,7 +4243,6 @@ class _DailyClosingCashDialog extends StatefulWidget {
 }
 
 class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
-  static const double _defaultOpeningCash = 5000000;
   static const List<int> _denominations = [
     500000,
     200000,
@@ -3854,8 +4281,15 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
     (sum, denomination) => sum + (denomination * _countFor(denomination)),
   );
 
-  double get _expectedCash =>
-      _defaultOpeningCash + widget.cashSales - widget.deliveryCashPayout;
+  double get _expectedDeposit => expectedCashBalance(
+    openingCash: 0,
+    cashSales: widget.cashSales,
+    cashRefunds: widget.cashRefunds,
+    cashPaid: widget.cashPaid,
+    cashRecovered: widget.cashRecovered,
+  );
+
+  double get _expectedCash => widget.openingCash + _expectedDeposit;
 
   @override
   void dispose() {
@@ -3887,7 +4321,7 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
                 children: [
                   _ClosingCashSummary(
                     label: l10n.reportsOpeningCash,
-                    value: _defaultOpeningCash,
+                    value: widget.openingCash,
                     currency: _currency,
                   ),
                   _ClosingCashSummary(
@@ -3897,7 +4331,21 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
                   ),
                   _ClosingCashSummary(
                     label: l10n.reportsDeliveryCashPayout,
-                    value: -widget.deliveryCashPayout,
+                    value: -widget.cashPaid,
+                    currency: _currency,
+                  ),
+                  _ClosingCashSummary(
+                    label: DirectOrderSupportCopy(
+                      Localizations.localeOf(context).languageCode,
+                    ).text('driver_recovered'),
+                    value: widget.cashRecovered,
+                    currency: _currency,
+                  ),
+                  _ClosingCashSummary(
+                    label: DirectOrderSupportCopy(
+                      Localizations.localeOf(context).languageCode,
+                    ).text('cash_refunds'),
+                    value: -widget.cashRefunds,
                     currency: _currency,
                   ),
                   _ClosingCashSummary(
@@ -3983,6 +4431,35 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
                   ),
                 ),
               const Divider(height: 24),
+              FinancialAmountCards(
+                cards: [
+                  FinancialAmountCardData(
+                    id: 'daily_closing_deposit_preview',
+                    title: l10n.salesDepositPreview,
+                    amount: _countedCash >= widget.openingCash
+                        ? _expectedDeposit
+                        : null,
+                    status: _countedCash < widget.openingCash
+                        ? l10n.salesDepositShortfall
+                        : l10n.salesDepositPending,
+                    warning: _countedCash < widget.openingCash,
+                    bank: widget.bank,
+                    details: [
+                      l10n.salesDepositCountedAmount(
+                        _formatVnd(
+                          _currency,
+                          _countedCash - widget.openingCash,
+                        ),
+                      ),
+                      l10n.salesDepositDate(
+                        nextDepositDate(widget.closingDate),
+                      ),
+                      if (widget.bank == null) l10n.salesDepositNoAccount,
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               _ClosingCashTotalRow(
                 label: l10n.reportsCountedCash,
                 value: _countedCash,
@@ -4010,7 +4487,7 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
           key: const Key('daily_closing_cash_confirm'),
           onPressed: () => Navigator.of(context).pop(
             _DailyClosingCashInput(
-              openingCashAmount: _defaultOpeningCash,
+              openingCashAmount: widget.openingCash,
               denominations: {
                 for (final denomination in _denominations)
                   '$denomination': _countFor(denomination),

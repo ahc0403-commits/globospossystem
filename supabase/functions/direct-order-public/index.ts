@@ -6,7 +6,7 @@ type RpcClient = {
   rpc: (
     name: string,
     payload: JsonObject,
-  ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  ) => PromiseLike<{ data: unknown; error: { message?: string } | null }>;
 };
 
 export type DirectOrderDependencies = {
@@ -32,10 +32,35 @@ export const directOrderActionRegistry = Object.freeze(
     storefront: { actor: "public", rateLimit: 60 },
     create_session: { actor: "public", rateLimit: 60 },
     submit: { actor: "public", rateLimit: 60 },
+    submit_v3: { actor: "public", rateLimit: 60 },
+    status_v3: { actor: "public", rateLimit: 60 },
+    status_v4: { actor: "public", rateLimit: 60 },
+    status_v5: { actor: "public", rateLimit: 60 },
+    status_v6: { actor: "public", rateLimit: 60 },
+    decide_requirement: { actor: "public", rateLimit: 30 },
+    resume_storefront: { actor: "public", rateLimit: 60 },
+    resume_order: { actor: "public", rateLimit: 60 },
+    issue_order_access: { actor: "public", rateLimit: 10 },
+    decide_pickup: { actor: "public", rateLimit: 60 },
     status: { actor: "public", rateLimit: 60 },
     status_v2: { actor: "public", rateLimit: 60 },
     orders_v2: { actor: "public", rateLimit: 60 },
+    orders_v3: { actor: "public", rateLimit: 60 },
+    orders_v4: { actor: "public", rateLimit: 60 },
+    push_subscription: { actor: "public", rateLimit: 10 },
     message: { actor: "public", rateLimit: 60 },
+    charge_consent: { actor: "public", rateLimit: 30 },
+    refund_details: { actor: "public", rateLimit: 20 },
+    customer_attachment_upload: { actor: "public", rateLimit: 10 },
+    customer_attachment_commit: { actor: "public", rateLimit: 30 },
+    customer_attachment_url: { actor: "public", rateLimit: 60 },
+    customer_chat_attachment_upload: { actor: "public", rateLimit: 10 },
+    customer_chat_attachment_commit: { actor: "public", rateLimit: 30 },
+    staff_chat_attachment_upload: { actor: "staff", rateLimit: null },
+    staff_chat_attachment_commit: { actor: "staff", rateLimit: null },
+    staff_attachment_upload: { actor: "staff", rateLimit: null },
+    staff_attachment_commit: { actor: "staff", rateLimit: null },
+    staff_attachment_url: { actor: "staff", rateLimit: null },
     cancel: { actor: "public", rateLimit: 60 },
     proof_upload_url: { actor: "public", rateLimit: 10 },
     proof_upload_url_v2: { actor: "public", rateLimit: 10 },
@@ -161,11 +186,27 @@ export function validateProofImage(
   extension: string,
 ): boolean {
   if (bytes.length < 12 || bytes.length > 5242880) return false;
-  const dimensions = proofDimensions(bytes, extension);
+  const dimensions = proofDimensions(
+    bytes,
+    extension === "jpeg" ? "jpg" : extension,
+  );
   if (!dimensions) return false;
   const { width, height } = dimensions;
   return width > 0 && height > 0 && width <= 12000 && height <= 12000 &&
     width * height <= 25000000;
+}
+
+export function validateChatAttachmentBytes(
+  bytes: Uint8Array,
+  extension: string,
+): boolean {
+  if (extension !== "pdf") return validateProofImage(bytes, extension);
+  if (bytes.length < 20 || bytes.length > 5242880) return false;
+  const decoder = new TextDecoder();
+  return /^%PDF-[12]\.[0-9]/.test(decoder.decode(bytes.subarray(0, 8))) &&
+    /%%EOF\s*$/.test(
+      decoder.decode(bytes.subarray(Math.max(0, bytes.length - 1024))),
+    );
 }
 
 export function resolveProjectSecretKey(
@@ -381,6 +422,32 @@ export function directOrderLocale(
   throw new SafeHttpError(400, "INVALID_REQUEST");
 }
 
+export async function directOrderPushSubscriptionArgs(
+  body: JsonObject,
+): Promise<JsonObject> {
+  const sessionId = requiredUuid(body, "session_id");
+  const secret = requiredString(body, "secret", 128, secretPattern);
+  const deviceId = requiredUuid(body, "device_id");
+  const locale = directOrderLocale(body.locale);
+  if (typeof body.enabled !== "boolean") {
+    throw new SafeHttpError(400, "INVALID_REQUEST");
+  }
+  const token = body.enabled
+    ? requiredString(body, "token", 2048, /^[A-Za-z0-9_:\-]+$/)
+    : null;
+  if (token != null && token.length < 16) {
+    throw new SafeHttpError(400, "INVALID_REQUEST");
+  }
+  return {
+    p_session_id: sessionId,
+    p_secret_hash: await sha256Hex(secret),
+    p_device_id: deviceId,
+    p_token: token,
+    p_locale: locale,
+    p_enabled: body.enabled,
+  };
+}
+
 function configuredOrigins(): string[] {
   return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
@@ -466,6 +533,78 @@ const internalFailure: SqlErrorContract = {
 export const sqlDomainErrorRegistry: Readonly<
   Record<string, SqlErrorContract>
 > = Object.freeze({
+  DIRECT_ORDER_DOCUMENT_TOO_LARGE: invalidRequest(
+    "DIRECT_ORDER_DOCUMENT_TOO_LARGE",
+  ),
+  DIRECT_ORDER_LINK_INPUT_INVALID: invalidRequest(
+    "DIRECT_ORDER_LINK_INPUT_INVALID",
+  ),
+  DIRECT_ORDER_LINK_RETRY_CHANGED: conflict("DIRECT_ORDER_LINK_RETRY_CHANGED"),
+  DIRECT_ORDER_PAYMENT_DOCUMENT_NOT_ALLOWED: conflict(
+    "DIRECT_ORDER_PAYMENT_DOCUMENT_NOT_ALLOWED",
+  ),
+  DIRECT_ORDER_PAYMENT_GUIDE_BOUNDARY_FAILED: internalFailure,
+  DIRECT_ORDER_QUOTE_ENTRY_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_QUOTE_INSERT_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_QUOTE_MODE_PATCH_FAILED: internalFailure,
+  DIRECT_ORDER_QUOTE_WRITER_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_TRANSLATION_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_RECIPIENT_RECEIPT_DRIFT: internalFailure,
+  DIRECT_ORDER_RECIPIENT_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_BATCH_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_BATCH_PATCH_DRIFT: internalFailure,
+  DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED: conflict(
+    "DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED",
+  ),
+  DIRECT_ORDER_BOOKING_REQUIRED: conflict("DIRECT_ORDER_BOOKING_REQUIRED"),
+  DIRECT_ORDER_BOOKING_CHANGED: conflict("DIRECT_ORDER_BOOKING_CHANGED"),
+  DIRECT_ORDER_COOKING_NOT_COMPLETE: conflict(
+    "DIRECT_ORDER_COOKING_NOT_COMPLETE",
+  ),
+  DIRECT_ORDER_COOKING_USE_KDS: conflict("DIRECT_ORDER_COOKING_USE_KDS"),
+  DIRECT_ORDER_DELIVERY_POLICY_LOCKED: conflict(
+    "DIRECT_ORDER_DELIVERY_POLICY_LOCKED",
+  ),
+  DIRECT_ORDER_BOOKING_INPUT_INVALID: invalidRequest(
+    "DIRECT_ORDER_BOOKING_INPUT_INVALID",
+  ),
+
+  DIRECT_ORDER_REQUIREMENT_NOT_FOUND: unavailable(
+    "DIRECT_ORDER_REQUIREMENT_NOT_FOUND",
+  ),
+  DIRECT_ORDER_REQUIREMENT_REPLY_INVALID: invalidRequest(
+    "DIRECT_ORDER_REQUIREMENT_REPLY_INVALID",
+  ),
+  DIRECT_ORDER_REQUIREMENT_VERSION_CONFLICT: conflict(
+    "DIRECT_ORDER_REQUIREMENT_VERSION_CONFLICT",
+  ),
+  DIRECT_ORDER_REQUIREMENTS_PENDING: conflict(
+    "DIRECT_ORDER_REQUIREMENTS_PENDING",
+  ),
+  DIRECT_ORDER_REQUIREMENT_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_REQUIREMENT_PRINT_DRIFT: internalFailure,
+  DIRECT_ORDER_UNAVAILABLE: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_ORDER_CLOSED: {
+    status: 410,
+    publicCode: "DIRECT_ORDER_ORDER_CLOSED",
+  },
+  DIRECT_ORDER_DELIVERY_EVIDENCE_REQUIRED: conflict(
+    "DIRECT_ORDER_DELIVERY_EVIDENCE_REQUIRED",
+  ),
+  DIRECT_ORDER_DELIVERY_COST_CHANGED: conflict(
+    "DIRECT_ORDER_DELIVERY_COST_CHANGED",
+  ),
+  DIRECT_ORDER_FINAL_AMOUNT_LOCKED: conflict(
+    "DIRECT_ORDER_FINAL_AMOUNT_LOCKED",
+  ),
+  DIRECT_ORDER_FINAL_AMOUNT_PATCH_DRIFT: internalFailure,
+  DIRECT_ORDER_COST_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_COST_RETENTION_DRIFT: internalFailure,
+  DIRECT_ORDER_COST_SETTLEMENT_DRIFT: internalFailure,
+  DIRECT_ORDER_DELIVERY_COST_IMMUTABLE: internalFailure,
+  DIRECT_ORDER_PUSH_SCOPE_PATCH_DRIFT: internalFailure,
+  DIRECT_ORDER_RETENTION_PATCH_DRIFT: internalFailure,
+  DIRECT_ORDER_ACCESS_PERMISSION_DRIFT: internalFailure,
   DIRECT_ORDER_ACTOR_INPUT_REQUIRED: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_FORBIDDEN: forbidden("REQUEST_FORBIDDEN"),
   DIRECT_ORDER_RATE_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
@@ -505,6 +644,18 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_QUOTE_EXPIRED: conflict("DIRECT_ORDER_QUOTE_EXPIRED"),
   DIRECT_ORDER_PROOF_PATH_INVALID: invalidRequest("INVALID_PROOF"),
   DIRECT_ORDER_LIMIT_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_UTENSILS_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_KITCHEN_DRIFT: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_PACKING_DRIFT: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_PRINT_DRIFT: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_PROGRESS_SUBMIT_DRIFT: unavailable("DIRECT_ORDER_UNAVAILABLE"),
+  DIRECT_ORDER_PROGRESS_VERIFICATION_FAILED: unavailable(
+    "DIRECT_ORDER_UNAVAILABLE",
+  ),
+  DIRECT_ORDER_PUSH_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
+  DIRECT_ORDER_PUSH_DEVICE_LIMIT: conflict("DIRECT_ORDER_PUSH_DEVICE_LIMIT"),
+  DIRECT_ORDER_KDS_READY_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_CUSTOMER_EXPERIENCE_CONTRACT_FAILED: internalFailure,
   DIRECT_ORDER_QUOTE_INPUT_INVALID: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_REQUEST_NOT_QUOTABLE: conflict(
     "DIRECT_ORDER_REQUEST_NOT_QUOTABLE",
@@ -538,6 +689,9 @@ export const sqlDomainErrorRegistry: Readonly<
   ),
   DIRECT_ORDER_PAYMENT_PROOF_REQUIRED: conflict(
     "DIRECT_ORDER_PAYMENT_PROOF_REQUIRED",
+  ),
+  DIRECT_ORDER_PAYMENT_REVIEW_CHANGED: conflict(
+    "DIRECT_ORDER_PAYMENT_REVIEW_CHANGED",
   ),
   DIRECT_ORDER_VERIFIED_PAYMENT_REQUIRED: conflict(
     "DIRECT_ORDER_VERIFIED_PAYMENT_REQUIRED",
@@ -595,7 +749,95 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_PILOT_SAFETY_VERIFY_FAILED: internalFailure,
   DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_FAILED: internalFailure,
   DIRECT_ORDER_CUSTOMER_STATUS_MIGRATION_VERIFY_FAILED: internalFailure,
+  DIRECT_ORDER_DINER_COUNT_INVALID: invalidRequest(
+    "DIRECT_ORDER_DINER_COUNT_INVALID",
+  ),
+  DIRECT_ORDER_PICKUP_INPUT_INVALID: invalidRequest(
+    "DIRECT_ORDER_PICKUP_INPUT_INVALID",
+  ),
+  DIRECT_ORDER_FULFILLMENT_CHANGED: conflict(
+    "DIRECT_ORDER_FULFILLMENT_CHANGED",
+  ),
+  DIRECT_ORDER_PICKUP_NOT_ALLOWED: conflict("DIRECT_ORDER_PICKUP_NOT_ALLOWED"),
+  DIRECT_ORDER_REFUND_NOT_DUE: conflict("DIRECT_ORDER_REFUND_NOT_DUE"),
+  DIRECT_ORDER_REFUND_RECONCILIATION_REQUIRED: conflict(
+    "DIRECT_ORDER_REFUND_RECONCILIATION_REQUIRED",
+  ),
+  DIRECT_ORDER_PICKUP_OFFER_PENDING: conflict(
+    "DIRECT_ORDER_PICKUP_OFFER_PENDING",
+  ),
+  DIRECT_ORDER_ACTIVE_REQUESTS_EXIST: conflict(
+    "DIRECT_ORDER_ACTIVE_REQUESTS_EXIST",
+  ),
+  DIRECT_ORDER_PICKUP_FEE_MUST_BE_ZERO: conflict(
+    "DIRECT_ORDER_PICKUP_FEE_MUST_BE_ZERO",
+  ),
+  DIRECT_ORDER_PACKING_CONTRACT_VERIFICATION_FAILED: internalFailure,
+  DIRECT_ORDER_FALLBACK_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_FALLBACK_VERIFICATION_FAILED: internalFailure,
+  DIRECT_ORDER_QUOTE_CHANGED: conflict("DIRECT_ORDER_QUOTE_CHANGED"),
+  DIRECT_ORDER_ADDRESS_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_ANALYTICS_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_CLEANUP_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_LIST_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_PUSH_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_QUOTE_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_RECEIPT_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_SUPPORT_VERIFICATION_FAILED: internalFailure,
+  DIRECT_ORDER_CHARGE_CHANGED: conflict("DIRECT_ORDER_CHARGE_CHANGED"),
+  DIRECT_ORDER_CHARGE_INVALID: conflict("DIRECT_ORDER_CHARGE_INVALID"),
+  DIRECT_ORDER_ATTACHMENT_INVALID: conflict("DIRECT_ORDER_ATTACHMENT_INVALID"),
+  DIRECT_ORDER_SUPPORT_CHANGED: conflict("DIRECT_ORDER_SUPPORT_CHANGED"),
+  DIRECT_ORDER_SUPPORT_INPUT_INVALID: conflict(
+    "DIRECT_ORDER_SUPPORT_INPUT_INVALID",
+  ),
+  DIRECT_ORDER_INVOICE_INVALID: conflict("DIRECT_ORDER_INVOICE_INVALID"),
+  DIRECT_ORDER_RECEIPT_INVALID: conflict("DIRECT_ORDER_RECEIPT_INVALID"),
+  DIRECT_ORDER_ALREADY_PAID: conflict("DIRECT_ORDER_ALREADY_PAID"),
+  DIRECT_ORDER_AMOUNT_EXCEEDS_DUE: conflict("DIRECT_ORDER_AMOUNT_EXCEEDS_DUE"),
+  DIRECT_ORDER_AMOUNT_MISMATCH: conflict("DIRECT_ORDER_AMOUNT_MISMATCH"),
+  DIRECT_ORDER_PAYMENT_PENDING: conflict("DIRECT_ORDER_PAYMENT_PENDING"),
+  DIRECT_ORDER_REFUND_NOT_ALLOWED: conflict("DIRECT_ORDER_REFUND_NOT_ALLOWED"),
+  DIRECT_ORDER_REFUND_AMOUNT_INVALID: conflict(
+    "DIRECT_ORDER_REFUND_AMOUNT_INVALID",
+  ),
+  DIRECT_ORDER_REFUND_PENDING: conflict("DIRECT_ORDER_REFUND_PENDING"),
+  DIRECT_ORDER_CASH_MOVEMENT_INVALID: conflict(
+    "DIRECT_ORDER_CASH_MOVEMENT_INVALID",
+  ),
+  DIRECT_ORDER_CASH_PAYOUT_CONFIRMATION_REQUIRED: conflict(
+    "DIRECT_ORDER_CASH_PAYOUT_CONFIRMATION_REQUIRED",
+  ),
+  DIRECT_ORDER_CHARGE_AMOUNT_INVALID: conflict(
+    "DIRECT_ORDER_CHARGE_AMOUNT_INVALID",
+  ),
+  DIRECT_ORDER_CLOSING_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_CLOSING_HISTORY_DRIFT: internalFailure,
+  DIRECT_ORDER_MONEY_IMMUTABLE: conflict("DIRECT_ORDER_MONEY_IMMUTABLE"),
+  DIRECT_ORDER_RECONCILIATION_PERMISSIONS: internalFailure,
+  DIRECT_ORDER_REFUND_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_REFUND_EVIDENCE_REQUIRED: conflict(
+    "DIRECT_ORDER_REFUND_EVIDENCE_REQUIRED",
+  ),
+  DIRECT_ORDER_TRANSLATION_DETAIL_DRIFT: internalFailure,
+  DIRECT_ORDER_TRANSLATION_INVALID: conflict(
+    "DIRECT_ORDER_TRANSLATION_INVALID",
+  ),
+  DIRECT_ORDER_TRANSLATION_PERMISSION_DRIFT: internalFailure,
+  DIRECT_ORDER_TRANSLATION_RETENTION_DRIFT: internalFailure,
+  DIRECT_ORDER_PHOTO_APPROVAL_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_PHOTO_APPROVAL_VERIFICATION_FAILED: internalFailure,
 });
+
+export function directOrderDinerCount(value: unknown): number {
+  if (
+    typeof value !== "number" || !Number.isInteger(value) || value < 1 ||
+    value > 100
+  ) {
+    throw new SafeHttpError(400, "DIRECT_ORDER_DINER_COUNT_INVALID");
+  }
+  return value;
+}
 
 export function normalizeRpcError(message: string): SafeHttpError {
   const code = Object.keys(sqlDomainErrorRegistry).find((candidate) =>
@@ -633,8 +875,114 @@ export function validProofObjectPath(path: string): boolean {
     fileMatch !== null && uuidPattern.test(fileMatch[1]);
 }
 
+export function validChatObjectPath(path: string): boolean {
+  const [store, order, file, extra] = path.split("/");
+  const match = /^([0-9a-f-]{36})[.](jpg|jpeg|png|webp|pdf)$/.exec(file ?? "");
+  return extra === undefined && uuidPattern.test(store ?? "") &&
+    uuidPattern.test(order ?? "") && match !== null &&
+    uuidPattern.test(match[1]);
+}
+
 export function validProofPath(path: string, requestId: string): boolean {
   return validProofObjectPath(path) && path.split("/")[1] === requestId;
+}
+
+type ProofStorage = {
+  list: (
+    folder: string,
+    options: { limit: number; search: string },
+  ) => Promise<{
+    data: { name: string }[] | null;
+    error: unknown;
+  }>;
+  download: (path: string) => Promise<{ data: Blob | null; error: unknown }>;
+  remove: (paths: string[]) => Promise<unknown>;
+};
+
+// V1 and V2 share the same verification. Temporary Storage failures must not
+// destroy a valid photo whose upload/commit response may simply have been lost.
+export async function verifyProofUpload(storage: ProofStorage, path: string) {
+  const [storeId, requestId, fileName] = path.split("/");
+  const { data: objects, error: listError } = await storage.list(
+    `${storeId}/${requestId}`,
+    { limit: 2, search: fileName },
+  );
+  if (listError || !objects) {
+    throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+  }
+  if (!objects.some((object) => object.name === fileName)) {
+    throw new SafeHttpError(409, "PROOF_UPLOAD_INCOMPLETE");
+  }
+  const { data: blob, error: downloadError } = await storage.download(path);
+  if (downloadError || !blob) {
+    throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await blob.arrayBuffer());
+  } catch {
+    throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+  }
+  if (
+    !validateProofImage(bytes, fileName.split(".").pop()?.toLowerCase() ?? "")
+  ) {
+    await storage.remove([path]);
+    throw new SafeHttpError(400, "INVALID_PROOF");
+  }
+}
+
+/** Validate a file against the authenticated request scope before issuing a token. */
+export function directOrderAttachmentSpec(
+  body: JsonObject,
+  storeId: string,
+  requestId: string,
+  staff: boolean,
+  generalChat = false,
+) {
+  const filename = requiredString(body, "filename", 255).replace(
+    // deno-lint-ignore no-control-regex -- strip filename control characters
+    /[\/\\\u0000-\u001f]/g,
+    "_",
+  );
+  const mime = requiredString(body, "mime_type", 100);
+  const extension = allowedProofTypes.get(mime) ??
+    ((staff || generalChat) && mime === "application/pdf" ? "pdf" : null);
+  const path = requiredString(body, "path", 200);
+  const pathExtension = path.split(".").pop() ?? "";
+  const expectedExtension = extension === "jpg" ? "(?:jpg|jpeg)" : extension;
+  const expected = new RegExp(
+    `^${storeId}/${requestId}/[0-9a-f-]{36}\\.${expectedExtension}$`,
+  );
+  if (
+    !extension || !expected.test(path) ||
+    !uuidPattern.test(path.split("/")[2].split(".")[0])
+  ) {
+    throw new SafeHttpError(400, "DIRECT_ORDER_ATTACHMENT_INVALID");
+  }
+  return { filename, mime, path, extension: pathExtension };
+}
+
+export function directOrderRequirementDecisionArgs(
+  body: JsonObject,
+): JsonObject {
+  if (
+    typeof body.accept !== "boolean" ||
+    !Number.isSafeInteger(body.expected_version) ||
+    Number(body.expected_version) < 1 ||
+    Number(body.expected_version) > 2147483647 ||
+    (body.accept && body.message != null)
+  ) {
+    throw new SafeHttpError(400, "DIRECT_ORDER_REQUIREMENT_REPLY_INVALID");
+  }
+  return {
+    p_session_id: requiredUuid(body, "session_id"),
+    p_request_id: requiredUuid(body, "request_id"),
+    p_requirement_id: requiredUuid(body, "requirement_id"),
+    p_expected_version: body.expected_version,
+    p_reply_message_id: requiredUuid(body, "reply_message_id"),
+    p_accept: body.accept,
+    p_body: body.accept ? null : requiredString(body, "message", 2000),
+  };
 }
 
 export function directOrderSecretKeyName(
@@ -642,6 +990,89 @@ export function directOrderSecretKeyName(
   publicReceiptName: string | undefined,
 ): string {
   return directOrderName?.trim() || publicReceiptName?.trim() || "";
+}
+
+// Link credentials are exchanged only inside the service backend. Never return
+// the original browser session hash or allow a link to act on another order.
+export async function resolveOrderScopedRequest(
+  client: RpcClient,
+  action: string,
+  input: JsonObject,
+): Promise<
+  { body: JsonObject; secretHash?: string; requestId?: string; slug?: string }
+> {
+  if (input.order_scoped !== true) return { body: input };
+  const permitted = new Set([
+    "resume_order",
+    "push_subscription",
+    "resume_storefront",
+    "orders_v2",
+    "orders_v3",
+    "orders_v4",
+    "status",
+    "status_v2",
+    "status_v3",
+    "status_v4",
+    "status_v5",
+    "status_v6",
+    "decide_requirement",
+    "message",
+    "decide_pickup",
+    "cancel",
+    "charge_consent",
+    "proof_upload_url",
+    "proof_upload_url_v2",
+    "proof_commit",
+    "proof_commit_v2",
+    "refund_details",
+    "customer_attachment_upload",
+    "customer_attachment_commit",
+    "customer_attachment_url",
+    "customer_chat_attachment_upload",
+    "customer_chat_attachment_commit",
+  ]);
+  if (!permitted.has(action)) throw new SafeHttpError(403, "REQUEST_FORBIDDEN");
+  const requestId = requiredUuid(input, "session_id");
+  if (
+    input.request_id != null && requiredUuid(input, "request_id") !== requestId
+  ) {
+    throw new SafeHttpError(403, "REQUEST_FORBIDDEN");
+  }
+  if (
+    ![
+      "resume_order",
+      "resume_storefront",
+      "orders_v2",
+      "orders_v3",
+      "orders_v4",
+      "push_subscription",
+    ]
+      .includes(action) &&
+    input.request_id == null
+  ) {
+    throw new SafeHttpError(400, "INVALID_REQUEST");
+  }
+  const secret = requiredString(input, "secret", 128, secretPattern);
+  const resolved = asObject(
+    await rpc(client, "direct_order_resolve_access", {
+      p_request_id: requestId,
+      p_key_hash: await sha256Hex(secret),
+    }),
+  );
+  const sessionId = requiredUuid(resolved, "session_id");
+  const secretHash = requiredString(
+    resolved,
+    "secret_hash",
+    64,
+    /^[a-f0-9]{64}$/,
+  );
+  const slug = requiredString(resolved, "slug", 63, slugPattern);
+  return {
+    body: { ...input, session_id: sessionId },
+    secretHash,
+    requestId,
+    slug,
+  };
 }
 
 function productionDependencies(): DirectOrderDependencies {
@@ -696,7 +1127,34 @@ function productionDependencies(): DirectOrderDependencies {
     body: JsonObject,
     request: Request,
   ): Promise<unknown> => {
+    const scoped = await resolveOrderScopedRequest(service, action, body);
+    body = scoped.body;
+    const hashSecret = async (secret: string) =>
+      scoped.secretHash ?? await sha256Hex(secret);
     switch (action) {
+      case "resume_order": {
+        if (!scoped.requestId || body.slug !== scoped.slug) {
+          throw new SafeHttpError(404, "DIRECT_ORDER_UNAVAILABLE");
+        }
+        return {
+          session_id: scoped.requestId,
+          secret: requiredString(body, "secret", 128, secretPattern),
+          expires_at: "2099-01-01T00:00:00Z",
+          order_scoped: true,
+        };
+      }
+      case "issue_order_access": {
+        return await rpc(service, "direct_order_issue_access", {
+          p_session_id: requiredUuid(body, "session_id"),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
+          p_request_id: requiredUuid(body, "request_id"),
+          p_key_hash: await sha256Hex(
+            requiredString(body, "access_key", 128, secretPattern),
+          ),
+        });
+      }
       case "storefront": {
         const slug = requiredString(body, "slug", 63, slugPattern);
         const value = await rpc(
@@ -721,14 +1179,15 @@ function productionDependencies(): DirectOrderDependencies {
             "direct_order_public_create_session",
             {
               p_slug: slug,
-              p_secret_hash: await sha256Hex(secret),
+              p_secret_hash: await hashSecret(secret),
               p_locale: locale,
             },
           ),
         );
         return { ...value, secret };
       }
-      case "submit": {
+      case "submit":
+      case "submit_v3": {
         const sessionId = requiredUuid(body, "session_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
         const clientRequestId = requiredUuid(body, "client_request_id");
@@ -740,12 +1199,34 @@ function productionDependencies(): DirectOrderDependencies {
         }
         const payload = body.payload as JsonObject;
         directOrderLocale(payload.locale);
-        return await rpc(service, "direct_order_public_submit", {
-          p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
-          p_client_request_id: clientRequestId,
-          p_payload: payload,
-        });
+        if (action === "submit_v3") directOrderDinerCount(payload.diner_count);
+        if (
+          "utensils_requested" in payload &&
+          typeof payload.utensils_requested !== "boolean"
+        ) {
+          throw new SafeHttpError(400, "INVALID_REQUEST");
+        }
+        return await rpc(
+          service,
+          action === "submit_v3" && body.access_key != null
+            ? "direct_order_public_submit_with_access"
+            : action === "submit_v3"
+            ? "direct_order_public_submit_v3"
+            : "direct_order_public_submit",
+          {
+            p_session_id: sessionId,
+            p_secret_hash: await hashSecret(secret),
+            p_client_request_id: clientRequestId,
+            p_payload: payload,
+            ...(action === "submit_v3" && body.access_key != null
+              ? {
+                p_key_hash: await sha256Hex(
+                  requiredString(body, "access_key", 128, secretPattern),
+                ),
+              }
+              : {}),
+          },
+        );
       }
       case "status": {
         const sessionId = requiredUuid(body, "session_id");
@@ -753,27 +1234,158 @@ function productionDependencies(): DirectOrderDependencies {
         const secret = requiredString(body, "secret", 128, secretPattern);
         return await rpc(service, "direct_order_public_status", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requestId,
         });
       }
-      case "status_v2": {
+      case "status_v2":
+      case "status_v3":
+      case "status_v4":
+      case "status_v5":
+      case "status_v6": {
         const sessionId = requiredUuid(body, "session_id");
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
-        return await rpc(service, "direct_order_public_status_v2", {
-          p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
-          p_request_id: requestId,
-        });
+        return await rpc(
+          service,
+          action === "status_v6"
+            ? "direct_order_public_status_v6"
+            : action === "status_v5"
+            ? "direct_order_public_status_v5"
+            : action === "status_v4"
+            ? "direct_order_public_status_v4"
+            : action === "status_v3"
+            ? "direct_order_public_status_v3"
+            : "direct_order_public_status_v2",
+          {
+            p_session_id: sessionId,
+            p_secret_hash: await hashSecret(secret),
+            p_request_id: requestId,
+          },
+        );
       }
-      case "orders_v2": {
+      case "resume_storefront": {
         const sessionId = requiredUuid(body, "session_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
-        return await rpc(service, "direct_order_public_orders_v2", {
+        const value = asObject(
+          await rpc(service, "direct_order_public_resume_storefront", {
+            p_session_id: sessionId,
+            p_secret_hash: await hashSecret(secret),
+          }),
+        );
+        return { ...value, google_maps_browser_key: null };
+      }
+      case "decide_pickup": {
+        const sessionId = requiredUuid(body, "session_id");
+        const secret = requiredString(body, "secret", 128, secretPattern);
+        if (
+          typeof body.accept !== "boolean" ||
+          typeof body.already_paid !== "boolean"
+        ) {
+          throw new SafeHttpError(400, "DIRECT_ORDER_PICKUP_INPUT_INVALID");
+        }
+        return await rpc(service, "direct_order_public_decide_pickup", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
-          p_limit: 50,
+          p_secret_hash: await hashSecret(secret),
+          p_request_id: requiredUuid(body, "request_id"),
+          p_offer_id: requiredUuid(body, "offer_id"),
+          p_accept: body.accept,
+          p_already_paid: body.already_paid,
+        });
+      }
+      case "push_subscription": {
+        return await rpc(
+          service,
+          "direct_order_public_push_subscription_scoped",
+          {
+            ...await directOrderPushSubscriptionArgs(body),
+            p_secret_hash: await hashSecret(body.secret as string),
+            p_request_scope_id: scoped.requestId ?? null,
+          },
+        );
+      }
+      case "orders_v2":
+      case "orders_v3":
+      case "orders_v4": {
+        const sessionId = requiredUuid(body, "session_id");
+        const secret = requiredString(body, "secret", 128, secretPattern);
+        if (scoped.requestId) {
+          const status = asObject(
+            await rpc(
+              service,
+              action === "orders_v4"
+                ? "direct_order_public_status_v6"
+                : action === "orders_v3"
+                ? "direct_order_public_status_v4"
+                : "direct_order_public_status_v3",
+              {
+                p_session_id: sessionId,
+                p_secret_hash: await hashSecret(secret),
+                p_request_id: scoped.requestId,
+              },
+            ),
+          );
+          const fulfillment = asObject(status.fulfillment ?? {});
+          const review = asObject(status.proof_review ?? {});
+          const quote = asObject(status.quote ?? {});
+          return [{
+            ...(action === "orders_v4"
+              ? {
+                booking_status:
+                  asObject(asObject(status.delivery ?? {}).booking ?? {})
+                    .status ?? null,
+              }
+              : {}),
+            ...(action === "orders_v3" || action === "orders_v4"
+              ? {
+                quote_id: quote.id ?? null,
+                quote_version: quote.version ?? null,
+                proof_review_id: review.id ?? null,
+                has_dispatch:
+                  Object.keys(asObject(status.dispatch ?? {})).length > 0 ||
+                  asObject(status.delivery ?? {}).provider != null,
+                fulfillment_method: asObject(status.delivery ?? {}).method ??
+                  "delivery",
+                cooking_complete:
+                  asObject(status.delivery ?? {}).cooking_complete === true,
+              }
+              : {}),
+            request_id: status.request_id,
+            reference_code: status.reference_code,
+            state: status.state,
+            created_at: status.created_at,
+            item_count: Array.isArray(status.items)
+              ? status.items.reduce(
+                (sum, item) => sum + Number(asObject(item).quantity ?? 0),
+                0,
+              )
+              : 0,
+            final_total: quote.final_total ?? null,
+            fulfillment_status: fulfillment.status ?? null,
+            completed_at: fulfillment.completed_at ?? null,
+            has_open_proof_review: review.can_resubmit === true,
+          }];
+        }
+        return await rpc(
+          service,
+          action === "orders_v4"
+            ? "direct_order_public_orders_v4"
+            : action === "orders_v3"
+            ? "direct_order_public_orders_v3"
+            : "direct_order_public_orders_v2",
+          {
+            p_session_id: sessionId,
+            p_secret_hash: await hashSecret(secret),
+            p_limit: 50,
+          },
+        );
+      }
+      case "decide_requirement": {
+        return await rpc(service, "direct_order_public_decide_requirement", {
+          ...directOrderRequirementDecisionArgs(body),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
         });
       }
       case "message": {
@@ -783,9 +1395,198 @@ function productionDependencies(): DirectOrderDependencies {
         const message = requiredString(body, "message", 2000);
         return await rpc(service, "direct_order_public_message", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requestId,
           p_body: message,
+        });
+      }
+      case "refund_details": {
+        return await rpc(service, "direct_order_public_refund_details", {
+          p_session_id: requiredUuid(body, "session_id"),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
+          p_request_id: requiredUuid(body, "request_id"),
+          p_payload: asObject(body.refund_details),
+        });
+      }
+      case "charge_consent": {
+        if (typeof body.accept !== "boolean") {
+          throw new SafeHttpError(400, "INVALID_REQUEST");
+        }
+        return await rpc(service, "direct_order_public_charge_consent", {
+          p_session_id: requiredUuid(body, "session_id"),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
+          p_request_id: requiredUuid(body, "request_id"),
+          p_charge_id: requiredUuid(body, "charge_id"),
+          p_accept: body.accept,
+        });
+      }
+      case "customer_attachment_upload":
+      case "customer_attachment_commit":
+      case "customer_attachment_url":
+      case "customer_chat_attachment_upload":
+      case "customer_chat_attachment_commit":
+      case "staff_chat_attachment_upload":
+      case "staff_chat_attachment_commit":
+      case "staff_attachment_upload":
+      case "staff_attachment_commit":
+      case "staff_attachment_url": {
+        const staff = action.startsWith("staff_");
+        const generalChat = action.includes("_chat_attachment_");
+        const requestId = requiredUuid(body, "request_id");
+        let storeId: string;
+        let actorId: string | null = null;
+        let status: JsonObject;
+        if (staff) {
+          storeId = requiredUuid(body, "store_id");
+          const actor = await authenticateStaff(request);
+          actorId = actor.actorAuthId;
+          status = asObject(
+            await rpc(actor.actorClient, "direct_order_staff_detail_v3", {
+              p_store_id: storeId,
+              p_request_id: requestId,
+            }),
+          );
+        } else {
+          status = asObject(
+            await rpc(service, "direct_order_public_status_v3", {
+              p_session_id: requiredUuid(body, "session_id"),
+              p_secret_hash: await hashSecret(
+                requiredString(body, "secret", 128, secretPattern),
+              ),
+              p_request_id: requestId,
+            }),
+          );
+          storeId = String(status.store_id);
+        }
+        if (action.endsWith("_url")) {
+          const { data: message, error } = await service.from(
+            "direct_order_messages",
+          )
+            .select("attachment_storage_path,metadata").eq(
+              "id",
+              requiredUuid(body, "message_id"),
+            )
+            .eq("request_id", requestId).eq("restaurant_id", storeId)
+            .maybeSingle();
+          if (error || !message?.attachment_storage_path) {
+            throw new SafeHttpError(404, "PROOF_NOT_FOUND");
+          }
+          const bucket =
+            message.metadata?.attachment_bucket === "direct-order-chat"
+              ? "direct-order-chat"
+              : "direct-order-proofs";
+          const signed = await service.storage.from(bucket).createSignedUrl(
+            message.attachment_storage_path,
+            300,
+          );
+          if (signed.error || !signed.data?.signedUrl) {
+            throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+          }
+          return { signed_url: signed.data.signedUrl, expires_in: 300 };
+        }
+        if (generalChat && body.charge_id != null) {
+          throw new SafeHttpError(400, "DIRECT_ORDER_ATTACHMENT_INVALID");
+        }
+        const chargeId = staff || generalChat || body.charge_id == null
+          ? null
+          : requiredUuid(body, "charge_id");
+        const { filename, mime, path, extension } = directOrderAttachmentSpec(
+          body,
+          storeId,
+          requestId,
+          staff,
+          generalChat,
+        );
+        if (action.endsWith("_commit")) {
+          const existing = await service.from("direct_order_messages")
+            .select(
+              "id,created_at,sender_type,sender_auth_id,message_type,body,metadata",
+            )
+            .eq("restaurant_id", storeId).eq("request_id", requestId)
+            .eq("attachment_storage_path", path).maybeSingle();
+          if (existing.error) {
+            throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+          }
+          if (existing.data) {
+            if (
+              existing.data.sender_type !== (staff ? "cashier" : "customer") ||
+              (existing.data.metadata?.charge_id ?? null) !== chargeId ||
+              (generalChat && (existing.data.message_type !== "attachment" ||
+                existing.data.metadata?.attachment_kind !== "chat" ||
+                existing.data.metadata?.mime_type !== mime ||
+                existing.data.body !== filename ||
+                existing.data.sender_auth_id !== actorId)) ||
+              (!generalChat &&
+                existing.data.metadata?.attachment_kind === "chat")
+            ) {
+              throw new SafeHttpError(409, "DIRECT_ORDER_ATTACHMENT_INVALID");
+            }
+            return {
+              message_id: existing.data.id,
+              created_at: existing.data.created_at,
+            };
+          }
+        }
+        const support = asObject(status.support);
+        if (support.chat_open !== true) {
+          throw new SafeHttpError(409, "DIRECT_ORDER_REQUEST_NOT_CHATABLE");
+        }
+        if (
+          !staff && !generalChat &&
+          !(chargeId == null && status.state === "approved") &&
+          !(Array.isArray(support.charges) && support.charges.some((raw) => {
+            const c = asObject(raw);
+            return c.id === chargeId &&
+              ["pending", "review"].includes(String(c.status));
+          }))
+        ) throw new SafeHttpError(409, "DIRECT_ORDER_CHARGE_CHANGED");
+        if (action.endsWith("_upload")) {
+          const upload = await service.storage.from("direct-order-chat")
+            .createSignedUploadUrl(path);
+          if (upload.error || !upload.data?.token) {
+            throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
+          }
+          return { path, token: upload.data.token };
+        }
+        const downloaded = await service.storage.from("direct-order-chat")
+          .download(path);
+        if (downloaded.error || !downloaded.data) {
+          throw new SafeHttpError(409, "PROOF_UPLOAD_INCOMPLETE");
+        }
+        const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
+        const valid = generalChat
+          ? validateChatAttachmentBytes(bytes, extension)
+          : bytes.length > 0 && bytes.length <= 5242880 &&
+            (extension === "pdf"
+              ? bytes.length >= 8 &&
+                new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-"
+              : validateProofImage(bytes, extension));
+        if (!valid) {
+          throw new SafeHttpError(400, "DIRECT_ORDER_ATTACHMENT_INVALID");
+        }
+        if (generalChat) {
+          return await rpc(service, "direct_order_commit_chat_attachment", {
+            p_request_id: requestId,
+            p_store_id: storeId,
+            p_sender: staff ? "cashier" : "customer",
+            p_actor: actorId,
+            p_path: path,
+            p_filename: filename,
+            p_mime: mime,
+          });
+        }
+        return await rpc(service, "direct_order_commit_attachment", {
+          p_request_id: requestId,
+          p_store_id: storeId,
+          p_sender: staff ? "cashier" : "customer",
+          p_actor: actorId,
+          p_path: path,
+          p_filename: filename,
+          p_charge_id: chargeId,
         });
       }
       case "cancel": {
@@ -794,7 +1595,7 @@ function productionDependencies(): DirectOrderDependencies {
         const secret = requiredString(body, "secret", 128, secretPattern);
         return await rpc(service, "direct_order_public_cancel", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requestId,
         });
       }
@@ -821,7 +1622,7 @@ function productionDependencies(): DirectOrderDependencies {
               : "direct_order_public_status",
             {
               p_session_id: sessionId,
-              p_secret_hash: await sha256Hex(secret),
+              p_secret_hash: await hashSecret(secret),
               p_request_id: requestId,
             },
           ),
@@ -899,27 +1700,10 @@ function productionDependencies(): DirectOrderDependencies {
         if (!validProofPath(path, requestId)) {
           throw new SafeHttpError(400, "INVALID_PROOF");
         }
-        const [storeId, , fileName] = path.split("/");
-        const { data: objects, error: listError } = await service.storage
-          .from("direct-order-proofs")
-          .list(`${storeId}/${requestId}`, {
-            limit: 2,
-            search: fileName,
-          });
-        if (
-          listError || !objects?.some((object) => object.name === fileName)
-        ) throw new SafeHttpError(409, "PROOF_UPLOAD_INCOMPLETE");
-        const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
-        const { data: proofBlob, error: downloadError } = await service.storage
-          .from("direct-order-proofs")
-          .download(path);
-        const proofBytes = downloadError || !proofBlob
-          ? null
-          : new Uint8Array(await proofBlob.arrayBuffer());
-        if (!proofBytes || !validateProofImage(proofBytes, extension)) {
-          await service.storage.from("direct-order-proofs").remove([path]);
-          throw new SafeHttpError(400, "INVALID_PROOF");
-        }
+        await verifyProofUpload(
+          service.storage.from("direct-order-proofs"),
+          path,
+        );
         if (isV2) {
           const quoteId = requiredUuid(body, "quote_id");
           const reviewRequestId = body.review_request_id == null
@@ -927,7 +1711,7 @@ function productionDependencies(): DirectOrderDependencies {
             : requiredUuid(body, "review_request_id");
           return await rpc(service, "direct_order_public_commit_proof_v2", {
             p_session_id: sessionId,
-            p_secret_hash: await sha256Hex(secret),
+            p_secret_hash: await hashSecret(secret),
             p_request_id: requestId,
             p_quote_id: quoteId,
             p_storage_path: path,
@@ -936,7 +1720,7 @@ function productionDependencies(): DirectOrderDependencies {
         }
         return await rpc(service, "direct_order_public_commit_proof", {
           p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
+          p_secret_hash: await hashSecret(secret),
           p_request_id: requestId,
           p_storage_path: path,
         });
@@ -952,7 +1736,7 @@ function productionDependencies(): DirectOrderDependencies {
         });
         const { data: message, error: messageError } = await service
           .from("direct_order_messages")
-          .select("attachment_storage_path")
+          .select("attachment_storage_path,metadata")
           .eq("id", messageId)
           .eq("request_id", requestId)
           .eq("restaurant_id", storeId)
@@ -963,7 +1747,11 @@ function productionDependencies(): DirectOrderDependencies {
           throw new SafeHttpError(404, "PROOF_NOT_FOUND");
         }
         const { data, error } = await service.storage
-          .from("direct-order-proofs")
+          .from(
+            message?.metadata?.attachment_bucket === "direct-order-chat"
+              ? "direct-order-chat"
+              : "direct-order-proofs",
+          )
           .createSignedUrl(path, 300);
         if (error || !data?.signedUrl) {
           throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
@@ -989,6 +1777,18 @@ function productionDependencies(): DirectOrderDependencies {
         const rows = Array.isArray(candidates) ? candidates : [];
         const requestIds: string[] = [];
         const paths = new Set<string>(orphanPaths);
+        const orphanChats = await rpc(
+          service,
+          "direct_order_orphan_chat_candidates",
+          { p_limit: 100 },
+        );
+        const chatPaths = new Set<string>(
+          Array.isArray(orphanChats)
+            ? orphanChats.filter((p): p is string =>
+              typeof p === "string" && validChatObjectPath(p)
+            )
+            : [],
+        );
         for (const raw of rows) {
           if (!raw || typeof raw !== "object") continue;
           const row = raw as JsonObject;
@@ -1005,6 +1805,28 @@ function productionDependencies(): DirectOrderDependencies {
                 paths.add(path);
               }
             }
+          }
+        }
+        for (const raw of rows) {
+          const row = asObject(raw);
+          if (Array.isArray(row.chat_paths)) {
+            for (const path of row.chat_paths) {
+              if (
+                typeof path === "string" &&
+                /^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp|pdf)$/
+                  .test(path) &&
+                path.split("/")[1] === row.request_id
+              ) {
+                chatPaths.add(path);
+              }
+            }
+          }
+        }
+        if (chatPaths.size > 0) {
+          const removed = await service.storage.from("direct-order-chat")
+            .remove([...chatPaths]);
+          if (removed.error) {
+            throw new SafeHttpError(503, "CLEANUP_TEMPORARILY_UNAVAILABLE");
           }
         }
         if (paths.size > 0) {

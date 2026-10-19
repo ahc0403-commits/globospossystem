@@ -1,23 +1,32 @@
+import 'direct_order_translation.dart';
+import 'direct_order_requirements.dart';
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/payments/vietqr_payload.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../widgets/language_switcher.dart';
 import 'direct_order_arrival_alert_sound.dart';
 import 'direct_order_copy.dart';
+import 'direct_order_stage.dart';
+import 'direct_order_details_sheet.dart';
+import 'direct_order_customer_push_service.dart';
+import 'direct_order_support.dart';
 import 'direct_order_localization.dart';
 import 'direct_order_dialog.dart';
 import 'direct_order_models.dart';
 import 'direct_order_service.dart';
+import 'direct_order_tracking_link.dart';
 
 enum _CustomerView { menu, address, status }
 
@@ -25,11 +34,25 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
   const DirectOrderStorefrontScreen({
     super.key,
     required this.slug,
+    this.requestId,
+    this.accessKey,
     this.service = directOrderService,
+    this.statusSafetyRefreshInterval = const Duration(seconds: 15),
+    this.statusSafetyRefreshJitter = const Duration(seconds: 3),
+    this.pollRandom,
+    this.pickProofImage,
+    this.pushService,
   });
 
   final String slug;
+  final String? requestId;
+  final String? accessKey;
   final DirectOrderService service;
+  final Duration statusSafetyRefreshInterval;
+  final Duration statusSafetyRefreshJitter;
+  final math.Random? pollRandom;
+  final Future<XFile?> Function()? pickProofImage;
+  final DirectOrderCustomerPushService? pushService;
 
   @override
   State<DirectOrderStorefrontScreen> createState() =>
@@ -42,12 +65,27 @@ class _DirectOrderStorefrontScreenState
   final String _submitDraftId = const Uuid().v4();
   final _cart = <String, int>{};
   final _itemNotes = <String, String>{};
+  final _dinerController = TextEditingController(text: '1');
+  bool _utensilsRequested = true;
+  String? _closedProgress;
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _detailController = TextEditingController();
   final _noteController = TextEditingController();
   final _messageController = TextEditingController();
+  final _menuScroll = ScrollController();
+  final _categoryScroll = ScrollController();
+  final _statusScroll = ScrollController();
+  final _sentMessageKey = GlobalKey();
+  String? _sentMessageId;
+  final _categoryKeys = <String, GlobalKey>{};
+  String? _selectedCategoryId;
+  final _proofAttempts = <String, DirectOrderProofAttempt>{};
+  final _proofErrors = <String, String>{};
+  final _proofRefreshFailures = <String>{};
+  final _submittedChargeVersions = <String, int>{};
+  String? _proofBusyRequestId;
   final _money = NumberFormat.currency(
     locale: 'vi_VN',
     symbol: '₫',
@@ -57,7 +95,9 @@ class _DirectOrderStorefrontScreenState
   DirectOrderStorefront? _storefront;
   DirectOrderSession? _session;
   DirectOrderAddress? _savedAddress;
-  DirectOrderStatus? _status;
+  final _statusUpdates = ValueNotifier<DirectOrderStatus?>(null);
+  DirectOrderStatus? get _status => _statusUpdates.value;
+  set _status(DirectOrderStatus? value) => _statusUpdates.value = value;
   List<DirectOrderSummary> _orders = const [];
   _CustomerView _view = _CustomerView.menu;
   Timer? _statusTimer;
@@ -65,13 +105,22 @@ class _DirectOrderStorefrontScreenState
   bool _submitting = false;
   bool _rememberAddress = false;
   bool _proofUploading = false;
+  bool _proofSelecting = false;
   bool _sendingMessage = false;
   bool _refreshingStatus = false;
   bool _pausedByServer = false;
   bool _paymentAlertsEnabled = true;
   String? _errorCode;
+  bool _orderClosed = false;
+  String? _accessKey;
   int _loadGeneration = 0;
   int _statusMutationRevision = 0;
+  bool _isForeground = true;
+  late final math.Random _pollRandom;
+  late final DirectOrderCustomerPushService _pushService;
+  DirectOrderPushReadiness _pushReadiness = DirectOrderPushReadiness.off;
+  bool _pushBusy = false;
+  String? _pushLocale;
 
   String get _languageCode =>
       Localizations.maybeLocaleOf(context)?.languageCode ?? 'vi';
@@ -80,27 +129,111 @@ class _DirectOrderStorefrontScreenState
   @override
   void initState() {
     super.initState();
+    _pollRandom = widget.pollRandom ?? math.Random();
+    _pushService = widget.pushService ?? DirectOrderCustomerPushService();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void didUpdateWidget(covariant DirectOrderStorefrontScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.slug != widget.slug ||
+        oldWidget.requestId != widget.requestId ||
+        oldWidget.accessKey != widget.accessKey) {
+      _statusMutationRevision++;
+      _statusTimer?.cancel();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
+    _pushService.dispose();
+    _dinerController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
     _detailController.dispose();
     _noteController.dispose();
     _messageController.dispose();
+    _menuScroll.dispose();
+    _categoryScroll.dispose();
+    _statusScroll.dispose();
+    _statusUpdates.dispose();
     super.dispose();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _revealSelectedCategory();
+    final locale = _languageCode;
+    final changed = _pushLocale != null && _pushLocale != locale;
+    _pushLocale = locale;
+    if (changed && _session != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_setCustomerPush(restore: true));
+      });
+    }
+  }
+
+  List<DirectOrderCategory> get _menuCategories {
+    final storefront = _storefront;
+    if (storefront == null) return const [];
+    final populated = storefront.items.map((item) => item.categoryId).toSet();
+    return storefront.categories
+        .where((category) => populated.contains(category.id))
+        .toList();
+  }
+
+  void _reconcileCategories() {
+    if (_selectedCategoryId != null &&
+        !_menuCategories.any((c) => c.id == _selectedCategoryId)) {
+      _selectedCategoryId = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _menuScroll.hasClients) _menuScroll.jumpTo(0);
+      });
+    }
+    _revealSelectedCategory();
+  }
+
+  void _revealSelectedCategory() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _view != _CustomerView.menu) return;
+      final target =
+          _categoryKeys[_selectedCategoryId ?? 'all']?.currentContext;
+      if (target != null) Scrollable.ensureVisible(target, alignment: 0.5);
+    });
+  }
+
+  void _selectCategory(String? id) {
+    if (_selectedCategoryId == id) return;
+    setState(() => _selectedCategoryId = id);
+    if (_menuScroll.hasClients) _menuScroll.jumpTo(0);
+    _revealSelectedCategory();
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _session != null) {
-      unawaited(_refreshStatus(silent: true));
+    _isForeground = state == AppLifecycleState.resumed;
+    if (_isForeground && _session != null) {
+      unawaited(_refreshStatusAfterResume());
+    } else {
+      _statusTimer?.cancel();
+      _statusTimer = null;
+    }
+  }
+
+  Future<void> _refreshStatusAfterResume() async {
+    await _refreshStatus(silent: true);
+    if (mounted) unawaited(_setCustomerPush(restore: true));
+    if (mounted && _hasPendingUpdates) {
+      _startStatusPolling();
     }
   }
 
@@ -110,22 +243,49 @@ class _DirectOrderStorefrontScreenState
       _loading = true;
       _errorCode = null;
       _pausedByServer = false;
+      _orderClosed = false;
     });
     try {
-      final storefront = await widget.service.fetchStorefront(widget.slug);
-      final session = await widget.service.ensureSession(
-        slug: widget.slug,
-        locale: _languageCode,
-      );
+      final cached = widget.requestId == null
+          ? await widget.service.loadRestorableSession(widget.slug)
+          : await widget.service.resumeOrder(
+              slug: widget.slug,
+              requestId: widget.requestId!,
+              accessKey: widget.accessKey ?? '',
+            );
+      _accessKey = widget.accessKey;
+      DirectOrderStorefront storefront;
+      try {
+        storefront = await widget.service.fetchStorefront(widget.slug);
+      } catch (_) {
+        if (cached == null) rethrow;
+        storefront = await widget.service.resumeStorefront(cached);
+      }
+      final session =
+          cached ??
+          await widget.service.ensureSession(
+            slug: widget.slug,
+            locale: _languageCode,
+          );
       final values = await Future.wait<Object?>([
         widget.service.loadAddress(widget.slug),
         widget.service.loadActiveRequestId(widget.slug),
-        widget.service.listOrders(session: session),
+        session.orderScoped
+            ? widget.service.fetchStatus(
+                session: session,
+                requestId: session.id,
+              )
+            : widget.service.listOrders(session: session),
         widget.service.loadPaymentAlertEnabled(widget.slug),
       ]);
       final saved = values[0] as DirectOrderAddress?;
-      final savedRequestId = values[1] as String?;
-      final orders = values[2] as List<DirectOrderSummary>;
+      final savedRequestId = widget.requestId ?? values[1] as String?;
+      final scopedStatus = values[2] is DirectOrderStatus
+          ? values[2] as DirectOrderStatus
+          : null;
+      final orders = scopedStatus == null
+          ? values[2] as List<DirectOrderSummary>
+          : [DirectOrderSummary.fromStatus(scopedStatus)];
       final alertsEnabled = values[3] as bool;
       final activeOrders = orders.where((order) => !order.isTerminal).toList();
       final selectedId =
@@ -133,11 +293,9 @@ class _DirectOrderStorefrontScreenState
           ? savedRequestId
           : activeOrders.isNotEmpty
           ? activeOrders.first.requestId
-          : orders.isNotEmpty
-          ? orders.first.requestId
           : null;
-      DirectOrderStatus? status;
-      if (selectedId != null) {
+      DirectOrderStatus? status = scopedStatus;
+      if (selectedId != null && status == null) {
         try {
           status = await widget.service.fetchStatus(
             session: session,
@@ -150,6 +308,7 @@ class _DirectOrderStorefrontScreenState
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _storefront = storefront;
+        _reconcileCategories();
         _session = session;
         _savedAddress = saved;
         _rememberAddress = saved != null;
@@ -160,9 +319,19 @@ class _DirectOrderStorefrontScreenState
         _loading = false;
       });
       if (saved != null) _populateAddress(saved);
-      if (status != null) unawaited(_notifyForStatus(status));
-      if (orders.any((order) => !order.isTerminal)) _startStatusPolling();
+      if (status != null) await _publishOrderLink(status);
+      if (!mounted || generation != _loadGeneration) return;
+      if (status != null && !_orderClosed) unawaited(_notifyForStatus(status));
+      if (_hasPendingUpdates) _startStatusPolling();
+      unawaited(_setCustomerPush(restore: true));
     } catch (error) {
+      if (!mounted || generation != _loadGeneration) return;
+      if (error is DirectOrderException &&
+          error.code == 'DIRECT_ORDER_ORDER_CLOSED' &&
+          widget.requestId != null) {
+        await widget.service.clearOrderAccess(widget.slug, widget.requestId!);
+        _closeOrderMemory(widget.requestId!);
+      }
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _loading = false;
@@ -173,6 +342,92 @@ class _DirectOrderStorefrontScreenState
     }
   }
 
+  String _orderPath(String requestId, String accessKey) => Uri(
+    path: '/order/${widget.slug}/r/$requestId',
+    fragment: 'access=$accessKey',
+  ).toString();
+
+  Future<void> _publishOrderLink(
+    DirectOrderStatus status, {
+    bool force = false,
+  }) async {
+    if (status.fulfillmentStatus == 'completed' &&
+            !_hasCompletionRefund(status) ||
+        status.support['chat_open'] == false) {
+      _closedProgress = directOrderCustomerProgress(
+        status.state,
+        status.fulfillmentStatus,
+        isPickup: status.delivery?.isPickup == true,
+      );
+      await widget.service.clearOrderAccess(widget.slug, status.requestId);
+      if (mounted) setState(() => _closeOrderMemory(status.requestId));
+      return;
+    }
+    final session = _session;
+    final router = mounted ? GoRouter.maybeOf(context) : null;
+    if (session == null || (router == null && !force)) return;
+    try {
+      final key = await widget.service.ensureOrderAccess(
+        slug: widget.slug,
+        session: session,
+        requestId: status.requestId,
+      );
+      if (!mounted || _status?.requestId != status.requestId) return;
+      _accessKey = key;
+      if (widget.requestId != status.requestId || widget.accessKey != key) {
+        router?.replace(_orderPath(status.requestId, key));
+      }
+    } catch (error) {
+      // A rolling server upgrade must not hide an otherwise valid order.
+      if (force) _showError(error);
+    }
+  }
+
+  bool _hasCompletionRefund(DirectOrderStatus status) {
+    // The server owns the post-completion support/evidence access decision.
+    if (status.support['access_open'] is bool) {
+      return status.support['access_open'] == true;
+    }
+    return supportNumber(status.support['overpayment_due']) > 0 ||
+        supportNumber(status.support['pickup_delivery_refund_due']) > 0 ||
+        supportNumber(
+              supportMap(status.support['delivery_cost_balance'])['refund_due'],
+            ) >
+            0 ||
+        (status.delivery?.offer?.status == 'accepted' &&
+            (status.delivery?.offer?.refundDue ?? 0) > 0 &&
+            status.delivery?.offer?.refundRecorded == false);
+  }
+
+  void _closeOrderMemory(String requestId) {
+    _statusTimer?.cancel();
+    _statusTimer = null;
+    _accessKey = null;
+    _proofAttempts.remove(requestId);
+    if (_status?.requestId == requestId) {
+      _status = null;
+      _messageController.clear();
+    }
+    _orders = _orders.where((order) => order.requestId != requestId).toList();
+    _orderClosed = true;
+  }
+
+  Future<void> _copyOrderLink() async {
+    final status = _status;
+    if (status == null) return;
+    await _publishOrderLink(status, force: true);
+    final key = _accessKey;
+    if (!mounted || key == null) return;
+    final path = Uri.parse(_orderPath(status.requestId, key));
+    final link = Uri.base.replace(
+      path: path.path,
+      query: '',
+      fragment: path.fragment,
+    );
+    await Clipboard.setData(ClipboardData(text: link.toString()));
+    if (mounted) _snack(_copy.orderLinkCopied);
+  }
+
   void _populateAddress(DirectOrderAddress address) {
     _nameController.text = address.customerName;
     _phoneController.text = address.customerPhone;
@@ -181,7 +436,41 @@ class _DirectOrderStorefrontScreenState
     _rememberAddress = true;
   }
 
-  void _selectView(_CustomerView view) => setState(() => _view = view);
+  Future<void> _selectView(_CustomerView view) async {
+    if (view != _CustomerView.status) {
+      try {
+        final storefront = await widget.service.fetchStorefront(widget.slug);
+        if (!mounted) return;
+        setState(() {
+          _storefront = storefront;
+          _reconcileCategories();
+          _pausedByServer = false;
+        });
+      } catch (error) {
+        if (!mounted) return;
+        if (_status == null) {
+          _showError(error);
+          return;
+        }
+        setState(() => _pausedByServer = true);
+      }
+    }
+    if (mounted) setState(() => _view = view);
+  }
+
+  bool get _hasPendingUpdates =>
+      !_orderClosed &&
+      (_orders.any((order) => !order.isTerminal) ||
+          (_status?.support['chat_open'] == true &&
+              const {
+                'cancelled',
+                'rejected',
+                'expired',
+              }.contains(_status?.state)) ||
+          (_status?.delivery?.offer?.status == 'accepted' &&
+              (_status?.delivery?.offer?.refundDue ?? 0) > 0 &&
+              _status?.delivery?.offer?.refundRecorded == false) ||
+          (_status != null && _hasCompletionRefund(_status!)));
 
   void _changeQuantity(String itemId, int delta) {
     setState(() {
@@ -207,11 +496,190 @@ class _DirectOrderStorefrontScreenState
 
   int get _cartCount => _cart.values.fold(0, (sum, value) => sum + value);
 
+  Future<void> _editItemRequest(DirectOrderMenuItem item) async {
+    var draft = _itemNotes[item.id] ?? '';
+    final note = await showDirectOrderDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(item.localizedName(_languageCode)),
+        content: TextFormField(
+          key: Key('direct_item_request_input_${item.id}'),
+          initialValue: draft,
+          onChanged: (value) => draft = value,
+          autofocus: true,
+          maxLength: 300,
+          minLines: 2,
+          maxLines: 4,
+          decoration: InputDecoration(
+            labelText: _copy.itemRequest,
+            hintText: _copy.itemRequestHint,
+            helperText: _copy.itemRequestHelp,
+            helperMaxLines: 3,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(_copy.close),
+          ),
+          FilledButton(
+            key: const Key('direct_item_request_save'),
+            onPressed: () => Navigator.pop(context, draft.trim()),
+            child: Text(_copy.save),
+          ),
+        ],
+      ),
+    );
+    if (mounted && note != null && _cart.containsKey(item.id)) {
+      setState(() {
+        if (note.isEmpty) {
+          _itemNotes.remove(item.id);
+        } else {
+          _itemNotes[item.id] = note;
+        }
+      });
+    }
+  }
+
+  Future<void> _showOrderDetails(DirectOrderStatus status) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        constraints: const BoxConstraints(maxWidth: 920),
+        builder: (context) => DirectOrderDetailsSheet(
+          status: status,
+          languageCode: _languageCode,
+        ),
+      );
+
+  Future<void> _showCart() async {
+    final items = _storefront!.items
+        .where((item) => (_cart[item.id] ?? 0) > 0)
+        .toList();
+    final openAddress = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 640),
+      builder: (context) => StatefulBuilder(
+        builder: (context, refreshSheet) => SafeArea(
+          child: SizedBox(
+            key: const Key('direct_cart_sheet'),
+            height: MediaQuery.sizeOf(context).height * 0.78,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.shopping_cart_outlined),
+                  title: Text(
+                    _copy.cart,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  subtitle: Text(_copy.itemsCount(_cartCount)),
+                  trailing: IconButton(
+                    key: const Key('direct_cart_close'),
+                    tooltip: _copy.close,
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const Divider(height: 24),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final quantity = _cart[item.id]!;
+                      return Column(
+                        key: Key('direct_cart_item_${item.id}'),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            item.localizedName(_languageCode),
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${_money.format(item.price)} × $quantity',
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                _money.format(item.price * quantity),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ],
+                          ),
+                          if (_itemNotes[item.id]?.isNotEmpty == true)
+                            Text(
+                              '${_copy.itemRequest}: ${_itemNotes[item.id]}',
+                            ),
+                          TextButton.icon(
+                            key: Key('direct_cart_request_${item.id}'),
+                            onPressed: () async {
+                              await _editItemRequest(item);
+                              if (context.mounted) refreshSheet(() {});
+                            },
+                            icon: const Icon(Icons.edit_note),
+                            label: Text(_copy.addItemRequest),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text(_copy.subtotal)),
+                          const SizedBox(width: 12),
+                          Text(
+                            key: const Key('direct_cart_subtotal'),
+                            _money.format(_cartSubtotal),
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _copy.cartQuoteNotice,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        key: const Key('direct_cart_address'),
+                        onPressed: () => Navigator.pop(context, true),
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                        label: Text(_copy.address),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (mounted && openAddress == true) {
+      await _selectView(_CustomerView.address);
+    }
+  }
+
   DirectOrderAddress? _composeAddress() {
     if (_nameController.text.trim().isEmpty ||
         _phoneController.text.trim().isEmpty ||
-        _addressController.text.trim().length < 3 ||
-        _detailController.text.trim().isEmpty) {
+        _addressController.text.trim().length < 3) {
       return null;
     }
     return DirectOrderAddress(
@@ -228,6 +696,11 @@ class _DirectOrderStorefrontScreenState
       setState(() => _view = _CustomerView.menu);
       return;
     }
+    final dinerCount = int.tryParse(_dinerController.text.trim());
+    if (dinerCount == null || dinerCount < 1 || dinerCount > 100) {
+      _snack(_copy.errorMessage('DIRECT_ORDER_DINER_COUNT_INVALID'));
+      return;
+    }
     final address = _composeAddress();
     if (address == null) {
       _snack(_copy.requiredFields);
@@ -237,11 +710,18 @@ class _DirectOrderStorefrontScreenState
       _snack(_copy.invalidPhone);
       return;
     }
-    final session = _session;
+    var session = _session;
     if (session == null) return;
     unawaited(directOrderArrivalAlertSoundService.prepare());
     setState(() => _submitting = true);
     try {
+      if (session.orderScoped) {
+        session = await widget.service.ensureSession(
+          slug: widget.slug,
+          locale: _languageCode,
+        );
+        _session = session;
+      }
       final submission = await widget.service.submit(
         slug: widget.slug,
         session: session,
@@ -252,6 +732,8 @@ class _DirectOrderStorefrontScreenState
         address: address,
         rememberAddress: _rememberAddress,
         customerNote: _noteController.text.trim(),
+        dinerCount: dinerCount,
+        utensilsRequested: _utensilsRequested,
       );
       final status = await widget.service.fetchStatus(
         session: session,
@@ -266,6 +748,7 @@ class _DirectOrderStorefrontScreenState
         _view = _CustomerView.status;
       });
       _startStatusPolling();
+      await _publishOrderLink(status);
     } catch (error) {
       if (error is DirectOrderException &&
           error.code == 'DIRECT_ORDER_STOREFRONT_PAUSED') {
@@ -280,9 +763,22 @@ class _DirectOrderStorefrontScreenState
 
   void _startStatusPolling() {
     _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      _refreshStatus(silent: true);
-    });
+    _statusTimer = null;
+    if (!_isForeground || !_hasPendingUpdates) return;
+    _statusTimer = Timer(
+      jitteredPollDelay(
+        widget.statusSafetyRefreshInterval,
+        maximumJitter: widget.statusSafetyRefreshJitter,
+        random: _pollRandom,
+      ),
+      () async {
+        _statusTimer = null;
+        await _refreshStatus(silent: true);
+        if (mounted && _hasPendingUpdates) {
+          _startStatusPolling();
+        }
+      },
+    );
   }
 
   Future<void> _refreshStatus({bool silent = false}) async {
@@ -297,41 +793,105 @@ class _DirectOrderStorefrontScreenState
       final previousOrders = {
         for (final order in _orders) order.requestId: order,
       };
-      final orders = await widget.service.listOrders(session: session);
-      final status = requestId == null || requestId.isEmpty
-          ? null
-          : await widget.service.fetchStatus(
+      final scopedStatus = session.orderScoped
+          ? await widget.service.fetchStatus(
               session: session,
-              requestId: requestId,
-            );
-      if (!mounted || revision != _statusMutationRevision) return;
-      if (status != null) {
-        await _notifyForStatus(status);
-      }
-      for (final order in orders) {
-        if (order.requestId == requestId) continue;
-        final previous = previousOrders[order.requestId];
-        final becameQuoted =
-            order.state == 'quoted' && previous?.state != 'quoted';
-        final needsNewProof =
-            order.hasOpenProofReview && previous?.hasOpenProofReview != true;
-        if (becameQuoted || needsNewProof) {
-          final changedStatus = await widget.service.fetchStatus(
-            session: session,
-            requestId: order.requestId,
-          );
-          await _notifyForStatus(changedStatus);
-        }
-      }
+              requestId: session.id,
+            )
+          : null;
+      final orders = scopedStatus == null
+          ? await widget.service.listOrders(session: session)
+          : [DirectOrderSummary.fromStatus(scopedStatus)];
+      final status =
+          scopedStatus ??
+          (requestId == null || requestId.isEmpty
+              ? null
+              : await widget.service.fetchStatus(
+                  session: session,
+                  requestId: requestId,
+                ));
       if (!mounted || revision != _statusMutationRevision) return;
       setState(() {
         _orders = orders;
         if (status != null) _status = status;
       });
-      if (!orders.any((order) => !order.isTerminal)) {
+      if (status != null) {
+        await _publishOrderLink(status);
+        if (!_orderClosed) unawaited(_notifyForStatus(status));
+      }
+      for (final order in orders) {
+        if (order.requestId == requestId || order.isTerminal) continue;
+        final previous = previousOrders[order.requestId];
+        if (order.proofReviewId != null &&
+            order.proofReviewId != previous?.proofReviewId) {
+          unawaited(
+            _notifyEvent(
+              '${order.requestId}:proof-review:${order.proofReviewId}',
+              '${order.referenceCode} · ${_copy.replaceProof}',
+            ),
+          );
+        } else if (order.state == 'quoted' &&
+            order.quoteId != null &&
+            (order.quoteId != previous?.quoteId ||
+                order.quoteVersion != previous?.quoteVersion)) {
+          unawaited(
+            _notifyEvent(
+              '${order.requestId}:quote:${order.quoteId}:${order.quoteVersion}',
+              _copy.quoteArrived,
+            ),
+          );
+        } else if (order.hasDispatch &&
+            order.fulfillmentStatus == 'dispatched' &&
+            (previous?.fulfillmentStatus != 'dispatched' ||
+                previous?.hasDispatch != true)) {
+          unawaited(
+            _notifyEvent(
+              '${order.requestId}:driver-handoff',
+              _copy.driverHandoffNotice,
+            ),
+          );
+        } else if (order.fulfillmentStatus == 'ready' &&
+            previous?.fulfillmentStatus != 'ready') {
+          unawaited(
+            _notifyEvent(
+              '${order.requestId}:${order.fulfillmentMethod == 'pickup' ? 'pickup-ready' : 'packed'}',
+              _copy.customerProgressLabel(
+                order.fulfillmentMethod == 'pickup'
+                    ? 'customer_pickup_ready'
+                    : 'customer_packed',
+              ),
+            ),
+          );
+        } else if (order.cookingComplete &&
+            const {
+              null,
+              'pending',
+              'preparing',
+            }.contains(order.fulfillmentStatus) &&
+            previous?.cookingComplete != true) {
+          unawaited(
+            _notifyEvent(
+              '${order.requestId}:cooked',
+              _copy.customerProgressLabel('customer_cooked'),
+            ),
+          );
+        }
+      }
+      if (!mounted || revision != _statusMutationRevision) return;
+      if (!orders.any((order) => !order.isTerminal) &&
+          !_hasPendingUpdates &&
+          _status?.support['chat_open'] == false) {
         _statusTimer?.cancel();
+        _statusTimer = null;
       }
     } catch (error) {
+      if (!mounted || revision != _statusMutationRevision) return;
+      if (error is DirectOrderException &&
+          error.code == 'DIRECT_ORDER_ORDER_CLOSED' &&
+          requestId != null) {
+        await widget.service.clearOrderAccess(widget.slug, requestId);
+        if (mounted) setState(() => _closeOrderMemory(requestId));
+      }
       if (!silent) _showError(error);
     } finally {
       _refreshingStatus = false;
@@ -348,11 +908,37 @@ class _DirectOrderStorefrontScreenState
   }
 
   Future<void> _notifyForStatus(DirectOrderStatus status) async {
+    if (status.fulfillmentStatus == 'completed' ||
+        directOrderStage(status.state, status.fulfillmentStatus) ==
+            DirectOrderStage.exception) {
+      return;
+    }
     final quote = status.quote;
     final review = status.proofReview;
     String? eventKey;
     String? message;
-    if (review != null) {
+    if (status.delivery?.isPickup == true &&
+        status.fulfillmentStatus == 'ready') {
+      eventKey = '${status.requestId}:pickup-ready';
+      message = _copy.pickupReadyNotice;
+    } else if (status.fulfillmentStatus == 'dispatched' &&
+        status.hasDriverHandoff) {
+      eventKey = '${status.requestId}:driver-handoff';
+      message = _copy.driverHandoffNotice;
+    } else if (status.state == 'approved' &&
+        status.fulfillmentStatus == 'ready') {
+      eventKey = '${status.requestId}:packed';
+      message = _copy.customerProgressLabel('customer_packed');
+    } else if (status.state == 'approved' &&
+        const {
+          null,
+          'pending',
+          'preparing',
+        }.contains(status.fulfillmentStatus) &&
+        status.delivery?.cookingComplete == true) {
+      eventKey = '${status.requestId}:cooked';
+      message = _copy.customerProgressLabel('customer_cooked');
+    } else if (review != null) {
       eventKey = '${status.requestId}:proof-review:${review.id}';
       message = '${status.referenceCode} · ${_copy.replaceProof}';
     } else if (quote != null && status.state == 'quoted') {
@@ -360,9 +946,20 @@ class _DirectOrderStorefrontScreenState
       message = quote.version > 1 ? _copy.quoteChanged : _copy.quoteArrived;
     }
     if (eventKey == null || message == null) return;
-    final isNew = await widget.service.markAlertSeen(widget.slug, eventKey);
+    await _notifyEvent(eventKey, message);
+  }
+
+  Future<void> _notifyEvent(String eventKey, String message) async {
+    bool isNew;
+    try {
+      isNew = await widget.service.markAlertSeen(widget.slug, eventKey);
+    } catch (_) {
+      return;
+    }
     if (!isNew || !mounted) return;
-    _snack('$message ${_money.format(quote?.finalTotal ?? 0)}');
+    if (!eventKey.contains(':quote:')) {
+      _snack(message);
+    }
     if (_paymentAlertsEnabled) {
       try {
         await directOrderArrivalAlertSoundService.play();
@@ -393,7 +990,8 @@ class _DirectOrderStorefrontScreenState
         _view = _CustomerView.status;
         _loading = false;
       });
-      if (_orders.any((order) => !order.isTerminal)) _startStatusPolling();
+      if (_hasPendingUpdates) _startStatusPolling();
+      await _publishOrderLink(status);
     } catch (error) {
       if (!mounted || revision != _statusMutationRevision) return;
       setState(() => _loading = false);
@@ -429,7 +1027,7 @@ class _DirectOrderStorefrontScreenState
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final order = _orders[index];
-                      final status = order.fulfillmentStatus ?? order.state;
+
                       return ListTile(
                         key: Key('direct_customer_order_${order.requestId}'),
                         selected: order.requestId == _status?.requestId,
@@ -441,7 +1039,7 @@ class _DirectOrderStorefrontScreenState
                         ),
                         title: Text('#${order.referenceCode}'),
                         subtitle: Text(
-                          '${_copy.stateLabel(status)} · '
+                          '${_copy.customerProgressLabel(directOrderCustomerProgress(order.state, order.fulfillmentStatus, cookingComplete: order.cookingComplete, isPickup: order.fulfillmentMethod == 'pickup', handoffConfirmed: order.hasDispatch, driverBooked: order.bookingStatus == 'booked'))} · '
                           '${_copy.itemsCount(order.itemCount)}',
                         ),
                         trailing: Text(
@@ -486,70 +1084,319 @@ class _DirectOrderStorefrontScreenState
     _snack(enabled ? _copy.paymentAlertEnabled : _copy.paymentAlertDisabled);
   }
 
-  Future<void> _uploadProof() async {
+  bool _canSendProof(DirectOrderStatus status) {
+    if (directOrderStage(status.state, status.fulfillmentStatus) ==
+        DirectOrderStage.exception) {
+      return false;
+    }
+    final quote = status.quote;
+    if (quote == null) return false;
+    if (status.state == 'awaiting_payment_review' &&
+        quote.status == 'locked' &&
+        status.proofReview?.canResubmit == true) {
+      return true;
+    }
+    return status.state == 'quoted' &&
+        quote.status == 'active' &&
+        (quote.amountFinalizedAt != null ||
+            quote.expiresAt == null ||
+            quote.expiresAt!.isAfter(DateTime.now()));
+  }
+
+  bool _canShowPaymentDetails(DirectOrderStatus status) =>
+      status.state == 'quoted' &&
+      directOrderStage(status.state, status.fulfillmentStatus) !=
+          DirectOrderStage.exception &&
+      _canSendProof(status) &&
+      supportNumber(status.support['food_received']) <= 0 &&
+      _primaryCharge(status) == null &&
+      _proofAttemptFor(status) == null &&
+      _proofAttempts[status.requestId]?.outcomeUncertain != true;
+
+  String _paymentSummaryLabel(DirectOrderStatus status) {
+    if (directOrderStage(status.state, status.fulfillmentStatus) ==
+        DirectOrderStage.exception) {
+      return _copy.stateLabel(
+        status.fulfillmentStatus == 'cancelled' ? 'cancelled' : status.state,
+      );
+    }
+    final charge = _primaryCharge(status);
+    if (charge != null) {
+      return _customerChargeState(status, charge) == 'review'
+          ? _copy.additionalPaymentReview
+          : _copy.additionalPaymentPending;
+    }
+    if (_hasUnderpayment(status)) return _copy.additionalPaymentPreparing;
+    if (status.state == 'approved') return _copy.paymentCompleted;
+    if (status.proofReview?.canResubmit == true) return _copy.replaceProof;
+    if (status.state == 'awaiting_payment_review' ||
+        _proofAttemptFor(status)?.complete == true) {
+      return _copy.paymentReviewPending;
+    }
+    return _canShowPaymentDetails(status)
+        ? _copy.paymentPending
+        : _copy.amountDetails;
+  }
+
+  bool _hasUnderpayment(DirectOrderStatus status) =>
+      const {'quoted', 'awaiting_payment_review'}.contains(status.state) &&
+      supportNumber(status.support['food_received']) > 0 &&
+      supportNumber(status.support['food_due']) > 0 &&
+      directOrderStage(status.state, status.fulfillmentStatus) !=
+          DirectOrderStage.exception;
+
+  num _summaryAmount(DirectOrderStatus status) {
+    final charge = _primaryCharge(status);
+    if (charge != null) return _chargeDue(status, charge);
+    return _hasUnderpayment(status)
+        ? supportNumber(status.support['food_due'])
+        : status.quote!.finalTotal;
+  }
+
+  num _chargeDue(DirectOrderStatus status, Map<String, dynamic> charge) {
+    if (const {'paid', 'void'}.contains(charge['status'])) return 0;
+    return math.max(
+      0.0,
+      charge['kind'] == 'food_balance' && status.support.containsKey('food_due')
+          ? supportNumber(status.support['food_due'])
+          : supportNumber(charge['amount']) - supportNumber(charge['received']),
+    );
+  }
+
+  Map<String, dynamic>? _primaryCharge(DirectOrderStatus status) {
+    if (directOrderStage(status.state, status.fulfillmentStatus) ==
+        DirectOrderStage.exception) {
+      return null;
+    }
+    Map<String, dynamic>? deliveryCharge;
+    for (final charge in supportRows(status.support['charges']).reversed) {
+      if (!const {'pending', 'review'}.contains(charge['status']) ||
+          _chargeDue(status, charge) <= 0) {
+        continue;
+      }
+      if (charge['kind'] == 'food_balance') return charge;
+      deliveryCharge ??= charge;
+    }
+    return deliveryCharge;
+  }
+
+  String _customerChargeState(
+    DirectOrderStatus status,
+    Map<String, dynamic> charge,
+  ) {
+    final submittedVersion =
+        _submittedChargeVersions['${status.requestId}:${charge['id']}'];
+    if (charge['status'] == 'pending' &&
+        submittedVersion != null &&
+        supportNumber(status.support['version']).toInt() == submittedVersion) {
+      return 'review';
+    }
+    return charge['status'].toString();
+  }
+
+  bool _canPayCharge(DirectOrderStatus status, Map<String, dynamic> charge) =>
+      _customerChargeState(status, charge) == 'pending' &&
+      _chargeDue(status, charge) > 0 &&
+      status.support['chat_open'] != false &&
+      directOrderStage(status.state, status.fulfillmentStatus) !=
+          DirectOrderStage.exception &&
+      (charge['kind'] != 'food_balance' ||
+          _primaryCharge(status)?['id'] == charge['id']);
+
+  String _quoteDeliveryNotice(DirectOrderStatus status) {
+    final supportCopy = DirectOrderSupportCopy(_copy.languageCode);
+    if (status.delivery?.isPickup == true) {
+      return '${_copy.pickup} · ${_copy.vatIncluded}';
+    }
+    if (status.support['delivery_fee_deferred'] == true) {
+      if (status.support['delivery_fee_finalized'] == false) {
+        return '${_copy.vatIncluded} · ${supportCopy.text('fee_pending')}';
+      }
+      if (supportRows(status.support['charges']).any(
+        (charge) => charge['kind'] == 'delivery' && charge['status'] != 'void',
+      )) {
+        return '${_copy.vatIncluded} · ${supportCopy.text('delivery_separate_payments')}';
+      }
+    }
+    return status.quote?.deliveryPaymentMode == 'customer_direct'
+        ? _copy.customerPaysDriverHelp
+        : _copy.deliveryVatIncluded;
+  }
+
+  DirectOrderProofAttempt? _proofAttemptFor(DirectOrderStatus status) {
+    final attempt = _proofAttempts[status.requestId];
+    return attempt?.quoteId == status.quote?.id &&
+            attempt?.reviewRequestId ==
+                (status.proofReview?.canResubmit == true
+                    ? status.proofReview?.id
+                    : null)
+        ? attempt
+        : null;
+  }
+
+  Future<void> _uploadProof({bool retry = false}) async {
     final session = _session;
     final status = _status;
-    if (session == null || status == null) return;
-    final image = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1800,
-      imageQuality: 88,
-    );
-    if (image == null) return;
-    final bytes = await image.readAsBytes();
-    if (!mounted) return;
-    final shouldUpload = await showDirectOrderDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          status.proofReview?.canResubmit == true
-              ? _copy.replaceProof
-              : _copy.attachProof,
-        ),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 420, maxWidth: 420),
-          child: Image.memory(bytes, fit: BoxFit.contain),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(
+    if (_proofUploading || session == null || status?.quote == null) return;
+    var attempt =
+        _proofAttemptFor(status!) ??
+        (retry ? _proofAttempts[status.requestId] : null);
+    if ((!retry || attempt == null) && !_canSendProof(status)) return;
+    setState(() {
+      _proofUploading = true;
+      _proofSelecting = !retry || attempt == null;
+      _proofBusyRequestId = status.requestId;
+      if (retry) _proofErrors.remove(status.requestId);
+      _statusMutationRevision++;
+    });
+    try {
+      if (!retry || attempt == null) {
+        final image =
+            await (widget.pickProofImage?.call() ??
+                ImagePicker().pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 1800,
+                  imageQuality: 88,
+                ));
+        if (image == null) return;
+        final bytes = await image.readAsBytes();
+        if (!mounted || _status?.requestId != status.requestId) return;
+        final extension = image.name.split('.').last.toLowerCase();
+        final mimeType =
+            image.mimeType ??
+            switch (extension) {
+              'png' => 'image/png',
+              'webp' => 'image/webp',
+              _ => 'image/jpeg',
+            };
+        if (bytes.isEmpty ||
+            bytes.length > 5242880 ||
+            !const {
+              'image/jpeg',
+              'image/png',
+              'image/webp',
+            }.contains(mimeType)) {
+          throw const DirectOrderException('INVALID_PROOF');
+        }
+        final shouldUpload = await showDirectOrderDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(
               status.proofReview?.canResubmit == true
                   ? _copy.replaceProof
                   : _copy.attachProof,
             ),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '#${status.referenceCode} · ${_money.format(status.quote!.finalTotal)}',
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: Image.memory(bytes, fit: BoxFit.contain),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                key: const Key('direct_cancel_payment_proof'),
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(
+                  MaterialLocalizations.of(context).cancelButtonLabel,
+                ),
+              ),
+              FilledButton(
+                key: const Key('direct_confirm_payment_proof'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(_copy.attachProof),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-    if (shouldUpload != true || !mounted) return;
-    final extension = image.name.split('.').last.toLowerCase();
-    final mimeType =
-        image.mimeType ??
-        switch (extension) {
-          'png' => 'image/png',
-          'webp' => 'image/webp',
-          _ => 'image/jpeg',
-        };
-    setState(() => _proofUploading = true);
-    try {
-      await widget.service.uploadPaymentProof(
+        );
+        if (shouldUpload != true ||
+            !mounted ||
+            _status?.requestId != status.requestId ||
+            _status?.quote?.id != status.quote!.id ||
+            _status?.proofReview?.id != status.proofReview?.id ||
+            !_canSendProof(_status!)) {
+          return;
+        }
+        attempt = DirectOrderProofAttempt(
+          requestId: status.requestId,
+          quoteId: status.quote!.id,
+          reviewRequestId: status.proofReview?.canResubmit == true
+              ? status.proofReview?.id
+              : null,
+          bytes: bytes,
+          mimeType: mimeType,
+        );
+        _proofAttempts[status.requestId] = attempt;
+        _proofErrors.remove(status.requestId);
+      }
+      if (mounted) setState(() => _proofSelecting = false);
+      await widget.service.resumePaymentProof(
         session: session,
-        requestId: status.requestId,
-        quoteId: status.quote!.id,
-        reviewRequestId: status.proofReview?.id,
-        bytes: bytes,
-        mimeType: mimeType,
+        attempt: attempt,
+        allowUpload:
+            _status?.requestId == status.requestId &&
+            _proofAttemptFor(_status!) == attempt &&
+            _canSendProof(_status!),
+        onChanged: () {
+          if (mounted) setState(() {});
+        },
       );
-      await _refreshStatus();
+      await _refreshProofStatus(session, status.requestId);
     } catch (error) {
-      _showError(error);
+      if (mounted) {
+        if (attempt == null) _showError(error);
+        setState(
+          () => _proofErrors[status.requestId] = error is DirectOrderException
+              ? error.code
+              : 'PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE',
+        );
+        // Reconcile a changed quote, staff approval or another device's upload.
+        await _refreshProofStatus(session, status.requestId);
+      }
     } finally {
-      if (mounted) setState(() => _proofUploading = false);
+      if (mounted) {
+        setState(() {
+          _proofUploading = false;
+          _proofSelecting = false;
+          _proofBusyRequestId = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshProofStatus(
+    DirectOrderSession session,
+    String requestId,
+  ) async {
+    final revision = _statusMutationRevision;
+    try {
+      final latest = await widget.service.fetchStatus(
+        session: session,
+        requestId: requestId,
+      );
+      if (!mounted ||
+          _status?.requestId != requestId ||
+          revision != _statusMutationRevision) {
+        return;
+      }
+      setState(() {
+        _statusMutationRevision++;
+        _status = latest;
+        _proofRefreshFailures.remove(requestId);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _proofRefreshFailures.add(requestId));
     }
   }
 
@@ -573,10 +1420,13 @@ class _DirectOrderStorefrontScreenState
       _statusMutationRevision += 1;
       _messageController.clear();
       setState(() {
+        _sentMessageId = sent.id;
         _status = DirectOrderStatus(
           requestId: latest.requestId,
           referenceCode: latest.referenceCode,
           state: latest.state,
+          createdAt: latest.createdAt,
+          items: latest.items,
           quote: latest.quote,
           messages: messages,
           fulfillmentStatus: latest.fulfillmentStatus,
@@ -584,13 +1434,81 @@ class _DirectOrderStorefrontScreenState
           fulfillmentVersion: latest.fulfillmentVersion,
           completedAt: latest.completedAt,
           proofReview: latest.proofReview,
+          delivery: latest.delivery,
+          support: latest.support,
+          requirements: latest.requirements,
         );
       });
+      _scrollToSentMessage(status.requestId);
     } catch (error) {
       _showError(error);
     } finally {
       if (mounted) setState(() => _sendingMessage = false);
     }
+  }
+
+  Future<void> _decideRequirement(
+    DirectOrderRequirement requirement,
+    bool accept,
+  ) async {
+    final session = _session;
+    final requestId = _status?.requestId;
+    if (_sendingMessage || session == null || requestId == null) return;
+    final message = accept ? null : await showRequirementClarification(context);
+    if (!accept && message == null) return;
+    if (!mounted || _status?.requestId != requestId) return;
+    setState(() => _sendingMessage = true);
+    _statusMutationRevision += 1;
+    try {
+      final latest = await widget.service.decideRequirement(
+        session: session,
+        requestId: requestId,
+        requirement: requirement,
+        accept: accept,
+        message: message,
+      );
+      if (!mounted || _status?.requestId != requestId) return;
+      _statusMutationRevision += 1;
+      setState(() => _status = latest);
+    } catch (error) {
+      _showError(error);
+      await _refreshStatus();
+    } finally {
+      if (mounted) setState(() => _sendingMessage = false);
+    }
+  }
+
+  void _scrollToSentMessage(String requestId) {
+    void reveal(int attemptsRemaining) {
+      final target = _sentMessageKey.currentContext;
+      if (!mounted ||
+          _status?.requestId != requestId ||
+          !_statusScroll.hasClients) {
+        return;
+      }
+      if (target == null) {
+        if (attemptsRemaining == 0) {
+          return;
+        }
+        // The lazy list's estimated extent changes as the conversation lays out.
+        _statusScroll.jumpTo(_statusScroll.position.maxScrollExtent);
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => reveal(attemptsRemaining - 1),
+        );
+        WidgetsBinding.instance.scheduleFrame();
+        return;
+      }
+      unawaited(
+        Scrollable.ensureVisible(
+          target,
+          alignment: 1,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        ),
+      );
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => reveal(3));
   }
 
   Future<void> _cancelOrder() async {
@@ -628,6 +1546,21 @@ class _DirectOrderStorefrontScreenState
   }
 
   Future<void> _startNewOrder() async {
+    if (_session?.orderScoped == true) {
+      _session = await widget.service.ensureSession(
+        slug: widget.slug,
+        locale: _languageCode,
+      );
+      _accessKey = null;
+      if (!mounted) return;
+      final router = GoRouter.maybeOf(context);
+      if (router != null) {
+        router.go('/order/${widget.slug}');
+        return;
+      }
+    }
+    await _selectView(_CustomerView.menu);
+    if (!mounted || (_storefront?.paused ?? true) || _pausedByServer) return;
     await widget.service.clearActiveRequest(widget.slug);
     if (!mounted) return;
     _statusMutationRevision += 1;
@@ -636,11 +1569,13 @@ class _DirectOrderStorefrontScreenState
       _cart.clear();
       _itemNotes.clear();
       _noteController.clear();
+      _dinerController.text = '1';
+      _utensilsRequested = true;
       _messageController.clear();
       _view = _CustomerView.menu;
       if (_savedAddress != null) _populateAddress(_savedAddress!);
     });
-    if (_orders.any((order) => !order.isTerminal)) _startStatusPolling();
+    if (_hasPendingUpdates) _startStatusPolling();
   }
 
   Future<void> _clearSavedAddress() async {
@@ -699,10 +1634,9 @@ class _DirectOrderStorefrontScreenState
               ),
             ),
           IconButton(
-            tooltip: _paymentAlertsEnabled
-                ? _copy.paymentAlertEnabled
-                : _copy.paymentAlertDisabled,
-            onPressed: _togglePaymentAlerts,
+            key: const Key('direct_customer_notifications'),
+            tooltip: _copy.customerNotifications,
+            onPressed: _showCustomerNotifications,
             icon: Icon(
               _paymentAlertsEnabled
                   ? Icons.notifications_active_outlined
@@ -723,6 +1657,16 @@ class _DirectOrderStorefrontScreenState
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
+    if (_orderClosed) {
+      return _CenteredMessage(
+        icon: Icons.check_circle_outline,
+        title: _closedProgress == null
+            ? _copy.orderClosed
+            : '${_copy.customerProgressLabel(_closedProgress!)} · ${_copy.orderClosed}',
+        actionLabel: _copy.menu,
+        onAction: () => GoRouter.maybeOf(context)?.go('/order/${widget.slug}'),
+      );
+    }
     if (_errorCode != null || _storefront == null) {
       return _CenteredMessage(
         icon: Icons.cloud_off_rounded,
@@ -731,8 +1675,22 @@ class _DirectOrderStorefrontScreenState
         onAction: _load,
       );
     }
-    if ((_storefront!.paused || _pausedByServer) && _status == null) {
-      return _DeliveryClosedMessage(copy: _copy, onCheckAgain: _load);
+    if ((_storefront!.paused || _pausedByServer) &&
+        _view != _CustomerView.status) {
+      return Column(
+        children: [
+          Expanded(
+            child: _DeliveryClosedMessage(copy: _copy, onCheckAgain: _load),
+          ),
+          if (_status != null)
+            SafeArea(
+              child: TextButton(
+                onPressed: () => _selectView(_CustomerView.status),
+                child: Text(_copy.orderStatus),
+              ),
+            ),
+        ],
+      );
     }
     final content = switch (_view) {
       _CustomerView.menu => _buildMenu(),
@@ -746,13 +1704,16 @@ class _DirectOrderStorefrontScreenState
           constraints: const BoxConstraints(maxWidth: 920),
           child: Column(
             children: [
-              _ProgressTabs(
-                selected: _view,
-                copy: _copy,
-                canOpenAddress: _cart.isNotEmpty,
-                hasStatus: _status != null,
-                onSelected: _selectView,
-              ),
+              if (_view != _CustomerView.status ||
+                  MediaQuery.viewInsetsOf(context).bottom == 0)
+                _ProgressTabs(
+                  selected: _view,
+                  copy: _copy,
+                  canOpenAddress: _cart.isNotEmpty,
+                  hasStatus: _status != null,
+                  onSelected: _selectView,
+                ),
+              if (_view == _CustomerView.menu) _buildCategoryBar(),
               Expanded(child: content),
             ],
           ),
@@ -761,14 +1722,97 @@ class _DirectOrderStorefrontScreenState
     );
   }
 
+  Widget _buildCategoryBar() => LayoutBuilder(
+    builder: (context, constraints) {
+      Widget chip(String? id, String name) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Center(
+          key: _categoryKeys.putIfAbsent(id ?? 'all', GlobalKey.new),
+          child: Tooltip(
+            message: name,
+            child: ChoiceChip(
+              key: Key('direct_category_${id ?? 'all'}'),
+              selected: _selectedCategoryId == id,
+              onSelected: (_) => _selectCategory(id),
+              materialTapTargetSize: MaterialTapTargetSize.padded,
+              label: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 220),
+                child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ),
+        ),
+      );
+      void scroll(double direction) {
+        if (!_categoryScroll.hasClients) return;
+        _categoryScroll.animateTo(
+          (_categoryScroll.offset + direction * 280).clamp(
+            0,
+            _categoryScroll.position.maxScrollExtent,
+          ),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+
+      return SizedBox(
+        height: 64,
+        child: Row(
+          children: [
+            if (constraints.maxWidth >= 600)
+              IconButton(
+                tooltip: _copy.previousCategories,
+                onPressed: () => scroll(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+            Expanded(
+              child: ListView(
+                key: const Key('direct_category_bar'),
+                controller: _categoryScroll,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  chip(null, _copy.allCategories),
+                  for (final category in _menuCategories)
+                    chip(category.id, category.localizedName(_languageCode)),
+                ],
+              ),
+            ),
+            if (constraints.maxWidth >= 600)
+              IconButton(
+                tooltip: _copy.nextCategories,
+                onPressed: () => scroll(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+
   Widget _buildMenu() {
     final storefront = _storefront!;
     return Stack(
       children: [
         ListView(
+          key: const PageStorageKey('direct_menu_list'),
+          controller: _menuScroll,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 132),
           children: [
-            for (final category in storefront.categories) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(_copy.customerPaysDriverHelp),
+            ),
+            if (_menuCategories.isEmpty) ...[
+              Text(_copy.emptyMenu),
+              TextButton(
+                onPressed: () => _selectView(_CustomerView.menu),
+                child: Text(_copy.refresh),
+              ),
+            ],
+            for (final category in _menuCategories.where(
+              (c) => _selectedCategoryId == null || c.id == _selectedCategoryId,
+            )) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
                 child: Text(
@@ -788,9 +1832,10 @@ class _DirectOrderStorefrontScreenState
             right: 12,
             bottom: 12,
             child: _BottomActionCard(
-              leading: '$_cartCount ${_copy.cart}',
+              leading: '${_copy.viewCart} · $_cartCount',
               amount: _money.format(_cartSubtotal),
               label: _copy.address,
+              onViewCart: _showCart,
               onPressed: () => _selectView(_CustomerView.address),
             ),
           ),
@@ -804,79 +1849,101 @@ class _DirectOrderStorefrontScreenState
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ClipRRect(
-              borderRadius: AppRadius.md,
-              child: SizedBox(
-                width: 88,
-                height: 88,
-                child: item.imageUrl?.isNotEmpty == true
-                    ? Image.network(
-                        item.imageUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _menuPlaceholder(),
-                      )
-                    : _menuPlaceholder(),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.localizedName(_languageCode),
-                    style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: AppRadius.md,
+                  child: SizedBox(
+                    width: 88,
+                    height: 88,
+                    child: item.imageUrl?.isNotEmpty == true
+                        ? Image.network(
+                            item.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _menuPlaceholder(),
+                          )
+                        : _menuPlaceholder(),
                   ),
-                  if (item.description?.trim().isNotEmpty == true) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      item.description!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    _money.format(item.price),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleMedium?.copyWith(color: PosColors.accent),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.localizedName(_languageCode),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      if (item.description?.trim().isNotEmpty == true) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          item.description!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Text(
+                        _money.format(item.price),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(color: PosColors.accent),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (quantity == 0)
-              IconButton.filled(
-                key: Key('direct_add_${item.id}'),
-                onPressed: () => _changeQuantity(item.id, 1),
-                icon: const Icon(Icons.add_rounded),
-              )
-            else
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton.outlined(
-                    onPressed: () => _changeQuantity(item.id, -1),
-                    icon: const Icon(Icons.remove_rounded),
-                  ),
-                  SizedBox(
-                    width: 34,
-                    child: Text(
-                      '$quantity',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
+                ),
+                const SizedBox(width: 8),
+                if (quantity == 0)
                   IconButton.filled(
+                    key: Key('direct_add_${item.id}'),
                     onPressed: () => _changeQuantity(item.id, 1),
                     icon: const Icon(Icons.add_rounded),
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton.outlined(
+                        onPressed: () => _changeQuantity(item.id, -1),
+                        icon: const Icon(Icons.remove_rounded),
+                      ),
+                      SizedBox(
+                        width: 34,
+                        child: Text(
+                          '$quantity',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton.filled(
+                        onPressed: () => _changeQuantity(item.id, 1),
+                        icon: const Icon(Icons.add_rounded),
+                      ),
+                    ],
                   ),
-                ],
+              ],
+            ),
+            if (quantity > 0) ...[
+              const SizedBox(height: 8),
+              if (_itemNotes[item.id]?.isNotEmpty == true)
+                Text(
+                  '${_copy.itemRequest}: ${_itemNotes[item.id]}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: Key('direct_menu_request_${item.id}'),
+                  onPressed: () => _editItemRequest(item),
+                  icon: const Icon(Icons.edit_note),
+                  label: Text(_copy.addItemRequest),
+                ),
               ),
+            ],
           ],
         ),
       ),
@@ -930,6 +1997,57 @@ class _DirectOrderStorefrontScreenState
           const SizedBox(height: 12),
         ],
         TextField(
+          key: const Key('direct_diner_count_input'),
+          controller: _dinerController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          maxLength: 3,
+          decoration: InputDecoration(
+            labelText: _copy.dinerQuestion,
+            helperText: _copy.dinerHelp,
+            helperMaxLines: 3,
+            counterText: '',
+            prefixIcon: const Icon(Icons.groups_outlined),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: () {
+                    final n = int.tryParse(_dinerController.text) ?? 1;
+                    _dinerController.text = '${(n - 1).clamp(1, 100)}';
+                  },
+                  icon: const Icon(Icons.remove),
+                ),
+                IconButton(
+                  onPressed: () {
+                    final n = int.tryParse(_dinerController.text) ?? 0;
+                    _dinerController.text = '${(n + 1).clamp(1, 100)}';
+                  },
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(_copy.utensils),
+        const SizedBox(height: 8),
+        SegmentedButton<bool>(
+          key: const Key('direct_utensils_choice'),
+          segments: [
+            ButtonSegment(value: true, label: Text(_copy.utensilsByDiners)),
+            ButtonSegment(value: false, label: Text(_copy.utensilsNone)),
+          ],
+          selected: {_utensilsRequested},
+          onSelectionChanged: (values) =>
+              setState(() => _utensilsRequested = values.single),
+        ),
+        Text(
+          _copy.packagingProvided,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+        TextField(
           key: const Key('direct_address_input'),
           controller: _addressController,
           maxLength: 500,
@@ -950,7 +2068,8 @@ class _DirectOrderStorefrontScreenState
           maxLength: 300,
           decoration: InputDecoration(
             counterText: '',
-            labelText: _copy.detailAddress,
+            labelText:
+                '${_copy.detailAddress} (${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).optional})',
             hintText: _copy.detailAddressHint,
             prefixIcon: const Icon(Icons.apartment_rounded),
           ),
@@ -1020,6 +2139,151 @@ class _DirectOrderStorefrontScreenState
     );
   }
 
+  Future<void> _setCustomerPush({
+    bool restore = false,
+    bool disable = false,
+  }) async {
+    final session = _session;
+    if (_pushBusy || session == null || _orderClosed) return;
+    setState(() => _pushBusy = true);
+    try {
+      final readiness = disable
+          ? await _pushService.disable(
+              slug: session.orderScoped
+                  ? "${widget.slug}:${session.id}"
+                  : widget.slug,
+              session: session,
+              service: widget.service,
+              locale: _languageCode,
+            )
+          : await _pushService.enable(
+              slug: session.orderScoped
+                  ? "${widget.slug}:${session.id}"
+                  : widget.slug,
+              session: session,
+              service: widget.service,
+              locale: _languageCode,
+              restore: restore,
+              onForeground: (requestId, kind) async {
+                final eventKey =
+                    '$requestId:${kind == 'pickup_ready' ? 'pickup-ready' : 'driver-handoff'}';
+                try {
+                  if (await widget.service.markAlertSeen(
+                        widget.slug,
+                        eventKey,
+                      ) &&
+                      mounted) {
+                    _snack(
+                      kind == 'pickup_ready'
+                          ? _copy.pickupReadyNotice
+                          : _copy.driverHandoffNotice,
+                    );
+                  }
+                } catch (_) {
+                  // A local alert cache failure must not stop status refresh.
+                }
+                if (mounted) unawaited(_refreshStatus(silent: true));
+              },
+            );
+      if (mounted && _session?.id == session.id) {
+        if (disable && readiness == DirectOrderPushReadiness.error) {
+          _snack(_copy.pushFailed);
+          return;
+        }
+        setState(() {
+          _pushReadiness = readiness;
+        });
+      }
+    } catch (_) {
+      if (mounted && !restore) _snack(_copy.pushFailed);
+    } finally {
+      if (mounted) setState(() => _pushBusy = false);
+    }
+  }
+
+  Future<void> _showCustomerNotifications() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    constraints: const BoxConstraints(maxWidth: 640),
+    builder: (context) => StatefulBuilder(
+      builder: (context, refresh) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _customerNotificationCard(() {
+                if (context.mounted) refresh(() {});
+              }),
+              SwitchListTile(
+                value: _paymentAlertsEnabled,
+                title: Text(_copy.paymentAlertEnabled),
+                onChanged: (_) async {
+                  await _togglePaymentAlerts();
+                  if (context.mounted) refresh(() {});
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _customerNotificationCard(VoidCallback refresh) {
+    final message = switch (_pushReadiness) {
+      DirectOrderPushReadiness.ready => _copy.pushReady,
+      DirectOrderPushReadiness.denied => _copy.pushDenied,
+      DirectOrderPushReadiness.unsupported ||
+      DirectOrderPushReadiness.notConfigured => _copy.pushUnavailable,
+      DirectOrderPushReadiness.error => _copy.pushFailed,
+      DirectOrderPushReadiness.off => _copy.pushDisabled,
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _copy.customerNotifications,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(message),
+            const SizedBox(height: 8),
+            Text(_copy.pushHelp),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('direct_customer_push_toggle'),
+              onPressed: _pushBusy
+                  ? null
+                  : () async {
+                      final pending = _setCustomerPush(
+                        disable:
+                            _pushReadiness == DirectOrderPushReadiness.ready,
+                      );
+                      refresh();
+                      await pending;
+                      refresh();
+                    },
+              icon: Icon(
+                _pushReadiness == DirectOrderPushReadiness.ready
+                    ? Icons.notifications_off_outlined
+                    : Icons.notifications_active_outlined,
+              ),
+              label: Text(
+                _pushReadiness == DirectOrderPushReadiness.ready
+                    ? _copy.disableCustomerNotifications
+                    : _copy.enableCustomerNotifications,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatus() {
     final status = _status;
     if (status == null) {
@@ -1030,161 +2294,321 @@ class _DirectOrderStorefrontScreenState
         onAction: _load,
       );
     }
-    return RefreshIndicator(
-      onRefresh: _refreshStatus,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+    return Column(
+      children: [
+        if (status.quote != null) _paymentSummary(status),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _refreshStatus,
+            child: ListView(
+              key: const PageStorageKey('direct_status_list'),
+              controller: _statusScroll,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+              children: [
+                _statusHero(status),
+                if ((status.fulfillmentStatus != 'completed' ||
+                        _hasCompletionRefund(status)) &&
+                    status.support['chat_open'] != false)
+                  TextButton.icon(
+                    key: const Key('direct_order_copy_link'),
+                    onPressed: _copyOrderLink,
+                    icon: const Icon(Icons.link),
+                    label: Text(_copy.copyOrderLink),
+                  ),
+
+                if (status.delivery?.offer?.isPending == true) ...[
+                  const SizedBox(height: 12),
+                  _pickupOfferCard(status),
+                ],
+                if (directOrderStage(status.state, status.fulfillmentStatus) !=
+                    DirectOrderStage.exception) ...[
+                  const SizedBox(height: 12),
+                  _orderProgressCard(status),
+                ],
+                if (_session != null && _storefront != null)
+                  DirectOrderCustomerSupportPanel(
+                    key: ValueKey('customer-support:${status.requestId}'),
+                    status: status,
+                    session: _session!,
+                    bank: _storefront!.bank,
+                    storeId: _storefront!.storeId,
+                    service: widget.service,
+                    onChanged: _refreshStatus,
+                    showCharges: false,
+                  ),
+                const SizedBox(height: 12),
+                _chatCard(status),
+                if (const {
+                  'awaiting_quote',
+                  'quoted',
+                }.contains(status.state)) ...[
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: _cancelOrder,
+                    icon: const Icon(Icons.cancel_outlined),
+                    label: Text(_copy.cancelOrder),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        _chatComposer(status),
+      ],
+    );
+  }
+
+  Widget _paymentSummary(DirectOrderStatus status) => Material(
+    key: const Key('direct_customer_payment_summary'),
+    color: PosColors.accentMuted,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
         children: [
-          _statusHero(status),
-          if (!{'rejected', 'cancelled', 'expired'}.contains(status.state)) ...[
-            const SizedBox(height: 12),
-            _orderProgressCard(status),
-          ],
-          if (status.quote != null) ...[
-            const SizedBox(height: 12),
-            _quoteCard(status),
-          ],
-          const SizedBox(height: 12),
-          _chatCard(status),
-          if (const {'awaiting_quote', 'quoted'}.contains(status.state)) ...[
-            const SizedBox(height: 10),
-            TextButton.icon(
-              onPressed: _cancelOrder,
-              icon: const Icon(Icons.cancel_outlined),
-              label: Text(_copy.cancelOrder),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _paymentSummaryLabel(status),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _money.format(_summaryAmount(status)),
+                    key: const Key('direct_customer_pinned_amount'),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: PosColors.accentStrong,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton(
+            key: const Key('direct_customer_check_amount'),
+            onPressed: () {
+              final charge = _primaryCharge(status);
+              if (charge != null) {
+                _showQuoteSheet(
+                  status,
+                  payment: _canPayCharge(status, charge),
+                  chargeId: charge['id'].toString(),
+                );
+              } else if (_hasUnderpayment(status)) {
+                _showQuoteSheet(status, payment: false, balance: true);
+              } else if (_canShowPaymentDetails(status)) {
+                _showPaymentDetails(status);
+              } else {
+                _showQuoteDetails(status);
+              }
+            },
+            style: OutlinedButton.styleFrom(minimumSize: const Size(64, 48)),
+            child: Text(_copy.checkAmount),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _decidePickup(DirectOrderStatus status, bool accept) async {
+    final session = _session;
+    final offer = status.delivery?.offer;
+    if (session == null || offer == null || _submitting) return;
+    var alreadyPaid =
+        status.state == 'awaiting_payment_review' || status.state == 'approved';
+    if (accept && status.state == 'quoted') {
+      final paid = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          key: const Key('direct_pickup_payment_status_dialog'),
+          title: Text(_copy.pickup),
+          content: Text(_copy.pickupQuestion),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(_copy.notTransferred),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(_copy.alreadyTransferred),
             ),
           ],
-        ],
+        ),
+      );
+      if (paid == null) return;
+      alreadyPaid = paid;
+    }
+    if (!mounted) return;
+    setState(() => _submitting = true);
+    try {
+      await widget.service.decidePickup(
+        session: session,
+        requestId: status.requestId,
+        offerId: offer.id,
+        accept: accept,
+        alreadyPaid: alreadyPaid,
+      );
+      await _refreshStatus();
+      if (mounted) _startStatusPolling();
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Widget _pickupOfferCard(DirectOrderStatus status) {
+    final delivery = status.delivery!;
+    return Card(
+      key: const Key('direct_pickup_offer'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _copy.pickupQuestion,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(delivery.offer!.reason),
+            Text(delivery.storeName),
+            Text(delivery.storeAddress),
+            if (delivery.offer!.refundDue > 0)
+              Text(
+                '${_copy.refundPending}: ${_money.format(delivery.offer!.refundDue)}',
+              ),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: const Key('direct_accept_pickup'),
+              onPressed: _submitting ? null : () => _decidePickup(status, true),
+              child: Text(_copy.acceptPickup),
+            ),
+            TextButton(
+              key: const Key('direct_decline_pickup'),
+              onPressed: _submitting
+                  ? null
+                  : () => _decidePickup(status, false),
+              child: Text(_copy.keepDelivery),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _statusHero(DirectOrderStatus status) {
-    final (icon, tone, title) = switch (status.fulfillmentStatus) {
-      'preparing' => (
-        Icons.restaurant_rounded,
-        PosColors.warning,
-        _copy.preparing,
-      ),
-      'ready' => (Icons.inventory_2_outlined, PosColors.info, _copy.ready),
-      'dispatched' => (
-        Icons.delivery_dining_rounded,
-        PosColors.success,
-        _copy.dispatched,
-      ),
-      'completed' => (
-        Icons.check_circle_outline_rounded,
-        PosColors.success,
-        _copy.completed,
-      ),
-      _ => switch (status.state) {
-        'awaiting_quote' => (
-          Icons.schedule_rounded,
-          PosColors.info,
-          _copy.awaitingQuote,
-        ),
-        'quoted' => (
-          Icons.request_quote_rounded,
-          PosColors.accent,
-          _copy.quoteReady,
-        ),
-        'awaiting_payment_review' => (
-          Icons.verified_user_outlined,
-          PosColors.warning,
-          _copy.awaitingApproval,
-        ),
-        'approved' => (
-          Icons.restaurant_rounded,
-          PosColors.success,
-          _copy.approved,
-        ),
-        'rejected' => (
-          Icons.error_outline_rounded,
-          PosColors.danger,
-          _copy.rejected,
-        ),
-        'cancelled' => (
-          Icons.cancel_outlined,
-          PosColors.textSecondary,
-          _copy.cancelled,
-        ),
-        _ => (
-          Icons.info_outline_rounded,
-          PosColors.textSecondary,
-          _copy.orderStatus,
-        ),
-      },
-    };
-    final fulfillment = switch (status.fulfillmentStatus) {
-      'preparing' => _copy.preparing,
-      'ready' => _copy.ready,
-      'dispatched' => _copy.dispatched,
-      'completed' => _copy.completed,
-      _ => null,
-    };
+    final progress = directOrderCustomerProgress(
+      status.state,
+      status.fulfillmentStatus,
+      cookingComplete: status.delivery?.cookingComplete == true,
+      isPickup: status.delivery?.isPickup == true,
+      handoffConfirmed: status.hasDriverHandoff,
+      driverBooked: status.delivery?.hasBooking == true,
+    );
+    final exception =
+        directOrderStage(status.state, status.fulfillmentStatus) ==
+        DirectOrderStage.exception;
+    final booking = status.delivery?.hasBooking == true
+        ? status.delivery!.booking
+        : <String, dynamic>{};
+    final url =
+        status.delivery?.trackingUrl ??
+        status.grabTrackingUrl ??
+        booking['tracking_url'] as String?;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(12),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(icon, color: tone, size: 48),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              key: const Key('direct_order_status_title'),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge,
+            Row(
+              children: [
+                Icon(
+                  exception ? Icons.cancel_outlined : Icons.delivery_dining,
+                  color: exception ? PosColors.danger : PosColors.accent,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _copy.customerProgressLabel(progress),
+                    key: const Key('direct_order_status_title'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 5),
-            Text(
-              status.referenceCode,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: tone),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    key: const Key('direct_open_order_details'),
+                    onPressed: () => _showOrderDetails(status),
+                    child: Wrap(
+                      spacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        Text(status.referenceCode),
+                        Text(_copy.orderDetails),
+                      ],
+                    ),
+                  ),
+                ),
+                if (status.state == 'approved')
+                  Text(
+                    _copy.paymentCompleted,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+              ],
             ),
-            if (fulfillment != null) ...[
-              const SizedBox(height: 10),
-              Chip(
-                avatar: const Icon(Icons.delivery_dining_rounded, size: 18),
-                label: Text(fulfillment),
+            if (url != null)
+              DirectOrderTrackingLink(
+                key: const Key('direct_delivery_tracking'),
+                url: url,
               ),
-            ],
-            if (status.completedAt != null) ...[
-              const SizedBox(height: 6),
+            if (status.delivery?.isPickup != true &&
+                (status.support['delivery_policy_version'] == 2 ||
+                    status.quote?.deliveryPaymentMode == 'customer_direct'))
+              Text(_copy.customerPaysDriverHelp),
+            if (booking['recipient_fee'] is num)
+              Text(
+                '${_copy.recipientFeeReference}: ${_money.format((booking['recipient_fee'] as num).toDouble())}',
+              ),
+            if (status.delivery?.driverContact != null ||
+                booking['driver_contact'] != null)
+              SelectableText(
+                status.delivery?.driverContact ??
+                    booking['driver_contact'] as String,
+              ),
+            if (status.delivery?.offer?.status == 'accepted' &&
+                (status.delivery?.offer?.refundDue ?? 0) > 0)
+              Text(
+                '${status.delivery!.offer!.refundRecorded ? _copy.refundRecorded : _copy.refundPending}: ${_money.format(status.delivery!.offer!.refundDue)}',
+              ),
+            if (status.completedAt != null)
               Text(
                 DateFormat(
                   'yyyy-MM-dd HH:mm',
                 ).format(status.completedAt!.toLocal()),
-                style: Theme.of(context).textTheme.bodySmall,
               ),
-            ],
-            if (status.grabTrackingUrl != null) ...[
-              const SizedBox(height: 10),
-              FilledButton.icon(
-                onPressed: () async {
-                  final uri = Uri.tryParse(status.grabTrackingUrl!);
-                  if (uri != null) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-                icon: const Icon(Icons.open_in_new_rounded),
-                label: Text(_copy.openGrab),
-              ),
-            ],
-            const SizedBox(height: 10),
             Wrap(
-              alignment: WrapAlignment.center,
               spacing: 8,
-              runSpacing: 8,
               children: [
-                OutlinedButton.icon(
+                TextButton.icon(
                   onPressed: _startNewOrder,
-                  icon: const Icon(Icons.add_shopping_cart_outlined),
+                  icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
                   label: Text(_copy.addOrder),
                 ),
-                OutlinedButton.icon(
+                TextButton.icon(
                   onPressed: _showOrders,
-                  icon: const Icon(Icons.receipt_long_outlined),
+                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
                   label: Text(_copy.myOrders),
                 ),
               ],
@@ -1196,68 +2620,126 @@ class _DirectOrderStorefrontScreenState
   }
 
   Widget _orderProgressCard(DirectOrderStatus status) {
-    final currentStep = switch (status.fulfillmentStatus) {
+    final delivery = status.delivery;
+    final current = switch (status.fulfillmentStatus) {
       'completed' => 4,
-      'dispatched' => 3,
-      'preparing' || 'ready' => 2,
-      _ when status.state == 'approved' => 1,
-      _ => 0,
+      'dispatched' => status.hasDriverHandoff ? 3 : 2,
+      'ready' => 2,
+      _ => delivery?.cookingComplete == true ? 1 : 0,
     };
-    final steps = <(IconData, String)>[
-      (Icons.receipt_long_outlined, _copy.progressOrderConfirmed),
-      (Icons.account_balance_wallet_outlined, _copy.progressPaymentConfirmed),
-      (Icons.restaurant_outlined, _copy.progressPreparing),
-      (Icons.delivery_dining_outlined, _copy.progressGrabHandoff),
-      (Icons.check_circle_outline_rounded, _copy.progressCompleted),
+    final steps = <String>[
+      'customer_preparing',
+      'customer_cooked',
+      delivery?.isPickup == true ? 'customer_pickup_ready' : 'customer_packed',
+      delivery?.isPickup == true
+          ? 'customer_pickup_ready'
+          : 'customer_shipping',
+      delivery?.isPickup == true ? 'customer_collected' : 'customer_delivered',
     ];
     return Card(
       key: const Key('direct_order_customer_progress'),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              _copy.orderProgress,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            for (var index = 0; index < steps.length; index++)
-              _CustomerProgressRow(
-                key: Key('direct_order_progress_step_$index'),
-                icon: steps[index].$1,
-                label: steps[index].$2,
-                isCompleted: index < currentStep,
-                isCurrent: index == currentStep,
-                showConnector: index < steps.length - 1,
+      child: ExpansionTile(
+        key: PageStorageKey('order-progress:${status.requestId}'),
+        title: Text(_copy.orderProgress),
+        children: [
+          if (delivery != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                _copy.packingCount(
+                  delivery.dinerCount,
+                  utensilsRequested: delivery.utensilsRequested,
+                ),
               ),
-          ],
-        ),
+            ),
+          if (delivery?.isPickup == true)
+            ListTile(
+              title: Text(delivery!.storeName),
+              subtitle: Text(delivery.storeAddress),
+            ),
+          if (delivery?.provider != null)
+            Text(delivery!.providerName ?? delivery.provider!),
+          if (delivery?.paidTotal != null)
+            Text(
+              '${_copy.netReceived}: ${_money.format(delivery!.paidTotal! - delivery.refundedTotal)}',
+            ),
+          if (delivery?.offer?.status == 'accepted' &&
+              (delivery?.offer?.refundDue ?? 0) > 0)
+            Text(
+              '${delivery!.offer!.refundRecorded ? _copy.refundRecorded : _copy.refundPending}: ${_money.format(delivery.offer!.refundDue)}',
+            ),
+          for (var index = 0; index < steps.length; index++)
+            if (!(delivery?.isPickup == true && index == 3))
+              ListTile(
+                key: Key('direct_order_progress_step_$index'),
+                dense: true,
+                leading: Icon(
+                  status.state == 'approved' && index <= current
+                      ? Icons.check_circle_outline
+                      : Icons.radio_button_unchecked,
+                  color: status.state == 'approved' && index <= current
+                      ? PosColors.success
+                      : PosColors.textSecondary,
+                ),
+                title: Text(_copy.customerProgressLabel(steps[index])),
+              ),
+        ],
       ),
     );
   }
 
   Widget _quoteCard(DirectOrderStatus status) {
     final quote = status.quote!;
-    final canPay = status.state == 'quoted' && quote.status == 'active';
+    final canPay = _canShowPaymentDetails(status);
     final canResubmit = status.proofReview?.canResubmit == true;
     return Card(
+      key: const Key('direct_chat_current_quote'),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.md,
+        side: const BorderSide(color: PosColors.accent),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              _copy.quoteReady,
-              style: Theme.of(context).textTheme.titleLarge,
+            Row(
+              children: [
+                const Icon(Icons.check_circle, color: PosColors.accent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    canPay || _hasUnderpayment(status)
+                        ? _copy.quoteConfirmed
+                        : _paymentSummaryLabel(status),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            _amountRow(_copy.menuTotal, quote.menuTotal),
-            _amountRow(_copy.serviceCharge, quote.serviceChargeTotal),
-            _amountRow(_copy.deliveryFee, quote.deliveryFeeTotal),
-            const Divider(height: 24),
-            _amountRow(_copy.finalTotal, quote.finalTotal, strong: true),
-            _amountRow(_copy.includedVat, quote.vatTotal),
+            Text(
+              _money.format(quote.finalTotal),
+              key: const Key('direct_chat_quote_amount'),
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                color: PosColors.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(_quoteDeliveryNotice(status)),
+            if (quote.deliveryPaymentMode == 'customer_direct' &&
+                status.delivery?.isPickup != true)
+              Text(_copy.vatIncluded),
+            if (quote.cashierNote?.isNotEmpty == true) ...[
+              const SizedBox(height: 8),
+              DirectOrderTranslatedText(
+                original: quote.cashierNote!,
+                translations: quote.noteTranslations,
+                status: quote.translationStatus,
+              ),
+            ],
             if (canResubmit) ...[
               const SizedBox(height: 16),
               Card(
@@ -1273,106 +2755,387 @@ class _DirectOrderStorefrontScreenState
                 ),
               ),
             ],
-            if (canPay || canResubmit) ...[
-              const SizedBox(height: 14),
-              FilledButton.icon(
-                key: const Key('direct_open_payment_details'),
-                onPressed: _proofUploading
-                    ? null
-                    : () => _showPaymentDetails(status),
-                icon: Icon(
-                  canResubmit
-                      ? Icons.refresh_rounded
-                      : Icons.account_balance_wallet_outlined,
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    key: const Key('direct_chat_quote_details'),
+                    onPressed: () => _showQuoteDetails(status),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    child: Text(
+                      _copy.amountDetails,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ),
-                label: Text(canResubmit ? _copy.replaceProof : _copy.payNow),
-              ),
-            ],
+                if (canPay) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key('direct_open_payment_details'),
+                      onPressed: () => _showPaymentDetails(status),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                      ),
+                      child: Text(
+                        _copy.viewPaymentDetails,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            _buildProofControls(status),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _showPaymentDetails(DirectOrderStatus status) async {
-    final storefront = _storefront;
-    final quote = status.quote;
-    if (storefront == null || quote == null) return;
-    final isResubmission = status.proofReview?.canResubmit == true;
-    final qrData = VietQrPayload.bankTransfer(
-      bankBin: storefront.bank.bin,
-      accountNumber: storefront.bank.accountNumber,
-      amount: quote.finalTotal.round(),
-      purpose: status.referenceCode,
+  Widget _buildProofControls(DirectOrderStatus status) {
+    final saved = _proofAttempts[status.requestId];
+    final attempt =
+        _proofAttemptFor(status) ??
+        (saved?.outcomeUncertain == true ? saved : null);
+    final busy = _proofUploading && _proofBusyRequestId == status.requestId;
+    final canSend =
+        _canSendProof(status) &&
+        (attempt == null || _proofAttemptFor(status) == attempt);
+    if (!const {'quoted', 'awaiting_payment_review'}.contains(status.state)) {
+      return const SizedBox.shrink();
+    }
+    final sent =
+        (attempt?.complete == true &&
+            const {
+              'quoted',
+              'awaiting_payment_review',
+            }.contains(status.state)) ||
+        (status.state == 'awaiting_payment_review' &&
+            status.proofReview?.canResubmit != true);
+    if (!canSend && !sent && attempt?.outcomeUncertain != true) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 12),
+        if (sent) ...[
+          Text(_copy.proofSent, key: const Key('direct_proof_sent')),
+          if (_proofRefreshFailures.contains(status.requestId)) ...[
+            Text(_copy.proofStatusUnavailable),
+            TextButton(
+              key: const Key('direct_refresh_proof_status'),
+              onPressed: () => _refreshProofStatus(_session!, status.requestId),
+              child: Text(_copy.refreshProofStatus),
+            ),
+          ],
+        ] else ...[
+          if (attempt != null && !busy) ...[
+            SizedBox(
+              height: 110,
+              child: Image.memory(attempt.bytes, fit: BoxFit.contain),
+            ),
+            if (_proofErrors[status.requestId] != null)
+              Text(
+                _copy.errorMessage(_proofErrors[status.requestId]!),
+                key: const Key('direct_proof_error'),
+              ),
+            if (attempt.outcomeUncertain) Text(_copy.checkingProof),
+          ],
+          FilledButton.icon(
+            key: Key(
+              attempt == null
+                  ? 'direct_upload_payment_proof'
+                  : 'direct_retry_payment_proof',
+            ),
+            onPressed: _proofUploading
+                ? null
+                : () => _uploadProof(retry: attempt != null),
+            icon: busy && !_proofSelecting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add_photo_alternate_outlined),
+            label: Text(
+              busy
+                  ? (_proofSelecting
+                        ? _copy.selectingProof
+                        : attempt?.stage == DirectOrderProofStage.confirming
+                        ? _copy.checkingProof
+                        : _copy.proofUploading)
+                  : attempt != null
+                  ? _copy.retryProof
+                  : status.proofReview?.canResubmit == true
+                  ? _copy.replaceProof
+                  : _copy.attachProof,
+            ),
+          ),
+          if (attempt != null && !attempt.outcomeUncertain && canSend)
+            TextButton(
+              key: const Key('direct_change_payment_proof'),
+              onPressed: _proofUploading ? null : () => _uploadProof(),
+              child: Text(_copy.changeProof),
+            ),
+          if (status.proofReview?.canResubmit != true)
+            Text(_copy.proofOnlyHelp),
+        ],
+      ],
     );
-    await showDirectOrderDialog<void>(
+  }
+
+  Future<void> _showPaymentDetails(DirectOrderStatus status) =>
+      _showQuoteSheet(status, payment: true);
+
+  Future<void> _showQuoteDetails(DirectOrderStatus status) =>
+      _showQuoteSheet(status, payment: false);
+
+  Future<void> _showQuoteSheet(
+    DirectOrderStatus status, {
+    required bool payment,
+    String? chargeId,
+    bool balance = false,
+  }) async {
+    if (_status?.requestId != status.requestId || _status?.quote == null) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(_copy.paymentDetails),
-        content: SizedBox(
-          width: 460,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '#${status.referenceCode}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                _amountRow(_copy.finalTotal, quote.finalTotal, strong: true),
-                _amountRow(_copy.includedVat, quote.vatTotal),
-                if (isResubmission) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _copy.doNotPayAgain,
-                    style: const TextStyle(color: PosColors.danger),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 12),
-                  Text(_copy.transferInstruction, textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      color: Colors.white,
-                      child: QrImageView(data: qrData, size: 210),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _copyBankLine(_copy.bankName, storefront.bank.label),
-                  _copyBankLine(
-                    _copy.accountNumber,
-                    storefront.bank.accountNumber,
-                  ),
-                  _bankLine(_copy.accountHolder, storefront.bank.accountHolder),
-                  _copyBankLine(_copy.transferReference, status.referenceCode),
-                ],
-              ],
+      useRootNavigator: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      constraints: const BoxConstraints(maxWidth: 600),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.85,
+          child: ValueListenableBuilder<DirectOrderStatus?>(
+            valueListenable: _statusUpdates,
+            builder: (context, latest, _) => _quoteSheetContent(
+              sheetContext,
+              latest?.requestId == status.requestId ? latest : null,
+              payment: payment,
+              chargeId: chargeId,
+              balance: balance,
             ),
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(_copy.close),
+      ),
+    );
+  }
+
+  Widget _quoteSheetContent(
+    BuildContext sheetContext,
+    DirectOrderStatus? status, {
+    required bool payment,
+    String? chargeId,
+    required bool balance,
+  }) {
+    Map<String, dynamic>? charge;
+    if (status != null && chargeId != null) {
+      for (final entry in supportRows(status.support['charges'])) {
+        if (entry['id'] == chargeId) charge = entry;
+      }
+    }
+    final available =
+        status?.quote != null && (chargeId == null || charge != null);
+    final canPay =
+        available &&
+        (charge != null
+            ? _canPayCharge(status!, charge)
+            : !balance && _canShowPaymentDetails(status!));
+    final additional = balance || chargeId != null;
+    final amount = !available
+        ? 0.0
+        : charge != null
+        ? _chargeDue(status!, charge)
+        : balance
+        ? supportNumber(status!.support['food_due'])
+        : status!.quote!.finalTotal;
+    final reference = chargeId == null
+        ? status?.referenceCode ?? ''
+        : '${status?.referenceCode} ${chargeId.substring(0, math.min(8, chargeId.length))}';
+    final supportCopy = DirectOrderSupportCopy(_copy.languageCode);
+    return Column(
+      key: const Key('direct_customer_quote_sheet'),
+      children: [
+        ListTile(
+          title: Text(payment ? _copy.paymentDetails : _copy.amountDetails),
+          trailing: IconButton(
+            tooltip: _copy.close,
+            onPressed: () => Navigator.pop(sheetContext),
+            icon: const Icon(Icons.close),
           ),
-          FilledButton.icon(
-            key: const Key('direct_upload_payment_proof'),
-            onPressed: _proofUploading
-                ? null
-                : () {
-                    Navigator.pop(dialogContext);
-                    _uploadProof();
-                  },
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: Text(
-              isResubmission ? _copy.replaceProof : _copy.attachProof,
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: available
+              ? SingleChildScrollView(
+                  key: const Key('direct_customer_quote_sheet_list'),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('#${status!.referenceCode}'),
+                      const SizedBox(height: 8),
+                      _amountRow(
+                        additional
+                            ? _copy.additionalPaymentAmount
+                            : _copy.storePaymentAmount,
+                        amount,
+                        strong: true,
+                      ),
+                      if (!additional) Text(_quoteDeliveryNotice(status)),
+                      if (additional) ...[
+                        _amountRow(
+                          charge?['kind'] == 'delivery'
+                              ? supportCopy.text('amount')
+                              : _copy.storePaymentAmount,
+                          charge?['kind'] == 'delivery'
+                              ? supportNumber(charge?['amount'])
+                              : status.quote!.finalTotal,
+                        ),
+                        _amountRow(
+                          supportCopy.text('received'),
+                          charge?['kind'] == 'delivery'
+                              ? supportNumber(charge?['received'])
+                              : supportNumber(status.support['food_received']),
+                        ),
+                        if (charge != null)
+                          Text(charge['reason']?.toString() ?? ''),
+                      ],
+                      const SizedBox(height: 12),
+                      if (payment && canPay && _storefront != null) ...[
+                        Text(_copy.transferInstruction),
+                        const SizedBox(height: 12),
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            color: Colors.white,
+                            child: QrImageView(
+                              key: ValueKey(
+                                'direct_payment_qr:$chargeId:${amount.round()}',
+                              ),
+                              data: VietQrPayload.bankTransfer(
+                                bankBin: _storefront!.bank.bin,
+                                accountNumber: _storefront!.bank.accountNumber,
+                                amount: amount.round(),
+                                purpose: reference,
+                              ),
+                              size: 200,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _copyBankLine(_copy.bankName, _storefront!.bank.label),
+                        _copyBankLine(
+                          _copy.accountNumber,
+                          _storefront!.bank.accountNumber,
+                        ),
+                        _bankLine(
+                          _copy.accountHolder,
+                          _storefront!.bank.accountHolder,
+                        ),
+                        _copyBankLine(_copy.transferReference, reference),
+                      ] else ...[
+                        Text(
+                          charge == null
+                              ? _paymentSummaryLabel(status)
+                              : _chargeStatusLabel(status, charge),
+                        ),
+                        if (status.proofReview?.canResubmit == true)
+                          Text(
+                            _copy.doNotPayAgain,
+                            style: const TextStyle(color: PosColors.danger),
+                          ),
+                      ],
+                      if (!additional) ...[
+                        const Divider(height: 24),
+                        _amountRow(_copy.menuTotal, status.quote!.menuTotal),
+                        _amountRow(
+                          _copy.serviceCharge,
+                          status.quote!.serviceChargeTotal,
+                        ),
+                        if (status.quote!.deliveryPaymentMode !=
+                                'customer_direct' &&
+                            status.support['delivery_fee_deferred'] != true)
+                          _amountRow(
+                            _copy.deliveryFee,
+                            status.quote!.deliveryFeeTotal,
+                          ),
+                        _amountRow(_copy.includedVat, status.quote!.vatTotal),
+                      ],
+                    ],
+                  ),
+                )
+              : Center(child: Text(_copy.unavailable)),
+        ),
+        if (payment &&
+            canPay &&
+            charge != null &&
+            _session != null &&
+            _storefront != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: DirectOrderAttachmentButton(
+                key: ValueKey('direct_charge_sheet_proof:$chargeId'),
+                storeId: _storefront!.storeId,
+                requestId: status.requestId,
+                proofOnly: true,
+                upload: (path, name, mime, bytes) =>
+                    widget.service.uploadSupportAttachment(
+                      session: _session!,
+                      requestId: status.requestId,
+                      chargeId: charge!['id'].toString(),
+                      path: path,
+                      filename: name,
+                      mimeType: mime,
+                      bytes: bytes,
+                    ),
+                onSent: () async {
+                  if (!mounted || _status?.requestId != status.requestId) {
+                    return;
+                  }
+                  setState(() {
+                    _submittedChargeVersions['${status.requestId}:$chargeId'] =
+                        supportNumber(_status!.support['version']).toInt();
+                  });
+                  if (sheetContext.mounted) {
+                    Navigator.pop(sheetContext);
+                  }
+                  await _refreshStatus();
+                },
+              ),
+            ),
+          )
+        else if (payment && canPay)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: const Key('direct_payment_sheet_upload_proof'),
+                onPressed: _proofUploading
+                    ? null
+                    : () {
+                        Navigator.pop(sheetContext);
+                        _uploadProof();
+                      },
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+                label: Text(_copy.attachProof),
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -1393,7 +3156,7 @@ class _DirectOrderStorefrontScreenState
     ),
   );
 
-  Widget _amountRow(String label, double amount, {bool strong = false}) {
+  Widget _amountRow(String label, num amount, {bool strong = false}) {
     final style = strong
         ? Theme.of(
             context,
@@ -1401,12 +3164,21 @@ class _DirectOrderStorefrontScreenState
         : Theme.of(context).textTheme.bodyLarge;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: style)),
-          Text(_money.format(amount), style: style),
-        ],
-      ),
+      child: strong
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: Theme.of(context).textTheme.bodyMedium),
+                Text(_money.format(amount), style: style),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: Text(label, style: style)),
+                const SizedBox(width: 12),
+                Text(_money.format(amount), style: style),
+              ],
+            ),
     );
   }
 
@@ -1423,6 +3195,16 @@ class _DirectOrderStorefrontScreenState
   );
 
   Widget _chatCard(DirectOrderStatus status) {
+    final charges = supportRows(status.support['charges']);
+    final primaryCharge = _primaryCharge(status);
+    String? currentQuoteMessageId;
+    for (final message in status.messages) {
+      if (message.messageType == 'quote' &&
+          status.quote != null &&
+          message.metadata['quote_id'] == status.quote!.id) {
+        currentQuoteMessageId = message.id;
+      }
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -1450,41 +3232,189 @@ class _DirectOrderStorefrontScreenState
               ],
             ),
             const Divider(),
+            if (status.requirements.isNotEmpty) ...[
+              Text(
+                DirectOrderRequirementCopy(_languageCode).requests,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              for (final q in status.requirements.where((q) => !q.isConfirmed))
+                DirectOrderRequirementCard(
+                  requirement: q,
+                  cashier: false,
+                  busy: _sendingMessage || status.support['chat_open'] == false,
+                  onConfirm: () => _decideRequirement(q, true),
+                  onClarify: () => _decideRequirement(q, false),
+                ),
+              if (status.requirements.any((q) => q.isConfirmed))
+                ExpansionTile(
+                  key: PageStorageKey<String>(
+                    'direct_requirements_${status.requestId}',
+                  ),
+                  title: Text(
+                    DirectOrderRequirementCopy(_languageCode).confirmed,
+                  ),
+                  children: [
+                    for (final q in status.requirements.where(
+                      (q) => q.isConfirmed,
+                    ))
+                      DirectOrderRequirementCard(
+                        requirement: q,
+                        cashier: false,
+                      ),
+                  ],
+                ),
+              const Divider(),
+            ],
             if (status.messages.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(_copy.systemUpdate, textAlign: TextAlign.center),
               )
             else
-              for (final message in status.messages) _messageBubble(message),
-            const SizedBox(height: 10),
+              for (final message in status.messages)
+                KeyedSubtree(
+                  key: message.id == _sentMessageId ? _sentMessageKey : null,
+                  child: message.id == currentQuoteMessageId
+                      ? _quoteCard(status)
+                      : _messageBubble(message),
+                ),
+            if (status.quote != null && currentQuoteMessageId == null)
+              _quoteCard(status),
+            if (_hasUnderpayment(status) &&
+                primaryCharge?['kind'] != 'food_balance')
+              _additionalPaymentCard(status),
+            for (final charge in charges)
+              if (charge['status'] != 'void' &&
+                  (charge['kind'] != 'food_balance' ||
+                      charge['status'] == 'paid' ||
+                      charge['id'] == primaryCharge?['id']))
+                _additionalPaymentCard(status, charge: charge),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _chargeStatusLabel(
+    DirectOrderStatus status,
+    Map<String, dynamic> charge,
+  ) => switch (_customerChargeState(status, charge)) {
+    'pending' => _copy.additionalPaymentPending,
+    'review' => _copy.additionalPaymentReview,
+    'paid' => _copy.paymentCompleted,
+    'awaiting_consent' => DirectOrderSupportCopy(
+      _copy.languageCode,
+    ).text('legacy_cost_review'),
+    _ => _copy.amountDetails,
+  };
+
+  Widget _additionalPaymentCard(
+    DirectOrderStatus status, {
+    Map<String, dynamic>? charge,
+  }) {
+    final food = charge == null || charge['kind'] == 'food_balance';
+    final canPay = charge != null && _canPayCharge(status, charge);
+    final amount = charge == null
+        ? supportNumber(status.support['food_due'])
+        : charge['status'] == 'paid'
+        ? supportNumber(charge['amount'])
+        : _chargeDue(status, charge);
+    final supportCopy = DirectOrderSupportCopy(_copy.languageCode);
+    return Card(
+      key: ValueKey(
+        charge == null
+            ? 'direct_chat_underpayment'
+            : 'direct_chat_charge:${charge['id']}',
+      ),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.md,
+        side: const BorderSide(color: PosColors.accent),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              food ? _copy.underpaymentConfirmed : supportCopy.text('delivery'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              charge?['status'] == 'paid'
+                  ? _copy.paymentCompleted
+                  : _copy.additionalPaymentAmount,
+            ),
+            Text(
+              _money.format(amount),
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                color: PosColors.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _amountRow(
+              food ? _copy.storePaymentAmount : supportCopy.text('amount'),
+              food
+                  ? status.quote?.finalTotal ?? 0
+                  : supportNumber(charge['amount']),
+            ),
+            _amountRow(
+              supportCopy.text('received'),
+              food
+                  ? supportNumber(status.support['food_received'])
+                  : supportNumber(charge['received']),
+            ),
+            if (charge?['reason'] != null) Text(charge!['reason'].toString()),
+            Text(
+              charge == null
+                  ? _copy.additionalPaymentPreparing
+                  : _chargeStatusLabel(status, charge),
+            ),
+            const SizedBox(height: 12),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    minLines: 1,
-                    maxLines: 4,
-                    decoration: InputDecoration(
-                      hintText: _copy.messageHint,
-                      counterText: '',
+                  child: OutlinedButton(
+                    key: ValueKey(
+                      'direct_charge_details:${charge?['id'] ?? 'balance'}',
                     ),
-                    maxLength: 2000,
-                    onSubmitted: (_) => _sendMessage(),
+                    onPressed: () => _showQuoteSheet(
+                      status,
+                      payment: false,
+                      chargeId: charge?['id']?.toString(),
+                      balance: charge == null,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    child: Text(
+                      _copy.amountDetails,
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  tooltip: _copy.send,
-                  onPressed: _sendingMessage ? null : _sendMessage,
-                  icon: _sendingMessage
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send_rounded),
-                ),
+                if (canPay) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      key: ValueKey('direct_charge_payment:${charge['id']}'),
+                      onPressed: () => _showQuoteSheet(
+                        status,
+                        payment: true,
+                        chargeId: charge['id'].toString(),
+                      ),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                      ),
+                      child: Text(
+                        _copy.viewPaymentDetails,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -1493,18 +3423,89 @@ class _DirectOrderStorefrontScreenState
     );
   }
 
+  Widget _chatComposer(DirectOrderStatus status) => Container(
+    key: const Key('direct_customer_chat_composer'),
+    decoration: const BoxDecoration(
+      color: PosColors.surface,
+      border: Border(top: BorderSide(color: PosColors.border)),
+    ),
+    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (_session != null && _storefront != null) ...[
+          DirectOrderAttachmentButton(
+            key: ValueKey('customer_chat_attachment:${status.requestId}'),
+            storeId: _storefront!.storeId,
+            requestId: status.requestId,
+            compact: true,
+            enabled: status.support['chat_open'] != false,
+            upload: (path, filename, mime, bytes) =>
+                widget.service.uploadSupportAttachment(
+                  session: _session!,
+                  requestId: status.requestId,
+                  path: path,
+                  filename: filename,
+                  mimeType: mime,
+                  bytes: bytes,
+                ),
+            onSent: () => _refreshStatus(silent: true),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: TextField(
+            key: const Key('direct_customer_chat_input'),
+            controller: _messageController,
+            enabled: status.support['chat_open'] != false,
+            minLines: 1,
+            maxLines: 4,
+            decoration: InputDecoration(
+              hintText: _copy.messageHint,
+              hintMaxLines: 1,
+              counterText: '',
+            ),
+            maxLength: 2000,
+            onSubmitted: (_) => _sendMessage(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filled(
+          tooltip: _copy.send,
+          onPressed: _sendingMessage || status.support['chat_open'] == false
+              ? null
+              : _sendMessage,
+          icon: _sendingMessage
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.send_rounded),
+        ),
+      ],
+    ),
+  );
+
   Widget _messageBubble(DirectOrderMessage message) {
     final mine = message.senderType == 'customer';
     final body = message.hasAttachment
-        ? _copy.paymentProof
+        ? (message.messageType == 'attachment'
+              ? message.body ?? _copy.paymentProof
+              : _copy.paymentProof)
         : localizedDirectOrderMessage(
             copy: _copy,
             messageType: message.messageType,
             body: message.body,
           );
-    final grabUri = message.messageType == 'grab_link'
-        ? Uri.tryParse(message.body ?? '')
-        : null;
+    final links = message.hasAttachment
+        ? const <String>[]
+        : directOrderTrackingLinks(message.body ?? '');
+    final grabUri = links.isEmpty ? null : directOrderTrackingUri(links.first);
+    var prose = body;
+    for (final url in links) {
+      prose = prose.replaceAll(url, '');
+    }
+    final previousQuoteAmount = message.metadata['final_total'];
     final bubble = Container(
       constraints: const BoxConstraints(maxWidth: 560),
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -1517,13 +3518,54 @@ class _DirectOrderStorefrontScreenState
         mainAxisSize: MainAxisSize.min,
         children: [
           if (message.hasAttachment) ...[
-            const Icon(Icons.image_outlined, size: 18),
+            Icon(
+              message.metadata['mime_type'] == 'application/pdf'
+                  ? Icons.picture_as_pdf_outlined
+                  : Icons.image_outlined,
+              size: 18,
+            ),
             const SizedBox(width: 6),
           ] else if (grabUri != null) ...[
             const Icon(Icons.delivery_dining_outlined, size: 18),
             const SizedBox(width: 6),
           ],
-          Flexible(child: Text(body)),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (message.metadata['request_text'] is String) ...[
+                  Text(
+                    '↳ ${message.metadata['request_text']}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                if (message.messageType == 'quote') ...[
+                  Text(
+                    _copy.previousQuote,
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  if (previousQuoteAmount is num &&
+                      previousQuoteAmount.isFinite &&
+                      previousQuoteAmount >= 0)
+                    Text(_money.format(previousQuoteAmount)),
+                ] else
+                  DirectOrderTranslatedText(
+                    original: prose.trim(),
+                    translations: links.isEmpty
+                        ? supportMap(message.metadata['translations'])
+                        : const {},
+                    status: message.metadata['translation_status']?.toString(),
+                  ),
+                for (final url in links)
+                  DirectOrderTrackingLink(
+                    url: url,
+                    orderLink: message.metadata['order_access_link'] == true,
+                  ),
+              ],
+            ),
+          ),
           if (grabUri != null) ...[
             const SizedBox(width: 6),
             const Icon(Icons.open_in_new_rounded, size: 16),
@@ -1533,84 +3575,22 @@ class _DirectOrderStorefrontScreenState
     );
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: grabUri == null
-          ? bubble
-          : InkWell(
-              onTap: () =>
-                  launchUrl(grabUri, mode: LaunchMode.externalApplication),
+      child: message.hasAttachment && _session != null
+          ? InkWell(
+              onTap: () => openDirectOrderAttachment(
+                context,
+                () => widget.service.supportRequest(
+                  session: _session!,
+                  requestId: _status!.requestId,
+                  action: 'customer_attachment_url',
+                  payload: {'message_id': message.id},
+                ),
+              ),
               child: bubble,
-            ),
-    );
-  }
-}
-
-class _CustomerProgressRow extends StatelessWidget {
-  const _CustomerProgressRow({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.isCompleted,
-    required this.isCurrent,
-    required this.showConnector,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool isCompleted;
-  final bool isCurrent;
-  final bool showConnector;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = isCompleted || isCurrent;
-    final color = isCompleted
-        ? PosColors.success
-        : isCurrent
-        ? PosColors.accent
-        : PosColors.textSecondary;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 34,
-          child: Column(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: active ? color : PosColors.panelMuted,
-                ),
-                child: Icon(
-                  isCompleted ? Icons.check_rounded : icon,
-                  size: 17,
-                  color: active ? Colors.white : color,
-                ),
-              ),
-              if (showConnector)
-                Container(
-                  width: 2,
-                  height: 20,
-                  color: isCompleted ? PosColors.success : PosColors.border,
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: active ? PosColors.textPrimary : PosColors.textSecondary,
-                fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
-      ],
+            )
+          : grabUri == null
+          ? bubble
+          : InkWell(child: bubble),
     );
   }
 }
@@ -1707,12 +3687,14 @@ class _BottomActionCard extends StatelessWidget {
     required this.leading,
     required this.amount,
     required this.label,
+    required this.onViewCart,
     required this.onPressed,
   });
 
   final String leading;
   final String amount;
   final String label;
+  final VoidCallback onViewCart;
   final VoidCallback onPressed;
 
   @override
@@ -1721,14 +3703,18 @@ class _BottomActionCard extends StatelessWidget {
       color: PosTerminalColors.darkShell,
       elevation: 8,
       borderRadius: AppRadius.lg,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: AppRadius.lg,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-          child: Row(
-            children: [
-              Expanded(
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              key: const Key('direct_view_cart'),
+              onTap: onViewCart,
+              borderRadius: AppRadius.lg,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 15,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1749,18 +3735,31 @@ class _BottomActionCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Icon(Icons.arrow_forward_rounded, color: Colors.white),
-            ],
+            ),
           ),
-        ),
+          InkWell(
+            key: const Key('direct_cart_continue'),
+            onTap: onPressed,
+            borderRadius: AppRadius.lg,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -316,9 +316,13 @@ class ReportSummary {
     this.paymentMethodBreakdown = const [],
     this.missingProofIssues = const [],
     this.einvoiceReviewIssues = const [],
+    this.issuesPaged = false,
   });
 
   factory ReportSummary.fromServer(Map<String, dynamic> data) {
+    if (data['version'] != 1 && data['version'] != 2) {
+      throw const FormatException('STORE_REPORT_VERSION_INVALID');
+    }
     double number(Map row, String key) {
       final value = row[key];
       if (value is! num || !value.isFinite) {
@@ -377,9 +381,13 @@ class ReportSummary {
           ),
         )
         .toList();
-    if (missing.length != integer(data, 'missing_proof_count') ||
-        jobs.length != integer(data, 'failed_einvoice_count')) {
+    if (data['version'] == 1 &&
+        (missing.length != integer(data, 'missing_proof_count') ||
+            jobs.length != integer(data, 'failed_einvoice_count'))) {
       throw const FormatException('STORE_REPORT_ISSUES_INCOMPLETE');
+    }
+    if (data['version'] == 2 && (missing.isNotEmpty || jobs.isNotEmpty)) {
+      throw const FormatException('STORE_REPORT_SUMMARY_DETAILS_UNEXPECTED');
     }
     final dineIn = number(data, 'dine_in');
     final delivery = number(data, 'delivery');
@@ -405,8 +413,9 @@ class ReportSummary {
       payTotal: pay,
       paymentReceivedTotal: cash + card + bank + pay,
       paymentVariance: number(data, 'variance'),
-      missingProofPhotosCount: missing.length,
-      failedEinvoiceJobsCount: jobs.length,
+      missingProofPhotosCount: integer(data, 'missing_proof_count'),
+      failedEinvoiceJobsCount: integer(data, 'failed_einvoice_count'),
+      issuesPaged: data['version'] == 2,
       missingProofIssues: missing,
       einvoiceReviewIssues: jobs,
       proofCompletePercent: number(data, 'proof_pct'),
@@ -471,6 +480,7 @@ class ReportSummary {
   final int failedEinvoiceJobsCount;
   final double proofCompletePercent;
   final List<PaymentMethodBreakdown> paymentMethodBreakdown;
+  final bool issuesPaged;
   final List<MissingProofIssue> missingProofIssues;
   final List<EinvoiceReviewIssue> einvoiceReviewIssues;
 }
@@ -564,7 +574,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final startDate = DateFormat('yyyy-MM-dd').format(requestedStart);
       final endDate = DateFormat('yyyy-MM-dd').format(requestedEnd);
       final response = await (_client ?? supabase).rpc(
-        'get_store_report_summary',
+        'get_store_report_summary_v2',
         params: {
           'p_store_id': storeId,
           'p_from_date': startDate,
@@ -573,7 +583,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
       );
       if (!mounted || requestId != _requestId) return;
       if (response is! Map ||
-          response['version'] != 1 ||
+          response['version'] != 2 ||
           response['store_id'] != storeId ||
           response['from_date'] != startDate ||
           response['to_date'] != endDate) {

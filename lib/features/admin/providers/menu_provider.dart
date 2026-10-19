@@ -1,3 +1,4 @@
+import '../../../core/payments/beverage_tax.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -75,6 +76,9 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
     if (message.contains('MENU_COMBO_')) {
       return 'Choose at least one valid non-combo menu and quantity.';
+    }
+    if (message.contains('MENU_TAX_')) {
+      return 'Invalid beverage sugar classification or basis.';
     }
     if (message.contains('MENU_IMAGE_')) {
       return 'The menu photo could not be saved. Choose another image and try again.';
@@ -234,6 +238,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
@@ -241,10 +246,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
   }) async {
     Map<String, dynamic>? created;
     try {
-      final currentItems = state.items.valueOrNull ?? [];
-      final sortOrder = currentItems
-          .where((item) => item['category_id'].toString() == categoryId)
-          .length;
+      final sortOrder = _nextSortOrder(categoryId);
 
       created = await menuService.addMenuItem(
         storeId: storeId,
@@ -253,6 +255,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameVi: nameVi,
         nameEn: nameEn,
         paperlessNameVi: paperlessNameVi,
+        beverageTax: beverageTax,
         price: price,
         sortOrder: sortOrder,
       );
@@ -291,6 +294,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
     required XFile photo,
     bool isCombo = false,
@@ -300,10 +304,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     Map<String, dynamic>? created;
     MenuImageUploadResult? uploaded;
     try {
-      final currentItems = state.items.valueOrNull ?? [];
-      final sortOrder = currentItems
-          .where((item) => item['category_id'].toString() == categoryId)
-          .length;
+      final sortOrder = _nextSortOrder(categoryId);
       created = await menuService.addMenuItem(
         storeId: storeId,
         categoryId: categoryId,
@@ -311,6 +312,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameVi: nameVi,
         nameEn: nameEn,
         paperlessNameVi: paperlessNameVi,
+        beverageTax: beverageTax,
         price: price,
         sortOrder: sortOrder,
       );
@@ -373,6 +375,20 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
   }
 
+  Future<bool> archiveMenuItem(String itemId) async {
+    try {
+      await menuService.archiveMenuItem(itemId);
+      await fetchItems();
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to delete menu.'),
+      );
+      return false;
+    }
+  }
+
   Future<bool> togglePublicVisibility(
     String itemId,
     bool isVisiblePublic,
@@ -390,12 +406,30 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
   }
 
+  int _nextSortOrder(String categoryId) {
+    var maxSortOrder = -1;
+    for (final item in state.items.valueOrNull ?? const []) {
+      if (item['category_id']?.toString() != categoryId) continue;
+      final sortOrder = switch (item['sort_order']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value),
+        _ => null,
+      };
+      if (sortOrder != null && sortOrder > maxSortOrder) {
+        maxSortOrder = sortOrder;
+      }
+    }
+    return maxSortOrder + 1;
+  }
+
   Future<bool> updateMenuItem({
     required String itemId,
     required String nameKo,
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    BeverageTax? beverageTax,
     required double price,
   }) async {
     try {
@@ -405,6 +439,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameVi: nameVi,
         nameEn: nameEn,
         paperlessNameVi: paperlessNameVi,
+        beverageTax: beverageTax,
         price: price,
       );
       await fetchItems();

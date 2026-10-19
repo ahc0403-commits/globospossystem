@@ -1,33 +1,46 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../main.dart';
 import 'direct_order_service.dart';
+import 'direct_order_requirements.dart';
+import 'package:uuid/uuid.dart';
 
 String directOrderStaffErrorCode(Object error) {
   if (error is DirectOrderException) return error.code;
   if (error is PostgrestException) {
     final match = RegExp(
-      r'\b(?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+\b',
+      r'\b(?:(?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+|DELIVERY_FEE_DISABLED)\b',
     ).firstMatch(error.message);
     if (match != null) return match.group(0)!;
   }
   return 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE';
 }
 
-String? normalizeGrabTrackingUrl(String input) {
+String? normalizeDeliveryTrackingUrl(String input) {
   var value = input.trim();
-  if (value.isEmpty) return null;
+  if (value.isEmpty || value.length > 2000 || RegExp(r'\s').hasMatch(value)) {
+    return null;
+  }
   if (!value.contains('://')) value = 'https://$value';
   final uri = Uri.tryParse(value);
-  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
-  final host = uri.host.toLowerCase();
-  final validHost =
-      host == 'grab.com' ||
-      host.endsWith('.grab.com') ||
-      host == 'grab.onelink.me';
-  return validHost ? uri.toString() : null;
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty ||
+      !RegExp(
+        r'^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$',
+      ).hasMatch(uri.host) ||
+      value.length > 2000) {
+    return null;
+  }
+  return uri.toString();
 }
+
+// Kept for existing callers; provider identity is independent of URL validation.
+String? normalizeGrabTrackingUrl(String input) =>
+    normalizeDeliveryTrackingUrl(input);
 
 class DirectOrderAvailability {
   const DirectOrderAvailability({
@@ -125,6 +138,17 @@ enum DirectOrderDeliveryPaymentMode {
 class DirectOrderStaffService {
   const DirectOrderStaffService();
 
+  Future<Map<String, dynamic>?> fetchOrderPackingContext({
+    required String orderId,
+    required String storeId,
+  }) async {
+    final result = await supabase.rpc(
+      'direct_order_receipt_packing_context',
+      params: {'p_order_id': orderId, 'p_store_id': storeId},
+    );
+    return result == null ? null : Map<String, dynamic>.from(result as Map);
+  }
+
   Map<String, dynamic> _map(Object? raw) {
     if (raw is! Map) {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
@@ -146,7 +170,7 @@ class DirectOrderStaffService {
     int limit = 100,
   }) async {
     final raw = await supabase.rpc(
-      'direct_order_staff_list_v2',
+      'direct_order_staff_list_v5',
       params: {'p_store_id': storeId, 'p_states': states, 'p_limit': limit},
     );
     return _list(raw);
@@ -158,11 +182,50 @@ class DirectOrderStaffService {
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_detail_v2',
+        'direct_order_staff_detail_v6',
         params: {'p_store_id': storeId, 'p_request_id': requestId},
       ),
     );
   }
+
+  Future<Map<String, dynamic>> issueOrderLink({
+    required String storeId,
+    required String requestId,
+    required String operationId,
+    required String accessKey,
+    required bool sendToCustomer,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_staff_issue_order_link',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_operation_id': operationId,
+        'p_access_key': accessKey,
+        'p_public_origin': AppConstants.posPublicUrl,
+        'p_send_to_customer': sendToCustomer,
+      },
+    ),
+  );
+
+  Future<Map<String, dynamic>> paymentDocument({
+    required String storeId,
+    required String requestId,
+    required String quoteId,
+    required int quoteVersion,
+    required bool includePayment,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_staff_payment_document',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_quote_id': quoteId,
+        'p_quote_version': quoteVersion,
+        'p_include_payment': includePayment,
+      },
+    ),
+  );
 
   Future<Map<String, dynamic>> quote({
     required String storeId,
@@ -185,6 +248,61 @@ class DirectOrderStaffService {
     );
   }
 
+  Future<Map<String, dynamic>> bookDriver({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String operationId,
+    required String action,
+    required Map<String, dynamic> payload,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_booking_action',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_operation_id': operationId,
+        'p_action': action,
+        'p_payload': payload,
+      },
+    ),
+  );
+
+  Future<void> handoffBooking({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String bookingId,
+  }) async {
+    await supabase.rpc(
+      'direct_order_handoff_booking',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_booking_id': bookingId,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> markCooked({
+    required String storeId,
+    required String ticketId,
+    required int expectedVersion,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_mark_cooked',
+      params: {
+        'p_store_id': storeId,
+        'p_ticket_id': ticketId,
+        'p_expected_version': expectedVersion,
+      },
+    ),
+  );
+
+  String newDeliveryOperationId() => const Uuid().v4();
+
   Future<Map<String, dynamic>> sendMessage({
     required String storeId,
     required String requestId,
@@ -201,6 +319,34 @@ class DirectOrderStaffService {
       ),
     );
   }
+
+  Future<Map<String, dynamic>> replyRequirement({
+    required String storeId,
+    required String requestId,
+    required DirectOrderRequirement requirement,
+    required DirectOrderRequirementReply reply,
+    required String locale,
+    required String mutationId,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_staff_reply_requirement',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_requirement_id': requirement.id,
+        'p_expected_version': requirement.version,
+        'p_mutation_id': mutationId,
+        'p_body': reply.body,
+        'p_locale': locale,
+        'p_needs_confirmation': reply.needsConfirmation,
+        'p_print_request_vi': reply.printRequestVi,
+        'p_print_reply_vi': reply.printReplyVi,
+        'p_print_scope': reply.printScope,
+      },
+    ),
+  );
+
+  String newRequirementMutationId() => const Uuid().v4();
 
   Future<void> reject({
     required String storeId,
@@ -256,15 +402,248 @@ class DirectOrderStaffService {
     return _map(result);
   }
 
+  Future<Map<String, dynamic>> recordReceipt({
+    required String storeId,
+    required String requestId,
+    required String quoteId,
+    required String proofMessageId,
+    required num amount,
+    required String bankReference,
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_record_receipt',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_quote_id': quoteId,
+        'p_proof_message_id': proofMessageId,
+        'p_amount': amount,
+        'p_bank_reference': bankReference,
+      },
+    ),
+  );
+
+  Future<Map<String, dynamic>> saveBuyerInformation({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required Map<String, dynamic> patch,
+  }) async => _map(
+    await supabase.rpc(
+      'pos_direct_order_save_buyer',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_patch': patch,
+      },
+    ),
+  );
+
+  Future<Map<String, dynamic>> supportAction({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String action,
+    Map<String, dynamic> payload = const {},
+  }) async => _map(
+    await supabase.rpc(
+      'direct_order_staff_support_action',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_action': action,
+        'p_payload': payload,
+      },
+    ),
+  );
+
+  Future<Map<String, dynamic>> attachmentRequest({
+    required String storeId,
+    required String requestId,
+    required String action,
+    Map<String, dynamic> payload = const {},
+  }) async {
+    try {
+      final response = await supabase.functions.invoke(
+        'direct-order-public',
+        body: {
+          ...payload,
+          'action': action,
+          'store_id': storeId,
+          'request_id': requestId,
+        },
+      );
+      if (response.status != 200) {
+        throw DirectOrderException(
+          response.data is Map
+              ? response.data['error'].toString()
+              : 'DIRECT_ORDER_ATTACHMENT_INVALID',
+        );
+      }
+      final envelope = _map(response.data);
+      if (envelope['data'] is! Map) {
+        throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+      }
+      return _map(envelope['data']);
+    } on FunctionException catch (error) {
+      throw DirectOrderException(
+        error.details is Map
+            ? error.details['error'].toString()
+            : 'DIRECT_ORDER_ATTACHMENT_INVALID',
+      );
+    }
+  }
+
+  Future<void> uploadPaymentDocument({
+    required String storeId,
+    required String requestId,
+    required String quoteId,
+    required int quoteVersion,
+    required bool includePayment,
+    required String sourceHash,
+    required String path,
+    required String filename,
+    required String mimeType,
+    required Uint8List bytes,
+  }) async {
+    Future<void> commit() async {
+      await supabase.rpc(
+        'direct_order_staff_commit_payment_document',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_quote_id': quoteId,
+          'p_quote_version': quoteVersion,
+          'p_include_payment': includePayment,
+          'p_source_hash': sourceHash,
+          'p_path': path,
+          'p_filename': filename,
+          'p_mime': mimeType,
+        },
+      );
+    }
+
+    try {
+      await commit();
+      return;
+    } on PostgrestException catch (error) {
+      if (error.message != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
+    }
+    final upload = await attachmentRequest(
+      storeId: storeId,
+      requestId: requestId,
+      action: 'staff_chat_attachment_upload',
+      payload: {'path': path, 'filename': filename, 'mime_type': mimeType},
+    );
+    await supabase.storage
+        .from('direct-order-chat')
+        .uploadBinaryToSignedUrl(
+          path,
+          upload['token'] as String,
+          bytes,
+          FileOptions(contentType: mimeType),
+        );
+    await commit();
+  }
+
+  Future<void> uploadChatAttachment({
+    required String storeId,
+    required String requestId,
+    required String path,
+    required String filename,
+    required String mimeType,
+    required Uint8List bytes,
+  }) async {
+    final payload = {'path': path, 'filename': filename, 'mime_type': mimeType};
+    // A previous upload or commit may have succeeded despite a lost response.
+    // Recover the same immutable path first; only a missing object needs upload.
+    try {
+      await attachmentRequest(
+        storeId: storeId,
+        requestId: requestId,
+        action: 'staff_chat_attachment_commit',
+        payload: payload,
+      );
+      return;
+    } on DirectOrderException catch (error) {
+      if (error.code != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
+    }
+    final upload = await attachmentRequest(
+      storeId: storeId,
+      requestId: requestId,
+      action: 'staff_chat_attachment_upload',
+      payload: payload,
+    );
+    await supabase.storage
+        .from('direct-order-chat')
+        .uploadBinaryToSignedUrl(
+          path,
+          upload['token'] as String,
+          bytes,
+          FileOptions(contentType: mimeType),
+        );
+    await attachmentRequest(
+      storeId: storeId,
+      requestId: requestId,
+      action: 'staff_chat_attachment_commit',
+      payload: payload,
+    );
+  }
+
   Future<Map<String, dynamic>> approve({
     required String storeId,
     required String requestId,
+    required num confirmedAmount,
+    required String quoteId,
+    required String proofMessageId,
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_approve_verified_payment',
-        params: {'p_store_id': storeId, 'p_request_id': requestId},
+        'direct_order_approve_photo_payment',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_confirmed_amount': confirmedAmount,
+          'p_quote_id': quoteId,
+          'p_proof_message_id': proofMessageId,
+        },
       ),
+    );
+  }
+
+  Future<Map<String, dynamic>> driverCashAction({
+    required String storeId,
+    required String requestId,
+    required String kind,
+    required Map<String, dynamic> payload,
+    String? parentId,
+  }) async {
+    final result = await supabase.rpc(
+      'direct_order_staff_driver_cash_action',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_operation_id': payload['operation_id'],
+        'p_kind': kind,
+        'p_amount': payload['amount'],
+        'p_reference': payload['reference'],
+        'p_evidence_message_id': payload['evidence_message_id'],
+        'p_parent_id': parentId,
+        'p_method': payload['method'],
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<void> retryTranslation({
+    required String storeId,
+    required String requestId,
+  }) async {
+    await supabase.rpc(
+      'direct_order_retry_translation',
+      params: {'p_store_id': storeId, 'p_request_id': requestId},
     );
   }
 
@@ -273,14 +652,96 @@ class DirectOrderStaffService {
     required String requestId,
     required String grabUrl,
     double? actualGrabFee,
+    int? expectedVersion,
+    String provider = 'grab',
+    String? providerName,
+    String? driverContact,
+    bool cashConfirmed = false,
+    String? evidenceMessageId,
+    String? operationId,
+    String? cashReference,
   }) async {
     await supabase.rpc(
-      'direct_order_set_dispatch_with_payment_mode',
+      'direct_order_set_dispatch_v4',
       params: {
         'p_store_id': storeId,
         'p_request_id': requestId,
-        'p_grab_tracking_url': grabUrl,
-        'p_actual_grab_fee': actualGrabFee,
+        'p_tracking_url': grabUrl,
+        'p_actual_fee': actualGrabFee,
+        'p_expected_version': expectedVersion,
+        'p_provider': provider,
+        'p_provider_name': providerName,
+        'p_driver_contact': driverContact,
+        'p_cash_confirmed': cashConfirmed,
+        'p_evidence_message_id': evidenceMessageId,
+        'p_operation_id': operationId,
+        'p_cash_reference': cashReference,
+      },
+    );
+  }
+
+  Future<void> setDinerCount({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required int dinerCount,
+  }) async {
+    await supabase.rpc(
+      'direct_order_staff_set_diner_count',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_diner_count': dinerCount,
+      },
+    );
+  }
+
+  Future<void> offerPickup({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+    required String reason,
+  }) async {
+    await supabase.rpc(
+      'direct_order_staff_offer_pickup',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
+        'p_reason': reason,
+      },
+    );
+  }
+
+  Future<void> recordPickupRefund({
+    required String storeId,
+    required String requestId,
+    required String offerId,
+    required String reference,
+  }) async {
+    await supabase.rpc(
+      'direct_order_staff_record_pickup_refund',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_offer_id': offerId,
+        'p_reference': reference,
+      },
+    );
+  }
+
+  Future<void> completePickup({
+    required String storeId,
+    required String requestId,
+    required int expectedVersion,
+  }) async {
+    await supabase.rpc(
+      'direct_order_cashier_complete_pickup',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_expected_version': expectedVersion,
       },
     );
   }
@@ -382,7 +843,7 @@ class DirectOrderStaffService {
   }) async {
     return _list(
       await supabase.rpc(
-        'direct_delivery_ticket_list',
+        'direct_delivery_ticket_list_v4',
         params: {'p_store_id': storeId, 'p_statuses': statuses, 'p_limit': 200},
       ),
     );
@@ -481,7 +942,7 @@ class DirectOrderStaffService {
         '${value.day.toString().padLeft(2, '0')}';
     return _map(
       await supabase.rpc(
-        'direct_order_analytics',
+        'direct_order_analytics_v4',
         params: {
           'p_store_id': storeId,
           'p_from_date': date(from),

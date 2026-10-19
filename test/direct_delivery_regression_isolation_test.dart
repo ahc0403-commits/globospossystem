@@ -7,33 +7,54 @@ import 'package:flutter_test/flutter_test.dart';
 const _migrationPath =
     'supabase/migrations/20260821130000_direct_delivery_ordering.sql';
 
+// 2026-10-11: data access plan changes refresh ownership and report v2.
+// Bounded SDK probes, realtime tests and financial SQL/API tests cover behavior.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      'cc34d252a0cef434c5535b89a9749e8c91f8cf6cd102d6c9806237c420dd5cd3',
+      '14eaeb6d1629981b0c615a8b887f9d3e1d7806403e5668f60b06d86f56abd6c1',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.
   // Timed KDS and cashier cancel/undo tests cover the requested workflow.
   // menu_language_switch_test + routed/overlay operational suites cover behavior.
+  // 2026-10-11: corporate bank snapshots replace the personal beneficiary.
+  // Customer display and cashier overlay tests verify the approved account.
+  // Non-revenue checkout now reconfirms totals after concurrent additions.
   'lib/features/cashier/cashier_screen.dart':
-      '297c34308ee695e28e91ebc5d26616ece5fef8a66ef08d6cb791f6dc4c305dba',
+      '236b5da79562c8e4fa44a2aeda06e312af38db7616ff1b913ce9cdefe5d1e515',
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
+  // 2026-10-08: eager-load and retain item notes; menu-request behavior is
+  // covered by direct_order_support_test and operational kitchen suites.
   'lib/features/kitchen/kitchen_provider.dart':
-      'ed1bc663f89f23b51d705cb1b26610a848092758446372ffb519636441da271b',
+      'a78480eec8f93ba946dbef688ad5745930c5b469b7941d3a49b5a88a0e436cc8',
   'lib/features/kitchen/kitchen_screen.dart':
-      '6a485a44bde9887568dd3eaf22b0d0bbc0a0c72966920ff938f469a78a33d2ee',
+      '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
+  // 2026-10-08: eager-load menu notes for native receipt reprints; payment
+  // writes are unchanged. Receipt SQL and printer byte tests cover the change.
   'lib/core/services/payment_service.dart':
-      '8dedccd5c59bfb01b7b3fe4089fedca2450d2f2b031f801a24cd3b4ccba20402',
+      '85442e4b0dd62d2fd540971b5b8d843c3590209299e6b4845bbfabc66032f34a',
+  // Sugar VAT and mixed combo amounts are covered by beverage_sugar_vat_test.
   'lib/core/payments/payment_total_calculator.dart':
-      'a6fe830f387dac0775a794f466fb5fb33103a64f4e0f6d8c0863ea3e87b47076',
+      'ee04b6d78af1b0dfed8cd7669e2e3e513d9140ca5ed4e6a3f089c946186efb9b',
   // Phase 4D moves the reconciled sales report to a server aggregate.
   // Real SQL/API and Excel coverage lives in financial_inputs_postgrest_test.dart.
   'lib/features/report/report_provider.dart':
-      'dd2d2e3ac50b1961c5fe3d99e17de6f585e84bf48aab137d79bef6f28f9a757a',
+      '8ba89ba7b6937baecb78dd5bde9b9751ed160634b7d2ba536909b9ab0cba0548',
+  // 2026-10-06: forward the direct order reference for packing headers.
+  // Runtime queue->agent bytes coverage verifies 3 sets; regular receipts
+  // retain their existing financial behavior and have no utensil block.
+  // 2026-10-08: forward customer requests to the same queued receipt builder.
+  // 2026-10-10: forward the independent utensils flag; byte tests retain diners
+  // and verify opt-out across all packing forms without changing money.
+  // 2026-10-10: confirmed-request addenda render as memo slips; destinations
+  // and physical endpoints are fetched in two batch reads for 1/10/50 printers.
+  // direct_order_requirements_test + wifi_printer_service_test cover the path.
+  // 2026-10-10: payer snapshot and claim_print_jobs_v2 prevent old wording.
+  // Recipient receipt bytes and isolated SQL claims cover direct/legacy paths.
   'lib/core/hardware/print_job_agent_service.dart':
-      '5c976d66666e47e3a9a2de7cf7cda39a6c6827792015cb414b118925409b03db',
+      '4f4c80d32fecfe2fab4687ddd243b61984cf5c72dd66a4acb45110a543fad963',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
       '812fdaa3f993520983fc87e4bdb2c1f28c7ccca23f0eb384d69fdf42f4101993',
   'supabase/migrations/20260722050000_kitchen_direct_completion.sql':
@@ -143,7 +164,7 @@ void main() {
       'supabase/functions/direct-order-public/index.ts',
     ).readAsStringSync();
     final raisedCodes = RegExp(
-      r"RAISE EXCEPTION\s+'((?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+)",
+      r"RAISE EXCEPTION\s+'{1,2}((?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+)",
       caseSensitive: false,
     ).allMatches(migration).map((match) => match.group(1)!.toUpperCase()).toSet();
     final registeredCodes = RegExp(

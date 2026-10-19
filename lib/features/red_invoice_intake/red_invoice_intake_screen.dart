@@ -1,3 +1,4 @@
+import 'buyer_information_form.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -346,13 +347,19 @@ class _RedInvoiceIntakeScreenState extends State<RedInvoiceIntakeScreen> {
   }
 
   Future<void> _edit(RedInvoiceIntake request) async {
-    final saved = await showDialog<bool>(
+    final saved = await showDialog<RedInvoiceIntake>(
       context: context,
       barrierDismissible: false,
       builder: (_) =>
           _RedInvoiceIntakeEditDialog(request: request, service: _service),
     );
-    if (saved == true) await _reload();
+    if (saved != null && mounted) {
+      setState(
+        () => _requests = [
+          for (final row in _requests) row.id == saved.id ? saved : row,
+        ],
+      );
+    }
   }
 
   Future<void> _openAttachment(String url) async {
@@ -402,13 +409,7 @@ class _RedInvoiceIntakeEditDialog extends StatefulWidget {
 
 class _RedInvoiceIntakeEditDialogState
     extends State<_RedInvoiceIntakeEditDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _taxCode;
-  late final TextEditingController _legalName;
-  late final TextEditingController _address;
-  late final TextEditingController _email;
-  late final TextEditingController _phone;
-  late final TextEditingController _note;
+  late final BuyerInformationController _buyer;
   late String _source;
   late String _status;
   XFile? _evidence;
@@ -420,28 +421,17 @@ class _RedInvoiceIntakeEditDialogState
   void initState() {
     super.initState();
     final request = widget.request;
-    _taxCode = TextEditingController(text: request.buyerTaxCode);
-    _legalName = TextEditingController(text: request.buyerLegalName);
-    _address = TextEditingController(text: request.buyerAddress);
-    _email = TextEditingController(text: request.buyerEmail);
-    _phone = TextEditingController(text: request.buyerPhone);
-    _note = TextEditingController(text: request.sourceNote);
+    _buyer = BuyerInformationController(
+      request.buyerInformation,
+      confirm: request.status == 'ready',
+    );
     _source = request.source;
     _status = request.status;
   }
 
   @override
   void dispose() {
-    for (final controller in [
-      _taxCode,
-      _legalName,
-      _address,
-      _email,
-      _phone,
-      _note,
-    ]) {
-      controller.dispose();
-    }
+    _buyer.dispose();
     super.dispose();
   }
 
@@ -453,106 +443,83 @@ class _RedInvoiceIntakeEditDialogState
       title: Text(l10n.redInvoiceEditTitle),
       content: SizedBox(
         width: 620,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _source,
-                        decoration: InputDecoration(
-                          labelText: l10n.redInvoiceInformationSource,
-                        ),
-                        items: [
-                          _item('cashier', l10n.redInvoiceSourceCashier),
-                          _item(
-                            'business_card',
-                            l10n.redInvoiceSourceBusinessCard,
-                          ),
-                          _item('zalo', l10n.redInvoiceSourceZalo),
-                          _item('other', l10n.redInvoiceSourceOther),
-                        ],
-                        onChanged: (value) => setState(() => _source = value!),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _source,
+                      decoration: InputDecoration(
+                        labelText: l10n.redInvoiceInformationSource,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _status,
-                        decoration: InputDecoration(
-                          labelText: l10n.redInvoiceStatus,
+                      items: [
+                        _item('cashier', l10n.redInvoiceSourceCashier),
+                        _item(
+                          'business_card',
+                          l10n.redInvoiceSourceBusinessCard,
                         ),
-                        items: [
-                          _item(
-                            'awaiting_information',
-                            l10n.redInvoiceStatusAwaiting,
-                          ),
-                          _item('ready', l10n.redInvoiceStatusReady),
-                          _item(
-                            'manual_review',
-                            l10n.redInvoiceStatusManualReview,
-                          ),
-                          _item('cancelled', l10n.redInvoiceStatusCancelled),
-                        ],
-                        onChanged: (value) => setState(() => _status = value!),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _field(
-                  _taxCode,
-                  l10n.redInvoiceTaxCode,
-                  required: _requiresBuyerInformation,
-                ),
-                _field(
-                  _legalName,
-                  l10n.redInvoiceCompanyName,
-                  required: _requiresBuyerInformation,
-                ),
-                _field(
-                  _address,
-                  l10n.address,
-                  required: _requiresBuyerInformation,
-                ),
-                _field(
-                  _email,
-                  l10n.redInvoiceEmailRequiredLabel,
-                  required: _requiresBuyerInformation,
-                  email: true,
-                ),
-                _field(
-                  _phone,
-                  '${l10n.redInvoicePhone} *',
-                  required: _requiresBuyerInformation,
-                ),
-                _field(_note, l10n.redInvoiceSourceNote, lines: 3),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: _saving ? null : _pickEvidence,
-                    icon: const Icon(Icons.add_photo_alternate_outlined),
-                    label: Text(
-                      _evidence == null
-                          ? l10n.redInvoiceAttachEvidence
-                          : l10n.redInvoiceEvidenceSelected(_evidence!.name),
+                        _item('zalo', l10n.redInvoiceSourceZalo),
+                        _item('other', l10n.redInvoiceSourceOther),
+                      ],
+                      onChanged: (value) => setState(() => _source = value!),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _status,
+                      decoration: InputDecoration(
+                        labelText: l10n.redInvoiceStatus,
+                      ),
+                      items: [
+                        _item(
+                          'awaiting_information',
+                          l10n.redInvoiceStatusAwaiting,
+                        ),
+                        _item('ready', l10n.redInvoiceStatusReady),
+                        _item(
+                          'manual_review',
+                          l10n.redInvoiceStatusManualReview,
+                        ),
+                        _item('cancelled', l10n.redInvoiceStatusCancelled),
+                      ],
+                      onChanged: (value) => setState(() {
+                        _status = value!;
+                        _buyer.confirm = _requiresBuyerInformation;
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              BuyerInformationFields(
+                controller: _buyer,
+                storeId: widget.request.storeId,
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : _pickEvidence,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: Text(
+                    _evidence == null
+                        ? l10n.redInvoiceAttachEvidence
+                        : l10n.redInvoiceEvidenceSelected(_evidence!.name),
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
       actions: [
         TextButton(
           key: const Key('red_invoice_intake_edit_cancel'),
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
           child: Text(l10n.cancel),
         ),
         FilledButton(
@@ -572,34 +539,6 @@ class _RedInvoiceIntakeEditDialogState
     return DropdownMenuItem(value: value, child: Text(label));
   }
 
-  Widget _field(
-    TextEditingController controller,
-    String label, {
-    bool required = false,
-    bool email = false,
-    int lines = 1,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: TextFormField(
-        controller: controller,
-        minLines: lines,
-        maxLines: lines,
-        decoration: InputDecoration(labelText: label),
-        validator: (value) {
-          final text = value?.trim() ?? '';
-          if (required && text.isEmpty) {
-            return context.l10n.redInvoiceRequiredField;
-          }
-          if (email && text.isNotEmpty && !text.contains('@')) {
-            return context.l10n.redInvoiceInvalidEmail;
-          }
-          return null;
-        },
-      ),
-    );
-  }
-
   Future<void> _pickEvidence() async {
     final file = await ImagePicker().pickImage(
       source: ImageSource.gallery,
@@ -609,36 +548,32 @@ class _RedInvoiceIntakeEditDialogState
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_buyer.validate()) return;
     setState(() => _saving = true);
     try {
-      final saved = await widget.service.save(
+      var saved = await widget.service.saveBuyerInformation(
         orderId: widget.request.orderId,
         storeId: widget.request.storeId,
+        expectedVersion: widget.request.buyerVersion,
+        patch: _buyer.patch,
+        confirm: _requiresBuyerInformation,
         source: _source,
         status: _status,
-        buyerTaxCode: _taxCode.text,
-        buyerLegalName: _legalName.text,
-        buyerAddress: _address.text,
-        buyerEmail: _email.text,
-        buyerPhone: _phone.text,
-        sourceNote: _note.text,
       );
       final evidence = _evidence;
       if (evidence != null) {
-        await widget.service.uploadEvidence(
+        final url = await widget.service.uploadEvidence(
           intakeId: saved.id,
           storeId: saved.storeId,
           file: evidence,
         );
+        saved = saved.withEvidence(url);
       }
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(saved);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.redInvoiceDeferredSaveFailed('$error')),
-        ),
+        SnackBar(content: Text(buyerSaveError(context, _buyer, error))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);

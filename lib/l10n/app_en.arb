@@ -1,4 +1,5 @@
 {
+  "deliberryRetiredMessage": "The Deliberry integration has been retired.",
   "@@locale": "en",
   "appTitle": "GLOBOS POS",
   "back": "Back",
@@ -41,6 +42,14 @@
   "refresh": "Refresh",
   "offline": "Offline",
   "offlineConnectionMessage": "Internet connection lost. Online-only actions may be unavailable.",
+  "connectivityServerDelayed": "Server delayed",
+  "connectivityServerDelayedMessage": "The internet is connected, but the server is responding slowly. Requests will keep retrying safely.",
+  "connectivitySignInRequired": "Sign-in required",
+  "connectivitySignInRequiredMessage": "Your session has expired. Sign in again before continuing protected actions.",
+  "connectivityRealtimeDelayed": "Live updates delayed",
+  "connectivityRealtimeDelayedMessage": "Live updates are reconnecting. Safe background reconciliation remains active.",
+  "connectivityLastSuccess": "Last successful connection: {time}",
+  "@connectivityLastSuccess": {"placeholders": {"time": {"type": "String"}}},
   "email": "Email",
   "password": "Password",
   "pinEnterTitle": "Enter PIN",
@@ -298,6 +307,12 @@
   "menuCategoryDeleted": "Category \"{name}\" deleted.",
   "@menuCategoryDeleted": {"placeholders": {"name": {"type": "String"}}},
   "menuDelete": "Delete",
+  "menuDeleteItem": "Delete menu",
+  "menuDeleteItemTitle": "Delete this menu?",
+  "menuDeleteItemConfirm": "Remove \"{name}\" from new orders? Past order and sales records will be retained.",
+  "@menuDeleteItemConfirm": {"placeholders": {"name": {"type": "String"}}},
+  "menuItemDeleted": "Menu \"{name}\" deleted.",
+  "@menuItemDeleted": {"placeholders": {"name": {"type": "String"}}},
   "menuAddMenu": "Add Menu",
   "menuExportExcel": "Export Excel",
   "menuExportInProgress": "Building menu Excel…",
@@ -945,6 +960,10 @@
   "cashierNonRevenueReason": "Detailed reason",
   "cashierNonRevenueRequired": "Enter the required staff name and detailed reason.",
   "cashierNonRevenueComplete": "Close as non-revenue",
+  "cashierNonRevenueAmountChangedTitle": "Order amount changed",
+  "cashierNonRevenueAmountChangedMessage": "Additional items changed the amount while you were entering the checkout details. Review the current amount and confirm again.",
+  "cashierNonRevenuePreviousAmount": "Previous amount",
+  "cashierNonRevenueConfirmUpdatedAmount": "Confirm current amount",
   "cashierDiscountAction": "Apply discount",
   "cashierDiscountTitle": "Apply Discount",
   "cashierDiscountType": "Discount type",
@@ -1153,7 +1172,7 @@
   "photoOpsSalaryTitle": "Salary",
   "photoOpsSalarySubtitle": "Current payroll estimate for the active store.",
   "photoOpsStoreScopeTitle": "Store Scope",
-  "photoOpsStoreScopeSubtitle": "Photo Objet stays on office operations while Deliberry settlement remains in the admin workflow.",
+  "photoOpsStoreScopeSubtitle": "Manage Photo Objet office operations.",
   "photoOpsHeroTitle": "Manage sales, attendance, inventory, and salary in an office-linked workspace without delivery-settlement or red-invoice tasks.",
   "photoOpsContextSubtitle": "Photo Ops keeps HQ aware of live store health without replacing the store-level workflow.",
   "photoOpsMetaRole": "Role",
@@ -2807,7 +2826,7 @@
   "settingsPromotionMenuCount": "{count} menu(s) selected",
   "@settingsPromotionMenuCount": {"placeholders": {"count": {"type": "int"}}},
   "settingsQrTakeoutTitle": "QR takeout ordering",
-  "settingsQrTakeoutSummary": "Show or hide the takeout choice on the customer QR menu during promotions.",
+  "settingsQrTakeoutSummary": "Show or hide the takeout choice on the customer QR menu.",
   "settingsQrTakeoutEnabled": "Available",
   "settingsQrTakeoutDisabled": "Paused",
   "settingsQrTakeoutResumeAt": "Automatically resumes {date}",
@@ -4103,5 +4122,153 @@
   "revenueForecastSourceSavedProfile": "Saved settings",
   "revenueForecastSourceManualAssumption": "Manual assumption",
   "revenueForecastSourceUnavailable": "No measurable history · input required",
-  "revenueForecastSourceProxy": "transaction-event proxy"
+  "revenueForecastSourceProxy": "transaction-event proxy",
+  "menuBeverageTax": "Beverage sugar VAT",
+  "menuTaxNotApplicable": "Not subject to the beverage sugar rule",
+  "menuSugarAtMostFive": "At most 5 g/100ml · VAT 8%",
+  "menuSugarAboveFive": "Above 5 g/100ml · VAT 10%",
+  "menuSugarGrams": "Labelled total sugar (g/100ml, optional)",
+  "menuTaxBasis": "Label / product or classification basis",
+  "menuSugarTaxHelp": "2026: above 5 g/100ml is 10%; exactly 5 is 8%. If the exact amount is unknown, select a confirmed band and enter its basis.",
+  "menuTaxInvalid": "Check the sugar amount, classification and basis.",
+  "menuComboVat": "VAT by component",
+  "excelImportInvalidContainer": "The Excel file could not be read. It may be damaged, encrypted, or in an unsupported format.",
+  "excelImportInvalidXml": "The Excel file contains unreadable workbook data. Save it again or paste its values into the import template.",
+  "excelImportUnsupportedNumberFormat": "Some cell formats in this file could not be processed. Paste the values into the import template and save it again.",
+  "excelImportDecodeFailed": "The Excel file could not be processed. Save it again or paste its values into the import template.",
+  "collectionBankUnavailable": "The company collection account is unavailable. Please contact an administrator.",
+  "salesDepositBankTitle": "Customer bank transfers",
+  "salesDepositBankNote": "POS collection records · excluded from cash deposits",
+  "salesDepositPhotoTitle": "Photo · next-day corporate deposit",
+  "salesDepositCashTitle": "BunsikClub cash · next-day corporate deposit",
+  "salesDepositDate": "Deposit date: {date}",
+  "@salesDepositDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositSourceDate": "Sales / closing date: {date}",
+  "@salesDepositSourceDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositTotalTitle": "Total next-day corporate deposit",
+  "salesDepositConfirmed": "Closing confirmed",
+  "salesDepositPending": "Before closing · provisional",
+  "salesDepositPhotoComplete": "Photo import complete",
+  "salesDepositPhotoMissing": "Photo import needs confirmation",
+  "salesDepositReview": "Closing confirmed · review differences",
+  "salesDepositShortfall": "Cash float shortage · review required",
+  "salesDepositUnavailable": "Deposit information needs confirmation",
+  "salesDepositKnownAmount": "Recorded amount: {amount}",
+  "@salesDepositKnownAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositExpectedAmount": "Expected cash deposit: {amount}",
+  "salesDepositCountedAmount": "Counted cash less float: {amount}",
+  "@salesDepositCountedAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "@salesDepositExpectedAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositMissingStores": "Photo stores to confirm: {count}",
+  "@salesDepositMissingStores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "salesDepositPendingStores": "Stores awaiting closing: {count}",
+  "@salesDepositPendingStores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "salesDepositNoAccount": "Configure the legal entity collection account",
+  "salesDepositPreview": "Corporate deposit after closing",
+  "salesDepositOpenPhoto": "Review Photo import",
+  "salesDepositOpenClosing": "Review daily closing",
+  "salesDepositOpenBank": "View bank transfers",
+  "salesDepositAsOf": "Updated: {time}",
+  "@salesDepositAsOf": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositNextPage": "Next page",
+  "salesDepositImportAmount": "This file’s registered amount: {amount}",
+  "@salesDepositImportAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "salesDepositImportCompleteness": "Check the legal-entity sales summary for registration completeness across Photo stores and the deposit amount.",
+  "brandAdd": "Add brand",
+  "brandManagement": "Manage brands",
+  "brandName": "Brand name",
+  "brandCode": "Brand code",
+  "brandGroup": "Organization group",
+  "brandGroupRequired": "Select an organization group.",
+  "brandNoGroups": "No organization groups are available. Ask an administrator to configure one.",
+  "brandIndependentHint": "Register a brand without a store. Link legal entities now or later.",
+  "brandNameRequired": "Enter a brand name.",
+  "brandCodeHint": "2–64: a–z, 0–9, _ or -.",
+  "brandCodeInvalid": "Enter a 2–64 character code starting with a letter or digit.",
+  "brandCodeExists": "This brand code is already in use. Link the existing brand or choose another code.",
+  "brandLinkEntities": "Link legal entities",
+  "brandEntityHint": "Legal entity links are optional until a store is added. Existing links are retained.",
+  "brandNoEntities": "No legal entities are registered. Save the brand and link one after registration.",
+  "brandUnlinked": "No linked legal entities",
+  "brandStoreCount": "{count} stores",
+  "brandListEmpty": "No brands match your search.",
+  "brandLoadMore": "Load more",
+  "brandSaving": "Saving…",
+  "brandForbidden": "Only active master administrators can register or link brands.",
+  "brandRequestConflict": "This request already registered a brand. Check the brand list.",
+  "brandEntityInvalid": "Check the selected legal entities and try again.",
+  "brandOperationFailed": "Could not process brand information. Check your connection and retry.",
+  "@brandStoreCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cashDepositQrTitle": "Cash deposit QR",
+  "cashDepositToday": "Report date",
+  "cashDepositAmount": "Reported cash deposit amount",
+  "cashDepositInvalidAmount": "The reported cash amount must be a whole amount from 1 to 9,999,999,999,999 VND to generate a QR.",
+  "cashDepositPurpose": "Full memo (reference)",
+  "cashDepositMemoHelp": "The QR uses the applied report date (dd/mm) and cash amount automatically. Scan it to fill in the account, amount, and memo above.",
+  "cashDepositCopyPurpose": "Copy memo",
+  "cashDepositCopied": "Memo copied",
+  "cashDepositGenerateQr": "Generate QR code",
+  "cashDepositStoreUnavailable": "The selected store’s brand and store names are unavailable. Contact an administrator.",
+  "cashDepositQrPurpose": "Memo included in QR",
+  "cashDepositSingleDayRequired": "Query a single day before generating a cash deposit QR."
 }

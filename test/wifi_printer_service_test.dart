@@ -106,6 +106,71 @@ void main() {
   });
 
   group('PrintJobAgentService', () {
+    for (final form in ['kitchen', 'floor', 'tray', 'confirmation']) {
+      for (final method in ['delivery', 'pickup', null]) {
+        test(
+          'Print Station $form dispatch retains $method packing scope and copies',
+          () async {
+            final backend = _FakePrintJobBackend(
+              jobs: [
+                PrintAgentJob.fromJson({
+                  'id': 'packing-$form',
+                  'destination_id': 'packing',
+                  'payload': {
+                    'ticket': form,
+                    'ticket_code': 'TEST',
+                    'table_number': 'A1',
+                    'floor_label': '1F',
+                    'items': [
+                      {'label': 'Packing menu', 'qty': 7, 'unit_price': 10000},
+                    ],
+                    if (method != null) ...{
+                      'diner_count': 3,
+                      'fulfillment_method': method,
+                      'direct_order_reference': 'D12345678',
+                    },
+                    if (method == null) 'guest_count': 3,
+                  },
+                }),
+              ],
+              destinations: const {
+                'packing': PrintDestination(
+                  id: 'packing',
+                  name: 'Packing',
+                  ip: '192.168.1.50',
+                  port: 9100,
+                ),
+              },
+            );
+            final printer = _FakePrinterService(PrintResult.success);
+            final agent = PrintJobAgentService(
+              backend: backend,
+              printerService: printer,
+              networkCapabilityService: _availableNetwork,
+            );
+            final results = await agent.processOnce('store-1');
+            expect(results.single.result, PrintResult.success);
+            expect(
+              printer.prints,
+              hasLength(form == 'floor' || form == 'confirmation' ? 2 : 1),
+            );
+            for (final print in printer.prints) {
+              final text = String.fromCharCodes(print.bytes);
+              expect(
+                RegExp('DUNG CU:').allMatches(text),
+                hasLength(method == null ? 0 : 1),
+              );
+              if (method != null) {
+                expect(text, contains('SO NGUOI: 3'));
+                expect(text, contains('DUNG CU: 3 BO'));
+                expect(text, isNot(contains('DUNG CU: 6 BO')));
+                expect(text, isNot(contains('DUNG CU: 7 BO')));
+              }
+            }
+          },
+        );
+      }
+    }
     test('processOnce claims jobs, prints, and completes success', () async {
       final backend = _FakePrintJobBackend(
         jobs: [_job(id: 'job-1', destinationId: 'dest-1', ticketType: 'tray')],
@@ -655,6 +720,10 @@ void main() {
             'destination_id': 'dest-receipt',
             'payload': {
               'ticket': 'receipt',
+              'order_notes': 'No steamed rice',
+              'diner_count': 3,
+              'fulfillment_method': 'pickup',
+              'direct_order_reference': 'D12345678',
               'restaurant_name': 'GLOBOS PILOT',
               'table_number': 'T07',
               'total_amount': 50000,
@@ -663,6 +732,7 @@ void main() {
               'items': [
                 {
                   'label': 'Pho Bo',
+                  'notes': 'No onion',
                   'quantity': 1,
                   'unit_price': 50000,
                   'is_service_item': false,
@@ -693,7 +763,13 @@ void main() {
       expect(results.single.result, PrintResult.success);
       final output = String.fromCharCodes(printer.prints.single.bytes);
       expect(output, contains('GLOBOS PILOT'));
+      expect(output, contains('SO NGUOI: 3'));
+      expect(output, contains('DUNG CU: 3 BO'));
+      expect(output, contains('D12345678'));
+      expect(output, contains('TU DEN LAY'));
       expect(output, contains('PHIEU THANH TOAN'));
+      expect(output, contains('GHI CHU: No steamed rice'));
+      expect(output, contains('No onion'));
       expect(output, contains('TONG CONG'));
       expect(output, isNot(contains('PHIEU BEP')));
       expect(_hasBuzzerAlert(printer.prints.single.bytes), isFalse);
@@ -716,6 +792,49 @@ void main() {
 
         expect(results, isEmpty);
         expect(backend.claimedStoreId, isNull);
+      },
+    );
+    test(
+      'request addendum goes through the queue as a memo with one destination batch',
+      () async {
+        final backend = _FakePrintJobBackend(
+          jobs: [
+            PrintAgentJob.fromJson({
+              'id': 'addendum',
+              'destination_id': 'receipt',
+              'payload': {
+                'ticket': 'request_update',
+                'direct_order_reference': 'D12345678',
+                'order_notes': 'Để sốt riêng',
+                'items': [],
+              },
+            }),
+          ],
+          destinations: const {
+            'receipt': PrintDestination(
+              id: 'receipt',
+              name: 'Cashier',
+              ip: '127.0.0.1',
+              port: 9100,
+              purpose: 'receipt',
+            ),
+          },
+        );
+        final printer = _FakePrinterService(PrintResult.success);
+        final agent = PrintJobAgentService(
+          backend: backend,
+          printerService: printer,
+          networkCapabilityService: _availableNetwork,
+        );
+        final results = await agent.processOnce('store-1');
+        expect(results.single.result, PrintResult.success);
+        expect(backend.destinationBatchCount, 1);
+        expect(backend.singleDestinationCount, 0);
+        final text = String.fromCharCodes(printer.prints.single.bytes);
+        expect(text, contains('YEU CAU BO SUNG DA THONG NHAT'));
+        expect(text, contains('De sot rieng'));
+        expect(text, isNot(contains('TONG CONG')));
+        expect(backend.completed.single.ok, isTrue);
       },
     );
 
@@ -823,6 +942,8 @@ class _FakePrintJobBackend implements PrintJobBackend {
   String? claimedStoreId;
   String? subscribedStoreId;
   int claimCount = 0;
+  int destinationBatchCount = 0;
+  int singleDestinationCount = 0;
   int unsubscribeCount = 0;
   void Function()? _onPrintJobChanged;
 
@@ -847,7 +968,19 @@ class _FakePrintJobBackend implements PrintJobBackend {
 
   @override
   Future<PrintDestination?> loadDestination(String destinationId) async {
+    singleDestinationCount++;
     return destinations[destinationId];
+  }
+
+  @override
+  Future<Map<String, PrintDestination>> loadDestinations(
+    List<String> destinationIds,
+  ) async {
+    destinationBatchCount++;
+    return {
+      for (final id in destinationIds)
+        if (destinations.containsKey(id)) id: destinations[id]!,
+    };
   }
 
   @override

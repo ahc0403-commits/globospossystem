@@ -473,7 +473,7 @@ void main() {
     expect(receiptBuilder, contains('buildTrayLabel'));
     expect(receiptBuilder, contains('PrintTicket.fromPayload'));
     expect(agentService, contains('bool get isSupported => !kIsWeb'));
-    expect(agentService, contains("rpc(\n      'claim_print_jobs'"));
+    expect(agentService, contains("rpc(\n      'claim_print_jobs_v2'"));
     expect(agentService, contains("rpc(\n      'complete_print_job'"));
     expect(agentService, contains('_printerService.printReceipt'));
     expect(agentService, contains('startPolling'));

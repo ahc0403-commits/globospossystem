@@ -1,10 +1,59 @@
+import 'dart:convert';
+import 'dart:io';
+import 'fixtures/sales_invoice_fixture.dart';
+
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/core/payments/payment_method_contract.dart';
 import 'package:globos_pos_system/features/admin/einvoice_misa_workbook.dart';
 
 void main() {
+  test('all selectable revenue methods have an explicit invoice mapping', () {
+    final contract =
+        jsonDecode(
+              File(
+                'test/fixtures/invoice_payment_contract.json',
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    final methods = contract['methods'] as Map<String, dynamic>;
+    expect(methods.keys.toSet().containsAll(revenuePaymentMethods), isTrue);
+    for (final entry in methods.entries) {
+      final label = (entry.value as Map)['label'] as String;
+      expect(misaPaymentCode(entry.key), label, reason: entry.key);
+      expect(misaPaymentCode(label), label, reason: entry.key);
+    }
+    final keys = methods.keys.toList()..sort();
+    for (var i = 0; i < keys.length; i++) {
+      for (var j = i + 1; j < keys.length; j++) {
+        final labels = {
+          methods[keys[i]]['label'] as String,
+          methods[keys[j]]['label'] as String,
+        }.toList()..sort();
+        final expected = keys[i] == 'BANKTRANSFER' && keys[j] == 'CASH'
+            ? 'TM/CK'
+            : labels.join('/');
+        expect(misaPaymentCode('${keys[i]}/${keys[j]}'), expected);
+        expect(misaPaymentCode('${keys[j]}/${keys[i]}'), expected);
+      }
+    }
+    for (final unknown in ['QR', 'SERVICE', 'CASH/QR', '']) {
+      expect(() => misaPaymentCode(unknown), throwsFormatException);
+    }
+  });
+  test(
+    'mixed payment labels retain actual methods without treating QR as a wallet',
+    () {
+      expect(
+        misaPaymentCode('Thẻ quốc tế/Ví điện tử'),
+        'Thẻ quốc tế/Ví điện tử',
+      );
+      expect(misaPaymentCode('ATM'), 'Thẻ ATM');
+      expect(() => misaPaymentCode('Ví điện tử/QR'), throwsFormatException);
+    },
+  );
   test('exports the exact 17-column MISA desktop upload layout', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
+    final bytes = _fixtureWorkbook([
       {
         'id': 'restaurant-job',
         'source_system': 'globos_pos',
@@ -13,6 +62,9 @@ void main() {
         'buyer_snapshot': {'unit_name': 'Restaurant customer'},
         'line_items_snapshot': [
           {
+            'order_item_id': 'tteok-line',
+            'invoice_name_vi': 'Tteokbokki',
+            'misa_unit_name': 'Phần',
             'display_name': 'Tteokbokki',
             'quantity': 2,
             'total_amount_ex_tax': 100000,
@@ -41,7 +93,12 @@ void main() {
     ]);
 
     final workbook = Excel.decodeBytes(bytes);
-    expect(workbook.tables.keys, ['Hóa đơn GTGT']);
+    expect(workbook.tables.keys, [
+      'Hóa đơn GTGT',
+      'POS Ledger',
+      'Invoice Mapping',
+      'Export Contract',
+    ]);
     final sheet = workbook.tables['Hóa đơn GTGT']!;
 
     expect(sheet.rows[7].map(_text).toList(), const [
@@ -83,36 +140,54 @@ void main() {
     final restaurant = sheet.rows[9];
     expect(_number(restaurant[0]), 2);
     expect(_text(restaurant[9]), 'CK');
-    expect(_text(restaurant[11]), 'Lần');
-    expect(_number(restaurant[12]), 1);
-    expect(_number(restaurant[13]), 100000);
+    expect(_text(restaurant[11]), 'Phần');
+    expect(_number(restaurant[12]), 2);
+    expect(_number(restaurant[13]), 50000);
     expect(_number(restaurant[14]), 100000);
     expect(_number(restaurant[16]), 8000);
   });
 
-  test('combines equal-rate lines into one warning-free invoice row', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
+  test('preserves equal-rate menu lines and stable IDs', () {
+    final bytes = _fixtureWorkbook([
       {
         'source_system': 'globos_pos',
+        'payment_method_snapshot': 'TM',
         'created_at': '2026-08-04T02:00:00Z',
         'line_items_snapshot': [
-          {'display_name': 'A', 'quantity': 1, 'total_amount_ex_tax': 100},
-          {'display_name': 'B', 'quantity': 1, 'total_amount_ex_tax': 200},
+          {
+            'order_item_id': 'a',
+            'invoice_name_vi': 'A',
+            'misa_unit_name': 'Phần',
+            'display_name': 'A',
+            'quantity': 1,
+            'total_amount_ex_tax': 100,
+          },
+          {
+            'order_item_id': 'b',
+            'invoice_name_vi': 'B',
+            'misa_unit_name': 'Phần',
+            'display_name': 'B',
+            'quantity': 1,
+            'total_amount_ex_tax': 200,
+          },
         ],
       },
     ]);
     final rows = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows;
-    expect(rows, hasLength(9));
+    expect(rows, hasLength(10));
     expect(_number(rows[8][0]), 1);
     expect(_number(rows[8][12]), 1);
-    expect(_number(rows[8][13]), 300);
-    expect(_number(rows[8][14]), 300);
+    expect(_number(rows[8][13]), 100);
+    expect(_number(rows[8][14]), 100);
+    expect(_text(rows[9][10]), 'B');
+    expect(_number(rows[9][14]), 200);
+    expect(_number(rows[9][0]), 1);
     expect(_number(rows[8][15]), 0);
     expect(_number(rows[8][16]), 0);
   });
 
   test('keeps the reported 290000 VND Photo receipt arithmetically exact', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
+    final bytes = _fixtureWorkbook([
       {
         'source_system': 'photo_objet_moers',
         'created_at': '2026-09-11T13:54:59Z',
@@ -140,7 +215,7 @@ void main() {
   });
 
   test('matches every MISA arithmetic check used by the Photo workbook', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
+    final bytes = _fixtureWorkbook([
       for (final gross in [70000, 200000, 290000, 340000])
         {
           'source_system': 'photo_objet_moers',
@@ -184,37 +259,37 @@ void main() {
     expect(isMisaLineTotalConsistent(2, 100, 199), isFalse);
   });
 
-  test('repairs quantity, line VAT, and same-rate total mismatches', () {
-    final bytes = buildMisaPendingInvoiceWorkbook([
-      {
-        'source_system': 'restaurant_pos',
-        'line_items_snapshot': [
-          for (var index = 0; index < 4; index++)
-            {
-              'display_name': 'Food',
-              'quantity': 2,
-              'unit_price': 100,
-              'total_amount_ex_tax': 10,
-              'vat_rate': 8,
-              'vat_amount': 1.3,
-            },
-        ],
-      },
-    ]);
-
-    final rows = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows;
-    expect(rows, hasLength(9));
-    final row = rows[8];
-    final quantity = _number(row[12]).toDouble();
-    final unitPrice = _number(row[13]).toDouble();
-    final supply = _number(row[14]).toDouble();
-    final rate = _number(row[15]).toDouble();
-    final vat = _number(row[16]).toDouble();
-    expect(quantity, 1);
-    expect(supply + vat, closeTo(45.2, 0.000001));
-    expect(isMisaLineTotalConsistent(quantity, unitPrice, supply), isTrue);
-    expect(isMisaVatConsistent(supply, rate, vat), isTrue);
-  });
+  test(
+    'blocks invalid source VAT rather than recalculating historical amounts',
+    () {
+      expect(
+        () => _fixtureWorkbook([
+          {
+            'source_system': 'restaurant_pos',
+            'payment_method_snapshot': 'TM',
+            'line_items_snapshot': [
+              {
+                'order_item_id': 'invalid',
+                'invoice_name_vi': 'Food',
+                'misa_unit_name': 'Phần',
+                'quantity': 2,
+                'total_amount_ex_tax': 10,
+                'vat_rate': 8,
+                'vat_amount': 5.3,
+              },
+            ],
+          },
+        ]),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            'MISA_EXPORT_SOURCE_AMOUNT_MISMATCH',
+          ),
+        ),
+      );
+    },
+  );
 
   test('preserves VND gross amounts while producing MISA-consistent VAT', () {
     for (final rate in [0.0, 5.0, 8.0, 10.0]) {
@@ -231,7 +306,7 @@ void main() {
 
   test('refuses an empty pending queue export', () {
     expect(
-      () => buildMisaPendingInvoiceWorkbook(const []),
+      () => _fixtureWorkbook(const []),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -246,3 +321,6 @@ void main() {
 String _text(Data? cell) => cell?.value.toString() ?? '';
 
 num _number(Data? cell) => num.parse(_text(cell));
+
+List<int> _fixtureWorkbook(List<Map<String, dynamic>> jobs) =>
+    buildMisaPendingInvoiceWorkbook(approvedSalesFixtureJobs(jobs));

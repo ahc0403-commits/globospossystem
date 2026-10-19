@@ -175,7 +175,13 @@ void main() {
           overrides: [
             authProvider.overrideWith((ref) => AuditAuth()),
             adminScopedStoreIdProvider.overrideWithValue(store),
-            connectivityProvider.overrideWith((ref) => Stream.value(true)),
+            serviceConnectivityProvider.overrideWith(
+              (ref) => Stream.value(
+                const ServiceConnectivityState(
+                  kind: ServiceConnectivityKind.online,
+                ),
+              ),
+            ),
             posLiveEventsProvider(store).overrideWith((ref) => events.stream),
           ],
           child: MaterialApp.router(

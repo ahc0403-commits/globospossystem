@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/tables_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/coalesced_refresh.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../main.dart';
 import 'table_model.dart';
 import 'table_order_preview.dart';
@@ -43,7 +45,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   WaiterTableNotifier() : super(const WaiterTableState());
 
   static const _autoRefreshInterval = Duration(seconds: 2);
-  static const _fallbackPollInterval = Duration(seconds: 15);
+  static const _fallbackPollInterval = Duration(seconds: 30);
 
   RealtimeChannel? _channel;
   String? _subscribedRestaurantId;
@@ -51,30 +53,93 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   String? _pollStoreId;
   bool _realtimeConnected = false;
 
-  Future<void> loadTables(String storeId, {bool showLoading = true}) async {
-    if (showLoading) {
-      state = state.copyWith(isLoading: true, clearError: true);
+  final _refreshQueue = CoalescedRefresh();
+  String? _readStoreId;
+  int _readGeneration = 0;
+  bool _reloadTables = false;
+  bool _reloadPreviews = false;
+  final _dirtyOrders = <String>{};
+  final _dirtyTables = <String>{};
+  Timer? _eventTimer;
+
+  Future<void> loadTables(String storeId, {bool showLoading = true}) {
+    if (!mounted) return Future.value();
+    if (_readStoreId != storeId) {
+      _readStoreId = storeId;
+      _readGeneration++;
+      _dirtyOrders.clear();
+      _dirtyTables.clear();
+      _eventTimer?.cancel();
+      state = const WaiterTableState();
     }
+    _reloadTables = true;
+    _reloadPreviews = true;
+    if (showLoading) state = state.copyWith(isLoading: true, clearError: true);
+    return _refreshQueue.run(_drainRefresh);
+  }
+
+  Future<void> _drainRefresh() async {
+    if (!mounted) return;
+    final storeId = _readStoreId!;
+    final generation = _readGeneration;
+    final full = _reloadTables;
+    _reloadTables = false;
+    final fullPreviews = _reloadPreviews;
+    _reloadPreviews = false;
+    final ids = _dirtyOrders.toList();
+    final tableIds = _dirtyTables.toList();
+    _dirtyOrders.clear();
+    _dirtyTables.clear();
+    await _readTables(
+      storeId,
+      generation: generation,
+      full: full,
+      fullPreviews: fullPreviews,
+      ids: ids,
+      tableIds: tableIds,
+    );
+  }
+
+  Future<void> _readTables(
+    String storeId, {
+    required int generation,
+    required bool full,
+    required bool fullPreviews,
+    required List<String> ids,
+    required List<String> tableIds,
+  }) async {
     try {
-      final response = await tablesService.fetchTables(storeId);
-      Map<String, TableOrderPreview> orderPreviewByTableId = const {};
+      final response = full ? await tablesService.fetchTables(storeId) : null;
+      Map<String, TableOrderPreview> orderPreviewByTableId = Map.of(
+        state.orderPreviewByTableId,
+      );
       try {
-        orderPreviewByTableId = await _fetchActiveOrderPreviews(storeId);
+        orderPreviewByTableId = fullPreviews
+            ? await _fetchActiveOrderPreviews(storeId)
+            : await _fetchChangedPreviews(
+                storeId,
+                ids,
+                tableIds,
+                orderPreviewByTableId,
+              );
       } catch (_) {
         // Keep the floor usable even if the secondary preview query fails.
       }
 
-      final tables = response
-          .map<PosTable>((row) => PosTable.fromJson(row))
-          // An active order is the operational source of truth for occupancy.
-          // This also closes the short interval where the order row is visible
-          // before a delayed table-status update reaches the client.
-          .map(
-            (table) => orderPreviewByTableId.containsKey(table.id)
-                ? table.copyWithStatus('occupied')
-                : table,
-          )
-          .toList();
+      if (!mounted || generation != _readGeneration) return;
+      final tables =
+          (response == null
+                  ? state.tables
+                  : response.map<PosTable>(PosTable.fromJson))
+              // An active order is the operational source of truth for occupancy.
+              // This also closes the short interval where the order row is visible
+              // before a delayed table-status update reaches the client.
+              .map(
+                (table) => orderPreviewByTableId.containsKey(table.id)
+                    ? table.copyWithStatus('occupied')
+                    : table,
+              )
+              .toList();
 
       state = state.copyWith(
         tables: _sortTables(tables),
@@ -85,6 +150,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
 
       await subscribe(storeId);
     } catch (error) {
+      if (!mounted || generation != _readGeneration) return;
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load tables: $error',
@@ -92,22 +158,14 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
     }
   }
 
-  Future<void> refreshOrderPreviews(String storeId) async {
-    try {
-      final orderPreviewByTableId = await _fetchActiveOrderPreviews(storeId);
-      if (!mounted) {
-        return;
-      }
-      state = state.copyWith(
-        orderPreviewByTableId: orderPreviewByTableId,
-        clearError: true,
-      );
-    } catch (_) {
-      // Keep the floor usable even if the secondary preview query fails.
-    }
+  Future<void> refreshOrderPreviews(String storeId) {
+    if (!mounted || _readStoreId != storeId) return Future.value();
+    _reloadPreviews = true;
+    return _refreshQueue.run(_drainRefresh);
   }
 
   Future<void> subscribe(String storeId) async {
+    if (!mounted || _readStoreId != storeId) return;
     if (_subscribedRestaurantId == storeId && _channel != null) {
       _ensureAutoRefresh(storeId);
       return;
@@ -117,6 +175,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
       await _channel!.unsubscribe();
       _channel = null;
     }
+    if (!mounted || _readStoreId != storeId) return;
     _pollTimer?.cancel();
     _pollTimer = null;
     _pollStoreId = null;
@@ -133,7 +192,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
           filter: LiveSyncScope.storeFilter(storeId),
           callback: (payload) {
             final raw = payload.newRecord;
-            if (raw.isEmpty) {
+            if (!mounted || _readStoreId != storeId || raw.isEmpty) {
               return;
             }
 
@@ -162,14 +221,16 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
           schema: 'public',
           table: 'orders',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshTablesFromRealtime(storeId),
+          callback: (payload) =>
+              _refreshTablesFromRealtime(storeId, payload, false),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'order_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => _refreshTablesFromRealtime(storeId),
+          callback: (payload) =>
+              _refreshTablesFromRealtime(storeId, payload, true),
         )
         .subscribe((status, [error]) {
           final connected = status == RealtimeSubscribeStatus.subscribed;
@@ -188,11 +249,87 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
     });
   }
 
-  void _refreshTablesFromRealtime(String storeId) {
-    if (!mounted) {
-      return;
+  void _refreshTablesFromRealtime(
+    String storeId,
+    PostgresChangePayload payload,
+    bool item,
+  ) {
+    final row = payload.newRecord.isNotEmpty
+        ? payload.newRecord
+        : payload.oldRecord;
+    final id = row[item ? 'order_id' : 'id']?.toString();
+    if (id == null || id.isEmpty) {
+      unawaited(refreshOrderPreviews(storeId));
+    } else {
+      queueChangedOrders(
+        storeId,
+        [id],
+        tableIds: item
+            ? const []
+            : [if (row['table_id'] != null) row['table_id'].toString()],
+      );
     }
-    unawaited(loadTables(storeId, showLoading: false));
+  }
+
+  void queueChangedOrders(
+    String storeId,
+    Iterable<String> ids, {
+    Iterable<String> tableIds = const [],
+  }) {
+    if (!mounted || _readStoreId != storeId) return;
+    _dirtyOrders.addAll(ids);
+    _dirtyTables.addAll(tableIds);
+    if (_dirtyOrders.length > 500 || _dirtyTables.length > 500) {
+      _dirtyOrders.clear();
+      _dirtyTables.clear();
+      _reloadPreviews = true;
+    }
+    _eventTimer ??= Timer(const Duration(milliseconds: 150), () {
+      _eventTimer = null;
+      if (mounted) unawaited(_refreshQueue.run(_drainRefresh));
+    });
+  }
+
+  Future<Map<String, TableOrderPreview>> _fetchChangedPreviews(
+    String storeId,
+    List<String> ids,
+    List<String> explicitTables,
+    Map<String, TableOrderPreview> current,
+  ) async {
+    final previews = Map<String, TableOrderPreview>.of(current);
+    for (var start = 0; start < ids.length; start += 50) {
+      final batch = ids.skip(start).take(50).toList();
+      final affected = <String>{
+        ...explicitTables.skip(start).take(50),
+        ...current.entries
+            .where((e) => batch.contains(e.value.orderId))
+            .map((e) => e.key),
+      };
+      // A batch may include both old and new tables. Preserve the 50-table input
+      // bound; other old tables are reached by their unchanged order IDs.
+      if (affected.length > 50) return _fetchActiveOrderPreviews(storeId);
+      final result = await supabase.rpc(
+        'get_table_order_previews_delta',
+        params: {
+          'p_store_id': storeId,
+          'p_order_ids': batch,
+          'p_table_ids': affected.toList(),
+        },
+      );
+      if (result is! Map ||
+          result['version'] != 1 ||
+          result['rows'] is! List ||
+          (result['rows'] as List).length > 100) {
+        throw const FormatException('TABLE_PREVIEW_RESPONSE_INVALID');
+      }
+      final rows = List<Map<String, dynamic>>.from(result['rows'] as List);
+      for (final row in rows) {
+        final tableId = row['table_id'] as String;
+        previews.remove(tableId);
+      }
+      previews.addAll(_parsePreviewRows(rows.where((r) => r['id'] != null)));
+    }
+    return previews;
   }
 
   void _ensureAutoRefresh(String storeId) {
@@ -208,9 +345,15 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+    _pollTimer = Timer(jitteredPollDelay(_fallbackPollInterval), () async {
+      _pollTimer = null;
       if (mounted && _subscribedRestaurantId == storeId) {
-        unawaited(loadTables(storeId, showLoading: false));
+        await loadTables(storeId, showLoading: false);
+      }
+      if (mounted &&
+          !_realtimeConnected &&
+          _subscribedRestaurantId == storeId) {
+        _ensureAutoRefresh(storeId);
       }
     });
   }
@@ -229,6 +372,12 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
         .order('created_at', referencedTable: 'order_items', ascending: true)
         .order('id', referencedTable: 'order_items', ascending: true);
 
+    return _parsePreviewRows(response.map((r) => Map<String, dynamic>.from(r)));
+  }
+
+  Map<String, TableOrderPreview> _parsePreviewRows(
+    Iterable<Map<String, dynamic>> response,
+  ) {
     final previews = <String, TableOrderPreview>{};
     for (final rawOrder in response) {
       final order = Map<String, dynamic>.from(rawOrder);
@@ -304,6 +453,9 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
 
   @override
   void dispose() {
+    _readGeneration++;
+    _eventTimer?.cancel();
+    _refreshQueue.dispose();
     _pollTimer?.cancel();
     _pollTimer = null;
     _pollStoreId = null;

@@ -16,6 +16,10 @@ if [[ -z "$FLUTTER_BIN" ]]; then
   fi
 fi
 
+if [[ "$FLUTTER_BIN" != "flutter" ]]; then
+  export DART_BIN="$(dirname "$FLUTTER_BIN")/dart"
+fi
+bash scripts/build_photo_import_worker.sh
 "$FLUTTER_BIN" build web --release \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \

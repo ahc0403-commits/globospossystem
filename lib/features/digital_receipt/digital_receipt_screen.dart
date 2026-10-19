@@ -1,3 +1,4 @@
+import '../../core/hardware/receipt_delivery_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -250,7 +251,51 @@ class _ReceiptPaper extends StatelessWidget {
             _MetaRow(label: copy.paidAt, value: paidAt),
             _MetaRow(label: copy.cashier, value: receipt.cashierCode),
             _MetaRow(label: copy.table, value: receipt.tableNumber),
+            if (receipt.isDirectOrder) ...[
+              if (receipt.directOrderReference != null)
+                _MetaRow(label: 'Mã đơn', value: receipt.directOrderReference!),
+              Text(
+                receipt.fulfillmentMethod == 'pickup'
+                    ? 'TỰ ĐẾN LẤY'
+                    : 'GIAO HÀNG',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                receipt.packingDinerLabelVi,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                receipt.packingUtensilLabelVi,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
+              ),
+            ],
+            if (recipientPaysDelivery(
+              receipt.deliveryPaymentMode,
+              receipt.fulfillmentMethod,
+            ))
+              const Text(
+                recipientDeliveryNoticeVi,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             const Divider(height: 28),
+            if (receipt.orderNotes != null) ...[
+              Text(
+                'Ghi chú: ${receipt.orderNotes}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const Divider(height: 28),
+            ],
+            for (final addendum in receipt.requestAddenda) ...[
+              const Text(
+                'Yêu cầu bổ sung đã thống nhất',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(addendum),
+              const Divider(height: 28),
+            ],
             for (final item in billableItems)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 7),
@@ -258,9 +303,16 @@ class _ReceiptPaper extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Text(
-                        digitalReceiptItemLabelVi(item.label),
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            digitalReceiptItemLabelVi(item.label),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          if (item.notes != null)
+                            Text('Ghi chú: ${item.notes}'),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 10),

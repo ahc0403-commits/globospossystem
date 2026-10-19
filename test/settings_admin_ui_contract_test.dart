@@ -5,25 +5,44 @@ import 'package:flutter_test/flutter_test.dart';
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
-  test(
-    'scheduled promotion dialog remains an explicit settings entrypoint',
-    () {
-      final source = readRepoFile(
-        'lib/features/settings/promotion_settings_card.dart',
-      );
+  test('promotion and QR takeout remain independent settings entrypoints', () {
+    final promotionSource = readRepoFile(
+      'lib/features/settings/promotion_settings_card.dart',
+    );
+    final qrTakeoutSource = readRepoFile(
+      'lib/features/settings/qr_takeout_settings_card.dart',
+    );
+    final settingsSource = readRepoFile(
+      'lib/features/admin/tabs/settings_tab.dart',
+    );
+    final promotionService = readRepoFile(
+      'lib/features/settings/promotion_service.dart',
+    );
+    final qrTakeoutService = readRepoFile(
+      'lib/features/settings/qr_takeout_service.dart',
+    );
+    final koreanMessages = readRepoFile('lib/l10n/app_ko.arb');
 
-      expect(source, contains('promotion_settings_dialog'));
-      expect(source, contains('settings_promotion_add_action'));
-      expect(source, contains('settingsPromotionPercent'));
-      expect(source, contains('promotionScopeSelectedItems'));
-      expect(source, contains('promotion_menu_'));
-      expect(source, contains('settingsPromotionMenuRequired'));
-      expect(source, contains('settings_qr_takeout_toggle'));
-      expect(source, contains('settings_qr_takeout_schedule_resume'));
-      expect(source, contains('settings_qr_takeout_resume_dialog'));
-      expect(source, contains('settingsQrTakeoutResumeAt'));
-    },
-  );
+    expect(promotionSource, contains('promotion_settings_dialog'));
+    expect(promotionSource, contains('settings_promotion_add_action'));
+    expect(promotionSource, contains('settingsPromotionPercent'));
+    expect(promotionSource, contains('promotionScopeSelectedItems'));
+    expect(promotionSource, contains('promotion_menu_'));
+    expect(promotionSource, contains('settingsPromotionMenuRequired'));
+    expect(promotionSource, isNot(contains('settings_qr_takeout_toggle')));
+    expect(qrTakeoutSource, contains('settings_qr_takeout_section'));
+    expect(qrTakeoutSource, contains('settings_qr_takeout_toggle'));
+    expect(qrTakeoutSource, contains('settings_qr_takeout_schedule_resume'));
+    expect(qrTakeoutSource, contains('settings_qr_takeout_resume_dialog'));
+    expect(qrTakeoutSource, contains('settingsQrTakeoutResumeAt'));
+    expect(settingsSource, contains('PromotionSettingsCard(storeId: storeId)'));
+    expect(settingsSource, contains('QrTakeoutSettingsCard(storeId: storeId)'));
+    expect(promotionService, isNot(contains('qr_takeout')));
+    expect(qrTakeoutService, contains('get_qr_takeout_availability'));
+    expect(qrTakeoutService, contains('set_qr_takeout_availability'));
+    expect(koreanMessages, contains('고객 QR 메뉴에서 포장 주문 선택을 표시하거나 숨깁니다.'));
+    expect(koreanMessages, isNot(contains('프로모션 운영 중 고객 QR 메뉴')));
+  });
 
   test('settings admin surface stays configuration-primary', () {
     final source = readRepoFile('lib/features/admin/tabs/settings_tab.dart');

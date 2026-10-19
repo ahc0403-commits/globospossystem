@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,9 +21,9 @@ const emergencyAdditionalOrderAlarmCoalesceDelay = Duration(seconds: 2);
 
 Duration emergencySnapshotRetryDelay(int consecutiveFailures) =>
     switch (consecutiveFailures) {
-      <= 1 => const Duration(seconds: 2),
-      2 => const Duration(seconds: 5),
-      _ => const Duration(seconds: 15),
+      <= 1 => const Duration(seconds: 5),
+      2 => const Duration(seconds: 15),
+      _ => const Duration(seconds: 30),
     };
 
 String formatEmergencyElapsed(Duration elapsed) {
@@ -155,6 +156,7 @@ class EmergencyFulfillmentDisplayItem {
     this.completedQuantity,
     this.totalQuantity,
     this.isTakeout = false,
+    this.notes,
     this.batchReceivedAt,
     this.stationStartedAt,
     this.stationCompletedAt,
@@ -172,6 +174,7 @@ class EmergencyFulfillmentDisplayItem {
   final int? completedQuantity;
   final int? totalQuantity;
   final bool isTakeout;
+  final String? notes;
   final DateTime? batchReceivedAt;
   final DateTime? stationStartedAt;
   final DateTime? stationCompletedAt;
@@ -209,6 +212,7 @@ class EmergencyFulfillmentItem {
     this.sourceKind = 'order_item',
     this.comboComponents = const [],
     this.isTakeout = false,
+    this.notes,
     this.batchReceivedAt,
     this.kitchenFirstDoneAt,
     this.kitchenLastDoneAt,
@@ -239,6 +243,7 @@ class EmergencyFulfillmentItem {
   final String sourceKind;
   final List<EmergencyComboComponent> comboComponents;
   final bool isTakeout;
+  final String? notes;
   final DateTime? batchReceivedAt;
   final DateTime? kitchenFirstDoneAt;
   final DateTime? kitchenLastDoneAt;
@@ -253,6 +258,8 @@ class EmergencyFulfillmentItem {
       (orderedQuantity - excusedQuantity).clamp(0, orderedQuantity);
   int get readyUnservedQuantity =>
       (trayDispatchedQuantity - floorServedQuantity).clamp(0, requiredQuantity);
+  int get trayPendingQuantity =>
+      (kitchenDoneQuantity - trayDispatchedQuantity).clamp(0, requiredQuantity);
   String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
 
   DateTime? stationStartedAt(String stationType) => switch (stationType) {
@@ -458,6 +465,7 @@ class EmergencyFulfillmentItem {
       lineKey: json['line_key']?.toString() ?? 'base',
       sourceKind: json['source_kind']?.toString() ?? 'order_item',
       isTakeout: json['is_takeout'] == true,
+      notes: json['notes']?.toString(),
       batchReceivedAt: _optionalDateTime(json['batch_received_at']),
       kitchenFirstDoneAt: _optionalDateTime(json['kitchen_first_done_at']),
       kitchenLastDoneAt: _optionalDateTime(json['kitchen_last_done_at']),
@@ -533,6 +541,7 @@ class EmergencyFulfillmentOrder {
     required this.createdAt,
     required this.items,
     this.salesChannel = 'dine_in',
+    this.directOrderPacking,
     this.lastActionId,
     this.lastActionAt,
     this.stationStartedAt,
@@ -550,6 +559,7 @@ class EmergencyFulfillmentOrder {
   final DateTime createdAt;
   final List<EmergencyFulfillmentItem> items;
   final String salesChannel;
+  final Map<String, dynamic>? directOrderPacking;
   final String? lastActionId;
   final DateTime? lastActionAt;
   final DateTime? stationStartedAt;
@@ -590,6 +600,30 @@ class EmergencyFulfillmentOrder {
       )
       .toList(growable: false);
 
+  List<EmergencyFulfillmentItem> trayFloorPendingItems() {
+    if (!usesKitchenHandoffWorkflow || isDelivery) return const [];
+    return _operationalItems()
+        .where(
+          (item) =>
+              !item.isFloorDirect &&
+              !item.needsReview &&
+              item.trayPendingQuantity > 0,
+        )
+        .toList(growable: false);
+  }
+
+  List<EmergencyFulfillmentItem> customerDeliveryPendingItems() {
+    if (!usesKitchenHandoffWorkflow || isDelivery) return const [];
+    return _operationalItems()
+        .where(
+          (item) =>
+              !item.isFloorDirect &&
+              !item.needsReview &&
+              item.readyUnservedQuantity > 0,
+        )
+        .toList(growable: false);
+  }
+
   int incomingHandoffQuantityAt(String stationType) => _operationalItems()
       .where((item) => !item.isFloorDirect)
       .fold(
@@ -629,14 +663,36 @@ class EmergencyFulfillmentOrder {
           lastActionId != null &&
           !hasActionableQuantity(stationType));
 
+  DateTime? stationClockStartedAt(String stationType) {
+    if (stationType == 'kitchen' ||
+        stationType == 'tray' ||
+        stationType == 'floor') {
+      return createdAt;
+    }
+    return null;
+  }
+
+  DateTime? stationClockCompletedAt(String stationType) {
+    if (!isRecentlyCompleteAt(stationType)) return null;
+    if (stationCompletedAt != null) return stationCompletedAt;
+    final relevant = displayItemsAt(stationType);
+    final values = relevant
+        .map((item) => item.stationCompletedAt)
+        .whereType<DateTime>()
+        .toList(growable: false);
+    if (relevant.isNotEmpty && values.length == relevant.length) {
+      return values.reduce((left, right) => left.isAfter(right) ? left : right);
+    }
+    return lastActionAt;
+  }
+
   Duration stationElapsedAt(DateTime now, String stationType) {
-    final startedAt =
-        stationStartedAt ?? (stationType == 'kitchen' ? createdAt : null);
+    final startedAt = stationClockStartedAt(stationType);
     if (startedAt == null) return Duration.zero;
-    final completedAt = isRecentlyCompleteAt(stationType)
-        ? stationCompletedAt ?? lastActionAt
-        : null;
-    return (completedAt ?? now).difference(startedAt);
+    final elapsed = (stationClockCompletedAt(stationType) ?? now).difference(
+      startedAt,
+    );
+    return elapsed.isNegative ? Duration.zero : elapsed;
   }
 
   List<EmergencyFulfillmentDisplayItem> displayItemsAt(String stationType) {
@@ -696,6 +752,7 @@ class EmergencyFulfillmentOrder {
             completedQuantity: progress.$1,
             totalQuantity: progress.$2,
             isTakeout: item.isTakeout,
+            notes: item.notes,
             batchReceivedAt: item.batchReceivedAt,
             stationStartedAt: item.stationStartedAt(stationType),
             stationCompletedAt: item.stationCompletedAt(stationType),
@@ -731,6 +788,7 @@ class EmergencyFulfillmentOrder {
             completedQuantity: progress.$1,
             totalQuantity: progress.$2,
             isTakeout: item.isTakeout,
+            notes: item.notes,
             batchReceivedAt: statusItem.batchReceivedAt ?? item.batchReceivedAt,
             stationStartedAt: statusItem.stationStartedAt(stationType),
             stationCompletedAt: statusItem.stationCompletedAt(stationType),
@@ -802,6 +860,7 @@ class EmergencyFulfillmentOrder {
     createdAt: createdAt,
     items: items ?? this.items,
     salesChannel: salesChannel ?? this.salesChannel,
+    directOrderPacking: directOrderPacking,
     lastActionId: clearLastAction ? null : (lastActionId ?? this.lastActionId),
     lastActionAt: clearLastAction ? null : (lastActionAt ?? this.lastActionAt),
     stationStartedAt: stationStartedAt ?? this.stationStartedAt,
@@ -843,6 +902,9 @@ class EmergencyFulfillmentOrder {
       tableNumber: json['table_number']?.toString() ?? '-',
       floorLabel: json['floor_label']?.toString() ?? '1F',
       salesChannel: json['sales_channel']?.toString() ?? 'dine_in',
+      directOrderPacking: json['direct_order_packing'] is Map
+          ? Map<String, dynamic>.from(json['direct_order_packing'] as Map)
+          : null,
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now().toUtc(),
@@ -916,6 +978,7 @@ class KitchenChecketMenuGroup {
     required this.nameVi,
     required this.nameEn,
     required this.pendingQuantity,
+    this.notes,
   });
 
   final String key;
@@ -923,6 +986,7 @@ class KitchenChecketMenuGroup {
   final String nameVi;
   final String nameEn;
   final int pendingQuantity;
+  final String? notes;
 
   String localizedName(String languageCode) => localizedMenuName({
     'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
@@ -957,6 +1021,7 @@ String kitchenChecketGroupKey(EmergencyFulfillmentItem item) => [
   item.nameKo.trim().toLowerCase(),
   item.nameVi.trim().toLowerCase(),
   item.nameEn.trim().toLowerCase(),
+  item.notes?.trim() ?? '',
 ].join('\u0000');
 
 List<KitchenChecketMenuGroup> buildKitchenChecketMenuGroups(
@@ -975,6 +1040,7 @@ List<KitchenChecketMenuGroup> buildKitchenChecketMenuGroups(
         nameVi: item.nameVi,
         nameEn: item.nameEn,
         pendingQuantity: (current?.pendingQuantity ?? 0) + pending,
+        notes: item.notes,
       );
     }
   }
@@ -1013,6 +1079,291 @@ List<KitchenChecketAllocation> allocateKitchenChecketSelections(
   }
   if (remaining.values.any((quantity) => quantity > 0)) {
     throw StateError('KDS_CHECKET_SELECTION_STALE');
+  }
+  return List.unmodifiable(allocations);
+}
+
+String _kdsSourceKind(EmergencyFulfillmentItem item) =>
+    item.sourceKind == 'combo_component' ? 'combo_component' : 'base';
+
+String _handoffMenuKey(EmergencyFulfillmentItem item) => [
+  item.nameKo.trim().toLowerCase(),
+  item.nameVi.trim().toLowerCase(),
+  item.nameEn.trim().toLowerCase(),
+  item.notes?.trim() ?? '',
+].join('\u0000');
+
+class TrayFloorTransitionAllocation {
+  const TrayFloorTransitionAllocation({
+    required this.itemId,
+    required this.queueId,
+    required this.sourceKind,
+    required this.quantity,
+  });
+
+  final String itemId;
+  final String queueId;
+  final String sourceKind;
+  final int quantity;
+
+  Map<String, dynamic> toJson() => {
+    'item_id': itemId,
+    'queue_id': queueId,
+    'source_kind': sourceKind,
+    'quantity': quantity,
+  };
+}
+
+class TrayFloorTransitionMenuGroup {
+  const TrayFloorTransitionMenuGroup({
+    required this.key,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.quantity,
+  });
+
+  final String key;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int quantity;
+
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
+}
+
+class TrayFloorTransitionSummary {
+  const TrayFloorTransitionSummary({
+    required this.floorLabel,
+    required this.groups,
+    required this.allocations,
+  });
+
+  final String floorLabel;
+  final List<TrayFloorTransitionMenuGroup> groups;
+  final List<TrayFloorTransitionAllocation> allocations;
+
+  int get totalQuantity =>
+      allocations.fold(0, (total, allocation) => total + allocation.quantity);
+}
+
+TrayFloorTransitionSummary buildTrayFloorTransitionSummary(
+  Iterable<EmergencyFulfillmentOrder> orders,
+  String floorLabel,
+) {
+  final normalizedFloor = floorLabel.trim().toUpperCase();
+  final groups = <String, TrayFloorTransitionMenuGroup>{};
+  final allocations = <TrayFloorTransitionAllocation>[];
+  for (final order in sortEmergencyOrdersForStation(orders, 'tray')) {
+    if (order.floorLabel.trim().toUpperCase() != normalizedFloor) continue;
+    for (final item in order.trayFloorPendingItems()) {
+      final quantity = item.trayPendingQuantity;
+      if (quantity <= 0) continue;
+      allocations.add(
+        TrayFloorTransitionAllocation(
+          itemId: item.id,
+          queueId: order.queueId,
+          sourceKind: _kdsSourceKind(item),
+          quantity: quantity,
+        ),
+      );
+      final key = _handoffMenuKey(item);
+      final current = groups[key];
+      groups[key] = TrayFloorTransitionMenuGroup(
+        key: key,
+        nameKo: item.nameKo,
+        nameVi: item.nameVi,
+        nameEn: item.nameEn,
+        quantity: (current?.quantity ?? 0) + quantity,
+      );
+    }
+  }
+  return TrayFloorTransitionSummary(
+    floorLabel: normalizedFloor,
+    groups: List.unmodifiable(groups.values),
+    allocations: List.unmodifiable(allocations),
+  );
+}
+
+int trayUnsupportedFloorQuantity(Iterable<EmergencyFulfillmentOrder> orders) =>
+    orders
+        .where(
+          (order) => !const {
+            '1F',
+            '2F',
+          }.contains(order.floorLabel.trim().toUpperCase()),
+        )
+        .expand((order) => order.trayFloorPendingItems())
+        .fold(0, (total, item) => total + item.trayPendingQuantity);
+
+class CustomerDeliveryAllocation {
+  const CustomerDeliveryAllocation({
+    required this.itemId,
+    required this.queueId,
+    required this.sourceKind,
+    required this.quantity,
+  });
+
+  final String itemId;
+  final String queueId;
+  final String sourceKind;
+  final int quantity;
+
+  CustomerDeliveryAllocation withQuantity(int value) =>
+      CustomerDeliveryAllocation(
+        itemId: itemId,
+        queueId: queueId,
+        sourceKind: sourceKind,
+        quantity: value,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'item_id': itemId,
+    'queue_id': queueId,
+    'source_kind': sourceKind,
+    'quantity': quantity,
+  };
+}
+
+class CustomerDeliveryMenu {
+  const CustomerDeliveryMenu({
+    required this.key,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.availableQuantity,
+    required this.allocations,
+  });
+
+  final String key;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int availableQuantity;
+  final List<CustomerDeliveryAllocation> allocations;
+
+  String localizedName(String languageCode) => localizedMenuName({
+    'name': _firstEmergencyMenuName(nameKo, nameVi, nameEn),
+    'name_ko': nameKo,
+    'name_vi': nameVi,
+    'name_en': nameEn,
+  }, languageCode);
+}
+
+class CustomerDeliveryBox {
+  const CustomerDeliveryBox({
+    required this.queueId,
+    required this.orderId,
+    required this.queueNo,
+    required this.tableNumber,
+    required this.floorLabel,
+    required this.createdAt,
+    required this.menus,
+  });
+
+  final String queueId;
+  final String orderId;
+  final int queueNo;
+  final String tableNumber;
+  final String floorLabel;
+  final DateTime createdAt;
+  final List<CustomerDeliveryMenu> menus;
+
+  int get totalQuantity =>
+      menus.fold(0, (total, menu) => total + menu.availableQuantity);
+}
+
+List<CustomerDeliveryBox> buildCustomerDeliveryBoxes(
+  Iterable<EmergencyFulfillmentOrder> orders,
+  String floorLabel,
+) {
+  final normalizedFloor = floorLabel.trim().toUpperCase();
+  final result = <CustomerDeliveryBox>[];
+  for (final order in sortEmergencyOrdersForStation(orders, 'floor')) {
+    if (order.floorLabel.trim().toUpperCase() != normalizedFloor) continue;
+    final grouped = <String, List<CustomerDeliveryAllocation>>{};
+    final sourceItems = <String, EmergencyFulfillmentItem>{};
+    for (final item in order.customerDeliveryPendingItems()) {
+      final quantity = item.readyUnservedQuantity;
+      if (quantity <= 0) continue;
+      final menuKey = _handoffMenuKey(item);
+      sourceItems.putIfAbsent(menuKey, () => item);
+      grouped
+          .putIfAbsent(menuKey, () => [])
+          .add(
+            CustomerDeliveryAllocation(
+              itemId: item.id,
+              queueId: order.queueId,
+              sourceKind: _kdsSourceKind(item),
+              quantity: quantity,
+            ),
+          );
+    }
+    if (grouped.isEmpty) continue;
+    final menus = grouped.entries
+        .map((entry) {
+          final item = sourceItems[entry.key]!;
+          return CustomerDeliveryMenu(
+            key: '${order.queueId}\u0000${entry.key}',
+            nameKo: item.nameKo,
+            nameVi: item.nameVi,
+            nameEn: item.nameEn,
+            availableQuantity: entry.value.fold(
+              0,
+              (total, allocation) => total + allocation.quantity,
+            ),
+            allocations: List.unmodifiable(entry.value),
+          );
+        })
+        .toList(growable: false);
+    result.add(
+      CustomerDeliveryBox(
+        queueId: order.queueId,
+        orderId: order.orderId,
+        queueNo: order.queueNo,
+        tableNumber: order.tableNumber,
+        floorLabel: order.floorLabel,
+        createdAt: order.createdAt,
+        menus: List.unmodifiable(menus),
+      ),
+    );
+  }
+  return List.unmodifiable(result);
+}
+
+List<CustomerDeliveryAllocation> allocateCustomerDeliverySelections(
+  Iterable<CustomerDeliveryBox> boxes,
+  Map<String, int> selections,
+) {
+  final allocations = <CustomerDeliveryAllocation>[];
+  final knownKeys = <String>{};
+  for (final box in boxes) {
+    for (final menu in box.menus) {
+      knownKeys.add(menu.key);
+      var remaining = selections[menu.key] ?? 0;
+      if (remaining < 0 || remaining > menu.availableQuantity) {
+        throw StateError('KDS_CUSTOMER_DELIVERY_SELECTION_STALE');
+      }
+      for (final available in menu.allocations) {
+        if (remaining <= 0) break;
+        final quantity = math.min(remaining, available.quantity);
+        allocations.add(available.withQuantity(quantity));
+        remaining -= quantity;
+      }
+      if (remaining > 0) {
+        throw StateError('KDS_CUSTOMER_DELIVERY_SELECTION_STALE');
+      }
+    }
+  }
+  if (selections.entries.any(
+    (entry) => entry.value != 0 && !knownKeys.contains(entry.key),
+  )) {
+    throw StateError('KDS_CUSTOMER_DELIVERY_SELECTION_STALE');
   }
   return List.unmodifiable(allocations);
 }
@@ -1367,8 +1718,11 @@ class EmergencyFulfillmentNotifier
   SupabaseClient get _client => _providedClient ?? supabase;
 
   static const _uuid = Uuid();
-  static const _handoffRefreshInterval = Duration(seconds: 1);
-  static const _connectedHealthRefreshInterval = Duration(seconds: 5);
+  // Realtime events are the fast path. Legacy reconciliation is only a bounded
+  // safety net and must not become faster when the realtime channel is down.
+  static const _handoffRefreshInterval = Duration(seconds: 30);
+  static const _connectedHealthRefreshInterval = Duration(seconds: 30);
+  static const _pollJitter = Duration(seconds: 5);
   static const _realtimeRefreshDelay = Duration(milliseconds: 100);
   RealtimeChannel? _channel;
   KdsRealtimeSync? _kdsSync;
@@ -1387,6 +1741,7 @@ class EmergencyFulfillmentNotifier
   int _snapshotFailureCount = 0;
   int _realtimeRevision = 0;
   final Map<String, int> _ticketRevisions = {};
+  final math.Random _pollRandom = math.Random();
 
   Future<void> load({bool showLoading = true}) async {
     if (!mounted) return;
@@ -1486,6 +1841,10 @@ class EmergencyFulfillmentNotifier
       if (!mounted) return;
       final next = EmergencyFulfillmentState.fromJson(json);
       final pendingRecords = await EmergencyWebBridge.readOutbox();
+      final currentPendingRecords = emergencyOutboxRecordsForStore(
+        pendingRecords,
+        storeId,
+      );
       if (!mounted) return;
       if (refreshRevision != _realtimeRevision) {
         _refreshRequested = true;
@@ -1493,8 +1852,8 @@ class EmergencyFulfillmentNotifier
       }
       state = next.copyWith(
         isLoading: false,
-        pendingOutboxCount: pendingRecords.length,
-        pendingQueueIds: _pendingQueueIds(pendingRecords),
+        pendingOutboxCount: currentPendingRecords.length,
+        pendingQueueIds: emergencyPendingQueueIds(currentPendingRecords),
         error: outboxError,
         clearError: outboxError == null,
       );
@@ -1521,13 +1880,12 @@ class EmergencyFulfillmentNotifier
 
   void _scheduleSnapshotRetry() {
     _snapshotRetryTimer?.cancel();
-    _snapshotRetryTimer = Timer(
-      emergencySnapshotRetryDelay(_snapshotFailureCount),
-      () {
-        _snapshotRetryTimer = null;
-        if (mounted) unawaited(load(showLoading: false));
-      },
-    );
+    final baseDelay = emergencySnapshotRetryDelay(_snapshotFailureCount);
+    final jitter = _pollRandom.nextInt(2001);
+    _snapshotRetryTimer = Timer(baseDelay + Duration(milliseconds: jitter), () {
+      _snapshotRetryTimer = null;
+      if (mounted) unawaited(load(showLoading: false));
+    });
   }
 
   void _scheduleBusinessDayRefresh(VietnamBusinessDayWindow businessDay) {
@@ -1730,10 +2088,21 @@ class EmergencyFulfillmentNotifier
     if (_pollTimer != null && _pollInterval == interval) return;
     _pollTimer?.cancel();
     _pollInterval = interval;
-    _pollTimer = Timer.periodic(interval, (_) {
+    _scheduleLegacyPollTick(interval);
+  }
+
+  void _scheduleLegacyPollTick(Duration interval) {
+    final jitterWindowMs = _pollJitter.inMilliseconds * 2;
+    final jitterMs = _pollRandom.nextInt(jitterWindowMs + 1);
+    final delay = interval - _pollJitter + Duration(milliseconds: jitterMs);
+    _pollTimer = Timer(delay, () {
+      _pollTimer = null;
       // The retry timer owns recovery after failure; polling must not bypass it.
       if (mounted && !_refreshing && _snapshotRetryTimer == null) {
         unawaited(load(showLoading: false));
+      }
+      if (mounted && _syncMode != KdsSyncMode.active) {
+        _scheduleLegacyPollTick(interval);
       }
     });
   }
@@ -1890,10 +2259,14 @@ class EmergencyFulfillmentNotifier
     if (!mounted || _syncMode == KdsSyncMode.legacy) return;
     final error = await _flushOutbox();
     final pendingRecords = await EmergencyWebBridge.readOutbox();
+    final currentPendingRecords = emergencyOutboxRecordsForStore(
+      pendingRecords,
+      state.restaurantId,
+    );
     if (!mounted) return;
     state = state.copyWith(
-      pendingOutboxCount: pendingRecords.length,
-      pendingQueueIds: _pendingQueueIds(pendingRecords),
+      pendingOutboxCount: currentPendingRecords.length,
+      pendingQueueIds: emergencyPendingQueueIds(currentPendingRecords),
       error: error,
       clearError: error == null,
     );
@@ -2054,7 +2427,7 @@ class EmergencyFulfillmentNotifier
         return;
       }
       try {
-        await EmergencyWebBridge.putOutbox(eventId, jsonEncode(payload));
+        await _putOutbox(eventId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           error: 'EMERGENCY_PROGRESS_QUEUED',
@@ -2094,7 +2467,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(actionId, jsonEncode(payload));
+        await _putOutbox(actionId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {...state.pendingQueueIds, queueId},
@@ -2135,7 +2508,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(requestId, jsonEncode(payload));
+        await _putOutbox(requestId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {
@@ -2147,6 +2520,85 @@ class EmergencyFulfillmentNotifier
         return true;
       } catch (_) {
         state = state.copyWith(error: 'KDS_CHECKET_BATCH_FAILED');
+        return false;
+      }
+    }
+  }
+
+  Future<bool> completeTrayFloorTransition(
+    TrayFloorTransitionSummary summary,
+  ) async {
+    if (summary.allocations.isEmpty) return false;
+    final requestId = _uuid.v4();
+    final payload = <String, dynamic>{
+      'kind': 'tray_floor_batch',
+      'request_id': requestId,
+      'floor_label': summary.floorLabel,
+      'allocations': summary.allocations
+          .map((allocation) => allocation.toJson())
+          .toList(growable: false),
+    };
+    try {
+      await _sendOutboxPayload(payload);
+      await load(showLoading: false);
+      return true;
+    } catch (error) {
+      if (error is PostgrestException) {
+        state = state.copyWith(error: error.message);
+        return false;
+      }
+      try {
+        await _putOutbox(requestId, payload);
+        state = state.copyWith(
+          pendingOutboxCount: state.pendingOutboxCount + 1,
+          pendingQueueIds: {
+            ...state.pendingQueueIds,
+            ...summary.allocations.map((allocation) => allocation.queueId),
+          },
+          error: 'KDS_TRAY_FLOOR_BATCH_QUEUED',
+        );
+        return true;
+      } catch (_) {
+        state = state.copyWith(error: 'KDS_TRAY_FLOOR_BATCH_FAILED');
+        return false;
+      }
+    }
+  }
+
+  Future<bool> completeCustomerDeliveryBatch(
+    List<CustomerDeliveryAllocation> allocations,
+  ) async {
+    if (allocations.isEmpty) return false;
+    final requestId = _uuid.v4();
+    final payload = <String, dynamic>{
+      'kind': 'customer_delivery_batch',
+      'request_id': requestId,
+      'allocations': allocations
+          .map((allocation) => allocation.toJson())
+          .toList(growable: false),
+    };
+    try {
+      await _sendOutboxPayload(payload);
+      await load(showLoading: false);
+      return true;
+    } catch (error) {
+      if (error is PostgrestException) {
+        state = state.copyWith(error: error.message);
+        return false;
+      }
+      try {
+        await _putOutbox(requestId, payload);
+        state = state.copyWith(
+          pendingOutboxCount: state.pendingOutboxCount + 1,
+          pendingQueueIds: {
+            ...state.pendingQueueIds,
+            ...allocations.map((allocation) => allocation.queueId),
+          },
+          error: 'KDS_CUSTOMER_DELIVERY_BATCH_QUEUED',
+        );
+        return true;
+      } catch (_) {
+        state = state.copyWith(error: 'KDS_CUSTOMER_DELIVERY_BATCH_FAILED');
         return false;
       }
     }
@@ -2180,7 +2632,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(eventId, jsonEncode(payload));
+        await _putOutbox(eventId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {...state.pendingQueueIds, task.queueId},
@@ -2223,7 +2675,7 @@ class EmergencyFulfillmentNotifier
         return false;
       }
       try {
-        await EmergencyWebBridge.putOutbox(revertId, jsonEncode(payload));
+        await _putOutbox(revertId, payload);
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {...state.pendingQueueIds, queueId},
@@ -2402,6 +2854,29 @@ class EmergencyFulfillmentNotifier
         return raw is Map
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
+      case 'tray_floor_batch':
+        final raw = await _client.rpc(
+          'kds_dispatch_tray_floor_batch_v1',
+          params: {
+            'p_request_id': payload['request_id'],
+            'p_floor_label': payload['floor_label'],
+            'p_allocations': payload['allocations'],
+          },
+        );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
+      case 'customer_delivery_batch':
+        final raw = await _client.rpc(
+          'kds_complete_customer_delivery_batch_v1',
+          params: {
+            'p_request_id': payload['request_id'],
+            'p_allocations': payload['allocations'],
+          },
+        );
+        return raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
       case 'serve_ready_order':
         final raw = await _client.rpc(
           'kds_serve_ready_order_v3',
@@ -2509,6 +2984,17 @@ class EmergencyFulfillmentNotifier
     );
   }
 
+  Future<void> _putOutbox(String id, Map<String, dynamic> payload) async {
+    final storeId = state.restaurantId;
+    if (storeId == null || storeId.isEmpty) {
+      throw StateError('KDS_OUTBOX_STORE_SCOPE_MISSING');
+    }
+    await EmergencyWebBridge.putOutbox(
+      id,
+      jsonEncode({...payload, '_outbox_store_id': storeId}),
+    );
+  }
+
   Future<String?> _flushOutbox() async {
     if (_flushing) return null;
     _flushing = true;
@@ -2519,10 +3005,19 @@ class EmergencyFulfillmentNotifier
         try {
           final decoded = jsonDecode(record.payload);
           if (decoded is! Map) {
-            await EmergencyWebBridge.deleteOutbox(record.id);
+            throw const FormatException('KDS_OUTBOX_PAYLOAD_INVALID');
+          }
+          final payload = Map<String, dynamic>.from(decoded);
+          final recordStoreId = payload['_outbox_store_id']?.toString();
+          final currentStoreId = state.restaurantId;
+          if (recordStoreId != null &&
+              recordStoreId.isNotEmpty &&
+              recordStoreId != currentStoreId) {
+            // A different store/user session must never replay or delete this
+            // record. It remains durable until its owning scope is active.
             continue;
           }
-          await _sendOutboxPayload(Map<String, dynamic>.from(decoded));
+          await _sendOutboxPayload(payload);
           await EmergencyWebBridge.deleteOutbox(record.id);
         } on PostgrestException catch (error) {
           // A server-side contract rejection will not succeed on retry. Remove
@@ -2553,18 +3048,54 @@ class EmergencyFulfillmentNotifier
   }
 }
 
-Set<String> _pendingQueueIds(List<EmergencyOutboxRecord> records) => records
-    .map((record) {
-      try {
-        final decoded = jsonDecode(record.payload);
-        return decoded is Map ? decoded['queue_id']?.toString() : null;
-      } catch (_) {
-        return null;
+@visibleForTesting
+Set<String> emergencyPendingQueueIds(Iterable<EmergencyOutboxRecord> records) {
+  final queueIds = <String>{};
+  for (final record in records) {
+    try {
+      final decoded = jsonDecode(record.payload);
+      if (decoded is! Map) continue;
+      final directQueueId = decoded['queue_id']?.toString();
+      if (directQueueId != null && directQueueId.isNotEmpty) {
+        queueIds.add(directQueueId);
       }
-    })
-    .whereType<String>()
-    .where((id) => id.isNotEmpty)
-    .toSet();
+      final allocations = decoded['allocations'];
+      if (allocations is! List) continue;
+      for (final allocation in allocations.whereType<Map>()) {
+        final queueId = allocation['queue_id']?.toString();
+        if (queueId != null && queueId.isNotEmpty) queueIds.add(queueId);
+      }
+    } catch (_) {
+      // Storage adapters surface corrupt records; direct fixture inputs are
+      // ignored here because they cannot identify a pending queue safely.
+    }
+  }
+  return queueIds;
+}
+
+@visibleForTesting
+List<EmergencyOutboxRecord> emergencyOutboxRecordsForStore(
+  Iterable<EmergencyOutboxRecord> records,
+  String? storeId,
+) {
+  if (storeId == null || storeId.isEmpty) return const [];
+  return records
+      .where((record) {
+        try {
+          final decoded = jsonDecode(record.payload);
+          if (decoded is! Map) return false;
+          final recordStoreId = decoded['_outbox_store_id']?.toString();
+          // Pre-scope records remain replayable under server-side RLS for a
+          // backwards-compatible migration. Every new record carries a scope.
+          return recordStoreId == null ||
+              recordStoreId.isEmpty ||
+              recordStoreId == storeId;
+        } catch (_) {
+          return false;
+        }
+      })
+      .toList(growable: false);
+}
 
 final emergencyFulfillmentProvider =
     StateNotifierProvider<

@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/daily_closing_service.dart';
+import '../../../core/payments/cash_deposit.dart';
+import '../../../core/payments/collection_bank.dart';
 
 class DailyClosingRecord {
   const DailyClosingRecord({
@@ -27,6 +29,9 @@ class DailyClosingRecord {
     required this.serviceTotal,
     required this.lowStockCount,
     required this.closeSource,
+    this.directOrderCashRefunds = 0,
+    this.deliveryCashPaid = 0,
+    this.deliveryCashRecovered = 0,
     this.snapshotPaymentsTotal = 0,
     this.ledgerPaymentsCount = 0,
     this.ledgerPaymentsTotal = 0,
@@ -37,6 +42,8 @@ class DailyClosingRecord {
     this.reconciliationDelta = 0,
     this.ledgerAsOf,
     this.notes,
+    this.bank,
+    this.cashLedgerChanged = false,
     required this.createdAt,
   });
 
@@ -54,6 +61,9 @@ class DailyClosingRecord {
   final double paymentsPay;
   final double paymentsBankTransfer;
   final double deliveryCashPayout;
+  final double directOrderCashRefunds;
+  final double deliveryCashPaid;
+  final double deliveryCashRecovered;
   final double openingCashAmount;
   final double expectedCashAmount;
   final double countedCashAmount;
@@ -72,9 +82,22 @@ class DailyClosingRecord {
   final double reconciliationDelta;
   final DateTime? ledgerAsOf;
   final String? notes;
+  final CollectionBank? bank;
+  final bool cashLedgerChanged;
   final DateTime createdAt;
 
   factory DailyClosingRecord.fromJson(Map<String, dynamic> json) {
+    if (json['close_source'] == 'manual') {
+      for (final key in ['counted_cash_amount', 'opening_cash_amount']) {
+        final value = json[key];
+        final parsed = value is num
+            ? value.toDouble()
+            : double.tryParse(value?.toString() ?? '');
+        if (parsed == null || !parsed.isFinite || parsed < 0) {
+          throw const FormatException('DAILY_CLOSING_CASH_INVALID');
+        }
+      }
+    }
     return DailyClosingRecord(
       id: json['closing_id']?.toString() ?? '',
       closingDate: json['closing_date']?.toString() ?? '',
@@ -90,6 +113,11 @@ class DailyClosingRecord {
       paymentsPay: _toDouble(json['payments_pay']),
       paymentsBankTransfer: _toDouble(json['payments_bank_transfer']),
       deliveryCashPayout: _toDouble(json['delivery_cash_payout']),
+      directOrderCashRefunds: _toDouble(json['direct_order_cash_refunds']),
+      deliveryCashPaid: _toDouble(
+        json['delivery_cash_paid'] ?? json['delivery_cash_payout'],
+      ),
+      deliveryCashRecovered: _toDouble(json['delivery_cash_recovered']),
       openingCashAmount: _toDouble(json['opening_cash_amount']),
       expectedCashAmount: _toDouble(json['expected_cash_amount']),
       countedCashAmount: _toDouble(json['counted_cash_amount']),
@@ -120,6 +148,12 @@ class DailyClosingRecord {
       reconciliationDelta: _toDouble(json['reconciliation_delta']),
       ledgerAsOf: DateTime.tryParse(json['ledger_as_of']?.toString() ?? ''),
       notes: json['notes']?.toString(),
+      cashLedgerChanged: json['cash_ledger_changed'] == true,
+      bank: json['bank'] is Map
+          ? CollectionBank.fromJson(
+              Map<String, dynamic>.from(json['bank'] as Map),
+            )
+          : null,
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
@@ -128,8 +162,25 @@ class DailyClosingRecord {
 
   bool get isClosed => closeSource == 'manual';
 
-  double get depositTotal =>
+  double get countedDepositTotal =>
       isClosed ? countedCashAmount - openingCashAmount : 0;
+  double get expectedDepositTotal => expectedCashBalance(
+    openingCash: 0,
+    cashSales: paymentsCash,
+    cashRefunds: directOrderCashRefunds,
+    cashPaid: deliveryCashPaid,
+    cashRecovered: deliveryCashRecovered,
+  );
+  double get depositTotal => isClosed ? expectedDepositTotal : 0;
+  double? get confirmedDeposit => isClosed ? depositTotal : null;
+  String get depositDate => nextDepositDate(closingDate);
+  bool get depositNeedsReview =>
+      isClosed &&
+      (depositTotal < 0 ||
+          countedDepositTotal < 0 ||
+          cashVariance != 0 ||
+          reconciliationDelta != 0 ||
+          cashLedgerChanged);
 
   static int _toInt(dynamic v) => switch (v) {
     int val => val,
@@ -174,6 +225,19 @@ final dailyClosingHistoryProvider = FutureProvider.autoDispose
     .family<List<DailyClosingRecord>, String>((ref, storeId) async {
       final rows = await dailyClosingService.fetchDailyClosings(
         storeId: storeId,
+      );
+      return rows.map(DailyClosingRecord.fromJson).toList();
+    });
+
+final dailyClosingDayProvider = FutureProvider.autoDispose
+    .family<List<DailyClosingRecord>, ({String storeId, String day})>((
+      ref,
+      scope,
+    ) async {
+      final rows = await dailyClosingService.fetchDailyClosings(
+        storeId: scope.storeId,
+        closingDate: scope.day,
+        limit: 1,
       );
       return rows.map(DailyClosingRecord.fromJson).toList();
     });

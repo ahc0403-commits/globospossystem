@@ -1,5 +1,7 @@
 import '../../l10n/app_localizations.dart';
 import 'dart:async';
+import 'package:uuid/uuid.dart';
+import 'cashier_item_edit_dialogs.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,8 @@ import '../../core/models/pos_table.dart';
 import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/payments/vietqr_payload.dart';
+import '../../core/payments/collection_bank.dart';
+import '../../core/services/collection_bank_service.dart';
 import '../../core/services/bank_transfer_alert_service.dart';
 import '../../core/services/bank_transfer_alert_sound.dart';
 import '../../core/services/bank_transfer_alert_coordinator.dart';
@@ -27,6 +31,7 @@ import '../../core/layout/platform_info.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/permission_utils.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
@@ -110,9 +115,10 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.bankTransferAlertSoundServiceOverride,
     this.menuServiceOverride,
     this.digitalReceiptServiceOverride,
+    this.collectionBankServiceOverride,
     this.directOrderStaffServiceOverride,
-    this.bankTransferAlertPollInterval = const Duration(seconds: 2),
-    this.deliveryStatusPollInterval = const Duration(seconds: 7),
+    this.bankTransferAlertPollInterval = const Duration(seconds: 30),
+    this.deliveryStatusPollInterval = const Duration(seconds: 30),
   });
 
   final PaymentProofService? paymentProofServiceOverride;
@@ -123,6 +129,7 @@ class CashierScreen extends ConsumerStatefulWidget {
   final BankTransferAlertSoundService? bankTransferAlertSoundServiceOverride;
   final MenuService? menuServiceOverride;
   final DigitalReceiptService? digitalReceiptServiceOverride;
+  final CollectionBankService? collectionBankServiceOverride;
   final DirectOrderStaffService? directOrderStaffServiceOverride;
   final Duration bankTransferAlertPollInterval;
   final Duration deliveryStatusPollInterval;
@@ -163,10 +170,14 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   late final ProviderSubscription<PaymentState> _paymentSub;
   late final PrintJobAgentService _printJobAgent;
 
+  int _proofActionsPending = 0;
   PaymentProofService get _paymentProofService =>
       widget.paymentProofServiceOverride ?? paymentProofService;
   PaymentService get _paymentService =>
       widget.paymentServiceOverride ?? paymentService;
+  CollectionBankService get _collectionBankService =>
+      widget.collectionBankServiceOverride ?? collectionBankService;
+
   DigitalReceiptService get _digitalReceiptService =>
       widget.digitalReceiptServiceOverride ?? digitalReceiptService;
   RestaurantCutoffService get _restaurantCutoffService =>
@@ -193,15 +204,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   void initState() {
     super.initState();
     _printJobAgent = widget.printJobAgentOverride ?? PrintJobAgentService();
-    _deliveryStatusTimer = Timer.periodic(widget.deliveryStatusPollInterval, (
-      _,
-    ) {
-      final storeId = _initializedRestaurantId;
-      if (storeId != null) {
-        unawaited(_loadDeliveryTickets(storeId));
-        unawaited(_loadDeliveryAvailability(storeId));
-      }
-    });
+    _scheduleDeliveryStatusPoll();
     _orderSearchController.addListener(() {
       if (!mounted) {
         return;
@@ -224,14 +227,33 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       final error = next.error;
       if (error != null && error.isNotEmpty && error != _lastError) {
         _lastError = error;
-        if (mounted) {
+        if (mounted && error != nonRevenueAmountChangedError) {
           showErrorToast(
             context,
-            localizeRestaurantCutoffError(context.l10n, error),
+            cashierItemEditErrorText(context, error) ??
+                localizeRestaurantCutoffError(context.l10n, error),
           );
         }
       }
     });
+  }
+
+  void _scheduleDeliveryStatusPoll() {
+    _deliveryStatusTimer?.cancel();
+    _deliveryStatusTimer = Timer(
+      jitteredPollDelay(widget.deliveryStatusPollInterval),
+      () async {
+        _deliveryStatusTimer = null;
+        final storeId = _initializedRestaurantId;
+        if (storeId != null) {
+          await Future.wait([
+            _loadDeliveryTickets(storeId),
+            _loadDeliveryAvailability(storeId),
+          ]);
+        }
+        if (mounted) _scheduleDeliveryStatusPoll();
+      },
+    );
   }
 
   Future<void> _flushProofQueueIfNeeded(bool isOnline) async {
@@ -242,6 +264,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     _isFlushingProofQueue = true;
     try {
       final uploaded = await _paymentProofService.flushPendingUploads();
+      final storeId = _initializedRestaurantId;
+      if (storeId != null) {
+        final count = await _paymentProofService.pendingActionCount(storeId);
+        if (mounted && storeId == _initializedRestaurantId) {
+          setState(() => _proofActionsPending = count);
+        }
+      }
       if (mounted && uploaded > 0) {
         showSuccessToast(
           context,
@@ -291,10 +320,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
     Future.microtask(() {
-      ref.read(paymentProvider.notifier).loadOrders(storeId);
-      ref
-          .read(waiterTableProvider.notifier)
-          .loadTables(storeId, showLoading: false);
+      if (event.isFallback ||
+          event.affects({'settings', 'einvoice', 'print'})) {
+        ref.read(paymentProvider.notifier).loadOrders(storeId);
+      }
+      if (event.isFallback) {
+        ref
+            .read(waiterTableProvider.notifier)
+            .loadTables(storeId, showLoading: false);
+      }
       ref.invalidate(einvoiceJobStatusProvider);
     });
   }
@@ -666,6 +700,103 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
   }
 
+  Future<bool> _showNonRevenueAmountChangedDialog({
+    required double previousAmount,
+    required double currentAmount,
+  }) async {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            key: const Key('cashier_non_revenue_amount_changed_dialog'),
+            title: Text(l10n.cashierNonRevenueAmountChangedTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(l10n.cashierNonRevenueAmountChangedMessage),
+                const SizedBox(height: 16),
+                _AmountLine(
+                  label: l10n.cashierNonRevenuePreviousAmount,
+                  value: '₫${currency.format(previousAmount)}',
+                ),
+                const SizedBox(height: 8),
+                _AmountLine(
+                  label: l10n.cashierPaymentDue,
+                  value: '₫${currency.format(currentAmount)}',
+                  prominent: true,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                key: const Key('cashier_non_revenue_amount_changed_confirm'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(l10n.cashierNonRevenueConfirmUpdatedAmount),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<({Map<String, dynamic> payment, CashierOrder order})?>
+  _processNonRevenueWithReconfirmation({
+    required PaymentNotifier notifier,
+    required String storeId,
+    required CashierOrder order,
+    required Map<String, String> input,
+  }) async {
+    var amount = order.remainingDue;
+    var currentOrder = order;
+
+    while (mounted) {
+      final payment = await notifier.processNonRevenuePayment(
+        storeId: storeId,
+        orderId: order.orderId,
+        amount: amount,
+        type: input['type'] ?? '',
+        reason: input['reason'] ?? '',
+        staffName: input['staffName'],
+        managerPin: input['managerPin'] ?? '',
+      );
+      if (payment != null) {
+        return (payment: payment, order: currentOrder);
+      }
+
+      final refreshedState = ref.read(paymentProvider);
+      if (refreshedState.error != nonRevenueAmountChangedError) {
+        return null;
+      }
+      final refreshedOrder = refreshedState.selectedOrder;
+      if (refreshedOrder == null ||
+          refreshedOrder.orderId != order.orderId ||
+          refreshedOrder.remainingDue <= 0) {
+        notifier.clearError();
+        return null;
+      }
+
+      final confirmed = await _showNonRevenueAmountChangedDialog(
+        previousAmount: amount,
+        currentAmount: refreshedOrder.remainingDue,
+      );
+      if (!confirmed) {
+        notifier.clearError();
+        return null;
+      }
+      currentOrder = refreshedOrder;
+      amount = refreshedOrder.remainingDue;
+    }
+
+    return null;
+  }
+
   Future<Map<String, String>?> _showServiceItemDialog({
     required bool isMarked,
   }) async {
@@ -867,7 +998,18 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
 
     CashTender? cashTender;
-    if (method == paymentMethodOther || method == paymentMethodBankTransfer) {
+    if (method == paymentMethodBankTransfer) {
+      CollectionBank bank;
+      try {
+        bank = await _collectionBankService.load(
+          storeId,
+          orderId: paymentOrders.first.orderId,
+        );
+      } catch (_) {
+        if (mounted) showErrorToast(context, l10n.collectionBankUnavailable);
+        return;
+      }
+      if (!mounted) return;
       final qrConfirmed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -875,6 +1017,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
           key: const Key('cashier_combined_qr_payment_dialog'),
           orders: paymentOrders,
           totalAmount: combinedTotal,
+          bank: bank,
         ),
       );
       if (qrConfirmed != true || !mounted) {
@@ -1330,7 +1473,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final notifier = ref.read(paymentProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');
     // 오프라인 상태 감지 - RULES.md: 결제는 온라인 필수
-    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
+    final isOnline =
+        ref
+            .watch(serviceConnectivityProvider)
+            .asData
+            ?.value
+            .canAttemptOnlineWork ??
+        true;
     if (!isOnline) {
       _hasAttemptedProofFlush = false;
     } else if (storeId != null && !_hasAttemptedProofFlush) {
@@ -1407,6 +1556,22 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
             ),
           ),
+          if (_proofActionsPending > 0)
+            TextButton.icon(
+              key: const Key('cashier_retry_queued_proof'),
+              icon: const Icon(Icons.sync),
+              label: Text(
+                '${l10n.paymentProofTitle} · ${l10n.refresh} ($_proofActionsPending)',
+              ),
+              onPressed: isOnline && !_isFlushingProofQueue && storeId != null
+                  ? () async {
+                      await _paymentProofService.resumePendingUploads(
+                        storeId: storeId,
+                      );
+                      await _flushProofQueueIfNeeded(isOnline);
+                    }
+                  : null,
+            ),
           const SizedBox(height: 10),
           _CashierOrderSearchToolbar(
             controller: _orderSearchController,
@@ -1750,16 +1915,30 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         storeId == null) {
                       return;
                     }
-                    unawaited(
-                      notifier.showOnCustomerDisplay(
-                        storeId: storeId,
-                        order: order,
-                      ),
+                    await notifier.showOnCustomerDisplay(
+                      storeId: storeId,
+                      order: order,
                     );
-                    await showDialog<void>(
-                      context: context,
-                      builder: (_) => _BankTransferQrDialog(order: order),
-                    );
+                    if (!mounted || !context.mounted) return;
+                    try {
+                      final bank = await _collectionBankService.load(
+                        storeId,
+                        orderId: order.orderId,
+                      );
+                      if (!mounted || !context.mounted) return;
+                      await showDialog<void>(
+                        context: context,
+                        builder: (_) =>
+                            _BankTransferQrDialog(order: order, bank: bank),
+                      );
+                    } catch (_) {
+                      if (context.mounted) {
+                        showErrorToast(
+                          context,
+                          context.l10n.collectionBankUnavailable,
+                        );
+                      }
+                    }
                   },
                   onApplyDiscount: () async {
                     final selectedOrder = paymentState.selectedOrder;
@@ -1908,22 +2087,70 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       );
                     }
                   },
+                  onMoveOrderItems: (initialItem) async {
+                    final source = paymentState.selectedOrder;
+                    if (storeId == null ||
+                        source == null ||
+                        !canCancelOrders ||
+                        !isOnline ||
+                        paymentState.isProcessing) {
+                      return;
+                    }
+                    final selection = await showCashierMoveItems(
+                      context,
+                      items: source.items,
+                      tables: tableState.tables,
+                      currentTableId: source.tableId,
+                      initialItem: initialItem,
+                    );
+                    if (selection == null || !context.mounted) return;
+                    final moved = await notifier.moveOrderItems(
+                      storeId: storeId,
+                      orderId: source.orderId,
+                      targetTableId: selection.tableId,
+                      items: selection.items,
+                      operationId: const Uuid().v4(),
+                    );
+                    await ref
+                        .read(waiterTableProvider.notifier)
+                        .loadTables(storeId, showLoading: false);
+                    if (moved && context.mounted) {
+                      showSuccessToast(
+                        context,
+                        cashierItemEditText(context, 'discount_review'),
+                      );
+                    }
+                  },
                   onCancelOrderItem: (item) async {
                     if (storeId == null || !canCancelOrders || !isOnline) {
                       return;
                     }
-                    final cancelled = await notifier.cancelOrderItem(
-                      item.id,
-                      storeId,
-                    );
+                    final quantity = item.quantity > 1
+                        ? await showCashierCancelQuantity(context, item)
+                        : 1;
+                    if (quantity == null || !context.mounted) {
+                      return;
+                    }
+                    final partial = quantity < item.quantity;
+                    final operation = const Uuid().v4();
+                    final cancelled = partial
+                        ? await notifier.cancelItemQuantity(
+                            storeId: storeId,
+                            item: item,
+                            newQuantity: item.quantity - quantity,
+                            operationId: operation,
+                          )
+                        : await notifier.cancelOrderItem(item.id, storeId);
                     if (cancelled && context.mounted) {
                       _showCancellationUndoSnackBar(
                         message: l10n.orderWorkspaceCancelItemAction,
                         restoredMessage: l10n.cancelledItemRestored,
-                        onUndo: () => notifier.restoreCancelledOrderItem(
-                          item.id,
-                          storeId,
-                        ),
+                        onUndo: () => partial
+                            ? notifier.restoreItemQuantity(storeId, operation)
+                            : notifier.restoreCancelledOrderItem(
+                                item.id,
+                                storeId,
+                              ),
                       );
                     }
                   },
@@ -1950,33 +2177,36 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       }
                     }
 
-                    final payment = nonRevenueInput == null
-                        ? await notifier.processPayment(
-                            storeId,
-                            selectedOrder.orderId,
-                            selectedOrder.remainingDue,
-                            method,
-                          )
-                        : await notifier.processNonRevenuePayment(
-                            storeId: storeId,
-                            orderId: selectedOrder.orderId,
-                            amount: selectedOrder.remainingDue,
-                            type: nonRevenueInput['type'] ?? '',
-                            reason: nonRevenueInput['reason'] ?? '',
-                            staffName: nonRevenueInput['staffName'],
-                            managerPin: nonRevenueInput['managerPin'] ?? '',
-                          );
+                    Map<String, dynamic>? payment;
+                    var paymentOrder = selectedOrder;
+                    if (nonRevenueInput == null) {
+                      payment = await notifier.processPayment(
+                        storeId,
+                        selectedOrder.orderId,
+                        selectedOrder.remainingDue,
+                        method,
+                      );
+                    } else {
+                      final result = await _processNonRevenueWithReconfirmation(
+                        notifier: notifier,
+                        storeId: storeId,
+                        order: selectedOrder,
+                        input: nonRevenueInput,
+                      );
+                      payment = result?.payment;
+                      paymentOrder = result?.order ?? selectedOrder;
+                    }
                     if (mounted && ref.read(paymentProvider).paymentSuccess) {
-                      if (!selectedOrder.fulfillmentMode.isPaperless) {
+                      if (!paymentOrder.fulfillmentMode.isPaperless) {
                         await _printReceipt(
-                          order: selectedOrder,
+                          order: paymentOrder,
                           method: method,
                           cashTender: cashTender,
                         );
                       }
                       setState(() {
                         _selectedMethod = null;
-                        _lastCompletedOrderId = selectedOrder.orderId;
+                        _lastCompletedOrderId = paymentOrder.orderId;
                         _showPaymentQueueOnCompact = true;
                       });
                       final proofRequired = requiresPaymentProof(method);
@@ -2042,7 +2272,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           barrierDismissible: false,
                           builder: (_) => RedInvoiceModal(
                             key: const Key('cashier_single_red_invoice_dialog'),
-                            orderId: selectedOrder.orderId,
+                            orderId: paymentOrder.orderId,
                             storeId: storeId,
                           ),
                         );
@@ -2051,7 +2281,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       final receiptAccess = context.mounted
                           ? await _prepareDigitalReceipt(
                               storeId: storeId,
-                              order: selectedOrder,
+                              order: paymentOrder,
                               cashTender: cashTender,
                             )
                           : null;
@@ -2059,7 +2289,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       if (context.mounted) {
                         await _showPaymentCompletion(
                           storeId: storeId,
-                          order: selectedOrder,
+                          order: paymentOrder,
                           paymentMethod: method,
                           cashTender: cashTender,
                           receiptAccess: receiptAccess,
@@ -3509,6 +3739,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.onVoidDiscount,
     required this.onToggleServiceItem,
     required this.onCancelOrderItem,
+    this.onMoveOrderItems,
     required this.onProcess,
     required this.onProcessSplit,
     required this.onCancelOrder,
@@ -3537,6 +3768,7 @@ class _SelectedOrderView extends StatelessWidget {
   final Future<void> Function() onVoidDiscount;
   final Future<void> Function(OrderItem item) onToggleServiceItem;
   final Future<void> Function(OrderItem item) onCancelOrderItem;
+  final Future<void> Function(OrderItem? item)? onMoveOrderItems;
   final Future<void> Function(String method, CashTender? cashTender) onProcess;
   final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
@@ -3597,6 +3829,7 @@ class _SelectedOrderView extends StatelessWidget {
           onOpenOrderLedger: onOpenOrderLedger,
           onToggleServiceItem: onToggleServiceItem,
           onCancelOrderItem: onCancelOrderItem,
+          onMoveOrderItems: onMoveOrderItems,
           onVoidDiscount: onVoidDiscount,
         );
         final paymentRail = _CashierPaymentRail(
@@ -3644,6 +3877,7 @@ class _SelectedOrderView extends StatelessWidget {
                       onOpenOrderLedger: onOpenOrderLedger,
                       onToggleServiceItem: onToggleServiceItem,
                       onCancelOrderItem: onCancelOrderItem,
+                      onMoveOrderItems: onMoveOrderItems,
                       onVoidDiscount: onVoidDiscount,
                     ),
                     const SizedBox(height: 12),
@@ -3764,6 +3998,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
     required this.onOpenOrderLedger,
     this.onToggleServiceItem,
     this.onCancelOrderItem,
+    this.onMoveOrderItems,
     this.onVoidDiscount,
   });
 
@@ -3777,6 +4012,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
   final Future<void> Function() onOpenOrderLedger;
   final Future<void> Function(OrderItem item)? onToggleServiceItem;
   final Future<void> Function(OrderItem item)? onCancelOrderItem;
+  final Future<void> Function(OrderItem? item)? onMoveOrderItems;
   final Future<void> Function()? onVoidDiscount;
 
   @override
@@ -3793,6 +4029,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
       isOnline: isOnline,
       onToggleServiceItem: onToggleServiceItem,
       onCancelOrderItem: onCancelOrderItem,
+      onMoveOrderItems: onMoveOrderItems,
     );
 
     return ToastWorkSurface(
@@ -3843,6 +4080,21 @@ class _CashierOrderSummarySurface extends StatelessWidget {
               ),
             ),
           ),
+          if (canCancelItems &&
+              order.paymentCount == 0 &&
+              order.tableId.isNotEmpty &&
+              onMoveOrderItems != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const Key('cashier_move_order_items'),
+                onPressed: isProcessing || !isOnline
+                    ? null
+                    : () => onMoveOrderItems!(null),
+                icon: const Icon(Icons.move_up),
+                label: Text(cashierItemEditText(context, 'move_all')),
+              ),
+            ),
           if (order.emergencyModeActive && order.unservedQuantity > 0) ...[
             Container(
               key: const Key('cashier_unserved_warning'),
@@ -3996,6 +4248,7 @@ class _CashierOrderItemsPanel extends StatelessWidget {
     this.isOnline = true,
     this.onToggleServiceItem,
     this.onCancelOrderItem,
+    this.onMoveOrderItems,
   });
 
   final CashierOrder order;
@@ -4007,6 +4260,7 @@ class _CashierOrderItemsPanel extends StatelessWidget {
   final bool isOnline;
   final Future<void> Function(OrderItem item)? onToggleServiceItem;
   final Future<void> Function(OrderItem item)? onCancelOrderItem;
+  final Future<void> Function(OrderItem? item)? onMoveOrderItems;
 
   @override
   Widget build(BuildContext context) {
@@ -4283,6 +4537,19 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                           runSpacing: 6,
                           alignment: WrapAlignment.end,
                           children: [
+                            OutlinedButton.icon(
+                              key: ValueKey(
+                                'cashier_move_order_item_${item.id}',
+                              ),
+                              onPressed:
+                                  canCancelItem &&
+                                      order.tableId.isNotEmpty &&
+                                      onMoveOrderItems != null
+                                  ? () => onMoveOrderItems!(item)
+                                  : null,
+                              icon: const Icon(Icons.move_up, size: 18),
+                              label: Text(cashierItemEditText(context, 'move')),
+                            ),
                             OutlinedButton.icon(
                               key: ValueKey(
                                 'cashier_cancel_order_item_${item.id}',
@@ -6357,9 +6624,10 @@ class _CombinedTablePaymentDialogState
 }
 
 class _BankTransferQrDialog extends StatelessWidget {
-  const _BankTransferQrDialog({required this.order});
+  const _BankTransferQrDialog({required this.order, required this.bank});
 
   final CashierOrder order;
+  final CollectionBank bank;
 
   @override
   Widget build(BuildContext context) {
@@ -6381,8 +6649,8 @@ class _BankTransferQrDialog extends StatelessWidget {
                 child: QrImageView(
                   key: const Key('cashier_bank_transfer_qr_image'),
                   data: VietQrPayload.bankTransfer(
-                    bankBin: '970457',
-                    accountNumber: '100202042976',
+                    bankBin: bank.bin,
+                    accountNumber: bank.accountNumber,
                     amount: order.remainingDue.round(),
                     purpose: VietQrPayload.paymentPurpose(order.orderId),
                   ),
@@ -6396,8 +6664,8 @@ class _BankTransferQrDialog extends StatelessWidget {
                 '₫${currency.format(order.remainingDue)}',
                 style: PosNumericText.amountHero,
               ),
-              const Text(
-                'WOORI BANK · 100202042976 · AHN HYOCHANG',
+              Text(
+                '${bank.label} · ${bank.accountNumber} · ${bank.accountHolder}',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -6420,10 +6688,10 @@ class _CombinedQrPaymentDialog extends StatelessWidget {
     super.key,
     required this.orders,
     required this.totalAmount,
+    required this.bank,
   });
 
-  static const _wooriBankBin = '970457';
-  static const _wooriAccountNumber = '100202042976';
+  final CollectionBank bank;
 
   final List<CashierOrder> orders;
   final double totalAmount;
@@ -6435,8 +6703,8 @@ class _CombinedQrPaymentDialog extends StatelessWidget {
     final tableNumbers = orders.map((order) => order.tableNumber).join(', ');
     final reference = 'CB${orders.length}${orders.first.orderId}';
     final qrPayload = VietQrPayload.bankTransfer(
-      bankBin: _wooriBankBin,
-      accountNumber: _wooriAccountNumber,
+      bankBin: bank.bin,
+      accountNumber: bank.accountNumber,
       amount: totalAmount.round(),
       purpose: VietQrPayload.paymentPurpose(reference),
     );
@@ -6485,8 +6753,8 @@ class _CombinedQrPaymentDialog extends StatelessWidget {
               key: const Key('cashier_combined_qr_total'),
               style: PosNumericText.amountHero,
             ),
-            const Text(
-              'WOORI BANK · 100202042976 · AHN HYOCHANG',
+            Text(
+              '${bank.label} · ${bank.accountNumber} · ${bank.accountHolder}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: PosColors.textSecondary,

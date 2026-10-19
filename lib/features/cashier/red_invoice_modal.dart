@@ -3,12 +3,10 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/i18n/locale_extensions.dart';
-import '../../core/services/einvoice_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/error_toast.dart';
 import '../red_invoice_intake/red_invoice_intake_service.dart';
-
-enum _BuyerLookupState { idle, cacheHit, manualFallback }
+import '../red_invoice_intake/buyer_information_form.dart';
 
 enum _RedInvoiceStep { prompt, immediate, deferred }
 
@@ -32,86 +30,33 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   _RedInvoiceStep _step = _RedInvoiceStep.prompt;
   bool _isSubmitting = false;
 
-  final _taxCodeCtrl = TextEditingController();
-  final _companyCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  final _buyer = BuyerInformationController(const {});
   final _deferredNoteCtrl = TextEditingController();
   String _deferredSource = 'business_card';
   XFile? _deferredEvidence;
 
-  bool _isLookingUp = false;
-  _BuyerLookupState _lookupState = _BuyerLookupState.idle;
-  String? _lookupNote;
-
   @override
   void dispose() {
-    _taxCodeCtrl.dispose();
-    _companyCtrl.dispose();
-    _addressCtrl.dispose();
-    _emailCtrl.dispose();
-    _phoneCtrl.dispose();
+    _buyer.dispose();
     _deferredNoteCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _onTaxCodeSubmitted(String taxCode) async {
-    final normalized = taxCode.trim();
-    if (normalized.isEmpty) return;
-    setState(() => _isLookingUp = true);
-
-    try {
-      final cached = await einvoiceService.lookupB2bBuyer(
-        storeId: widget.storeId,
-        taxCode: normalized,
-      );
-      if (!mounted) return;
-      if (cached != null) {
-        _companyCtrl.text = cached['tax_company_name'] ?? '';
-        _addressCtrl.text = cached['tax_address'] ?? '';
-        _emailCtrl.text = cached['receiver_email'] ?? '';
-        _phoneCtrl.text = cached['buyer_phone'] ?? '';
-        setState(() {
-          _lookupState = _BuyerLookupState.cacheHit;
-          _lookupNote = context.l10n.redInvoiceCacheHitNote;
-        });
-        return;
-      }
-    } catch (_) {
-      // graceful fallback: manual entry remains valid
-    } finally {
-      if (mounted) {
-        setState(() {
-          if (_lookupState == _BuyerLookupState.idle) {
-            _lookupState = _BuyerLookupState.manualFallback;
-            _lookupNote = context.l10n.redInvoiceManualFallbackNote;
-          }
-          _isLookingUp = false;
-        });
-      }
-    }
-  }
-
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_buyer.validate()) return;
     setState(() => _isSubmitting = true);
     try {
-      await einvoiceService.requestRedInvoice(
+      await redInvoiceIntakeService.saveBuyerInformation(
         orderId: widget.orderId,
         storeId: widget.storeId,
-        buyerTaxCode: _taxCodeCtrl.text.trim(),
-        buyerLegalName: _companyCtrl.text.trim(),
-        buyerAddress: _addressCtrl.text.trim(),
-        buyerEmail: _emailCtrl.text.trim(),
-        buyerPhone: _phoneCtrl.text.trim(),
+        expectedVersion: null,
+        patch: _buyer.patch,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true); // true = submitted
     } catch (e) {
       if (mounted) {
-        showErrorToast(context, context.l10n.redInvoiceRequestFailed('$e'));
+        showErrorToast(context, buyerSaveError(context, _buyer, e));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -341,107 +286,12 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
     ];
   }
 
-  Widget _buildForm() {
-    final l10n = context.l10n;
-    return Form(
-      key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          _label(l10n.redInvoiceTaxCode),
-          Row(
-            children: [
-              Expanded(
-                child: _field(
-                  controller: _taxCodeCtrl,
-                  hint: l10n.redInvoiceTaxCodeHint,
-                  required: true,
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? l10n.redInvoiceTaxCodeRequired
-                      : null,
-                  onFieldSubmitted: _onTaxCodeSubmitted,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: PosDensity.touchTargetMin,
-                child: _isLookingUp
-                    ? const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: PosColors.accent,
-                          ),
-                        ),
-                      )
-                    : OutlinedButton(
-                        onPressed: () => _onTaxCodeSubmitted(_taxCodeCtrl.text),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: PosColors.border),
-                          foregroundColor: PosColors.textSecondary,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                        child: Text(l10n.lookup),
-                      ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _lookupStatusPanel(),
-          const SizedBox(height: 10),
-          _label(l10n.redInvoiceCompanyName),
-          _field(
-            controller: _companyCtrl,
-            hint: l10n.redInvoiceCompanyNameHint,
-            required: true,
-            validator: (value) => value == null || value.trim().isEmpty
-                ? l10n.redInvoiceCompanyNameRequired
-                : null,
-          ),
-          const SizedBox(height: 10),
-          _label(l10n.address),
-          _field(
-            controller: _addressCtrl,
-            hint: l10n.redInvoiceAddressHint,
-            required: true,
-            validator: (value) => value == null || value.trim().isEmpty
-                ? l10n.redInvoiceAddressRequired
-                : null,
-          ),
-          const SizedBox(height: 10),
-          _label(l10n.redInvoiceEmailRequiredLabel),
-          _field(
-            controller: _emailCtrl,
-            hint: l10n.redInvoiceEmailHint,
-            required: true,
-            keyboardType: TextInputType.emailAddress,
-            validator: (value) {
-              final email = value?.trim() ?? '';
-              if (email.isEmpty) return l10n.redInvoiceEmailRequired;
-              return email.contains('@') ? null : l10n.redInvoiceInvalidEmail;
-            },
-          ),
-          const SizedBox(height: 10),
-          _label('${l10n.redInvoicePhone} *'),
-          _field(
-            controller: _phoneCtrl,
-            hint: l10n.redInvoicePhoneHint,
-            required: true,
-            keyboardType: TextInputType.phone,
-            validator: (value) => value == null || value.trim().isEmpty
-                ? l10n.redInvoiceRequiredField
-                : null,
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
+  Widget _buildForm() => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      BuyerInformationFields(controller: _buyer, storeId: widget.storeId),
+    ],
+  );
 
   List<Widget> _buildFormActions() {
     return [
@@ -477,88 +327,6 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
     ];
   }
 
-  Widget _lookupStatusPanel() {
-    final l10n = context.l10n;
-    if (_lookupState == _BuyerLookupState.idle) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: PosColors.canvas,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: PosColors.border),
-        ),
-        child: Text(
-          l10n.redInvoiceLookupIdle,
-          style: AppFonts.system(
-            color: PosColors.textSecondary,
-            fontSize: 12,
-            height: 1.35,
-          ),
-        ),
-      );
-    }
-
-    final (color, icon, title) = switch (_lookupState) {
-      _BuyerLookupState.cacheHit => (
-        PosColors.success,
-        Icons.inventory_2_outlined,
-        l10n.redInvoiceCacheMatch,
-      ),
-      _BuyerLookupState.manualFallback => (
-        PosColors.warning,
-        Icons.edit_note,
-        l10n.redInvoiceManualEntry,
-      ),
-      _ => (
-        PosColors.textSecondary,
-        Icons.info_outline,
-        l10n.redInvoiceBuyerLookup,
-      ),
-    };
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppFonts.system(
-                    color: color,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _lookupNote ?? '',
-                  style: AppFonts.system(
-                    color: PosColors.textPrimary,
-                    fontSize: 12,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _label(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -570,24 +338,6 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           fontWeight: FontWeight.w600,
         ),
       ),
-    );
-  }
-
-  Widget _field({
-    required TextEditingController controller,
-    required String hint,
-    required bool required,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-    void Function(String)? onFieldSubmitted,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      onFieldSubmitted: onFieldSubmitted,
-      style: AppFonts.system(color: PosColors.textPrimary, fontSize: 14),
-      decoration: _inputDecoration(hintText: hint),
-      validator: validator,
     );
   }
 

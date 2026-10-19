@@ -17,10 +17,12 @@ import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
+import '../direct_order/direct_order_staff_service.dart';
 import '../settings/printer_provider.dart';
 
 String _digitalReceiptLabel(BuildContext context) =>
@@ -59,7 +61,7 @@ class PaymentDetailScreen extends ConsumerStatefulWidget {
 class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
   late Future<Map<String, dynamic>?> _detailFuture;
   final _currency = NumberFormat('#,###', 'vi_VN');
-  static const _autoRefreshInterval = Duration(seconds: 2);
+  static const _autoRefreshInterval = Duration(seconds: 30);
   RealtimeChannel? _detailChannel;
   Timer? _pollTimer;
   Map<String, dynamic>? _lastDetail;
@@ -252,9 +254,12 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
       return;
     }
 
-    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
-      if (mounted) {
-        _refreshDetailFromRealtime();
+    _pollTimer = Timer(jitteredPollDelay(_autoRefreshInterval), () async {
+      _pollTimer = null;
+      if (!mounted) return;
+      await _refreshDetailSilently();
+      if (mounted && !_realtimeConnected) {
+        _ensureAutoRefresh(storeId);
       }
     });
   }
@@ -856,31 +861,59 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     }
 
     final payment = _map(detail['payment']);
-    final bytes = await ReceiptBuilder.buildPaymentReceipt(
-      restaurantName: _receiptRestaurantName(order),
-      tableNumber: _extractTableNumber(order),
-      items: _receiptItems(order),
-      totalAmount: _numValue(
-        payment['amount'] ??
-            payment['paid_amount'] ??
-            payment['settled_amount'],
-      ).toDouble(),
-      paymentMethod: _stringOrDash(
-        payment['method'] ?? payment['payment_method'],
-      ),
-      vatAmount: _receiptVatAmount(order),
-      paidAt: _dateValue(payment['created_at']) ?? DateTime.now(),
-      isService:
-          _stringOrDash(payment['method'] ?? payment['payment_method']) ==
-          'service',
-    );
+    try {
+      final storeId =
+          order['restaurant_id']?.toString() ??
+          payment['restaurant_id']?.toString();
+      if (orderId == null ||
+          orderId.isEmpty ||
+          storeId == null ||
+          storeId.isEmpty) {
+        throw StateError('RECEIPT_ORDER_REQUIRED');
+      }
+      final packing = await directOrderStaffService.fetchOrderPackingContext(
+        orderId: orderId,
+        storeId: storeId,
+      );
+      final bytes = await ReceiptBuilder.buildPaymentReceipt(
+        dinerCount: (packing?['diner_count'] as num?)?.toInt(),
+        utensilsRequested: packing?['utensils_requested'] != false,
+        fulfillmentMethod: packing?['fulfillment_method']?.toString(),
+        deliveryPaymentMode: packing?['delivery_payment_mode']?.toString(),
+        directOrderReference: packing?['direct_order_reference']?.toString(),
+        orderNotes: packing?['order_notes']?.toString(),
+        restaurantName: _receiptRestaurantName(order),
+        tableNumber: _extractTableNumber(order),
+        items: _receiptItems(
+          order,
+          deliveryFeeItemId: packing?['delivery_fee_item_id']?.toString(),
+          hideDeliveryFee: packing?['fulfillment_method'] == 'pickup',
+          hideRawNotes: packing != null,
+        ),
+        totalAmount: _numValue(
+          payment['amount'] ??
+              payment['paid_amount'] ??
+              payment['settled_amount'],
+        ).toDouble(),
+        paymentMethod: _stringOrDash(
+          payment['method'] ?? payment['payment_method'],
+        ),
+        vatAmount: _receiptVatAmount(order),
+        paidAt: _dateValue(payment['created_at']) ?? DateTime.now(),
+        isService:
+            _stringOrDash(payment['method'] ?? payment['payment_method']) ==
+            'service',
+      );
 
-    final result = await ref.read(printerProvider.notifier).print(bytes);
-    if (!mounted) return;
-    if (result == PrintResult.success) {
-      showSuccessToast(context, l10n.settingsTestPrintComplete);
-    } else {
-      showErrorToast(context, l10n.cashierReceiptPrintFailed);
+      final result = await ref.read(printerProvider.notifier).print(bytes);
+      if (!mounted) return;
+      if (result == PrintResult.success) {
+        showSuccessToast(context, l10n.settingsTestPrintComplete);
+      } else {
+        showErrorToast(context, l10n.cashierReceiptPrintFailed);
+      }
+    } catch (_) {
+      if (mounted) showErrorToast(context, l10n.cashierReceiptPrintFailed);
     }
   }
 
@@ -1038,23 +1071,38 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     return name == null || name.isEmpty ? 'GLOBOS POS' : name;
   }
 
-  List<ReceiptItem> _receiptItems(Map<String, dynamic> order) {
+  List<ReceiptItem> _receiptItems(
+    Map<String, dynamic> order, {
+    String? deliveryFeeItemId,
+    bool hideDeliveryFee = false,
+    bool hideRawNotes = false,
+  }) {
     final items = order['order_items'];
     if (items is! List) return const [];
 
     return items
         .map((item) => Map<String, dynamic>.from(item))
         .where((item) => item['status']?.toString() != 'cancelled')
+        .where(
+          (item) =>
+              !hideDeliveryFee ||
+              deliveryFeeItemId == null ||
+              item['id']?.toString() != deliveryFeeItemId,
+        )
         .map((item) {
           final menuItem = item['menu_items'];
           final menuNameVi = menuItem is Map
               ? menuItem['name_vi']?.toString().trim()
               : null;
           return ReceiptItem(
+            notes: hideRawNotes ? null : item['notes']?.toString(),
             name:
-                menuNameVi != null &&
-                    menuNameVi.isNotEmpty &&
-                    !RegExp(r'[\uac00-\ud7a3]').hasMatch(menuNameVi)
+                item['id']?.toString() == deliveryFeeItemId &&
+                    deliveryFeeItemId != null
+                ? 'Phí giao hàng'
+                : menuNameVi != null &&
+                      menuNameVi.isNotEmpty &&
+                      !RegExp(r'[\uac00-\ud7a3]').hasMatch(menuNameVi)
                 ? menuNameVi
                 : 'Món',
             quantity: _intValue(item['quantity']),

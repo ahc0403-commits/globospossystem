@@ -321,7 +321,13 @@ void main() {
         tester,
         child: const PrintStationScreen(isSupportedOverride: false),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(true)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.online,
+              ),
+            ),
+          ),
         ],
       );
       expect(find.byKey(const Key('print_station_start')), findsNothing);
@@ -335,7 +341,13 @@ void main() {
         tester,
         child: const PrintStationScreen(isSupportedOverride: true),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(false)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.networkUnavailable,
+              ),
+            ),
+          ),
           printerDestinationsProvider.overrideWith(
             (ref, storeId) => _PrinterDestinationsNotifier(
               const PrinterDestinationsState(
@@ -370,7 +382,13 @@ void main() {
         child: const PrintStationScreen(isSupportedOverride: true),
         physicalSize: const Size(390, 844),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(true)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.online,
+              ),
+            ),
+          ),
           printerDestinationsProvider.overrideWith(
             (ref, storeId) => _PrinterDestinationsNotifier(
               const PrinterDestinationsState(
@@ -456,7 +474,13 @@ void main() {
           ),
         ),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(true)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.online,
+              ),
+            ),
+          ),
           attendanceKioskProvider.overrideWith(
             (ref) => _AttendanceNotifier(completion: attendanceResult),
           ),
@@ -479,7 +503,13 @@ void main() {
         tester,
         child: const AttendanceKioskScreen(),
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(false)),
+          serviceConnectivityProvider.overrideWith(
+            (ref) => Stream.value(
+              const ServiceConnectivityState(
+                kind: ServiceConnectivityKind.networkUnavailable,
+              ),
+            ),
+          ),
           attendanceKioskProvider.overrideWith((ref) => _AttendanceNotifier()),
         ],
       );
@@ -763,9 +793,24 @@ void main() {
                 buyerPhone: '',
                 lineItems: const [
                   RestaurantSalesLineItem(
+                    orderItemId: 'approved-line',
+                    menuItemId: 'approved-menu',
+                    approval: {
+                      'invoice_profile_id': 'synthetic-approved-profile',
+                      'invoice_approval_type': 'menu_item',
+                      'invoice_mapping_version': 'fixture-v1',
+                      'invoice_source_reference': 'synthetic fixture approval',
+                      'invoice_effective_from': '2020-01-01T00:00:00+07:00',
+                      'invoice_effective_to': null,
+                      'invoice_store_id': _storeId,
+                    },
+                    invoiceName: 'Món ăn',
+                    unitName: 'Phần',
                     name: 'Món ăn',
                     quantity: 1,
                     unitPrice: 100000,
+                    invoiceUnitPrice: 100000,
+                    discountAmount: 0,
                     supplyAmount: 100000,
                     vatRate: 8,
                     vatAmount: 8000,
@@ -847,7 +892,14 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('restaurant_sales_export_button')));
     await tester.pumpAndSettle();
-    expect(savedFileName, 'MISA_sales_0318453298_20260816.xlsx');
+    expect(
+      savedFileName,
+      'MISA_sales_0318453298_20260816.xlsx',
+      reason: tester
+          .widgetList<Text>(find.byType(Text))
+          .map((w) => w.data)
+          .join(' | '),
+    );
     expect(savedByteLength, greaterThan(0));
     await tester.ensureVisible(
       find.byKey(const Key('restaurant_sales_export_date_picker')),

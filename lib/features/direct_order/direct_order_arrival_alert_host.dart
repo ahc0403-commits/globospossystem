@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/polling_utils.dart';
 import '../auth/auth_provider.dart';
 import 'direct_order_arrival_alert_service.dart';
 import 'direct_order_arrival_alert_sound.dart';
@@ -33,7 +34,7 @@ class DirectOrderArrivalAlertHost extends ConsumerStatefulWidget {
     this.service,
     this.soundService,
     this.liveEvents,
-    this.pollInterval = const Duration(seconds: 10),
+    this.pollInterval = const Duration(seconds: 30),
     this.burstWindow = const Duration(milliseconds: 500),
     this.storeIdOverride,
     this.enabledOverride,
@@ -195,8 +196,34 @@ class _DirectOrderArrivalAlertHostState
         onError: (_) {},
       );
     }
-    _pollTimer = Timer.periodic(widget.pollInterval, (_) => _requestDrain());
+    _scheduleSafetyPoll(generation, storeId);
     unawaited(_initializeCursor(generation, storeId));
+  }
+
+  void _scheduleSafetyPoll(int generation, String storeId) {
+    _pollTimer?.cancel();
+    final jitter = widget.pollInterval >= const Duration(seconds: 10)
+        ? const Duration(seconds: 5)
+        : Duration.zero;
+    _pollTimer = Timer(
+      jitteredPollDelay(widget.pollInterval, maximumJitter: jitter),
+      () async {
+        _pollTimer = null;
+        if (!mounted ||
+            generation != _generation ||
+            storeId != _activeStoreId) {
+          return;
+        }
+        if (_cursor == null) {
+          await _initializeCursor(generation, storeId);
+        } else {
+          await _drain(generation, storeId);
+        }
+        if (mounted && generation == _generation && storeId == _activeStoreId) {
+          _scheduleSafetyPoll(generation, storeId);
+        }
+      },
+    );
   }
 
   Future<void> _initializeCursor(int generation, String storeId) async {

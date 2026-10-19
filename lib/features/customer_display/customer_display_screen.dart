@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/payments/vietqr_payload.dart';
+import '../../core/payments/collection_bank.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../auth/auth_provider.dart';
 import 'customer_display_provider.dart';
@@ -254,6 +255,7 @@ class CustomerPaymentContent extends StatelessWidget {
           final qrPanel = _CustomerQrPanel(
             amount: snapshot.total.round(),
             orderId: snapshot.orderId,
+            bank: snapshot.bank,
           );
 
           return Padding(
@@ -469,19 +471,31 @@ class _AmountRow extends StatelessWidget {
 }
 
 class _CustomerQrPanel extends StatelessWidget {
-  const _CustomerQrPanel({required this.amount, required this.orderId});
+  const _CustomerQrPanel({
+    required this.amount,
+    required this.orderId,
+    required this.bank,
+  });
 
-  static const _wooriBankBin = '970457';
-  static const _wooriAccountNumber = '100202042976';
+  final CollectionBank? bank;
 
   final int amount;
   final String orderId;
 
   @override
   Widget build(BuildContext context) {
+    final bank = this.bank;
+    if (bank == null) {
+      return Center(
+        child: Text(
+          context.l10n.collectionBankUnavailable,
+          key: const Key('customer_display_bank_unavailable'),
+        ),
+      );
+    }
     final qrPayload = VietQrPayload.bankTransfer(
-      bankBin: _wooriBankBin,
-      accountNumber: _wooriAccountNumber,
+      bankBin: bank.bin,
+      accountNumber: bank.accountNumber,
       amount: amount > 0 ? amount : null,
       purpose: VietQrPayload.paymentPurpose(orderId),
     );
@@ -518,16 +532,16 @@ class _CustomerQrPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'WOORI BANK · 100202042976',
+          Text(
+            '${bank.label} · ${bank.accountNumber}',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: PosColors.textPrimary,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const Text(
-            'AHN HYOCHANG',
+          Text(
+            bank.accountHolder,
             textAlign: TextAlign.center,
             style: TextStyle(color: PosColors.textSecondary),
           ),

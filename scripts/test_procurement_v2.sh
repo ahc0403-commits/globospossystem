@@ -51,3 +51,60 @@ run_sql "$INVENTORY_ROOT/scripts/verify_inventory_workflow_all_stores.sql"
 
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_receiving_integrity.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_v2_workflow.test.sql"
+
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_upgrade_fixture.sql"
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005030000_procurement_process_contract.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_process_contract.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005031000_procurement_documents_and_channel.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_documents_and_channel.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005032000_procurement_paged_reads.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_paged_reads.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005033000_procurement_set_based_evidence.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_set_based_evidence.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005034000_procurement_nonstock_returns.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_nonstock_returns.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005035000_procurement_document_storage_scope.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_document_storage_scope.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005036000_procurement_legacy_entry_and_evidence.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_legacy_entry_and_evidence.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005037000_procurement_accounting_status.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_accounting_status.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005039000_procurement_role_roster_and_metrics.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_role_roster_and_metrics.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005040000_procurement_read_indexes.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_read_indexes.sql" >/dev/null
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_fixed_account_fixture.py" "$INVENTORY_ROOT" "$INVENTORY_TMP/fixed-accounts.sql"
+run_sql "$INVENTORY_TMP/fixed-accounts.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005041000_procurement_store_verifier_accounts.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005042000_procurement_shared_role_roster.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261005043000_procurement_employee_payment_owners.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_employee_payment_owners.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261007010000_procurement_pr_account.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_pr_account.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_upgrade_compatibility.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_process_contract.test.sql"
+
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_paged_reads.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_shared_roles.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_pr_account.test.sql"
+
+if [ "${PROCUREMENT_SKIP_PERFORMANCE:-0}" != 1 ]; then
+  python3 "$INVENTORY_ROOT/scripts/tests/procurement_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
+  python3 "$INVENTORY_ROOT/scripts/tests/procurement_pr_query_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
+fi
+
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_two_stage_upgrade_fixture.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261013010000_procurement_two_stage_receiving_carryover.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261013011000_procurement_receipt_reports.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261013012000_procurement_shortage_carryover.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_two_stage_receiving.test.sql"
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_carryover_concurrency.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
+
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_all_store_parity_fixture.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/preflight_procurement_all_store_parity.sql"
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261019081922_procurement_all_store_parity.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_all_store_parity.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_all_store_parity.test.sql"
+# Exact reapplication is a no-op: row versions and audit event counts stay fixed.
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261019081922_procurement_all_store_parity.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_all_store_parity.test.sql"

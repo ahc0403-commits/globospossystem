@@ -9,18 +9,61 @@ class _OperationalCoverage {
     required this.test,
     required this.markers,
     this.indirectEntrypoints = 0,
+    this.additionalTest,
+    this.additionalTests = const [],
   });
 
   final String source;
   final int directCalls;
   final int indirectEntrypoints;
   final String test;
+  final String? additionalTest;
+  final List<String> additionalTests;
   final List<String> markers;
 
   int get totalEntrypoints => directCalls + indirectEntrypoints;
 }
 
 const _coverage = <_OperationalCoverage>[
+  _OperationalCoverage(
+    source:
+        'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart',
+    directCalls: 6,
+    test: 'test/daily_sales_report_screen_test.dart',
+    additionalTests: ['test/photo_sales_cash_deposit_qr_test.dart'],
+    markers: [
+      'photo sales total QR uses the selected entity amount account and query date',
+      'sales_collection_bank_dialog',
+      'bank_transfer_ledger_dialog',
+      'sales_deposit_store_dialog',
+      '매핑 JSON 선택',
+      'line-1',
+    ],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/red_invoice_intake/buyer_information_form.dart',
+    directCalls: 1,
+    test: 'test/pos_buyer_information_test.dart',
+    markers: [
+      'cancel never saves; save failure and stale record keep all entries',
+    ],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/restaurant_sales_export/pos_receipt_ledger.dart',
+    directCalls: 2,
+    test: 'test/pos_buyer_information_test.dart',
+    markers: [
+      'mobile ledger opens from selected report scope',
+      'ledger reuses counts, detail needs no RPC, save updates one cached row',
+    ],
+  ),
+
+  _OperationalCoverage(
+    source: 'lib/features/cashier/cashier_item_edit_dialogs.dart',
+    directCalls: 2,
+    test: 'test/cashier_item_edit_dialogs_test.dart',
+    markers: ['cashier_cancel_quantity_confirm', 'cashier_move_confirm'],
+  ),
   _OperationalCoverage(
     source: 'lib/core/ui/toast/toast_primitives.dart',
     directCalls: 2,
@@ -58,13 +101,14 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/cashier/cashier_screen.dart',
-    directCalls: 24,
+    directCalls: 25,
     test: 'test/cashier_overlay_operational_test.dart',
     markers: [
       'cashier_delivery_availability_confirm',
       'cashier_cancel_order_dialog',
       'cashier_service_item_dialog',
       'cashier_non_revenue_dialog',
+      'cashier_non_revenue_amount_changed_dialog',
       'cashier_split_payment_dialog',
       'cashier_discount_dialog',
       'cashier_single_payment_proof_dialog',
@@ -132,10 +176,9 @@ const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
     source:
         'lib/features/inventory_purchase/inventory_order_workflow_screen.dart',
-    directCalls: 7,
+    directCalls: 6,
     test: 'test/inventory_purchase_approval_contract_test.dart',
     markers: [
-      'inventory_order_create_draft_dialog',
       'inventory_order_edit_draft_dialog',
       'inventory_order_confirmation_dialog',
       'inventory_quantity_warning_dialog',
@@ -146,18 +189,25 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/procurement/procurement_workspace.dart',
-    directCalls: 3,
+    directCalls: 7,
     test: 'test/features/procurement/procurement_workspace_test.dart',
+    additionalTest:
+        'test/features/procurement/procurement_product_picker_test.dart',
     markers: [
       'opens request editor',
       'return reason dialog',
       'request submit confirmation',
+      'draft deletion confirmation',
+      'purchase item dialog validates fields',
+      'policy activation dialog requires explicit confirmation',
+      'search stays above scrolling results and returns the selected code',
     ],
   ),
   _OperationalCoverage(
     source: 'lib/features/super_admin/super_admin_screen.dart',
-    directCalls: 6,
+    directCalls: 7,
     test: 'test/super_admin_overlay_operational_test.dart',
+    additionalTest: 'test/independent_brand_widget_test.dart',
     markers: [
       'super_admin_store_sheet',
       'super_admin_global_template_sheet',
@@ -165,7 +215,14 @@ const _coverage = <_OperationalCoverage>[
       'super_admin_purge_store_dialog',
       'super_admin_continue_store_setup_dialog',
       'legal_entity_accounting_dialog',
+      'brand_management_dialog',
     ],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/super_admin/brand_dialog.dart',
+    directCalls: 1,
+    test: 'test/independent_brand_widget_test.dart',
+    markers: ['brand_editor_dialog'],
   ),
   _OperationalCoverage(
     source: 'lib/features/photo_ops/photo_ops_screen.dart',
@@ -221,12 +278,13 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/menu_tab.dart',
-    directCalls: 7,
+    directCalls: 8,
     test: 'test/admin_core_overlay_operational_test.dart',
     markers: [
       'admin_menu_add_category_dialog',
       'admin_menu_edit_category_dialog',
       'admin_menu_delete_category_dialog',
+      'admin_menu_delete_item_dialog',
       'admin_menu_add_item_dialog',
       'admin_menu_edit_item_dialog',
       'admin_menu_import_preview_dialog',
@@ -298,9 +356,16 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/reports_tab.dart',
-    directCalls: 2,
+    directCalls: 4,
     test: 'test/reports_operational_attention_contract_test.dart',
-    markers: ['reports_issue_detail_list', 'daily_closing_cash_dialog'],
+    additionalTest: 'test/deposit_breakdown_responsive_test.dart',
+    additionalTests: ['test/reports_cash_deposit_qr_test.dart'],
+    markers: [
+      'reports_issue_detail_list',
+      'daily_closing_cash_dialog',
+      'bank_transfer_ledger_dialog',
+      'cash_deposit_qr_dialog',
+    ],
   ),
   _OperationalCoverage(
     source: 'lib/features/report/bm_menu_exception_history.dart',
@@ -316,9 +381,15 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/settings/promotion_settings_card.dart',
-    directCalls: 2,
+    directCalls: 1,
     test: 'test/settings_admin_ui_contract_test.dart',
-    markers: ['promotion_settings_dialog', 'settings_qr_takeout_resume_dialog'],
+    markers: ['promotion_settings_dialog'],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/settings/qr_takeout_settings_card.dart',
+    directCalls: 1,
+    test: 'test/qr_takeout_availability_contract_test.dart',
+    markers: ['settings_qr_takeout_resume_dialog'],
   ),
   _OperationalCoverage(
     source: 'lib/features/emergency_fulfillment/emergency_control_panel.dart',
@@ -328,16 +399,34 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/direct_order/direct_order_storefront_screen.dart',
-    directCalls: 1,
+    directCalls: 6,
     test: 'test/direct_delivery_storefront_widget_test.dart',
-    markers: ['direct_customer_my_orders'],
+    additionalTest: 'test/direct_order_delivery_fallback_test.dart',
+    markers: [
+      'direct_customer_my_orders',
+      'direct_pickup_payment_status_dialog',
+      'direct_cart_sheet',
+      'direct_open_order_details',
+      'direct_customer_notifications',
+      'direct_customer_quote_sheet',
+    ],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/direct_order/direct_order_cashier_screen.dart',
+    directCalls: 1,
+    test: 'test/direct_order_staff_fallback_test.dart',
+    markers: ['direct_chat_template_address'],
   ),
   _OperationalCoverage(
     source:
         'lib/features/emergency_fulfillment/emergency_fulfillment_screen.dart',
-    directCalls: 1,
+    directCalls: 3,
     test: 'test/emergency_fulfillment_responsive_test.dart',
-    markers: ['kitchen_checket_handoff_sheet'],
+    markers: [
+      'kitchen_checket_handoff_sheet',
+      'tray_floor_transition_columns',
+      'customer_delivery_grid_8_slots',
+    ],
   ),
   _OperationalCoverage(
     source:
@@ -358,7 +447,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 127 dialog and sheet entrypoints map to operational tests', () {
+  test('all 155 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -370,10 +459,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 126);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 154);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      127,
+      155,
     );
 
     final settings = File(
@@ -387,7 +476,11 @@ void main() {
         hasLength(item.totalEntrypoints),
         reason: '${item.source} needs one operational marker per entrypoint',
       );
-      final operationalTest = File(item.test).readAsStringSync();
+      final operationalTest = [
+        item.test,
+        if (item.additionalTest != null) item.additionalTest!,
+        ...item.additionalTests,
+      ].map((path) => File(path).readAsStringSync()).join('\n');
       for (final marker in item.markers) {
         expect(
           operationalTest,

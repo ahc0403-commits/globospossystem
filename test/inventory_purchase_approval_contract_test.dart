@@ -111,7 +111,8 @@ void main() {
       'lib/features/inventory_purchase/inventory_purchase_document_service.dart',
     );
 
-    expect(screen, contains('createManualInventoryPurchaseOrder'));
+    expect(screen, contains('ProcurementWorkspacePage'));
+    expect(screen, isNot(contains('createManualInventoryPurchaseOrder')));
     expect(screen, contains('saveInventoryPurchaseOrderDraft'));
     expect(screen, contains('deleteInventoryPurchaseOrderDraft'));
     expect(screen, contains('storeDecideInventoryPurchaseOrder'));
@@ -120,7 +121,7 @@ void main() {
     expect(screen, isNot(contains('_queueReceiptAutosave')));
     expect(screen, contains('verifyInventoryReceipt'));
     expect(screen, contains('parseSupplierPriceImportWorkbook'));
-    expect(screen, contains('inventory_order_create_draft_dialog'));
+    expect(screen, isNot(contains('inventory_order_create_draft_dialog')));
     expect(screen, contains('inventory_order_edit_draft_dialog'));
     expect(screen, contains('inventory_order_confirmation_dialog'));
     expect(screen, contains('inventory_quantity_warning_dialog'));

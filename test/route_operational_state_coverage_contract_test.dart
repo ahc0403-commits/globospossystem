@@ -84,7 +84,7 @@ const _routeStateCoverage = <_RouteStateCoverage>[
     operationalTest: 'test/remaining_route_operational_state_test.dart',
     stateMarkers: [
       'Completer<bool>()',
-      'Stream.value(false)',
+      'ServiceConnectivityKind.networkUnavailable',
       'attendance_employee_clock_in',
     ],
   ),
@@ -154,7 +154,7 @@ const _routeStateCoverage = <_RouteStateCoverage>[
     operationalTest: 'test/admin_core_overlay_operational_test.dart',
     stateMarkers: [
       'all six table dialog entrypoints',
-      'all seven menu dialog entrypoints',
+      'all eight menu dialog entrypoints',
       'all five staff sheet and dialog entrypoints',
       'all four Settings dialog entrypoints',
     ],
@@ -164,7 +164,7 @@ const _routeStateCoverage = <_RouteStateCoverage>[
     operationalTest:
         'test/globos_pos_operational_ui_coverage_contract_test.dart',
     stateMarkers: [
-      'all ten Admin tabs render localized selected operational workspaces',
+      'all nine Admin tabs render localized selected operational workspaces',
       'selectedNav',
       'Tristate.isTrue',
     ],

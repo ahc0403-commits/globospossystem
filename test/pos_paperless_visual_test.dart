@@ -29,8 +29,15 @@ const _captureRoot =
     '../.design/2026-08-pos-print-paperless-receipts/screenshots';
 const _linuxGoldenRoot =
     '../.design/2026-08-pos-print-paperless-receipts/goldens/linux';
+const _macosGoldenRoot =
+    '../.design/2026-08-pos-print-paperless-receipts/goldens/macos';
 
-String get _goldenRoot => Platform.isLinux ? _linuxGoldenRoot : _captureRoot;
+// Use the existing platform baselines without weakening exact pixel checks.
+String get _goldenRoot => Platform.isLinux
+    ? _linuxGoldenRoot
+    : Platform.isMacOS
+    ? _macosGoldenRoot
+    : _captureRoot;
 
 class _VisualEmergencyNotifier extends EmergencyFulfillmentNotifier {
   _VisualEmergencyNotifier(EmergencyFulfillmentState value) {
@@ -244,7 +251,13 @@ Future<void> _pumpKds(
     ProviderScope(
       overrides: [
         authProvider.overrideWith((_) => _VisualAuthNotifier()),
-        connectivityProvider.overrideWith((_) => Stream.value(true)),
+        serviceConnectivityProvider.overrideWith(
+          (_) => Stream.value(
+            const ServiceConnectivityState(
+              kind: ServiceConnectivityKind.online,
+            ),
+          ),
+        ),
         emergencyFulfillmentProvider.overrideWith(
           (_) => _VisualEmergencyNotifier(_kdsState(station)),
         ),

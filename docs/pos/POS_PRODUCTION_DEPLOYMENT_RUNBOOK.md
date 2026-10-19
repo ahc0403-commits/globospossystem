@@ -2,6 +2,24 @@
 
 Last updated: 2026-07-17
 
+## Required scope for the next combined release (2026-10-13)
+
+The owner requested that, after the existing plan is implemented, the next
+combined deployment also include the [full menu catalog and automatic new-menu
+invoice mapping requirements](SALES_REPORT_MAPPING_FULL_CATALOG_RELEASE_REQUIREMENTS_2026_10_13.md). The linked document preserves the entire
+attached request and the implementation, production-data, deployment, and
+operational verification acceptance criteria.
+
+Include the required schema/RPC changes, approved policies and actual mapping
+data, management UI, export changes, and safe unissued-snapshot revalidation in
+that release. A fix limited to recently sold menus or the three reproduced menu
+IDs does not satisfy the release scope. The 2026-10-12 initial mapping deployment
+does not establish completion of this new requirement.
+
+Use the official script and exact pushed SHA gates below. Preserve issued and
+externally reported data and the existing exclusion of external MISA tests;
+do not reactivate Photo automatic collection or add delivery-fee items.
+
 ## Why operational login can fail after a good deploy
 
 The POS web deploy and Supabase Auth provisioning are separate systems.

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/config/integration_availability.dart';
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
@@ -31,6 +32,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   }
 
   void _loadData() {
+    if (IntegrationAvailability.deliberryRetired) return;
     final rid = ref.read(adminScopedStoreIdProvider);
     if (rid != null) {
       ref.read(deliverySettlementProvider.notifier).load(rid);
@@ -47,6 +49,12 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    if (IntegrationAvailability.deliberryRetired) {
+      return Center(
+        key: const Key('delivery_settlement_root'),
+        child: Text(l10n.deliberryRetiredMessage),
+      );
+    }
     final state = ref.watch(deliverySettlementProvider);
     final role = ref.watch(authProvider).role;
 

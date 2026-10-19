@@ -461,7 +461,7 @@ void main() {
       );
       expect(
         EmergencyFulfillmentNotifier.handoffRefreshInterval,
-        lessThanOrEqualTo(const Duration(seconds: 1)),
+        greaterThanOrEqualTo(const Duration(seconds: 10)),
       );
     },
   );

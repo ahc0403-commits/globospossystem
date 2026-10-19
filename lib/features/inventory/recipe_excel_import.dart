@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 
+import '../../core/utils/excel_workbook_decoder.dart';
+import '../../core/utils/streaming_xlsx_writer.dart';
+
 const recipeImportSheetName = '레시피등록';
 const recipeMenuReferenceSheetName = '메뉴목록';
 const recipeIngredientReferenceSheetName = '원재료목록';
@@ -48,9 +51,10 @@ class RecipeImportWorkbook {
 }
 
 class RecipeImportValidationException implements Exception {
-  const RecipeImportValidationException(this.issues);
+  const RecipeImportValidationException(this.issues, {this.decodeFailure});
 
   final List<String> issues;
+  final ExcelWorkbookDecodeException? decodeFailure;
 
   @override
   String toString() => issues.join('\n');
@@ -145,6 +149,67 @@ List<int> buildRecipeImportTemplate({
   return excel.encode()!;
 }
 
+/// The three sources are consumed sequentially; only one 500-row page and the
+/// compressed download artifact remain in memory. Source order is stable UUID
+/// order, so exporting does not require retaining and sorting the whole catalog.
+Future<Uint8List> buildRecipeTemplateFromBatches({
+  required Stream<List<Map<String, dynamic>>> recipes,
+  required Stream<List<Map<String, dynamic>>> menuItems,
+  required Stream<List<Map<String, dynamic>>> ingredients,
+}) async {
+  final writer = StreamingXlsxWriter([
+    recipeImportSheetName,
+    recipeMenuReferenceSheetName,
+    recipeIngredientReferenceSheetName,
+  ]);
+  Stream<Map<String, dynamic>> rows(
+    Stream<List<Map<String, dynamic>>> batches,
+  ) async* {
+    await for (final batch in batches) {
+      if (batch.length > 500) {
+        throw const FormatException('INVENTORY_EXPORT_BATCH_INVALID');
+      }
+      yield* Stream.fromIterable(batch);
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
+
+  writer.beginSheet(columnWidths: [32, 32, 18]);
+  writer.addRow(recipeImportHeaders);
+  var count = 0;
+  await for (final recipe in rows(recipes)) {
+    final menuName = _mapText(recipe['menu_item_name']);
+    final ingredientName = _mapText(recipe['ingredient_name']);
+    final quantity = _mapNumber(recipe['quantity_g']);
+    if (menuName.isEmpty || ingredientName.isEmpty || quantity == null) {
+      continue;
+    }
+    writer.addRow([menuName, ingredientName, quantity]);
+    count++;
+  }
+  if (count == 0) {
+    writer.addRow(['메뉴목록 시트에서 복사', '원재료목록 시트에서 복사', 100]);
+  }
+  writer.endSheet();
+  writer.beginSheet(columnWidths: [32]);
+  writer.addRow(['메뉴명']);
+  await for (final menu in rows(menuItems)) {
+    final name = _mapText(menu['name']);
+    if (name.isNotEmpty) writer.addRow([name]);
+  }
+  writer.endSheet();
+  writer.beginSheet(columnWidths: [32, 14]);
+  writer.addRow(['재료명', '기준단위']);
+  await for (final ingredient in rows(ingredients)) {
+    writer.addRow([
+      _mapText(ingredient['name']),
+      _mapText(ingredient['base_unit']).toLowerCase(),
+    ]);
+  }
+  writer.endSheet();
+  return writer.finish();
+}
+
 RecipeImportWorkbook parseRecipeImportWorkbook(
   Uint8List bytes, {
   required List<Map<String, dynamic>> menuItems,
@@ -156,11 +221,11 @@ RecipeImportWorkbook parseRecipeImportWorkbook(
 
   late final Excel excel;
   try {
-    excel = Excel.decodeBytes(bytes);
-  } catch (_) {
-    throw const RecipeImportValidationException([
-      'Excel 파일을 읽을 수 없습니다. .xlsx 형식인지 확인하세요.',
-    ]);
+    excel = decodeExcelWorkbook(bytes);
+  } on ExcelWorkbookDecodeException catch (error) {
+    throw RecipeImportValidationException([
+      'Excel 파일을 읽지 못했습니다. 등록 양식에 값을 붙여넣어 다시 저장해 주세요.',
+    ], decodeFailure: error);
   }
 
   final sheet = excel.tables[recipeImportSheetName];

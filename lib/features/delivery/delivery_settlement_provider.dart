@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config/integration_availability.dart';
 import '../../main.dart';
 import 'delivery_models.dart';
 
@@ -49,6 +50,10 @@ class DeliverySettlementNotifier
 
   /// 정산 데이터 전체 로드 (화면 진입 시)
   Future<void> load(String storeId) async {
+    if (IntegrationAvailability.deliberryRetired) {
+      state = const DeliverySettlementState(error: deliberryRetiredError);
+      return;
+    }
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       // 1) 미정산 매출
@@ -128,6 +133,10 @@ class DeliverySettlementNotifier
 
   /// 입금 확인 (admin)
   Future<void> confirmReceived(String settlementId, String storeId) async {
+    if (IntegrationAvailability.deliberryRetired) {
+      state = const DeliverySettlementState(error: deliberryRetiredError);
+      return;
+    }
     state = state.copyWith(confirmingId: settlementId);
     try {
       await supabase.rpc(

@@ -8,7 +8,10 @@ import 'package:globos_pos_system/core/utils/time_utils.dart';
 
 class _PayrollAttendanceFixture extends AttendanceService {
   @override
-  Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async => [
+  Future<List<Map<String, dynamic>>> fetchStaffList(
+    String storeId, {
+    String? employeeId,
+  }) async => [
     {
       'user_id': 'employee-without-logs',
       'employee_number': 'BT1',
@@ -19,6 +22,7 @@ class _PayrollAttendanceFixture extends AttendanceService {
 
   @override
   Future<List<Map<String, dynamic>>> fetchPayrollLogs({
+    String? employeeId,
     required String storeId,
     required DateTime from,
     required DateTime to,
@@ -26,6 +30,7 @@ class _PayrollAttendanceFixture extends AttendanceService {
 
   @override
   Future<List<Map<String, dynamic>>> fetchDailyAllowances({
+    String? employeeId,
     required String storeId,
     required DateTime from,
     required DateTime to,

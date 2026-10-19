@@ -73,7 +73,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
       }
 
       if (path.startsWith('/order/')) {
-        NavigationHistoryService.instance.push(fullLocation);
+        NavigationHistoryService.instance.push(path);
         return null;
       }
 
@@ -285,6 +285,14 @@ GoRouter buildAppRouter(ProviderContainer container) {
         path: '/order/:slug',
         builder: (_, state) => DirectOrderStorefrontScreen(
           slug: state.pathParameters['slug'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/order/:slug/r/:requestId',
+        builder: (_, state) => DirectOrderStorefrontScreen(
+          slug: state.pathParameters['slug'] ?? '',
+          requestId: state.pathParameters['requestId'],
+          accessKey: Uri.splitQueryString(state.uri.fragment)['access'],
         ),
       ),
       GoRoute(

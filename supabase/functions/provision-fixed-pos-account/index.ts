@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { canProvisionFixedAccount } from "./policy.ts";
 import {
   createClient,
   type SupabaseClient,
   type User,
-} from "https://esm.sh/@supabase/supabase-js@2";
+} from "https://esm.sh/@supabase/supabase-js@2.110.7";
 
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
   .split(",")
@@ -46,42 +47,25 @@ function response(status: number, payload: Record<string, unknown>) {
 }
 
 function canProvision(callerRole: string, requirement: Requirement): boolean {
-  if (requirement.scope === "legal_entity") {
-    return callerRole === "super_admin";
-  }
-  if (callerRole === "super_admin") return true;
-  if (["brand_admin", "photo_objet_master"].includes(callerRole)) {
-    return !["brand_admin", "photo_objet_master"].includes(requirement.role);
-  }
-  if (["admin", "store_admin"].includes(callerRole)) {
-    return requirement.scope === "store" &&
-      !["brand_manager", "store_manager", "inventory_accounting"].includes(
-      requirement.account_type,
-    ) &&
-      !["brand_admin", "photo_objet_master", "store_admin"].includes(
-        requirement.role,
-      );
-  }
-  return false;
+  return canProvisionFixedAccount(callerRole, requirement);
 }
 
 async function findAuthUserByEmail(
   client: SupabaseClient,
   email: string,
-): Promise<User | null> {
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await client.auth.admin.listUsers({
-      page,
-      perPage: 1000,
-    });
-    if (error) throw error;
-    const found = data.users.find((user) =>
-      user.email?.toLowerCase() === email
-    );
-    if (found) return found;
-    if (data.users.length < 1000) return null;
+): Promise<Pick<User, "id" | "email"> | null> {
+  const { data, error } = await client.rpc("find_fixed_account_auth_user", {
+    p_email: email,
+  });
+  if (error) throw error;
+  if (data == null) return null;
+  if (
+    typeof data.id !== "string" || typeof data.email !== "string" ||
+    data.email.toLowerCase() !== email.toLowerCase()
+  ) {
+    throw new Error("FIXED_ACCOUNT_AUTH_RESPONSE_INVALID");
   }
-  throw new Error("AUTH_DIRECTORY_SCAN_LIMIT");
+  return { id: data.id, email: data.email };
 }
 
 serve(async (req) => {
@@ -141,9 +125,7 @@ serve(async (req) => {
       return response(400, { error: "REQUIREMENT_SCOPE_AMBIGUOUS" });
     }
 
-    const requirementKind = legalEntityRequirementId
-      ? "legal_entity"
-      : "store";
+    const requirementKind = legalEntityRequirementId ? "legal_entity" : "store";
     const requirementTable = requirementKind === "legal_entity"
       ? "legal_entity_fixed_account_requirements"
       : "store_fixed_account_requirements";
@@ -198,7 +180,7 @@ serve(async (req) => {
       .maybeSingle();
     if (fixedProfileError) throw fixedProfileError;
 
-    let authUser: User | null = fixedProfile
+    let authUser: Pick<User, "id" | "email"> | null = fixedProfile
       ? (await serviceClient.auth.admin.getUserById(fixedProfile.auth_id)).data
         .user
       : await findAuthUserByEmail(serviceClient, email);

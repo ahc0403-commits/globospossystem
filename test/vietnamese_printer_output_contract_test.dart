@@ -33,7 +33,7 @@ void main() {
       final service = _read('lib/core/services/payment_service.dart');
       final screen = _read('lib/features/payment/payment_detail_screen.dart');
       final receiptItemsBody = RegExp(
-        r'List<ReceiptItem> _receiptItems\([\s\S]*?\n  \}',
+        r'List<ReceiptItem> _receiptItems\([\s\S]*?\) \{[\s\S]*?\n  \}',
       ).firstMatch(screen)?.group(0);
 
       expect(

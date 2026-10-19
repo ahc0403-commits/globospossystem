@@ -1,0 +1,18 @@
+{
+  "mapping_version": "pos-payment-v3",
+  "methods": {
+    "CASH": {"code": "CASH", "label": "TM"},
+    "BANKTRANSFER": {"code": "BANKTRANSFER", "label": "CK"},
+    "CREDITCARD": {"code": "CARD", "label": "Thẻ quốc tế"},
+    "ATM": {"code": "CARD", "label": "Thẻ ATM"},
+    "MOMO": {"code": "EWALLET", "label": "Ví điện tử"},
+    "ZALOPAY": {"code": "EWALLET", "label": "Ví điện tử"},
+    "SHOPEEPAY": {"code": "EWALLET", "label": "Ví điện tử"},
+    "VNPAY": {"code": "GATEWAY", "label": "VNPAY"},
+    "VOUCHER": {"code": "VOUCHER", "label": "Voucher"},
+    "CREDITSALE": {"code": "CREDITSALE", "label": "Chưa thu tiền"},
+    "OTHER": {"code": "EWALLET", "label": "Ví điện tử"},
+    "EPAY": {"code": "EWALLET", "label": "Ví điện tử"},
+    "PAY": {"code": "EWALLET", "label": "Ví điện tử"}
+  }
+}

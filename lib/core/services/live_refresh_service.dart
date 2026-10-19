@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/polling_utils.dart';
+
 typedef _LiveChange = ({String domain, String sourceTable, String eventType});
 
 /// A payload-free signal telling a screen to refetch data through its normal,
@@ -15,6 +17,7 @@ class PosLiveEvent {
     this.restaurantId,
     this.isFallback = false,
     this.affectedDomains,
+    this.affectedRestaurantIds,
   }) : _changes = null;
 
   const PosLiveEvent._merged({
@@ -24,6 +27,7 @@ class PosLiveEvent {
     required this.restaurantId,
     required this.isFallback,
     required this.affectedDomains,
+    required this.affectedRestaurantIds,
     required Set<_LiveChange> changes,
   }) : _changes = changes;
 
@@ -34,6 +38,7 @@ class PosLiveEvent {
       restaurantId = null,
       isFallback = true,
       affectedDomains = null,
+      affectedRestaurantIds = null,
       _changes = null;
 
   final String domain;
@@ -42,6 +47,13 @@ class PosLiveEvent {
   final String? restaurantId;
   final bool isFallback;
   final Set<String>? affectedDomains;
+  final Set<String>? affectedRestaurantIds;
+
+  /// Null denotes a global/recovery signal; multiple stores retain their scope.
+  Set<String>? get restaurantIds => isFallback
+      ? null
+      : affectedRestaurantIds ??
+            (restaurantId == null ? null : {restaurantId!});
   final Set<_LiveChange>? _changes;
 
   Set<_LiveChange> get _changeKinds =>
@@ -66,6 +78,10 @@ class PosLiveEvent {
         (value) => value == '*' || domains.contains(value),
       );
 
+  bool onlySourceTables(Set<String> tables) =>
+      !isFallback &&
+      _changeKinds.every((change) => tables.contains(change.sourceTable));
+
   PosLiveEvent merge(PosLiveEvent other) => PosLiveEvent._merged(
     domain: domain == other.domain ? domain : '*',
     sourceTable: sourceTable == other.sourceTable ? sourceTable : '*',
@@ -78,6 +94,12 @@ class PosLiveEvent {
       ...?other.affectedDomains,
       if (other.affectedDomains == null) other.domain,
     }),
+    affectedRestaurantIds:
+        restaurantIds == null ||
+            other.restaurantIds == null ||
+            {...restaurantIds!, ...other.restaurantIds!}.length > 500
+        ? null
+        : Set.unmodifiable({...restaurantIds!, ...other.restaurantIds!}),
     changes: Set.unmodifiable({..._changeKinds, ...other._changeKinds}),
   );
 
@@ -149,15 +171,26 @@ final posLiveEventsProvider = StreamProvider.autoDispose
 
       // Realtime reconnects automatically. The low-frequency safety tick
       // covers periods where the SDK reports a disconnected channel.
-      final fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-        if (!realtimeConnected && !controller.isClosed) {
-          controller.add(const PosLiveEvent.fallback());
-        }
-      });
+      Timer? fallbackTimer;
+      void scheduleFallback() {
+        fallbackTimer?.cancel();
+        fallbackTimer = Timer(
+          jitteredPollDelay(const Duration(seconds: 30)),
+          () {
+            fallbackTimer = null;
+            if (!realtimeConnected && !controller.isClosed) {
+              controller.add(const PosLiveEvent.fallback());
+            }
+            if (!controller.isClosed) scheduleFallback();
+          },
+        );
+      }
+
+      scheduleFallback();
 
       ref.onDispose(() {
         debounceTimer?.cancel();
-        fallbackTimer.cancel();
+        fallbackTimer?.cancel();
         unawaited(channel.unsubscribe());
         unawaited(controller.close());
       });

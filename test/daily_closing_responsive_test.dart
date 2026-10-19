@@ -18,15 +18,15 @@ DailyClosingRecord _record({bool closed = false}) {
     itemsCancelled: 7,
     paymentsCount: 31,
     paymentsTotal: 123456789,
-    paymentsCash: 23456789,
+    paymentsCash: closed ? 1622160 : 23456789,
     paymentsCard: 50000000,
     paymentsPay: 30000000,
     paymentsBankTransfer: 20000000,
     deliveryCashPayout: 25000,
     openingCashAmount: 5000000,
-    expectedCashAmount: 28456789,
-    countedCashAmount: 28456789,
-    cashVariance: 0,
+    expectedCashAmount: closed ? 6622160 : 28456789,
+    countedCashAmount: closed ? 6623000 : 28456789,
+    cashVariance: closed ? 840 : 0,
     serviceCount: 0,
     serviceTotal: 0,
     lowStockCount: 0,
@@ -35,11 +35,11 @@ DailyClosingRecord _record({bool closed = false}) {
   );
 }
 
-Widget _app(Widget home, {double textScale = 1}) {
+Widget _app(Widget home, {double textScale = 1, bool closed = false}) {
   return ProviderScope(
     overrides: [
       dailyClosingHistoryProvider.overrideWith(
-        (ref, storeId) async => [_record()],
+        (ref, storeId) async => [_record(closed: closed)],
       ),
     ],
     child: MaterialApp(
@@ -59,6 +59,26 @@ Widget _app(Widget home, {double textScale = 1}) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final width in [390.0, 768.0, 1440.0]) {
+    testWidgets('closing deposit keeps exact dong at width $width', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(Size(width, 1100));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _app(const DailyClosingScreen(storeId: _storeId), closed: true),
+      );
+      await tester.pumpAndSettle();
+      final amount = tester.widget<Text>(
+        find.byKey(const Key('closing_deposit_2026-08-13_amount')),
+      );
+      expect(amount.data, '1.622.160 VND');
+      expect(find.text('실사 현금 − 시재: 1.623.000 VND'), findsOneWidget);
+      expect(find.text('840 VND'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('phone launcher opens the dedicated daily closing screen', (
     tester,
@@ -130,6 +150,8 @@ void main() {
 
     expect(find.byKey(const Key('nav_daily_closing')), findsOneWidget);
     expect(find.byKey(const Key('daily_closing_cards')), findsNothing);
+    expect(find.byKey(const Key('closing_deposit_2026-08-13')), findsOneWidget);
+    expect(find.textContaining('2026-08-14'), findsWidgets);
     expect(
       find.byKey(const Key('daily_closing_action_2026-08-13')),
       findsOneWidget,
@@ -152,6 +174,29 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('123.456.789 VND'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('wide closing uses readable cards at 200 percent text scale', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _app(
+        const Scaffold(
+          body: SingleChildScrollView(
+            child: DailyClosingSection(storeId: _storeId),
+          ),
+        ),
+        textScale: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('daily_closing_cards')), findsOneWidget);
+    expect(
+      find.byKey(const Key('daily_closing_table_horizontal_scroll')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 }

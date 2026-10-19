@@ -1,11 +1,13 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
-import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import 'package:qr_flutter/qr_flutter.dart' as qr;
+import '../payments/collection_bank.dart';
+import '../payments/vietqr_payload.dart';
 import '../utils/floor_label.dart';
 import '../utils/time_utils.dart';
+import 'receipt_delivery_policy.dart';
 
 class ReceiptBuilder {
-  static const bankTransferQrAsset = 'assets/images/woori_bank_account_qr.jpg';
   static const internalBuzzerAlertBytes = <int>[0x1B, 0x42, 5, 9];
 
   static Future<List<int>> buildPaymentReceipt({
@@ -15,6 +17,7 @@ class ReceiptBuilder {
     required double totalAmount,
     required String paymentMethod,
     required DateTime paidAt,
+    CollectionBank? bank,
     bool isService = false,
     String? legalName,
     String? taxCode,
@@ -26,6 +29,13 @@ class ReceiptBuilder {
     double vatAmount = 0,
     double? receivedAmount,
     double changeAmount = 0,
+    int? dinerCount,
+    bool utensilsRequested = true,
+    String? fulfillmentMethod,
+    String? deliveryPaymentMode,
+    String? directOrderReference,
+    String? orderNotes,
+    double refundedTotal = 0,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -103,6 +113,50 @@ class ReceiptBuilder {
 
     bytes.addAll(generator.text(_escText('Ban: $tableNumber')));
     bytes.addAll(generator.hr());
+    if (directOrderReference != null) {
+      bytes.addAll(generator.text('Ma don: ${_escText(directOrderReference)}'));
+    }
+    if (recipientPaysDelivery(deliveryPaymentMode, fulfillmentMethod)) {
+      bytes.addAll(
+        generator.text(
+          _escText(recipientDeliveryNoticeVi),
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      bytes.addAll(generator.hr());
+    }
+    if (fulfillmentMethod != null ||
+        dinerCount != null ||
+        directOrderReference != null) {
+      bytes.addAll(
+        _buildPackingHeader(
+          generator,
+          dinerCount,
+          fulfillmentMethod,
+          utensilsRequested,
+        ),
+      );
+      if (refundedTotal > 0) {
+        bytes.addAll(generator.text('Da hoan: ${_formatVnd(refundedTotal)}'));
+        bytes.addAll(
+          generator.text(
+            'Thuc nhan: ${_formatVnd(totalAmount - refundedTotal)}',
+          ),
+        );
+      }
+      bytes.addAll(generator.hr());
+    }
+
+    final request = orderNotes?.trim();
+    if (request != null && request.isNotEmpty) {
+      bytes.addAll(
+        generator.text(
+          _escText('GHI CHU: $request'),
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      bytes.addAll(generator.hr());
+    }
 
     bytes.addAll(
       generator.row([
@@ -145,6 +199,10 @@ class ReceiptBuilder {
           ),
         ]),
       );
+      final notes = item.notes?.trim();
+      if (notes != null && notes.isNotEmpty) {
+        bytes.addAll(generator.text(_escText('  * $notes')));
+      }
     }
 
     bytes.addAll(generator.hr());
@@ -201,7 +259,7 @@ class ReceiptBuilder {
       );
     }
 
-    if (!isService) {
+    if (!isService && bank != null) {
       bytes.addAll(generator.hr());
       bytes.addAll(
         generator.text(
@@ -211,17 +269,17 @@ class ReceiptBuilder {
       );
       bytes.addAll(
         generator.text(
-          'WOORI BANK - 100202042976',
+          _escText('${bank.label} - ${bank.accountNumber}'),
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
       );
       bytes.addAll(
         generator.text(
-          'AHN HYOCHANG',
+          _escText(bank.accountHolder),
           styles: const PosStyles(align: PosAlign.center),
         ),
       );
-      bytes.addAll(generator.imageRaster(await _loadBankTransferQr()));
+      bytes.addAll(generator.imageRaster(_bankTransferQr(bank)));
     }
 
     bytes.addAll(generator.hr());
@@ -250,6 +308,12 @@ class ReceiptBuilder {
     required double deliveryFeeTotal,
     required double finalTotal,
     required DateTime printedAt,
+    int? dinerCount,
+    bool utensilsRequested = true,
+    bool isPickup = false,
+    String deliveryPaymentMode = 'store_prepaid',
+    double refundedTotal = 0,
+    String? orderNotes,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -263,7 +327,7 @@ class ReceiptBuilder {
     );
     bytes.addAll(
       generator.text(
-        'PHIEU GIAO HANG',
+        isPickup ? 'PHIEU NHAN MANG VE' : 'PHIEU GIAO HANG',
         styles: const PosStyles(
           bold: true,
           align: PosAlign.center,
@@ -273,7 +337,12 @@ class ReceiptBuilder {
     );
     bytes.addAll(
       generator.text(
-        'DA THANH TOAN',
+        recipientPaysDelivery(
+              deliveryPaymentMode,
+              isPickup ? 'pickup' : 'delivery',
+            )
+            ? driverFoodPaidVi
+            : 'DA THANH TOAN',
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
@@ -293,9 +362,25 @@ class ReceiptBuilder {
     );
     bytes.addAll(generator.text('Khach: ${_escText(customerName)}'));
     bytes.addAll(generator.text('SDT  : ${_escText(customerPhone)}'));
-    bytes.addAll(generator.text('Dia chi giao hang:'));
-    bytes.addAll(generator.text(_escText(formattedAddress)));
-    bytes.addAll(generator.text('Chi tiet: ${_escText(detailAddress)}'));
+    if (!isPickup) {
+      bytes.addAll(generator.text('Dia chi giao hang:'));
+      bytes.addAll(generator.text(_escText(formattedAddress)));
+      bytes.addAll(generator.text('Chi tiet: ${_escText(detailAddress)}'));
+    }
+    bytes.addAll(
+      _buildPackingHeader(
+        generator,
+        dinerCount,
+        isPickup ? 'pickup' : 'delivery',
+        utensilsRequested,
+      ),
+    );
+    if (refundedTotal > 0) {
+      bytes.addAll(generator.text('Da hoan: ${_formatVnd(refundedTotal)}'));
+      bytes.addAll(
+        generator.text('Thuc nhan: ${_formatVnd(finalTotal - refundedTotal)}'),
+      );
+    }
     bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
@@ -325,9 +410,22 @@ class ReceiptBuilder {
       );
     }
     bytes.addAll(generator.hr());
+    if (orderNotes?.trim().isNotEmpty == true) {
+      bytes.addAll(
+        generator.text(_escText('Yeu cau da thong nhat: $orderNotes')),
+      );
+      bytes.addAll(generator.hr());
+    }
     bytes.addAll(_amountRow(generator, 'Tien mon', menuTotal));
     bytes.addAll(_amountRow(generator, 'Phi dich vu', serviceChargeTotal));
-    bytes.addAll(_amountRow(generator, 'Phi giao hang Grab', deliveryFeeTotal));
+    if (!recipientPaysDelivery(
+      deliveryPaymentMode,
+      isPickup ? 'pickup' : 'delivery',
+    )) {
+      bytes.addAll(
+        _amountRow(generator, 'Phi giao hang Grab', deliveryFeeTotal),
+      );
+    }
     bytes.addAll(
       generator.row([
         PosColumn(
@@ -345,13 +443,23 @@ class ReceiptBuilder {
     bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
-        'Khach can tra: ${_formatVnd(0)}',
+        recipientPaysDelivery(
+              deliveryPaymentMode,
+              isPickup ? 'pickup' : 'delivery',
+            )
+            ? driverDoNotCollectFoodVi
+            : 'Khach can tra: ${_formatVnd(0)}',
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
     bytes.addAll(
       generator.text(
-        'KHONG THU THEM TIEN CUA KHACH',
+        recipientPaysDelivery(
+              deliveryPaymentMode,
+              isPickup ? 'pickup' : 'delivery',
+            )
+            ? driverCollectDeliveryVi
+            : 'KHONG THU THEM TIEN CUA KHACH',
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
@@ -360,17 +468,37 @@ class ReceiptBuilder {
     return bytes;
   }
 
-  static Future<img.Image> _loadBankTransferQr() async {
-    final data = await rootBundle.load(bankTransferQrAsset);
-    final decoded = img.decodeImage(data.buffer.asUint8List());
-    if (decoded == null) {
-      throw StateError('BANK_TRANSFER_QR_ASSET_INVALID');
-    }
-    return img.copyResize(
-      decoded,
-      width: 512,
-      interpolation: img.Interpolation.average,
+  static img.Image _bankTransferQr(CollectionBank bank) {
+    // Receipts show an account-only QR, without requesting another payment.
+    final code = qr.QrImage(
+      qr.QrCode.fromData(
+        data: VietQrPayload.bankTransfer(
+          bankBin: bank.bin,
+          accountNumber: bank.accountNumber,
+        ),
+        errorCorrectLevel: qr.QrErrorCorrectLevel.M,
+      ),
     );
+    const width = 512;
+    const quietZone = 4;
+    final scale = width ~/ (code.moduleCount + quietZone * 2);
+    final offset = (width - code.moduleCount * scale) ~/ 2;
+    final image = img.Image(width: width, height: width);
+    img.fill(image, color: img.ColorRgb8(255, 255, 255));
+    for (var row = 0; row < code.moduleCount; row++) {
+      for (var col = 0; col < code.moduleCount; col++) {
+        if (!code.isDark(row, col)) continue;
+        img.fillRect(
+          image,
+          x1: offset + col * scale,
+          y1: offset + row * scale,
+          x2: offset + (col + 1) * scale - 1,
+          y2: offset + (row + 1) * scale - 1,
+          color: img.ColorRgb8(0, 0, 0),
+        );
+      }
+    }
+    return image;
   }
 
   static List<int> _amountRow(
@@ -385,6 +513,94 @@ class ReceiptBuilder {
       styles: const PosStyles(align: PosAlign.right),
     ),
   ]);
+
+  static List<int> _buildPackingHeader(
+    Generator generator,
+    int? count,
+    String? method,
+    bool utensilsRequested,
+  ) {
+    final bytes = <int>[];
+    if (method != null) {
+      bytes.addAll(
+        generator.text(method == 'pickup' ? 'TU DEN LAY' : 'GIAO HANG'),
+      );
+    }
+    if (count == null || count < 1 || count > 100) {
+      bytes.addAll(
+        generator.text(
+          'SO NGUOI: CHUA NHAP',
+          styles: const PosStyles(bold: true),
+        ),
+      );
+      bytes.addAll(
+        generator.text(
+          utensilsRequested ? 'DUNG CU: CAN KIEM TRA' : 'DUNG CU: KHONG CAN',
+          styles: const PosStyles(bold: true, height: PosTextSize.size2),
+        ),
+      );
+    } else {
+      bytes.addAll(
+        generator.text('SO NGUOI: $count', styles: const PosStyles(bold: true)),
+      );
+      bytes.addAll(
+        generator.text(
+          utensilsRequested ? 'DUNG CU: $count BO' : 'DUNG CU: KHONG CAN',
+          styles: const PosStyles(bold: true, height: PosTextSize.size2),
+        ),
+      );
+    }
+    return bytes;
+  }
+
+  static List<int> _buildTicketPackingHeader(
+    Generator generator,
+    PrintTicket ticket,
+  ) {
+    if (ticket.fulfillmentMethod == null &&
+        ticket.dinerCount == null &&
+        ticket.directOrderReference == null) {
+      return const [];
+    }
+    return [
+      if (ticket.directOrderReference != null)
+        ...generator.text('Ma don: ${_escText(ticket.directOrderReference!)}'),
+      ..._buildPackingHeader(
+        generator,
+        ticket.dinerCount,
+        ticket.fulfillmentMethod,
+        ticket.utensilsRequested,
+      ),
+    ];
+  }
+
+  static Future<List<int>> buildRequestUpdate(PrintTicket ticket) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    final confirmedAt = DateTime.tryParse(ticket.printedAt);
+    return [
+      ...generator.text(
+        'YEU CAU BO SUNG DA THONG NHAT',
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+      ...generator.text(
+        _escText('Ma don: ${ticket.directOrderReference ?? ticket.ticketCode}'),
+      ),
+      if (confirmedAt != null)
+        ...generator.text(
+          _escText('Xac nhan: ${TimeUtils.formatDateTime(confirmedAt)}'),
+        ),
+      ...generator.hr(),
+      ...generator.text(
+        _escText(ticket.orderNotes ?? ''),
+        styles: const PosStyles(bold: true),
+      ),
+      ...generator.hr(),
+      ...generator.text('Phieu bo sung - khong thu tien'),
+      ...generator.feed(3),
+      ...generator.cut(),
+    ];
+  }
 
   static Future<List<int>> buildKitchenTicket(PrintTicket ticket) async {
     final driverReceipt = ticket.deliveryDriverReceipt;
@@ -402,6 +618,12 @@ class ReceiptBuilder {
         deliveryFeeTotal: driverReceipt.deliveryFeeTotal,
         finalTotal: driverReceipt.finalTotal,
         printedAt: driverReceipt.printedAt,
+        dinerCount: driverReceipt.dinerCount,
+        utensilsRequested: driverReceipt.utensilsRequested,
+        isPickup: driverReceipt.isPickup,
+        deliveryPaymentMode: driverReceipt.deliveryPaymentMode,
+        refundedTotal: driverReceipt.refundedTotal,
+        orderNotes: driverReceipt.orderNotes,
       );
     }
 
@@ -421,6 +643,7 @@ class ReceiptBuilder {
       ),
     );
     bytes.addAll(generator.text(_escText('#${ticket.ticketCode}')));
+    bytes.addAll(_buildTicketPackingHeader(generator, ticket));
     bytes.addAll(
       generator.text(
         _escText(
@@ -445,6 +668,7 @@ class ReceiptBuilder {
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
+    bytes.addAll(_buildTicketPackingHeader(generator, ticket));
     bytes.addAll(_buildTicketBody(generator, ticket));
     return bytes;
   }
@@ -472,6 +696,7 @@ class ReceiptBuilder {
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
+    bytes.addAll(_buildTicketPackingHeader(generator, ticket));
     bytes.addAll(
       _buildTicketBody(generator, ticket, finish: false, showPrices: true),
     );
@@ -504,6 +729,7 @@ class ReceiptBuilder {
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
+    bytes.addAll(_buildTicketPackingHeader(generator, ticket));
     bytes.addAll(_buildTicketBody(generator, ticket, compact: true));
     return bytes;
   }
@@ -839,6 +1065,10 @@ class PrintTicket {
     required this.printedAt,
     required this.items,
     this.orderNotes,
+    this.dinerCount,
+    this.utensilsRequested = true,
+    this.fulfillmentMethod,
+    this.directOrderReference,
     this.deliveryDriverReceipt,
   });
 
@@ -851,6 +1081,10 @@ class PrintTicket {
   final String printedAt;
   final List<PrintTicketItem> items;
   final String? orderNotes;
+  final int? dinerCount;
+  final bool utensilsRequested;
+  final String? fulfillmentMethod;
+  final String? directOrderReference;
   final QueuedDeliveryDriverReceipt? deliveryDriverReceipt;
 
   factory PrintTicket.fromPayload(Map<String, dynamic> payload) {
@@ -878,6 +1112,10 @@ class PrintTicket {
           )
           .toList(),
       orderNotes: payload['order_notes']?.toString(),
+      dinerCount: _packingDinerCount(payload['diner_count']),
+      utensilsRequested: payload['utensils_requested'] != false,
+      fulfillmentMethod: payload['fulfillment_method']?.toString(),
+      directOrderReference: payload['direct_order_reference']?.toString(),
       deliveryDriverReceipt: ticket == 'delivery_driver_receipt'
           ? QueuedDeliveryDriverReceipt.fromPayload(payload)
           : null,
@@ -989,6 +1227,14 @@ class QueuedPaymentReceipt {
     required this.vatAmount,
     required this.receivedAmount,
     required this.changeAmount,
+    this.bank,
+    this.dinerCount,
+    this.utensilsRequested = true,
+    this.fulfillmentMethod,
+    this.deliveryPaymentMode,
+    this.directOrderReference,
+    this.orderNotes,
+    this.refundedTotal = 0,
   });
 
   final String restaurantName;
@@ -1008,6 +1254,14 @@ class QueuedPaymentReceipt {
   final double vatAmount;
   final double? receivedAmount;
   final double changeAmount;
+  final CollectionBank? bank;
+  final int? dinerCount;
+  final bool utensilsRequested;
+  final String? fulfillmentMethod;
+  final String? deliveryPaymentMode;
+  final String? directOrderReference;
+  final String? orderNotes;
+  final double refundedTotal;
 
   factory QueuedPaymentReceipt.fromPayload(Map<String, dynamic> payload) {
     final rawItems = payload['items'];
@@ -1020,11 +1274,24 @@ class QueuedPaymentReceipt {
         ? payload[combinedKey] ?? payload[standardKey]
         : payload[standardKey];
     return QueuedPaymentReceipt(
+      bank: payload['bank'] is Map
+          ? CollectionBank.fromJson(
+              Map<String, dynamic>.from(payload['bank'] as Map),
+            )
+          : null,
+      orderNotes: payload['order_notes']?.toString(),
+      dinerCount: _packingDinerCount(payload['diner_count']),
+      utensilsRequested: payload['utensils_requested'] != false,
+      fulfillmentMethod: payload['fulfillment_method']?.toString(),
+      deliveryPaymentMode: payload['delivery_payment_mode']?.toString(),
+      directOrderReference: payload['direct_order_reference']?.toString(),
+      refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       tableNumber: payload['table_number']?.toString() ?? '-',
       items: itemRows.whereType<Map>().map((item) {
         final row = Map<String, dynamic>.from(item);
         return ReceiptItem(
+          notes: row['notes']?.toString(),
           name: row['label']?.toString() ?? 'Mon',
           quantity: switch (row['quantity'] ?? row['qty']) {
             int value => value,
@@ -1120,6 +1387,12 @@ class QueuedDeliveryDriverReceipt {
     required this.deliveryFeeTotal,
     required this.finalTotal,
     required this.printedAt,
+    this.dinerCount,
+    this.utensilsRequested = true,
+    this.isPickup = false,
+    this.deliveryPaymentMode = 'store_prepaid',
+    this.refundedTotal = 0,
+    this.orderNotes,
   });
 
   final String restaurantName;
@@ -1134,6 +1407,12 @@ class QueuedDeliveryDriverReceipt {
   final double deliveryFeeTotal;
   final double finalTotal;
   final DateTime printedAt;
+  final int? dinerCount;
+  final bool utensilsRequested;
+  final bool isPickup;
+  final String deliveryPaymentMode;
+  final double refundedTotal;
+  final String? orderNotes;
 
   factory QueuedDeliveryDriverReceipt.fromPayload(
     Map<String, dynamic> payload,
@@ -1141,6 +1420,13 @@ class QueuedDeliveryDriverReceipt {
     final rawItems = payload['items'];
     final itemRows = rawItems is List ? rawItems : const <Object?>[];
     return QueuedDeliveryDriverReceipt(
+      orderNotes: payload['order_notes']?.toString(),
+      dinerCount: _packingDinerCount(payload['diner_count']),
+      utensilsRequested: payload['utensils_requested'] != false,
+      isPickup: payload['fulfillment_method'] == 'pickup',
+      deliveryPaymentMode:
+          payload['delivery_payment_mode']?.toString() ?? 'store_prepaid',
+      refundedTotal: _payloadDouble(payload['refunded_total']) ?? 0,
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       referenceCode:
           payload['reference_code']?.toString() ??
@@ -1188,10 +1474,18 @@ class ReceiptItem {
     required this.quantity,
     required this.unitPrice,
     this.isServiceItem = false,
+    this.notes,
   });
 
   final String name;
   final int quantity;
   final double unitPrice;
   final bool isServiceItem;
+  final String? notes;
+}
+
+int? _packingDinerCount(Object? value) {
+  if (value is! num || !value.isFinite || value != value.toInt()) return null;
+  final count = value.toInt();
+  return count >= 1 && count <= 100 ? count : null;
 }

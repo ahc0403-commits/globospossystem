@@ -62,7 +62,7 @@ export function buildEmergencyFcmMessage(delivery: EmergencyPushDelivery) {
             ? "Mở màn hình để xử lý yêu cầu đóng gói đồ ăn thừa."
             : "Mở màn hình để kiểm tra đơn hàng.",
           tag: delivery.eventId,
-          renotify: true,
+          renotify: false,
         },
         fcm_options: {
           link: delivery.stationType === "kitchen" ? "/kitchen" : "/emergency",

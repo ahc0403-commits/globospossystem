@@ -12,6 +12,7 @@ class VietQrPayload {
     required String accountNumber,
     int? amount,
     String? purpose,
+    bool preservePurposeSlashes = false,
   }) {
     if (!RegExp(r'^\d{6}$').hasMatch(bankBin)) {
       throw ArgumentError.value(bankBin, 'bankBin', 'Must be 6 digits.');
@@ -36,7 +37,10 @@ class VietQrPayload {
         _tlv('00', _napasGuid) +
         _tlv('01', beneficiary) +
         _tlv('02', _transferToAccountService);
-    final normalizedPurpose = _normalizePurpose(purpose);
+    final normalizedPurpose = _normalizePurpose(
+      purpose,
+      preserveSlashes: preservePurposeSlashes,
+    );
 
     final payload = StringBuffer()
       ..write(_tlv('00', '01'))
@@ -68,9 +72,15 @@ class VietQrPayload {
     return suffix.isEmpty ? 'GLOBOS' : 'GLOBOS $suffix';
   }
 
-  static String _normalizePurpose(String? value) {
+  static String _normalizePurpose(
+    String? value, {
+    required bool preserveSlashes,
+  }) {
     final normalized = (value ?? '')
-        .replaceAll(RegExp(r'[^A-Za-z0-9 ]'), '')
+        .replaceAll(
+          RegExp(preserveSlashes ? r'[^A-Za-z0-9 /]' : r'[^A-Za-z0-9 ]'),
+          '',
+        )
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     return normalized.length > 25 ? normalized.substring(0, 25) : normalized;

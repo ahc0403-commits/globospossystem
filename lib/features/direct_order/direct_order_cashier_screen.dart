@@ -1,4 +1,11 @@
+import 'direct_order_translation.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
+import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'direct_order_payment_document.dart';
+import 'direct_order_service.dart' show DirectOrderException;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,17 +16,31 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/language_switcher.dart';
 import '../auth/auth_provider.dart';
 import 'direct_order_copy.dart';
+import 'direct_order_support.dart';
+import 'direct_order_stage.dart';
+import 'direct_order_chat_templates.dart';
+import 'package:flutter/services.dart';
 import 'direct_order_dialog.dart';
 import 'direct_order_localization.dart';
 import 'direct_order_money.dart';
 import 'direct_order_staff_service.dart';
+import 'direct_order_requirements.dart';
+import 'direct_order_tracking_link.dart';
 
 class DirectOrderCashierScreen extends ConsumerStatefulWidget {
-  const DirectOrderCashierScreen({super.key});
+  const DirectOrderCashierScreen({
+    super.key,
+    this.service = directOrderStaffService,
+    this.documentService = const DirectOrderPaymentDocumentService(),
+  });
+
+  final DirectOrderStaffService service;
+  final DirectOrderPaymentDocumentService documentService;
 
   @override
   ConsumerState<DirectOrderCashierScreen> createState() =>
@@ -30,16 +51,18 @@ class _DirectOrderCashierScreenState
     extends ConsumerState<DirectOrderCashierScreen> {
   final _money = NumberFormat('#,###', 'vi_VN');
   final _chatController = TextEditingController();
-  final _feeController = TextEditingController();
   final _quoteNoteController = TextEditingController();
   final _grabUrlController = TextEditingController();
   final _actualGrabFeeController = TextEditingController();
+  final _providerNameController = TextEditingController();
+  final _driverContactController = TextEditingController();
+  final _bookingReferenceController = TextEditingController();
+  final _bookingOperationIds = <String, String>{};
+  String _deliveryProvider = 'grab';
   Timer? _timer;
   Timer? _chatRefreshTimer;
   List<Map<String, dynamic>> _requests = const [];
   Map<String, dynamic>? _detail;
-  Map<String, dynamic>? _verifiedPaymentEvidence;
-  List<Map<String, dynamic>> _sepayCandidates = const [];
   DirectOrderDriverReceiptStatus _driverReceiptStatus =
       const DirectOrderDriverReceiptStatus.empty();
   DirectOrderDriverReceiptStatus _customerReceiptStatus =
@@ -51,20 +74,36 @@ class _DirectOrderCashierScreenState
   String? _stateFilter;
   bool _loading = true;
   bool _busy = false;
+  final _requirementDrafts = <String, DirectOrderRequirementReply>{};
+  final _requirementMutationIds = <String, String>{};
+  final _requirementDraftSources = <String, String>{};
   int _refreshRevision = 0;
+  String? _linkRequestId, _linkOperationId, _linkAccessKey;
+  String? _documentFingerprint, _documentPath;
+  Uint8List? _documentBytes;
+
+  DirectOrderPaymentGuideCopy get _guideCopy =>
+      DirectOrderPaymentGuideCopy(Localizations.localeOf(context).languageCode);
 
   DirectOrderCopy get _copy =>
       DirectOrderCopy(Localizations.localeOf(context).languageCode);
   String? get _storeId => ref.read(authProvider).storeId;
+  DirectOrderStaffService get directOrderStaffService => widget.service;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
-    _timer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _refresh(silent: true),
-    );
+    _scheduleSafetyRefresh();
+  }
+
+  void _scheduleSafetyRefresh() {
+    _timer?.cancel();
+    _timer = Timer(jitteredPollDelay(const Duration(seconds: 30)), () async {
+      _timer = null;
+      await _refresh(silent: true);
+      if (mounted) _scheduleSafetyRefresh();
+    });
   }
 
   @override
@@ -72,10 +111,12 @@ class _DirectOrderCashierScreenState
     _timer?.cancel();
     _chatRefreshTimer?.cancel();
     _chatController.dispose();
-    _feeController.dispose();
     _quoteNoteController.dispose();
     _grabUrlController.dispose();
     _actualGrabFeeController.dispose();
+    _providerNameController.dispose();
+    _driverContactController.dispose();
+    _bookingReferenceController.dispose();
     super.dispose();
   }
 
@@ -88,26 +129,10 @@ class _DirectOrderCashierScreenState
     final revision = ++_refreshRevision;
     if (!silent) setState(() => _loading = true);
     try {
-      final fulfillmentFilter = const {
-        'preparing',
-        'ready',
-        'dispatched',
-        'completed',
-      }.contains(_stateFilter);
-      final allRows = await directOrderStaffService.listRequests(
+      final rows = await directOrderStaffService.listRequests(
         storeId: storeId,
-        states: _stateFilter == null || fulfillmentFilter
-            ? null
-            : [_stateFilter!],
+        states: _stateFilter == null ? null : [_stateFilter!],
       );
-      final rows = fulfillmentFilter
-          ? allRows
-                .where(
-                  (row) =>
-                      row['fulfillment_status']?.toString() == _stateFilter,
-                )
-                .toList(growable: false)
-          : allRows;
       Map<String, dynamic>? detail;
       final requestedSelection = _selectedId;
       final selectedId =
@@ -128,12 +153,14 @@ class _DirectOrderCashierScreenState
           selectedId != null && detail?['financial'] is Map
           ? await _loadCustomerReceiptStatus(storeId, selectedId)
           : const DirectOrderDriverReceiptStatus.empty();
-      final paymentReview = selectedId == null || detail == null
-          ? const _PaymentReviewData.empty()
-          : await _loadPaymentReview(storeId, selectedId, detail);
       if (!mounted || revision != _refreshRevision) return;
-      if (selectedId != requestedSelection && detail != null) {
-        _seedOrderInputs(detail);
+      if (selectedId != requestedSelection) {
+        _chatController.clear();
+        if (detail != null) _seedOrderInputs(detail);
+      }
+      if (detail != null) {
+        _seedPickupQuoteInput(detail);
+        _seedVerifiedDeliveryCost(detail);
       }
       setState(() {
         _requests = rows;
@@ -141,21 +168,24 @@ class _DirectOrderCashierScreenState
         _detail = detail;
         _driverReceiptStatus = driverReceiptStatus;
         _customerReceiptStatus = customerReceiptStatus;
-        _verifiedPaymentEvidence = paymentReview.evidence;
-        _sepayCandidates = paymentReview.candidates;
         _error = null;
         _loading = false;
       });
     } catch (_) {
-      if (!mounted || silent) return;
+      if (!mounted || revision != _refreshRevision) return;
       setState(() {
-        _error = _copy.loadFailed;
+        if (!silent || _detail == null) {
+          _error = _copy.loadFailed;
+          _detail = null;
+        }
         _loading = false;
       });
     }
   }
 
   Future<void> _select(String id) async {
+    if (_busy) return;
+    _chatController.clear();
     final storeId = _storeId;
     if (storeId == null) return;
     final revision = ++_refreshRevision;
@@ -164,8 +194,6 @@ class _DirectOrderCashierScreenState
       _detail = null;
       _driverReceiptStatus = const DirectOrderDriverReceiptStatus.empty();
       _customerReceiptStatus = const DirectOrderDriverReceiptStatus.empty();
-      _verifiedPaymentEvidence = null;
-      _sepayCandidates = const [];
       _loading = true;
     });
     try {
@@ -179,22 +207,20 @@ class _DirectOrderCashierScreenState
       final customerReceiptStatus = detail['financial'] is Map
           ? await _loadCustomerReceiptStatus(storeId, id)
           : const DirectOrderDriverReceiptStatus.empty();
-      final paymentReview = await _loadPaymentReview(storeId, id, detail);
       if (!mounted || revision != _refreshRevision) return;
       _seedOrderInputs(detail);
       setState(() {
         _detail = detail;
         _driverReceiptStatus = driverReceiptStatus;
         _customerReceiptStatus = customerReceiptStatus;
-        _verifiedPaymentEvidence = paymentReview.evidence;
-        _sepayCandidates = paymentReview.candidates;
         _loading = false;
         _error = null;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || revision != _refreshRevision) return;
       setState(() {
         _error = _copy.loadFailed;
+        _detail = null;
         _loading = false;
       });
     }
@@ -219,28 +245,511 @@ class _DirectOrderCashierScreenState
           ),
         );
       }
+      await _refresh(silent: true, allowWhileBusy: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  Map<String, dynamic> get _delivery => _map(_detail?['delivery']);
+  bool get _isPickup => _delivery['method'] == 'pickup';
+  bool get _recipientPolicy {
+    final policy = _map(_detail?['request'])['delivery_policy_version'];
+    return policy == 2 ||
+        (policy == null &&
+            _activeQuote == null &&
+            _map(_detail?['financial']).isEmpty);
+  }
+
+  bool get _pickupOriginalPaymentPending =>
+      _isPickup &&
+      _map(_detail?['request'])['state'] == 'quoted' &&
+      _number(_activeQuote?['delivery_fee_total']) > 0;
+
+  void _seedPickupQuoteInput(Map<String, dynamic> detail) {
+    if (_map(detail['delivery'])['method'] == 'pickup' &&
+        _map(detail['request'])['state'] == 'awaiting_quote') {
+      _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.storePrepaid;
+    }
+  }
+
+  Future<String?> _inputDialog(
+    String title, {
+    String? help,
+    String initial = '',
+    bool number = false,
+  }) => showDirectOrderDialog<String>(
+    context: context,
+    builder: (context) => _FulfillmentInputDialog(
+      copy: _copy,
+      title: title,
+      help: help,
+      initial: initial,
+      number: number,
+    ),
+  );
+
+  Future<void> _editDinerCount() async {
+    final input = await _inputDialog(
+      _copy.editDinerCount,
+      initial: _delivery['diner_count']?.toString() ?? '',
+      number: true,
+    );
+    if (input == null || !mounted || _storeId == null || _selectedId == null) {
+      return;
+    }
+    final count = int.tryParse(input);
+    if (count == null || count < 1 || count > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_copy.errorMessage('DIRECT_ORDER_DINER_COUNT_INVALID')),
+        ),
+      );
+      return;
+    }
+    await _act(
+      () => directOrderStaffService.setDinerCount(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        expectedVersion: (_delivery['version'] as num?)?.toInt() ?? 1,
+        dinerCount: count,
+      ),
+      _copy.packingCount(
+        count,
+        utensilsRequested: _delivery['utensils_requested'] != false,
+      ),
+    );
+  }
+
+  Future<void> _offerPickup() async {
+    final reason = await _inputDialog(
+      _copy.pickupReason,
+      initial: _copy.offerPickup,
+    );
+    if (reason == null || !mounted || _storeId == null || _selectedId == null) {
+      return;
+    }
+    await _act(
+      () => directOrderStaffService.offerPickup(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        expectedVersion: (_delivery['version'] as num?)?.toInt() ?? 1,
+        reason: reason,
+      ),
+      _copy.pickupOffered,
+    );
+  }
+
+  Future<void> _recordPickupRefund() async {
+    if (_storeId == null || _selectedId == null) return;
+    final due = supportNumber(_map(_delivery['pickup_offer'])['refund_due']);
+    final payload = await _moneyEvidence(_copy.refundReference, due);
+    if (payload == null || !mounted) return;
+    await _act(
+      () => directOrderStaffService.supportAction(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        expectedVersion:
+            (supportMap(_detail?['support'])['version'] as num?)?.toInt() ?? 1,
+        action: 'refund_original_pickup',
+        payload: {
+          ...payload,
+          'offer_id': _map(_delivery['pickup_offer'])['id'],
+        },
+      ),
+      _copy.refundRecorded,
+    );
+  }
+
+  Future<Map<String, dynamic>?> _moneyEvidence(
+    String title,
+    num amount, {
+    bool cashOnly = false,
+  }) => showDirectOrderMoneyEvidence(
+    context,
+    title: title,
+    amount: amount,
+    cashOnly: cashOnly,
+    storeId: _storeId!,
+    requestId: _selectedId!,
+    messages: () => _maps(_detail?['messages']),
+    upload: (path, name, mime, bytes) =>
+        directOrderStaffService.uploadChatAttachment(
+          storeId: _storeId!,
+          requestId: _selectedId!,
+          path: path,
+          filename: name,
+          mimeType: mime,
+          bytes: bytes,
+        ),
+    onChanged: () => _refresh(silent: true),
+  );
+
+  Future<void> _completePickup() async {
+    if (_storeId == null || _selectedId == null) return;
+    await _act(
+      () => directOrderStaffService.completePickup(
+        storeId: _storeId!,
+        requestId: _selectedId!,
+        expectedVersion:
+            (_map(_detail?['fulfillment'])['version'] as num?)?.toInt() ?? 0,
+      ),
+      _copy.pickupCompleted,
+    );
+  }
+
+  Future<void> _customerOrderLink({required bool send}) async {
+    final storeId = _storeId, requestId = _selectedId;
+    if (_busy || storeId == null || requestId == null) return;
+    if (_linkRequestId != requestId) {
+      _linkRequestId = requestId;
+      _linkOperationId = const Uuid().v4();
+      final random = math.Random.secure();
+      _linkAccessKey = base64UrlEncode(
+        List<int>.generate(32, (_) => random.nextInt(256)),
+      ).replaceAll('=', '');
+    }
+    setState(() => _busy = true);
+    try {
+      final result = await directOrderStaffService.issueOrderLink(
+        storeId: storeId,
+        requestId: requestId,
+        operationId: _linkOperationId!,
+        accessKey: _linkAccessKey!,
+        sendToCustomer: send,
+      );
+      if (!send) {
+        await Clipboard.setData(ClipboardData(text: result['url'] as String));
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(send ? _guideCopy.sent : _guideCopy.linkCopied)),
+      );
+      if (send) await _refresh(silent: true, allowWhileBusy: true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_copy.errorMessage(directOrderStaffErrorCode(error))),
+            backgroundColor: PosColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _paymentDocument({
+    required bool payment,
+    bool png = false,
+    bool send = false,
+  }) async {
+    final storeId = _storeId, requestId = _selectedId, quote = _activeQuote;
+    if (_busy || storeId == null || requestId == null || quote == null) return;
+    setState(() => _busy = true);
+    try {
+      // Revalidate state, quote version, amount due and bank before each action.
+      final source = await directOrderStaffService.paymentDocument(
+        storeId: storeId,
+        requestId: requestId,
+        quoteId: quote['id'].toString(),
+        quoteVersion: (quote['version'] as num).toInt(),
+        includePayment: payment,
+      );
+      final data = _map(source['data']);
+      final language = _guideCopy.language;
+      final fingerprint =
+          '$requestId/${source['source_hash']}/$language/$png/$payment';
+      if (_documentFingerprint != fingerprint) {
+        final bytes = png
+            ? await widget.documentService.buildPng(data, language: language)
+            : await widget.documentService.buildPdf(data, language: language);
+        if (bytes.isEmpty || bytes.length > 10 * 1024 * 1024) {
+          throw const DirectOrderException('DIRECT_ORDER_DOCUMENT_TOO_LARGE');
+        }
+        _documentFingerprint = fingerprint;
+        _documentBytes = bytes;
+        _documentPath =
+            '$storeId/$requestId/${const Uuid().v4()}.${png ? 'png' : 'pdf'}';
+      }
+      final filename =
+          '${payment ? 'payment' : 'quote'}-${data['reference_code']}-v${data['quote_version']}';
+      if (send) {
+        await directOrderStaffService.uploadPaymentDocument(
+          storeId: storeId,
+          requestId: requestId,
+          quoteId: quote['id'].toString(),
+          quoteVersion: (quote['version'] as num).toInt(),
+          includePayment: payment,
+          sourceHash: source['source_hash'].toString(),
+          path: _documentPath!,
+          filename: '$filename.${png ? 'png' : 'pdf'}',
+          mimeType: png ? 'image/png' : 'application/pdf',
+          bytes: _documentBytes!,
+        );
+      } else {
+        await widget.documentService.save(
+          _documentBytes!,
+          filename: filename,
+          png: png,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(send ? _guideCopy.sent : _guideCopy.saved)),
+      );
+      if (send) await _refresh(silent: true, allowWhileBusy: true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is DirectOrderException || error is PostgrestException
+                  ? _copy.errorMessage(directOrderStaffErrorCode(error))
+                  : _guideCopy.documentError,
+            ),
+            backgroundColor: PosColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _buildPaymentTools(Map<String, dynamic> request) {
+    final summary = _map(_detail?['amount_summary']);
+    final amounts = _map(summary['amounts']);
+    final quote = _activeQuote;
+    final canDocument =
+        quote != null &&
+        const {
+          'quoted',
+          'awaiting_payment_review',
+        }.contains(request['state']) &&
+        _detail?['financial'] is! Map;
+    final canLink = _detail?['can_issue_order_link'] == true;
+    return _Section(
+      title: summary['finalized'] == true
+          ? _guideCopy.finalAmount
+          : _guideCopy.preview,
+      icon: Icons.payments_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (amounts['final_total'] is num) ...[
+            _AmountRow(
+              label: _copy.subtotal,
+              value: _vnd(amounts['menu_total']),
+            ),
+            _AmountRow(
+              label: _copy.serviceCharge,
+              value: _vnd(amounts['service_charge_total']),
+            ),
+            _AmountRow(
+              label: _copy.includedVat,
+              value: _vnd(
+                _number(amounts['menu_vat']) +
+                    _number(amounts['service_charge_vat']),
+              ),
+            ),
+            _AmountRow(
+              label: _copy.finalTotal,
+              value: _vnd(amounts['final_total']),
+              strong: true,
+            ),
+          ] else
+            Text(_guideCopy.unavailable),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (canLink) ...[
+                OutlinedButton.icon(
+                  key: const Key('direct_staff_copy_order_link'),
+                  onPressed: _busy
+                      ? null
+                      : () => _customerOrderLink(send: false),
+                  icon: const Icon(Icons.link),
+                  label: Text(_guideCopy.copyLink),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('direct_staff_send_order_link'),
+                  onPressed: _busy
+                      ? null
+                      : () => _customerOrderLink(send: true),
+                  icon: const Icon(Icons.send_outlined),
+                  label: Text(_guideCopy.sendLink),
+                ),
+              ],
+              if (canDocument) ...[
+                OutlinedButton(
+                  key: const Key('direct_staff_send_quote_pdf'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: false, send: true),
+                  child: Text(_guideCopy.sendQuote),
+                ),
+                OutlinedButton(
+                  key: const Key('direct_staff_quote_pdf'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: false),
+                  child: Text(_guideCopy.quote),
+                ),
+                OutlinedButton(
+                  key: const Key('direct_staff_payment_pdf'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: true),
+                  child: Text(_guideCopy.guide),
+                ),
+                OutlinedButton(
+                  key: const Key('direct_staff_payment_png'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: true, png: true),
+                  child: Text(_guideCopy.png),
+                ),
+                FilledButton(
+                  key: const Key('direct_staff_send_payment_pdf'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(payment: true, send: true),
+                  child: Text(_guideCopy.sendPdf),
+                ),
+                FilledButton(
+                  key: const Key('direct_staff_send_payment_png'),
+                  onPressed: _busy
+                      ? null
+                      : () => _paymentDocument(
+                          payment: true,
+                          png: true,
+                          send: true,
+                        ),
+                  child: Text(_guideCopy.sendPng),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _sendQuote() async {
-    final fee =
-        _deliveryPaymentMode == DirectOrderDeliveryPaymentMode.customerDirect
-        ? 0
-        : parseDirectOrderVnd(_feeController.text);
-    if (fee == null || _storeId == null || _selectedId == null) {
+    if (_hasPendingRequirements) return;
+    if (_storeId == null || _selectedId == null) {
       return;
     }
     await _act(() async {
-      await directOrderStaffService.quote(
+      final saved = await directOrderStaffService.quote(
         storeId: _storeId!,
         requestId: _selectedId!,
-        deliveryFee: fee.toDouble(),
-        deliveryPaymentMode: _deliveryPaymentMode,
+        deliveryFee: 0,
+        deliveryPaymentMode: _recipientPolicy || _isPickup
+            ? DirectOrderDeliveryPaymentMode.customerDirect
+            : supportMap(_detail?['support'])['delivery_fee_deferred'] == true
+            ? DirectOrderDeliveryPaymentMode.storePrepaid
+            : _deliveryPaymentMode,
         note: _quoteNoteController.text.trim(),
       );
+      if (mounted && _detail != null) {
+        setState(() {
+          _detail = {
+            ..._detail!,
+            'quotes': [saved],
+            'amount_summary': {'finalized': true, 'amounts': saved},
+            'request': {..._map(_detail!['request']), 'state': 'quoted'},
+          };
+        });
+      }
     }, _copy.quoteSent);
+  }
+
+  List<DirectOrderRequirement> get _requirements =>
+      DirectOrderRequirement.fromRows(_detail?['requirements']);
+  bool get _hasPendingRequirements => _requirements.any((q) => !q.isConfirmed);
+
+  Future<void> _replyRequirement(DirectOrderRequirement requirement) async {
+    final requestId = _selectedId;
+    final storeId = _storeId;
+    if (_busy || requestId == null || storeId == null) return;
+    final draftKey = '$requestId/${requirement.id}';
+    if (_requirementDraftSources[draftKey] != requirement.requestText ||
+        requirement.followupText != null) {
+      _requirementDrafts.remove(draftKey);
+      _requirementMutationIds.remove(draftKey);
+    }
+    final previousDraft = _requirementDrafts[draftKey];
+    final reply = await showDirectOrderDialog<DirectOrderRequirementReply>(
+      context: context,
+      builder: (_) => DirectOrderRequirementReplyDialog(
+        requirement: requirement,
+        draft: _requirementDrafts[draftKey],
+      ),
+    );
+    if (reply == null || !mounted || _selectedId != requestId) return;
+    if (previousDraft?.body != reply.body ||
+        previousDraft?.printRequestVi != reply.printRequestVi ||
+        previousDraft?.printReplyVi != reply.printReplyVi ||
+        previousDraft?.needsConfirmation != reply.needsConfirmation ||
+        previousDraft?.printScope != reply.printScope) {
+      _requirementMutationIds[draftKey] = directOrderStaffService
+          .newRequirementMutationId();
+    }
+    _requirementDraftSources[draftKey] = requirement.requestText;
+    _requirementDrafts[draftKey] = reply;
+    setState(() => _busy = true);
+    try {
+      final detail = await directOrderStaffService.replyRequirement(
+        storeId: storeId,
+        requestId: requestId,
+        requirement: requirement,
+        reply: reply,
+        locale: Localizations.localeOf(context).languageCode,
+        mutationId: _requirementMutationIds[draftKey]!,
+      );
+      if (!mounted || _selectedId != requestId) return;
+      _refreshRevision += 1;
+      _requirementDrafts.remove(draftKey);
+      _requirementMutationIds.remove(draftKey);
+      _requirementDraftSources.remove(draftKey);
+      final requirements = DirectOrderRequirement.fromRows(
+        detail['requirements'],
+      );
+      setState(() {
+        _detail = detail;
+        _requests = [
+          for (final row in _requests)
+            if (row['id'] == requestId)
+              {
+                ...row,
+                'request_reply_due': requirements
+                    .where((q) => q.status == 'awaiting_reply')
+                    .length,
+                'request_confirmation_due': requirements
+                    .where((q) => q.awaitingCustomer)
+                    .length,
+              }
+            else
+              row,
+        ];
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_copy.errorMessage(directOrderStaffErrorCode(error))),
+          ),
+        );
+        await _refresh(silent: true, allowWhileBusy: true);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<DirectOrderDriverReceiptStatus> _loadDriverReceiptStatus(
@@ -273,47 +782,20 @@ class _DirectOrderCashierScreenState
     }
   }
 
-  Future<_PaymentReviewData> _loadPaymentReview(
-    String storeId,
-    String requestId,
-    Map<String, dynamic> detail,
-  ) async {
-    final state = _map(detail['request'])['state']?.toString();
-    if (!const {'quoted', 'awaiting_payment_review'}.contains(state)) {
-      return const _PaymentReviewData.empty();
-    }
-    try {
-      final results = await Future.wait<Object?>([
-        directOrderStaffService.verifiedPaymentEvidence(
-          storeId: storeId,
-          requestId: requestId,
-        ),
-        directOrderStaffService.sepayCandidates(
-          storeId: storeId,
-          requestId: requestId,
-        ),
-      ]);
-      return _PaymentReviewData(
-        evidence: results[0] as Map<String, dynamic>?,
-        candidates: results[1] as List<Map<String, dynamic>>,
-      );
-    } catch (_) {
-      return const _PaymentReviewData.empty();
-    }
-  }
-
   Future<void> _sendMessage() async {
     final body = _chatController.text.trim();
+    final selectedId = _selectedId;
+    final storeId = _storeId;
     if (body.isEmpty || _storeId == null || _selectedId == null) return;
     if (_busy) return;
     setState(() => _busy = true);
     try {
       final sent = await directOrderStaffService.sendMessage(
-        storeId: _storeId!,
-        requestId: _selectedId!,
+        storeId: storeId!,
+        requestId: selectedId!,
         message: body,
       );
-      if (!mounted) return;
+      if (!mounted || _selectedId != selectedId || _storeId != storeId) return;
       _refreshRevision += 1;
       final currentDetail = _detail;
       _chatController.clear();
@@ -362,7 +844,7 @@ class _DirectOrderCashierScreenState
     try {
       final url = await directOrderStaffService.proofSignedUrl(
         storeId: _storeId!,
-        requestId: _selectedId!,
+        requestId: message['request_id']?.toString() ?? _selectedId!,
         messageId: message['id']?.toString() ?? '',
       );
       if (!mounted) return;
@@ -391,7 +873,17 @@ class _DirectOrderCashierScreenState
                     ],
                   ),
                 ),
-                Flexible(child: InteractiveViewer(child: Image.network(url))),
+                Flexible(
+                  child: InteractiveViewer(
+                    child: Image.network(
+                      url,
+                      errorBuilder: (context, error, stackTrace) => Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(_copy.loadFailed),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -407,67 +899,53 @@ class _DirectOrderCashierScreenState
   }
 
   Future<void> _showApproval() async {
-    final quote = _activeQuote;
-    final total = _number(quote?['final_total']);
-    if (_verifiedPaymentEvidence == null) {
+    if (_busy || _photoApprovalBlockedReason != null) return;
+    final storeId = _storeId, requestId = _selectedId;
+    final quote = _activeQuote, proof = _currentPaymentProof;
+    if (storeId == null ||
+        requestId == null ||
+        quote == null ||
+        proof == null) {
+      return;
+    }
+    final support = supportMap(_detail?['support']);
+    final due = support.isEmpty
+        ? _number(quote['final_total'])
+        : supportNumber(support['food_due']);
+    final reviewed = await showDirectOrderReceiptReview(
+      context,
+      due,
+      viewProof: () => _showProof(proof),
+    );
+    if (!mounted || reviewed == null) return;
+    if (_storeId != storeId ||
+        _selectedId != requestId ||
+        _activeQuote?['id'] != quote['id'] ||
+        _currentPaymentProof?['id'] != proof['id']) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_copy.verifiedPaymentRequired),
-          backgroundColor: PosColors.danger,
+          content: Text(
+            _copy.errorMessage('DIRECT_ORDER_PAYMENT_REVIEW_CHANGED'),
+          ),
         ),
       );
       return;
     }
-    final confirmed = await showDirectOrderDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(_copy.approveConfirmTitle),
-        content: SizedBox(
-          width: 460,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                initialValue: formatDirectOrderVnd(total),
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: _copy.confirmedAmount,
-                  suffixText: 'VND',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _copy.verifiedPaymentSummary(
-                  _vnd(_verifiedPaymentEvidence!['amount']),
-                  _verifiedPaymentEvidence!['reference_code']?.toString(),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(_copy.manualApprovalCheck),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(_copy.close),
-          ),
-          FilledButton(
-            key: const Key('direct_order_approval_confirm'),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(_copy.approveAndSendKitchen),
-          ),
-        ],
-      ),
+    await _act(
+      () async {
+        await directOrderStaffService.recordReceipt(
+          storeId: storeId,
+          requestId: requestId,
+          quoteId: quote['id'].toString(),
+          proofMessageId: proof['id'].toString(),
+          amount: reviewed.amount,
+          bankReference: reviewed.reference,
+        );
+      },
+      reviewed.amount < due
+          ? DirectOrderSupportCopy(_copy.languageCode).text('partial')
+          : _copy.approvalSuccess,
     );
-    if (confirmed != true || _storeId == null || _selectedId == null) return;
-    await _act(() async {
-      await directOrderStaffService.approve(
-        storeId: _storeId!,
-        requestId: _selectedId!,
-      );
-    }, _copy.approvalSuccess);
   }
 
   Future<void> _reject() async {
@@ -514,12 +992,22 @@ class _DirectOrderCashierScreenState
   }
 
   Future<void> _sendGrab() async {
-    final url = normalizeGrabTrackingUrl(_grabUrlController.text);
+    final url = normalizeDeliveryTrackingUrl(_grabUrlController.text);
     final mode = DirectOrderDeliveryPaymentMode.fromValue(
       (_detail?['financial'] as Map?)?['delivery_payment_mode'],
     );
-    final actual = parseDirectOrderVnd(_actualGrabFeeController.text);
-    if (url == null ||
+    final verifiedFee = supportMap(
+      supportMap(_detail?['support'])['delivery_cost'],
+    )['actual_fee'];
+    final actual = mode == DirectOrderDeliveryPaymentMode.customerDirect
+        ? null
+        : verifiedFee is num
+        ? verifiedFee.toInt()
+        : parseDirectOrderVnd(_actualGrabFeeController.text);
+    if ((_grabUrlController.text.trim().isNotEmpty && url == null) ||
+        (url == null && _driverContactController.text.trim().isEmpty) ||
+        (_deliveryProvider == 'other' &&
+            _providerNameController.text.trim().isEmpty) ||
         (mode == DirectOrderDeliveryPaymentMode.storePrepaid &&
             actual == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -533,14 +1021,259 @@ class _DirectOrderCashierScreenState
     if (_storeId == null || _selectedId == null) {
       return;
     }
+    Map<String, dynamic>? cash;
+    if (actual != null && actual > 0) {
+      cash = await _moneyEvidence(
+        DirectOrderSupportCopy(
+          Localizations.localeOf(context).languageCode,
+        ).text('driver_paid'),
+        actual,
+        cashOnly: true,
+      );
+      if (cash == null || !mounted) return;
+    }
     await _act(
       () => directOrderStaffService.setDispatch(
         storeId: _storeId!,
         requestId: _selectedId!,
-        grabUrl: url,
+        grabUrl: url ?? '',
+        provider: _deliveryProvider,
+        providerName: _providerNameController.text.trim().isEmpty
+            ? null
+            : _providerNameController.text.trim(),
+        driverContact: _driverContactController.text.trim().isEmpty
+            ? null
+            : _driverContactController.text.trim(),
+        expectedVersion: (_map(_detail?['fulfillment'])['version'] as num?)
+            ?.toInt(),
         actualGrabFee: actual?.toDouble(),
+        cashConfirmed: cash != null,
+        evidenceMessageId: cash?['evidence_message_id'] as String?,
+        operationId: cash?['operation_id'] as String?,
+        cashReference: cash?['reference'] as String?,
       ),
       _copy.grabLinkSent,
+    );
+  }
+
+  Future<void> _bookingAction(String action) async {
+    final storeId = _storeId, requestId = _selectedId;
+    if (_busy || storeId == null || requestId == null) return;
+    final url = normalizeDeliveryTrackingUrl(_grabUrlController.text);
+    final feeText = _actualGrabFeeController.text.trim();
+    final fee = feeText.isEmpty ? null : parseDirectOrderVnd(feeText);
+    Map<String, dynamic> payload;
+    if (action == 'book') {
+      if ((_grabUrlController.text.trim().isNotEmpty && url == null) ||
+          (url == null && _driverContactController.text.trim().isEmpty) ||
+          (feeText.isNotEmpty && fee == null) ||
+          (_deliveryProvider == 'other' &&
+              _providerNameController.text.trim().isEmpty)) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_copy.bookingInputRequired)));
+        return;
+      }
+      payload = {
+        'provider': _deliveryProvider,
+        'provider_name': _providerNameController.text.trim(),
+        'reference': _bookingReferenceController.text.trim(),
+        'driver_contact': _driverContactController.text.trim(),
+        'tracking_url': url,
+        'recipient_fee': fee,
+      };
+    } else {
+      final reason = await _inputDialog(_copy.bookingFailureReason);
+      if (reason == null ||
+          reason.trim().isEmpty ||
+          !mounted ||
+          _selectedId != requestId) {
+        return;
+      }
+      payload = {'reason': reason.trim()};
+    }
+    // Keep retries within the same booking attempt, but give a new booking
+    // after cancellation/failure its own operation even if the details match.
+    final bookingContext = _map(_detail?['booking'])['id'] ?? 'initial';
+    final operationKey =
+        '$requestId/$bookingContext/$action/${jsonEncode(payload)}';
+    final operationId = _bookingOperationIds.putIfAbsent(
+      operationKey,
+      directOrderStaffService.newDeliveryOperationId,
+    );
+    await _act(() async {
+      await directOrderStaffService.bookDriver(
+        storeId: storeId,
+        requestId: requestId,
+        expectedVersion:
+            (_map(_detail?['fulfillment'])['version'] as num?)?.toInt() ?? 0,
+        operationId: operationId,
+        action: action,
+        payload: payload,
+      );
+    }, action == 'book' ? _copy.driverBooked : _copy.bookingRetry);
+  }
+
+  Future<void> _handoffBooking() async {
+    final storeId = _storeId, requestId = _selectedId;
+    final bookingId = _map(_detail?['booking'])['id']?.toString();
+    if (storeId == null || requestId == null || bookingId == null) return;
+    await _act(
+      () => directOrderStaffService.handoffBooking(
+        storeId: storeId,
+        requestId: requestId,
+        expectedVersion:
+            (_map(_detail?['fulfillment'])['version'] as num?)?.toInt() ?? 0,
+        bookingId: bookingId,
+      ),
+      _copy.driverHandoffNotice,
+    );
+  }
+
+  String _workLabel(Map<String, dynamic> row) {
+    if (row['state'] == 'awaiting_quote') return _copy.quoteNeeded;
+    if (row['state'] != 'approved') {
+      return _copy.stateLabel(row['state']?.toString() ?? '');
+    }
+    final status = row['fulfillment_status']?.toString();
+    if (status == 'completed') {
+      return _copy.customerProgressLabel('customer_completed');
+    }
+    if (status == 'cancelled') return _copy.stateLabel('cancelled');
+    if (status == 'dispatched') return _copy.driverHandoffNotice;
+    if (status == 'ready') {
+      return _copy.customerProgressLabel(
+        row['fulfillment_method'] == 'pickup'
+            ? 'customer_pickup_ready'
+            : 'customer_packed',
+      );
+    }
+    if (row['booking_status'] == 'booked') return _copy.driverBooked;
+    if (row['cooking_complete'] == true &&
+        row['fulfillment_method'] != 'pickup') {
+      return _copy.callDriver;
+    }
+    return _copy.customerProgressLabel('customer_preparing');
+  }
+
+  Widget _buildRecipientBooking() {
+    final booking = _map(_detail?['booking']);
+    final cooked = _delivery['cooking_complete'] == true;
+    final booked = booking['status'] == 'booked';
+    final ready = _map(_detail?['fulfillment'])['status'] == 'ready';
+    final pickupPending =
+        _map(_delivery['pickup_offer'])['status'] == 'proposed';
+    return _Section(
+      title: _copy.driverBooking,
+      icon: Icons.delivery_dining,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(_copy.customerPaysDriverHelp),
+          const SizedBox(height: 8),
+          Text(
+            booked
+                ? _copy.driverBooked
+                : cooked
+                ? _copy.callDriver
+                : _copy.customerProgressLabel('customer_preparing'),
+          ),
+          if (booking['reason'] != null) Text(booking['reason'].toString()),
+          if (booked) ...[
+            Text(
+              '${booking['provider_name'] ?? booking['provider'] ?? ''} · ${booking['reference'] ?? ''}',
+            ),
+            if (booking['driver_contact'] != null)
+              Text(booking['driver_contact'].toString()),
+            if (booking['tracking_url'] != null)
+              DirectOrderTrackingLink(url: booking['tracking_url'].toString()),
+            if (booking['recipient_fee'] != null)
+              Text(
+                '${_copy.recipientFeeReference}: ${_vnd(booking['recipient_fee'])}',
+              ),
+            FilledButton.icon(
+              key: const Key('direct_order_handoff_booking'),
+              onPressed: _busy || !ready || pickupPending
+                  ? null
+                  : _handoffBooking,
+              icon: const Icon(Icons.local_shipping_outlined),
+              label: Text(_copy.handoffDriver),
+            ),
+            OutlinedButton(
+              onPressed: _busy || pickupPending
+                  ? null
+                  : () => _bookingAction('cancel'),
+              child: Text(_copy.cancelBooking),
+            ),
+          ] else ...[
+            DropdownButtonFormField<String>(
+              key: const Key('direct_booking_provider'),
+              initialValue: _deliveryProvider,
+              decoration: InputDecoration(labelText: _copy.deliveryProvider),
+              items: [
+                for (final provider in ['grab', 'be', 'other'])
+                  DropdownMenuItem(
+                    value: provider,
+                    child: Text(
+                      provider == 'grab'
+                          ? _copy.grabProvider
+                          : provider == 'be'
+                          ? _copy.beProvider
+                          : _copy.otherProvider,
+                    ),
+                  ),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) =>
+                        setState(() => _deliveryProvider = value ?? 'grab'),
+            ),
+            if (_deliveryProvider == 'other')
+              TextField(
+                controller: _providerNameController,
+                maxLength: 100,
+                decoration: InputDecoration(labelText: _copy.providerName),
+              ),
+            TextField(
+              controller: _bookingReferenceController,
+              maxLength: 200,
+              decoration: InputDecoration(labelText: _copy.bookingReference),
+            ),
+            TextField(
+              controller: _driverContactController,
+              maxLength: 200,
+              decoration: InputDecoration(labelText: _copy.driverContact),
+            ),
+            TextField(
+              controller: _grabUrlController,
+              decoration: InputDecoration(labelText: _copy.grabTrackingUrl),
+            ),
+            TextField(
+              controller: _actualGrabFeeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [DirectOrderVndInputFormatter()],
+              decoration: InputDecoration(
+                labelText: _copy.recipientFeeReference,
+                suffixText: 'VND',
+              ),
+            ),
+            FilledButton.icon(
+              key: const Key('direct_order_book_driver'),
+              onPressed: _busy || !cooked || pickupPending
+                  ? null
+                  : () => _bookingAction('book'),
+              icon: const Icon(Icons.person_pin_circle_outlined),
+              label: Text(_copy.saveBooking),
+            ),
+            TextButton(
+              onPressed: _busy || !cooked || pickupPending
+                  ? null
+                  : () => _bookingAction('fail'),
+              child: Text(_copy.recordBookingFailure),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -667,10 +1400,13 @@ class _DirectOrderCashierScreenState
   }
 
   void _seedOrderInputs(Map<String, dynamic> detail) {
-    _feeController.clear();
     _quoteNoteController.clear();
     _grabUrlController.clear();
     _actualGrabFeeController.clear();
+    _providerNameController.clear();
+    _driverContactController.clear();
+    _bookingReferenceController.clear();
+    _deliveryProvider = 'grab';
     _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.customerDirect;
 
     final quotes = _maps(detail['quotes']);
@@ -682,19 +1418,30 @@ class _DirectOrderCashierScreenState
       _deliveryPaymentMode = DirectOrderDeliveryPaymentMode.fromValue(
         activeQuote['delivery_payment_mode'] ?? 'store_prepaid',
       );
-      final fee = activeQuote['delivery_fee_total'];
-      if (fee is num && fee > 0) {
-        _feeController.text = formatDirectOrderVnd(fee);
-      }
       _quoteNoteController.text = activeQuote['cashier_note']?.toString() ?? '';
     }
 
+    _seedPickupQuoteInput(detail);
+    _seedVerifiedDeliveryCost(detail);
+
     final dispatch = detail['dispatch'];
     if (dispatch is! Map) return;
+    _deliveryProvider = dispatch['delivery_provider']?.toString() ?? 'grab';
+    _providerNameController.text = dispatch['provider_name']?.toString() ?? '';
+    _driverContactController.text =
+        dispatch['driver_contact']?.toString() ?? '';
     final url = dispatch['grab_tracking_url']?.toString();
     final fee = dispatch['actual_grab_fee'];
     if (url != null && url.isNotEmpty) _grabUrlController.text = url;
     if (fee is num) _actualGrabFeeController.text = formatDirectOrderVnd(fee);
+  }
+
+  void _seedVerifiedDeliveryCost(Map<String, dynamic> detail) {
+    final support = supportMap(detail['support']);
+    final fee = supportMap(support['delivery_cost'])['actual_fee'];
+    if (fee is num) {
+      _actualGrabFeeController.text = formatDirectOrderVnd(fee);
+    }
   }
 
   Future<void> _printDriverReceipt({required bool reprint}) async {
@@ -727,6 +1474,44 @@ class _DirectOrderCashierScreenState
       }
     }
     return quotes.isEmpty ? null : quotes.first;
+  }
+
+  Map<String, dynamic>? get _currentPaymentProof {
+    final quote = _activeQuote;
+    if (quote == null) return null;
+    final proofs = _maps(_detail?['messages']).where((message) {
+      final metadata = _map(message['metadata']);
+      return message['message_type'] == 'payment_proof' &&
+          message['sender_type'] == 'customer' &&
+          message['has_attachment'] == true &&
+          message['request_id'] == _selectedId &&
+          metadata['quote_id'] == quote['id'] &&
+          metadata['charge_id'] == null &&
+          metadata['quote_version'].toString() == quote['version'].toString();
+    }).toList();
+    return proofs.isEmpty ? null : proofs.last;
+  }
+
+  String? get _photoApprovalBlockedReason {
+    if (_map(_detail?['request'])['state'] != 'awaiting_payment_review' ||
+        _activeQuote?['status'] != 'locked' ||
+        _number(_activeQuote?['final_total']) <= 0) {
+      return _copy.photoAwaitingSubmission;
+    }
+    if (_maps(
+      _detail?['proof_reviews'],
+    ).any((review) => review['status'] == 'requested')) {
+      return _copy.errorMessage('DIRECT_ORDER_PROOF_RESUBMISSION_PENDING');
+    }
+    if (_currentPaymentProof == null) return _copy.photoAwaitingSubmission;
+    if (supportRows(
+      supportMap(_detail?['support'])['receipts'],
+    ).any((r) => r['proof_message_id'] == _currentPaymentProof?['id'])) {
+      return DirectOrderSupportCopy(
+        Localizations.localeOf(context).languageCode,
+      ).text('pending');
+    }
+    return null;
   }
 
   @override
@@ -782,7 +1567,7 @@ class _DirectOrderCashierScreenState
           ),
         ],
       ),
-      body: _error != null && _requests.isEmpty
+      body: _error != null
           ? _ErrorState(message: _error!, retry: _refresh, copy: _copy)
           : isCompact
           ? (_selectedId == null ? _buildQueue() : _buildCompactDetail())
@@ -817,15 +1602,17 @@ class _DirectOrderCashierScreenState
   Widget _buildQueue() {
     const filters = <String?>[
       null,
-      'awaiting_quote',
-      'quoted',
-      'awaiting_payment_review',
-      'approved',
-      'preparing',
-      'ready',
-      'dispatched',
-      'completed',
+      'customer_pending',
+      'customer_paid',
+      'customer_completed',
     ];
+    String filterLabel(String? state) => state == null
+        ? _copy.all
+        : _copy.stageLabel(
+            DirectOrderStage.values.firstWhere(
+              (stage) => stage.filter == state,
+            ),
+          );
     return Column(
       children: [
         Padding(
@@ -838,19 +1625,58 @@ class _DirectOrderCashierScreenState
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: ChoiceChip(
-                      label: Text(
-                        state == null ? _copy.all : _copy.stateLabel(state),
-                      ),
+                      label: Text(filterLabel(state)),
                       selected: _stateFilter == state,
-                      onSelected: (_) {
-                        setState(() => _stateFilter = state);
-                        _refresh();
-                      },
+                      onSelected: _busy
+                          ? null
+                          : (_) {
+                              setState(() => _stateFilter = state);
+                              _refresh();
+                            },
                     ),
                   ),
               ],
             ),
           ),
+        ),
+        ExpansionTile(
+          key: const Key('direct_staff_advanced_statuses'),
+          title: Text(_copy.advancedStatuses),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final state in const [
+                    'awaiting_quote',
+                    'quoted',
+                    'awaiting_payment_review',
+                    'approved',
+                    'preparing',
+                    'ready',
+                    'dispatched',
+                    'customer_exception',
+                  ])
+                    ChoiceChip(
+                      label: Text(
+                        state == 'customer_exception'
+                            ? _copy.exceptionOrders
+                            : _copy.stateLabel(state),
+                      ),
+                      selected: _stateFilter == state,
+                      onSelected: _busy
+                          ? null
+                          : (_) {
+                              setState(() => _stateFilter = state);
+                              _refresh();
+                            },
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
         if (_loading && _requests.isEmpty)
           const Expanded(child: Center(child: CircularProgressIndicator()))
@@ -872,10 +1698,6 @@ class _DirectOrderCashierScreenState
                 final row = _requests[index];
                 final id = row['id']?.toString() ?? '';
                 final requestState = row['state']?.toString() ?? '';
-                final state =
-                    row['fulfillment_status']?.toString().isNotEmpty == true
-                    ? row['fulfillment_status'].toString()
-                    : requestState;
                 return ListTile(
                   selected: id == _selectedId,
                   selectedTileColor: PosColors.selectedRow,
@@ -897,7 +1719,7 @@ class _DirectOrderCashierScreenState
                     ],
                   ),
                   subtitle: Text(
-                    '${_copy.stateLabel(state)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}',
+                    '${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_workLabel(row)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${supportNumber(row['request_reply_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).replyDue} ${row['request_reply_due']}' : ''}${supportNumber(row['request_confirmation_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).awaiting} ${row['request_confirmation_due']}' : ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}${supportNumber(row['overpayment_due']) > 0 ? ' · ${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).text('surplus')}: ${_vnd(row['overpayment_due'])}' : ''}',
                   ),
                   trailing: row['final_total'] == null
                       ? null
@@ -928,9 +1750,24 @@ class _DirectOrderCashierScreenState
     final fulfillment = _map(_detail?['fulfillment']);
     final fulfillmentStatus = fulfillment['status']?.toString() ?? '';
     final displayState = fulfillmentStatus.isEmpty ? state : fulfillmentStatus;
-    return ListView(
+    final content = ListView(
+      key: const Key('direct_staff_detail_list'),
       padding: const EdgeInsets.all(16),
       children: [
+        DirectOrderStaffSupportPanel(
+          key: ValueKey('support:${_selectedId ?? ''}'),
+          canAdjustDriverCash: const {
+            'admin',
+            'store_admin',
+            'brand_admin',
+            'super_admin',
+          }.contains(ref.read(authProvider).role),
+          storeId: _storeId!,
+          requestId: _selectedId!,
+          detail: _detail!,
+          service: directOrderStaffService,
+          onChanged: () => _refresh(silent: true),
+        ),
         Wrap(
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -939,8 +1776,85 @@ class _DirectOrderCashierScreenState
               '#${request['reference_code'] ?? ''}',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
-            Chip(label: Text(_copy.stateLabel(displayState))),
+            Chip(
+              label: Text(
+                _isPickup && displayState == 'completed'
+                    ? _copy.pickupCompleted
+                    : _copy.stateLabel(displayState),
+              ),
+            ),
           ],
+        ),
+        const SizedBox(height: 12),
+        _buildPaymentTools(request),
+        const SizedBox(height: 12),
+        _Section(
+          title: _isPickup ? _copy.pickup : _copy.directDelivery,
+          icon: Icons.inventory_2_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _copy.packingCount(
+                  (_delivery['diner_count'] as num?)?.toInt(),
+                  utensilsRequested: _delivery['utensils_requested'] != false,
+                ),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (!{
+                    'dispatched',
+                    'completed',
+                    'cancelled',
+                  }.contains(fulfillmentStatus) &&
+                  !{'rejected', 'cancelled', 'expired'}.contains(state))
+                TextButton(
+                  key: const Key('direct_edit_diner_count'),
+                  onPressed: _busy ? null : _editDinerCount,
+                  child: Text(_copy.editDinerCount),
+                ),
+              if (_map(_delivery['pickup_offer'])['status'] == 'proposed')
+                Text(_copy.pickupOffered),
+              if (!_isPickup &&
+                  !{
+                    'dispatched',
+                    'completed',
+                    'cancelled',
+                  }.contains(fulfillmentStatus) &&
+                  !{'rejected', 'cancelled', 'expired'}.contains(state))
+                OutlinedButton(
+                  key: const Key('direct_offer_pickup'),
+                  onPressed: _busy ? null : _offerPickup,
+                  child: Text(_copy.offerPickup),
+                ),
+              if (_isPickup && fulfillmentStatus == 'ready')
+                FilledButton(
+                  key: const Key('direct_complete_pickup'),
+                  onPressed: _busy ? null : _completePickup,
+                  child: Text(_copy.pickupCompleted),
+                ),
+              if (_map(_delivery['pickup_offer'])['status'] == 'accepted' &&
+                  _number(_map(_delivery['pickup_offer'])['refund_due']) >
+                      0) ...[
+                Text(
+                  '${_map(_delivery['pickup_offer'])['refund_recorded'] == true ? _copy.refundRecorded : _copy.refundPending}: ${_vnd(_map(_delivery['pickup_offer'])['refund_due'])}',
+                ),
+                if (financial is Map &&
+                    _map(_delivery['pickup_offer'])['refund_recorded'] != true)
+                  FilledButton.tonal(
+                    key: const Key('direct_record_pickup_refund'),
+                    onPressed: _busy ? null : _recordPickupRefund,
+                    child: Text(_copy.recordRefund),
+                  ),
+              ],
+              if (_delivery['paid_total'] != null)
+                Text(
+                  '${_copy.netReceived}: ${_vnd(_number(_delivery['paid_total']) - _number(_delivery['refunded_total']))}',
+                ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         _Section(
@@ -964,6 +1878,11 @@ class _DirectOrderCashierScreenState
           ),
         ),
         const SizedBox(height: 12),
+        if ('${request['customer_note'] ?? ''}'.isNotEmpty)
+          DirectOrderTranslatedText(
+            original: '${request['customer_note']}',
+            translations: supportMap(request['note_translations']),
+          ),
         _Section(
           title: _copy.orderItems,
           icon: Icons.receipt_long_outlined,
@@ -982,11 +1901,24 @@ class _DirectOrderCashierScreenState
                         ),
                       ),
                       Expanded(
-                        child: Text(
-                          localizedDirectOrderSnapshotName(
-                            item,
-                            Localizations.localeOf(context).languageCode,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              localizedDirectOrderSnapshotName(
+                                item,
+                                Localizations.localeOf(context).languageCode,
+                              ),
+                            ),
+                            if ('${item['item_note'] ?? ''}'.isNotEmpty)
+                              DirectOrderTranslatedText(
+                                original: '${item['item_note']}',
+                                translations: supportMap(
+                                  item['note_translations'],
+                                ),
+                                status: item['translation_status']?.toString(),
+                              ),
+                          ],
                         ),
                       ),
                       Text(
@@ -1002,65 +1934,49 @@ class _DirectOrderCashierScreenState
           ),
         ),
         const SizedBox(height: 12),
-        if (state == 'awaiting_quote' || state == 'quoted')
+        if (_pickupOriginalPaymentPending) ...[
+          Text(_copy.pickupOriginalPaymentHelp),
+          const SizedBox(height: 12),
+        ],
+        if ((state == 'awaiting_quote' || state == 'quoted') &&
+            !_pickupOriginalPaymentPending)
           _Section(
-            title: _copy.enterGrabFee,
+            title: _copy.finalOrderAmount,
             icon: Icons.delivery_dining_outlined,
             child: Column(
               children: [
-                DropdownButtonFormField<DirectOrderDeliveryPaymentMode>(
-                  key: const Key('direct_order_delivery_payment_mode'),
-                  initialValue: _deliveryPaymentMode,
-                  decoration: InputDecoration(
-                    labelText: _copy.deliveryPaymentMethod,
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: DirectOrderDeliveryPaymentMode.customerDirect,
-                      child: Text(_copy.customerPaysDriver),
+                if (_recipientPolicy && !_isPickup)
+                  Text(_copy.customerPaysDriverHelp),
+                if (!_recipientPolicy &&
+                    supportMap(_detail?['support'])['delivery_fee_deferred'] !=
+                        true) ...[
+                  DropdownButtonFormField<DirectOrderDeliveryPaymentMode>(
+                    key: const Key('direct_order_delivery_payment_mode'),
+                    initialValue: _deliveryPaymentMode,
+                    decoration: InputDecoration(
+                      labelText: _copy.deliveryPaymentMethod,
                     ),
-                    DropdownMenuItem(
-                      value: DirectOrderDeliveryPaymentMode.storePrepaid,
-                      child: Text(_copy.storePrepaysDriver),
-                    ),
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-                          setState(() {
-                            _deliveryPaymentMode = value;
-                            if (value ==
-                                DirectOrderDeliveryPaymentMode.customerDirect) {
-                              _feeController.clear();
-                            }
-                          });
-                        },
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  key: const Key('direct_order_delivery_fee_input'),
-                  controller: _feeController,
-                  enabled:
-                      _deliveryPaymentMode ==
-                      DirectOrderDeliveryPaymentMode.storePrepaid,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: const [DirectOrderVndInputFormatter()],
-                  decoration: InputDecoration(
-                    labelText:
-                        _deliveryPaymentMode ==
-                            DirectOrderDeliveryPaymentMode.customerDirect
-                        ? _copy.customerPaysDriver
-                        : _copy.storeCollectedDeliveryFee,
-                    suffixText: 'VND',
-                    helperText:
-                        _deliveryPaymentMode ==
-                            DirectOrderDeliveryPaymentMode.customerDirect
-                        ? _copy.customerPaysDriverHelp
-                        : _copy.storePrepaysDriverHelp,
+                    items: [
+                      DropdownMenuItem(
+                        value: DirectOrderDeliveryPaymentMode.customerDirect,
+                        child: Text(_copy.customerPaysDriver),
+                      ),
+                      DropdownMenuItem(
+                        value: DirectOrderDeliveryPaymentMode.storePrepaid,
+                        child: Text(_copy.storePrepaysDriver),
+                      ),
+                    ],
+                    onChanged: (_busy || _isPickup || state == 'quoted')
+                        ? null
+                        : (value) {
+                            if (value == null) return;
+                            setState(() {
+                              _deliveryPaymentMode = value;
+                            });
+                          },
                   ),
-                ),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 8),
+                ],
                 TextField(
                   controller: _quoteNoteController,
                   decoration: InputDecoration(labelText: _copy.quoteNote),
@@ -1069,11 +1985,20 @@ class _DirectOrderCashierScreenState
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _busy ? null : _sendQuote,
+                    onPressed: _busy || _hasPendingRequirements
+                        ? null
+                        : _sendQuote,
                     icon: const Icon(Icons.send_outlined),
                     label: Text(_copy.sendQuote),
                   ),
                 ),
+                if (_hasPendingRequirements)
+                  Text(
+                    DirectOrderRequirementCopy(
+                      Localizations.localeOf(context).languageCode,
+                    ).pendingGate,
+                    key: const Key('requirement_quote_gate'),
+                  ),
               ],
             ),
           ),
@@ -1092,15 +2017,21 @@ class _DirectOrderCashierScreenState
                   label: _copy.serviceCharge,
                   value: _vnd(quote['service_charge_total']),
                 ),
-                if (DirectOrderDeliveryPaymentMode.fromValue(
-                      quote['delivery_payment_mode'] ?? 'store_prepaid',
-                    ) ==
-                    DirectOrderDeliveryPaymentMode.storePrepaid)
+                if (!_isPickup &&
+                    _number(quote['delivery_fee_total']) > 0 &&
+                    DirectOrderDeliveryPaymentMode.fromValue(
+                          quote['delivery_payment_mode'] ?? 'store_prepaid',
+                        ) ==
+                        DirectOrderDeliveryPaymentMode.storePrepaid)
                   _AmountRow(
                     label: _copy.storeCollectedDeliveryFee,
                     value: _vnd(quote['delivery_fee_total']),
                   )
-                else
+                else if (!_isPickup &&
+                    DirectOrderDeliveryPaymentMode.fromValue(
+                          quote['delivery_payment_mode'] ?? 'store_prepaid',
+                        ) ==
+                        DirectOrderDeliveryPaymentMode.customerDirect)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.delivery_dining_outlined),
@@ -1181,12 +2112,59 @@ class _DirectOrderCashierScreenState
           const SizedBox(height: 12),
           _buildDriverReceiptSection(),
           const SizedBox(height: 12),
-          if (fulfillmentStatus != 'completed')
+          if (_recipientPolicy &&
+              !_isPickup &&
+              {'pending', 'preparing', 'ready'}.contains(fulfillmentStatus))
+            _buildRecipientBooking(),
+          if (!_recipientPolicy &&
+              !_isPickup &&
+              fulfillmentStatus == 'ready' &&
+              _map(_delivery['pickup_offer'])['status'] != 'proposed')
             _Section(
               title: _copy.grabTrackingUrl,
               icon: Icons.delivery_dining,
               child: Column(
                 children: [
+                  DropdownButtonFormField<String>(
+                    key: const Key('direct_delivery_provider'),
+                    initialValue: _deliveryProvider,
+                    decoration: InputDecoration(
+                      labelText: _copy.deliveryProvider,
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'grab',
+                        child: Text(_copy.grabProvider),
+                      ),
+                      DropdownMenuItem(
+                        value: 'be',
+                        child: Text(_copy.beProvider),
+                      ),
+                      DropdownMenuItem(
+                        value: 'other',
+                        child: Text(_copy.otherProvider),
+                      ),
+                    ],
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(
+                            () => _deliveryProvider = value ?? 'grab',
+                          ),
+                  ),
+                  if (_deliveryProvider == 'other')
+                    TextField(
+                      key: const Key('direct_provider_name'),
+                      controller: _providerNameController,
+                      decoration: InputDecoration(
+                        labelText: _copy.providerName,
+                      ),
+                    ),
+                  TextField(
+                    key: const Key('direct_driver_contact'),
+                    controller: _driverContactController,
+                    maxLength: 200,
+                    decoration: InputDecoration(labelText: _copy.driverContact),
+                  ),
                   TextField(
                     controller: _grabUrlController,
                     decoration: InputDecoration(
@@ -1202,6 +2180,13 @@ class _DirectOrderCashierScreenState
                     TextField(
                       key: const Key('direct_order_actual_grab_fee_input'),
                       controller: _actualGrabFeeController,
+                      readOnly:
+                          supportMap(
+                                supportMap(
+                                  _detail?['support'],
+                                )['delivery_cost'],
+                              )['actual_fee']
+                              is num,
                       keyboardType: TextInputType.number,
                       inputFormatters: const [DirectOrderVndInputFormatter()],
                       decoration: InputDecoration(
@@ -1222,7 +2207,7 @@ class _DirectOrderCashierScreenState
                     child: FilledButton.icon(
                       onPressed: _busy ? null : _sendGrab,
                       icon: const Icon(Icons.send_outlined),
-                      label: Text(_copy.sendGrabLink),
+                      label: Text(_copy.handoffDriver),
                     ),
                   ),
                 ],
@@ -1242,6 +2227,26 @@ class _DirectOrderCashierScreenState
           const SizedBox(height: 16),
           SizedBox(height: 520, child: _buildChat()),
         ],
+      ],
+    );
+    final summary = _map(_detail?['amount_summary']);
+    final amounts = _map(summary['amounts']);
+    return Column(
+      children: [
+        if (amounts['final_total'] is num)
+          Container(
+            key: const Key('direct_staff_fixed_amount'),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            child: _AmountRow(
+              label: summary['finalized'] == true
+                  ? _guideCopy.finalAmount
+                  : _guideCopy.preview,
+              value: _vnd(amounts['final_total']),
+              strong: true,
+            ),
+          ),
+        Expanded(child: content),
       ],
     );
   }
@@ -1299,70 +2304,16 @@ class _DirectOrderCashierScreenState
             style: const TextStyle(color: PosColors.textSecondary),
           ),
           const SizedBox(height: 10),
-          if (_verifiedPaymentEvidence != null)
-            Card(
-              key: const Key('direct_order_verified_payment'),
-              color: PosColors.successMuted,
-              child: ListTile(
-                leading: const Icon(
-                  Icons.verified_rounded,
-                  color: PosColors.success,
-                ),
-                title: Text(
-                  _copy.paymentConfirmed(
-                    _vnd(_verifiedPaymentEvidence!['amount']),
-                  ),
-                ),
-                subtitle: Text(
-                  [
-                    _verifiedPaymentEvidence!['reference_code'],
-                    _verifiedPaymentEvidence!['transaction_at'] ??
-                        _verifiedPaymentEvidence!['received_at'],
-                  ].where((value) => value != null).join(' · '),
-                ),
-              ),
-            )
-          else if (_sepayCandidates.isEmpty)
-            Text(_copy.noSepayCandidates)
-          else
-            Column(
-              children: [
-                for (final row in _sepayCandidates)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(_vnd(row['amount'])),
-                    subtitle: Text(
-                      [
-                        row['payment_code'],
-                        row['reference_code'],
-                        row['transaction_at'] ?? row['received_at'],
-                      ].where((value) => value != null).join(' · '),
-                    ),
-                    trailing: TextButton(
-                      onPressed: _busy
-                          ? null
-                          : () => _act(
-                              () => directOrderStaffService.linkSepay(
-                                storeId: _storeId!,
-                                requestId: _selectedId!,
-                                transactionId: row['id']?.toString() ?? '',
-                              ),
-                              _copy.linked,
-                            ),
-                      child: Text(_copy.link),
-                    ),
-                  ),
-              ],
-            ),
+          if (_photoApprovalBlockedReason case final reason?)
+            Text(reason, key: const Key('direct_order_photo_approval_blocked')),
           const SizedBox(height: 12),
           FilledButton.icon(
-            key: const Key('direct_order_verified_approval'),
-            onPressed:
-                _busy || _verifiedPaymentEvidence == null || openReview != null
+            key: const Key('direct_order_photo_approval'),
+            onPressed: _busy || _photoApprovalBlockedReason != null
                 ? null
                 : _showApproval,
             icon: const Icon(Icons.check_circle_outline),
-            label: Text(_copy.approveAndSendKitchen),
+            label: Text(_copy.reviewPaymentAmount),
           ),
         ],
       ),
@@ -1427,7 +2378,7 @@ class _DirectOrderCashierScreenState
         : _copy.printDriverReceipt;
 
     return _Section(
-      title: _copy.driverReceipt,
+      title: _isPickup ? _copy.pickup : _copy.driverReceipt,
       icon: Icons.receipt_long_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1486,6 +2437,96 @@ class _DirectOrderCashierScreenState
     );
   }
 
+  Future<void> _chooseChatTemplate() async {
+    final selectedId = _selectedId;
+    final detail = _detail;
+    if (_busy || selectedId == null || detail == null) return;
+    final template = await showModalBottomSheet<DirectOrderChatTemplate>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final entry in <(DirectOrderChatTemplate, String)>[
+              (DirectOrderChatTemplate.received, _copy.receiptTemplate),
+              if (_map(detail['active_quote']).isNotEmpty)
+                (DirectOrderChatTemplate.quote, _copy.quoteTemplate),
+              if (!_isPickup)
+                (DirectOrderChatTemplate.address, _copy.addressTemplate),
+              if (!_isPickup)
+                (DirectOrderChatTemplate.deliveryFee, _copy.feeTemplate),
+            ])
+              ListTile(
+                key: Key('direct_chat_template_${entry.$1.name}'),
+                title: Text(entry.$2),
+                onTap: () => Navigator.pop(context, entry.$1),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || template == null || _selectedId != selectedId) return;
+    final request = _map(detail['request']);
+    final delivery = _map(detail['delivery']);
+    final address = _map(detail['address']);
+    int? fee;
+    if (template == DirectOrderChatTemplate.deliveryFee && _recipientPolicy) {
+      fee = (_map(detail['booking'])['recipient_fee'] as num?)?.toInt();
+    } else if (template == DirectOrderChatTemplate.deliveryFee) {
+      // Always ask staff to confirm the current fare rather than assume a quote
+      // of zero means free delivery or reuse an old dispatch fare.
+      final value = await _inputDialog(_copy.feeTemplate, number: true);
+      fee = value == null ? null : parseDirectOrderVnd(value);
+      if (!mounted || fee == null || _selectedId != selectedId) return;
+    }
+    if (_chatController.text.trim().isNotEmpty) {
+      final replace = await showDirectOrderDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(_copy.messageTemplates),
+          content: Text(_copy.replaceDraft),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(_copy.close),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(_copy.confirm),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || replace != true || _selectedId != selectedId) return;
+    }
+    final draft = directOrderChatDraft(
+      template: template,
+      locale: Localizations.localeOf(context).languageCode,
+      storeName: delivery['store_name']?.toString() ?? _copy.shop,
+      referenceCode: request['reference_code']?.toString() ?? '',
+      customerName: address['customer_name']?.toString() ?? '',
+      phone: address['customer_phone']?.toString() ?? '',
+      address: [
+        address['formatted_address'],
+        address['detail_address'],
+      ].where((part) => part != null && part.toString().isNotEmpty).join(' '),
+      pickup: delivery['method'] == 'pickup',
+      recipientDeliveryPolicy: _recipientPolicy,
+      customerPaysDriver:
+          DirectOrderDeliveryPaymentMode.fromValue(
+            _map(detail['active_quote'])['delivery_payment_mode']?.toString() ??
+                _deliveryPaymentMode.value,
+          ) ==
+          DirectOrderDeliveryPaymentMode.customerDirect,
+      deliveryFee: fee,
+    );
+    _chatController.value = TextEditingValue(
+      text: draft,
+      selection: TextSelection.collapsed(offset: draft.length),
+    );
+  }
+
   Widget _buildChat() {
     final messages = _maps(_detail?['messages']);
     return Container(
@@ -1506,6 +2547,23 @@ class _DirectOrderCashierScreenState
             ),
           ),
           const Divider(height: 1),
+          if (_requirements.isNotEmpty)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (final requirement in _requirements)
+                      DirectOrderRequirementCard(
+                        requirement: requirement,
+                        cashier: true,
+                        busy: _busy,
+                        onReply: () => _replyRequirement(requirement),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
@@ -1528,7 +2586,34 @@ class _DirectOrderCashierScreenState
                           : PosColors.panelMuted,
                       borderRadius: AppRadius.sm,
                     ),
-                    child: type == 'payment_proof'
+                    child:
+                        supportMap(message['metadata'])['order_access_link'] ==
+                            true
+                        ? DirectOrderTrackingLink(
+                            url: message['body'].toString(),
+                            orderLink: true,
+                          )
+                        : type == 'attachment'
+                        ? InkWell(
+                            onTap: () => openDirectOrderAttachment(
+                              context,
+                              () => directOrderStaffService.attachmentRequest(
+                                storeId: _storeId!,
+                                requestId: _selectedId!,
+                                action: 'staff_attachment_url',
+                                payload: {'message_id': message['id']},
+                              ),
+                            ),
+                            child: Text(
+                              message['body']?.toString() ??
+                                  DirectOrderSupportCopy(
+                                    Localizations.localeOf(
+                                      context,
+                                    ).languageCode,
+                                  ).text('attach'),
+                            ),
+                          )
+                        : type == 'payment_proof'
                         ? InkWell(
                             onTap: () => _showProof(message),
                             child: Row(
@@ -1540,16 +2625,112 @@ class _DirectOrderCashierScreenState
                               ],
                             ),
                           )
-                        : Text(
-                            localizedDirectOrderMessage(
-                              copy: _copy,
-                              messageType: type,
-                              body: message['body']?.toString(),
-                            ),
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (supportMap(
+                                    message['metadata'],
+                                  )['request_text']
+                                  is String)
+                                Text(
+                                  '↳ ${supportMap(message['metadata'])['request_text']}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              DirectOrderTranslatedText(
+                                translations: supportMap(
+                                  supportMap(
+                                    message['metadata'],
+                                  )['translations'],
+                                ),
+                                status: supportMap(
+                                  message['metadata'],
+                                )['translation_status']?.toString(),
+                                original: localizedDirectOrderMessage(
+                                  copy: _copy,
+                                  messageType: type,
+                                  body: message['body']?.toString(),
+                                ),
+                              ),
+                            ],
                           ),
                   ),
                 );
               },
+            ),
+          ),
+          if (_maps(_detail?['messages']).any(
+            (m) => supportMap(m['metadata'])['translation_status'] == 'failed',
+          ))
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => _act(
+                      () => directOrderStaffService.retryTranslation(
+                        storeId: _storeId!,
+                        requestId: _selectedId!,
+                      ),
+                      _copy.systemUpdate,
+                    ),
+              child: Text(
+                DirectOrderSupportCopy(
+                  Localizations.localeOf(context).languageCode,
+                ).text('retry_translation'),
+              ),
+            ),
+          if (_storeId != null &&
+              _selectedId != null &&
+              supportMap(_detail?['support'])['chat_open'] != false)
+            DirectOrderAttachmentButton(
+              key: ValueKey('staff_attachment:${_selectedId!}'),
+              storeId: _storeId!,
+              requestId: _selectedId!,
+              upload: (path, name, mime, bytes) =>
+                  directOrderStaffService.uploadChatAttachment(
+                    storeId: _storeId!,
+                    requestId: _selectedId!,
+                    path: path,
+                    filename: name,
+                    mimeType: mime,
+                    bytes: bytes,
+                  ),
+              onSent: () => _refresh(silent: true),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton.icon(
+                    key: const Key('direct_chat_templates'),
+                    onPressed: _busy ? null : _chooseChatTemplate,
+                    icon: const Icon(Icons.quickreply_outlined),
+                    label: Text(_copy.messageTemplates),
+                  ),
+                ),
+                IconButton(
+                  tooltip: _copy.copyDraft,
+                  onPressed: () async {
+                    if (_chatController.text.trim().isEmpty) return;
+                    await Clipboard.setData(
+                      ClipboardData(text: _chatController.text),
+                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(_copy.copied)));
+                    }
+                  },
+                  icon: const Icon(Icons.copy),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              _copy.templateHelp,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
           Padding(
@@ -1559,13 +2740,27 @@ class _DirectOrderCashierScreenState
                 Expanded(
                   child: TextField(
                     controller: _chatController,
-                    decoration: InputDecoration(hintText: _copy.messageHint),
-                    onSubmitted: (_) => _sendMessage(),
+                    enabled:
+                        supportMap(_detail?['support'])['chat_open'] != false,
+                    key: const Key('direct_staff_chat_input'),
+                    minLines: 1,
+                    maxLines: 4,
+                    maxLength: 2000,
+                    decoration: InputDecoration(
+                      hintText: _copy.messageHint,
+                      counterText: '',
+                    ),
+                    textInputAction: TextInputAction.newline,
                   ),
                 ),
                 const SizedBox(width: 6),
                 IconButton.filled(
-                  onPressed: _busy ? null : _sendMessage,
+                  key: const Key('direct_staff_chat_send'),
+                  onPressed:
+                      _busy ||
+                          supportMap(_detail?['support'])['chat_open'] == false
+                      ? null
+                      : _sendMessage,
                   icon: const Icon(Icons.send),
                 ),
               ],
@@ -1588,6 +2783,69 @@ double _number(Object? value) => value is num
     ? value.toDouble()
     : double.tryParse(value?.toString() ?? '') ?? 0;
 
+class _FulfillmentInputDialog extends StatefulWidget {
+  const _FulfillmentInputDialog({
+    required this.copy,
+    required this.title,
+    required this.initial,
+    required this.number,
+    this.help,
+  });
+  final DirectOrderCopy copy;
+  final String title;
+  final String initial;
+  final bool number;
+  final String? help;
+  @override
+  State<_FulfillmentInputDialog> createState() =>
+      _FulfillmentInputDialogState();
+}
+
+class _FulfillmentInputDialogState extends State<_FulfillmentInputDialog> {
+  late final _controller = TextEditingController(text: widget.initial);
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.help != null) Text(widget.help!),
+          TextField(
+            key: const Key('direct_fulfillment_dialog_input'),
+            controller: _controller,
+            maxLength: widget.number ? 3 : 500,
+            keyboardType: widget.number
+                ? TextInputType.number
+                : TextInputType.text,
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text(widget.copy.keepCurrentState),
+      ),
+      FilledButton(
+        onPressed: () {
+          final value = _controller.text.trim();
+          if (value.isNotEmpty) {
+            Navigator.pop(context, value);
+          }
+        },
+        child: Text(widget.copy.confirm),
+      ),
+    ],
+  );
+}
+
 class _Section extends StatelessWidget {
   const _Section({
     required this.title,
@@ -1608,7 +2866,12 @@ class _Section extends StatelessWidget {
             children: [
               Icon(icon, size: 20, color: PosColors.accent),
               const SizedBox(width: 8),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -1644,15 +2907,6 @@ class _AmountRow extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _PaymentReviewData {
-  const _PaymentReviewData({required this.evidence, required this.candidates});
-
-  const _PaymentReviewData.empty() : evidence = null, candidates = const [];
-
-  final Map<String, dynamic>? evidence;
-  final List<Map<String, dynamic>> candidates;
 }
 
 class _ErrorState extends StatelessWidget {

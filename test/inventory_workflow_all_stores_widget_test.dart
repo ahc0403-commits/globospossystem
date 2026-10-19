@@ -18,12 +18,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class _Auth extends AuthNotifier {
-  _Auth(String role) : super() {
+  _Auth(String role, String storeId, String accountCode) : super() {
     state = PosAuthState(
       role: role,
-      storeId: 'operating-store',
+      storeId: storeId,
       user: User(
-        id: 'actor',
+        id: accountCode,
         appMetadata: const {},
         userMetadata: const {},
         aud: 'authenticated',
@@ -34,6 +34,72 @@ class _Auth extends AuthNotifier {
 }
 
 class _Inventory extends InventoryService {
+  _Inventory({
+    this.prEnabled = true,
+    this.storeApprover = false,
+    this.policyMissing = false,
+  });
+  final bool prEnabled;
+  final bool storeApprover;
+  final bool policyMissing;
+  final procurementCommands = <String>[];
+  String requestStatus = 'submitted';
+  final prQueries = <Map<String, dynamic>>[];
+  final prStores = <String>[];
+  @override
+  Future<Map<String, dynamic>> fetchProcurementPage(
+    String storeId,
+    Map<String, dynamic> query,
+  ) async {
+    prQueries.add({...query});
+    prStores.add(storeId);
+    return {
+      'contract_version': 2,
+      'enabled': !policyMissing && prEnabled,
+      'store_id': storeId,
+      'actor': {
+        'system': 'pos',
+        'subject_id': 'actor',
+        'can_create': true,
+        'can_view_prices': storeApprover,
+        'can_store_approve': storeApprover,
+      },
+      'requests': [
+        {
+          'id': 'pr-root',
+          'request_no': 'PR-ROOT',
+          'status': storeApprover ? requestStatus : 'draft',
+          'row_version': procurementCommands.length + 2,
+          'created_at': '2026-10-07',
+          'requested_delivery_date': '2026-10-09',
+          'reason': 'Weekly order',
+          'allowed_actions': storeApprover && requestStatus == 'submitted'
+              ? ['adjust_request', 'store_approve', 'return_request']
+              : [],
+        },
+      ],
+      'request_counts': {'pending': 1, 'approved': 0, 'cancelled': 0},
+      'orders': [],
+      'products': [],
+      'supplier_items': [],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> executeProcurementCommand({
+    required String storeId,
+    required String action,
+    String? recordId,
+    required int version,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+  }) async {
+    procurementCommands.add(action);
+    requestStatus = 'office_review';
+    return {'id': recordId, 'status': requestStatus, 'row_version': 3};
+  }
+
+  int catalogLoads = 0;
   int detailLoads = 0;
   int listLoads = 0;
   bool failNext = false;
@@ -106,7 +172,21 @@ class _Inventory extends InventoryService {
   @override
   Future<Map<String, dynamic>> fetchInventoryOrderCatalog(
     String storeId,
-  ) async => {'items': [], 'suppliers': []};
+  ) async {
+    catalogLoads++;
+    return {
+      'items': [],
+      'suppliers': [],
+      'procurement_policy': policyMissing
+          ? null
+          : {
+              'enabled': prEnabled,
+              'two_stage_required': storeApprover && prEnabled,
+              'three_stage_required': !storeApprover && prEnabled,
+            },
+    };
+  }
+
   @override
   Future<Map<String, dynamic>> fetchInventoryWorkflowDetail(
     String orderId,
@@ -166,8 +246,13 @@ Future<GoRouter> _mount(
   _Inventory service,
   StreamController<PosLiveEvent> events, {
   String role = 'inventory_orderer',
+  String storeId = 'operating-store',
+  String accountCode = 'actor',
+  Size size = const Size(1440, 1100),
+  Locale locale = const Locale('en'),
+  String? initialOrderId,
 }) async {
-  tester.view.physicalSize = const Size(1440, 1100);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -176,21 +261,22 @@ Future<GoRouter> _mount(
     routes: [
       GoRoute(
         path: '/inventory-orders',
-        builder: (_, _) => InventoryOrderWorkflowScreen(service: service),
+        builder: (_, _) => InventoryOrderWorkflowScreen(
+          service: service,
+          initialOrderId: initialOrderId,
+        ),
       ),
     ],
   );
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authProvider.overrideWith((ref) => _Auth(role)),
-        posLiveEventsProvider(
-          'operating-store',
-        ).overrideWith((ref) => events.stream),
+        authProvider.overrideWith((ref) => _Auth(role, storeId, accountCode)),
+        posLiveEventsProvider(storeId).overrideWith((ref) => events.stream),
       ],
       child: MaterialApp.router(
         routerConfig: router,
-        locale: const Locale('en'),
+        locale: locale,
         localizationsDelegates: const [
           AppLocalizations.delegate,
           GlobalMaterialLocalizations.delegate,
@@ -217,6 +303,200 @@ void main() {
   });
   tearDownAll(() => Supabase.instance.dispose());
 
+  testWidgets(
+    'PR account opens actual requests and keeps receiving and historical orders accessible',
+    (tester) async {
+      final service = _Inventory(prEnabled: true);
+      final events = StreamController<PosLiveEvent>.broadcast();
+      addTearDown(events.close);
+      final router = await _mount(tester, service, events);
+      addTearDown(router.dispose);
+      expect(find.text('Purchase request management'), findsOneWidget);
+      expect(find.text('PR-ROOT · Draft'), findsOneWidget);
+      expect(service.listLoads, 0);
+      expect(service.prQueries.single['request_view'], true);
+      events.add(
+        const PosLiveEvent(
+          domain: 'inventory',
+          sourceTable: 'inventory_purchase_requests',
+          eventType: 'INSERT',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(service.prQueries, hasLength(2));
+      expect(service.catalogLoads, 0);
+      expect(service.listLoads, 0);
+      await tester.tap(find.widgetWithText(TextButton, 'Receiving'));
+      await tester.pumpAndSettle();
+      expect(service.listLoads, 1);
+      expect(find.textContaining('PO-OPERATING'), findsWidgets);
+      await tester.tap(find.text('Orders & approvals'));
+      await tester.pumpAndSettle();
+      expect(find.text('PR-ROOT · Draft'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Historical orders'));
+      await tester.pumpAndSettle();
+      expect(service.listLoads, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'store manager opens submitted PRs directly and approves before buyer review',
+    (tester) async {
+      final service = _Inventory(prEnabled: true, storeApprover: true);
+      final events = StreamController<PosLiveEvent>.broadcast();
+      addTearDown(events.close);
+      final router = await _mount(tester, service, events, role: 'store_admin');
+      addTearDown(router.dispose);
+      expect(find.text('PR-ROOT · Store review'), findsOneWidget);
+      expect(service.listLoads, 0);
+      expect(service.prQueries.single['request_view'], isNull);
+      expect(service.catalogLoads, 0);
+      expect(service.detailLoads, 0);
+      await tester.tap(find.text('PR-ROOT · Store review'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.widgetWithText(OutlinedButton, 'Approve request'),
+      );
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Approve request'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Approve request'));
+      await tester.pumpAndSettle();
+      expect(service.procurementCommands, ['store_approve']);
+      expect(find.text('PR-ROOT · Office review'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Receiving'));
+      await tester.pumpAndSettle();
+      expect(service.listLoads, 1);
+      expect(find.textContaining('PO-OPERATING'), findsWidgets);
+      await tester.tap(find.text('Orders & approvals'));
+      await tester.pumpAndSettle();
+      expect(find.text('PR-ROOT · Office review'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Historical orders'));
+      await tester.pumpAndSettle();
+      expect(service.listLoads, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  for (final account in [
+    ('bt_order', 'inventory_orderer', 'bunsik-bt'),
+    ('bt_pr1', 'inventory_orderer', 'bunsik-bt'),
+    ('sp_order', 'inventory_orderer', 'bunsik-sample'),
+    ('sp_pr1', 'inventory_orderer', 'bunsik-sample'),
+    ('jgbt_order', 'inventory_orderer', 'jeongabok-bt'),
+    ('jgbt_pr1', 'inventory_orderer', 'jeongabok-bt'),
+    ('bunsik_sm1', 'store_admin', 'bunsik-bt'),
+    ('bunsik_sm2', 'store_admin', 'bunsik-sample'),
+    ('jgbt_sm1', 'store_admin', 'jeongabok-bt'),
+    ('bunsik_bm1', 'brand_admin', 'bunsik-bt'),
+    ('jg_bm1', 'brand_admin', 'jeongabok-bt'),
+    ('andre', 'super_admin', 'bunsik-bt'),
+    ('admin-fixture', 'admin', 'jeongabok-bt'),
+  ]) {
+    for (final policyState in ['enabled', 'disabled', 'missing']) {
+      testWidgets(
+        '${account.$1} opens the same PR entry with $policyState policy',
+        (tester) async {
+          final service = _Inventory(
+            prEnabled: policyState == 'enabled',
+            policyMissing: policyState == 'missing',
+            storeApprover: account.$2 != 'inventory_orderer',
+          );
+          final events = StreamController<PosLiveEvent>.broadcast();
+          addTearDown(events.close);
+          final router = await _mount(
+            tester,
+            service,
+            events,
+            role: account.$2,
+            storeId: account.$3,
+            accountCode: account.$1,
+          );
+          addTearDown(router.dispose);
+          expect(
+            find.byKey(const Key('procurement_create_request')),
+            findsOneWidget,
+          );
+          final create = tester.widget<FilledButton>(
+            find.byKey(const Key('procurement_create_request')),
+          );
+          expect(create.onPressed != null, policyState == 'enabled');
+          expect(service.prStores, [account.$3]);
+          expect(service.prQueries, hasLength(1));
+          expect(service.listLoads, 0);
+          expect(service.catalogLoads, 0);
+          expect(service.detailLoads, 0);
+          expect(
+            find.byKey(const Key('inventory_order_create_draft_dialog')),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('account keeps its scoped receiving entry', (tester) async {
+    final service = _Inventory();
+    final events = StreamController<PosLiveEvent>.broadcast();
+    addTearDown(events.close);
+    final router = await _mount(
+      tester,
+      service,
+      events,
+      role: 'inventory_accounting',
+    );
+    addTearDown(router.dispose);
+    expect(service.prQueries, isEmpty);
+    expect(service.listLoads, 1);
+    expect(service.catalogLoads, 0);
+    expect(
+      find.byKey(const Key('inventory_accounting_store_filter')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final locale in ['ko', 'en', 'vi']) {
+    for (final width in [390.0, 1440.0]) {
+      testWidgets('account receiving fits $locale at $width', (tester) async {
+        final service = _Inventory();
+        final events = StreamController<PosLiveEvent>.broadcast();
+        addTearDown(events.close);
+        final router = await _mount(
+          tester,
+          service,
+          events,
+          role: 'inventory_accounting',
+          size: Size(width, 1100),
+          locale: Locale(locale),
+        );
+        addTearDown(router.dispose);
+        expect(
+          find.byKey(const Key('inventory_accounting_store_filter')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+  testWidgets(
+    'explicit PO link keeps its selected detail when PR policy is enabled',
+    (tester) async {
+      final service = _Inventory(prEnabled: true);
+      final events = StreamController<PosLiveEvent>.broadcast();
+      addTearDown(events.close);
+      final router = await _mount(
+        tester,
+        service,
+        events,
+        initialOrderId: 'order-1',
+      );
+      addTearDown(router.dispose);
+      expect(service.prQueries, isEmpty);
+      expect(service.detailLoads, 1);
+      expect(find.textContaining('PO-OPERATING'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
   test(
     'all known states are discoverable and master permissions follow roles',
     () {
@@ -272,7 +552,7 @@ void main() {
       final events = StreamController<PosLiveEvent>.broadcast();
       final router = await _mount(tester, service, events);
       expect(find.text('Supplier prices'), findsNothing);
-      expect(find.text('Placed (301)'), findsOneWidget);
+      expect(find.text('Purchase request management'), findsOneWidget);
       await tester.tap(find.text('Receiving'));
       await tester.pumpAndSettle();
       final baseline = service.detailLoads;
@@ -390,7 +670,12 @@ void main() {
         ],
       };
       final events = StreamController<PosLiveEvent>.broadcast();
-      final router = await _mount(tester, service, events);
+      final router = await _mount(
+        tester,
+        service,
+        events,
+        initialOrderId: 'order-1',
+      );
 
       await tester.tap(find.byKey(const Key('inventory_order_submit')));
       await tester.pumpAndSettle();

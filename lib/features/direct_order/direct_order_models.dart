@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../core/i18n/menu_localization.dart';
+import 'direct_order_requirements.dart';
 
 Never _invalidModel(String field) =>
     throw FormatException('DIRECT_ORDER_RESPONSE_INVALID:$field');
@@ -279,11 +280,19 @@ class DirectOrderSession {
     required this.id,
     required this.secret,
     required this.expiresAt,
+    this.orderScoped = false,
   });
 
   final String id;
   final String secret;
   final DateTime expiresAt;
+  final bool orderScoped;
+
+  Map<String, dynamic> get credentials => {
+    'session_id': id,
+    'secret': secret,
+    if (orderScoped) 'order_scoped': true,
+  };
 
   bool get isValid =>
       id.isNotEmpty &&
@@ -294,6 +303,7 @@ class DirectOrderSession {
     'id': id,
     'secret': secret,
     'expires_at': expiresAt.toIso8601String(),
+    if (orderScoped) 'order_scoped': true,
   };
 
   factory DirectOrderSession.fromJson(Map<String, dynamic> json) {
@@ -303,6 +313,7 @@ class DirectOrderSession {
       'store_id',
       'secret',
       'expires_at',
+      'order_scoped',
     });
     final rawId = json['session_id'] ?? json['id'];
     if (rawId is! String || rawId.trim().isEmpty) {
@@ -313,6 +324,7 @@ class DirectOrderSession {
       id: rawId,
       secret: _requiredString(json, 'secret'),
       expiresAt: _requiredDateTime(json, 'expires_at'),
+      orderScoped: json['order_scoped'] == true,
     );
   }
 }
@@ -378,7 +390,9 @@ class DirectOrderAddress {
       customerName: _requiredString(json, 'customer_name'),
       customerPhone: _requiredString(json, 'customer_phone'),
       formattedAddress: _requiredString(json, 'formatted_address'),
-      detailAddress: _requiredString(json, 'detail_address'),
+      detailAddress: json['detail_address'] is String
+          ? json['detail_address'] as String
+          : _invalidModel('detail_address'),
       latitude: _optionalDouble(json, 'latitude'),
       longitude: _optionalDouble(json, 'longitude'),
       googlePlaceId: _optionalString(json, 'google_place_id'),
@@ -414,8 +428,15 @@ class DirectOrderQuote {
     this.deliveryFeeVat = 0,
     this.vatTotal = 0,
     this.deliveryPaymentMode = 'store_prepaid',
+    this.amountFinalizedAt,
+    this.cashierNote,
+    this.noteTranslations = const {},
+    this.translationStatus,
   });
 
+  final String? cashierNote;
+  final Map<String, dynamic> noteTranslations;
+  final String? translationStatus;
   final String id;
   final double menuTotal;
   final double serviceChargeTotal;
@@ -432,6 +453,7 @@ class DirectOrderQuote {
   final double deliveryFeeVat;
   final double vatTotal;
   final String deliveryPaymentMode;
+  final DateTime? amountFinalizedAt;
 
   factory DirectOrderQuote.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
@@ -451,11 +473,20 @@ class DirectOrderQuote {
       'delivery_fee_vat',
       'vat_total',
       'delivery_payment_mode',
+      'amount_finalized_at',
+      'cashier_note',
+      'note_translations',
+      'translation_status',
     });
     final menuVat = _optionalDouble(json, 'menu_vat') ?? 0;
     final serviceVat = _optionalDouble(json, 'service_charge_vat') ?? 0;
     final deliveryVat = _optionalDouble(json, 'delivery_fee_vat') ?? 0;
     return DirectOrderQuote(
+      cashierNote: _optionalString(json, 'cashier_note'),
+      noteTranslations: json['note_translations'] is Map
+          ? Map<String, dynamic>.from(json['note_translations'] as Map)
+          : const {},
+      translationStatus: _optionalString(json, 'translation_status'),
       id: _requiredString(json, 'id'),
       version: _requiredNumber(json, 'version').toInt(),
       menuTotal: _requiredNumber(json, 'menu_total').toDouble(),
@@ -467,6 +498,7 @@ class DirectOrderQuote {
       finalTotal: _requiredNumber(json, 'final_total').toDouble(),
       status: _requiredString(json, 'status'),
       expiresAt: _requiredDateTime(json, 'expires_at'),
+      amountFinalizedAt: _optionalDateTime(json, 'amount_finalized_at'),
       menuPretax: _optionalDouble(json, 'menu_pretax') ?? 0,
       menuVat: menuVat,
       serviceChargePretax: _optionalDouble(json, 'service_charge_pretax') ?? 0,
@@ -526,6 +558,13 @@ class DirectOrderSummary {
     this.finalTotal,
     this.fulfillmentStatus,
     this.completedAt,
+    this.quoteId,
+    this.quoteVersion,
+    this.proofReviewId,
+    this.cookingComplete = false,
+    this.hasDispatch = false,
+    this.fulfillmentMethod = 'delivery',
+    this.bookingStatus,
   });
 
   final String requestId;
@@ -537,9 +576,36 @@ class DirectOrderSummary {
   final String? fulfillmentStatus;
   final DateTime? completedAt;
   final bool hasOpenProofReview;
+  final String? quoteId;
+  final int? quoteVersion;
+  final String? proofReviewId;
+  final bool cookingComplete;
+  final bool hasDispatch;
+  final String fulfillmentMethod;
+  final String? bookingStatus;
+
+  factory DirectOrderSummary.fromStatus(DirectOrderStatus status) =>
+      DirectOrderSummary(
+        requestId: status.requestId,
+        referenceCode: status.referenceCode,
+        state: status.state,
+        createdAt: status.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+        itemCount: status.items.fold(0, (sum, item) => sum + item.quantity),
+        hasOpenProofReview: status.proofReview?.canResubmit == true,
+        finalTotal: status.quote?.finalTotal,
+        fulfillmentStatus: status.fulfillmentStatus,
+        completedAt: status.completedAt,
+        quoteId: status.quote?.id,
+        quoteVersion: status.quote?.version,
+        proofReviewId: status.proofReview?.id,
+        cookingComplete: status.delivery?.cookingComplete ?? false,
+        hasDispatch: status.hasDriverHandoff,
+        fulfillmentMethod: status.delivery?.method ?? 'delivery',
+        bookingStatus: status.delivery?.booking['status'] as String?,
+      );
 
   bool get isTerminal =>
-      fulfillmentStatus == 'completed' ||
+      const {'completed', 'cancelled'}.contains(fulfillmentStatus) ||
       const {'rejected', 'cancelled', 'expired'}.contains(state);
 
   factory DirectOrderSummary.fromJson(Map<String, dynamic> json) {
@@ -553,8 +619,34 @@ class DirectOrderSummary {
       'fulfillment_status',
       'completed_at',
       'has_open_proof_review',
+      'quote_id',
+      'quote_version',
+      'proof_review_id',
+      'cooking_complete',
+      'has_dispatch',
+      'fulfillment_method',
+      'booking_status',
     });
+    final quoteVersion = json['quote_version'];
+    final method = _optionalString(json, 'fulfillment_method') ?? 'delivery';
+    if (quoteVersion != null && (quoteVersion is! int || quoteVersion < 1)) {
+      _invalidModel('quote_version');
+    }
+    if (!{'delivery', 'pickup'}.contains(method)) {
+      _invalidModel('fulfillment_method');
+    }
     return DirectOrderSummary(
+      quoteId: _optionalString(json, 'quote_id'),
+      quoteVersion: quoteVersion as int?,
+      proofReviewId: _optionalString(json, 'proof_review_id'),
+      cookingComplete: json.containsKey('cooking_complete')
+          ? _requiredBool(json, 'cooking_complete')
+          : false,
+      hasDispatch: json.containsKey('has_dispatch')
+          ? _requiredBool(json, 'has_dispatch')
+          : false,
+      fulfillmentMethod: method,
+      bookingStatus: _optionalString(json, 'booking_status'),
       requestId: _requiredString(json, 'request_id'),
       referenceCode: _requiredString(json, 'reference_code'),
       state: _requiredString(json, 'state'),
@@ -576,8 +668,10 @@ class DirectOrderMessage {
     required this.body,
     required this.hasAttachment,
     required this.createdAt,
+    this.metadata = const {},
   });
 
+  final Map<String, dynamic> metadata;
   final String id;
   final String senderType;
   final String messageType;
@@ -593,8 +687,12 @@ class DirectOrderMessage {
       'body',
       'has_attachment',
       'created_at',
+      'metadata',
     });
     return DirectOrderMessage(
+      metadata: json['metadata'] is Map
+          ? Map<String, dynamic>.from(json['metadata'] as Map)
+          : const {},
       id: _requiredString(json, 'id'),
       senderType: _requiredString(json, 'sender_type'),
       messageType: _requiredString(json, 'message_type'),
@@ -605,23 +703,92 @@ class DirectOrderMessage {
   }
 }
 
+class DirectOrderItemSnapshot {
+  const DirectOrderItemSnapshot({
+    required this.menuItemId,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.unitPrice,
+    required this.quantity,
+    this.note,
+    this.noteTranslations = const {},
+    this.translationStatus,
+  });
+
+  final String menuItemId;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final double unitPrice;
+  final int quantity;
+  final String? note;
+  final Map<String, dynamic> noteTranslations;
+  final String? translationStatus;
+  double get amount => unitPrice * quantity;
+  String localizedName(String locale) => switch (locale) {
+    'ko' => nameKo,
+    'en' => nameEn,
+    _ => nameVi,
+  };
+
+  factory DirectOrderItemSnapshot.fromJson(Map<String, dynamic> json) {
+    _expectKeys(json, const {
+      'menu_item_id',
+      'name_ko',
+      'name_vi',
+      'name_en',
+      'unit_price',
+      'quantity',
+      'note',
+      'note_translations',
+      'translation_status',
+    });
+    final quantity = _requiredNumber(json, 'quantity');
+    final price = _requiredNumber(json, 'unit_price');
+    if (quantity < 1 || quantity != quantity.toInt() || price < 0) {
+      _invalidModel('items');
+    }
+    return DirectOrderItemSnapshot(
+      menuItemId: _requiredString(json, 'menu_item_id'),
+      nameKo: _requiredString(json, 'name_ko'),
+      nameVi: _requiredString(json, 'name_vi'),
+      nameEn: _requiredString(json, 'name_en'),
+      unitPrice: price.toDouble(),
+      quantity: quantity.toInt(),
+      note: _optionalString(json, 'note'),
+      noteTranslations: json['note_translations'] is Map
+          ? Map<String, dynamic>.from(json['note_translations'] as Map)
+          : const {},
+      translationStatus: _optionalString(json, 'translation_status'),
+    );
+  }
+}
+
 class DirectOrderStatus {
   const DirectOrderStatus({
     required this.requestId,
     required this.referenceCode,
     required this.state,
     required this.messages,
+    this.createdAt,
+    this.items = const [],
     this.quote,
     this.fulfillmentStatus,
     this.grabTrackingUrl,
     this.fulfillmentVersion,
     this.completedAt,
     this.proofReview,
+    this.delivery,
+    this.support = const {},
+    this.requirements = const [],
   });
 
   final String requestId;
   final String referenceCode;
   final String state;
+  final DateTime? createdAt;
+  final List<DirectOrderItemSnapshot> items;
   final DirectOrderQuote? quote;
   final List<DirectOrderMessage> messages;
   final String? fulfillmentStatus;
@@ -629,6 +796,14 @@ class DirectOrderStatus {
   final int? fulfillmentVersion;
   final DateTime? completedAt;
   final DirectOrderProofReview? proofReview;
+  final DirectOrderDelivery? delivery;
+  final Map<String, dynamic> support;
+  final List<DirectOrderRequirement> requirements;
+  bool get hasDriverHandoff =>
+      delivery?.provider != null ||
+      delivery?.trackingUrl != null ||
+      delivery?.driverContact != null ||
+      grabTrackingUrl != null;
 
   factory DirectOrderStatus.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
@@ -643,6 +818,9 @@ class DirectOrderStatus {
       'fulfillment',
       'dispatch',
       'proof_review',
+      'delivery',
+      'support',
+      'requirements',
     });
     final quoteRaw = json['quote'];
     if (quoteRaw != null && quoteRaw is! Map) _invalidModel('quote');
@@ -656,27 +834,15 @@ class DirectOrderStatus {
       _invalidModel('dispatch');
     }
     _requiredString(json, 'store_id');
-    _requiredDateTime(json, 'created_at');
-    for (final row in _requiredList(json, 'items')) {
-      if (row is! Map) _invalidModel('items');
-      final item = Map<String, dynamic>.from(row);
-      _expectKeys(item, const {
-        'menu_item_id',
-        'name_ko',
-        'name_vi',
-        'name_en',
-        'unit_price',
-        'quantity',
-        'note',
-      });
-      _requiredString(item, 'menu_item_id');
-      _requiredString(item, 'name_ko');
-      _requiredString(item, 'name_vi');
-      _requiredString(item, 'name_en');
-      _requiredNumber(item, 'unit_price');
-      _requiredNumber(item, 'quantity');
-      _optionalString(item, 'note');
-    }
+    final createdAt = _requiredDateTime(json, 'created_at');
+    final items = _requiredList(json, 'items')
+        .map((row) {
+          if (row is! Map) _invalidModel('items');
+          return DirectOrderItemSnapshot.fromJson(
+            Map<String, dynamic>.from(row),
+          );
+        })
+        .toList(growable: false);
     if (fulfillmentRaw is Map) {
       final fulfillment = Map<String, dynamic>.from(fulfillmentRaw);
       _expectKeys(fulfillment, const {
@@ -700,14 +866,23 @@ class DirectOrderStatus {
       _requiredString(dispatch, 'grab_tracking_url');
       _requiredDateTime(dispatch, 'sent_at');
     }
+    if (json['delivery'] != null && json['delivery'] is! Map) {
+      _invalidModel('delivery');
+    }
     final proofReviewRaw = json['proof_review'];
     if (proofReviewRaw != null && proofReviewRaw is! Map) {
       _invalidModel('proof_review');
     }
     return DirectOrderStatus(
+      requirements: DirectOrderRequirement.fromRows(json['requirements']),
+      support: json['support'] is Map
+          ? Map<String, dynamic>.from(json['support'] as Map)
+          : const {},
       requestId: _requiredString(json, 'request_id'),
       referenceCode: _requiredString(json, 'reference_code'),
       state: _requiredString(json, 'state'),
+      createdAt: createdAt,
+      items: items,
       quote: quoteRaw is Map
           ? DirectOrderQuote.fromJson(Map<String, dynamic>.from(quoteRaw))
           : null,
@@ -732,11 +907,145 @@ class DirectOrderStatus {
               'completed_at',
             )
           : null,
+      delivery: json['delivery'] is Map
+          ? DirectOrderDelivery.fromJson(
+              Map<String, dynamic>.from(json['delivery'] as Map),
+            )
+          : null,
       proofReview: proofReviewRaw is Map
           ? DirectOrderProofReview.fromJson(
               Map<String, dynamic>.from(proofReviewRaw),
             )
           : null,
+    );
+  }
+}
+
+class DirectOrderDelivery {
+  const DirectOrderDelivery({
+    this.dinerCount,
+    this.utensilsRequested = true,
+    this.cookingComplete = false,
+    this.method = 'delivery',
+    this.version = 1,
+    this.storeName = '',
+    this.storeAddress = '',
+    this.provider,
+    this.providerName,
+    this.trackingUrl,
+    this.driverContact,
+    this.offer,
+    this.paidTotal,
+    this.refundedTotal = 0,
+    this.booking = const {},
+  });
+  final int? dinerCount;
+  final bool utensilsRequested;
+  final bool cookingComplete;
+  final String method;
+  final int version;
+  final String storeName;
+  final String storeAddress;
+  final String? provider;
+  final String? providerName;
+  final String? trackingUrl;
+  final String? driverContact;
+  final DirectOrderPickupOffer? offer;
+  final double? paidTotal;
+  final double refundedTotal;
+  final Map<String, dynamic> booking;
+  bool get hasBooking => booking['status'] == 'booked';
+  bool get isPickup => method == 'pickup';
+  factory DirectOrderDelivery.fromJson(Map<String, dynamic> json) {
+    _expectKeys(json, const {
+      'diner_count',
+      'utensils_requested',
+      'cooking_complete',
+      'method',
+      'version',
+      'store_name',
+      'store_address',
+      'provider',
+      'provider_name',
+      'tracking_url',
+      'driver_contact',
+      'pickup_offer',
+      'paid_total',
+      'refunded_total',
+      'booking',
+    });
+    final count = json['diner_count'];
+    final version = _requiredNumber(json, 'version');
+    final method = _requiredString(json, 'method');
+    if ((count != null && (count is! int || count < 1 || count > 100)) ||
+        version is! int ||
+        version < 1 ||
+        !{'delivery', 'pickup'}.contains(method)) {
+      _invalidModel('delivery');
+    }
+    final offer = json['pickup_offer'];
+    if (offer != null && offer is! Map) _invalidModel('pickup_offer');
+    return DirectOrderDelivery(
+      booking: json['booking'] is Map
+          ? Map<String, dynamic>.from(json['booking'] as Map)
+          : const {},
+      dinerCount: count as int?,
+      utensilsRequested: json.containsKey('utensils_requested')
+          ? _requiredBool(json, 'utensils_requested')
+          : true,
+      cookingComplete: json.containsKey('cooking_complete')
+          ? _requiredBool(json, 'cooking_complete')
+          : false,
+      method: method,
+      version: version,
+      storeName: _requiredString(json, 'store_name'),
+      storeAddress: _optionalString(json, 'store_address') ?? '',
+      provider: _optionalString(json, 'provider'),
+      providerName: _optionalString(json, 'provider_name'),
+      trackingUrl: _optionalString(json, 'tracking_url'),
+      driverContact: _optionalString(json, 'driver_contact'),
+      offer: offer is Map
+          ? DirectOrderPickupOffer.fromJson(Map<String, dynamic>.from(offer))
+          : null,
+      paidTotal: _optionalDouble(json, 'paid_total'),
+      refundedTotal: _requiredNumber(json, 'refunded_total').toDouble(),
+    );
+  }
+}
+
+class DirectOrderPickupOffer {
+  const DirectOrderPickupOffer({
+    required this.id,
+    required this.status,
+    required this.reason,
+    this.refundDue = 0,
+    this.refundRecorded = false,
+  });
+  final String id;
+  final String status;
+  final String reason;
+  final double refundDue;
+  final bool refundRecorded;
+  bool get isPending => status == 'proposed';
+  factory DirectOrderPickupOffer.fromJson(Map<String, dynamic> json) {
+    _expectKeys(json, const {
+      'id',
+      'status',
+      'reason',
+      'refund_due',
+      'refund_recorded',
+      'refunded_at',
+    });
+    final status = _requiredString(json, 'status');
+    if (!{'proposed', 'accepted', 'declined'}.contains(status)) {
+      _invalidModel('pickup_offer.status');
+    }
+    return DirectOrderPickupOffer(
+      id: _requiredString(json, 'id'),
+      status: status,
+      reason: _requiredString(json, 'reason'),
+      refundDue: _requiredNumber(json, 'refund_due').toDouble(),
+      refundRecorded: _requiredBool(json, 'refund_recorded'),
     );
   }
 }

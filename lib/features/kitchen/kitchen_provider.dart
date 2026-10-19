@@ -5,8 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/order_service.dart';
-import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/coalesced_refresh.dart';
+import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/polling_utils.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 
@@ -62,6 +63,7 @@ class KitchenItem {
     this.nameKo,
     this.nameVi,
     this.nameEn,
+    this.notes,
   });
 
   final String itemId;
@@ -74,6 +76,7 @@ class KitchenItem {
   final String? nameKo;
   final String? nameVi;
   final String? nameEn;
+  final String? notes;
 
   String localizedName(String languageCode) => localizedMenuName({
     'name': label,
@@ -93,6 +96,7 @@ class KitchenItem {
     String? nameKo,
     String? nameVi,
     String? nameEn,
+    String? notes,
   }) {
     return KitchenItem(
       itemId: itemId ?? this.itemId,
@@ -105,6 +109,7 @@ class KitchenItem {
       nameKo: nameKo ?? this.nameKo,
       nameVi: nameVi ?? this.nameVi,
       nameEn: nameEn ?? this.nameEn,
+      notes: notes ?? this.notes,
     );
   }
 
@@ -134,6 +139,7 @@ class KitchenItem {
               .toList(growable: false)
         : const <KitchenComboComponent>[];
     return KitchenItem(
+      notes: json['notes']?.toString(),
       itemId: json['id'].toString(),
       label:
           json['label']?.toString() ??
@@ -284,7 +290,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   SupabaseClient get _db => _client ?? supabase;
 
   static const _autoRefreshInterval = Duration(seconds: 2);
-  static const _fallbackPollInterval = Duration(seconds: 15);
+  static const _fallbackPollInterval = Duration(seconds: 30);
 
   final _refreshQueue = CoalescedRefresh();
   final _dirtyOrderIds = <String>{};
@@ -322,6 +328,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   Future<void> refreshOrdersById(String storeId, Iterable<String> orderIds) {
     if (!mounted || _restaurantId != storeId) return Future.value();
     _dirtyOrderIds.addAll(orderIds);
+    _boundDirtyOrders();
     return _refreshQueue.run(_refreshOrders);
   }
 
@@ -474,7 +481,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   ) => _db
       .from('orders')
       .select(
-        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_ko, name_vi, name_en))',
+        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, notes, combo_components, menu_items(name, name_ko, name_vi, name_en))',
       )
       .eq('restaurant_id', storeId)
       .gte('created_at', businessDay.startIso8601)
@@ -666,8 +673,16 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       _fullRefreshRequested = true;
     } else {
       _dirtyOrderIds.add(id);
+      _boundDirtyOrders();
     }
     _scheduleEventRefresh();
+  }
+
+  void _boundDirtyOrders() {
+    if (_dirtyOrderIds.length > 500) {
+      _dirtyOrderIds.clear();
+      _fullRefreshRequested = true;
+    }
   }
 
   void _scheduleEventRefresh() {
@@ -693,9 +708,13 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+    _pollTimer = Timer(jitteredPollDelay(_fallbackPollInterval), () async {
+      _pollTimer = null;
       if (mounted && _restaurantId == storeId) {
-        unawaited(loadOrders(storeId, showLoading: false));
+        await loadOrders(storeId, showLoading: false);
+      }
+      if (mounted && !_realtimeConnected && _restaurantId == storeId) {
+        _ensureAutoRefresh(storeId);
       }
     });
   }

@@ -31,7 +31,7 @@ void main() {
       contains("'cash', 'card', 'creditcard', 'atm', 'banktransfer'"),
     );
     expect(service, contains("'p_closing_date': closingDate"));
-    expect(service, contains("'get_daily_closing_days'"));
+    expect(service, contains("'get_daily_closing_deposit_days'"));
     expect(screen, contains('record.isClosed'));
     expect(screen, contains('record.depositTotal'));
     expect(screen, contains('record.paymentsPay'));

@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 
+import '../../core/utils/excel_workbook_decoder.dart';
+import '../../core/utils/streaming_xlsx_writer.dart';
+
 const ingredientImportSheetName = '원재료등록';
 const ingredientSupplierReferenceSheetName = '거래처목록';
 const ingredientImportMaxRows = 1000;
@@ -89,9 +92,10 @@ class IngredientImportWorkbook {
 }
 
 class IngredientImportValidationException implements Exception {
-  const IngredientImportValidationException(this.issues);
+  const IngredientImportValidationException(this.issues, {this.decodeFailure});
 
   final List<String> issues;
+  final ExcelWorkbookDecodeException? decodeFailure;
 
   @override
   String toString() => issues.join('\n');
@@ -208,17 +212,18 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
 
   late final Excel excel;
   try {
-    excel = Excel.decodeBytes(bytes);
-  } catch (_) {
-    throw const IngredientImportValidationException([
-      'Excel 파일을 읽을 수 없습니다. .xlsx 형식인지 확인하세요.',
-    ]);
+    excel = decodeExcelWorkbook(bytes);
+  } on ExcelWorkbookDecodeException catch (error) {
+    throw IngredientImportValidationException([
+      'Excel 파일을 읽지 못했습니다. 등록 양식에 값을 붙여넣어 다시 저장해 주세요.',
+    ], decodeFailure: error);
   }
 
   final sheet = excel.tables[ingredientImportSheetName];
   if (sheet == null || sheet.rows.isEmpty) {
-    throw const IngredientImportValidationException([
-      '"원재료등록" 시트를 찾을 수 없습니다. 제공된 양식을 사용하세요.',
+    throw IngredientImportValidationException([
+      '"원재료등록" 시트를 찾을 수 없습니다. 제공된 양식을 사용하세요. '
+          '현재 시트: ${excel.tables.keys.join(', ')}',
     ]);
   }
 
@@ -345,7 +350,9 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
       issues.add('$sourceRow행: 같은 이름의 거래처가 여러 개입니다. 거래처명을 고유하게 변경하세요.');
     }
     final unitPrice = _parseNumber(rawUnitPrice);
-    if (unitPrice == null || !unitPrice.isFinite || unitPrice < 0) {
+    if (rawUnitPrice.isEmpty) {
+      issues.add('$sourceRow행: 가격을 입력하세요. 0 이상의 숫자를 입력할 수 있습니다.');
+    } else if (unitPrice == null || !unitPrice.isFinite || unitPrice < 0) {
       issues.add('$sourceRow행: 가격은 0 이상의 숫자로 입력하세요.');
     }
 
@@ -449,3 +456,70 @@ double? _parseNumber(String value) =>
     double.tryParse(value.replaceAll(',', '').replaceAll(' ', ''));
 int? _parseInteger(String value) =>
     int.tryParse(value.replaceAll(',', '').replaceAll(' ', ''));
+
+/// Bounded row working set: each batch is encoded and released before the next.
+/// The final compressed bytes are retained for the browser/native download API.
+Future<Uint8List> buildIngredientTemplateFromBatches({
+  required Stream<List<Map<String, dynamic>>> batches,
+  required List<Map<String, dynamic>> suppliers,
+}) async {
+  final writer = StreamingXlsxWriter([
+    ingredientImportSheetName,
+    ingredientSupplierReferenceSheetName,
+  ]);
+  writer.beginSheet(
+    columnWidths: [38, 18, 28, 18, 18, 14, 22, 18, 18, 18, 28, 18],
+  );
+  writer.addRow(ingredientImportHeaders);
+  var count = 0;
+  await for (final batch in batches) {
+    if (batch.length > 500) {
+      throw const FormatException('INVENTORY_EXPORT_BATCH_INVALID');
+    }
+    for (final p in batch) {
+      final link = p['export_supplier'] as Map?;
+      writer.addRow([
+        p['id'],
+        p['product_code'],
+        p['name'],
+        p['category'],
+        p['stock_unit'],
+        p['base_unit'],
+        p['base_unit_factor'] ?? 1,
+        p['storage_type'],
+        p['shelf_life_days'],
+        p['is_orderable'] == false ? 'N' : 'Y',
+        link?['supplier_name'] ?? '',
+        link?['unit_price'] ?? '',
+      ]);
+      count++;
+    }
+    await Future<void>.delayed(Duration.zero);
+  }
+  if (count == 0) {
+    writer.addRow([
+      '',
+      'ING-001',
+      '예: 떡',
+      '식재료',
+      'kg',
+      'g',
+      1000,
+      '냉장',
+      7,
+      'Y',
+      '기존 거래처명 또는 신규 거래처명',
+      100000,
+    ]);
+  }
+  writer.endSheet();
+  writer.beginSheet();
+  writer.addRow(['거래처명']);
+  for (final supplier in suppliers) {
+    if (supplier['status'] == null || supplier['status'] == 'active') {
+      writer.addRow([supplier['supplier_name']]);
+    }
+  }
+  writer.endSheet();
+  return writer.finish();
+}
