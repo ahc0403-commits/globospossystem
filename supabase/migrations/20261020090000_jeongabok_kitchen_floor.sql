@@ -590,4 +590,5 @@ BEGIN
   END IF;
 END;
 $$;
+NOTIFY pgrst, 'reload schema';
 COMMIT;
