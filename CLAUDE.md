@@ -49,6 +49,19 @@ requests and higher-priority instructions take precedence.
   PO references, and transfer the original unreceived balance only on new PO
   issuance. Preserve lineage and prevent duplicate reservations/stock/payment.
 
+## Registered menu choices (owner decision 2026-10-20)
+
+- Portions are single, S or L. Each sellable portion/permitted spice choice has
+  its own stable menu ID and explicit registered price. Do not merge existing
+  menus, invent prices, spice steps or recipe multipliers. Unclassified spice
+  stays `unknown`, distinct from `not_spicy`.
+- `portion_code`, `spice_level`, `spice_choice` are structured authority;
+  compatibility names expose the same choice in existing POS/QR/direct/print
+  contracts. Preserve `option_base_names` for editing and Excel round trips.
+- Carry `menu_option_key` through carts, drafts and offline requests. Validate
+  it with one set JOIN before ordering; a stale choice requires reselection.
+  `menu_option_snapshot` preserves order-time options, names and unit price.
+
 ## Payments and operating times
 
 - **JeonGabok Binh Thanh has no checker (owner decision 2026-10-20).** Only

@@ -483,6 +483,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
           for (final line in submittedItems)
             QrOrderLine(
               menuItemId: line.item.id,
+              menuOptionKey: line.item.menuOptionKey,
               quantity: line.quantity,
               isTakeout: line.isTakeout,
               comboDrinkChoices:

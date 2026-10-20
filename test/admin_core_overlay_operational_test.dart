@@ -185,6 +185,7 @@ class _TablesService extends TablesService {
 }
 
 class _MenuNotifier extends MenuNotifier {
+  Map<String, dynamic>? lastMenuOptions;
   _MenuNotifier() : super(_storeId) {
     state = const MenuState(
       categories: AsyncValue.data([
@@ -298,6 +299,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    Map<String, dynamic>? menuOptions,
     BeverageTax? beverageTax,
     String? invoiceSaleUnit,
     required double price,
@@ -306,6 +308,7 @@ class _MenuNotifier extends MenuNotifier {
     int comboDrinkChoiceCount = 0,
   }) async {
     addItemCalls += 1;
+    lastMenuOptions = menuOptions;
     lastPaperlessNameVi = paperlessNameVi;
     lastAddedItemWasCombo = isCombo;
     lastComboComponents = comboComponents;
@@ -320,6 +323,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    Map<String, dynamic>? menuOptions,
     BeverageTax? beverageTax,
     required double price,
   }) async {
@@ -1316,8 +1320,29 @@ void main() {
         find.byKey(const Key('admin_menu_item_price')),
         '45000',
       );
+      await tester.ensureVisible(
+        find.byKey(const Key('admin_menu_options_expansion')),
+      );
+      await tester.tap(find.byKey(const Key('admin_menu_options_expansion')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('admin_menu_portion')));
+      await tester.tap(find.byKey(const Key('admin_menu_portion')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('S').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('admin_menu_spice')));
+      await tester.tap(find.byKey(const Key('admin_menu_spice')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('🌶').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('admin_menu_combo_toggle')),
+      );
       await tester.tap(find.byKey(const Key('admin_menu_combo_toggle')));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('admin_menu_combo_component_$_menuItemId')),
+      );
       await tester.tap(
         find.byKey(const Key('admin_menu_combo_component_$_menuItemId')),
       );
@@ -1334,6 +1359,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(notifier.addItemCalls, 1);
       expect(notifier.lastPaperlessNameVi, 'Cà phê sữa KDS');
+      expect(notifier.lastMenuOptions?['portion_code'], 'S');
+      expect(notifier.lastMenuOptions?['spice_level'], 'spicy');
       expect(notifier.lastAddedItemWasCombo, isTrue);
       expect(notifier.lastComboComponents, [
         {'menu_item_id': _menuItemId, 'quantity': 1},

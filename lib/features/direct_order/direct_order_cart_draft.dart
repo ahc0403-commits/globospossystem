@@ -4,6 +4,7 @@ class DirectOrderCartDraft {
     required this.savedAt,
     required this.cart,
     required this.itemNotes,
+    this.menuOptionKeys = const {},
     required this.comboChoices,
     required this.pickup,
     required this.dinerCount,
@@ -14,6 +15,7 @@ class DirectOrderCartDraft {
   final DateTime savedAt;
   final Map<String, int> cart;
   final Map<String, String> itemNotes;
+  final Map<String, String> menuOptionKeys;
   final Map<String, List<String>> comboChoices;
   final bool pickup, utensilsRequested;
   final int dinerCount;
@@ -23,6 +25,7 @@ class DirectOrderCartDraft {
     'saved_at': savedAt.toUtc().toIso8601String(),
     'cart': cart,
     'item_notes': itemNotes,
+    if (menuOptionKeys.isNotEmpty) 'menu_option_keys': menuOptionKeys,
     'combo_choices': comboChoices,
     'pickup': pickup,
     'diner_count': dinerCount,
@@ -53,6 +56,9 @@ class DirectOrderCartDraft {
       savedAt: DateTime.parse(row['saved_at'] as String),
       cart: cart,
       itemNotes: notes,
+      menuOptionKeys: row['menu_option_keys'] is Map
+          ? Map<String, String>.from(row['menu_option_keys'] as Map)
+          : const {},
       comboChoices: choices,
       pickup: row['pickup'] as bool,
       dinerCount: diners,

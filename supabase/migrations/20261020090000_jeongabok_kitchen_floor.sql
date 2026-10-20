@@ -186,6 +186,13 @@ SELECT pg_temp.kds_direct_patch('public.emergency_add_order_batch_timings(jsonb)
   $old$event.stage = 'tray_dispatched'$old$,
   $new$(event.stage = 'tray_dispatched' OR (public.kds_is_direct_floor_store(event.restaurant_id) AND event.stage = 'kitchen_done'))$new$, 2);
 
+-- The physical kitchen ticket must not create a checker copy either.
+SELECT pg_temp.kds_direct_patch('public.enqueue_tray_copy_for_kitchen_job()',
+ $old$BEGIN
+$old$,$new$BEGIN
+  IF public.kds_is_direct_floor_store(NEW.restaurant_id) THEN RETURN NEW; END IF;
+$new$);
+
 -- Retire legacy whole-order mutations for this store; their old quantity-only
 -- semantics cannot consume the floor-ready lots. Current clients use batches.
 SELECT pg_temp.kds_direct_patch('public.emergency_complete_order_stage(uuid,uuid)',
@@ -323,7 +330,7 @@ BEGIN
   FOREACH relation_name IN ARRAY ARRAY['emergency_order_queue', 'emergency_fulfillment_items',
     'emergency_combo_component_items', 'emergency_fulfillment_events', 'emergency_fulfillment_actions',
     'emergency_floor_direct_items', 'emergency_floor_ready_lots', 'emergency_tray_ready_lots',
-    'leftover_packaging_requests'] LOOP
+    'leftover_packaging_requests', 'orders', 'order_items', 'kds_change_log'] LOOP
     EXECUTE format('CREATE POLICY kds_direct_active_identity ON public.%I AS RESTRICTIVE
       FOR SELECT TO authenticated USING (NOT public.kds_is_direct_floor_store(restaurant_id)
         OR (SELECT EXISTS (SELECT 1 FROM public.users u WHERE u.auth_id = auth.uid() AND u.is_active)))', relation_name);

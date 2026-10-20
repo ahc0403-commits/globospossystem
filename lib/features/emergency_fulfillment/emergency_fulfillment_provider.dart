@@ -206,6 +206,7 @@ class EmergencyFulfillmentItem {
     this.excusedQuantity = 0,
     this.workflowVersion = 1,
     this.kitchenDirectToFloor = false,
+    this.menuOptionKey = '',
     this.oldestReadySequence,
     this.oldestTrayReadySequence,
     this.fulfillmentRoute = 'kitchen_tray_floor',
@@ -238,6 +239,7 @@ class EmergencyFulfillmentItem {
   final bool needsReview;
   final int workflowVersion;
   final bool kitchenDirectToFloor;
+  final String menuOptionKey;
   final int? oldestReadySequence;
   final int? oldestTrayReadySequence;
   final String fulfillmentRoute;
@@ -430,6 +432,7 @@ class EmergencyFulfillmentItem {
     needsReview: needsReview,
     workflowVersion: workflowVersion,
     kitchenDirectToFloor: kitchenDirectToFloor,
+    menuOptionKey: menuOptionKey,
     oldestReadySequence: updateOldestReadySequence
         ? oldestReadySequence
         : this.oldestReadySequence,
@@ -453,6 +456,12 @@ class EmergencyFulfillmentItem {
   factory EmergencyFulfillmentItem.fromJson(Map<String, dynamic> json) {
     final rawComponents = json['combo_components'];
     return EmergencyFulfillmentItem(
+      menuOptionKey: json['menu_option_snapshot'] is Map
+          ? jsonEncode([
+              for (final key in ['portion_code', 'spice_level', 'spice_choice'])
+                (json['menu_option_snapshot'] as Map)[key],
+            ])
+          : '',
       id: json['id']?.toString() ?? '',
       orderItemId: json['order_item_id']?.toString() ?? '',
       nameKo: json['name_ko']?.toString() ?? '',
@@ -1043,6 +1052,7 @@ class KitchenChecketAllocation {
 }
 
 String kitchenChecketGroupKey(EmergencyFulfillmentItem item) => [
+  item.menuOptionKey,
   item.nameKo.trim().toLowerCase(),
   item.nameVi.trim().toLowerCase(),
   item.nameEn.trim().toLowerCase(),
@@ -1112,6 +1122,7 @@ String _kdsSourceKind(EmergencyFulfillmentItem item) =>
     item.sourceKind == 'combo_component' ? 'combo_component' : 'base';
 
 String _handoffMenuKey(EmergencyFulfillmentItem item) => [
+  item.menuOptionKey,
   item.nameKo.trim().toLowerCase(),
   item.nameVi.trim().toLowerCase(),
   item.nameEn.trim().toLowerCase(),

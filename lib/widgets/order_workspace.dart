@@ -487,6 +487,8 @@ class _MenuBrowser extends StatelessWidget {
                               : () => onAddItem(
                                   CartItem(
                                     menuItemId: menuItemId,
+                                    menuOptionKey: item['menu_option_key']
+                                        ?.toString(),
                                     name: name,
                                     nameKo: item['name_ko']?.toString(),
                                     nameVi: item['name_vi']?.toString(),

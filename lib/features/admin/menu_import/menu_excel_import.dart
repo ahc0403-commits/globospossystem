@@ -26,6 +26,7 @@ class MenuImportRow {
     this.beverageTax,
     this.nameVi,
     this.invoiceSaleUnit,
+    this.menuOptions,
     required this.storeCode,
     required this.categoryName,
     required this.categorySortOrder,
@@ -37,6 +38,8 @@ class MenuImportRow {
     required this.sortOrder,
   });
 
+  /// Null preserves options when an older workbook omits these columns.
+  final Map<String, dynamic>? menuOptions;
   final BeverageTax? beverageTax;
   final String? nameVi, invoiceSaleUnit;
   final int sourceRow;
@@ -52,6 +55,7 @@ class MenuImportRow {
 
   Map<String, dynamic> toJson() => {
     'source_row': sourceRow,
+    ...?menuOptions,
     if (beverageTax != null) ...beverageTax!.toJson(),
     'store_code': storeCode,
     'category_name': categoryName,
@@ -212,9 +216,20 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
       issues.add('$sourceRow행: QR메뉴노출은 TRUE 또는 FALSE여야 합니다.');
     }
 
+    final menuOptions = parseMenuOptionsExcelRow(
+      headerIndexes,
+      text,
+      sourceRow,
+      issues,
+    );
     if (categoryName.isNotEmpty && menuName.isNotEmpty) {
-      final duplicateKey =
-          '${categoryName.toLowerCase()}\u0000${menuName.toLowerCase()}';
+      final duplicateKey = [
+        categoryName.toLowerCase(),
+        menuName.toLowerCase(),
+        menuOptions?['portion_code'] ?? '',
+        menuOptions?['spice_level'] ?? 'unknown',
+        (menuOptions?['spice_choice'] ?? '').toString().toLowerCase(),
+      ].join('\u0000');
       final priorRow = duplicateKeys[duplicateKey];
       if (priorRow != null) {
         issues.add('$sourceRow행: $priorRow행과 같은 카테고리/메뉴명이 중복됩니다.');
@@ -235,6 +250,7 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
       rows.add(
         MenuImportRow(
           sourceRow: sourceRow,
+          menuOptions: menuOptions,
           beverageTax: beverageTax,
           storeCode: storeCode,
           categoryName: categoryName,
@@ -358,4 +374,34 @@ BeverageTax? parseBeverageTaxExcelRow(
     return null;
   }
   return tax;
+}
+
+const menuOptionsExcelHeaders = ['양(S/L)', '기본맵기', '맵기선택명'];
+Map<String, dynamic>? parseMenuOptionsExcelRow(
+  Map<String, int> headers,
+  String Function(String) text,
+  int row,
+  List<String> issues,
+) {
+  final result = <String, dynamic>{};
+  if (headers.containsKey('양(S/L)')) {
+    final portion = text('양(S/L)').toUpperCase();
+    if (!['', 'S', 'L'].contains(portion)) {
+      issues.add('$row행: 양은 빈값, S 또는 L이어야 합니다.');
+    }
+    result['portion_code'] = portion;
+  }
+  if (headers.containsKey('기본맵기')) {
+    final spice = text('기본맵기').isEmpty ? 'unknown' : text('기본맵기');
+    if (!['unknown', 'not_spicy', 'spicy'].contains(spice)) {
+      issues.add('$row행: 기본맵기는 unknown, not_spicy, spicy 중 하나여야 합니다.');
+    }
+    result['spice_level'] = spice;
+  }
+  if (headers.containsKey('맵기선택명')) {
+    final choice = text('맵기선택명');
+    if (choice.length > 60) issues.add('$row행: 맵기선택명은 60자 이하여야 합니다.');
+    result['spice_choice'] = choice;
+  }
+  return result.isEmpty ? null : result;
 }

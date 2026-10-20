@@ -25,6 +25,7 @@ Map<String, dynamic> _page(String id, {bool next = false}) => {
   'items': [
     {
       'id': id,
+      'menu_option_key': '["L","spicy","",100000]',
       'category_id': 'combos',
       'name_ko': '콤보',
       'name_vi': 'Combo',
@@ -69,6 +70,7 @@ void main() {
       final menu = await service.fetchStorefront('fixture');
       expect(calls, 2);
       expect(menu.items, hasLength(2));
+      expect(menu.items.first.menuOptionKey, '["L","spicy","",100000]');
       expect(
         menu.items.every(
           (item) => item.comboDrinkOptions.single.menuItemId == 'drink',
@@ -125,6 +127,7 @@ void main() {
         locale: 'ko',
         cart: {'combo': 2},
         itemNotes: {},
+        menuOptionKeys: {'combo': '["L","spicy","",100000]'},
         comboDrinkChoices: {
           'combo': ['cola', 'tea'],
         },
@@ -144,6 +147,11 @@ void main() {
         payloads[1]['client_request_id'],
       );
       expect(payloads[0]['payload'], payloads[1]['payload']);
+      expect(
+        ((payloads[1]['payload'] as Map)['items'] as List)
+            .single['menu_option_key'],
+        '["L","spicy","",100000]',
+      );
       expect(
         ((payloads[1]['payload'] as Map)['items'] as List)
             .single['combo_drink_choices'],

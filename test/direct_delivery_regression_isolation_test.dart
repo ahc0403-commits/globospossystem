@@ -11,9 +11,11 @@ const _migrationPath =
 // widget tests, plus the isolated SQL behavior and concurrency suites.
 // 2026-10-19: terminal auth and printer mode copy have browser/native
 // isolation, profile recovery and settings refresh behavior coverage.
+// 2026-10-20: QR carries registered option keys; menu_portion_spice_test
+// and SQL regression cover stale choice rejection and S/M separation.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      'fe1d5b4eca7bff30215b34919e59d46c7d65d0d3e2712c033e9a2a5d7bcd4228',
+      '12a87696f354e3108403fad6d059944148948baf1769035947b268f9bb39fe2e',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.
@@ -26,19 +28,20 @@ const _frozenFiles = <String, String>{
   // covers the CLOSED hours label while preserving existing checkout behavior.
   'lib/features/cashier/cashier_screen.dart':
       '4053eeee83aa4a862b9411ca49c4121ea0f539812a6f8011c4ca089cad0112a9',
+  // 2026-10-20: immutable portion/spice names are covered by menu_portion_spice_test.
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.
   // Forward cursor ordering also covers capped pages and missing changed IDs.
   // 2026-10-08: eager-load and retain item notes; menu-request behavior is
   // covered by direct_order_support_test and operational kitchen suites.
   'lib/features/kitchen/kitchen_provider.dart':
-      'a78480eec8f93ba946dbef688ad5745930c5b469b7941d3a49b5a88a0e436cc8',
+      'fd35d653c09194249454d882aa5a5143df2827a68be7b2a441ea46b64c70cb25',
   'lib/features/kitchen/kitchen_screen.dart':
       '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
   // Receipt detail eagerly includes menu requests in the existing query.
   // Payment detail contracts cover the read; the atomic payment SQL is frozen.
   'lib/core/services/payment_service.dart':
-      '85442e4b0dd62d2fd540971b5b8d843c3590209299e6b4845bbfabc66032f34a',
+      '51f9d181fce06b2efb94ac073da3393e6e98a07ee418df252c812921fb9c0beb',
   // Sugar VAT and mixed combo amounts are covered by beverage_sugar_vat_test.
   'lib/core/payments/payment_total_calculator.dart':
       'ee04b6d78af1b0dfed8cd7669e2e3e513d9140ca5ed4e6a3f089c946186efb9b',

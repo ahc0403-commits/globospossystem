@@ -127,6 +127,12 @@ class KitchenItem {
       menuItemNameVi = menuItemRaw['name_vi']?.toString();
       menuItemNameEn = menuItemRaw['name_en']?.toString();
     }
+    final options = json['menu_option_snapshot'];
+    if (options is Map && options.isNotEmpty) {
+      menuItemNameKo = options['name_ko']?.toString() ?? menuItemNameKo;
+      menuItemNameVi = options['name_vi']?.toString() ?? menuItemNameVi;
+      menuItemNameEn = options['name_en']?.toString() ?? menuItemNameEn;
+    }
     final comboRaw = json['combo_components'];
     final comboComponents = comboRaw is List
         ? comboRaw
@@ -481,7 +487,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   ) => _db
       .from('orders')
       .select(
-        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, notes, combo_components, menu_items(name, name_ko, name_vi, name_en))',
+        'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, menu_option_snapshot, created_at, label, quantity, status, notes, combo_components, menu_items(name, name_ko, name_vi, name_en))',
       )
       .eq('restaurant_id', storeId)
       .gte('created_at', businessDay.startIso8601)

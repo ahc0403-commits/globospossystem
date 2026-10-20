@@ -94,6 +94,7 @@ class QrMenuCategory {
 class QrMenuItem {
   const QrMenuItem({
     required this.id,
+    this.menuOptionKey,
     required this.categoryId,
     required this.name,
     this.nameKo = '',
@@ -109,6 +110,7 @@ class QrMenuItem {
     this.comboDrinkOptions = const [],
   });
 
+  final String? menuOptionKey;
   final String id;
   final String? categoryId;
   final String name;
@@ -136,6 +138,7 @@ class QrMenuItem {
     final fallback = json['name']?.toString() ?? '';
     return QrMenuItem(
       id: json['id']?.toString() ?? '',
+      menuOptionKey: json['menu_option_key']?.toString(),
       categoryId: json['category_id']?.toString(),
       name: fallback,
       nameKo: json['name_ko']?.toString() ?? '',
@@ -214,11 +217,13 @@ int _jsonInt(dynamic value) => switch (value) {
 class QrOrderLine {
   const QrOrderLine({
     required this.menuItemId,
+    this.menuOptionKey,
     required this.quantity,
     this.isTakeout = false,
     this.comboDrinkChoices = const [],
   });
 
+  final String? menuOptionKey;
   final String menuItemId;
   final int quantity;
   final bool isTakeout;
@@ -226,6 +231,7 @@ class QrOrderLine {
 
   Map<String, dynamic> toJson() => {
     'menu_item_id': menuItemId,
+    if (menuOptionKey != null) 'menu_option_key': menuOptionKey,
     'quantity': quantity,
     if (isTakeout) 'is_takeout': true,
     if (comboDrinkChoices.isNotEmpty) 'combo_drink_choices': comboDrinkChoices,

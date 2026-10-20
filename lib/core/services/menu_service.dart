@@ -138,14 +138,18 @@ class MenuService {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    Map<String, dynamic>? menuOptions,
     BeverageTax? beverageTax,
     String? invoiceSaleUnit,
     required double price,
     required int sortOrder,
   }) async {
     final response = await supabase.rpc(
-      'admin_create_menu_item_with_invoice',
+      menuOptions == null
+          ? 'admin_create_menu_item_with_invoice'
+          : 'admin_create_menu_item_with_options',
       params: {
+        if (menuOptions != null) 'p_options': menuOptions,
         'p_store_id': storeId,
         'p_category_id': categoryId,
         'p_name_ko': nameKo,
@@ -238,14 +242,18 @@ class MenuService {
     required String nameVi,
     required String nameEn,
     String? paperlessNameVi,
+    Map<String, dynamic>? menuOptions,
     BeverageTax? beverageTax,
     required double price,
   }) async {
     await supabase.rpc(
-      beverageTax == null
+      menuOptions != null
+          ? 'admin_update_menu_item_with_options'
+          : beverageTax == null
           ? 'admin_update_menu_item_i18n_paperless'
           : 'admin_update_menu_item_with_tax',
       params: {
+        if (menuOptions != null) 'p_options': menuOptions,
         'p_item_id': itemId,
         'p_name_ko': nameKo,
         'p_name_vi': nameVi,

@@ -195,6 +195,7 @@ List<DirectOrderComboComponent> _comboComponents(Object? raw) {
 class DirectOrderMenuItem {
   const DirectOrderMenuItem({
     required this.id,
+    this.menuOptionKey,
     required this.categoryId,
     required this.nameKo,
     required this.nameVi,
@@ -210,6 +211,7 @@ class DirectOrderMenuItem {
     this.comboComponents = const [],
   });
 
+  final String? menuOptionKey;
   final String id;
   final String categoryId;
   final String nameKo;
@@ -227,6 +229,7 @@ class DirectOrderMenuItem {
   factory DirectOrderMenuItem.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {
       'id',
+      'menu_option_key',
       'category_id',
       'name_ko',
       'name_vi',
@@ -243,6 +246,7 @@ class DirectOrderMenuItem {
     });
     return DirectOrderMenuItem(
       id: _requiredString(json, 'id'),
+      menuOptionKey: _optionalString(json, 'menu_option_key'),
       categoryId: _requiredString(json, 'category_id'),
       nameKo: _requiredString(json, 'name_ko'),
       nameVi: _requiredString(json, 'name_vi'),

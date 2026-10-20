@@ -75,6 +75,7 @@ class _DirectOrderStorefrontScreenState
   bool _draftSubmitted = false;
   final _cart = <String, int>{};
   final _itemNotes = <String, String>{};
+  final _cartOptionKeys = <String, String>{};
   final _comboDrinkChoices = <String, List<String>>{};
   bool _comboSelecting = false;
   final _dinerController = TextEditingController(text: '1');
@@ -571,8 +572,12 @@ class _DirectOrderStorefrontScreenState
       if (next <= 0) {
         _cart.remove(itemId);
         _itemNotes.remove(itemId);
+        _cartOptionKeys.remove(itemId);
         _comboDrinkChoices.remove(itemId);
       } else {
+        if (!_cart.containsKey(itemId) && item.menuOptionKey != null) {
+          _cartOptionKeys[itemId] = item.menuOptionKey!;
+        }
         _cart[itemId] = next;
         if (choices != null) _comboDrinkChoices[itemId] = choices;
       }
@@ -594,6 +599,7 @@ class _DirectOrderStorefrontScreenState
       savedAt: DateTime.now().toUtc(),
       cart: Map.of(_cart),
       itemNotes: Map.of(_itemNotes),
+      menuOptionKeys: Map.of(_cartOptionKeys),
       comboChoices: _comboDrinkChoices.map(
         (k, v) => MapEntry(k, List<String>.of(v)),
       ),
@@ -616,7 +622,13 @@ class _DirectOrderStorefrontScreenState
     _submitDraftId = draft.id;
     for (final item in storefront.items) {
       final quantity = draft.cart[item.id];
-      if (quantity == null) continue;
+      if (quantity == null ||
+          draft.menuOptionKeys[item.id] != item.menuOptionKey) {
+        continue;
+      }
+      if (item.menuOptionKey != null) {
+        _cartOptionKeys[item.id] = item.menuOptionKey!;
+      }
       final choices = draft.comboChoices[item.id] ?? const <String>[];
       if (item.comboDrinkChoiceCount > 0 &&
           (choices.length != item.comboDrinkChoiceCount * quantity ||
@@ -914,6 +926,7 @@ class _DirectOrderStorefrontScreenState
         locale: _languageCode,
         cart: _cart,
         itemNotes: _itemNotes,
+        menuOptionKeys: _cartOptionKeys,
         comboDrinkChoices: _comboDrinkChoices,
         address: address,
         rememberAddress: _rememberAddress && !_isPickup,

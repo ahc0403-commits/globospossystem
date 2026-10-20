@@ -10,8 +10,8 @@ DECLARE
   scale integer; menu uuid; allocations jsonb; result jsonb; started timestamptz;
 BEGIN
   FOREACH scale IN ARRAY ARRAY[10,100,500] LOOP
-    INSERT INTO public.menu_items(restaurant_id,name,price)
-    VALUES('273b057e-3b69-46e3-93c1-6194c2802849','Scale laboratory '||scale,10000) RETURNING id INTO menu;
+    INSERT INTO public.menu_items(restaurant_id,name,price,portion_code,spice_level)
+    VALUES('273b057e-3b69-46e3-93c1-6194c2802849','Scale laboratory '||scale,10000,'S','spicy') RETURNING id INTO menu;
     INSERT INTO public.orders(id,restaurant_id,status,created_at)
     SELECT md5('direct-scale-order:'||scale||':'||n)::uuid,
       '273b057e-3b69-46e3-93c1-6194c2802849','pending',now()+n*interval '1 millisecond'
