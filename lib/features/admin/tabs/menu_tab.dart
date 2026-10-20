@@ -1208,15 +1208,19 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: priceController,
-                    key: const Key('admin_menu_item_price'),
-                    keyboardType: TextInputType.number,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(labelText: l10n.menuPrice),
-                  ),
+                  if (!menuOptions.hasSizes)
+                    TextField(
+                      controller: priceController,
+                      key: const Key('admin_menu_item_price'),
+                      keyboardType: TextInputType.number,
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(labelText: l10n.menuPrice),
+                    ),
                   const SizedBox(height: 16),
                   MenuOptionsEditor(
+                    allowSizes:
+                        menuNotifier.storeId ==
+                        '273b057e-3b69-46e3-93c1-6194c2802849',
                     value: menuOptions,
                     onChanged: (value) =>
                         setDialogState(() => menuOptions = value),
@@ -1290,10 +1294,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   final nameVi = nameViController.text.trim();
                   final paperlessNameVi = paperlessNameViController.text.trim();
                   final nameEn = nameEnController.text.trim();
-                  final price = parseDecimalInput(priceController.text);
+                  final price = menuOptions.hasSizes
+                      ? menuOptions.sizePrices['S']
+                      : parseDecimalInput(priceController.text);
                   if (nameKo.isEmpty ||
                       nameVi.isEmpty ||
                       nameEn.isEmpty ||
+                      !menuOptions.validSizePrices ||
                       price == null ||
                       price <= 0) {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
@@ -1482,14 +1489,15 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: priceController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                  if (!menuOptions.hasSizes)
+                    TextField(
+                      controller: priceController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(labelText: l10n.menuPrice),
                     ),
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(labelText: l10n.menuPrice),
-                  ),
                   const SizedBox(height: 16),
                   if (ref.read(authProvider).role == 'super_admin') ...[
                     InvoiceProfileEditor(
@@ -1499,6 +1507,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     const SizedBox(height: 16),
                   ],
                   MenuOptionsEditor(
+                    allowSizes:
+                        menuNotifier.storeId ==
+                        '273b057e-3b69-46e3-93c1-6194c2802849',
                     value: menuOptions,
                     onChanged: (value) =>
                         setDialogState(() => menuOptions = value),
@@ -1609,10 +1620,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   final nameVi = nameViController.text.trim();
                   final paperlessNameVi = paperlessNameViController.text.trim();
                   final nameEn = nameEnController.text.trim();
-                  final price = parseDecimalInput(priceController.text);
+                  final price = menuOptions.hasSizes
+                      ? menuOptions.sizePrices['S']
+                      : parseDecimalInput(priceController.text);
                   if (nameKo.isEmpty ||
                       nameVi.isEmpty ||
                       nameEn.isEmpty ||
+                      !menuOptions.validSizePrices ||
                       price == null ||
                       price <= 0) {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
@@ -2427,7 +2441,7 @@ class _ItemsPanel extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '₫${numberFormat.format(priceValue)} · ${isCombo ? l10n.menuComboVat : 'VAT ${BeverageTax.fromJson(item).vatRate(vatCategory: item['vat_category']?.toString()).toInt()}%'}',
+                                    '${MenuOptions.fromJson(item).hasSizes ? MenuOptions.fromJson(item).sizePrices.entries.map((e) => '${e.key} ₫${numberFormat.format(e.value)}').join(' · ') : '₫${numberFormat.format(priceValue)}'} · ${isCombo ? l10n.menuComboVat : 'VAT ${BeverageTax.fromJson(item).vatRate(vatCategory: item['vat_category']?.toString()).toInt()}%'}',
                                     style: AppFonts.system(
                                       color: AppColors.textSecondary,
                                       fontSize: 13,

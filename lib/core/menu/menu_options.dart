@@ -1,25 +1,50 @@
 import 'package:flutter/material.dart';
 
-/// One registered sellable choice has one stable menu ID and explicit price.
-/// Distinct sizes/spice choices therefore remain distinct in every existing cart.
+/// One registered dish can own both S/L prices. The chosen size is retained
+/// independently in carts and immutable order snapshots.
 class MenuOptions {
   const MenuOptions({
     this.portion = '',
     this.spice = 'unknown',
     this.choice = '',
+    this.sizePrices = const {},
   });
   final String portion;
   final String spice;
   final String choice;
+  final Map<String, double> sizePrices;
+  bool get hasSizes => sizePrices.isNotEmpty;
+  bool get validSizePrices =>
+      !hasSizes ||
+      (sizePrices.length == 2 &&
+          (sizePrices['S'] ?? 0) > 0 &&
+          (sizePrices['L'] ?? 0) > 0);
+  MenuOptions copyWith({
+    String? portion,
+    String? spice,
+    String? choice,
+    Map<String, double>? sizePrices,
+  }) => MenuOptions(
+    portion: portion ?? this.portion,
+    spice: spice ?? this.spice,
+    choice: choice ?? this.choice,
+    sizePrices: sizePrices ?? this.sizePrices,
+  );
 
   factory MenuOptions.fromJson(Map<String, dynamic> json) => MenuOptions(
     portion: json['portion_code']?.toString() ?? '',
     spice: json['spice_level']?.toString() ?? 'unknown',
     choice: json['spice_choice']?.toString() ?? '',
+    sizePrices: json['size_prices'] is Map
+        ? (json['size_prices'] as Map).map(
+            (key, value) => MapEntry(key.toString(), (value as num).toDouble()),
+          )
+        : const {},
   );
 
   Map<String, dynamic> toJson() => {
-    'portion_code': portion,
+    'portion_code': hasSizes ? 'S' : portion,
+    'size_prices': sizePrices,
     'spice_level': spice,
     'spice_choice': choice.trim(),
   };
@@ -29,9 +54,12 @@ class MenuOptions {
       other is MenuOptions &&
       portion == other.portion &&
       spice == other.spice &&
-      choice == other.choice;
+      choice == other.choice &&
+      sizePrices['S'] == other.sizePrices['S'] &&
+      sizePrices['L'] == other.sizePrices['L'];
   @override
-  int get hashCode => Object.hash(portion, spice, choice);
+  int get hashCode =>
+      Object.hash(portion, spice, choice, sizePrices['S'], sizePrices['L']);
 }
 
 String menuBaseName(Map<String, dynamic> item, String key) {
@@ -47,9 +75,11 @@ class MenuOptionsEditor extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.allowSizes = false,
   });
   final MenuOptions value;
   final ValueChanged<MenuOptions> onChanged;
+  final bool allowSizes;
 
   @override
   Widget build(BuildContext context) {
@@ -61,33 +91,80 @@ class MenuOptionsEditor extends StatelessWidget {
     };
     return ExpansionTile(
       key: const Key('admin_menu_options_expansion'),
-      title: Text(text('양·맵기', 'Khẩu phần · Độ cay', 'Portion & spiciness')),
+      title: Text(
+        allowSizes
+            ? text(
+                '사이즈별 가격·맵기',
+                'Giá theo cỡ · Độ cay',
+                'Size prices & spiciness',
+              )
+            : text('양·맵기', 'Khẩu phần · Độ cay', 'Portion & spiciness'),
+      ),
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DropdownButtonFormField<String>(
-              key: const Key('admin_menu_portion'),
-              initialValue: value.portion,
-              decoration: InputDecoration(
-                labelText: text('양', 'Khẩu phần', 'Portion'),
-              ),
-              items: [
-                DropdownMenuItem(
-                  value: '',
-                  child: Text(text('단일 규격', 'Một cỡ', 'Single size')),
-                ),
-                const DropdownMenuItem(value: 'S', child: Text('S')),
-                const DropdownMenuItem(value: 'L', child: Text('L')),
-              ],
-              onChanged: (v) => onChanged(
-                MenuOptions(
-                  portion: v ?? '',
-                  spice: value.spice,
-                  choice: value.choice,
+            if (allowSizes) ...[
+              SwitchListTile(
+                key: const Key('admin_menu_has_sizes'),
+                title: Text(text('사이즈별 가격', 'Giá theo cỡ', 'Prices by size')),
+                value: value.hasSizes,
+                onChanged: (enabled) => onChanged(
+                  value.copyWith(
+                    portion: '',
+                    sizePrices: enabled ? {'S': 0, 'L': 0} : {},
+                  ),
                 ),
               ),
-            ),
+              if (value.hasSizes)
+                for (final size in ['S', 'L'])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextFormField(
+                      key: Key('admin_menu_size_price_$size'),
+                      initialValue: (value.sizePrices[size] ?? 0) <= 0
+                          ? ''
+                          : value.sizePrices[size]!.toStringAsFixed(0),
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(labelText: '$size · VND'),
+                      onChanged: (text) => onChanged(
+                        value.copyWith(
+                          sizePrices: {
+                            ...value.sizePrices,
+                            size:
+                                double.tryParse(
+                                  text.replaceAll(',', '').trim(),
+                                ) ??
+                                0,
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+            ] else
+              DropdownButtonFormField<String>(
+                key: const Key('admin_menu_portion'),
+                initialValue: value.portion,
+                decoration: InputDecoration(
+                  labelText: text('양', 'Khẩu phần', 'Portion'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: '',
+                    child: Text(text('단일 규격', 'Một cỡ', 'Single size')),
+                  ),
+                  const DropdownMenuItem(value: 'S', child: Text('S')),
+                  const DropdownMenuItem(value: 'L', child: Text('L')),
+                ],
+                onChanged: (v) => onChanged(
+                  MenuOptions(
+                    portion: v ?? '',
+                    spice: value.spice,
+                    choice: value.choice,
+                    sizePrices: value.sizePrices,
+                  ),
+                ),
+              ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               key: const Key('admin_menu_spice'),
@@ -114,6 +191,7 @@ class MenuOptionsEditor extends StatelessWidget {
                   portion: value.portion,
                   spice: v ?? 'unknown',
                   choice: value.choice,
+                  sizePrices: value.sizePrices,
                 ),
               ),
             ),
@@ -134,14 +212,21 @@ class MenuOptionsEditor extends StatelessWidget {
                   portion: value.portion,
                   spice: value.spice,
                   choice: v,
+                  sizePrices: value.sizePrices,
                 ),
               ),
             ),
             Text(
               text(
-                'S와 L은 각각 메뉴로 등록하고 실제 판매 가격을 입력하세요. 조절 가능한 맵기도 허용하는 선택마다 등록하세요. 주문자는 등록된 선택만 주문할 수 있습니다.',
-                'Đăng ký riêng S và L với giá bán thực tế. Nếu cho phép đổi độ cay, đăng ký từng lựa chọn được phép.',
-                'Register S and L separately with their actual prices. For adjustable dishes, register each permitted spice choice.',
+                allowSizes
+                    ? '메뉴는 한 번만 등록합니다. S와 L 가격을 입력하면 고객이 메뉴를 눌러 사이즈를 선택합니다.'
+                    : '등록된 규격과 실제 판매 가격을 입력하세요.',
+                allowSizes
+                    ? 'Đăng ký một món với giá S và L. Khách chọn cỡ sau khi chọn món.'
+                    : 'Nhập khẩu phần và giá bán thực tế.',
+                allowSizes
+                    ? 'Register one dish with S and L prices. Customers tap the dish and choose a size.'
+                    : 'Enter the registered portion and its actual price.',
               ),
             ),
           ],

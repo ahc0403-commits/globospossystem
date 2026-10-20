@@ -1,3 +1,4 @@
+import '../core/menu/menu_sizes.dart';
 import '../core/i18n/menu_localization.dart';
 import 'dart:async';
 
@@ -484,19 +485,77 @@ class _MenuBrowser extends StatelessWidget {
                           };
                           final addItem = menuItemId.isEmpty
                               ? null
-                              : () => onAddItem(
-                                  CartItem(
-                                    menuItemId: menuItemId,
-                                    menuOptionKey: item['menu_option_key']
-                                        ?.toString(),
-                                    name: name,
-                                    nameKo: item['name_ko']?.toString(),
-                                    nameVi: item['name_vi']?.toString(),
-                                    nameEn: item['name_en']?.toString(),
-                                    price: price,
-                                    quantity: 1,
-                                  ),
-                                );
+                              : () async {
+                                  final options =
+                                      (item['size_options'] as List?)
+                                          ?.whereType<Map>()
+                                          .where(
+                                            (option) =>
+                                                option['is_available'] ==
+                                                    true &&
+                                                option['is_archived'] != true,
+                                          )
+                                          .map(
+                                            (option) =>
+                                                Map<String, dynamic>.from(
+                                                  option,
+                                                ),
+                                          )
+                                          .toList() ??
+                                      const <Map<String, dynamic>>[];
+                                  if (options.isNotEmpty) {
+                                    final language = Localizations.localeOf(
+                                      context,
+                                    ).languageCode;
+                                    final selected = await showMenuSizePicker(
+                                      context,
+                                      title: displayName,
+                                      languageCode: language,
+                                      options: [
+                                        for (final option in options)
+                                          MenuSizeOption(
+                                            id: option['id'].toString(),
+                                            size: option['portion_code']
+                                                .toString(),
+                                            price: (option['price'] as num)
+                                                .toDouble(),
+                                          ),
+                                      ],
+                                    );
+                                    if (selected == null) return;
+                                    final option = options.firstWhere(
+                                      (o) => o['id'] == selected.optionId,
+                                    );
+                                    onAddItem(
+                                      CartItem(
+                                        menuItemId: option['id'].toString(),
+                                        menuOptionKey: option['menu_option_key']
+                                            ?.toString(),
+                                        name: option['name'].toString(),
+                                        nameKo: option['name_ko']?.toString(),
+                                        nameVi: option['name_vi']?.toString(),
+                                        nameEn: option['name_en']?.toString(),
+                                        price: (option['price'] as num)
+                                            .toDouble(),
+                                        quantity: 1,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  onAddItem(
+                                    CartItem(
+                                      menuItemId: menuItemId,
+                                      menuOptionKey: item['menu_option_key']
+                                          ?.toString(),
+                                      name: name,
+                                      nameKo: item['name_ko']?.toString(),
+                                      nameVi: item['name_vi']?.toString(),
+                                      nameEn: item['name_en']?.toString(),
+                                      price: price,
+                                      quantity: 1,
+                                    ),
+                                  );
+                                };
 
                           return Semantics(
                             key: index == 0
@@ -573,7 +632,18 @@ class _MenuBrowser extends StatelessWidget {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              '₫${currency.format(price)}',
+                                              item['size_prices'] is Map &&
+                                                      (item['size_prices']
+                                                              as Map)
+                                                          .isNotEmpty
+                                                  ? (item['size_prices'] as Map)
+                                                        .entries
+                                                        .map(
+                                                          (e) =>
+                                                              '${e.key} ₫${currency.format(e.value)}',
+                                                        )
+                                                        .join(' · ')
+                                                  : '₫${currency.format(price)}',
                                               style: PosNumericText.amountLine
                                                   .copyWith(
                                                     color: PosColors.accent,

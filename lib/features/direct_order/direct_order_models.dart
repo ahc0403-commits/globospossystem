@@ -1,3 +1,4 @@
+import '../../core/menu/menu_sizes.dart';
 import 'dart:convert';
 
 import '../../core/i18n/menu_localization.dart';
@@ -225,6 +226,11 @@ class DirectOrderMenuItem {
   final bool isCombo;
   final int comboDrinkChoiceCount;
   final List<DirectOrderComboComponent> comboDrinkOptions, comboComponents;
+
+  MenuSizeMetadata? get sizeMetadata => MenuSizeMetadata.fromKey(menuOptionKey);
+  String catalogName(String languageCode) => sizeMetadata == null
+      ? localizedName(languageCode)
+      : localizedMenuName(sizeMetadata!.names, languageCode);
 
   factory DirectOrderMenuItem.fromJson(Map<String, dynamic> json) {
     _expectKeys(json, const {

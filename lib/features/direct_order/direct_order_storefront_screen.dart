@@ -1,3 +1,4 @@
+import '../../core/menu/menu_sizes.dart';
 import 'direct_order_translation.dart';
 import 'direct_order_menu_search.dart';
 import 'direct_order_cart_draft.dart';
@@ -2010,7 +2011,14 @@ class _DirectOrderStorefrontScreenState
   Widget _buildMenu() {
     final storefront = _storefront!;
     final query = _menuSearchController.text;
+    final sizeGroups = <String, List<DirectOrderMenuItem>>{};
+    for (final option in storefront.items) {
+      final groupId = option.sizeMetadata?.menuId;
+      if (groupId != null) (sizeGroups[groupId] ??= []).add(option);
+    }
+    final seen = <String>{};
     final matching = storefront.items
+        .where((item) => seen.add(item.sizeMetadata?.menuId ?? item.id))
         .where(
           (item) =>
               (_selectedCategoryId == null ||
@@ -2100,7 +2108,12 @@ class _DirectOrderStorefrontScreenState
               ),
               ...matching
                   .where((item) => item.categoryId == category.id)
-                  .map((item) => _menuCard(item)),
+                  .map(
+                    (item) => _menuCard(
+                      item,
+                      sizeOptions: sizeGroups[item.sizeMetadata?.menuId],
+                    ),
+                  ),
             ],
           ],
         ),
@@ -2122,7 +2135,51 @@ class _DirectOrderStorefrontScreenState
     );
   }
 
-  Widget _menuCard(DirectOrderMenuItem item) {
+  Widget _sizedMenuCard(
+    DirectOrderMenuItem item,
+    List<DirectOrderMenuItem> options,
+  ) {
+    return Card(
+      child: ListTile(
+        key: Key('direct_choose_size_${item.sizeMetadata!.menuId}'),
+        title: Text(item.catalogName(_languageCode)),
+        subtitle: Text(
+          options
+              .map(
+                (option) =>
+                    '${option.sizeMetadata!.size} ${_money.format(option.price)}',
+              )
+              .join(' · '),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          final selected = await showMenuSizePicker(
+            context,
+            title: item.catalogName(_languageCode),
+            languageCode: _languageCode,
+            options: [
+              for (final option in options)
+                MenuSizeOption(
+                  id: option.id,
+                  size: option.sizeMetadata!.size,
+                  price: option.price,
+                ),
+            ],
+          );
+          if (selected == null || !mounted) return;
+          await _changeQuantity(selected.optionId, 1);
+        },
+      ),
+    );
+  }
+
+  Widget _menuCard(
+    DirectOrderMenuItem item, {
+    List<DirectOrderMenuItem>? sizeOptions,
+  }) {
+    if (item.sizeMetadata != null) {
+      return _sizedMenuCard(item, sizeOptions ?? [item]);
+    }
     final quantity = _cart[item.id] ?? 0;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),

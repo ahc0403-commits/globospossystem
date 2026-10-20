@@ -1,3 +1,4 @@
+import '../../core/menu/menu_sizes.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -43,6 +44,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   final _uuid = const Uuid();
   final _currency = NumberFormat('#,###', 'vi_VN');
   QrOrderMenu? _menu;
+  Map<String, List<QrMenuItem>> _sizeGroups = {};
   QrActiveOrder? _activeOrder;
   QrOrderResult? _result;
   String? _selectedCategoryId;
@@ -56,6 +58,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   int _orderContextEpoch = 0;
   String _languageCode = 'vi';
   final Map<String, int> _cart = <String, int>{};
+  final Map<String, String?> _cartOptionKeys = {};
   final Map<String, List<String>> _comboDrinkChoices = <String, List<String>>{};
   Timer? _menuRefreshTimer;
   Timer? _displayResetTimer;
@@ -127,6 +130,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       setState(() {
         _orderContextEpoch++;
         _cart.clear();
+        _cartOptionKeys.clear();
         _comboDrinkChoices.clear();
         _clientOrderId = null;
         _result = null;
@@ -231,6 +235,11 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       unawaited(_subscribeMenuEvents(menu.storeId));
       setState(() {
         _menu = menu;
+        _sizeGroups = {};
+        for (final option in menu.items) {
+          final groupId = option.sizeMetadata?.menuId;
+          if (groupId != null) (_sizeGroups[groupId] ??= []).add(option);
+        }
         _applyActiveOrder(activeOrder);
         final categoryStillExists = menu.categories.any(
           (category) => category.id == _selectedCategoryId,
@@ -241,6 +250,23 @@ class _QrOrderScreenState extends State<QrOrderScreen>
               : menu.categories.first.id;
         }
         final availableIds = menu.items.map((item) => item.id).toSet();
+        final keys = {
+          for (final item in menu.items) item.id: item.menuOptionKey,
+        };
+        final stale = _cart.keys
+            .where(
+              (line) =>
+                  _cartOptionKeys[line] != keys[_menuItemIdFromLineKey(line)],
+            )
+            .toList();
+        for (final line in stale) {
+          _cart.remove(line);
+          _cartOptionKeys.remove(line);
+          _comboDrinkChoices.remove(line);
+        }
+        if (stale.isNotEmpty) {
+          _failure = _copy.failureFor('QR_MENU_ITEM_UNAVAILABLE');
+        }
         _cart.removeWhere(
           (lineKey, _) =>
               !availableIds.contains(_menuItemIdFromLineKey(lineKey)),
@@ -255,6 +281,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
             (lineKey, _) => lineKey.endsWith('|takeout'),
           );
         }
+        _cartOptionKeys.removeWhere((line, _) => !_cart.containsKey(line));
         for (final item in menu.items) {
           for (final isTakeout
               in menu.isTakeoutEnabled ? const [false, true] : const [false]) {
@@ -312,6 +339,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     if (orderClosed || orderChanged) {
       _result = null;
       _cart.clear();
+      _cartOptionKeys.clear();
       _comboDrinkChoices.clear();
       _clientOrderId = null;
       _isRequestingLeftoverPackaging = false;
@@ -348,8 +376,14 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     final menu = _menu;
     if (menu == null) return const <QrMenuItem>[];
     final categoryId = _selectedCategoryId;
-    if (categoryId == null) return menu.items;
-    return menu.items.where((item) => item.categoryId == categoryId).toList();
+    final seen = <String>{};
+    return menu.items
+        .where(
+          (item) =>
+              (categoryId == null || item.categoryId == categoryId) &&
+              seen.add(item.sizeMetadata?.menuId ?? item.id),
+        )
+        .toList();
   }
 
   List<({QrMenuItem item, int quantity, bool isTakeout, String lineKey})>
@@ -395,6 +429,15 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     required bool isTakeout,
   }) async {
     if (isTakeout && _menu?.isTakeoutEnabled != true) return;
+    if (_menu?.items.any(
+          (current) =>
+              current.id == item.id &&
+              current.menuOptionKey == item.menuOptionKey,
+        ) !=
+        true) {
+      setState(() => _failure = _copy.failureFor('QR_MENU_ITEM_UNAVAILABLE'));
+      return;
+    }
     final lineKey = _lineKey(item.id, isTakeout);
     final currentQuantity = _cart[lineKey] ?? 0;
     final choiceCount = item.comboDrinkChoiceCount;
@@ -426,9 +469,11 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     setState(() {
       if (quantity <= 0) {
         _cart.remove(lineKey);
+        _cartOptionKeys.remove(lineKey);
         _comboDrinkChoices.remove(lineKey);
       } else {
         _cart[lineKey] = quantity.clamp(1, 20);
+        _cartOptionKeys.putIfAbsent(lineKey, () => item.menuOptionKey);
         if (choiceCount > 0) {
           _comboDrinkChoices[lineKey] = choices;
         }
@@ -436,6 +481,84 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       _clientOrderId = null;
       _failure = null;
     });
+  }
+
+  Widget _sizedMenuTile(QrMenuItem item) {
+    final options = _sizeGroups[item.sizeMetadata!.menuId] ?? [item];
+    final title = item.catalogName(_languageCode);
+    final prices = options
+        .map(
+          (option) =>
+              '${option.sizeMetadata!.size} ${_currency.format(option.price)} VND',
+        )
+        .join(' · ');
+    return Semantics(
+      key: Key('qr_menu_item_${item.sizeMetadata!.menuId}'),
+      button: true,
+      child: Card(
+        child: InkWell(
+          key: Key('qr_choose_size_${item.sizeMetadata!.menuId}'),
+          onTap: () async {
+            final selected = await showMenuSizePicker(
+              context,
+              title: title,
+              languageCode: _languageCode,
+              allowTakeout: _menu!.isTakeoutEnabled,
+              options: [
+                for (final option in options)
+                  MenuSizeOption(
+                    id: option.id,
+                    size: option.sizeMetadata!.size,
+                    price: option.price,
+                  ),
+              ],
+            );
+            if (selected == null || !mounted) return;
+            final option = options.firstWhere((o) => o.id == selected.optionId);
+            await _setQuantity(
+              option,
+              (_cart[_lineKey(option.id, selected.isTakeout)] ?? 0) + 1,
+              isTakeout: selected.isTakeout,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(prices),
+                const SizedBox(height: 8),
+                Text(switch (_languageCode) {
+                  'ko' => '사이즈 선택',
+                  'vi' => 'Chọn cỡ',
+                  _ => 'Choose size',
+                }),
+                for (final option in options)
+                  for (final takeout
+                      in _menu!.isTakeoutEnabled ? [false, true] : [false])
+                    if ((_cart[_lineKey(option.id, takeout)] ?? 0) > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _QrLabeledStepper(
+                          label:
+                              '${option.sizeMetadata!.size} · ${takeout ? _copy.takeout : _copy.dineIn}',
+                          itemId: takeout ? '${option.id}_takeout' : option.id,
+                          itemName: option.localizedName(_languageCode),
+                          quantity: _cart[_lineKey(option.id, takeout)]!,
+                          copy: _copy,
+                          onChanged: (quantity) => unawaited(
+                            _setQuantity(option, quantity, isTakeout: takeout),
+                          ),
+                        ),
+                      ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _submitOrder() async {
@@ -483,7 +606,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
           for (final line in submittedItems)
             QrOrderLine(
               menuItemId: line.item.id,
-              menuOptionKey: line.item.menuOptionKey,
+              menuOptionKey: _cartOptionKeys[line.lineKey],
               quantity: line.quantity,
               isTakeout: line.isTakeout,
               comboDrinkChoices:
@@ -514,6 +637,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
           ],
         );
         _cart.clear();
+        _cartOptionKeys.clear();
         _comboDrinkChoices.clear();
         _clientOrderId = null;
         _isSubmitting = false;
@@ -752,6 +876,9 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                             const SizedBox(height: ToastSpacingTokens.sm),
                         itemBuilder: (context, index) {
                           final item = _visibleItems[index];
+                          if (item.sizeMetadata != null) {
+                            return _sizedMenuTile(item);
+                          }
                           return _QrMenuItemTile(
                             item: item,
                             languageCode: _languageCode,
@@ -1847,142 +1974,148 @@ class _QrReviewDialog extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: 560, maxHeight: maxHeight),
         child: Padding(
           padding: const EdgeInsets.all(ToastSpacingTokens.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Semantics(
-                header: true,
-                child: Text(
-                  copy.confirmTitle,
-                  style: AppFonts.system(
-                    color: ToastColorTokens.textPrimary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    height: 1.25,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    copy.confirmTitle,
+                    style: AppFonts.system(
+                      color: ToastColorTokens.textPrimary,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      height: 1.25,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: ToastSpacingTokens.sm),
-              Text(
-                copy.confirmBody,
-                style: AppFonts.system(
-                  color: ToastColorTokens.textSecondary,
-                  fontSize: 14,
-                  height: 1.45,
+                const SizedBox(height: ToastSpacingTokens.sm),
+                Text(
+                  copy.confirmBody,
+                  style: AppFonts.system(
+                    color: ToastColorTokens.textSecondary,
+                    fontSize: 14,
+                    height: 1.45,
+                  ),
                 ),
-              ),
-              const SizedBox(height: ToastSpacingTokens.lg),
-              Flexible(
-                child: ListView.separated(
-                  key: const Key('qr_review_items'),
-                  shrinkWrap: true,
-                  itemCount: lines.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: ToastSpacingTokens.lg),
-                  itemBuilder: (context, index) {
-                    final line = lines[index];
-                    final drinks = comboDrinkNames[line.lineKey] ?? const [];
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                line.item.localizedName(languageCode),
-                                style: AppFonts.system(
-                                  color: ToastColorTokens.textPrimary,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.4,
-                                ),
-                              ),
-                              const SizedBox(height: ToastSpacingTokens.xs),
-                              Text(
-                                line.isTakeout ? copy.takeout : copy.dineIn,
-                                key: Key('qr_review_mode_${line.lineKey}'),
-                                style: AppFonts.system(
-                                  color: line.isTakeout
-                                      ? ToastColorTokens.warning
-                                      : ToastColorTokens.textSecondary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              if (drinks.isNotEmpty) ...[
-                                const SizedBox(height: ToastSpacingTokens.xs),
+                const SizedBox(height: ToastSpacingTokens.lg),
+                SizedBox(
+                  child: ListView.separated(
+                    key: const Key('qr_review_items'),
+                    physics: const NeverScrollableScrollPhysics(),
+                    shrinkWrap: true,
+                    itemCount: lines.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: ToastSpacingTokens.lg),
+                    itemBuilder: (context, index) {
+                      final line = lines[index];
+                      final drinks = comboDrinkNames[line.lineKey] ?? const [];
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  drinks.join(', '),
-                                  key: Key(
-                                    'qr_review_combo_drinks_${line.isTakeout ? '${line.item.id}_takeout' : line.item.id}',
-                                  ),
+                                  line.item.localizedName(languageCode),
                                   style: AppFonts.system(
-                                    color: ToastColorTokens.textSecondary,
-                                    fontSize: 13,
+                                    color: ToastColorTokens.textPrimary,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
                                     height: 1.4,
                                   ),
                                 ),
+                                const SizedBox(height: ToastSpacingTokens.xs),
+                                Text(
+                                  line.isTakeout ? copy.takeout : copy.dineIn,
+                                  key: Key('qr_review_mode_${line.lineKey}'),
+                                  style: AppFonts.system(
+                                    color: line.isTakeout
+                                        ? ToastColorTokens.warning
+                                        : ToastColorTokens.textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                if (drinks.isNotEmpty) ...[
+                                  const SizedBox(height: ToastSpacingTokens.xs),
+                                  Text(
+                                    drinks.join(', '),
+                                    key: Key(
+                                      'qr_review_combo_drinks_${line.isTakeout ? '${line.item.id}_takeout' : line.item.id}',
+                                    ),
+                                    style: AppFonts.system(
+                                      color: ToastColorTokens.textSecondary,
+                                      fontSize: 13,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: ToastSpacingTokens.sm),
-                        Text(
-                          '×${line.quantity}',
-                          style: AppFonts.system(
-                            color: ToastColorTokens.textPrimary,
-                            fontWeight: FontWeight.w800,
-                            fontFeatures: const [FontFeature.tabularFigures()],
+                          const SizedBox(width: ToastSpacingTokens.sm),
+                          Text(
+                            '×${line.quantity}',
+                            style: AppFonts.system(
+                              color: ToastColorTokens.textPrimary,
+                              fontWeight: FontWeight.w800,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  },
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
-              const Divider(height: ToastSpacingTokens.xxl),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
+                const Divider(height: ToastSpacingTokens.xxl),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
+                    Text(
                       copy.reviewTotal,
                       style: AppFonts.system(
                         color: ToastColorTokens.textSecondary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ),
-                  Text(
-                    totalLabel,
-                    style: AppFonts.system(
-                      color: ToastColorTokens.accentStrong,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                    Text(
+                      totalLabel,
+                      style: AppFonts.system(
+                        color: ToastColorTokens.accentStrong,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: ToastSpacingTokens.lg),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: ToastSpacingTokens.sm,
-                runSpacing: ToastSpacingTokens.sm,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(copy.cancel),
-                  ),
-                  FilledButton(
-                    key: const Key('qr_confirm_submit'),
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: Text(copy.submit),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+                const SizedBox(height: ToastSpacingTokens.lg),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: ToastSpacingTokens.sm,
+                  runSpacing: ToastSpacingTokens.sm,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: Text(copy.cancel),
+                    ),
+                    FilledButton(
+                      key: const Key('qr_confirm_submit'),
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: Text(copy.submit),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

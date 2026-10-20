@@ -193,7 +193,7 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
       sourceRow,
       issues,
     );
-    final price = _parseNumber(rawPrice);
+    final price = _parseNumber(rawPrice.isEmpty ? text('S가격(VND)') : rawPrice);
     if (price == null || price <= 0) {
       issues.add('$sourceRow행: 가격은 0보다 큰 숫자여야 합니다.');
     }
@@ -376,7 +376,13 @@ BeverageTax? parseBeverageTaxExcelRow(
   return tax;
 }
 
-const menuOptionsExcelHeaders = ['양(S/L)', '기본맵기', '맵기선택명'];
+const menuOptionsExcelHeaders = [
+  '양(S/L)',
+  '기본맵기',
+  '맵기선택명',
+  'S가격(VND)',
+  'L가격(VND)',
+];
 Map<String, dynamic>? parseMenuOptionsExcelRow(
   Map<String, int> headers,
   String Function(String) text,
@@ -384,6 +390,21 @@ Map<String, dynamic>? parseMenuOptionsExcelRow(
   List<String> issues,
 ) {
   final result = <String, dynamic>{};
+  if (headers.containsKey('S가격(VND)') || headers.containsKey('L가격(VND)')) {
+    final small = text('S가격(VND)');
+    final large = text('L가격(VND)');
+    if (small.isEmpty && large.isEmpty) {
+      result['size_prices'] = <String, double>{};
+    } else {
+      final s = _parseNumber(small);
+      final l = _parseNumber(large);
+      if (s == null || l == null || s <= 0 || l <= 0) {
+        issues.add('$row행: S와 L 가격을 모두 양수로 입력하세요.');
+      } else {
+        result['size_prices'] = {'S': s, 'L': l};
+      }
+    }
+  }
   if (headers.containsKey('양(S/L)')) {
     final portion = text('양(S/L)').toUpperCase();
     if (!['', 'S', 'L'].contains(portion)) {

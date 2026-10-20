@@ -461,6 +461,69 @@ Future<void> _openAddress(WidgetTester tester, {bool fillDiners = true}) async {
 }
 
 void main() {
+  testWidgets(
+    'customer taps one dish and chooses S/L prices without extra catalog reads',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      final service = _StorefrontFixtureService(
+        defaultMenu: false,
+        extraItems: [
+          for (final size in ['S', 'L'])
+            DirectOrderMenuItem(
+              id: size == 'S' ? 'small' : 'large',
+              categoryId: 'popular',
+              nameKo: '$size · 탕수육',
+              nameVi: '$size · Thịt',
+              nameEn: '$size · Pork',
+              description: null,
+              price: size == 'S' ? 190000 : 370000,
+              imageUrl: null,
+              vatCategory: 'food',
+              sortOrder: 0,
+              menuOptionKey: jsonEncode([
+                size,
+                'unknown',
+                '',
+                size == 'S' ? 190000 : 370000,
+                {
+                  'menu_id': 'small',
+                  'names': {
+                    'name_ko': '탕수육',
+                    'name_vi': 'Thịt',
+                    'name_en': 'Pork',
+                  },
+                },
+              ]),
+            ),
+        ],
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, locale: const Locale('ko')),
+      );
+      await tester.pumpAndSettle();
+      final reads = service.fetchStorefrontCalls;
+      final card = find.byKey(const Key('direct_choose_size_small'));
+      await _revealMenu(tester, card);
+      expect(find.byKey(const Key('direct_choose_size_large')), findsNothing);
+      for (final size in ['S', 'L']) {
+        await tester.tap(card);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(Key('menu_size_$size')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const Key('direct_view_cart')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_cart_item_small')), findsOneWidget);
+      expect(find.byKey(const Key('direct_cart_item_large')), findsOneWidget);
+      expect(service.submitCalls, 0);
+      expect(service.fetchStorefrontCalls, reads);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('cart survives closing and reopening the storefront', (
     tester,
   ) async {
