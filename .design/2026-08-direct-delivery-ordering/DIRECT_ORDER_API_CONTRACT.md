@@ -161,7 +161,7 @@ staff viewer's current app locale. See `DIRECT_ORDER_LOCALE_CONTRACT.md`.
 - Input: session ID, secret, request UUID, trimmed message 1–2,000.
 - Output exactly `message_id`, `created_at`.
 - Side effect/idempotency: one SQL write stores the exact author-entered body;
-  non-idempotent. No machine translation is performed.
+  non-idempotent. Free text is enqueued for asynchronous translation without changing the original body.
 - Errors: invalid text, unavailable ownership, terminal-state conflict.
 
 ### `cancel`
@@ -285,7 +285,8 @@ for super_admin, staff functions require the requested store in
 | `direct_order_staff_sepay_candidates_v2(uuid,uuid) -> jsonb` | C/A store | Lists recent exact-store/exact-amount matched incoming transactions, excluding a transaction consumed by another request | forbidden, quote not found |
 | `direct_order_staff_link_sepay(uuid,uuid,uuid) -> jsonb` | C/A store | Locks the provider transaction, validates exact store/direction/status/amount/age, enforces one request per transaction, locks the quote and enters payment review; pair replay is idempotent and never approves | quote/candidate invalid, transaction already used |
 | `direct_order_staff_verified_payment_evidence(uuid,uuid) -> jsonb` | C/A store | Returns only the linked transaction that still matches the locked quote; read-only and retry-safe | forbidden |
-| `direct_order_approve_payment(uuid,uuid,numeric,text) -> jsonb` | C/A store | Compatibility approval anchor; now requires a linked verified transaction matching the locked quote before creating the legacy graph and calling unchanged `process_payment` once | all approval preconditions; reconciliation is sanitized 503 |
+| `direct_order_approve_payment(uuid,uuid,numeric,text) -> jsonb` | C/A store | Atomic approval anchor; authenticated staff may confirm a customer photo belonging to the locked quote, without SePay. The optional legacy verified-transfer caller is preserved. Creates the financial/ticket graph and calls unchanged `process_payment` once | all approval preconditions; reconciliation is sanitized 503 |
+| `direct_order_approve_photo_payment(uuid,uuid,numeric,uuid,uuid) -> jsonb` | C/A store | Staff confirm the displayed amount, quote ID and latest photo ID; validates under the request lock, invokes the common approval anchor, snapshots delivery mode, and returns the same payment/ticket IDs on retry. No bank API or SePay lookup | proof required, review changed, amount mismatch, resubmission pending, forbidden plus approval errors |
 | `direct_order_approve_verified_payment(uuid,uuid) -> jsonb` | C/A store | Derives amount/reference from verified evidence, invokes the atomic approval anchor, snapshots delivery mode, and attempts the first customer Bill job without making payment depend on printing | verified payment required plus approval errors |
 | `direct_order_customer_receipt_status(uuid,uuid) -> jsonb` | C/A store | Reads the latest customer receipt job and whether a completed first copy permits reprint | forbidden, request not approved |
 | `enqueue_direct_order_customer_receipt(uuid,uuid,bool) -> jsonb` | C/A store | First-copy retries reuse batch 1; reprint requires a completed copy and creates explicit history | request not approved, reprint unavailable |
@@ -345,7 +346,121 @@ codes use the same localized unavailable fallback and are never shown raw.
   corrupt or old cache is deleted instead of being submitted.
 - User-entered address/note and chat remain exact original data. UI labels,
   fixed system codes, status, and errors still render in the current viewer's
-  selected KO/VI/EN locale; free-text chat is not machine-translated.
+  selected KO/VI/EN locale. Optional `metadata.translations` and `translation_status` render translated free text while preserving the original.
 - Cashier detail returns request-time `name_ko/name_vi/name_en`; direct ticket
   list returns approval-time `name_ko/name_vi/name_en`. Staff Flutter selects
   among these using its current viewer locale and never request locale.
+
+## 2026-10-05 kitchen packing projection
+
+`direct_delivery_ticket_list_v3(uuid,text[],integer)` preserves the legacy
+ticket/item fields and adds only `delivery: {diner_count, method, version}`.
+It authorizes the actor once, selects at most 200 tickets for the current
+Asia/Ho_Chi_Minh business day, and reads items/packing as one set. It does not
+invoke `direct_order_fulfillment_context` per ticket. Provider/quote/refund
+context remains on authorized single-request detail/status. The effective
+definition is `20261005020000_direct_order_fallback_set_based_reads.sql`.
+
+## 2026-10-06 proof recovery and receipt packing
+
+V1/V2 proof commit share `verifyProofUpload`. A successful empty exact-name list
+returns 409 `PROOF_UPLOAD_INCOMPLETE`; list/download/blob-read failures return
+503 `PROOF_TEMPORARILY_UNAVAILABLE` and never remove the file. Only bytes read
+successfully and rejected by existing image validation are removed. Existing
+private Storage, MIME/5 MiB/dimension limits and SQL ownership checks remain.
+
+Flutter keeps a `DirectOrderProofAttempt` per order in screen memory. Lost Storage
+or commit responses reuse its original path/quote/review and call commit before
+uploading again. Only a definite missing object permits retransmitting to the same
+signed path. SDK `FunctionException` envelopes are normalized to the public code.
+Commit responses do not overwrite request state; current status is fetched with
+request/revision guards, so an approved order cannot regress to payment review.
+
+`direct_order_receipt_packing_context(p_store_id uuid,p_order_id uuid)` is an
+additive authenticated staff RPC, allowing cashier/admin/store_admin/brand_admin/
+super_admin with existing store authorization. It validates order/store ownership,
+returns SQL NULL for ordinary POS orders, and returns exactly `diner_count`
+(nullable integer 1..100), `fulfillment_method` and `direct_order_reference` for a
+linked direct order. It returns no customer/financial information and creates no
+job/payment. Flutter uses `DirectOrderStaffService.fetchOrderPackingContext` only
+at native print time; the atomic `PaymentService` file remains unchanged.
+
+Migration `20261006010000_direct_order_receipt_packing_context.sql` enriches new
+print payloads with the reference and new direct digital snapshots with the three
+packing fields. Combined digital snapshots are excluded. Print enrichment applies
+to all copy types for a linked direct order. BEFORE INSERT triggers do not update issued snapshots or jobs in
+pending/failed/printing/done states. New dedicated reprints capture current counts.
+The migration does not redefine `process_payment`, financial calculations or
+approval, and is source-only until separately applied through the release gate.
+
+
+## Customer experience additions — 2026-10-06
+
+- Public Edge action `push_subscription`: session-owned, rate limit 10 per minute. Input: `session_id`, `session_secret`, UUID `device_id`, `locale` in KO/VI/EN, boolean `enabled`, and FCM `token` only when enabled. The Edge hashes the secret and calls service-only `direct_order_public_push_subscription`. Output is exactly `{enabled: boolean}` inside the existing data envelope. Raw tokens and secrets never cross staff/public read APIs or logs. Up to five device identities are allowed per session; unsubscribe sends no token.
+- Authenticated `direct_order_staff_list_v3(p_store_id,p_states,p_limit)` retains the queue row shape and adds `display_stage` and `refund_pending`. Filters accept customer stage keys or existing request/ticket state keys before the server limit (1..200). Store/role boundaries stay identical to the cashier list. Existing v2 endpoints remain available.
+- Existing public status `created_at` and `items` are now retained in the Dart model for details; no extra public item endpoint is added. Existing submit item `note` persists menu requests.
+- Internal `direct-order-notification-dispatcher`: POST authenticated by CRON_SECRET or service role; claims at most 50 deliveries once, runs at most eight FCM workers, and acknowledges each lease. Claims/acknowledgements and all three push tables are unavailable to anonymous/authenticated clients. No customer address, phone, bank data or session secret appears in the FCM payload.
+- Migration `20261006030000_direct_order_customer_experience.sql` adds tables/RPCs/triggers and schedules the dispatcher every minute with the existing Vault cron secret when pg_cron/pg_net are available. Existing Firebase browser build definitions/VAPID and FIREBASE_SERVICE_ACCOUNT_JSON are reused. Cron availability and physical device receipt must be checked during release.
+
+## 2026-10-10 reconciliation and translation additions
+
+- `refund_details` (owning session, rate 20) accepts request ID and
+  `refund_details:{bank,account,holder}`; the server rejects other fields, foreign
+  orders, and orders without an eligible refund. Public support returns only
+  this owner's account, refund amount/method, and scoped evidence message ID.
+- `direct_order_record_receipt` keeps `actual_amount` separate from applied
+  `amount`. Excess becomes `overpayment_due`, never order revenue. Food-balance
+  charges must equal the server-calculated balance. Receipt proof and bank
+  reference retries cannot duplicate a receipt.
+- Refund support actions require operation UUID, eligible amount, method
+  `CASH|BANKTRANSFER`, reference, and a store-uploaded image message ID.
+  `refund_overpayment` reverses unallocated money without reversing POS revenue.
+  Customer evidence URLs retain the existing scoped, private signed URL flow.
+- `direct_order_set_dispatch_v4` requires positive store cash payouts to include
+  `p_cash_confirmed`, `p_evidence_message_id`, `p_operation_id`, and
+  `p_cash_reference`. Immutable
+  movement history preserves payout time; administrator correction/recovery
+  references its original payout. Bank recovery does not change store cash.
+- Closing preview/history separately expose `delivery_cash_paid`,
+  `delivery_cash_recovered`, and `direct_order_cash_refunds`.
+  Expected cash = opening cash + cash sales - paid + cash recovered - cash refunds.
+- `status_v3` messages optionally include `metadata`; item and quote notes
+  optionally include `note_translations` and `translation_status`. Quote notes
+  optionally include `cashier_note`. Existing responses remain accepted by the
+  additive Dart parsers. System codes, attachments, accounts, and amounts are
+  never translated as separate structured fields.
+
+### 2026-10-10 customer progress and utensil choice (source implementation)
+
+`status_v4` / `direct_order_public_status_v4` retain v3 authorization, money,
+message and proof IDs. Delivery adds `utensils_requested` (boolean, legacy true)
+and `cooking_complete` (boolean, all noncancelled KDS items/components at their
+required quantities, no unresolved review). No KDS quantities means false.
+Support adds `access_open`, the canonical post-completion refund/evidence access
+predicate. Fulfillment completion remains the existing cashier confirmation.
+
+`orders_v3` / `direct_order_public_orders_v3` add `quote_id`, `quote_version`,
+`proof_review_id`, `fulfillment_method`, `has_dispatch`, and `cooking_complete`
+to each summary. `has_dispatch` comes from the existing dispatch record; legacy
+KDS `dispatched` alone does not establish a driver handoff.
+Selected-page item/review/quote/progress aggregation uses set operations. Both
+v2 and v3 list paths use the batch implementation; v2 strips new keys to retain
+strict old clients. Customer multi-order refresh makes one list and one selected
+status request; changed alerts make zero detail requests. Scoped links derive
+summaries locally from one status request, bypassing the list endpoint.
+
+Cooking/packing notices use statement transition tables. The existing atomic
+`kds_complete_kitchen_batch_v1` retains its authorization and mutation response;
+its new wrapper defers customer aggregation during individual quantity events
+and aggregates affected requests once after successful completion.
+
+`submit_v3` accepts optional boolean `payload.utensils_requested`, default true.
+Diners remain 1..100; false means omit disposable cutlery, never food containers.
+Replay retains the original choice. Staff diner edits preserve it. Staff detail,
+kitchen list, entire KDS kitchen/tray snapshot, native/queued/driver paper prints,
+and digital receipt/PDF carry the same value. Saved print/receipt snapshots are
+not rewritten. Payment items and the process_payment anchor are unchanged.
+
+Versioned reads require the additive migration and Edge update before clients
+using the new versions are released. This section describes source behavior;
+DB application and production deployment require separate evidence.

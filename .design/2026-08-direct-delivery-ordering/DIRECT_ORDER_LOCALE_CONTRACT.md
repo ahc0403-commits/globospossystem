@@ -22,7 +22,7 @@ role, route, session, or order payload is allowed to overwrite it.
 
 `direct_order_sessions.locale` and `direct_order_requests.locale` record the
 customer locale used at session/request time. They support customer recovery
-and audit only. They are never passed to cashier, kitchen, admin menu/message,
+and the target language for cashier free-text translation. They are never passed to cashier, kitchen, admin menu/message,
 or alert rendering.
 
 ## Server boundary
@@ -32,9 +32,10 @@ or alert rendering.
 - `submit.payload.locale` is required and rejects every other value before any
   request write. Session and request database CHECK constraints independently
   enforce the same set.
-- Customer and staff text messages preserve the exact author-entered body and
-  do not send viewer locale to a translation service. Chat transport is
-  independent from the current UI locale.
+- Customer and staff text messages preserve the exact author-entered body.
+  A server queue translates customer text into Vietnamese and cashier text into
+  the customer request locale through OpenAI Responses. UI locale remains
+  device-owned; translations are additive and do not block chat transport.
 - Google autocomplete, details, and reverse-geocode calls receive the current
   customer viewer locale. An invalid supplied locale is a fixed
   `INVALID_REQUEST`; it is never silently coerced.
@@ -62,16 +63,19 @@ Fixed database codes are data, not display copy. Recognized direct system
 message codes are localized at render time with `DirectOrderCopy` and therefore
 change immediately when that viewer changes locale.
 
-Customer and cashier free-text chat preserves and displays the exact original
-`body` for every viewer locale. Changing the UI locale changes labels, fixed
-system messages, status, and errors but does not alter author-written chat.
+Customer and cashier free-text chat preserves the exact original `body`.
+The UI shows an available translation for its current locale and offers an
+original-text toggle. Pending or failed translations show the original and a
+localized status. Customer notes, item requests, and cashier quote notes follow
+the same rule. Fixed codes and menu-name snapshots retain their existing
+localization paths.
 
 These values remain exact and are not machine-translated:
 
 - cashier rejection reason unless it is a recognized fixed code;
 - Google/provider place names and formatted address returned for the selected
   customer locale;
-- customer name, phone, detailed address, item note, and customer note;
+- customer name, phone, detailed address, structured refund account;
 - Grab tracking URL and bank/audit identifiers.
 
 The isolated new-delivery cashier alert follows the same receiver rule: its
@@ -85,3 +89,45 @@ The local contract covers all customer `ko/vi/en` x cashier `ko/vi/en` pairs,
 all three kitchen/admin viewer locales, immediate re-render from the current
 locale, exact chat-original preservation across viewer locales, Edge/SQL
 allowlist rejection, and approval-time KO/VI/EN ticket snapshots.
+
+## 2026-10-06 customer and packing additions
+
+`DirectOrderCopy` localizes category All/empty/overflow directions, independent
+screenshot send/retry/change, picker/upload/reconciliation progress, accepted-photo
+status, status-refresh failure/retry, and the already-transferred hint in KO/VI/EN.
+Category names use the existing locale snapshot with IDs/selection unchanged.
+Failure messages use the current viewer locale; raw technical codes are hidden.
+Missing diner count now asks for a staff check. Staff/customer packing summaries
+continue to use N diners / N utensil sets, never menu quantity.
+
+Paper ESC/POS uses Vietnamese ASCII `SO NGUOI: N`, `DUNG CU: N BO`; missing counts
+use `CHUA NHAP` / `CAN KIEM TRA`. Digital receipt/PDF content retains its existing
+Vietnamese receipt policy (`Số người`, `Dụng cụ`), including 100 sets.
+
+
+## Customer experience locale additions — 2026-10-06
+
+The three display stages, details, item request controls and notification settings use the current customer viewer locale. Cashier templates use that cashier viewer's locale and preserve customer-entered names, address and notes verbatim. The edited draft can be copied manually. Sending free text enqueues automatic translation; original text, monetary values, names, and negations are preserved. Attachments and structured financial fields are not sent to the translation service.
+
+Push-device locale is registered from the customer's current selection and refreshed on page resume or locale change without prompting for permission. Background notification copy comes from that device locale, not the staff device or order locale. `DIRECT_ORDER_PICKUP_READY` and `DIRECT_ORDER_DRIVER_HANDOFF` system messages render via the current viewer locale in chat. Supported codes remain exactly `ko`, `vi`, `en`.
+
+## 2026-10-10 asynchronous translation
+
+`direct-order-translation-dispatcher` claims up to 10 texts in one lease and sends
+one strict-schema Responses request. `OPENAI_API_KEY` is an Edge secret, never a
+Flutter define. Missing key configuration leaves jobs pending without consuming
+retries. Transient failures retry up to five times; staff can retry failed jobs.
+The default model is `gpt-4.1-mini-2025-04-14`; the server-only
+`DIRECT_ORDER_TRANSLATION_MODEL` secret can select another compatible model.
+Numeric tokens must remain exact. `store:false` disables Responses history
+storage; it does not assert zero provider retention. The minute scheduler and
+existing status polling determine when translations become visible.
+
+### 2026-10-10 progress, tracking and packing labels
+
+Customer progress titles, independent utensils choices, copy/open feedback,
+and cooking/packing notices are available in Korean, Vietnamese and English.
+URLs are rendered from the original exact value and never from translated text;
+links in ordinary messages also receive selectable URL and open/copy controls.
+Printer labels remain Vietnamese (`DUNG CU: KHONG CAN` for opt-out), and digital
+receipt/PDF uses `Dụng cụ: Không cần`. Diner counts remain independent of utensils.

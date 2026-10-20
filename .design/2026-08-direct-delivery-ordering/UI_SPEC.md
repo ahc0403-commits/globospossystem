@@ -147,3 +147,125 @@ Do not introduce raster icons or a second icon library.
 - Status is never communicated by color alone.
 - Every field has a visible label and error/help text.
 - Keyboard focus order follows visual order and returns from dialogs correctly.
+
+## 2026-10-06 customer navigation, screenshots and packing
+
+Source implementation only; production migration/web/Print Station deployment and
+physical printer verification require separate evidence.
+
+- Menu view keeps a horizontal category bar below the progress tabs, outside the
+  vertical menu viewport. `All` is selected initially. Only populated categories
+  from the storefront response are shown, in server order. A selection filters
+  locally and resets vertical scrolling; repeat selection and quantity changes
+  preserve position. Category IDs, cart, notes and diner input survive locale and
+  address navigation. Removed categories fall back to `All`. Desktop arrows and
+  mobile swipes expose overflow; full labels remain available through tooltips.
+- The quote card exposes `Bank transfer details` and `Send transfer screenshot`
+  separately. The account dialog owns QR/account/reference details and close.
+  Screenshot preview identifies the order and amount. Picker/preview cancellation
+  makes no upload request; the picker is guarded from its first click.
+- Failed attempts retain bytes, MIME and exact request/quote/review/path in screen
+  memory. Retry resumes that attempt; an uncertain Storage response is reconciled
+  by committing its existing path first. Photo replacement is unavailable until
+  the uncertain result is resolved. Successful commit remains sent even if status
+  refresh fails, with a separate status refresh action. Staff resubmission presents
+  its reason and no-repeat-transfer warning directly, including locked old quotes.
+  Advanced/terminal states do not request a new screenshot.
+- All direct delivery/pickup forms (payment, kitchen, floor, tray, confirmation,
+  handoff) put `SO NGUOI: N` / `DUNG CU: N BO`
+  above items; utensil sets are bold and double height. Missing/invalid counts on
+  identified direct orders require a staff check. Ordinary dine-in guest counts
+  never imply utensil sets. Cashier/kitchen packing counts are emphasized.
+- Native payment-detail printing reads authorized single-order packing context,
+  without enqueuing a duplicate job. New direct digital snapshots and their 80mm
+  PDF include the count. Receipt text follows the existing Vietnamese policy.
+  Old digital/print snapshots remain immutable; a new reprint uses current counts.
+
+Behavior tests: `direct_delivery_storefront_widget_test.dart`,
+`direct_order_proof_retry_test.dart`, `receipt_builder_contract_test.dart`,
+`wifi_printer_service_test.dart`, `digital_receipt_pdf_service_test.dart`, and
+`direct_order_receipt_packing_contract_test.sql`.
+
+
+## Customer and cashier feedback implementation — 2026-10-06
+
+The customer hero, order history, and three-step progress use **확인 대기 / 결제 완료 / 완료**. Detailed preparation/ready/handoff labels remain secondary. Cancelled, rejected, and expired orders show their exception labels rather than a completed progress bar. Payment proof submission is still waiting for cashier confirmation; ready and driver handoff remain paid, not completed.
+
+The reference line opens `DirectOrderDetailsSheet`, displaying persisted item names, quantities, unit prices, line amounts, item notes, order reference/time, quote totals, service charge, delivery fee mode, VAT, payment and refund information. Menu prices/line amounts are before tax; the quoted menu total includes tax. An unavailable snapshot is identified, not rebuilt from today's menu. Opening the sheet makes no additional item requests.
+
+After adding an item, customers can edit a 300-character request below its menu card and in the cart. The request applies to every unit of that cart line; distinct unit requests require separate orders with the present cart model. Notes survive category, locale and address navigation and are submitted through the existing item `note` contract.
+
+The bell opens notification settings. Permission is requested only by the explicit enable action. When supported/configured, customer web push persists after closing the page; permission denial/configuration failure retain status/chat fallback. Pickup ready and actual driver handoff create separate, deduplicated events. Tray packing completion is ready, without pretending a driver received the order.
+
+Cashier default filters are all/waiting/paid/completed, with detailed filters in an expandable section and visible refund exceptions. Chat templates populate an editable draft, never send automatically, and capture the selected order. Quote templates require a stored quote; the fee draft requires staff to confirm the current amount. Copying the draft supports the requested manual Google Translate workflow.
+
+## 2026-10-10 cashier reconciliation and translation
+
+The receipt dialog accepts the actual bank receipt, displays any excess as a
+refund amount, and requires a bank reference and explicit receipt comparison.
+The payment panel requests the server-calculated food balance. Excess refund,
+cancellation refund, and pickup/delivery refund use a shared photo evidence and
+actual-payment confirmation dialog. Customers enter their refund bank/account/
+holder and open the resulting transfer proof from their order's support card.
+
+Store-prepaid delivery is the default for new delivery quotes. Positive driver
+cash handoff uses the same evidence/confirmation control. Cashier detail and
+closing show driver payout, cash recovery, and customer cash refund separately.
+Administrators can append extra payouts or recovery; stored payout amounts stay
+immutable. The closing denomination dialog subtracts all these cash movements.
+
+Chat, order notes, item requests, and quote notes show available viewer-locale
+translations and an original-text toggle. Pending/failed translations preserve
+the visible original. A failed translation can be retried by the cashier.
+
+## 2026-10-10 mobile customer payment visibility
+
+The customer status surface keeps the current payment amount above the scrolling
+conversation and the message composer below it. Navigation tabs collapse while
+the phone keyboard is open. The three-step progress is compact and horizontal.
+Sending a message brings that message into view without moving the pinned amount.
+The latest quote message renders an amount card with amount-detail and transfer
+actions; earlier quote messages retain their stored amount and cannot open a
+payment action. A current quote card is still shown if its message is absent
+from the returned history. Quote sounds remain deduplicated; the persistent
+amount/card replaces the transient quote snackbar.
+
+Payment and amount details open a mobile bottom sheet. An open sheet follows
+the current order snapshot, updates its amount/QR when the quote changes, and
+removes transfer actions when payment becomes ineligible or enters review.
+Existing proof selection, preview, retries and cashier approval remain in use.
+
+Confirmed underpayments use the same chat card, pinned amount and bottom sheet.
+The amount to transfer comes from server `food_due`, with the original quote
+and confirmed `food_received` shown separately. Before a stored balance charge
+exists, the customer sees the shortage and an instructions-pending notice with
+no transfer QR. An active balance charge opens a QR for that shortage and the
+existing charge-scoped proof uploader. `review`, `paid`, `void`, exception and
+superseded balance charges cannot request another transfer. Additional delivery
+charges use the same card presentation. Opening these views adds no API calls.
+
+### 2026-10-10 customer mobile progress (supersedes three customer stages)
+
+The same order/chat screen shows a compact current fulfillment card above chat.
+Payment is a separate badge. Detailed progress and packing/provider/financial
+information expand on demand and also remain available in order details.
+The cashier's existing three filter groups stay unchanged.
+
+Customer stages: store reviewing → awaiting payment → checking transfer → food
+preparation → food cooked / packing → packed / awaiting driver → with driver /
+on the way → delivered. Pickup uses ready for pickup / collected. Cancellation,
+rejection and expiry take priority. Cooking requires complete KDS quantities;
+packing requires ready, handoff requires the existing dispatch workflow. Normal
+completion closes customer access/polling; unsettled refunds and evidence access
+remain supported, according to server `support.access_open`.
+
+HTTPS shipping links have explicit open and copy actions, plus a selectable exact
+URL. The card, legacy grab_link and URLs in ordinary chat share the component.
+Link opening failures retain copy/manual selection. Contact-only delivery has no
+invented tracking link. URLs are never translated.
+
+Diners initially show 1 (range 1..100). Disposable utensils have independent
+receive-per-diner / no-utensils choices. Food containers are always included.
+Opt-out persists after diner edits and flows to staff packing and receipts.
+Cooking and packing chat/push notices deduplicate by request/event; no new
+cashier button or extra action is introduced.
