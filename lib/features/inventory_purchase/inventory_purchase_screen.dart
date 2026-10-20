@@ -25,6 +25,7 @@ import '../inventory/inventory_provider.dart';
 import '../inventory/recipe_excel_import.dart';
 import 'inventory_purchase_document_service.dart';
 import 'inventory_safety_stock.dart';
+import 'inventory_workflow_route.dart';
 import 'stock_audit_excel_import.dart';
 import 'stock_audit_dated_dialogs.dart';
 
@@ -57,6 +58,7 @@ class _InventoryPurchaseScreenState
   final _purchaseHistoryDetailKey = GlobalKey();
   late int _selectedIndex;
   String? _loadedStoreId;
+  int _storeReloadGeneration = 0;
   String? _printingOrderId;
   String? _selectedSupplierId;
   String? _selectedProductId;
@@ -319,14 +321,22 @@ class _InventoryPurchaseScreenState
     }
     _loadedStoreId = storeId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || _loadedStoreId != storeId) return;
       _reloadStoreScope(storeId);
     });
   }
 
   Future<void> _reloadStoreScope(String storeId) async {
-    ref.read(inventoryPurchaseStockAuditProvider.notifier).selectStore(storeId);
+    if (!mounted || ref.read(adminScopedStoreIdProvider) != storeId) return;
+    final generation = ++_storeReloadGeneration;
     final section = _selectedIndex;
+    bool isCurrent() =>
+        mounted &&
+        generation == _storeReloadGeneration &&
+        _selectedIndex == section &&
+        ref.read(adminScopedStoreIdProvider) == storeId;
+
+    ref.read(inventoryPurchaseStockAuditProvider.notifier).selectStore(storeId);
     if (section == 0) {
       await Future.wait([
         ref.read(inventoryPurchaseOverviewProvider.notifier).load(storeId),
@@ -344,33 +354,40 @@ class _InventoryPurchaseScreenState
             .load(storeId);
       }
     }
+    if (!isCurrent()) return;
     if ({2, 4, 5}.contains(section)) {
       await ref
           .read(inventoryPurchaseSupplierCatalogProvider.notifier)
           .load(storeId);
+      if (!isCurrent()) return;
     }
     if ({4, 5, 6, 10}.contains(section)) {
       await ref
           .read(inventoryPurchaseProductCatalogProvider.notifier)
           .load(storeId, complete: section == 6 || section == 10);
+      if (!isCurrent()) return;
     }
     if ({6, 10}.contains(section)) {
       await ref.read(recipeProvider.notifier).loadAll(storeId);
+      if (!isCurrent()) return;
     }
     if (section == 10) {
       await ref
           .read(inventoryPurchaseNewMenuProvider.notifier)
           .loadCategories(storeId);
+      if (!isCurrent()) return;
     }
     if ({7, 8}.contains(section)) {
       await ref
           .read(inventoryPurchaseCostAnalysisProvider.notifier)
           .load(storeId);
+      if (!isCurrent()) return;
     }
     if ({0, 2}.contains(section)) {
       await ref
           .read(inventoryPurchaseRecommendationSnapshotProvider.notifier)
           .loadLatest(storeId);
+      if (!isCurrent()) return;
     }
     if ({0, 2, 3}.contains(section)) {
       await ref
@@ -445,7 +462,11 @@ class _InventoryPurchaseScreenState
           icon: Icons.approval_outlined,
         ),
         selected: false,
-        onTap: () => context.go('/inventory-orders'),
+        onTap: () => context.go(
+          inventoryWorkflowLocation(
+            storeId: ref.read(adminScopedStoreIdProvider),
+          ),
+        ),
       ),
     ];
 
@@ -1355,7 +1376,10 @@ class _InventoryPurchaseScreenState
                       : PosActionDisabledReason.upstreamPending,
                   onPressed: canConfirmReceipt && detail.selectedOrderId != null
                       ? () => context.go(
-                          '/inventory-orders/${detail.selectedOrderId}',
+                          inventoryWorkflowLocation(
+                            storeId: storeId,
+                            orderId: detail.selectedOrderId,
+                          ),
                         )
                       : null,
                   compact: true,

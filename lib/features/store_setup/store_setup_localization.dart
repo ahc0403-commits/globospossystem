@@ -8,6 +8,12 @@ import 'store_setup_models.dart';
 /// localized runtime boundary.
 abstract final class StoreSetupCodeCatalog {
   static const validation = <String>{
+    'STORE_SETUP_MODE_INVALID',
+    'STORE_SETUP_MODE_PERMISSION',
+    'STORE_SETUP_USB_NAME_REQUIRED',
+    'STORE_SETUP_CONNECTION_INVALID',
+    'STORE_SETUP_PAPERLESS_RECEIPT_ONLY',
+
     'STORE_SETUP_TABLES_ARRAY_REQUIRED',
     'STORE_SETUP_TABLES_REQUIRED',
     'STORE_SETUP_TABLE_LIMIT',
@@ -110,6 +116,12 @@ String localizeStoreSetupValidation(
   AppLocalizations l10n,
   String code,
 ) => switch (code) {
+  'STORE_SETUP_MODE_INVALID' => l10n.storeSetupValidationModeInvalid,
+  'STORE_SETUP_MODE_PERMISSION' => l10n.storeSetupValidationModePermission,
+  'STORE_SETUP_USB_NAME_REQUIRED' => l10n.storeSetupValidationUsbName,
+  'STORE_SETUP_CONNECTION_INVALID' => l10n.storeSetupValidationConnection,
+  'STORE_SETUP_PAPERLESS_RECEIPT_ONLY' =>
+    l10n.storeSetupValidationPaperlessReceipt,
   'STORE_SETUP_TABLES_ARRAY_REQUIRED' =>
     l10n.storeSetupValidationTablesArrayRequired,
   'STORE_SETUP_TABLES_REQUIRED' => l10n.storeSetupValidationTablesRequired,

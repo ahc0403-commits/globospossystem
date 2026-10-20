@@ -115,6 +115,12 @@ try {
     "test/cashier_receipt_print_contract_test.dart",
     "test/receipt_builder_contract_test.dart",
     "test/wifi_printer_service_test.dart",
+    "test/store_setup_template_test.dart",
+    "test/store_setup_provider_test.dart",
+    "test/store_setup_localization_contract_test.dart",
+    "test/store_setup_printer_modes_test.dart",
+    "test/store_setup_print_agent_scope_test.dart",
+    "test/store_setup_active_store_test.dart",
     "test/print_station_connection_regression_test.dart",
     "test/registered_receipt_printer_panel_test.dart"
   )

@@ -23,6 +23,7 @@ import '../../core/i18n/excel_import_localization.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import 'inventory_workflow_state.dart';
+import 'inventory_workflow_route.dart';
 import '../procurement/procurement_workspace.dart';
 import '../procurement/procurement_inspection_dialog.dart';
 import '../../core/utils/permission_utils.dart';
@@ -40,12 +41,14 @@ class InventoryOrderWorkflowScreen extends ConsumerStatefulWidget {
   const InventoryOrderWorkflowScreen({
     super.key,
     this.initialOrderId,
+    this.overrideStoreId,
     this.service,
   });
 
   final InventoryService? service;
 
   final String? initialOrderId;
+  final String? overrideStoreId;
 
   @override
   ConsumerState<InventoryOrderWorkflowScreen> createState() =>
@@ -148,7 +151,10 @@ class _InventoryOrderWorkflowScreenState
     };
   }
 
-  String? get _storeId => ref.read(authProvider).storeId;
+  String? get _storeId =>
+      PermissionUtils.canManageInventorySupplierPrices(_role)
+      ? widget.overrideStoreId ?? ref.read(authProvider).storeId
+      : ref.read(authProvider).storeId;
   String? get _role => ref.read(authProvider).role;
   bool get _isAccounting => _role == 'inventory_accounting';
   bool get _combinedReceiving => _detail?['can_receive_and_confirm'] == true;
@@ -483,7 +489,11 @@ class _InventoryOrderWorkflowScreenState
       return;
     }
     if (GoRouterState.of(context).uri.path != '/inventory-orders') {
-      context.go('/inventory-orders');
+      context.go(
+        inventoryWorkflowLocation(
+          storeId: widget.overrideStoreId == null ? null : _storeId,
+        ),
+      );
     }
     await _loadDetail(orderId);
   }
@@ -501,7 +511,7 @@ class _InventoryOrderWorkflowScreenState
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
+    ref.watch(authProvider);
     final scopeChanged = _loadedScope != null && _scopeKey != _loadedScope;
     if (scopeChanged) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -527,7 +537,7 @@ class _InventoryOrderWorkflowScreenState
     }
     final syncStores = _isAccounting
         ? _accessibleStores.map(_id).toList()
-        : [if (auth.storeId != null) auth.storeId!];
+        : [if (_storeId != null) _storeId!];
     for (final storeId in syncStores) {
       ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
         _,
@@ -595,7 +605,14 @@ class _InventoryOrderWorkflowScreenState
               'inventory_accounting',
             }.contains(_role))
               TextButton.icon(
-                onPressed: () => context.go('/admin?tab=inventory'),
+                onPressed: () => context.go(
+                  Uri(
+                    path: _role == 'super_admin' && _storeId != null
+                        ? '/admin/$_storeId'
+                        : '/admin',
+                    queryParameters: const {'tab': 'inventory'},
+                  ).toString(),
+                ),
                 icon: const Icon(Icons.dashboard_outlined),
                 label: Text(_text(ko: '재고 관리', en: 'Inventory', vi: 'Kho')),
               ),

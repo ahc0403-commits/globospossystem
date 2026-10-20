@@ -151,3 +151,25 @@ SQL
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261016090000_pos_receiving_and_balance_guidance.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/scripts/verify_pos_receiving_and_balance_guidance.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/pos_receiving_guidance.test.sql"
+
+# Owner-requested parity across active ordering-account stores.
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_all_store_parity_fixture.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/preflight_procurement_all_store_parity.sql"
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261019081922_procurement_all_store_parity.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/verify_procurement_all_store_parity.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_all_store_parity.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261019081922_procurement_all_store_parity.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_all_store_parity.test.sql"
+
+# A pre-traffic rollback restores the original configuration and is replay-safe.
+run_sql "$INVENTORY_ROOT/scripts/rollback/20261019100141_restore_procurement_all_store_parity.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/scripts/rollback/20261019100141_restore_procurement_all_store_parity.sql" >/dev/null
+psql -X -h 127.0.0.1 -p "$INVENTORY_PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+ ASSERT (SELECT NOT enabled AND stock_freshness_hours=72 FROM public.procurement_store_policies WHERE restaurant_id=test_uuid(102));
+ ASSERT NOT EXISTS(SELECT 1 FROM public.procurement_store_policies WHERE restaurant_id=test_uuid(103));
+ ASSERT (SELECT count(*)=2 FROM public.procurement_events WHERE action='restore_procurement_policy');
+ ASSERT NOT EXISTS(SELECT 1 FROM public.procurement_role_roster WHERE restaurant_id=test_uuid(102) AND subject_id=test_uuid(5) AND stage='verifier');
+ ASSERT (SELECT count(*)=1 FROM public.procurement_events WHERE action='restore_procurement_receiver');
+END $$;
+SQL

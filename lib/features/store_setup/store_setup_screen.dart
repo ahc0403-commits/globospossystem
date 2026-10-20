@@ -4,27 +4,74 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/hardware/print_agent_coordinator.dart';
 import '../../core/hardware/print_agent_coordinator_provider.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../auth/auth_provider.dart';
 import 'store_setup_localization.dart';
 import 'store_setup_models.dart';
 import 'store_setup_provider.dart';
-import 'widgets/physical_printer_form.dart';
+import 'widgets/printer_setup_step.dart';
 import 'widgets/print_test_checklist.dart';
 import 'widgets/readiness_summary.dart';
 import 'widgets/route_preview.dart';
 import 'widgets/table_bulk_editor.dart';
 import 'widgets/workforce_setup_card.dart';
 
-class StoreSetupScreen extends ConsumerWidget {
+class StoreSetupScreen extends ConsumerStatefulWidget {
   const StoreSetupScreen({super.key, required this.storeId});
 
   final String storeId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StoreSetupScreen> createState() => _StoreSetupScreenState();
+}
+
+class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
+  bool _storeSelectionInFlight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(
+      authProvider,
+      (_, next) => _scheduleStoreSelection(),
+      fireImmediately: true,
+    );
+  }
+
+  @override
+  void didUpdateWidget(StoreSetupScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.storeId != widget.storeId) _scheduleStoreSelection();
+  }
+
+  void _scheduleStoreSelection() {
+    // Follow the same authorized active-store selection as Enter Store. The
+    // app-root print agent consumes that scope; the route ID alone does not.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = ref.read(authProvider);
+      if (!_storeSelectionInFlight &&
+          auth.user != null &&
+          auth.storeId != widget.storeId) {
+        unawaited(_selectStore(widget.storeId));
+      }
+    });
+  }
+
+  Future<void> _selectStore(String storeId) async {
+    _storeSelectionInFlight = true;
+    try {
+      await ref.read(authProvider.notifier).setActiveStoreForSetup(storeId);
+    } finally {
+      _storeSelectionInFlight = false;
+      if (mounted && widget.storeId != storeId) _scheduleStoreSelection();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final storeId = widget.storeId;
     final state = ref.watch(storeSetupProvider(storeId));
     final notifier = ref.read(storeSetupProvider(storeId).notifier);
     final auth = ref.watch(authProvider);
@@ -145,10 +192,12 @@ class StoreSetupScreen extends ConsumerWidget {
                       Step(
                         title: Text(context.l10n.storeSetupStepPrinters),
                         isActive: state.step >= 2,
-                        content: _PrinterStep(
+                        content: StoreSetupPrinterStep(
                           draft: state.draft,
                           onPrinterChanged: notifier.updatePrinter,
                           onFloor1Changed: notifier.setFloor1Slot,
+                          onOperationChanged: notifier.setOperation,
+                          enabled: !state.isBusy,
                         ),
                       ),
                       Step(
@@ -163,7 +212,7 @@ class StoreSetupScreen extends ConsumerWidget {
                       Step(
                         title: Text(context.l10n.storeSetupStepAgent),
                         isActive: state.step >= 4,
-                        content: const _PrintAgentStep(),
+                        content: _PrintAgentStep(storeId: storeId),
                       ),
                       Step(
                         title: Text(context.l10n.storeSetupStepTests),
@@ -275,68 +324,6 @@ class _StoreTemplateStep extends StatelessWidget {
   }
 }
 
-class _PrinterStep extends StatelessWidget {
-  const _PrinterStep({
-    required this.draft,
-    required this.onPrinterChanged,
-    required this.onFloor1Changed,
-  });
-
-  final StoreOpeningDraft draft;
-  final ValueChanged<PhysicalPrinterDraft> onPrinterChanged;
-  final ValueChanged<PhysicalPrinterSlot> onFloor1Changed;
-
-  @override
-  Widget build(BuildContext context) {
-    String title(PhysicalPrinterSlot slot) =>
-        localizePhysicalPrinterSlot(context.l10n, slot);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 760 ? 2 : 1;
-            final width = columns == 2
-                ? (constraints.maxWidth - 12) / 2
-                : constraints.maxWidth;
-            return Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final slot in PhysicalPrinterSlot.values)
-                  SizedBox(
-                    width: width,
-                    child: PhysicalPrinterForm(
-                      key: ValueKey(slot),
-                      title: title(slot),
-                      printer: draft.printers[slot]!,
-                      onChanged: onPrinterChanged,
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-        Text(context.l10n.storeSetupFloor1Share),
-        DropdownButton<PhysicalPrinterSlot>(
-          key: const Key('store_setup_floor1_physical_slot'),
-          value: draft.floor1Slot,
-          isExpanded: true,
-          items: [
-            for (final slot in PhysicalPrinterSlot.values)
-              DropdownMenuItem(value: slot, child: Text(title(slot))),
-          ],
-          onChanged: (value) {
-            if (value != null) onFloor1Changed(value);
-          },
-        ),
-      ],
-    );
-  }
-}
-
 class _PreviewApplyStep extends StatelessWidget {
   const _PreviewApplyStep({
     required this.state,
@@ -413,12 +400,15 @@ class _PreviewApplyStep extends StatelessWidget {
 }
 
 class _PrintAgentStep extends ConsumerWidget {
-  const _PrintAgentStep();
+  const _PrintAgentStep({required this.storeId});
+
+  final String storeId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(printAgentCoordinatorProvider);
     final coordinator = ref.read(printAgentCoordinatorProvider.notifier);
+    final runningForStore = state.isRunning && state.activeStoreId == storeId;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -437,12 +427,10 @@ class _PrintAgentStep extends ConsumerWidget {
             ),
             ListTile(
               leading: Icon(
-                state.status == PrintAgentStatus.running
-                    ? Icons.check_circle
-                    : Icons.warning_amber,
+                runningForStore ? Icons.check_circle : Icons.warning_amber,
               ),
               title: Text(
-                state.status == PrintAgentStatus.running
+                runningForStore
                     ? context.l10n.storeSetupPrintAgentRunning
                     : context.l10n.storeSetupPrintAgentStopped,
               ),
@@ -457,7 +445,7 @@ class _PrintAgentStep extends ConsumerWidget {
   }
 }
 
-class _TestsStep extends StatelessWidget {
+class _TestsStep extends ConsumerWidget {
   const _TestsStep({
     required this.state,
     required this.onRun,
@@ -473,13 +461,27 @@ class _TestsStep extends StatelessWidget {
   final Future<void> Function({bool silent}) onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final agent = ref.watch(printAgentCoordinatorProvider);
+    final runningForStore =
+        agent.isRunning && agent.activeStoreId == state.draft.storeId;
+    // Web setup can queue tests for a separate Windows station. On a supported
+    // native station, require this device's agent to consume the selected store.
+    final localAgentRequired = ref
+        .read(printAgentCoordinatorProvider.notifier)
+        .isSupported;
+    final agentReady = !localAgentRequired || runningForStore;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (!agentReady)
+          Text(
+            '${context.l10n.storeSetupStepAgent}: '
+            '${context.l10n.storeSetupPrintAgentStopped}',
+          ),
         FilledButton.icon(
           key: const Key('store_setup_run_five_tests'),
-          onPressed: state.applyResult == null
+          onPressed: state.applyResult == null || state.isBusy || !agentReady
               ? null
               : () => unawaited(onRun()),
           icon: const Icon(Icons.print_outlined),
@@ -488,6 +490,7 @@ class _TestsStep extends StatelessWidget {
         const SizedBox(height: 12),
         PrintTestChecklist(
           jobs: state.testJobs,
+          enabled: agentReady && !state.isBusy,
           onConfirm: onConfirm,
           onRetry: (label) => unawaited(onRetry(label)),
         ),
