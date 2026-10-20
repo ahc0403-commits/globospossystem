@@ -22,6 +22,10 @@ checkout is preserved. No unrelated user files are included.
   access on a recovery screen without deleting the refreshable session.
 - The vendored Auth SDK treats refresh-token HTTP 429 as a retryable error,
   preserving the session while its existing bounded retry handles throttling.
+- A session generation guard discards token responses superseded by logout or
+  a newer sign-in. It also prevents an old refresh error from deleting the
+  newer account. A delayed-refresh test reproduced logout resurrection before
+  the guard, and regression tests cover logout and account switching.
 - Initial-session and token-refresh events recover missing profile state.
   Profile retries are shared and bounded to two delayed attempts; requests
   time out after ten seconds. Fallback events reuse a profile for five minutes;

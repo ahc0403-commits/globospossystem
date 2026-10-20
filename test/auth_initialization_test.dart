@@ -30,6 +30,8 @@ class _AuthApi {
   bool mustChangePassword = false;
   bool active = true;
   Completer<void>? profileGate;
+  Completer<void>? tokenGate;
+  Completer<void>? tokenStarted;
   Completer<void>? storeGate;
   final profileStarted = Completer<void>();
   final storeStarted = Completer<void>();
@@ -45,6 +47,10 @@ class _AuthApi {
     Object response;
     switch (request.url.path) {
       case '/auth/v1/token':
+        if (request.url.queryParameters['grant_type'] == 'refresh_token') {
+          if (!(tokenStarted?.isCompleted ?? true)) tokenStarted!.complete();
+          await tokenGate?.future;
+        }
         if (request.url.queryParameters['grant_type'] == 'refresh_token' &&
             tokenRateLimits > 0) {
           tokenRateLimits--;
@@ -347,6 +353,65 @@ void main() {
       expect(api.logoutCalls, 0);
     },
   );
+
+  test('late token refresh cannot undo an explicit logout', () async {
+    final api = _AuthApi();
+    final auth = AuthNotifier(client: api.client);
+    addTearDown(auth.dispose);
+    addTearDown(api.client.dispose);
+    await auth.login('test@example.test', 'test-password');
+    api
+      ..tokenGate = Completer<void>()
+      ..tokenStarted = Completer<void>();
+    final refresh = api.client.auth.refreshSession();
+    await api.tokenStarted!.future;
+    await auth.logout();
+    api.tokenGate!.complete();
+    try {
+      await refresh;
+    } on AuthException {
+      /* A superseded refresh is rejected. */
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(api.client.auth.currentSession, isNull);
+    expect(auth.state.user, isNull);
+  });
+
+  test('late token refresh cannot replace a newer account', () async {
+    final api = _AuthApi();
+    final auth = AuthNotifier(client: api.client);
+    addTearDown(auth.dispose);
+    addTearDown(api.client.dispose);
+    await auth.login('test@example.test', 'test-password');
+    api
+      ..tokenGate = Completer<void>()
+      ..tokenStarted = Completer<void>();
+    final refresh = api.client.auth.refreshSession();
+    await api.tokenStarted!.future;
+    const otherId = '00000000-0000-0000-0000-000000000003';
+    final newer = api.client.auth.currentSession!.toJson();
+    (newer['user'] as Map)['id'] = otherId;
+    final payload = base64Url
+        .encode(
+          utf8.encode(
+            jsonEncode({
+              'sub': otherId,
+              'exp': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
+            }),
+          ),
+        )
+        .replaceAll('=', '');
+    newer['access_token'] = 'e30.$payload.signature';
+    newer['refresh_token'] = 'newer-mock-refresh';
+    await api.client.auth.setInitialSession(jsonEncode(newer));
+    api.tokenGate!.complete();
+    await refresh;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(api.client.auth.currentUser?.id, otherId);
+    expect(api.client.auth.currentSession?.refreshToken, 'newer-mock-refresh');
+    expect(auth.state.user?.id, otherId);
+    expect(api.logoutCalls, 0);
+  });
 
   test(
     'accepted consent survives an RPC outage and fresh fallback is coalesced',
