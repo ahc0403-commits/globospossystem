@@ -13,11 +13,13 @@ const _migrationPath =
 // isolation, profile recovery and settings refresh behavior coverage.
 // 2026-10-20: QR carries registered option keys; menu_portion_spice_test
 // and SQL regression cover stale choice rejection and S/L separation.
+// Owner-corrected size selection uses one catalog card and retains chosen price
+// IDs. QR operational UI tests cover KO/VI/EN, 200% text and stale price reset.
 // QR VAT copy excludes tax without asserting one rate for mixed-rate items;
 // qr_order_operational_ui_test covers the notice and scaled viewport layout.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      '4cf2b2cf8eec6d2a2e546d99da4dfd5a509bc6284b691d87f484fc4ce7ec9805',
+      'd5288074a813ca2b92ec3895b642ccbd7bd48de182ae3017bd8e6b55eda865f2',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -169,6 +170,129 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
+  QrOrderMenu sizesMenu({double largePrice = 370000}) => QrOrderMenu(
+    storeName: 'JeonGabok',
+    tableNumber: '1205',
+    floorLabel: '1F',
+    categories: const [QrMenuCategory(id: 'main', name: '요리')],
+    items: [
+      for (final size in ['S', 'L'])
+        QrMenuItem(
+          id: size == 'S' ? 'small' : 'large',
+          categoryId: 'main',
+          name: '$size · 탕수육',
+          nameKo: '$size · 탕수육',
+          nameVi: '$size · Thịt chua ngọt',
+          nameEn: '$size · Sweet and sour pork',
+          price: size == 'S' ? 190000 : largePrice,
+          menuOptionKey: jsonEncode([
+            size,
+            'unknown',
+            '',
+            size == 'S' ? 190000 : largePrice,
+            {
+              'menu_id': 'small',
+              'names': {
+                'name': '탕수육',
+                'name_ko': '탕수육',
+                'name_vi': 'Thịt chua ngọt',
+                'name_en': 'Sweet and sour pork',
+              },
+            },
+          ]),
+        ),
+    ],
+  );
+
+  for (final language in ['ko', 'vi', 'en']) {
+    testWidgets(
+      'one dish opens S/L selection and submits distinct chosen prices $language',
+      (tester) async {
+        final sent = <QrOrderLine>[];
+        await _pumpQr(
+          tester,
+          locale: Locale(language),
+          textScale: 2,
+          service: _service(
+            fetch: (_) async => sizesMenu(),
+            place: (_, items, __, ___) async {
+              sent.addAll(items);
+              return _result;
+            },
+          ),
+        );
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('qr_choose_size_small')),
+          120,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const Key('qr_menu_scroll')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('qr_menu_item_small')), findsOneWidget);
+        expect(find.byKey(const Key('qr_menu_item_large')), findsNothing);
+        for (final size in ['L', 'S']) {
+          await tester.ensureVisible(
+            find.byKey(const Key('qr_choose_size_small')),
+          );
+          await tester.tap(find.byKey(const Key('qr_choose_size_small')));
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('menu_size_picker')), findsOneWidget);
+          await tester.ensureVisible(find.byKey(Key('menu_size_$size')));
+          await tester.tap(find.byKey(Key('menu_size_$size')));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.byKey(const Key('qr_open_review')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.byKey(const Key('qr_confirm_submit')));
+        await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+        await tester.pumpAndSettle();
+        expect(sent.map((line) => line.menuItemId).toSet(), {'small', 'large'});
+        expect(sent.every((line) => line.quantity == 1), isTrue);
+        expect(
+          sent
+              .map((line) => (jsonDecode(line.menuOptionKey!) as List)[3])
+              .toSet(),
+          {190000, 370000},
+        );
+        _expectNoLayoutFailure(tester);
+      },
+    );
+  }
+
+  testWidgets(
+    'size price refresh requires reselection rather than repricing a cart',
+    (tester) async {
+      var menu = sizesMenu();
+      await _pumpQr(
+        tester,
+        menuSafetyRefreshInterval: const Duration(seconds: 15),
+        service: _service(fetch: (_) async => menu),
+      );
+      await tester.tap(find.byKey(const Key('qr_choose_size_small')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('menu_size_L')));
+      await tester.pumpAndSettle();
+      menu = sizesMenu(largePrice: 390000);
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('qr_open_review')))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        find.byKey(const Key('qr_state_item_unavailable')),
+        findsOneWidget,
+      );
+      _expectNoLayoutFailure(tester);
+    },
+  );
+
   testWidgets(
     'Vietnam midnight clears an unsent QR cart and reloads the table',
     (tester) async {

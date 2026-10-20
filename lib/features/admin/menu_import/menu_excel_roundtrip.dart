@@ -224,7 +224,9 @@ List<int> buildMenuRoundTripWorkbook({
         TextCellValue(menuBaseName(item, 'paperless_name_vi')),
         TextCellValue(menuBaseName(item, 'name_en')),
         TextCellValue(description),
-        DoubleCellValue(_mapDouble(item['price'])),
+        MenuOptions.fromJson(item).hasSizes
+            ? TextCellValue('')
+            : DoubleCellValue(_mapDouble(item['price'])),
         BoolCellValue(item['is_available'] == true),
         BoolCellValue(item['is_visible_public'] == true),
         IntCellValue(_mapInt(item['sort_order'])),
@@ -234,9 +236,21 @@ List<int> buildMenuRoundTripWorkbook({
         TextCellValue(item['sugar_g_per_100ml']?.toString() ?? ''),
         TextCellValue(item['tax_basis_note']?.toString() ?? ''),
         TextCellValue(item['invoice_sale_unit']?.toString() ?? ''),
-        TextCellValue(item['portion_code']?.toString() ?? ''),
+        TextCellValue(
+          MenuOptions.fromJson(item).hasSizes
+              ? ''
+              : item['portion_code']?.toString() ?? '',
+        ),
         TextCellValue(item['spice_level']?.toString() ?? 'unknown'),
         TextCellValue(item['spice_choice']?.toString() ?? ''),
+        if (MenuOptions.fromJson(item).hasSizes)
+          DoubleCellValue(MenuOptions.fromJson(item).sizePrices['S']!)
+        else
+          TextCellValue(''),
+        if (MenuOptions.fromJson(item).hasSizes)
+          DoubleCellValue(MenuOptions.fromJson(item).sizePrices['L']!)
+        else
+          TextCellValue(''),
       ]);
     }
   }
@@ -433,7 +447,7 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
     if (description.length > 1000) {
       issues.add('$sourceRow행: 설명은 1000자 이하여야 합니다.');
     }
-    final price = _parseNumber(rawPrice);
+    final price = _parseNumber(rawPrice.isEmpty ? text('S가격(VND)') : rawPrice);
     if (price == null || price <= 0) {
       issues.add('$sourceRow행: 가격은 0보다 큰 숫자여야 합니다.');
     }

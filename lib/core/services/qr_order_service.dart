@@ -1,3 +1,4 @@
+import '../menu/menu_sizes.dart';
 import '../i18n/menu_localization.dart';
 import '../../main.dart';
 
@@ -132,6 +133,11 @@ class QrMenuItem {
     'name_vi': nameVi,
     'name_en': nameEn,
   }, languageCode);
+
+  MenuSizeMetadata? get sizeMetadata => MenuSizeMetadata.fromKey(menuOptionKey);
+  String catalogName(String languageCode) => sizeMetadata == null
+      ? localizedName(languageCode)
+      : localizedMenuName(sizeMetadata!.names, languageCode);
 
   factory QrMenuItem.fromJson(Map<String, dynamic> json) {
     final priceRaw = json['price'];

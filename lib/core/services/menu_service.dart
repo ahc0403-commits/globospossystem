@@ -1,3 +1,4 @@
+import '../menu/menu_sizes.dart';
 import '../payments/beverage_tax.dart';
 import 'dart:typed_data';
 
@@ -105,9 +106,11 @@ class MenuService {
         .eq('restaurant_id', storeId)
         .eq('is_archived', false)
         .order('sort_order', ascending: true);
-    return response
-        .map<Map<String, dynamic>>((i) => Map<String, dynamic>.from(i))
-        .toList();
+    return menuCatalogRows(
+      response
+          .map<Map<String, dynamic>>((i) => Map<String, dynamic>.from(i))
+          .toList(),
+    );
   }
 
   Future<void> addCategory({

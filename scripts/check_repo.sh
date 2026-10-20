@@ -63,6 +63,9 @@ deno lint supabase/functions/direct-order-translation-dispatcher
 deno check --config supabase/functions/direct-order-translation-dispatcher/deno.json supabase/functions/direct-order-translation-dispatcher/index.ts
 deno test --config supabase/functions/direct-order-translation-dispatcher/deno.json supabase/functions/direct-order-translation-dispatcher/index_test.ts
 
+printf 'CHECK_REPO_STEP=menu_size_prices_sql\n'
+bash scripts/test_menu_size_prices.sh
+
 printf 'CHECK_REPO_STEP=menu_localization_sql\n'
 bash scripts/test_menu_localization.sh
 printf 'CHECK_REPO_STEP=bunsik_receipt_ledger_names_sql\n'

@@ -141,6 +141,94 @@ Widget _app(ValueNotifier<Locale> locale, Widget home) => ProviderScope(
 );
 
 void main() {
+  testWidgets(
+    'POS shows one dish and adds the selected size price to its cart',
+    (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final locale = ValueNotifier(const Locale('ko'));
+      addTearDown(locale.dispose);
+      final added = <CartItem>[];
+      await tester.pumpWidget(
+        _app(
+          locale,
+          Scaffold(
+            body: OrderWorkspace(
+              table: const PosTable(
+                id: 'table',
+                storeId: 'store',
+                tableNumber: '1',
+                seatCount: 4,
+                status: 'available',
+              ),
+              guestCount: 1,
+              menuState: const MenuState(
+                categories: AsyncData([
+                  {'id': 'main', 'name': '요리'},
+                ]),
+                selectedCategoryId: 'main',
+                items: AsyncData([
+                  {
+                    'id': 'small',
+                    'name': '탕수육',
+                    'name_ko': '탕수육',
+                    'category_id': 'main',
+                    'price': 190000,
+                    'is_available': true,
+                    'size_prices': {'S': 190000, 'L': 370000},
+                    'size_options': [
+                      {
+                        'id': 'small',
+                        'name': 'S · 탕수육',
+                        'name_ko': 'S · 탕수육',
+                        'portion_code': 'S',
+                        'price': 190000,
+                        'is_available': true,
+                        'menu_option_key': 'small-key',
+                      },
+                      {
+                        'id': 'large',
+                        'name': 'L · 탕수육',
+                        'name_ko': 'L · 탕수육',
+                        'portion_code': 'L',
+                        'price': 370000,
+                        'is_available': true,
+                        'menu_option_key': 'large-key',
+                      },
+                    ],
+                  },
+                ]),
+              ),
+              menuNotifier: null,
+              orderState: const OrderState(),
+              allowSubmitWithoutCart: false,
+              onAddToCart: added.add,
+              onIncrementCartItem: (_) {},
+              onDecrementCartItem: (_) {},
+              onSetCartItemTakeout: (_, __) {},
+              onCancel: () {},
+              onCancelOrder: () async {},
+              onSendOrder: () async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final size in ['L', 'S']) {
+        await tester.tap(find.byKey(const Key('menu_first_item_add_card')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(Key('menu_size_$size')));
+        await tester.pumpAndSettle();
+      }
+      expect(added.map((item) => item.menuItemId), ['large', 'small']);
+      expect(added.map((item) => item.price), [370000, 190000]);
+      expect(added.first.menuOptionKey, 'large-key');
+      expect(added.first.lineKey, isNot(added.last.lineKey));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('data names choose selected locale and preserve legacy identity', () {
     for (final code in ['en', 'vi', 'ko']) {
       expect(localizedMenuName(_names.first, code), _names.first['name_$code']);
