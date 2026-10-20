@@ -478,9 +478,11 @@ void main() {
               nameKo: '$size · 탕수육',
               nameVi: '$size · Thịt',
               nameEn: '$size · Pork',
-              description: null,
+              description: 'Registered dish description',
               price: size == 'S' ? 190000 : 370000,
-              imageUrl: null,
+              imageUrl: size == 'S'
+                  ? 'https://example.invalid/tangsuyuk.jpg'
+                  : null,
               vatCategory: 'food',
               sortOrder: 0,
               menuOptionKey: jsonEncode([
@@ -505,6 +507,13 @@ void main() {
       );
       await tester.pumpAndSettle();
       final reads = service.fetchStorefrontCalls;
+      expect(find.text('Registered dish description'), findsOneWidget);
+      expect(
+        tester
+            .widget<Image>(find.byKey(const Key('direct_size_image_small')))
+            .image,
+        isA<NetworkImage>(),
+      );
       final card = find.byKey(const Key('direct_choose_size_small'));
       await _revealMenu(tester, card);
       expect(find.byKey(const Key('direct_choose_size_large')), findsNothing);

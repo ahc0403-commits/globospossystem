@@ -2142,14 +2142,43 @@ class _DirectOrderStorefrontScreenState
     return Card(
       child: ListTile(
         key: Key('direct_choose_size_${item.sizeMetadata!.menuId}'),
+        leading: (item.imageUrl ?? '').trim().isEmpty
+            ? null
+            : ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  item.imageUrl!,
+                  key: Key('direct_size_image_${item.sizeMetadata!.menuId}'),
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.cover,
+                  excludeFromSemantics: true,
+                  errorBuilder: (_, _, _) => const SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: Icon(Icons.broken_image_outlined),
+                  ),
+                ),
+              ),
         title: Text(item.catalogName(_languageCode)),
-        subtitle: Text(
-          options
-              .map(
-                (option) =>
-                    '${option.sizeMetadata!.size} ${_money.format(option.price)}',
-              )
-              .join(' · '),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if ((item.description ?? '').trim().isNotEmpty)
+              Text(
+                item.description!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            Text(
+              options
+                  .map(
+                    (option) =>
+                        '${option.sizeMetadata!.size} ${_money.format(option.price)}',
+                  )
+                  .join(' · '),
+            ),
+          ],
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () async {
