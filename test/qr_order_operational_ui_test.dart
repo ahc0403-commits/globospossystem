@@ -353,7 +353,7 @@ void main() {
       find.text('Món ăn được chuẩn bị tận tâm. Chúc quý khách ngon miệng.'),
       findsOneWidget,
     );
-    expect(find.text('Chưa bao gồm 8% VAT.'), findsOneWidget);
+    expect(find.text('Chưa bao gồm VAT.'), findsOneWidget);
     await tester.drag(
       find.byKey(const Key('qr_menu_scroll')),
       const Offset(0, -600),
@@ -380,7 +380,7 @@ void main() {
 
     expect(find.byKey(const Key('qr_active_promotion')), findsOneWidget);
     expect(find.textContaining('30%'), findsOneWidget);
-    expect(find.text('Chưa bao gồm 8% VAT.'), findsOneWidget);
+    expect(find.text('Chưa bao gồm VAT.'), findsOneWidget);
     expect(find.byKey(const Key('qr_welcome_message')), findsNothing);
     _expectNoLayoutFailure(tester);
   });
