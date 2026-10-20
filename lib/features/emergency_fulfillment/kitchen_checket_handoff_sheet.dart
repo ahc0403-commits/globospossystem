@@ -12,10 +12,12 @@ class KitchenChecketHandoffSheet extends StatefulWidget {
   const KitchenChecketHandoffSheet({
     super.key,
     required this.groups,
+    this.directToFloor = false,
     required this.onSubmit,
   });
 
   final List<KitchenChecketMenuGroup> groups;
+  final bool directToFloor;
   final KitchenChecketSubmit onSubmit;
 
   @override
@@ -67,13 +69,13 @@ class _KitchenChecketHandoffSheetState
     }
     setState(() {
       _busy = false;
-      _error = _copy(context).stale;
+      _error = _copy(context, directToFloor: widget.directToFloor).stale;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final copy = _copy(context);
+    final copy = _copy(context, directToFloor: widget.directToFloor);
     final languageCode = Localizations.localeOf(context).languageCode;
     final pageStart = _page * _groupsPerPage;
     final pageGroups = widget.groups
@@ -366,10 +368,10 @@ class _KitchenChecketRow extends StatelessWidget {
   String empty,
   String stale,
 })
-_copy(BuildContext context) =>
+_copy(BuildContext context, {bool directToFloor = false}) =>
     switch (Localizations.localeOf(context).languageCode) {
       'vi' => (
-        title: 'Chuyển checker',
+        title: directToFloor ? 'Chuyển lên tầng' : 'Chuyển checker',
         selected: 'Đã chọn',
         complete: 'Hoàn tất',
         cancel: 'Hủy',
@@ -379,7 +381,7 @@ _copy(BuildContext context) =>
         stale: 'Số lượng đã thay đổi. Vui lòng mở lại danh sách.',
       ),
       'en' => (
-        title: 'Checker handoff',
+        title: directToFloor ? 'Floor handoff' : 'Checker handoff',
         selected: 'Selected',
         complete: 'Complete',
         cancel: 'Cancel',
@@ -389,7 +391,7 @@ _copy(BuildContext context) =>
         stale: 'Quantities changed. Reopen the list and try again.',
       ),
       _ => (
-        title: 'checker 전달',
+        title: directToFloor ? '층 전달' : 'checker 전달',
         selected: '선택',
         complete: '완료',
         cancel: '취소',
