@@ -170,39 +170,65 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
-  QrOrderMenu sizesMenu({double largePrice = 370000}) => QrOrderMenu(
-    storeName: 'JeonGabok',
-    tableNumber: '1205',
-    floorLabel: '1F',
-    categories: const [QrMenuCategory(id: 'main', name: '요리')],
-    items: [
-      for (final size in ['S', 'L'])
-        QrMenuItem(
-          id: size == 'S' ? 'small' : 'large',
-          categoryId: 'main',
-          name: '$size · 탕수육',
-          nameKo: '$size · 탕수육',
-          nameVi: '$size · Thịt chua ngọt',
-          nameEn: '$size · Sweet and sour pork',
-          price: size == 'S' ? 190000 : largePrice,
-          menuOptionKey: jsonEncode([
-            size,
-            'unknown',
-            '',
-            size == 'S' ? 190000 : largePrice,
-            {
-              'menu_id': 'small',
-              'names': {
-                'name': '탕수육',
-                'name_ko': '탕수육',
-                'name_vi': 'Thịt chua ngọt',
-                'name_en': 'Sweet and sour pork',
-              },
-            },
-          ]),
-        ),
-    ],
-  );
+  QrOrderMenu sizesMenu({double largePrice = 370000, bool withMedia = false}) =>
+      QrOrderMenu(
+        storeName: 'JeonGabok',
+        tableNumber: '1205',
+        floorLabel: '1F',
+        categories: const [QrMenuCategory(id: 'main', name: '요리')],
+        items: [
+          for (final size in ['S', 'L'])
+            QrMenuItem(
+              id: size == 'S' ? 'small' : 'large',
+              categoryId: 'main',
+              name: '$size · 탕수육',
+              nameKo: '$size · 탕수육',
+              nameVi: '$size · Thịt chua ngọt',
+              nameEn: '$size · Sweet and sour pork',
+              imageUrl: withMedia && size == 'S'
+                  ? 'https://example.invalid/tangsuyuk.jpg'
+                  : null,
+              description: withMedia ? 'Registered dish description' : null,
+              price: size == 'S' ? 190000 : largePrice,
+              menuOptionKey: jsonEncode([
+                size,
+                'unknown',
+                '',
+                size == 'S' ? 190000 : largePrice,
+                {
+                  'menu_id': 'small',
+                  'names': {
+                    'name': '탕수육',
+                    'name_ko': '탕수육',
+                    'name_vi': 'Thịt chua ngọt',
+                    'name_en': 'Sweet and sour pork',
+                  },
+                },
+              ]),
+            ),
+        ],
+      );
+
+  testWidgets('one sized menu retains its registered photo and description', (
+    tester,
+  ) async {
+    await _pumpQr(
+      tester,
+      service: _service(fetch: (_) async => sizesMenu(withMedia: true)),
+    );
+    final photo = tester.widget<Image>(
+      find.byKey(const Key('qr_size_image_small')),
+    );
+    expect(
+      (photo.image as NetworkImage).url,
+      'https://example.invalid/tangsuyuk.jpg',
+    );
+    expect(find.text('Registered dish description'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('qr_choose_size_small')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('menu_size_picker')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final language in ['ko', 'vi', 'en']) {
     testWidgets(

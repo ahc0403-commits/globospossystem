@@ -526,7 +526,38 @@ class _QrOrderScreenState extends State<QrOrderScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if ((item.imageUrl ?? '').trim().isNotEmpty) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        item.imageUrl!,
+                        key: Key('qr_size_image_${item.sizeMetadata!.menuId}'),
+                        width: 96,
+                        height: 96,
+                        fit: BoxFit.cover,
+                        excludeFromSemantics: true,
+                        errorBuilder: (_, _, _) => const SizedBox(
+                          width: 96,
+                          height: 96,
+                          child: Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Text(title, style: Theme.of(context).textTheme.titleMedium),
+                if ((item.description ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    item.description!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Text(prices),
                 const SizedBox(height: 8),
