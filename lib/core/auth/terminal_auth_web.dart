@@ -6,17 +6,48 @@ import 'terminal_auth.dart';
 Future<TerminalAuth> createTerminalAuth(String url, List<String> args) async {
   final uri = Uri.base;
   final requested = uri.queryParameters['terminal'];
-  final terminal = terminalNames.contains(requested) ? requested : null;
-  // Named terminals survive window closure. Unnamed browser windows use their
-  // own sessionStorage, so existing generic PWA icons also stop sharing auth.
-  final namespace = terminalNamespace(url, terminal ?? 'window');
-  return TerminalAuth(
-    namespace: terminal == null ? '$namespace:${const Uuid().v4()}' : namespace,
-    storage: WebTerminalStorage(
-      namespace,
-      terminal == null ? web.window.sessionStorage : web.window.localStorage,
-    ),
-  );
+  final legacyNamespace = terminalNamespace(url, 'window');
+  final local = web.window.localStorage;
+  final tab = web.window.sessionStorage;
+  final windowPattern = RegExp(r'^window-[a-f0-9-]{36}$');
+  final named = terminalNames.contains(requested);
+  final tabId = tab.getItem('$legacyNamespace:terminal-id');
+  final legacySession = tab.getItem('$legacyNamespace:session');
+  // Preserve an already open window's independent identity. The URL keeps its
+  // durable slot on restart; a generic PWA launch reopens its last active slot.
+  final terminal = named || windowPattern.hasMatch(requested ?? '')
+      ? requested!
+      : tabId ??
+            (legacySession == null
+                ? local.getItem('$legacyNamespace:last-terminal')
+                : null) ??
+            'window-${const Uuid().v4()}';
+  final namespace = terminalNamespace(url, terminal);
+  if (!named) {
+    tab.setItem('$legacyNamespace:terminal-id', terminal);
+    local.setItem('$legacyNamespace:last-terminal', terminal);
+  }
+  final storage = WebTerminalStorage(namespace, local);
+  if (!named && local.getItem('$namespace:migrated') == null) {
+    final project = Uri.parse(url).host.split('.').first;
+    final existing = legacySession ?? local.getItem('sb-$project-auth-token');
+    if (await storage.read('session') == null && existing != null) {
+      await storage.write('session', existing);
+    }
+    local.setItem('$namespace:migrated', '1');
+    tab.removeItem('$legacyNamespace:session');
+  }
+  final route = uri.fragment.isEmpty ? uri.path : uri.fragment;
+  if (!route.startsWith('/order/') &&
+      !route.startsWith('/qr/') &&
+      !route.startsWith('/receipt') &&
+      requested != terminal) {
+    final target = uri.replace(
+      queryParameters: {...uri.queryParameters, 'terminal': terminal},
+    );
+    web.window.history.replaceState(null, '', target.toString());
+  }
+  return TerminalAuth(namespace: namespace, storage: storage);
 }
 
 class WebTerminalStorage implements TerminalStorage {

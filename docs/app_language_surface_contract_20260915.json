@@ -7,6 +7,7 @@
     {"path": "/order/:slug/r/:requestId", "policy": "customer_selected"},
     {"path": "/receipt", "policy": "fixed_vi_customer_receipt"},
     {"path": "/login", "policy": "staff_selected"},
+    {"path": "/session-restore", "policy": "staff_selected"},
     {"path": "/change-initial-password", "policy": "staff_selected"},
     {"path": "/change-password", "policy": "staff_selected"},
     {"path": "/privacy-consent", "policy": "staff_selected"},

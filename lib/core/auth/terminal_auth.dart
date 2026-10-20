@@ -4,7 +4,20 @@ import 'terminal_auth_native.dart'
     if (dart.library.js_interop) 'terminal_auth_web.dart'
     as platform;
 
-const terminalNames = {'cashier', 'print_station', 'customer_display'};
+const terminalNames = {
+  'cashier',
+  'print_station',
+  'customer_display',
+  'kitchen',
+  'waiter',
+  'emergency_station',
+  'floor_1f',
+  'floor_2f',
+  'floor_3f',
+  'tray',
+  'inventory',
+  'admin',
+};
 
 /// A terminal is a login space, not an authorization role. Server permissions
 /// still come from the authenticated account and RLS.

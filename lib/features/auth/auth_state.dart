@@ -16,6 +16,8 @@ class AccessibleStore {
 
 class PosAuthState {
   final bool isLoading;
+  final bool isRestoring;
+  final bool isRecoveringSession;
   final User? user;
   final String? role;
   final String? storeId;
@@ -30,6 +32,8 @@ class PosAuthState {
 
   const PosAuthState({
     this.isLoading = false,
+    this.isRestoring = false,
+    this.isRecoveringSession = false,
     this.user,
     this.role,
     this.storeId,
@@ -45,6 +49,8 @@ class PosAuthState {
 
   PosAuthState copyWith({
     bool? isLoading,
+    bool? isRestoring,
+    bool? isRecoveringSession,
     User? user,
     String? role,
     String? storeId,
@@ -61,6 +67,8 @@ class PosAuthState {
   }) {
     return PosAuthState(
       isLoading: isLoading ?? this.isLoading,
+      isRestoring: isRestoring ?? this.isRestoring,
+      isRecoveringSession: isRecoveringSession ?? this.isRecoveringSession,
       user: clearUser ? null : (user ?? this.user),
       role: clearUser ? null : (role ?? this.role),
       storeId: clearUser ? null : (storeId ?? this.storeId),

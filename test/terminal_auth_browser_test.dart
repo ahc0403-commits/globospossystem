@@ -26,6 +26,48 @@ String fixtureSession(String id) => jsonEncode({
 });
 
 void main() {
+  test('unnamed window survives close and keeps a stable isolated URL', () async {
+    const url = 'https://persistent-window-fixture.invalid';
+    final original = web.window.location.href;
+    final legacy = terminalNamespace(url, 'window');
+    final base = Uri.parse(original).replace(queryParameters: {});
+    web.window.history.replaceState(null, '', base.toString());
+    web.window.sessionStorage.removeItem('$legacy:terminal-id');
+    web.window.localStorage.removeItem('$legacy:last-terminal');
+    web.window.sessionStorage.setItem(
+      '$legacy:session',
+      fixtureSession('old-window'),
+    );
+    final auth = await createTerminalAuth(url, []);
+    expect(await auth.storage.read('session'), fixtureSession('old-window'));
+    final durableUrl = web.window.location.href;
+    expect(
+      Uri.parse(durableUrl).queryParameters['terminal'],
+      startsWith('window-'),
+    );
+    expect(
+      web.window.localStorage.getItem('${auth.namespace}:session'),
+      isNotNull,
+    );
+    // Closing a browser discards sessionStorage, but not the terminal's session.
+    web.window.sessionStorage.removeItem('$legacy:terminal-id');
+    final reopened = await createTerminalAuth(url, []);
+    expect(reopened.namespace, auth.namespace);
+    expect(
+      await reopened.storage.read('session'),
+      fixtureSession('old-window'),
+    );
+    await reopened.storage.remove('session');
+    final loggedOut = await createTerminalAuth(url, []);
+    expect(await loggedOut.storage.read('session'), isNull);
+    for (final key in ['session', 'migrated']) {
+      web.window.localStorage.removeItem('${auth.namespace}:$key');
+    }
+    web.window.localStorage.removeItem('$legacy:last-terminal');
+    web.window.sessionStorage.removeItem('$legacy:terminal-id');
+    web.window.history.replaceState(null, '', original);
+  });
+
   test(
     'cashier logout and legacy broadcasts leave station/display logged in',
     () async {

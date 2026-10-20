@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'
         SupabaseClient,
         User;
 import '../../core/services/navigation_history_service.dart';
+import '../../core/auth/terminal_auth.dart';
 import '../../core/utils/role_routes.dart';
 import '../../main.dart';
 import '../admin/providers/settings_provider.dart';
@@ -46,19 +48,34 @@ const authErrorPasswordChangeFailedPrefix = 'auth/password-change-failed:';
 const privacyConsentDocumentVersion = 'vn-pdpl-2026-01';
 
 class AuthNotifier extends StateNotifier<PosAuthState> {
-  AuthNotifier({this.onLogout, SupabaseClient? client})
-    : _client = client ?? supabase,
-      super(const PosAuthState()) {
+  AuthNotifier({
+    this.onLogout,
+    SupabaseClient? client,
+    TerminalStorage? profileStorage,
+  }) : _client = client ?? supabase,
+       _profileStorage =
+           profileStorage ??
+           (client == null ? TerminalAuth.current?.storage : null),
+       super(const PosAuthState()) {
     _init();
   }
 
   final void Function()? onLogout;
   final SupabaseClient _client;
+  final TerminalStorage? _profileStorage;
+  Timer? _profileRetry;
+  int _retryCount = 0;
+  DateTime? _lastProfileSuccess;
+  String? _activeUserId;
+  bool _signedOutHandled = false;
+  Future<void> _cacheCleanup = Future.value();
   Future<void>? _profileLoad;
   String? _profileUserId;
   int _sessionGeneration = 0;
 
   void _invalidateProfileLoad() {
+    _profileRetry?.cancel();
+    _profileRetry = null;
     _sessionGeneration++;
     _profileLoad = null;
     _profileUserId = null;
@@ -71,32 +88,51 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   void _init() {
     final session = _client.auth.currentSession;
     if (session != null) {
-      state = state.copyWith(isLoading: true);
+      state = state.copyWith(isLoading: true, isRestoring: true);
       _fetchUserProfile(session.user);
     }
 
-    _authSub = _client.auth.onAuthStateChange.listen((data) async {
-      if (!mounted) return;
-      final event = data.event;
-      final session = data.session;
-      if (event == AuthChangeEvent.signedIn && session != null) {
-        if (_client.auth.currentUser?.id == session.user.id &&
-            state.user?.id != session.user.id) {
-          await _fetchUserProfile(session.user);
+    _authSub = _client.auth.onAuthStateChange.listen(
+      (data) {
+        if (!mounted) return;
+        final event = data.event;
+        final session = data.session;
+        if ((event == AuthChangeEvent.signedIn ||
+                event == AuthChangeEvent.initialSession ||
+                event == AuthChangeEvent.tokenRefreshed ||
+                event == AuthChangeEvent.userUpdated) &&
+            session != null) {
+          if (state.user != null && state.user?.id != session.user.id) {
+            _invalidateProfileLoad();
+            state = state.copyWith(clearUser: true, isRestoring: true);
+            onLogout?.call();
+          }
+          if (_client.auth.currentUser?.id == session.user.id &&
+              (state.user?.id != session.user.id ||
+                  state.isRecoveringSession ||
+                  event == AuthChangeEvent.userUpdated)) {
+            unawaited(_fetchUserProfile(session.user));
+          }
+        } else if (event == AuthChangeEvent.signedOut) {
+          _finishSignOut();
         }
-      } else if (event == AuthChangeEvent.signedOut) {
-        _invalidateProfileLoad();
-        NavigationHistoryService.instance.clear();
-        state = PosAuthState(errorMessage: _pendingSignedOutErrorMessage);
-        _pendingSignedOutErrorMessage = null;
-      }
-    });
+      },
+      onError: (Object error, StackTrace stack) {
+        final user = _client.auth.currentUser;
+        if (mounted && user != null) {
+          _profileFailed(user, authErrorProfileLoadFailed);
+        }
+      },
+    );
   }
 
   Future<void> _fetchUserProfile(User user) {
     if (_profileUserId == user.id && _profileLoad != null) {
       return _profileLoad!;
     }
+    _activeUserId = user.id;
+    _signedOutHandled = false;
+    _profileRetry?.cancel();
     final generation = ++_sessionGeneration;
     _profileUserId = user.id;
     final load = _loadUserProfile(user, generation);
@@ -112,8 +148,16 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   bool _isCurrentProfile(int generation) =>
       mounted && generation == _sessionGeneration;
 
-  Future<void> _loadUserProfile(User user, int generation) async {
+  Future<void> _loadUserProfile(
+    User user,
+    int generation, {
+    bool refreshed = false,
+  }) async {
     try {
+      if (!refreshed && state.user == null) {
+        await _restoreCachedProfile(user, generation);
+        if (!_isCurrentProfile(generation)) return;
+      }
       final data = await _client
           .from('users')
           .select(
@@ -121,7 +165,8 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
             'must_change_password',
           )
           .eq('auth_id', user.id)
-          .single();
+          .single()
+          .timeout(const Duration(seconds: 10));
       if (!_isCurrentProfile(generation)) return;
 
       final isActive = data['is_active'] as bool? ?? true;
@@ -168,6 +213,8 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
       state = state.copyWith(
         isLoading: false,
+        isRestoring: false,
+        isRecoveringSession: false,
         user: user,
         role: role,
         storeId: activeStoreId,
@@ -179,24 +226,45 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
             role != 'customer_display' && !hasPrivacyConsent,
         clearError: true,
       );
+      _retryCount = 0;
+      _lastProfileSuccess = DateTime.now();
+      await _saveCachedProfile(user);
+      if (!_isCurrentProfile(generation)) return;
 
       final homeRoute = homeRouteForRole(role);
       NavigationHistoryService.instance.push(homeRoute);
     } on PostgrestException catch (error) {
       if (!_isCurrentProfile(generation)) return;
-      await _handleProfileLoadError(error);
+      final code = error.code?.toUpperCase();
+      if (!refreshed &&
+          (code == 'PGRST301' ||
+              code == 'PGRST303' ||
+              error.message.toUpperCase().contains('JWT EXPIRED'))) {
+        try {
+          await _client.auth.refreshSession().timeout(
+            const Duration(seconds: 10),
+          );
+          if (_isCurrentProfile(generation)) {
+            await _loadUserProfile(user, generation, refreshed: true);
+          }
+        } catch (_) {
+          if (_isCurrentProfile(generation)) {
+            _profileFailed(user, authErrorProfileLoadFailed);
+          }
+        }
+        return;
+      }
+      _handleProfileLoadError(user, error);
     } catch (_) {
       if (!_isCurrentProfile(generation)) return;
-      state = state.copyWith(
-        isLoading: false,
-        clearUser: state.user?.id != user.id,
-        errorMessage: authErrorProfileLoadFailed,
-      );
+      _profileFailed(user, authErrorProfileLoadFailed);
     }
   }
 
   Future<void> login(String email, String password) async {
     _invalidateProfileLoad();
+    _retryCount = 0;
+    _signedOutHandled = false;
     state = state.copyWith(isLoading: true, clearUser: true, clearError: true);
     try {
       final response = await _client.auth.signInWithPassword(
@@ -220,7 +288,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     }
   }
 
-  Future<void> _handleProfileLoadError(PostgrestException error) async {
+  void _handleProfileLoadError(User user, PostgrestException error) {
     final code = error.code?.toUpperCase() ?? '';
     final message = error.message.toUpperCase();
 
@@ -228,7 +296,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         message.contains('0 ROWS') ||
         message.contains('NO ROWS') ||
         message.contains('JSON OBJECT REQUESTED')) {
-      await _signOutWithError(authErrorProfileMissing);
+      _profileFailed(user, authErrorProfileMissing, block: true);
       return;
     }
 
@@ -236,31 +304,163 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         message.contains('PERMISSION') ||
         message.contains('ROW-LEVEL SECURITY') ||
         message.contains('JWT')) {
-      await _signOutWithError(authErrorProfilePermissionDenied);
+      _profileFailed(user, authErrorProfilePermissionDenied, block: true);
       return;
     }
 
+    _profileFailed(user, authErrorProfileLookupFailedPrefix);
+  }
+
+  void _profileFailed(User user, String message, {bool block = false}) {
+    if (!mounted || _client.auth.currentUser?.id != user.id) return;
+    final keepUser = !block && state.user?.id == user.id;
     state = state.copyWith(
       isLoading: false,
-      clearUser: state.user?.id != _client.auth.currentUser?.id,
-      errorMessage: '$authErrorProfileLookupFailedPrefix ${error.message}',
+      isRestoring: !keepUser,
+      isRecoveringSession: true,
+      clearUser: !keepUser,
+      errorMessage: message,
     );
+    if (block) unawaited(_removeCachedProfile(user.id));
+    if (_profileRetry?.isActive == true || _retryCount >= 2) return;
+    final generation = _sessionGeneration;
+    final delay = Duration(
+      milliseconds: (1000 << _retryCount) + DateTime.now().millisecond % 250,
+    );
+    _retryCount++;
+    _profileRetry = Timer(delay, () {
+      if (_isCurrentProfile(generation) &&
+          _client.auth.currentUser?.id == user.id) {
+        unawaited(_fetchUserProfile(user));
+      }
+    });
+  }
+
+  Future<void> _restoreCachedProfile(User user, int generation) async {
+    try {
+      final raw = await _profileStorage?.read('profile-v1:${user.id}');
+      if (raw == null ||
+          !_isCurrentProfile(generation) ||
+          _client.auth.currentUser?.id != user.id) {
+        return;
+      }
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      if (data['user_id'] != user.id ||
+          !kKnownPosRoles.contains(data['role'])) {
+        return;
+      }
+      final stores = (data['stores'] as List)
+          .map(
+            (row) => AccessibleStore(
+              id: row['id'] as String,
+              name: row['name'] as String,
+              brandId: row['brand_id'] as String?,
+              brandName: row['brand_name'] as String?,
+            ),
+          )
+          .toList();
+      final storeId = data['store_id'] as String?;
+      if (!kStoreScopeExemptRoles.contains(data['role']) &&
+          !stores.any((store) => store.id == storeId)) {
+        return;
+      }
+      state = state.copyWith(
+        user: user,
+        role: data['role'] as String,
+        storeId: storeId,
+        primaryStoreId: data['primary_store_id'] as String?,
+        accessibleStores: stores,
+        extraPermissions: (data['permissions'] as List).cast<String>(),
+        passwordChangeRequired: data['password_change'] == true,
+        privacyConsentRequired:
+            data['consent_version'] != privacyConsentDocumentVersion ||
+            data['consent_required'] == true,
+        isLoading: false,
+        isRestoring: false,
+        isRecoveringSession: true,
+      );
+    } catch (_) {
+      // A damaged or unavailable cache never becomes an authentication failure.
+    }
+  }
+
+  Future<void> _saveCachedProfile(User user) async {
+    if (state.user?.id != user.id) return;
+    try {
+      await _profileStorage?.write(
+        'profile-v1:${user.id}',
+        jsonEncode({
+          'user_id': user.id,
+          'role': state.role,
+          'store_id': state.storeId,
+          'primary_store_id': state.primaryStoreId,
+          'permissions': state.extraPermissions,
+          'password_change': state.passwordChangeRequired,
+          'consent_required': state.privacyConsentRequired,
+          'consent_version': privacyConsentDocumentVersion,
+          'stores': state.accessibleStores
+              .map(
+                (s) => {
+                  'id': s.id,
+                  'name': s.name,
+                  'brand_id': s.brandId,
+                  'brand_name': s.brandName,
+                },
+              )
+              .toList(),
+        }),
+      );
+    } catch (_) {
+      // Storage quota/private mode must not sign out a healthy in-memory session.
+    }
+  }
+
+  Future<void> _removeCachedProfile(String userId) async {
+    try {
+      await _profileStorage?.remove('profile-v1:$userId');
+    } catch (_) {}
+  }
+
+  void _finishSignOut() {
+    if (_signedOutHandled) return;
+    _signedOutHandled = true;
+    final userId = _activeUserId;
+    _invalidateProfileLoad();
+    _retryCount = 0;
+    _lastProfileSuccess = null;
+    NavigationHistoryService.instance.clear();
+    state = PosAuthState(errorMessage: _pendingSignedOutErrorMessage);
+    _pendingSignedOutErrorMessage = null;
+    onLogout?.call();
+    _cacheCleanup = () async {
+      if (userId != null) await _removeCachedProfile(userId);
+      try {
+        if (_client.auth.currentSession == null) {
+          await _profileStorage?.remove('session');
+        }
+      } catch (_) {}
+    }();
   }
 
   Future<void> _signOutWithError(String message) async {
     _pendingSignedOutErrorMessage = message;
-    await _client.auth.signOut(scope: SignOutScope.local);
-    if (!mounted) return;
-    state = PosAuthState(errorMessage: message);
+    try {
+      await _client.auth.signOut(scope: SignOutScope.local);
+    } finally {
+      if (mounted) _finishSignOut();
+    }
   }
 
   Future<void> logout() async {
     _invalidateProfileLoad();
-    await _client.auth.signOut(scope: SignOutScope.local);
-    if (!mounted) return;
-    NavigationHistoryService.instance.clear();
-    state = const PosAuthState();
-    onLogout?.call();
+    try {
+      await _client.auth.signOut(scope: SignOutScope.local);
+    } catch (_) {
+      /* Local logout must complete while the network is unavailable. */
+    } finally {
+      if (mounted) _finishSignOut();
+      await _cacheCleanup;
+    }
   }
 
   Future<bool> changeInitialPassword(String newPassword) async {
@@ -313,6 +513,8 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         passwordChangeRequired: false,
         clearError: true,
       );
+      final user = state.user;
+      if (user != null) await _saveCachedProfile(user);
       return true;
     } on AuthException catch (error) {
       state = state.copyWith(
@@ -346,6 +548,8 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         privacyConsentRequired: false,
         clearError: true,
       );
+      final user = state.user;
+      if (user != null) await _saveCachedProfile(user);
       final role = state.role;
       if (role != null) {
         NavigationHistoryService.instance.push(homeRouteForRole(role));
@@ -417,13 +621,24 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     state = state.copyWith(storeId: storeId, accessibleStores: stores);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('$_activeStorePrefsPrefix${user.id}', storeId);
+    await _saveCachedProfile(user);
   }
 
-  Future<void> refreshProfile() async {
+  Future<void> refreshProfile({bool force = true}) async {
     final user = _client.auth.currentUser;
     if (user == null) {
-      state = const PosAuthState();
       return;
+    }
+    if (!force &&
+        !state.isRecoveringSession &&
+        state.user?.id == user.id &&
+        _lastProfileSuccess != null &&
+        DateTime.now().difference(_lastProfileSuccess!) <
+            const Duration(minutes: 5)) {
+      return;
+    }
+    if (state.user == null) {
+      state = state.copyWith(isLoading: true, isRestoring: true);
     }
     await _fetchUserProfile(user);
   }
@@ -560,7 +775,10 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       );
       return accepted == true;
     } catch (_) {
-      return false;
+      if (state.user?.id == _client.auth.currentUser?.id) {
+        return !state.privacyConsentRequired;
+      }
+      rethrow;
     }
   }
 

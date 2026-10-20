@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
+import 'package:globos_pos_system/core/auth/terminal_auth.dart';
+import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +16,12 @@ const _storeId = '00000000-0000-0000-0000-000000000002';
 class _AuthApi {
   int profileCalls = 0;
   bool failProfile = false;
+  bool failConsent = false;
+  bool failLogout = false;
+  String role = 'store_admin';
+  String failureCode = '503';
+  String failureMessage = 'temporary unavailable';
+  int? failuresRemaining;
   int logoutCalls = 0;
   int consentCalls = 0;
   int storeCalls = 0;
@@ -61,9 +69,13 @@ class _AuthApi {
         };
       case '/rest/v1/users':
         profileCalls++;
-        if (failProfile) {
+        if (failProfile &&
+            (failuresRemaining == null || failuresRemaining! > 0)) {
+          if (failuresRemaining != null) {
+            failuresRemaining = failuresRemaining! - 1;
+          }
           return http.Response(
-            jsonEncode({'message': 'temporary unavailable', 'code': '503'}),
+            jsonEncode({'message': failureMessage, 'code': failureCode}),
             503,
             headers: {'content-type': 'application/json'},
             request: request,
@@ -72,7 +84,7 @@ class _AuthApi {
         if (!profileStarted.isCompleted) profileStarted.complete();
         await profileGate?.future;
         response = {
-          'role': 'store_admin',
+          'role': role,
           'restaurant_id': _storeId,
           'is_active': active,
           'extra_permissions': [],
@@ -87,10 +99,12 @@ class _AuthApi {
         ];
       case '/rest/v1/rpc/has_accepted_current_privacy_consent':
         consentCalls++;
+        if (failConsent) throw http.ClientException('offline');
         if (!consentStarted.isCompleted) consentStarted.complete();
         response = consentAccepted;
       case '/auth/v1/logout':
         logoutCalls++;
+        if (failLogout) throw http.ClientException('offline');
         return http.Response('', 204);
       default:
         throw StateError('Unexpected request: ${request.url.path}');
@@ -101,6 +115,23 @@ class _AuthApi {
       headers: {'content-type': 'application/json'},
       request: request,
     );
+  }
+}
+
+class _MemoryStorage implements TerminalStorage {
+  final values = <String, String>{};
+  @override
+  Future<void> initialize() async {}
+  @override
+  Future<String?> read(String key) async => values[key];
+  @override
+  Future<void> write(String key, String value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<void> remove(String key) async {
+    values.remove(key);
   }
 }
 
@@ -217,6 +248,115 @@ void main() {
       expect(auth.state.user, isNull);
       expect(auth.state.errorMessage, authErrorAccountDeactivated);
       expect(api.logoutCalls, 1);
+    },
+  );
+
+  for (final role in kKnownPosRoles) {
+    test(
+      '$role survives cold restore, outage and explicit offline logout',
+      () async {
+        final api = _AuthApi()..role = role;
+        final storage = _MemoryStorage();
+        final original = AuthNotifier(
+          client: api.client,
+          profileStorage: storage,
+        );
+        await original.login('test@example.test', 'test-password');
+        expect(api.profileCalls, 1);
+        expect(api.storeCalls, 1);
+        expect(api.consentCalls, 1);
+        original.dispose();
+        api.failProfile = true;
+        var resets = 0;
+        final restored = AuthNotifier(
+          client: api.client,
+          profileStorage: storage,
+          onLogout: () => resets++,
+        );
+        addTearDown(restored.dispose);
+        addTearDown(api.client.dispose);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(restored.state.user?.id, _userId);
+        expect(restored.state.role, role);
+        expect(restored.state.storeId, _storeId);
+        expect(restored.state.isRecoveringSession, isTrue);
+        expect(api.client.auth.currentSession, isNotNull);
+        api.failProfile = false;
+        await api.client.auth.refreshSession();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(restored.state.isRecoveringSession, isFalse);
+        expect(restored.state.role, role);
+        api.failLogout = true;
+        await restored.logout();
+        expect(resets, 1);
+        expect(restored.state.user, isNull);
+        expect(storage.values, isEmpty);
+        expect(api.client.auth.currentSession, isNull);
+      },
+    );
+  }
+
+  test(
+    'JWT expiry refreshes once without signing out or losing the role',
+    () async {
+      final api = _AuthApi();
+      final auth = AuthNotifier(client: api.client);
+      addTearDown(auth.dispose);
+      addTearDown(api.client.dispose);
+      await auth.login('test@example.test', 'test-password');
+      api
+        ..failProfile = true
+        ..failureCode = 'PGRST303'
+        ..failureMessage = 'JWT expired'
+        ..failuresRemaining = 1;
+      await auth.refreshProfile();
+      expect(auth.state.user?.id, _userId);
+      expect(auth.state.isRecoveringSession, isFalse);
+      expect(api.profileCalls, 3);
+      expect(api.logoutCalls, 0);
+    },
+  );
+
+  test(
+    'accepted consent survives an RPC outage and fresh fallback is coalesced',
+    () async {
+      final api = _AuthApi();
+      final auth = AuthNotifier(client: api.client);
+      addTearDown(auth.dispose);
+      addTearDown(api.client.dispose);
+      await auth.login('test@example.test', 'test-password');
+      await Future.wait(
+        List.generate(20, (_) => auth.refreshProfile(force: false)),
+      );
+      expect(api.profileCalls, 1);
+      api.failConsent = true;
+      await auth.refreshProfile();
+      expect(auth.state.privacyConsentRequired, isFalse);
+      expect(auth.state.user, isNotNull);
+    },
+  );
+
+  test(
+    'missing profile blocks access but preserves the recoverable SDK session',
+    () async {
+      final api = _AuthApi();
+      final auth = AuthNotifier(client: api.client);
+      addTearDown(auth.dispose);
+      addTearDown(api.client.dispose);
+      await auth.login('test@example.test', 'test-password');
+      api
+        ..failProfile = true
+        ..failureCode = 'PGRST116'
+        ..failureMessage = '0 rows';
+      await auth.refreshProfile();
+      expect(auth.state.user, isNull);
+      expect(auth.state.isRestoring, isTrue);
+      expect(api.client.auth.currentSession, isNotNull);
+      expect(api.logoutCalls, 0);
+      api.failProfile = false;
+      await api.client.auth.refreshSession();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(auth.state.user?.id, _userId);
     },
   );
 }
