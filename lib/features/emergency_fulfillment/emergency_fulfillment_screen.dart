@@ -399,7 +399,10 @@ class _EmergencyFulfillmentScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(emergencyFulfillmentProvider);
-    final copy = _EmergencyCopy.of(context);
+    final copy = _EmergencyCopy.of(
+      context,
+      directToFloor: state.kitchenDirectToFloor,
+    );
     final expected = widget.expectedStationType;
     final headerStation = state.stationType ?? expected;
     final assignmentLoadFailed =
@@ -437,6 +440,7 @@ class _EmergencyFulfillmentScreenState
             children: [
               const OfflineBanner(),
               _EmergencyHeader(
+                directToFloor: state.kitchenDirectToFloor,
                 title: headerStation == null || headerStation == 'kitchen'
                     ? context.l10n.kitchenTitle
                     : copy.stationTitle(headerStation, state.floorLabel),
@@ -663,6 +667,7 @@ class _EmergencyFulfillmentScreenState
       useSafeArea: false,
       builder: (dialogContext) => Dialog.fullscreen(
         child: KitchenChecketHandoffSheet(
+          directToFloor: state.kitchenDirectToFloor,
           groups: groups,
           onSubmit: (selections) => ref
               .read(emergencyFulfillmentProvider.notifier)
@@ -838,6 +843,7 @@ class _EmergencyFulfillmentScreenState
 
 class _EmergencyHeader extends StatelessWidget {
   const _EmergencyHeader({
+    this.directToFloor = false,
     required this.title,
     required this.active,
     required this.draining,
@@ -855,6 +861,7 @@ class _EmergencyHeader extends StatelessWidget {
   });
 
   final String title;
+  final bool directToFloor;
   final bool active;
   final bool draining;
   final bool alarmEnabled;
@@ -871,7 +878,7 @@ class _EmergencyHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final copy = _EmergencyCopy.of(context);
+    final copy = _EmergencyCopy.of(context, directToFloor: directToFloor);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       color: PosColors.surface,
@@ -2731,12 +2738,19 @@ Color _orderFloorColor(String floorLabel) =>
     };
 
 class _EmergencyCopy {
-  const _EmergencyCopy(this.languageCode);
+  const _EmergencyCopy(this.languageCode, {this.directToFloor = false});
+
+  final bool directToFloor;
 
   final String languageCode;
 
-  static _EmergencyCopy of(BuildContext context) =>
-      _EmergencyCopy(Localizations.localeOf(context).languageCode);
+  static _EmergencyCopy of(
+    BuildContext context, {
+    bool directToFloor = false,
+  }) => _EmergencyCopy(
+    Localizations.localeOf(context).languageCode,
+    directToFloor: directToFloor,
+  );
 
   String _pick(String ko, String vi, String en) => switch (languageCode) {
     'vi' => vi,
@@ -2834,6 +2848,11 @@ class _EmergencyCopy {
     'Leftover packaging requests',
   );
   String leftoverPackagingStage(String status) => switch (status) {
+    'awaiting_floor_pickup' when directToFloor => _pick(
+      '층에서 요청 확인 후 주방으로 전달',
+      'Tầng xác nhận rồi chuyển vào bếp',
+      'Confirm on the floor, then hand to kitchen',
+    ),
     'awaiting_floor_pickup' => _pick(
       '층에서 요청 확인 후 트레이로 전달',
       'Tầng xác nhận rồi chuyển cho khay',
@@ -2861,6 +2880,11 @@ class _EmergencyCopy {
     ),
   };
   String leftoverPackagingAction(String status) => switch (status) {
+    'awaiting_floor_pickup' when directToFloor => _pick(
+      '주방 전달',
+      'Chuyển vào bếp',
+      'Send to kitchen',
+    ),
     'awaiting_floor_pickup' => _pick(
       '트레이 전달',
       'Chuyển cho khay',
@@ -2932,8 +2956,9 @@ class _EmergencyCopy {
       _pick('취소 (원복)', 'Hủy (hoàn tác)', 'Cancel (undo)');
   String get cancelOne => _pick('1개 취소', 'Hủy 1 món', 'Undo one');
   String get completeOne => _pick('1개 완료', 'Hoàn tất 1 món', 'Complete one');
-  String get checketHandoff =>
-      _pick('checker 전달', 'Chuyển checker', 'Checker handoff');
+  String get checketHandoff => directToFloor
+      ? _pick('층 전달', 'Chuyển lên tầng', 'Floor handoff')
+      : _pick('checker 전달', 'Chuyển checker', 'Checker handoff');
   String get floorTransition =>
       _pick('층별 전달', 'Chuyển theo tầng', 'Floor handoff');
   String get customerDelivery =>
@@ -2998,16 +3023,16 @@ class _EmergencyCopy {
     }
     if (error.contains('KDS_CHECKET_SELECTION_STALE')) {
       return _pick(
-        '메뉴 수량이 변경되었습니다. checker 전달을 다시 열어 주세요.',
-        'Số lượng món đã thay đổi. Hãy mở lại Chuyển checker.',
-        'Menu quantities changed. Reopen Checker handoff.',
+        '메뉴 수량이 변경되었습니다. $checketHandoff 화면을 다시 열어 주세요.',
+        'Số lượng món đã thay đổi. Hãy mở lại $checketHandoff.',
+        'Menu quantities changed. Reopen $checketHandoff.',
       );
     }
     if (error.contains('KDS_CHECKET_BATCH_QUEUED')) {
       return _pick(
-        '연결이 복구되면 checker 전달을 자동 전송합니다.',
-        'Checker sẽ tự gửi khi kết nối trở lại.',
-        'The Checker handoff will send when the connection returns.',
+        '연결이 복구되면 $checketHandoff 처리를 자동 전송합니다.',
+        '$checketHandoff sẽ tự gửi khi kết nối trở lại.',
+        '$checketHandoff will send when the connection returns.',
       );
     }
     if (error.contains('EMERGENCY_REVERT_DOWNSTREAM_PROGRESS')) {

@@ -6,12 +6,14 @@ class CartItem {
     required this.name,
     required this.price,
     required this.quantity,
+    this.menuOptionKey,
     this.isTakeout = false,
     this.nameKo,
     this.nameVi,
     this.nameEn,
   });
 
+  final String? menuOptionKey;
   final String menuItemId;
   final String name;
   final double price;
@@ -28,7 +30,8 @@ class CartItem {
     'name_en': nameEn,
   }, languageCode);
 
-  String get lineKey => '$menuItemId:${isTakeout ? 'takeout' : 'dine_in'}';
+  String get lineKey =>
+      '$menuItemId:${isTakeout ? 'takeout' : 'dine_in'}${menuOptionKey == null ? '' : ':$menuOptionKey'}';
 
   CartItem copyWith({
     String? menuItemId,
@@ -39,6 +42,7 @@ class CartItem {
   }) {
     return CartItem(
       menuItemId: menuItemId ?? this.menuItemId,
+      menuOptionKey: menuOptionKey,
       name: name ?? this.name,
       price: price ?? this.price,
       quantity: quantity ?? this.quantity,
@@ -142,6 +146,13 @@ class OrderItem {
       menuItemNameVi = menuItemRaw['name_vi']?.toString();
       menuItemNameEn = menuItemRaw['name_en']?.toString();
       vatCategory = menuItemRaw['vat_category']?.toString();
+    }
+
+    final options = json['menu_option_snapshot'];
+    if (options is Map && options.isNotEmpty) {
+      menuItemNameKo = options['name_ko']?.toString() ?? menuItemNameKo;
+      menuItemNameVi = options['name_vi']?.toString() ?? menuItemNameVi;
+      menuItemNameEn = options['name_en']?.toString() ?? menuItemNameEn;
     }
 
     return OrderItem(

@@ -1,3 +1,4 @@
+import '../../../core/menu/menu_options.dart';
 import '../../auth/auth_provider.dart';
 import '../widgets/invoice_profile_editor.dart';
 import '../widgets/invoice_mapping_catalog_dialog.dart';
@@ -1130,6 +1131,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final nameEnController = TextEditingController();
     final priceController = TextEditingController();
     var beverageTax = const BeverageTax();
+    var menuOptions = const MenuOptions();
     XFile? selectedPhoto;
     Uint8List? selectedPreviewBytes;
     var isCombo = false;
@@ -1212,6 +1214,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     keyboardType: TextInputType.number,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  MenuOptionsEditor(
+                    value: menuOptions,
+                    onChanged: (value) =>
+                        setDialogState(() => menuOptions = value),
                   ),
                   const SizedBox(height: 16),
                   BeverageTaxEditor(
@@ -1305,6 +1313,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   final success = photo == null
                       ? await menuNotifier.addMenuItem(
                           categoryId: categoryId,
+                          menuOptions: menuOptions.toJson(),
                           nameKo: nameKo,
                           nameVi: nameVi,
                           invoiceSaleUnit:
@@ -1323,6 +1332,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                         )
                       : await menuNotifier.addMenuItemWithPhoto(
                           categoryId: categoryId,
+                          menuOptions: menuOptions.toJson(),
                           nameKo: nameKo,
                           nameVi: nameVi,
                           invoiceSaleUnit:
@@ -1374,12 +1384,10 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     if (itemId.isEmpty) {
       return;
     }
-    final originalNameKo =
-        item['name_ko']?.toString() ?? item['name']?.toString() ?? '';
-    final originalNameVi = item['name_vi']?.toString() ?? '';
-    final originalPaperlessNameVi =
-        item['paperless_name_vi']?.toString().trim() ?? '';
-    final originalNameEn = item['name_en']?.toString() ?? '';
+    final originalNameKo = menuBaseName(item, 'name_ko');
+    final originalNameVi = menuBaseName(item, 'name_vi');
+    final originalPaperlessNameVi = menuBaseName(item, 'paperless_name_vi');
+    final originalNameEn = menuBaseName(item, 'name_en');
     final nameKoController = TextEditingController(text: originalNameKo);
     final nameViController = TextEditingController(text: originalNameVi);
     final paperlessNameViController = TextEditingController(
@@ -1388,6 +1396,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final nameEnController = TextEditingController(text: originalNameEn);
     final originalBeverageTax = BeverageTax.fromJson(item);
     var beverageTax = originalBeverageTax;
+    final originalMenuOptions = MenuOptions.fromJson(item);
+    var menuOptions = originalMenuOptions;
     final rawPrice = item['price'];
     final initialPrice = switch (rawPrice) {
       num value => value.toDouble(),
@@ -1488,6 +1498,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     ),
                     const SizedBox(height: 16),
                   ],
+                  MenuOptionsEditor(
+                    value: menuOptions,
+                    onChanged: (value) =>
+                        setDialogState(() => menuOptions = value),
+                  ),
+                  const SizedBox(height: 16),
                   BeverageTaxEditor(
                     value: beverageTax,
                     vatCategory: item['vat_category']?.toString(),
@@ -1612,6 +1628,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     return;
                   }
                   final detailsChanged =
+                      menuOptions != originalMenuOptions ||
                       nameKo != originalNameKo ||
                       nameVi != originalNameVi ||
                       paperlessNameVi != originalPaperlessNameVi ||
@@ -1643,6 +1660,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   if (detailsChanged) {
                     final detailsSaved = await menuNotifier.updateMenuItem(
                       itemId: itemId,
+                      menuOptions: menuOptions.toJson(),
                       nameKo: nameKo,
                       nameVi: nameVi,
                       nameEn: nameEn,

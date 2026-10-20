@@ -415,6 +415,7 @@ class DirectOrderService {
     required String locale,
     required Map<String, int> cart,
     required Map<String, String> itemNotes,
+    Map<String, String> menuOptionKeys = const {},
     Map<String, List<String>> comboDrinkChoices = const {},
     required DirectOrderAddress address,
     required bool rememberAddress,
@@ -473,6 +474,8 @@ class DirectOrderService {
             .map(
               (entry) => {
                 'menu_item_id': entry.key,
+                if (menuOptionKeys.containsKey(entry.key))
+                  'menu_option_key': menuOptionKeys[entry.key],
                 'quantity': entry.value,
                 'note': itemNotes[entry.key],
                 if (comboDrinkChoices.containsKey(entry.key))

@@ -287,6 +287,7 @@ class _StorefrontFixtureService extends DirectOrderService {
     required String locale,
     required Map<String, int> cart,
     required Map<String, String> itemNotes,
+    Map<String, String> menuOptionKeys = const {},
     Map<String, List<String>> comboDrinkChoices = const {},
     required DirectOrderAddress address,
     required bool rememberAddress,

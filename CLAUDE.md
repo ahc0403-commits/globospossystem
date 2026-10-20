@@ -49,7 +49,28 @@ requests and higher-priority instructions take precedence.
   PO references, and transfer the original unreceived balance only on new PO
   issuance. Preserve lineage and prevent duplicate reservations/stock/payment.
 
+## Registered menu choices (owner decision 2026-10-20)
+
+- Portions are single, S or L. Each sellable portion/permitted spice choice has
+  its own stable menu ID and explicit registered price. Do not merge existing
+  menus, invent prices, spice steps or recipe multipliers. Unclassified spice
+  stays `unknown`, distinct from `not_spicy`.
+- `portion_code`, `spice_level`, `spice_choice` are structured authority;
+  compatibility names expose the same choice in existing POS/QR/direct/print
+  contracts. Preserve `option_base_names` for editing and Excel round trips.
+- Carry `menu_option_key` through carts, drafts and offline requests. Validate
+  it with one set JOIN before ordering; a stale choice requires reselection.
+  `menu_option_snapshot` preserves order-time options, names and unit price.
+
 ## Payments and operating times
+
+- **JeonGabok Binh Thanh has no checker (owner decision 2026-10-20).** Only
+  store `273b057e-3b69-46e3-93c1-6194c2802849` uses kitchen completion ->
+  assigned floor readiness -> customer service. Retire `jgbt_tray1`; do not
+  provision or reactivate a checker for this store. Preserve its audit history,
+  distinct stored floors 1F/2F/3F, and other stores' checker workflows. Queue
+  `kitchen_direct_to_floor` is the source snapshot; tray quantity fields are
+  compatibility projections, not evidence of a checker actor.
 
 - `process_payment` is the atomic single-order payment entry point. Determine
   its effective definition by migration order, not a fixed historical filename.

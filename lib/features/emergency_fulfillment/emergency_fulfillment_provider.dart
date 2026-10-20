@@ -205,6 +205,8 @@ class EmergencyFulfillmentItem {
     this.kitchenStartedQuantity = 0,
     this.excusedQuantity = 0,
     this.workflowVersion = 1,
+    this.kitchenDirectToFloor = false,
+    this.menuOptionKey = '',
     this.oldestReadySequence,
     this.oldestTrayReadySequence,
     this.fulfillmentRoute = 'kitchen_tray_floor',
@@ -236,6 +238,8 @@ class EmergencyFulfillmentItem {
   final int excusedQuantity;
   final bool needsReview;
   final int workflowVersion;
+  final bool kitchenDirectToFloor;
+  final String menuOptionKey;
   final int? oldestReadySequence;
   final int? oldestTrayReadySequence;
   final String fulfillmentRoute;
@@ -265,7 +269,10 @@ class EmergencyFulfillmentItem {
   DateTime? stationStartedAt(String stationType) => switch (stationType) {
     'kitchen' => batchReceivedAt,
     'tray' => kitchenFirstDoneAt,
-    'floor' => isFloorDirect ? batchReceivedAt : trayFirstDispatchedAt,
+    'floor' =>
+      isFloorDirect
+          ? batchReceivedAt
+          : (kitchenDirectToFloor ? kitchenFirstDoneAt : trayFirstDispatchedAt),
     _ => null,
   };
 
@@ -289,7 +296,12 @@ class EmergencyFulfillmentItem {
   };
 
   bool isRevertibleAt(String stationType) => switch (stationType) {
-    'kitchen' => !isFloorDirect && kitchenDoneQuantity > trayReceivedQuantity,
+    'kitchen' =>
+      !isFloorDirect &&
+          kitchenDoneQuantity >
+              (kitchenDirectToFloor
+                  ? floorServedQuantity
+                  : trayReceivedQuantity),
     'tray' =>
       !isFloorDirect &&
           trayDispatchedQuantity > floorServedQuantity &&
@@ -403,10 +415,14 @@ class EmergencyFulfillmentItem {
     trayReceivedQuantity:
         stage == 'tray_received' ||
             stage == 'tray_ready' ||
-            (stage == 'tray_dispatched' && usesKitchenHandoffWorkflow)
+            (stage == 'tray_dispatched' && usesKitchenHandoffWorkflow) ||
+            (stage == 'kitchen_done' && kitchenDirectToFloor)
         ? quantity
         : trayReceivedQuantity,
-    trayDispatchedQuantity: stage == 'tray_dispatched' || stage == 'tray_ready'
+    trayDispatchedQuantity:
+        stage == 'tray_dispatched' ||
+            stage == 'tray_ready' ||
+            (stage == 'kitchen_done' && kitchenDirectToFloor)
         ? quantity
         : trayDispatchedQuantity,
     floorServedQuantity: stage == 'floor_served'
@@ -415,6 +431,8 @@ class EmergencyFulfillmentItem {
     excusedQuantity: excusedQuantity,
     needsReview: needsReview,
     workflowVersion: workflowVersion,
+    kitchenDirectToFloor: kitchenDirectToFloor,
+    menuOptionKey: menuOptionKey,
     oldestReadySequence: updateOldestReadySequence
         ? oldestReadySequence
         : this.oldestReadySequence,
@@ -438,6 +456,12 @@ class EmergencyFulfillmentItem {
   factory EmergencyFulfillmentItem.fromJson(Map<String, dynamic> json) {
     final rawComponents = json['combo_components'];
     return EmergencyFulfillmentItem(
+      menuOptionKey: json['menu_option_snapshot'] is Map
+          ? jsonEncode([
+              for (final key in ['portion_code', 'spice_level', 'spice_choice'])
+                (json['menu_option_snapshot'] as Map)[key],
+            ])
+          : '',
       id: json['id']?.toString() ?? '',
       orderItemId: json['order_item_id']?.toString() ?? '',
       nameKo: json['name_ko']?.toString() ?? '',
@@ -454,6 +478,7 @@ class EmergencyFulfillmentItem {
       excusedQuantity: _asInt(json['excused_quantity']),
       needsReview: json['needs_review'] == true,
       workflowVersion: _asInt(json['workflow_version']).clamp(1, 2),
+      kitchenDirectToFloor: json['kitchen_direct_to_floor'] == true,
       oldestReadySequence: json['oldest_ready_sequence'] == null
           ? null
           : _asInt(json['oldest_ready_sequence']),
@@ -1027,6 +1052,7 @@ class KitchenChecketAllocation {
 }
 
 String kitchenChecketGroupKey(EmergencyFulfillmentItem item) => [
+  item.menuOptionKey,
   item.nameKo.trim().toLowerCase(),
   item.nameVi.trim().toLowerCase(),
   item.nameEn.trim().toLowerCase(),
@@ -1096,6 +1122,7 @@ String _kdsSourceKind(EmergencyFulfillmentItem item) =>
     item.sourceKind == 'combo_component' ? 'combo_component' : 'base';
 
 String _handoffMenuKey(EmergencyFulfillmentItem item) => [
+  item.menuOptionKey,
   item.nameKo.trim().toLowerCase(),
   item.nameVi.trim().toLowerCase(),
   item.nameEn.trim().toLowerCase(),
@@ -1483,6 +1510,7 @@ class EmergencyFulfillmentState {
     this.stationType,
     this.floorLabel,
     this.fulfillmentMode = FulfillmentMode.paperless,
+    this.kitchenDirectToFloor = false,
     this.orders = const [],
     this.completedOrders = const [],
     this.leftoverPackagingTasks = const [],
@@ -1500,6 +1528,7 @@ class EmergencyFulfillmentState {
   final String? stationType;
   final String? floorLabel;
   final FulfillmentMode fulfillmentMode;
+  final bool kitchenDirectToFloor;
   final List<EmergencyFulfillmentOrder> orders;
   final List<EmergencyFulfillmentOrder> completedOrders;
   final List<LeftoverPackagingTask> leftoverPackagingTasks;
@@ -1519,6 +1548,7 @@ class EmergencyFulfillmentState {
     String? stationType,
     String? floorLabel,
     FulfillmentMode? fulfillmentMode,
+    bool? kitchenDirectToFloor,
     List<EmergencyFulfillmentOrder>? orders,
     List<EmergencyFulfillmentOrder>? completedOrders,
     List<LeftoverPackagingTask>? leftoverPackagingTasks,
@@ -1536,6 +1566,7 @@ class EmergencyFulfillmentState {
     stationType: stationType ?? this.stationType,
     floorLabel: floorLabel ?? this.floorLabel,
     fulfillmentMode: fulfillmentMode ?? this.fulfillmentMode,
+    kitchenDirectToFloor: kitchenDirectToFloor ?? this.kitchenDirectToFloor,
     orders: orders ?? this.orders,
     completedOrders: completedOrders ?? this.completedOrders,
     leftoverPackagingTasks:
@@ -1564,6 +1595,7 @@ class EmergencyFulfillmentState {
       assigned: json['assigned'] == true,
       assignmentResolved: json.containsKey('assigned'),
       active: json['active'] == true,
+      kitchenDirectToFloor: json['kitchen_direct_to_floor'] == true,
       restaurantId: json['restaurant_id']?.toString(),
       sessionId: json['session_id']?.toString(),
       stationType: json['station_type']?.toString(),

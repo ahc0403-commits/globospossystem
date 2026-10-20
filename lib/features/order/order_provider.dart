@@ -74,6 +74,8 @@ class OrderNotifier extends StateNotifier<OrderState> {
         .map(
           (item) => {
             'menu_item_id': item.menuItemId,
+            if (item.menuOptionKey != null)
+              'menu_option_key': item.menuOptionKey,
             'label': item.name,
             'unit_price': item.price,
             'quantity': item.quantity,
@@ -205,7 +207,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
       var query = supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, guest_count, leftover_packaging_requests(status), order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, is_takeout, item_type, combo_components, menu_items(name, name_ko, name_vi, name_en))',
+            'id, table_id, status, created_at, guest_count, leftover_packaging_requests(status), order_items(id, menu_option_snapshot, created_at, menu_item_id, label, unit_price, quantity, status, is_takeout, item_type, combo_components, menu_items(name, name_ko, name_vi, name_en))',
           )
           .eq('table_id', tableId)
           .eq('restaurant_id', storeId)
@@ -883,6 +885,8 @@ String _mapOrderError(Object error, String fallbackPrefix) {
         'Add at least one item before sending the order.',
       'INVALID_ORDER_ITEM_INPUT' =>
         'One or more selected items are invalid for this order.',
+      'MENU_ITEM_PRICE_INVALID' =>
+        'The menu options or price changed. Refresh the menu and select the items again.',
       'MENU_ITEM_NOT_AVAILABLE' =>
         'One or more selected menu items are unavailable.',
       'ORDER_CREATE_FORBIDDEN' =>

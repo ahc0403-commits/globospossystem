@@ -1,3 +1,4 @@
+import '../../../core/menu/menu_options.dart';
 import '../../../core/payments/beverage_tax.dart';
 import 'dart:typed_data';
 
@@ -25,6 +26,7 @@ const menuRoundTripHeaders = <String>[
   '메뉴순서',
   ...beverageTaxExcelHeaders,
   '계산서단위',
+  ...menuOptionsExcelHeaders,
 ];
 
 const _paperlessNameViHeader = '페이퍼리스 메뉴명(VI)';
@@ -66,6 +68,7 @@ class MenuRoundTripItem {
     required this.sourceRow,
     this.beverageTax,
     this.invoiceSaleUnit,
+    this.menuOptions,
     required this.storeId,
     required this.categoryId,
     required this.itemId,
@@ -80,6 +83,8 @@ class MenuRoundTripItem {
     required this.sortOrder,
   });
 
+  /// Null preserves options when an older workbook omits these columns.
+  final Map<String, dynamic>? menuOptions;
   final BeverageTax? beverageTax;
   final String? invoiceSaleUnit;
   final int sourceRow;
@@ -100,6 +105,7 @@ class MenuRoundTripItem {
 
   Map<String, dynamic> toJson() => {
     'source_row': sourceRow,
+    ...?menuOptions,
     if (beverageTax != null) ...beverageTax!.toJson(),
     'store_id': storeId,
     'category_id': categoryId,
@@ -213,10 +219,10 @@ List<int> buildMenuRoundTripWorkbook({
         TextCellValue(writesCategory ? categoryNameEn : ''),
         writesCategory ? IntCellValue(categorySortOrder) : TextCellValue(''),
         TextCellValue(_requiredMapText(item, 'id')),
-        TextCellValue(_localizedMapText(item, 'name_ko')),
-        TextCellValue(_localizedMapText(item, 'name_vi')),
-        TextCellValue(_mapText(item['paperless_name_vi'])),
-        TextCellValue(_localizedMapText(item, 'name_en')),
+        TextCellValue(menuBaseName(item, 'name_ko')),
+        TextCellValue(menuBaseName(item, 'name_vi')),
+        TextCellValue(menuBaseName(item, 'paperless_name_vi')),
+        TextCellValue(menuBaseName(item, 'name_en')),
         TextCellValue(description),
         DoubleCellValue(_mapDouble(item['price'])),
         BoolCellValue(item['is_available'] == true),
@@ -228,6 +234,9 @@ List<int> buildMenuRoundTripWorkbook({
         TextCellValue(item['sugar_g_per_100ml']?.toString() ?? ''),
         TextCellValue(item['tax_basis_note']?.toString() ?? ''),
         TextCellValue(item['invoice_sale_unit']?.toString() ?? ''),
+        TextCellValue(item['portion_code']?.toString() ?? ''),
+        TextCellValue(item['spice_level']?.toString() ?? 'unknown'),
+        TextCellValue(item['spice_choice']?.toString() ?? ''),
       ]);
     }
   }
@@ -283,6 +292,7 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
         (header) =>
             header != _paperlessNameViHeader &&
             header != '계산서단위' &&
+            !menuOptionsExcelHeaders.contains(header) &&
             !beverageTaxExcelHeaders.contains(header),
       )
       .where((header) => !headerIndexes.containsKey(header))
@@ -457,6 +467,12 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
       items.add(
         MenuRoundTripItem(
           sourceRow: sourceRow,
+          menuOptions: parseMenuOptionsExcelRow(
+            headerIndexes,
+            text,
+            sourceRow,
+            issues,
+          ),
           beverageTax: beverageTax,
           invoiceSaleUnit: headerIndexes.containsKey('계산서단위')
               ? text('계산서단위')
