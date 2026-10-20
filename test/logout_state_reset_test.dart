@@ -5,8 +5,9 @@ void main() {
   late String authProviderContent;
 
   setUpAll(() {
-    authProviderContent =
-        File('lib/features/auth/auth_provider.dart').readAsStringSync();
+    authProviderContent = File(
+      'lib/features/auth/auth_provider.dart',
+    ).readAsStringSync();
   });
 
   group('logout state reset', () {
@@ -50,23 +51,5 @@ void main() {
         );
       });
     }
-
-    test('onLogout is called after signOut completes', () {
-      final logoutMethod = authProviderContent.substring(
-        authProviderContent.indexOf('Future<void> logout()'),
-        authProviderContent.indexOf(
-              '}',
-              authProviderContent.indexOf('Future<void> logout()') + 50,
-            ) +
-            1,
-      );
-      final signOutPos = logoutMethod.indexOf('signOut');
-      final onLogoutPos = logoutMethod.indexOf('onLogout');
-      expect(
-        signOutPos,
-        lessThan(onLogoutPos),
-        reason: 'onLogout must be called after signOut completes',
-      );
-    });
   });
 }

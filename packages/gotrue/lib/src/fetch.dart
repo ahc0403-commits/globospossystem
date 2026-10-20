@@ -47,9 +47,9 @@ class GotrueFetch {
     }
     final response = error;
 
-    // If the status is 500 or above, it's likely a server error,
-    // and can be retried.
-    if (response.statusCode >= 500) {
+    // Throttling is temporary too. A terminal refresh-token error deletes the
+    // session, so a rate limit must follow the bounded retry path instead.
+    if (response.statusCode == 429 || response.statusCode >= 500) {
       throw AuthRetryableFetchException(
         message: response.body,
         statusCode: response.statusCode.toString(),

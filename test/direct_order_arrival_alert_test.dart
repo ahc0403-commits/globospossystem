@@ -26,8 +26,10 @@ final _time0 = DateTime.utc(2026, 8, 21, 12);
 // 2026-10-19: terminal auth and printer mode copy have browser/native
 // isolation, profile recovery and settings refresh behavior coverage.
 const _frozenAlertFiles = <String, String>{
+  // Session restoration adds a root lifecycle observer and recovery banner.
+  // The bank alert coordinator remains mounted across routes (widget coverage).
   'lib/main.dart':
-      '15ac13aca78a5c93b1da511c7bbe82116658c4e19cdfe76fd4548c58b99a46e2',
+      '4b64e176b898c88dadff00da863ae31e2b2fdcdfd69d3285daa1f81cab28d531',
   // Corporate collection account has cashier/customer display coverage.
   // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   // Scheduled delivery closure has cashier overlay coverage; alert paths stay unchanged.

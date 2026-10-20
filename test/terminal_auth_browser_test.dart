@@ -27,6 +27,104 @@ String fixtureSession(String id) => jsonEncode({
 
 void main() {
   test(
+    'legacy shared credentials migrate once and cannot undo logout',
+    () async {
+      const url = 'https://legacy-session-fixture.invalid';
+      const legacyKey = 'sb-legacy-session-fixture-auth-token';
+      final original = web.window.location.href;
+      final legacy = terminalNamespace(url, 'window');
+      final local = web.window.localStorage;
+      final tab = web.window.sessionStorage;
+      web.window.history.replaceState(
+        null,
+        '',
+        Uri.parse(original).replace(queryParameters: {}).toString(),
+      );
+      local.removeItem('$legacy:last-terminal');
+      local.removeItem('$legacy:project-session-migrated');
+      tab.removeItem('$legacy:terminal-id');
+      local.setItem(legacyKey, fixtureSession('legacy-user'));
+      final migrated = await createTerminalAuth(url, []);
+      expect(
+        await migrated.storage.read('session'),
+        fixtureSession('legacy-user'),
+      );
+      expect(local.getItem(legacyKey), isNull);
+      await migrated.storage.remove('session');
+      // A still-open old app can write its obsolete shared key again.
+      local.setItem(legacyKey, fixtureSession('legacy-user'));
+      web.window.history.replaceState(
+        null,
+        '',
+        Uri.parse(original)
+            .replace(
+              queryParameters: {
+                'terminal': 'window-00000000-0000-4000-8000-000000000002',
+              },
+            )
+            .toString(),
+      );
+      final fresh = await createTerminalAuth(url, []);
+      expect(await fresh.storage.read('session'), isNull);
+      for (final storage in [migrated.storage, fresh.storage]) {
+        await storage.remove('session');
+        await storage.remove('migrated');
+      }
+      for (final key in [
+        legacyKey,
+        '$legacy:last-terminal',
+        '$legacy:project-session-migrated',
+      ]) {
+        local.removeItem(key);
+      }
+      tab.removeItem('$legacy:terminal-id');
+      web.window.history.replaceState(null, '', original);
+    },
+  );
+
+  test('unnamed window survives close and keeps a stable isolated URL', () async {
+    const url = 'https://persistent-window-fixture.invalid';
+    final original = web.window.location.href;
+    final legacy = terminalNamespace(url, 'window');
+    final base = Uri.parse(original).replace(queryParameters: {});
+    web.window.history.replaceState(null, '', base.toString());
+    web.window.sessionStorage.removeItem('$legacy:terminal-id');
+    web.window.localStorage.removeItem('$legacy:last-terminal');
+    web.window.sessionStorage.setItem(
+      '$legacy:session',
+      fixtureSession('old-window'),
+    );
+    final auth = await createTerminalAuth(url, []);
+    expect(await auth.storage.read('session'), fixtureSession('old-window'));
+    final durableUrl = web.window.location.href;
+    expect(
+      Uri.parse(durableUrl).queryParameters['terminal'],
+      startsWith('window-'),
+    );
+    expect(
+      web.window.localStorage.getItem('${auth.namespace}:session'),
+      isNotNull,
+    );
+    // Closing a browser discards sessionStorage, but not the terminal's session.
+    web.window.sessionStorage.removeItem('$legacy:terminal-id');
+    final reopened = await createTerminalAuth(url, []);
+    expect(reopened.namespace, auth.namespace);
+    expect(
+      await reopened.storage.read('session'),
+      fixtureSession('old-window'),
+    );
+    await reopened.storage.remove('session');
+    final loggedOut = await createTerminalAuth(url, []);
+    expect(await loggedOut.storage.read('session'), isNull);
+    for (final key in ['session', 'migrated']) {
+      web.window.localStorage.removeItem('${auth.namespace}:$key');
+    }
+    web.window.localStorage.removeItem('$legacy:last-terminal');
+    web.window.sessionStorage.removeItem('$legacy:terminal-id');
+    web.window.history.replaceState(null, '', original);
+  });
+
+  test(
     'cashier logout and legacy broadcasts leave station/display logged in',
     () async {
       final requests = <http.Request>[];

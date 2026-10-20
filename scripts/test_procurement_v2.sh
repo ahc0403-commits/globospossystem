@@ -173,3 +173,7 @@ DO $$ BEGIN
  ASSERT (SELECT count(*)=1 FROM public.procurement_events WHERE action='restore_procurement_receiver');
 END $$;
 SQL
+
+# Requester IDs inherit both receiving stages through the real onboarding path.
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261020153000_unified_requester_receiving.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/unified_requester_receiving.test.sql"

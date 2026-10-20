@@ -11,6 +11,7 @@ import '../../features/admin/providers/admin_scope_provider.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/session_recovery_screen.dart';
 import '../../features/auth/initial_password_change_screen.dart';
 import '../../features/auth/privacy_consent_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
@@ -86,6 +87,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
 
       // 1. 비로그인 → 로그인 화면
       if (!isLoggedIn) {
+        if (auth.isRestoring) {
+          return location == '/session-restore'
+              ? null
+              : authGateRouteWithReturnTo('/session-restore', state.uri);
+        }
         redirectTo = location == '/login'
             ? null
             : loginRouteWithReturnTo(fullLocation);
@@ -126,6 +132,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
 
       const publicRoutes = [
         '/login',
+        '/session-restore',
         '/onboarding',
         '/privacy-consent',
         '/change-initial-password',
@@ -301,6 +308,10 @@ GoRouter buildAppRouter(ProviderContainer container) {
             DigitalReceiptScreen(token: DigitalReceiptTokenHandoff.take()),
       ),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(
+        path: '/session-restore',
+        builder: (_, __) => const SessionRecoveryScreen(),
+      ),
       GoRoute(
         path: '/change-initial-password',
         builder: (_, __) => const InitialPasswordChangeScreen(),

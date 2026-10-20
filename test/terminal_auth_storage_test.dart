@@ -79,7 +79,7 @@ void main() {
       terminalNames
           .map((n) => terminalNamespace('https://fixture.invalid', n))
           .toSet(),
-      hasLength(3),
+      hasLength(terminalNames.length),
     );
   });
 }

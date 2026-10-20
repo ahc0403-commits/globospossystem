@@ -73,6 +73,7 @@ String? postLoginReturnToForRole(
   }
   if ({
     '/login',
+    '/session-restore',
     '/onboarding',
     '/privacy-consent',
     '/change-initial-password',

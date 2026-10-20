@@ -46,6 +46,7 @@ class GoTrueClient {
 
   /// The session object for the currently logged in user or null.
   Session? _currentSession;
+  int _sessionGeneration = 0;
 
   final String _url;
   final Map<String, String> _headers;
@@ -1012,7 +1013,7 @@ class GoTrueClient {
       throw notifyException(AuthException('Initial session is missing data.'));
     }
 
-    _currentSession = session;
+    _saveSession(session);
     notifyAllSubscribers(AuthChangeEvent.initialSession);
   }
 
@@ -1195,11 +1196,13 @@ class GoTrueClient {
     _log.finest('Saving session: $session');
     _log.fine('Saving session');
     _currentSession = session;
+    _sessionGeneration++;
   }
 
   void _removeSession() {
     _log.fine('Removing session');
     _currentSession = null;
+    _sessionGeneration++;
   }
 
   void _mayStartBroadcastChannel() {
@@ -1273,6 +1276,7 @@ class GoTrueClient {
       return _refreshTokenCompleter!.future;
     }
 
+    final generation = _sessionGeneration;
     try {
       _refreshTokenCompleter = Completer<AuthResponse>();
 
@@ -1284,6 +1288,16 @@ class GoTrueClient {
       _log.fine('Refresh access token');
 
       final data = await _refreshAccessToken(refreshToken);
+
+      // Logout, a newer sign-in or a broadcast refresh supersedes this request.
+      // Never resurrect the old identity or replace a newer refresh token.
+      if (generation != _sessionGeneration) {
+        final current = _currentSession;
+        if (current == null) throw AuthSessionMissingException();
+        final response = AuthResponse(session: current);
+        _refreshTokenCompleter?.complete(response);
+        return response;
+      }
 
       final session = data.session;
 
@@ -1297,11 +1311,13 @@ class GoTrueClient {
       _refreshTokenCompleter?.complete(data);
       return data;
     } on AuthException catch (error, stack) {
-      if (error is! AuthRetryableFetchException) {
-        _removeSession();
-        notifyAllSubscribers(AuthChangeEvent.signedOut);
-      } else {
-        notifyException(error, stack);
+      if (generation == _sessionGeneration) {
+        if (error is! AuthRetryableFetchException) {
+          _removeSession();
+          notifyAllSubscribers(AuthChangeEvent.signedOut);
+        } else {
+          notifyException(error, stack);
+        }
       }
 
       _refreshTokenCompleter?.completeError(error);

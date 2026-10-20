@@ -17,6 +17,7 @@ import 'core/services/live_refresh_service.dart';
 import 'core/services/bank_transfer_alert_coordinator.dart';
 import 'core/ui/app_theme.dart';
 import 'features/auth/auth_provider.dart';
+import 'features/auth/session_recovery_screen.dart';
 import 'l10n/app_localizations.dart';
 
 export 'core/ui/app_theme.dart';
@@ -74,14 +75,32 @@ class GlobosPosApp extends ConsumerStatefulWidget {
   ConsumerState<GlobosPosApp> createState() => _GlobosPosAppState();
 }
 
-class _GlobosPosAppState extends ConsumerState<GlobosPosApp> {
+class _GlobosPosAppState extends ConsumerState<GlobosPosApp>
+    with WidgetsBindingObserver {
   bool _profileRefreshInFlight = false;
 
-  Future<void> _refreshProfile() async {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_refreshProfile());
+  }
+
+  Future<void> _refreshProfile({bool force = true}) async {
     if (_profileRefreshInFlight) return;
     _profileRefreshInFlight = true;
     try {
-      await ref.read(authProvider.notifier).refreshProfile();
+      await ref.read(authProvider.notifier).refreshProfile(force: force);
     } finally {
       _profileRefreshInFlight = false;
     }
@@ -106,7 +125,7 @@ class _GlobosPosAppState extends ConsumerState<GlobosPosApp> {
       ) {
         next.whenData((event) {
           if (event.isFallback || event.affects({'staff', 'settings'})) {
-            unawaited(_refreshProfile());
+            unawaited(_refreshProfile(force: !event.isFallback));
           }
         });
       });
@@ -128,7 +147,12 @@ class _GlobosPosAppState extends ConsumerState<GlobosPosApp> {
       builder: (context, child) => BankTransferAlertCoordinator(
         storeId: alertStoreId,
         child: localeState.isHydrated
-            ? child ?? const SizedBox.shrink()
+            ? Stack(
+                children: [
+                  child ?? const SizedBox.shrink(),
+                  const SessionRecoveryBanner(),
+                ],
+              )
             : const ColoredBox(color: Color(0xFF101114)),
       ),
       routerConfig: widget.router,
