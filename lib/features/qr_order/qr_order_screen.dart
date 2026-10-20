@@ -2502,9 +2502,9 @@ class QrOrderCopy {
   };
 
   String get vatExclusiveNotice => switch (code) {
-    'ko' => '부가세 8% 별도입니다.',
-    'vi' => 'Chưa bao gồm 8% VAT.',
-    _ => '8% VAT is not included.',
+    'ko' => '부가세 별도입니다.',
+    'vi' => 'Chưa bao gồm VAT.',
+    _ => 'VAT is not included.',
   };
 
   String get confirmTitle => switch (code) {
