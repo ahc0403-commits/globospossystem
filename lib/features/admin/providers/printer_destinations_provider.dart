@@ -3,6 +3,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/printer_destination_service.dart';
 
+const printerConfigurationTables = {
+  'printer_destinations',
+  'physical_printers',
+  'printer_endpoints',
+};
+
 class PrinterDestinationErrorCodes {
   const PrinterDestinationErrorCodes._();
 
@@ -49,14 +55,21 @@ class PrinterDestinationsState {
 
 class PrinterDestinationsNotifier
     extends StateNotifier<PrinterDestinationsState> {
-  PrinterDestinationsNotifier(this.storeId, {bool autoLoad = true})
-    : super(const PrinterDestinationsState()) {
+  PrinterDestinationsNotifier(
+    this.storeId, {
+    bool autoLoad = true,
+    PrinterDestinationService? service,
+  }) : _service = service ?? printerDestinationService,
+       super(const PrinterDestinationsState()) {
     if (autoLoad) {
       fetchDestinations();
     }
   }
 
   final String storeId;
+  final PrinterDestinationService _service;
+  Future<void>? _fetch;
+  bool _hasLoaded = false;
 
   String _mapPrinterDestinationError(Object error, String fallbackCode) {
     if (error is! PostgrestException) {
@@ -87,21 +100,28 @@ class PrinterDestinationsNotifier
     return fallbackCode;
   }
 
-  Future<void> fetchDestinations({bool showLoading = true}) async {
-    if (showLoading) {
+  Future<void> fetchDestinations({bool showLoading = true}) {
+    return _fetch ??= _loadDestinations(showLoading).whenComplete(() {
+      _fetch = null;
+    });
+  }
+
+  Future<void> _loadDestinations(bool showLoading) async {
+    if (showLoading && !_hasLoaded) {
       state = state.copyWith(isLoading: true, clearError: true);
     }
 
     try {
-      final destinations = await printerDestinationService.fetchDestinations(
-        storeId,
-      );
+      final destinations = await _service.fetchDestinations(storeId);
+      if (!mounted) return;
+      _hasLoaded = true;
       state = state.copyWith(
         destinations: destinations,
         isLoading: false,
         clearError: true,
       );
     } catch (error) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapPrinterDestinationError(
@@ -115,10 +135,9 @@ class PrinterDestinationsNotifier
   Future<bool> upsertDestination(PrinterDestinationDraft draft) async {
     state = state.copyWith(isSaving: true, clearError: true);
     try {
-      await printerDestinationService.upsertDestination(
-        storeId: storeId,
-        draft: draft,
-      );
+      await _service.upsertDestination(storeId: storeId, draft: draft);
+      await _fetch;
+      if (!mounted) return false;
       await fetchDestinations(showLoading: false);
       state = state.copyWith(isSaving: false, clearError: true);
       return true;
@@ -137,10 +156,12 @@ class PrinterDestinationsNotifier
   Future<bool> deleteDestination(String destinationId) async {
     state = state.copyWith(isSaving: true, clearError: true);
     try {
-      await printerDestinationService.deleteDestination(
+      await _service.deleteDestination(
         storeId: storeId,
         destinationId: destinationId,
       );
+      await _fetch;
+      if (!mounted) return false;
       await fetchDestinations(showLoading: false);
       state = state.copyWith(isSaving: false, clearError: true);
       return true;
@@ -159,7 +180,7 @@ class PrinterDestinationsNotifier
   Future<bool> enqueueTestPrintJob(String destinationId) async {
     state = state.copyWith(clearError: true);
     try {
-      await printerDestinationService.enqueueTestPrintJob(
+      await _service.enqueueTestPrintJob(
         storeId: storeId,
         destinationId: destinationId,
       );

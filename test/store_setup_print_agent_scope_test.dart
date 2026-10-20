@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/hardware/print_agent_coordinator.dart';
 import 'package:globos_pos_system/core/hardware/print_agent_coordinator_provider.dart';
 import 'package:globos_pos_system/core/hardware/print_job_agent_service.dart';
+import 'package:globos_pos_system/core/hardware/print_station_mode.dart';
 import 'package:globos_pos_system/core/hardware/printer_service.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
@@ -236,6 +237,10 @@ class _Preferences implements PrintAgentPreferenceStore {
   _Preferences(this.enabled);
   bool enabled;
   @override
+  Future<PrintStationMode?> readMode() async => PrintStationMode.printer;
+  @override
+  Future<void> writeMode(PrintStationMode value) async {}
+  @override
   Future<bool> readEnabled() async => enabled;
   @override
   Future<void> writeEnabled(bool value) async => enabled = value;
@@ -249,7 +254,12 @@ class _Driver implements PrintAgentDriver {
   @override
   bool get isSupported => supported;
   @override
-  Future<void> startPollingSafely(String storeId) async {
+  Future<void> configureReceiptOnly(bool receiptOnly) async {}
+  @override
+  Future<void> startPollingSafely(
+    String storeId, {
+    bool receiptOnly = false,
+  }) async {
     if (failStart) throw StateError('start failed');
     startedStores.add(storeId);
   }

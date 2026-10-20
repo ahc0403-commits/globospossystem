@@ -12,8 +12,9 @@ import 'wifi_printer_service.dart';
 
 abstract class PrintAgentDriver {
   bool get isSupported;
-  Future<void> startPollingSafely(String storeId);
+  Future<void> startPollingSafely(String storeId, {bool receiptOnly = false});
   Future<void> stopSafely();
+  Future<void> configureReceiptOnly(bool receiptOnly);
   Future<List<PrintJobAgentResult>> processOnce(String storeId, {int limit});
   Future<PrintResult> testPrintDestination(String destinationId);
 }
@@ -33,6 +34,8 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
   final NetworkCapabilityService _networkCapabilityService;
   Timer? _pollTimer;
   bool _isProcessing = false;
+  bool _receiptOnly = false;
+  Future<void>? _processingDone;
   int _lifecycleGeneration = 0;
   String? _activeStoreId;
 
@@ -41,10 +44,18 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
 
   void startPolling(
     String storeId, {
+    bool receiptOnly = false,
     Duration interval = const Duration(seconds: 15),
     int limit = 10,
   }) {
-    unawaited(startPollingSafely(storeId, interval: interval, limit: limit));
+    unawaited(
+      startPollingSafely(
+        storeId,
+        receiptOnly: receiptOnly,
+        interval: interval,
+        limit: limit,
+      ),
+    );
   }
 
   void stop() {
@@ -54,6 +65,7 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
   @override
   Future<void> startPollingSafely(
     String storeId, {
+    bool receiptOnly = false,
     Duration interval = const Duration(seconds: 15),
     int limit = 10,
   }) async {
@@ -64,6 +76,15 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
     await _backend.unsubscribeFromJobs();
     if (generation != _lifecycleGeneration || !isSupported) return;
 
+    // Ensure an old batch cannot observe a new policy midway through printing.
+    await _processingDone;
+    if (generation != _lifecycleGeneration) return;
+    _receiptOnly = receiptOnly;
+    if (receiptOnly) {
+      // Validate the receipt-only RPC before starting; zero never claims jobs.
+      await _backend.claimJobs(storeId, limit: 0, receiptOnly: true);
+    }
+    if (generation != _lifecycleGeneration) return;
     _activeStoreId = storeId;
     await _backend.subscribeToJobs(storeId, () {
       if (generation == _lifecycleGeneration && _activeStoreId == storeId) {
@@ -82,12 +103,19 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
   }
 
   @override
+  Future<void> configureReceiptOnly(bool receiptOnly) async {
+    await stopSafely();
+    _receiptOnly = receiptOnly;
+  }
+
+  @override
   Future<void> stopSafely() async {
     _lifecycleGeneration++;
     _pollTimer?.cancel();
     _pollTimer = null;
     _activeStoreId = null;
     await _backend.unsubscribeFromJobs();
+    await _processingDone;
   }
 
   @override
@@ -100,8 +128,14 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
     }
 
     _isProcessing = true;
+    final done = Completer<void>();
+    _processingDone = done.future;
     try {
-      final jobs = await _backend.claimJobs(storeId, limit: limit);
+      final jobs = await _backend.claimJobs(
+        storeId,
+        limit: limit,
+        receiptOnly: _receiptOnly,
+      );
       final destinations = await _backend.loadDestinations(
         jobs
             .map((job) => job.destinationId)
@@ -117,6 +151,8 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
       return results;
     } finally {
       _isProcessing = false;
+      done.complete();
+      _processingDone = null;
     }
   }
 
@@ -144,6 +180,21 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
         jobId: job.id,
         result: PrintResult.connectionFailed,
         error: 'DESTINATION_NOT_FOUND',
+      );
+    }
+
+    if (_receiptOnly && destination.purpose != 'receipt') {
+      // A destination can be edited after the atomic claim. Acknowledge the
+      // failed job so it and the remaining batch cannot become stuck printing.
+      await _backend.completeJob(
+        job.id,
+        ok: false,
+        error: 'PAPERLESS_CASHIER_ONLY',
+      );
+      return PrintJobAgentResult(
+        jobId: job.id,
+        result: PrintResult.noAllowedEndpoint,
+        error: 'PAPERLESS_CASHIER_ONLY',
       );
     }
 
@@ -190,6 +241,12 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
         return const PrinterTestReport(
           result: PrintResult.connectionFailed,
           errorCode: 'DESTINATION_NOT_FOUND',
+        );
+      }
+      if (_receiptOnly && destination.purpose != 'receipt') {
+        return const PrinterTestReport(
+          result: PrintResult.noAllowedEndpoint,
+          errorCode: 'PAPERLESS_CASHIER_ONLY',
         );
       }
       List<int>? bytes;
@@ -421,7 +478,11 @@ class PrintJobAgentService implements PrintAgentDriver, DiagnosticPrintAgent {
 }
 
 abstract class PrintJobBackend {
-  Future<List<PrintAgentJob>> claimJobs(String storeId, {int limit = 10});
+  Future<List<PrintAgentJob>> claimJobs(
+    String storeId, {
+    int limit = 10,
+    bool receiptOnly = false,
+  });
   Future<PrintDestination?> loadDestination(String destinationId);
   Future<Map<String, PrintDestination>> loadDestinations(
     List<String> destinationIds,
@@ -447,16 +508,25 @@ class SupabasePrintJobBackend implements PrintJobBackend {
   Future<List<PrintAgentJob>> claimJobs(
     String storeId, {
     int limit = 10,
+    bool receiptOnly = false,
   }) async {
     final params = {'p_store_id': storeId, 'p_limit': limit};
     dynamic response;
-    try {
-      response = await _client.rpc('claim_print_jobs_v3', params: params);
-    } on PostgrestException catch (error) {
-      // Install upgraded stations before the DB rollout. Only an absent RPC
-      // permits the predecessor claim; auth, routing and network errors stop.
-      if (error.code != 'PGRST202') rethrow;
-      response = await _client.rpc('claim_print_jobs_v2', params: params);
+    if (receiptOnly) {
+      // Never fall back to a claim that could consume operational printer jobs.
+      response = await _client.rpc(
+        'claim_print_station_receipt_jobs',
+        params: params,
+      );
+    } else {
+      try {
+        response = await _client.rpc('claim_print_jobs_v3', params: params);
+      } on PostgrestException catch (error) {
+        // Install upgraded stations before the DB rollout. Only an absent RPC
+        // permits the predecessor claim; auth, routing and network errors stop.
+        if (error.code != 'PGRST202') rethrow;
+        response = await _client.rpc('claim_print_jobs_v2', params: params);
+      }
     }
     final rows = response is List ? response : const <Object?>[];
     return rows

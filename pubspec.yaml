@@ -70,6 +70,10 @@ dependencies:
   sepay_android_audio:
     path: packages/sepay_android_audio
 
+dependency_overrides:
+  gotrue:
+    path: packages/gotrue
+
 dev_dependencies:
   analyzer: ^7.6.0
   flutter_test:

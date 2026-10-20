@@ -13,6 +13,9 @@ dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
 flutter test
 
+printf 'CHECK_REPO_STEP=print_station_receipt_only\n'
+bash test/print_station_receipt_only_sql_test.sh
+
 printf 'CHECK_REPO_STEP=store_opening_printer_modes\n'
 bash test/store_opening_printer_modes_sql_test.sh
 

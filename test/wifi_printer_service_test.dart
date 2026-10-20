@@ -904,6 +904,72 @@ void main() {
     );
 
     test(
+      'paperless polling prints only cashier jobs and blocks kitchen diagnostics',
+      () async {
+        final backend = _FakePrintJobBackend(
+          jobs: [
+            _job(
+              id: 'kitchen-job',
+              destinationId: 'kitchen',
+              ticketType: 'kitchen',
+            ),
+            PrintAgentJob.fromJson({
+              'id': 'receipt-job',
+              'destination_id': 'receipt',
+              'payload': {
+                'ticket': 'receipt',
+                'restaurant_name': 'Fixture',
+                'items': [],
+                'total_amount': 10000,
+                'payment_method': 'CASH',
+                'at': '2026-10-19T12:00:00+07:00',
+              },
+            }),
+          ],
+          destinations: const {
+            'kitchen': PrintDestination(
+              id: 'kitchen',
+              name: 'Kitchen',
+              ip: '192.168.1.51',
+              port: 9100,
+              purpose: 'kitchen',
+            ),
+            'receipt': PrintDestination(
+              id: 'receipt',
+              name: 'Cashier',
+              ip: '192.168.1.52',
+              port: 9100,
+              purpose: 'receipt',
+            ),
+          },
+        );
+        final printer = _FakePrinterService(PrintResult.success);
+        final agent = PrintJobAgentService(
+          backend: backend,
+          printerService: printer,
+          networkCapabilityService: _availableNetwork,
+        );
+        await agent.startPollingSafely('store-1', receiptOnly: true);
+        await agent.stopSafely();
+        expect(printer.prints.map((call) => call.ip), ['192.168.1.52']);
+        expect(backend.completed, [
+          const _Completion(jobId: 'receipt-job', ok: true),
+        ]);
+        expect(
+          backend.claimCount,
+          2,
+        ); // zero-limit preflight + one batched claim
+        expect(backend.destinationBatchCount, 1);
+        expect(backend.singleDestinationCount, 0);
+        expect(
+          await agent.testPrintDestination('kitchen'),
+          PrintResult.noAllowedEndpoint,
+        );
+        expect(printer.prints, hasLength(1));
+      },
+    );
+
+    test(
       'testPrintDestination prints directly to the selected destination',
       () async {
         final backend = _FakePrintJobBackend(
@@ -1016,10 +1082,18 @@ class _FakePrintJobBackend implements PrintJobBackend {
   Future<List<PrintAgentJob>> claimJobs(
     String storeId, {
     int limit = 10,
+    bool receiptOnly = false,
   }) async {
     claimedStoreId = storeId;
     claimCount++;
-    return jobs.take(limit).toList();
+    return jobs
+        .where(
+          (job) =>
+              !receiptOnly ||
+              destinations[job.destinationId]?.purpose == 'receipt',
+        )
+        .take(limit)
+        .toList();
   }
 
   @override

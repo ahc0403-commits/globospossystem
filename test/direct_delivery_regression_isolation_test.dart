@@ -9,6 +9,8 @@ const _migrationPath =
 
 // Daily reset changes are covered by QR midnight and cashier clear/review
 // widget tests, plus the isolated SQL behavior and concurrency suites.
+// 2026-10-19: terminal auth and printer mode copy have browser/native
+// isolation, profile recovery and settings refresh behavior coverage.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
       'fe1d5b4eca7bff30215b34919e59d46c7d65d0d3e2712c033e9a2a5d7bcd4228',
@@ -59,7 +61,7 @@ const _frozenFiles = <String, String>{
   // print_station_connection_regression_test covers diagnostics and duplicates;
   // wifi_printer_service_test retains packing forms and batch destination reads.
   'lib/core/hardware/print_job_agent_service.dart':
-      'fd5d8dd3500f232a17378912688db1c7435c683c5a9bc92590b5c94d7cc6bbc1',
+      'c38f83cf1375883ae2cc4cf7fe8393a162f1b846717846a04db28f61d4d66adc',
   'supabase/migrations/20260707010000_service_item_exclusion_v1.sql':
       '812fdaa3f993520983fc87e4bdb2c1f28c7ccca23f0eb384d69fdf42f4101993',
   'supabase/migrations/20260722050000_kitchen_direct_completion.sql':

@@ -78,3 +78,5 @@ jobs:
             public.ecr.aws/supabase/postgrest:v14.5
       - name: Validate repository
         run: bash scripts/check_repo.sh
+      - name: Verify independent browser terminal authentication
+        run: flutter test --no-pub --platform chrome test/terminal_auth_browser_test.dart

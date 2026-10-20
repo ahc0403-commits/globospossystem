@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/hardware/print_agent_coordinator.dart';
+import 'package:globos_pos_system/core/hardware/print_station_mode.dart';
 import 'package:globos_pos_system/core/hardware/print_agent_coordinator_provider.dart';
 import 'package:globos_pos_system/core/hardware/print_job_agent_service.dart';
 import 'package:globos_pos_system/core/hardware/printer_diagnostics.dart';
@@ -284,6 +285,10 @@ class _Destinations extends PrinterDestinationsNotifier {
 
 class _Preferences implements PrintAgentPreferenceStore {
   @override
+  Future<PrintStationMode?> readMode() async => PrintStationMode.printer;
+  @override
+  Future<void> writeMode(PrintStationMode mode) async {}
+  @override
   Future<bool> readEnabled() async => false;
   @override
   Future<void> writeEnabled(bool enabled) async {}
@@ -314,6 +319,8 @@ class _Driver implements PrintAgentDriver, DiagnosticPrintAgent {
     );
   }
 
+  @override
+  Future<void> configureReceiptOnly(bool value) async {}
   @override
   Future<void> stopSafely() async {}
   @override

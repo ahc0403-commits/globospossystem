@@ -79,9 +79,9 @@ void main() {
     expect(source, contains('SettingsTab() => 0'));
     expect(
       source,
-      contains('ref.invalidate(printerDestinationsProvider(liveStoreId))'),
+      contains('printerDestinationsProvider(liveStoreId).notifier'),
     );
-    expect(source, contains('.loadSettings(liveStoreId, auth.user!.id)'));
+    expect(source, contains('showLoading: false'));
   });
 
   test('reports remain a stable snapshot across live POS events', () {

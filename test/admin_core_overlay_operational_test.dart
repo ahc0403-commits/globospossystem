@@ -537,6 +537,10 @@ class _QcFollowupNotifier extends QcFollowupNotifier {
 }
 
 class _SettingsNotifier extends SettingsNotifier {
+  void refreshName(String name) {
+    state = state.copyWith(restaurantName: name);
+  }
+
   _SettingsNotifier() {
     state = const SettingsState(
       storeId: _storeId,
@@ -550,7 +554,11 @@ class _SettingsNotifier extends SettingsNotifier {
   }
 
   @override
-  Future<void> loadSettings(String storeId, String authUid) async {}
+  Future<void> loadSettings(
+    String storeId,
+    String authUid, {
+    bool showLoading = true,
+  }) async {}
 }
 
 class _PrinterDestinationsNotifier extends PrinterDestinationsNotifier {
@@ -2024,6 +2032,37 @@ void main() {
       find.byKey(const Key('attendance_daily_allowance_dialog')),
       findsNothing,
     );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('settings refresh keeps unsaved text and focus', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final settings = _SettingsNotifier();
+    await _pump(
+      tester,
+      child: SettingsTab(pinServiceOverride: _PinService()),
+      overrides: [
+        settingsProvider.overrideWith((ref) => settings),
+        printerDestinationsProvider.overrideWith(
+          (ref, storeId) => _PrinterDestinationsNotifier(),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    final controller = tester.widget<TextField>(field).controller!;
+    const selection = TextSelection(baseOffset: 2, extentOffset: 5);
+    controller.selection = selection;
+    settings.refreshName('GLOBOS Nguyễn Huệ');
+    await tester.pump();
+    expect(controller.selection, selection);
+    await tester.enterText(field, 'Unsaved store edit');
+    final focusBefore = FocusManager.instance.primaryFocus;
+    settings.refreshName('Updated server store name');
+    await tester.pump();
+    expect(find.text('Unsaved store edit'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(focusBefore));
     expect(tester.takeException(), isNull);
   });
 }

@@ -1,0 +1,3 @@
+# Keep the pinned upstream package independent of app-specific Flutter lints.
+analyzer:
+  exclude: []

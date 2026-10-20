@@ -97,14 +97,18 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           if (event.affects({'menu'})) {
             ref.invalidate(menuProvider(liveStoreId));
           }
-          if (event.affects({'print'})) {
-            ref.invalidate(printerDestinationsProvider(liveStoreId));
+          if (event.affectsSourceTables(printerConfigurationTables)) {
+            unawaited(
+              ref
+                  .read(printerDestinationsProvider(liveStoreId).notifier)
+                  .fetchDestinations(showLoading: false),
+            );
           }
           if (event.affects({'settings'}) && auth.user != null) {
             unawaited(
               ref
                   .read(settingsProvider.notifier)
-                  .loadSettings(liveStoreId, auth.user!.id),
+                  .loadSettings(liveStoreId, auth.user!.id, showLoading: false),
             );
           }
           ref.invalidate(adminAuditTraceProvider(liveStoreId));

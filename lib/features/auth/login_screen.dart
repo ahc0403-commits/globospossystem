@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import '../../core/i18n/locale_extensions.dart';
@@ -6,6 +7,7 @@ import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../main.dart';
+import '../../core/auth/terminal_auth.dart';
 import '../../widgets/language_switcher.dart';
 import 'auth_provider.dart';
 import 'auth_state.dart';
@@ -232,6 +234,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildLoginForm(BuildContext context, PosAuthState authState) {
     final l10n = context.l10n;
+    final terminalLabels = {
+      'cashier': l10n.roleCashierDisplay,
+      'print_station': l10n.printStationTitle,
+      'customer_display': l10n.loginTerminalCustomerDisplay,
+    };
+    final terminalLabel =
+        terminalLabels[TerminalAuth.current?.namespace.split(':').last];
 
     return SingleChildScrollView(
       padding: EdgeInsets.zero,
@@ -249,7 +258,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                l10n.loginStartShift,
+                terminalLabel ?? l10n.loginStartShift,
                 style: AppFonts.system(
                   fontSize: 24,
                   color: PosColors.text,
@@ -266,6 +275,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
+              if (kIsWeb) ...[
+                Text(l10n.loginTerminalTitle),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final entry in terminalLabels.entries)
+                      OutlinedButton(
+                        key: ValueKey('login_terminal_${entry.key}'),
+                        onPressed: authState.isLoading
+                            ? null
+                            : () => openWebTerminal(entry.key),
+                        child: Text(entry.value),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
               TextField(
                 key: const Key('login_email_field'),
                 controller: _emailController,

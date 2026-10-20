@@ -10,6 +10,8 @@ on:
       - 'lib/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+      - 'packages/gotrue/**'
+      - 'scripts/windows_launchers/**'
       - 'scripts/build_windows_print_station.ps1'
       - 'test/*print*'
   pull_request:
@@ -19,6 +21,8 @@ on:
       - 'lib/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+      - 'packages/gotrue/**'
+      - 'scripts/windows_launchers/**'
       - 'scripts/build_windows_print_station.ps1'
       - 'test/*print*'
 

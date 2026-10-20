@@ -82,6 +82,12 @@ class PosLiveEvent {
       !isFallback &&
       _changeKinds.every((change) => tables.contains(change.sourceTable));
 
+  /// Preserve original table kinds in merged signals; job/order events must
+  /// not reload printer configuration. Recovery still reconciles all data.
+  bool affectsSourceTables(Set<String> tables) =>
+      isFallback ||
+      _changeKinds.any((change) => tables.contains(change.sourceTable));
+
   PosLiveEvent merge(PosLiveEvent other) => PosLiveEvent._merged(
     domain: domain == other.domain ? domain : '*',
     sourceTable: sourceTable == other.sourceTable ? sourceTable : '*',
