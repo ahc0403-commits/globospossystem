@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
+import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/core/auth/terminal_auth.dart';
 import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:http/http.dart' as http;
@@ -16,6 +17,7 @@ const _storeId = '00000000-0000-0000-0000-000000000002';
 class _AuthApi {
   int profileCalls = 0;
   int tokenRateLimits = 0;
+  bool tokenError = false;
   bool failProfile = false;
   bool failConsent = false;
   bool failLogout = false;
@@ -32,6 +34,8 @@ class _AuthApi {
   Completer<void>? profileGate;
   Completer<void>? tokenGate;
   Completer<void>? tokenStarted;
+  Completer<void>? logoutGate;
+  Completer<void>? logoutStarted;
   Completer<void>? storeGate;
   final profileStarted = Completer<void>();
   final storeStarted = Completer<void>();
@@ -50,6 +54,17 @@ class _AuthApi {
         if (request.url.queryParameters['grant_type'] == 'refresh_token') {
           if (!(tokenStarted?.isCompleted ?? true)) tokenStarted!.complete();
           await tokenGate?.future;
+          if (tokenError) {
+            return http.Response(
+              jsonEncode({
+                'error_code': 'refresh_token_not_found',
+                'msg': 'Invalid refresh token',
+              }),
+              400,
+              headers: {'content-type': 'application/json'},
+              request: request,
+            );
+          }
         }
         if (request.url.queryParameters['grant_type'] == 'refresh_token' &&
             tokenRateLimits > 0) {
@@ -124,6 +139,8 @@ class _AuthApi {
         response = consentAccepted;
       case '/auth/v1/logout':
         logoutCalls++;
+        if (!(logoutStarted?.isCompleted ?? true)) logoutStarted!.complete();
+        await logoutGate?.future;
         if (failLogout) throw http.ClientException('offline');
         return http.Response('', 204);
       default:
@@ -153,6 +170,14 @@ class _MemoryStorage implements TerminalStorage {
   Future<void> remove(String key) async {
     values.remove(key);
   }
+}
+
+Future<void> _waitForState(
+  AuthNotifier auth,
+  bool Function(PosAuthState) ready,
+) async {
+  if (ready(auth.state)) return;
+  await auth.stream.firstWhere(ready).timeout(const Duration(seconds: 5));
 }
 
 void main() {
@@ -295,7 +320,10 @@ void main() {
         );
         addTearDown(restored.dispose);
         addTearDown(api.client.dispose);
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await _waitForState(
+          restored,
+          (s) => s.isRecoveringSession && s.errorMessage != null,
+        );
         expect(restored.state.user?.id, _userId);
         expect(restored.state.role, role);
         expect(restored.state.storeId, _storeId);
@@ -303,7 +331,10 @@ void main() {
         expect(api.client.auth.currentSession, isNotNull);
         api.failProfile = false;
         await api.client.auth.refreshSession();
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await _waitForState(
+          restored,
+          (s) => !s.isRecoveringSession && s.user != null,
+        );
         expect(restored.state.isRecoveringSession, isFalse);
         expect(restored.state.role, role);
         api.failLogout = true;
@@ -372,46 +403,76 @@ void main() {
     } on AuthException {
       /* A superseded refresh is rejected. */
     }
-    await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(api.client.auth.currentSession, isNull);
     expect(auth.state.user, isNull);
   });
 
-  test('late token refresh cannot replace a newer account', () async {
+  test('an older logout response cannot clear a newer login', () async {
     final api = _AuthApi();
     final auth = AuthNotifier(client: api.client);
     addTearDown(auth.dispose);
     addTearDown(api.client.dispose);
     await auth.login('test@example.test', 'test-password');
     api
-      ..tokenGate = Completer<void>()
-      ..tokenStarted = Completer<void>();
-    final refresh = api.client.auth.refreshSession();
-    await api.tokenStarted!.future;
-    const otherId = '00000000-0000-0000-0000-000000000003';
-    final newer = api.client.auth.currentSession!.toJson();
-    (newer['user'] as Map)['id'] = otherId;
-    final payload = base64Url
-        .encode(
-          utf8.encode(
-            jsonEncode({
-              'sub': otherId,
-              'exp': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
-            }),
-          ),
-        )
-        .replaceAll('=', '');
-    newer['access_token'] = 'e30.$payload.signature';
-    newer['refresh_token'] = 'newer-mock-refresh';
-    await api.client.auth.setInitialSession(jsonEncode(newer));
-    api.tokenGate!.complete();
-    await refresh;
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(api.client.auth.currentUser?.id, otherId);
-    expect(api.client.auth.currentSession?.refreshToken, 'newer-mock-refresh');
-    expect(auth.state.user?.id, otherId);
-    expect(api.logoutCalls, 0);
+      ..logoutGate = Completer<void>()
+      ..logoutStarted = Completer<void>();
+    final logout = auth.logout();
+    await api.logoutStarted!.future;
+    await auth.login('test@example.test', 'test-password');
+    api.logoutGate!.complete();
+    await logout;
+    expect(api.client.auth.currentSession, isNotNull);
+    expect(auth.state.user?.id, _userId);
   });
+
+  for (final oldRefreshFails in [false, true]) {
+    test(
+      'late token refresh (error=$oldRefreshFails) cannot replace a newer account',
+      () async {
+        final api = _AuthApi();
+        final auth = AuthNotifier(client: api.client);
+        addTearDown(auth.dispose);
+        addTearDown(api.client.dispose);
+        await auth.login('test@example.test', 'test-password');
+        api.tokenError = oldRefreshFails;
+        api
+          ..tokenGate = Completer<void>()
+          ..tokenStarted = Completer<void>();
+        final refresh = api.client.auth.refreshSession();
+        await api.tokenStarted!.future;
+        const otherId = '00000000-0000-0000-0000-000000000003';
+        final newer = api.client.auth.currentSession!.toJson();
+        (newer['user'] as Map)['id'] = otherId;
+        final payload = base64Url
+            .encode(
+              utf8.encode(
+                jsonEncode({
+                  'sub': otherId,
+                  'exp': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
+                }),
+              ),
+            )
+            .replaceAll('=', '');
+        newer['access_token'] = 'e30.$payload.signature';
+        newer['refresh_token'] = 'newer-mock-refresh';
+        await api.client.auth.setInitialSession(jsonEncode(newer));
+        api.tokenGate!.complete();
+        try {
+          await refresh;
+        } on AuthException {
+          if (!oldRefreshFails) rethrow;
+        }
+        await _waitForState(auth, (s) => s.user?.id == otherId);
+        expect(api.client.auth.currentUser?.id, otherId);
+        expect(
+          api.client.auth.currentSession?.refreshToken,
+          'newer-mock-refresh',
+        );
+        expect(auth.state.user?.id, otherId);
+        expect(api.logoutCalls, 0);
+      },
+    );
+  }
 
   test(
     'accepted consent survives an RPC outage and fresh fallback is coalesced',
@@ -451,7 +512,7 @@ void main() {
       expect(api.logoutCalls, 0);
       api.failProfile = false;
       await api.client.auth.refreshSession();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await _waitForState(auth, (s) => s.user?.id == _userId);
       expect(auth.state.user?.id, _userId);
     },
   );

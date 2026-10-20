@@ -447,7 +447,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     try {
       await _client.auth.signOut(scope: SignOutScope.local);
     } finally {
-      if (mounted) _finishSignOut();
+      if (mounted && _client.auth.currentSession == null) _finishSignOut();
     }
   }
 
@@ -458,7 +458,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     } catch (_) {
       /* Local logout must complete while the network is unavailable. */
     } finally {
-      if (mounted) _finishSignOut();
+      if (mounted && _client.auth.currentSession == null) _finishSignOut();
       await _cacheCleanup;
     }
   }

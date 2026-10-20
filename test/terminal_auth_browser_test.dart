@@ -26,6 +26,62 @@ String fixtureSession(String id) => jsonEncode({
 });
 
 void main() {
+  test(
+    'legacy shared credentials migrate once and cannot undo logout',
+    () async {
+      const url = 'https://legacy-session-fixture.invalid';
+      const legacyKey = 'sb-legacy-session-fixture-auth-token';
+      final original = web.window.location.href;
+      final legacy = terminalNamespace(url, 'window');
+      final local = web.window.localStorage;
+      final tab = web.window.sessionStorage;
+      web.window.history.replaceState(
+        null,
+        '',
+        Uri.parse(original).replace(queryParameters: {}).toString(),
+      );
+      local.removeItem('$legacy:last-terminal');
+      local.removeItem('$legacy:project-session-migrated');
+      tab.removeItem('$legacy:terminal-id');
+      local.setItem(legacyKey, fixtureSession('legacy-user'));
+      final migrated = await createTerminalAuth(url, []);
+      expect(
+        await migrated.storage.read('session'),
+        fixtureSession('legacy-user'),
+      );
+      expect(local.getItem(legacyKey), isNull);
+      await migrated.storage.remove('session');
+      // A still-open old app can write its obsolete shared key again.
+      local.setItem(legacyKey, fixtureSession('legacy-user'));
+      web.window.history.replaceState(
+        null,
+        '',
+        Uri.parse(original)
+            .replace(
+              queryParameters: {
+                'terminal': 'window-00000000-0000-4000-8000-000000000002',
+              },
+            )
+            .toString(),
+      );
+      final fresh = await createTerminalAuth(url, []);
+      expect(await fresh.storage.read('session'), isNull);
+      for (final storage in [migrated.storage, fresh.storage]) {
+        await storage.remove('session');
+        await storage.remove('migrated');
+      }
+      for (final key in [
+        legacyKey,
+        '$legacy:last-terminal',
+        '$legacy:project-session-migrated',
+      ]) {
+        local.removeItem(key);
+      }
+      tab.removeItem('$legacy:terminal-id');
+      web.window.history.replaceState(null, '', original);
+    },
+  );
+
   test('unnamed window survives close and keeps a stable isolated URL', () async {
     const url = 'https://persistent-window-fixture.invalid';
     final original = web.window.location.href;

@@ -26,6 +26,9 @@ checkout is preserved. No unrelated user files are included.
   a newer sign-in. It also prevents an old refresh error from deleting the
   newer account. A delayed-refresh test reproduced logout resurrection before
   the guard, and regression tests cover logout and account switching.
+- Late logout responses cannot clear a newer login. Obsolete shared browser
+  credentials are consumed once during migration and cannot restore a session
+  again after logout, even if a still-open old app writes the old key again.
 - Initial-session and token-refresh events recover missing profile state.
   Profile retries are shared and bounded to two delayed attempts; requests
   time out after ten seconds. Fallback events reuse a profile for five minutes;

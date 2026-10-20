@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import 'package:web/web.dart' as web;
 
@@ -30,11 +31,23 @@ Future<TerminalAuth> createTerminalAuth(String url, List<String> args) async {
   final storage = WebTerminalStorage(namespace, local);
   if (!named && local.getItem('$namespace:migrated') == null) {
     final project = Uri.parse(url).host.split('.').first;
-    final existing = legacySession ?? local.getItem('sb-$project-auth-token');
+    final legacyKey = 'sb-$project-auth-token';
+    final projectMarker = '$legacyNamespace:project-session-migrated';
+    final globalSession = local.getItem(projectMarker) == null
+        ? local.getItem(legacyKey)
+        : null;
+    final existing = legacySession ?? globalSession;
     if (await storage.read('session') == null && existing != null) {
       await storage.write('session', existing);
     }
     local.setItem('$namespace:migrated', '1');
+    if (globalSession != null &&
+        _sameSessionUser(await storage.read('session'), globalSession)) {
+      // Consume the old shared credential once. An old app must not repopulate
+      // that obsolete key and undo a later explicit logout in a fresh window.
+      local.setItem(projectMarker, '1');
+      local.removeItem(legacyKey);
+    }
     tab.removeItem('$legacyNamespace:session');
   }
   final route = uri.fragment.isEmpty ? uri.path : uri.fragment;
@@ -48,6 +61,17 @@ Future<TerminalAuth> createTerminalAuth(String url, List<String> args) async {
     web.window.history.replaceState(null, '', target.toString());
   }
   return TerminalAuth(namespace: namespace, storage: storage);
+}
+
+bool _sameSessionUser(String? left, String right) {
+  if (left == null) return false;
+  if (left == right) return true;
+  try {
+    final userId = jsonDecode(left)['user']['id'];
+    return userId is String && userId == jsonDecode(right)['user']['id'];
+  } catch (_) {
+    return false;
+  }
 }
 
 class WebTerminalStorage implements TerminalStorage {
