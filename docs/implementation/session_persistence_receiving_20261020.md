@@ -20,6 +20,8 @@ checkout is preserved. No unrelated user files are included.
 - Temporary profile failures retain the current user/store/screen. JWT expiry
   refreshes once before retrying the profile. Missing/denied profiles block
   access on a recovery screen without deleting the refreshable session.
+- The vendored Auth SDK treats refresh-token HTTP 429 as a retryable error,
+  preserving the session while its existing bounded retry handles throttling.
 - Initial-session and token-refresh events recover missing profile state.
   Profile retries are shared and bounded to two delayed attempts; requests
   time out after ten seconds. Fallback events reuse a profile for five minutes;

@@ -15,6 +15,7 @@ const _storeId = '00000000-0000-0000-0000-000000000002';
 
 class _AuthApi {
   int profileCalls = 0;
+  int tokenRateLimits = 0;
   bool failProfile = false;
   bool failConsent = false;
   bool failLogout = false;
@@ -44,6 +45,19 @@ class _AuthApi {
     Object response;
     switch (request.url.path) {
       case '/auth/v1/token':
+        if (request.url.queryParameters['grant_type'] == 'refresh_token' &&
+            tokenRateLimits > 0) {
+          tokenRateLimits--;
+          return http.Response(
+            jsonEncode({
+              'error_code': 'over_request_rate_limit',
+              'msg': 'Too many requests',
+            }),
+            429,
+            headers: {'content-type': 'application/json'},
+            request: request,
+          );
+        }
         final payload = base64Url
             .encode(
               utf8.encode(
@@ -313,6 +327,23 @@ void main() {
       expect(auth.state.user?.id, _userId);
       expect(auth.state.isRecoveringSession, isFalse);
       expect(api.profileCalls, 3);
+      expect(api.logoutCalls, 0);
+    },
+  );
+
+  test(
+    'refresh-token throttling retries without deleting the session',
+    () async {
+      final api = _AuthApi();
+      final auth = AuthNotifier(client: api.client);
+      addTearDown(auth.dispose);
+      addTearDown(api.client.dispose);
+      await auth.login('test@example.test', 'test-password');
+      api.tokenRateLimits = 1;
+      await api.client.auth.refreshSession();
+      expect(api.tokenRateLimits, 0);
+      expect(api.client.auth.currentSession, isNotNull);
+      expect(auth.state.user?.id, _userId);
       expect(api.logoutCalls, 0);
     },
   );
