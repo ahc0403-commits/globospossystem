@@ -235,6 +235,7 @@ run_sql < test/sql/procurement_reconciliation_evidence_test.sql
 run_sql < test/sql/store_closure_boundaries_test.sql
 run_sql < test/sql/store_identity_transfer_test.sql
 run_sql < test/sql/procurement_demand_initial_test.sql
+run_sql < test/sql/procurement_demand_client_compat_test.sql
 run_sql -c "SET test.held_price=130" -f - < test/sql/inventory_lots_test.sql
 run_sql < test/sql/store_operating_purge_contract_test.sql
 run_sql < test/sql/store_workflow_bunsik_test.sql
