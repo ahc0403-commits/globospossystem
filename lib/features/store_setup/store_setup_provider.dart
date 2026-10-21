@@ -173,6 +173,7 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
           tables: existing.tables,
           printers: printers,
           operation: existing.operation,
+          serviceWorkflow: existing.serviceWorkflow,
           floor1Slot: _floor1SlotFromExisting(existing.destinations),
         ),
         clearValidation: true,
@@ -295,6 +296,24 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
     state = state.copyWith(
       phase: StoreSetupPhase.editing,
       draft: state.draft.copyWith(operation: operation),
+      testJobs: const {},
+      clearValidation: true,
+      clearApplyResult: true,
+      clearReadiness: true,
+      clearError: true,
+    );
+  }
+
+  void setServiceWorkflow(StoreServiceWorkflow workflow) {
+    if (state.isBusy ||
+        _operationInFlight ||
+        state.draft.serviceWorkflow == workflow) {
+      return;
+    }
+    _invalidateTests();
+    state = state.copyWith(
+      phase: StoreSetupPhase.editing,
+      draft: state.draft.copyWith(serviceWorkflow: workflow),
       testJobs: const {},
       clearValidation: true,
       clearApplyResult: true,

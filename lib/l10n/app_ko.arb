@@ -4390,5 +4390,13 @@
   "storeSetupValidationModePermission": "매장 운영 방식 변경은 슈퍼 관리자만 가능합니다. 다른 관리자는 현재 운영 방식의 프린터를 설정할 수 있습니다.",
   "storeSetupValidationUsbName": "USB로 연결한 Windows 프린터 이름을 입력하세요.",
   "storeSetupValidationConnection": "연결 방식을 선택하고, 같은 물리 프린터를 공유하는 경로에는 동일한 연결 정보를 입력하세요.",
-  "storeSetupValidationPaperlessReceipt": "페이퍼리스 운영에는 캐셔 영수증 출력 경로 1개가 필요합니다."
+  "storeSetupValidationPaperlessReceipt": "페이퍼리스 운영에는 캐셔 영수증 출력 경로 1개가 필요합니다.",
+  "storeSetupServiceWorkflowTitle": "음식 제공 동선",
+  "storeSetupKitchenTrayFloor": "주방 → 트레이 → 층 (분식클럽)",
+  "storeSetupKitchenFloor": "주방 → 층 (전가복)",
+  "storeSetupServiceWorkflowHelp": "매장별로 적용됩니다. 진행 중인 주문이 있으면 동선을 변경할 수 없습니다.",
+  "storeSetupWorkflowInvalid": "음식 제공 동선을 선택해 주세요.",
+  "storeSetupWorkflowBusy": "진행 중인 주문과 전달 작업을 마친 뒤 음식 제공 동선을 변경해 주세요.",
+  "storeSetupWorkflowPermission": "음식 제공 동선 변경은 최고 관리자만 가능합니다.",
+  "storeSetupWorkflowJeongabok": "전가복은 트레이 없이 주방에서 층으로 전달합니다."
 }

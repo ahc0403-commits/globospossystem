@@ -55,7 +55,10 @@ void main() {
           final path = request.url.path.split('/').last;
           final Object response = switch (path) {
             'restaurants' => {'id': 'store', 'name': 'Fixture'},
-            'restaurant_settings' => {'fulfillment_mode': 'paperless'},
+            'restaurant_settings' => {
+              'fulfillment_mode': 'paperless',
+              'kds_workflow': 'kitchen_floor',
+            },
             'tables' => List.generate(
               500,
               (i) => {
@@ -98,6 +101,7 @@ void main() {
         client,
       ).loadExisting('store');
       expect(config.operation, StorePrinterOperation.paperless);
+      expect(config.serviceWorkflow, StoreServiceWorkflow.kitchenFloor);
       expect(config.tables, hasLength(500));
       expect(calls, hasLength(4));
       expect(
@@ -153,17 +157,56 @@ void main() {
       await backend.validate(draft);
       await backend.apply(draft);
       expect(paths, [
-        '/rest/v1/rpc/admin_validate_store_opening_config_v2',
-        '/rest/v1/rpc/admin_apply_store_opening_config_v2',
+        '/rest/v1/rpc/admin_validate_store_opening_config_v3',
+        '/rest/v1/rpc/admin_apply_store_opening_config_v3',
       ]);
       for (final payload in requests) {
         expect(payload['p_mode'], 'paperless');
+        expect(payload['p_kds_workflow'], 'kitchen_tray_floor');
         final routes = payload['p_destinations'] as List;
         expect(routes, hasLength(1));
         expect(routes.single['usb_printer_name'], 'XP-80C');
       }
     },
   );
+
+  testWidgets('service workflow is a separate store-level choice', (
+    tester,
+  ) async {
+    final draft = StoreOpeningDraft(
+      storeId: 'store',
+      printers: StoreOpeningTemplate.defaultPrinters(),
+      operation: StorePrinterOperation.paperless,
+    );
+    StoreServiceWorkflow? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ko'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: StoreSetupPrinterStep(
+              draft: draft,
+              onPrinterChanged: (_) {},
+              onFloor1Changed: (_) {},
+              onOperationChanged: (_) {},
+              enabled: true,
+              onServiceWorkflowChanged: (value) => selected = value,
+            ),
+          ),
+        ),
+      ),
+    );
+    final direct = find.byKey(const Key('store_setup_workflow_kitchen_floor'));
+    await tester.ensureVisible(direct);
+    await tester.tap(direct);
+    expect(selected, StoreServiceWorkflow.kitchenFloor);
+    expect(draft.serviceWorkflow, StoreServiceWorkflow.kitchenTrayFloor);
+    expect(draft.copyWith(serviceWorkflow: selected).serviceWorkflow, selected);
+    expect(find.text('주방 → 트레이 → 층 (분식클럽)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   test(
     'five test destinations enqueue through one RPC and return five IDs',
