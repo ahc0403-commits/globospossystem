@@ -7,6 +7,32 @@ import 'package:globos_pos_system/features/emergency_fulfillment/tray_floor_tran
 
 void main() {
   testWidgets(
+    'single hall renders one handoff destination without synthetic floors',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TrayFloorTransitionSheet(
+            areas: [_traySummary('HALL', 'Meal', 2)],
+            unsupportedFloorQuantity: 0,
+            onSubmit: (_) async => true,
+          ),
+        ),
+      );
+      expect(
+        find.byKey(const ValueKey('tray_floor_transition_column_HALL')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('tray_floor_transition_column_1F')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('tray_floor_transition_column_2F')),
+        findsNothing,
+      );
+    },
+  );
+  testWidgets(
     'floor transition stays horizontally split and submits one floor',
     (tester) async {
       final submitted = <TrayFloorTransitionSummary>[];

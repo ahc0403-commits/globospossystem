@@ -56,6 +56,7 @@ deno test --no-config supabase/functions/_shared/retired_deliberry_test.ts
 
 printf 'CHECK_REPO_STEP=atomic_release_bundle_contract\n'
 python3 scripts/build_pos_recipient_release.py --check
+python3 scripts/build_store_lifecycle_release.py --check
 printf 'CHECK_REPO_STEP=pos_receipt_ledger_sql\n'
 bash test/pos_receipt_ledger_sql_test.sh
 printf 'CHECK_REPO_STEP=migration_version_uniqueness\n'

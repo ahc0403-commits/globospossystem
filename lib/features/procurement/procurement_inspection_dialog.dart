@@ -1,3 +1,4 @@
+import 'inventory_lot_editor.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
@@ -7,8 +8,13 @@ class ProcurementInspectionDialog extends StatefulWidget {
     required this.lines,
     required this.payload,
     required this.uploadPhoto,
+    this.employees = const [],
+    this.locations = const [],
+    this.releaseOnly = false,
   });
+  final bool releaseOnly;
   final List<Map<String, dynamic>> lines, payload;
+  final List<Map<String, dynamic>> employees, locations;
   final Future<String> Function(XFile file) uploadPhoto;
   @override
   State<ProcurementInspectionDialog> createState() =>
@@ -20,6 +26,7 @@ class _ProcurementInspectionDialogState
   final _form = GlobalKey<FormState>();
   late final List<Map<String, dynamic>> _rows;
   bool _uploading = false;
+  String? _employee;
   String? _error;
   String t(String ko, String en, String vi) =>
       switch (Localizations.localeOf(context).languageCode) {
@@ -35,6 +42,14 @@ class _ProcurementInspectionDialogState
           (l) => {
             ...l,
             'inspection': <String, dynamic>{
+              if (widget.lines.any(
+                (line) =>
+                    line['id'] == l['purchase_order_line_id'] &&
+                    line['quality'] is Map,
+              ))
+                'quality_profile_id': widget.lines.firstWhere(
+                  (line) => line['id'] == l['purchase_order_line_id'],
+                )['quality']['profile_id'],
               'spec_ok': false,
               'quality_ok': false,
               'packaging_ok': false,
@@ -42,8 +57,10 @@ class _ProcurementInspectionDialogState
               'temperature_ok': false,
               'issue_type': 'none',
               'photo_paths': <String>[],
+              'lots': <Map<String, dynamic>>[],
             },
             'rejected_quantity_base': '0',
+            'held_quantity_base': 0,
           },
         )
         .toList();
@@ -72,6 +89,33 @@ class _ProcurementInspectionDialogState
             mainAxisSize: MainAxisSize.min,
             children: [
               if (_error != null) Text(_error!),
+              if (widget.lines.any((line) => line['quality'] is Map))
+                DropdownButtonFormField<String>(
+                  key: const Key('quality_inspector_employee'),
+                  initialValue: _employee,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: t(
+                      '실제 검수 직원',
+                      'Actual inspecting employee',
+                      'Nhân viên thực tế kiểm tra',
+                    ),
+                  ),
+                  items: [
+                    for (final e in widget.employees)
+                      DropdownMenuItem(
+                        value: e['id'].toString(),
+                        child: Text(e['name'].toString()),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _employee = value;
+                    for (final r in _rows) {
+                      (r['inspection'] as Map)['employee_id'] = value;
+                    }
+                  }),
+                  validator: (value) => value == null ? '*' : null,
+                ),
               for (final row in _rows)
                 Builder(
                   builder: (context) {
@@ -79,6 +123,22 @@ class _ProcurementInspectionDialogState
                       (l) => l['id'] == row['purchase_order_line_id'],
                     );
                     final q = row['inspection'] as Map<String, dynamic>;
+                    final quality = line['quality'] as Map?;
+                    final criteria = quality?['criteria'] as Map?;
+                    final tracked = line['lot_tracking'] == true;
+                    bool acceptsAny() =>
+                        (double.tryParse(
+                              row['received_quantity_base'].toString(),
+                            ) ??
+                            0) >
+                        (double.tryParse(
+                                  row['rejected_quantity_base'].toString(),
+                                ) ??
+                                0) +
+                            (num.tryParse(
+                                  row['held_quantity_base'].toString(),
+                                ) ??
+                                0);
                     return Card(
                       child: Padding(
                         padding: const EdgeInsets.all(12),
@@ -87,6 +147,43 @@ class _ProcurementInspectionDialogState
                             Text(
                               '${(line['product'] as Map?)?['name'] ?? line['product_name']} · ${t('입고 기준단위 수량', 'Received base quantity', 'Số lượng nhận cơ sở')}: ${row['received_quantity_base']}',
                             ),
+                            if (quality != null) ...[
+                              Text(
+                                '${t('승인 기준 버전', 'Approved criteria version', 'Phiên bản tiêu chí')}: ${quality['revision']}',
+                              ),
+                              if (criteria?['temperature_required'] == true)
+                                Text(
+                                  '${criteria!['temperature_min_c']}–${criteria['temperature_max_c']} °C',
+                                ),
+                              if (criteria?['expiry_required'] == true)
+                                Text(
+                                  '${t('최소 잔여 일수', 'Minimum remaining days', 'Số ngày còn lại tối thiểu')}: ${criteria!['min_remaining_days']}',
+                                ),
+                              if (criteria?['photo_required'] == true)
+                                Text(
+                                  t(
+                                    '검수 사진 필수',
+                                    'Inspection photo required',
+                                    'Bắt buộc ảnh kiểm tra',
+                                  ),
+                                ),
+                              TextFormField(
+                                key: ValueKey('quality_samples_${line['id']}'),
+                                decoration: InputDecoration(
+                                  labelText:
+                                      '${t('실제 검사 표본 수', 'Actual sample count', 'Số mẫu đã kiểm tra')} (≥${criteria!['min_sample_count']})',
+                                ),
+                                keyboardType: TextInputType.number,
+                                onChanged: (v) => q['sample_count'] = v,
+                                validator: (v) =>
+                                    !acceptsAny() ||
+                                        (int.tryParse(v ?? '') ?? 0) >=
+                                            (criteria['min_sample_count']
+                                                as num)
+                                    ? null
+                                    : '*',
+                              ),
+                            ],
                             for (final check in {
                               'spec_ok': t(
                                 '품목·단위·규격 확인',
@@ -117,8 +214,11 @@ class _ProcurementInspectionDialogState
                               CheckboxListTile(
                                 value: q[check.key] == true,
                                 title: Text(check.value),
-                                onChanged: (v) =>
-                                    setState(() => q[check.key] = v),
+                                onChanged:
+                                    check.key == 'expiry_not_applicable' &&
+                                        criteria?['expiry_required'] == true
+                                    ? null
+                                    : (v) => setState(() => q[check.key] = v),
                               ),
                             TextFormField(
                               decoration: InputDecoration(
@@ -130,7 +230,8 @@ class _ProcurementInspectionDialogState
                               ),
                               onChanged: (v) => q['expiry_date'] = v,
                               validator: (v) {
-                                if (q['expiry_not_applicable'] == true ||
+                                if (!acceptsAny() ||
+                                    q['expiry_not_applicable'] == true ||
                                     double.tryParse(
                                           row['rejected_quantity_base']
                                               .toString(),
@@ -163,12 +264,30 @@ class _ProcurementInspectionDialogState
                                 ),
                               ),
                               onChanged: (v) => q['temperature_c'] = v,
-                              validator: (v) =>
-                                  v == null ||
-                                      v.trim().isEmpty ||
-                                      (double.tryParse(v)?.isFinite ?? false)
-                                  ? null
-                                  : '°C',
+                              validator: (v) {
+                                final n = double.tryParse(v ?? '');
+                                if (acceptsAny() &&
+                                    criteria?['temperature_required'] == true &&
+                                    (n == null ||
+                                        !n.isFinite ||
+                                        n <
+                                            (criteria!['temperature_min_c']
+                                                as num) ||
+                                        n >
+                                            (criteria['temperature_max_c']
+                                                as num))) {
+                                  return t(
+                                    '승인 온도 범위 확인',
+                                    'Check approved temperature range',
+                                    'Kiểm tra khoảng nhiệt độ',
+                                  );
+                                }
+                                return v == null ||
+                                        v.trim().isEmpty ||
+                                        (double.tryParse(v)?.isFinite ?? false)
+                                    ? null
+                                    : '°C';
+                              },
                             ),
                             DropdownButtonFormField<String>(
                               initialValue: 'none',
@@ -201,33 +320,114 @@ class _ProcurementInspectionDialogState
                               onChanged: (v) =>
                                   setState(() => q['issue_type'] = v),
                             ),
-                            TextFormField(
-                              initialValue: '0',
-                              decoration: InputDecoration(
-                                labelText: t(
-                                  '불합격 수량 (기준 단위)',
-                                  'Rejected quantity (base units)',
-                                  'Số lượng loại (đơn vị cơ sở)',
+                            if (tracked)
+                              FormField<bool>(
+                                validator: (_) {
+                                  final lots =
+                                      q['lots'] as List<Map<String, dynamic>>;
+                                  final total = lots.fold<num>(
+                                    0,
+                                    (sum, lot) =>
+                                        sum +
+                                        (lot['accepted'] as num? ?? 0) +
+                                        (lot['held'] as num? ?? 0) +
+                                        (lot['rejected'] as num? ?? 0),
+                                  );
+                                  if ((total -
+                                              (row['received_quantity_base']
+                                                  as num))
+                                          .abs() >
+                                      0.0001) {
+                                    return t(
+                                      '로트 합계가 실수령 수량과 다릅니다.',
+                                      'Lot total must equal physical receipt.',
+                                      'Tổng lô phải bằng số lượng thực nhận.',
+                                    );
+                                  }
+                                  if ((row['held_quantity_base'] as num) > 0 &&
+                                      (q['issue_type'] == 'none' ||
+                                          (row['discrepancy_reason']
+                                                      ?.toString()
+                                                      .trim()
+                                                      .length ??
+                                                  0) <
+                                              5)) {
+                                    return t(
+                                      '보류 유형과 사유를 입력하세요.',
+                                      'Enter hold issue and reason.',
+                                      'Nhập vấn đề và lý do tạm giữ.',
+                                    );
+                                  }
+                                  return null;
+                                },
+                                builder: (field) => Column(
+                                  children: [
+                                    InventoryLotEditor(
+                                      lots:
+                                          q['lots']
+                                              as List<Map<String, dynamic>>,
+                                      locations: widget.locations,
+                                      onChanged: () => setState(() {
+                                        final lots =
+                                            q['lots']
+                                                as List<Map<String, dynamic>>;
+                                        row['held_quantity_base'] = lots
+                                            .fold<num>(
+                                              0,
+                                              (sum, lot) =>
+                                                  sum +
+                                                  (lot['held'] as num? ?? 0),
+                                            );
+                                        row['rejected_quantity_base'] = lots
+                                            .fold<num>(
+                                              0,
+                                              (sum, lot) =>
+                                                  sum +
+                                                  (lot['rejected'] as num? ??
+                                                      0),
+                                            );
+                                      }),
+                                    ),
+                                    if (field.errorText != null)
+                                      Text(
+                                        field.errorText!,
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.error,
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
-                              onChanged: (v) =>
-                                  row['rejected_quantity_base'] = v,
-                              validator: (v) {
-                                final n = double.tryParse(v ?? '');
-                                return n != null &&
-                                        n.isFinite &&
-                                        n >= 0 &&
-                                        n <=
-                                            (row['received_quantity_base']
-                                                as num)
-                                    ? null
-                                    : t(
-                                        '수량 확인',
-                                        'Check quantity',
-                                        'Kiểm tra số lượng',
-                                      );
-                              },
-                            ),
+                            if (!tracked && !widget.releaseOnly)
+                              TextFormField(
+                                initialValue: '0',
+                                decoration: InputDecoration(
+                                  labelText: t(
+                                    '불합격 수량 (기준 단위)',
+                                    'Rejected quantity (base units)',
+                                    'Số lượng loại (đơn vị cơ sở)',
+                                  ),
+                                ),
+                                onChanged: (v) =>
+                                    row['rejected_quantity_base'] = v,
+                                validator: (v) {
+                                  final n = double.tryParse(v ?? '');
+                                  return n != null &&
+                                          n.isFinite &&
+                                          n >= 0 &&
+                                          n <=
+                                              (row['received_quantity_base']
+                                                  as num)
+                                      ? null
+                                      : t(
+                                          '수량 확인',
+                                          'Check quantity',
+                                          'Kiểm tra số lượng',
+                                        );
+                                },
+                              ),
                             TextFormField(
                               decoration: InputDecoration(
                                 labelText: t(

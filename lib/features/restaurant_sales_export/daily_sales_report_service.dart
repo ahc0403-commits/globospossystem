@@ -440,7 +440,15 @@ class DailySalesReportService {
     if (session != _sessionKey()) {
       throw const FormatException('SALES_EXPORT_SESSION_CHANGED');
     }
-    return combined;
+    return CombinedSalesExport(
+      taxEntityId: combined.taxEntityId,
+      sellerTaxCode: combined.sellerTaxCode,
+      sellerLegalName: combined.sellerLegalName,
+      restaurant: combined.restaurant,
+      photo: combined.photo,
+      sourceRevision: summary.sourceRevision,
+      mappingRevision: summary.mappingRevision,
+    );
   }
 }
 

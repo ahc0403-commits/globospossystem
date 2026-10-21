@@ -1,3 +1,5 @@
+import 'sales_reporting_batch_service.dart';
+import 'sales_reporting_batches_dialog.dart';
 import '../../widgets/error_toast.dart';
 import 'daily_deposit_panel.dart';
 import '../report/cash_deposit_qr_dialog.dart';
@@ -48,6 +50,7 @@ class RestaurantSalesExportScreen extends StatefulWidget {
     this.todayOverride,
     this.ledgerService,
     this.reportService,
+    this.batchService,
     this.saveCollectionBank,
     this.initialBusinessDate,
     this.summaryRefreshInterval,
@@ -63,6 +66,7 @@ class RestaurantSalesExportScreen extends StatefulWidget {
   final DateTime? todayOverride;
   final PosReceiptLedgerService? ledgerService;
   final DailySalesReportService? reportService;
+  final SalesReportingBatchService? batchService;
   final Future<void> Function(Map<String, dynamic>)? saveCollectionBank;
   final String? initialBusinessDate;
 
@@ -89,6 +93,13 @@ class _RestaurantSalesExportScreenState
     return null;
   }
 
+  final _defaultBatchService = SalesReportingBatchService();
+  SalesReportingBatchService get _batchService =>
+      widget.batchService ?? _defaultBatchService;
+  // Deterministic legacy loaders are read-only fixtures; production always records batches.
+  bool get _recordsBatches =>
+      widget.batchService != null ||
+      (widget.loader == null && widget.reportService == null);
   String? _selectedTaxEntityId;
   bool _isLoading = false;
   bool _isDownloading = false;
@@ -228,6 +239,26 @@ class _RestaurantSalesExportScreenState
                   key: const Key('restaurant_sales_export_status'),
                 ),
               ],
+              if (_recordsBatches && _selectedTaxEntityId != null)
+                TextButton.icon(
+                  icon: const Icon(Icons.fact_check_outlined),
+                  key: const Key('sales_reporting_batches'),
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => SalesReportingBatchesDialog(
+                      date: _businessDate,
+                      entity: _selectedTaxEntityId!,
+                      service: _batchService,
+                    ),
+                  ),
+                  label: Text(
+                    _copy(
+                      '신고 배치·대표 확인',
+                      'Lô báo cáo và xác nhận',
+                      'Reporting batches and confirmation',
+                    ),
+                  ),
+                ),
               if (_lastArtifact != null)
                 TextButton(
                   key: const Key('sales_export_manifest_button'),
@@ -1074,7 +1105,14 @@ class _RestaurantSalesExportScreenState
         }
         throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
       }
-      final artifact = buildCombinedSalesArtifact(export);
+      final batch = _recordsBatches
+          ? await _batchService.prepare(export)
+          : null;
+      if (batch != null) export = selectSalesBatch(export, batch);
+      final artifact = buildCombinedSalesArtifact(
+        export,
+        batchId: batch?['id']?.toString(),
+      );
       final bytes = Uint8List.fromList(artifact.bytes);
       final taxCode = export.sellerTaxCode.replaceAll(
         RegExp(r'[^A-Za-z0-9_-]'),
@@ -1091,6 +1129,12 @@ class _RestaurantSalesExportScreenState
           ext: 'xlsx',
           mimeType: MimeType.microsoftExcel,
         );
+      }
+      if (batch != null) {
+        await _batchService.update(batch['id'].toString(), 'generated', {
+          'sha256': artifact.manifest['file_sha256'],
+          'size': artifact.manifest['file_size'],
+        });
       }
       if (!mounted) return;
       final amount = NumberFormat(

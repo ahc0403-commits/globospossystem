@@ -49,6 +49,39 @@ Map<String, dynamic> job(String id, List<Map<String, dynamic>> lines) => {
 String text(Data? c) => c?.value?.toString() ?? '';
 
 void main() {
+  test('same-name stores and receipt numbers remain distinct in ledger v3', () {
+    final a = job('receipt-a', [line('a')..['invoice_store_id'] = 'store-a'])
+      ..addAll({
+        'store_id': 'store-a',
+        'store_code': 'SA',
+        'store_name': 'Same name',
+        'store_name_origin': 'order_snapshot',
+        'receipt_number': '001',
+      });
+    final b = job('receipt-b', [line('b')..['invoice_store_id'] = 'store-b'])
+      ..addAll({
+        'store_id': 'store-b',
+        'store_code': 'SB',
+        'store_name': 'Same name',
+        'store_name_origin': 'current_registry',
+        'receipt_number': '001',
+      });
+    final book = Excel.decodeBytes(buildMisaPendingInvoiceWorkbook([a, b]));
+    final ledger = book.tables['POS Ledger']!.rows;
+    expect(ledger.first.skip(14).map(text), [
+      'store_id',
+      'store_code',
+      'store_name',
+      'store_name_origin',
+    ]);
+    expect(ledger.skip(1).map((r) => text(r[14])).toSet(), {
+      'store-a',
+      'store-b',
+    });
+    expect(ledger.skip(1).map((r) => text(r[5])).toSet(), {'001'});
+    expect(ledger.skip(1).map((r) => text(r[0])).toSet(), {'3'});
+    expect(book.tables['Hóa đơn GTGT']!.rows[7], hasLength(17));
+  });
   test(
     'open-ended menu and wet tissue mapping remains valid on the following day',
     () {

@@ -174,7 +174,9 @@ class WorkforceSetupCard extends StatelessWidget {
               children: [
                 FilledButton.icon(
                   key: const Key('store_setup_configure_workforce'),
-                  onPressed: isSaving ? null : () => _openEditor(context),
+                  onPressed: isSaving || store['registered_config'] == true
+                      ? null
+                      : () => _openEditor(context),
                   icon: const Icon(Icons.manage_accounts_outlined),
                   label: Text(context.l10n.storeSetupConfigureWorkforce),
                 ),

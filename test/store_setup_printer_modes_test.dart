@@ -44,7 +44,7 @@ void main() {
   });
 
   test(
-    'load uses four store-scoped requests regardless of table count and embeds endpoints',
+    'load uses five bounded store-scoped requests regardless of table count and embeds endpoints',
     () async {
       final calls = <Uri>[];
       final client = SupabaseClient(
@@ -52,9 +52,16 @@ void main() {
         'fixture-anon',
         httpClient: MockClient((request) async {
           calls.add(request.url);
+          if (request.url.path.endsWith('admin_get_store_service_areas_v1')) {
+            expect(jsonDecode(request.body), {'p_store_id': 'store'});
+          }
           final path = request.url.path.split('/').last;
           final Object response = switch (path) {
             'restaurants' => {'id': 'store', 'name': 'Fixture'},
+            'admin_get_store_service_areas_v1' => {
+              'registered': false,
+              'areas': [],
+            },
             'restaurant_settings' => {
               'fulfillment_mode': 'paperless',
               'kds_workflow': 'kitchen_floor',
@@ -103,7 +110,13 @@ void main() {
       expect(config.operation, StorePrinterOperation.paperless);
       expect(config.serviceWorkflow, StoreServiceWorkflow.kitchenFloor);
       expect(config.tables, hasLength(500));
-      expect(calls, hasLength(4));
+      expect(calls, hasLength(5));
+      expect(
+        calls
+            .singleWhere((u) => u.path.endsWith('tables'))
+            .queryParameters['limit'],
+        '501',
+      );
       expect(
         calls
             .where((uri) => uri.path.endsWith('printer_destinations'))
@@ -115,7 +128,8 @@ void main() {
         calls.every(
           (uri) =>
               uri.queryParameters['restaurant_id'] == 'eq.store' ||
-              uri.queryParameters['id'] == 'eq.store',
+              uri.queryParameters['id'] == 'eq.store' ||
+              uri.path.endsWith('admin_get_store_service_areas_v1'),
         ),
         isTrue,
       );

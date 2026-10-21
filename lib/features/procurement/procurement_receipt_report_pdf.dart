@@ -15,7 +15,17 @@ Future<Uint8List> buildProcurementReceiptReportPdf(
     _ => en,
   };
   final complete = report['kind'] == 'complete';
-  final title = complete
+  final release = data['receipt_origin'] == 'hold_release';
+  final held = (data['lines'] as List).any(
+    (l) => (l['held_quantity'] as num? ?? 0) > 0,
+  );
+  final title = release
+      ? t(
+          '보류 재검수 확인서',
+          'Held stock reinspection',
+          'Xác nhận kiểm tra lại hàng tạm giữ',
+        )
+      : complete
       ? t(
           '전량 입고 확인서',
           'Complete delivery confirmation',
@@ -37,6 +47,8 @@ Future<Uint8List> buildProcurementReceiptReportPdf(
     t('PO 수량', 'Ordered', 'Đặt'),
     if (!complete) t('이전 입고', 'Previous', 'Trước'),
     if (!complete) t('이번 실수령', 'Received', 'Nhận lần này'),
+    if (release) t('보류 해제', 'Released', 'Đã giải phóng'),
+    if (held) t('보류', 'Held', 'Tạm giữ'),
     t('누적 합격', 'Accepted total', 'Tổng nhập đạt'),
     if (!complete) t('부족', 'Short', 'Thiếu'),
     if (!complete) t('초과', 'Excess', 'Thừa'),
@@ -89,6 +101,9 @@ Future<Uint8List> buildProcurementReceiptReportPdf(
                   procurementNumber(l['previous_quantity'], decimals: 3),
                 if (!complete)
                   procurementNumber(l['received_quantity'], decimals: 3),
+                if (release)
+                  procurementNumber(l['released_quantity'], decimals: 3),
+                if (held) procurementNumber(l['held_quantity'], decimals: 3),
                 procurementNumber(l['cumulative_quantity'], decimals: 3),
                 if (!complete)
                   procurementNumber(l['shortage_quantity'], decimals: 3),
@@ -111,9 +126,9 @@ Future<Uint8List> buildProcurementReceiptReportPdf(
         if (!complete) ...[
           pw.Text(
             t(
-              '부족분은 다음 PO의 발주 대상입니다. 이 문서는 전량 입고 확인서가 아닙니다.',
-              'Short quantities will be carried to a subsequent PO. Delivery is incomplete.',
-              'Số lượng thiếu sẽ được chuyển sang PO tiếp theo. Chưa nhập đủ hàng.',
+              '미합격 수량에는 보류분이 포함될 수 있습니다. 보류분은 재검수·처분 후 부족분 이월을 판단합니다.',
+              'Unaccepted quantities may include held stock. Resolve held stock before carrying shortages forward.',
+              'Số chưa đạt có thể gồm hàng tạm giữ. Xử lý hàng tạm giữ trước khi chuyển thiếu hụt.',
             ),
           ),
           for (final l in lines)

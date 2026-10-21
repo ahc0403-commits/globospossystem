@@ -170,6 +170,9 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
         store: existing.store,
         existingDestinations: existing.destinations,
         draft: state.draft.copyWith(
+          floors: (existing.store['service_areas'] as List?)
+              ?.map((a) => (a as Map)['code'].toString())
+              .toList(),
           tables: existing.tables,
           printers: printers,
           operation: existing.operation,

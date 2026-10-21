@@ -9,14 +9,16 @@ typedef TrayFloorTransitionSubmit =
 class TrayFloorTransitionSheet extends StatefulWidget {
   const TrayFloorTransitionSheet({
     super.key,
-    required this.firstFloor,
-    required this.secondFloor,
+    this.firstFloor,
+    this.secondFloor,
+    this.areas,
     required this.unsupportedFloorQuantity,
     required this.onSubmit,
   });
 
-  final TrayFloorTransitionSummary firstFloor;
-  final TrayFloorTransitionSummary secondFloor;
+  final TrayFloorTransitionSummary? firstFloor;
+  final TrayFloorTransitionSummary? secondFloor;
+  final List<TrayFloorTransitionSummary>? areas;
   final int unsupportedFloorQuantity;
   final TrayFloorTransitionSubmit onSubmit;
 
@@ -134,36 +136,44 @@ class _TrayFloorTransitionSheetState extends State<TrayFloorTransitionSheet> {
                 ),
               ),
             Expanded(
-              child: Row(
-                key: const Key('tray_floor_transition_columns'),
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _FloorTransitionColumn(
-                      summary: widget.firstFloor,
-                      selected: _selectedFor(widget.firstFloor.floorLabel),
-                      languageCode: languageCode,
-                      copy: copy,
-                      busy: _busyFloor != null,
-                      onChange: (group, delta) =>
-                          _change(widget.firstFloor, group, delta),
-                      onSubmit: () => _submit(widget.firstFloor),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _FloorTransitionColumn(
-                      summary: widget.secondFloor,
-                      selected: _selectedFor(widget.secondFloor.floorLabel),
-                      languageCode: languageCode,
-                      copy: copy,
-                      busy: _busyFloor != null,
-                      onChange: (group, delta) =>
-                          _change(widget.secondFloor, group, delta),
-                      onSubmit: () => _submit(widget.secondFloor),
-                    ),
-                  ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final areas =
+                      widget.areas ??
+                      [
+                        if (widget.firstFloor != null) widget.firstFloor!,
+                        if (widget.secondFloor != null) widget.secondFloor!,
+                      ];
+                  final width = areas.length <= 1
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth / 2).clamp(
+                          320.0,
+                          double.infinity,
+                        );
+                  return ListView(
+                    key: const Key('tray_floor_transition_columns'),
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      for (final area in areas)
+                        SizedBox(
+                          width: width,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: _FloorTransitionColumn(
+                              summary: area,
+                              selected: _selectedFor(area.floorLabel),
+                              languageCode: languageCode,
+                              copy: copy,
+                              busy: _busyFloor != null,
+                              onChange: (group, delta) =>
+                                  _change(area, group, delta),
+                              onSubmit: () => _submit(area),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ],

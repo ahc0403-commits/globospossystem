@@ -80,6 +80,7 @@ void main() {
       'Hóa đơn GTGT',
       'POS Ledger',
       'Invoice Mapping',
+      'Store Reconciliation',
       'Export Contract',
     ]);
     final rows = output.tables['Hóa đơn GTGT']!.rows;

@@ -24,6 +24,61 @@ class _OperationalCoverage {
 
 const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
+    source: 'lib/features/store_procurement/quality_profile_editor.dart',
+    directCalls: 1,
+    test: 'test/store_lifecycle_overlay_test.dart',
+    markers: [
+      'approved quality editor closes without publishing invented criteria',
+    ],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/store_procurement/store_procurement_setup_card.dart',
+    directCalls: 3,
+    test: 'test/store_procurement_setup_card_test.dart',
+    additionalTests: ['test/store_lifecycle_overlay_test.dart'],
+    markers: [
+      'procurement setup reads on demand and requires reviewed policy values',
+      'Approve item and purchase terms',
+      'Find approved policy',
+    ],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/procurement/inventory_lot_workspace.dart',
+    directCalls: 4,
+    test: 'test/store_lifecycle_overlay_test.dart',
+    markers: [
+      'Add storage location',
+      'Material · Opening / stock count',
+      'Review details',
+      'Delivery inspection',
+    ],
+  ),
+  _OperationalCoverage(
+    source:
+        'lib/features/restaurant_sales_export/sales_reporting_batches_dialog.dart',
+    directCalls: 1,
+    test: 'test/store_lifecycle_overlay_test.dart',
+    markers: ['reporting batch owner confirmation closes without reporting'],
+  ),
+  _OperationalCoverage(
+    source:
+        'lib/features/store_setup/widgets/store_operational_acceptance_dialog.dart',
+    directCalls: 1,
+    test: 'test/store_lifecycle_overlay_test.dart',
+    markers: ['operational acceptance cancels without inventing opening cash'],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/store_setup/widgets/store_lifecycle_card.dart',
+    directCalls: 2,
+    test: 'test/store_lifecycle_card_test.dart',
+    additionalTests: ['test/store_lifecycle_overlay_test.dart'],
+    markers: [
+      'readiness blocks opening and uses the inspected revision after explicit action',
+      'closed store transfer requires explicit reviewed destination',
+    ],
+  ),
+
+  _OperationalCoverage(
     source: 'lib/core/menu/menu_choice_editor.dart',
     directCalls: 2,
     test: 'test/menu_choices_test.dart',
@@ -88,11 +143,12 @@ const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
     source:
         'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart',
-    directCalls: 6,
+    directCalls: 7,
     test: 'test/daily_sales_report_screen_test.dart',
     additionalTests: [
       'test/deposit_breakdown_responsive_test.dart',
       'test/photo_sales_cash_deposit_qr_test.dart',
+      'test/store_lifecycle_overlay_test.dart',
     ],
     markers: [
       'photo sales total QR uses the selected entity amount account and query date',
@@ -101,6 +157,7 @@ const _coverage = <_OperationalCoverage>[
       'mapping dialog opens, requires selected JSON and closes without writes',
       'transfer details paginate without per-row calls',
       'multiple stores choose a closing without changing selected entity',
+      'reporting batch owner confirmation closes without reporting',
     ],
   ),
   _OperationalCoverage(
@@ -257,8 +314,9 @@ const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
     source:
         'lib/features/inventory_purchase/inventory_order_workflow_screen.dart',
-    directCalls: 7,
+    directCalls: 8,
     test: 'test/inventory_purchase_approval_contract_test.dart',
+    additionalTests: ['test/procurement_lifecycle_recovery_test.dart'],
     markers: [
       'inventory_order_create_draft_dialog',
       'inventory_order_edit_draft_dialog',
@@ -267,6 +325,7 @@ const _coverage = <_OperationalCoverage>[
       'inventory_order_text_input_dialog',
       'inventory_receipt_statement_dialog',
       'ProcurementInspectionDialog',
+      'accounting requires actual external amounts and carries the reviewed source hash',
     ],
   ),
   _OperationalCoverage(
@@ -517,12 +576,13 @@ const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
     source:
         'lib/features/emergency_fulfillment/emergency_fulfillment_screen.dart',
-    directCalls: 3,
+    directCalls: 4,
     test: 'test/emergency_fulfillment_responsive_test.dart',
     markers: [
       'kitchen_checket_handoff_sheet',
       'tray_floor_transition_columns',
       'customer_delivery_grid_8_slots',
+      'shared area chooser opens the second area without completing other orders',
     ],
   ),
   _OperationalCoverage(
@@ -544,7 +604,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 180 dialog and sheet entrypoints map to operational tests', () {
+  test('all 195 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -556,10 +616,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 177);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 192);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      180,
+      195,
     );
 
     final inventory = File(

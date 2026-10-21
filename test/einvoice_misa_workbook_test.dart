@@ -97,6 +97,7 @@ void main() {
       'Hóa đơn GTGT',
       'POS Ledger',
       'Invoice Mapping',
+      'Store Reconciliation',
       'Export Contract',
     ]);
     final sheet = workbook.tables['Hóa đơn GTGT']!;

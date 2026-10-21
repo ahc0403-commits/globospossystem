@@ -58,6 +58,8 @@ class RestaurantSalesReceipt {
     required this.buyerPhone,
     required this.lineItems,
     required this.issues,
+    this.storeCode = '',
+    this.storeNameOrigin = 'current_registry',
     this.receiptNumber = '',
     this.paymentMethods = const [],
     this.snapshotVersion = 1,
@@ -67,6 +69,8 @@ class RestaurantSalesReceipt {
 
   final String storeId;
   final String storeName;
+  final String storeCode;
+  final String storeNameOrigin;
   final String receiptId;
   final String receiptNumber;
   final List<String> paymentMethods;
@@ -419,6 +423,9 @@ RestaurantSalesExport createRestaurantSalesExport(
             row['store_name'],
             'RESTAURANT_EXPORT_INVALID_STORE_NAME:$receiptId',
           ),
+          storeCode: row['store_code']?.toString() ?? '',
+          storeNameOrigin:
+              row['store_name_origin']?.toString() ?? 'current_registry',
           receiptId: receiptId,
           receiptNumber: row['receipt_number']?.toString() ?? '',
           paymentMethods: (row['payment_methods'] as List? ?? const [])
@@ -599,6 +606,9 @@ Map<String, dynamic> buildRestaurantMisaJob(RestaurantSalesReceipt receipt) {
   return {
     'source_system': 'restaurant_pos',
     'store_id': receipt.storeId,
+    'store_code': receipt.storeCode,
+    'store_name': receipt.storeName,
+    'store_name_origin': receipt.storeNameOrigin,
     'externally_reported': receipt.externallyReported,
     'receipt_id': receipt.receiptId,
     'receipt_number': receipt.displayReceiptNumber,

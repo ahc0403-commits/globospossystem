@@ -16,7 +16,7 @@ for attempt in {1..60}; do
   if [[ "$attempt" == 60 ]]; then exit 1; fi
   sleep 1
 done
-run_sql() { docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U supabase_admin -d postgres -v ON_ERROR_STOP=1; }
+run_sql() { docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U supabase_admin -d postgres -v ON_ERROR_STOP=1 "$@"; }
 run_sql <<'SQL' >/dev/null
 -- Remove image-specific default grants before restoring the exported ACLs.
 -- pg_dump assumes objects start with PostgreSQL defaults, not Supabase's
@@ -114,5 +114,135 @@ run_sql < test/sql/store_operating_payment_parity_test.sql
 run_sql < test/sql/store_operating_purge_contract_test.sql
 run_sql < test/sql/store_workflow_purge_test.sql
 run_sql < test/sql/store_workflow_upgrade_contract_test.sql
+# Store lifecycle stage 1: registration, optional physical floors, explicit areas.
+for operating_migration in \
+  20261021230000_owner_sales_reporting.sql \
+  20261022090000_store_registration_areas.sql \
+  20261022091000_service_area_kds_compat.sql; do
+ docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < "supabase/migrations/$operating_migration" >/dev/null
+done
+run_sql < test/sql/store_registration_areas_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/store_workflow_bunsik_test.sql
+run_sql < test/sql/store_workflow_direct_test.sql
+run_sql < test/sql/store_workflow_undo_test.sql
+run_sql < test/sql/store_workflow_move_fifo_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_operating_purge_contract_test.sql
+run_sql < test/sql/store_workflow_publication_test.sql
+python3 scripts/tests/store_registration_concurrency.py "$operating_fixture"
+
+# Stage 2: explicit opening, current credentials and grandfathered legacy intake.
+docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+ < supabase/migrations/20261022100000_store_lifecycle_readiness.sql >/dev/null
+run_sql < test/sql/store_lifecycle_readiness_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/store_workflow_bunsik_test.sql
+run_sql < test/sql/store_workflow_direct_test.sql
+run_sql < test/sql/store_workflow_undo_test.sql
+run_sql < test/sql/store_workflow_move_fifo_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_operating_purge_contract_test.sql
+run_sql < test/sql/store_workflow_publication_test.sql
+
+# Stage 3: store identity and existing financial/receipt snapshots.
+docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+ < supabase/migrations/20261022110000_sales_store_identity.sql >/dev/null
+run_sql < test/sql/sales_store_identity_test.sql
+docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+ < supabase/migrations/20261022112000_sales_reporting_batches.sql >/dev/null
+run_sql < test/sql/sales_reporting_batches_test.sql
+python3 scripts/tests/sales_reporting_concurrency.py "$operating_fixture"
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_operating_sales_contract_test.sql
+run_sql < test/sql/store_operating_purge_contract_test.sql
+
+# Stage 4: new-store procurement readiness and existing store parity.
+docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+ < supabase/migrations/20261022120000_procurement_readiness_profiles.sql >/dev/null
+run_sql < test/sql/procurement_readiness_profiles_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/store_workflow_bunsik_test.sql
+run_sql < test/sql/store_workflow_direct_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_operating_purge_contract_test.sql
+run_sql < test/sql/store_workflow_publication_test.sql
+
+# Stage 5: approved quality criteria and frozen receipt evidence.
+docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+ < supabase/migrations/20261022130000_procurement_quality_profiles.sql >/dev/null
+run_sql < test/sql/procurement_quality_profiles_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/store_workflow_bunsik_test.sql
+run_sql < test/sql/store_workflow_direct_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_operating_purge_contract_test.sql
+run_sql < test/sql/store_workflow_publication_test.sql
+
+# Stage 6: opt-in lots, opening counts, quarantine and receipt lineage.
+for operating_migration in \
+  20261022140000_inventory_lot_foundation.sql \
+  20261022141000_inventory_lot_counts.sql \
+  20261022142000_inventory_receipt_lots.sql \
+  20261022143000_inventory_lot_dispositions.sql \
+  20261022144000_inventory_lot_workspace.sql \
+  20261022145000_inventory_lot_boundaries.sql; do
+ docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < "supabase/migrations/$operating_migration" >/dev/null
+done
+run_sql < test/sql/inventory_lots_test.sql
+python3 scripts/tests/inventory_lot_concurrency.py "$operating_fixture"
+run_sql < test/sql/procurement_quality_profiles_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/store_workflow_bunsik_test.sql
+run_sql < test/sql/store_workflow_direct_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_operating_purge_contract_test.sql
+run_sql < test/sql/store_workflow_publication_test.sql
+
+# Shared receiver keeps the two stores' legacy area scopes unchanged.
+run_sql -Atc "SELECT store_workflow_source('273b057e-3b69-46e3-93c1-6194c2802849'),store_workflow_source('8bc9eef5-dcd5-46b1-b931-23f77132322c');" > "$operating_logs/area-before"
+docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+ < supabase/migrations/20261022150000_shared_service_area_receivers.sql >/dev/null
+run_sql -Atc "SELECT store_workflow_source('273b057e-3b69-46e3-93c1-6194c2802849'),store_workflow_source('8bc9eef5-dcd5-46b1-b931-23f77132322c');" > "$operating_logs/area-after"
+cmp "$operating_logs/area-before" "$operating_logs/area-after"
+run_sql < test/sql/shared_area_receivers_test.sql
+run_sql < test/sql/store_workflow_bunsik_test.sql
+run_sql < test/sql/store_workflow_direct_test.sql
+run_sql < test/sql/store_workflow_undo_test.sql
+run_sql < test/sql/store_workflow_move_fifo_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_workflow_publication_test.sql
+# Stage 7: operating acceptance, external reconciliation evidence and closure/reopening.
+for operating_migration in \
+  20261022160000_store_closure_boundaries.sql \
+  20261022170000_store_operational_acceptance.sql \
+  20261022180000_procurement_reconciliation_evidence.sql \
+  20261022181000_store_reopening_preparation.sql \
+  20261022182000_procurement_quality_review.sql \
+  20261022190000_procurement_demand_initial_plans.sql \
+  20261022191000_store_identity_transfers.sql \
+  20261022192000_lifecycle_read_boundaries.sql \
+  20261022193000_lifecycle_financial_boundaries.sql; do
+ docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < "supabase/migrations/$operating_migration" >/dev/null
+done
+run_sql < test/sql/store_operational_acceptance_test.sql
+run_sql < test/sql/procurement_reconciliation_evidence_test.sql
+run_sql < test/sql/store_closure_boundaries_test.sql
+run_sql < test/sql/store_identity_transfer_test.sql
+run_sql < test/sql/procurement_demand_initial_test.sql
+run_sql -c "SET test.held_price=130" -f - < test/sql/inventory_lots_test.sql
+run_sql < test/sql/store_operating_purge_contract_test.sql
+run_sql < test/sql/store_workflow_bunsik_test.sql
+run_sql < test/sql/store_workflow_direct_test.sql
+run_sql < test/sql/store_workflow_undo_test.sql
+run_sql < test/sql/store_workflow_move_fifo_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_workflow_publication_test.sql
 run_sql < test/sql/store_workflow_concurrency_setup.sql >/dev/null
 python3 scripts/tests/store_workflow_concurrency.py "$operating_fixture"

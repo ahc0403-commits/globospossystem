@@ -82,6 +82,7 @@ void main() {
         'Hóa đơn GTGT',
         'POS Ledger',
         'Invoice Mapping',
+        'Store Reconciliation',
         'Export Contract',
         'Email Delivery',
       ]);
