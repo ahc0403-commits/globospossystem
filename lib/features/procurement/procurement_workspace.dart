@@ -1734,7 +1734,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                         '${line['product_name']} · ${line['requested_quantity']} ${line['requested_unit']}',
                       ),
                       subtitle: Text(
-                        '${t('요청 당시 재고', 'Stock at request', 'Tồn kho khi yêu cầu')}: ${procurementNumber(line['current_stock_snapshot'], decimals: 3)}\n${line['memo'] ?? ''}\n${copy('estimate')}: ${line['estimated_unit_price'] == null ? copy('quoteNeeded') : procurementNumber(line['estimated_unit_price'])} / ${line['estimated_order_unit'] ?? '—'}',
+                        '${copy('productCode')}: ${line['product_code'] ?? line['product_code_snapshot'] ?? '—'}\n${t('요청 당시 재고', 'Stock at request', 'Tồn kho khi yêu cầu')}: ${procurementNumber(line['current_stock_snapshot'], decimals: 3)}\n${line['memo'] ?? ''}\n${copy('estimate')}: ${line['estimated_unit_price'] == null ? copy('quoteNeeded') : procurementNumber(line['estimated_unit_price'])} / ${line['estimated_order_unit'] ?? '—'}',
                       ),
                     ),
                   Wrap(
