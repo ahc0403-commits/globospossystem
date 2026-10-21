@@ -34,7 +34,8 @@ END $patch$;
 DO $schedule$
 BEGIN
   IF to_regclass('cron.job') IS NOT NULL THEN
-    UPDATE cron.job SET active=false
+    PERFORM cron.alter_job(jobid, active := false)
+      FROM cron.job
       WHERE jobname='restaurant-daily-sales-finalize-2220-hcm' AND active;
   END IF;
 END $schedule$;

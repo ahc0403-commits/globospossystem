@@ -9,7 +9,9 @@ trap cleanup EXIT
 # Only an owned disposable database; no production credentials or host ports.
 docker run --detach --rm --name "$db_name" \
   --env POSTGRES_PASSWORD=report-fixture --env POSTGRES_DB=report_ready_test \
-  public.ecr.aws/supabase/postgres:17.6.1.104 -c track_functions=all >/dev/null
+  public.ecr.aws/supabase/postgres:17.6.1.104 -c track_functions=all \
+  -c shared_preload_libraries=pg_cron -c cron.database_name=report_ready_test \
+  -c cron.launch_active_jobs=off >/dev/null
 for attempt in $(seq 1 60); do
   if docker exec "$db_name" pg_isready -h 127.0.0.1 -U postgres -d report_ready_test >/dev/null 2>&1; then break; fi
   if [[ "$attempt" == 60 ]]; then exit 1; fi
@@ -158,6 +160,8 @@ run_sql < test/sql/all_store_sales_reporting_test.sql
 if [[ -n "${GLOBOS_ALL_STORE_PERF_OUTPUT:-}" ]]; then
   python3 scripts/tests/deposit_breakdown_performance.py "$db_name" "$GLOBOS_ALL_STORE_PERF_OUTPUT"
 fi
+docker exec --env PGPASSWORD=report-fixture "$db_name" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d report_ready_test \
+  -c 'CREATE EXTENSION pg_cron; GRANT USAGE ON SCHEMA cron TO postgres; GRANT EXECUTE ON FUNCTION cron.alter_job(bigint,text,text,text,text,boolean) TO postgres;' >/dev/null
 run_sql < test/sql/owner_sales_reporting_setup.sql
 run_sql < supabase/migrations/20261021230000_owner_sales_reporting.sql
 run_sql < supabase/migrations/20261021230000_owner_sales_reporting.sql
