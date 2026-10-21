@@ -59,13 +59,14 @@ BEGIN
  IF p_workflow IS NULL OR p_workflow NOT IN ('kitchen_tray_floor','kitchen_floor') THEN
   RETURN '["STORE_SETUP_WORKFLOW_INVALID"]'::jsonb;
  END IF;
- SELECT kds_workflow INTO current_workflow FROM public.restaurant_settings WHERE restaurant_id=p_store_id;
- current_workflow:=coalesce(current_workflow,'kitchen_tray_floor');
- IF current_workflow=p_workflow THEN RETURN '[]'::jsonb; END IF;
- IF NOT coalesce(public.is_super_admin(),false) THEN RETURN '["STORE_SETUP_WORKFLOW_PERMISSION"]'::jsonb; END IF;
  IF p_store_id='273b057e-3b69-46e3-93c1-6194c2802849' AND p_workflow<>'kitchen_floor' THEN
   RETURN '["STORE_SETUP_WORKFLOW_JEONGABOK"]'::jsonb;
  END IF;
+ SELECT kds_workflow INTO current_workflow FROM public.restaurant_settings WHERE restaurant_id=p_store_id;
+ current_workflow:=coalesce(current_workflow,CASE WHEN p_store_id='273b057e-3b69-46e3-93c1-6194c2802849'
+  THEN 'kitchen_floor' ELSE 'kitchen_tray_floor' END);
+ IF current_workflow=p_workflow THEN RETURN '[]'::jsonb; END IF;
+ IF NOT coalesce(public.is_super_admin(),false) THEN RETURN '["STORE_SETUP_WORKFLOW_PERMISSION"]'::jsonb; END IF;
  IF EXISTS(SELECT 1 FROM public.orders WHERE restaurant_id=p_store_id AND status NOT IN ('completed','cancelled'))
  OR EXISTS(SELECT 1 FROM public.emergency_fulfillment_items i
   JOIN public.emergency_fulfillment_sessions s ON s.id=i.session_id AND s.status='active'
