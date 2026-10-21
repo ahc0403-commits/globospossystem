@@ -209,6 +209,194 @@ void main() {
         ],
       );
 
+  for (final order in [
+    const ['S', 'L'],
+    const ['L', 'S'],
+  ]) {
+    testWidgets(
+      'cart keeps both sizes in order $order and allows edits before sending',
+      (tester) async {
+        var reads = 0, submissions = 0;
+        await _pumpQr(
+          tester,
+          service: _service(
+            fetch: (_) async {
+              reads++;
+              return sizesMenu();
+            },
+            place: (_, _, _, _) async {
+              submissions++;
+              return _result;
+            },
+          ),
+        );
+        for (final size in order) {
+          final add = find.byKey(const Key('qr_add_option_small'));
+          await tester.ensureVisible(add);
+          await tester.tap(add);
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(Key('menu_size_$size')));
+          await tester.pumpAndSettle();
+        }
+        final readCount = reads;
+        await tester.tap(find.byKey(const Key('qr_open_review')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('qr_cart_small|dine_in_quantity')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('qr_cart_large|dine_in_quantity')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const Key('qr_cart_small|dine_in_plus')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const Key('qr_cart_small|dine_in_quantity')),
+              )
+              .data,
+          '2',
+        );
+        await tester.tap(find.byKey(const Key('qr_cart_small|dine_in_minus')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('qr_cart_small|dine_in_details')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(TextButton),
+              )
+              .last,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('qr_cart_small|dine_in_options')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('menu_size_L')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('qr_cart_small|dine_in_quantity')),
+          findsNothing,
+        );
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const Key('qr_cart_large|dine_in_quantity')),
+              )
+              .data,
+          '2',
+        );
+        await tester.ensureVisible(
+          find.byKey(const Key('qr_cart_large|dine_in_remove')),
+        );
+        await tester.tap(find.byKey(const Key('qr_cart_large|dine_in_remove')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<FilledButton>(find.byKey(const Key('qr_confirm_submit')))
+              .onPressed,
+          isNull,
+        );
+        expect(submissions, 0);
+        expect(reads, readCount);
+        _expectNoLayoutFailure(tester);
+      },
+    );
+  }
+
+  testWidgets(
+    'noodles and rice require a choice and remain editable separate cart rows',
+    (tester) async {
+      final sent = <QrOrderLine>[];
+      final menu = QrOrderMenu(
+        storeName: 'JeonGabok',
+        tableNumber: '1',
+        floorLabel: '1F',
+        categories: const [QrMenuCategory(id: 'main', name: 'Main')],
+        items: [
+          for (final meal in ['noodles', 'rice'])
+            QrMenuItem(
+              id: meal,
+              categoryId: 'main',
+              name: '$meal Jjamppong',
+              nameEn: '$meal Jjamppong',
+              price: 165000,
+              menuOptionKey: jsonEncode([
+                '',
+                'unknown',
+                '',
+                165000,
+                {
+                  'menu_id': 'noodles',
+                  'meal_choice': meal,
+                  'names': {'name_en': 'Jjamppong'},
+                },
+              ]),
+            ),
+        ],
+      );
+      await _pumpQr(
+        tester,
+        service: _service(
+          fetch: (_) async => menu,
+          place: (_, items, _, _) async {
+            sent.addAll(items);
+            return _result;
+          },
+        ),
+      );
+      for (final meal in ['noodles', 'rice']) {
+        await tester.tap(find.byKey(const Key('qr_add_option_noodles')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(Key('menu_size__$meal')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const Key('qr_open_review')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('qr_cart_noodles|dine_in_quantity')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('qr_cart_rice|dine_in_quantity')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('qr_cart_noodles|dine_in_options')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('menu_size__rice')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const Key('qr_cart_rice|dine_in_quantity')),
+            )
+            .data,
+        '2',
+      );
+      await tester.tap(find.byKey(const Key('qr_cart_rice|dine_in_minus')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+      await tester.pumpAndSettle();
+      expect(sent, hasLength(1));
+      expect(sent.single.menuItemId, 'rice');
+      expect(sent.single.quantity, 1);
+      expect(
+        (jsonDecode(sent.single.menuOptionKey!) as List)[4]['meal_choice'],
+        'rice',
+      );
+      _expectNoLayoutFailure(tester);
+    },
+  );
+
   testWidgets('one sized menu retains its registered photo and description', (
     tester,
   ) async {
@@ -228,6 +416,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('menu_size_picker')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cart option edits retain the existing takeout selection', (
+    tester,
+  ) async {
+    final sent = <QrOrderLine>[];
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetch: (_) async => sizesMenu(),
+        place: (_, items, __, ___) async {
+          sent.addAll(items);
+          return _result;
+        },
+      ),
+    );
+    await tester.tap(find.byKey(const Key('qr_choose_size_small')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('menu_size_S')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_open_review')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_cart_small|takeout_options')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isTrue,
+    );
+    await tester.tap(find.byKey(const Key('menu_size_L')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('qr_cart_large|takeout_quantity')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+    await tester.pumpAndSettle();
+    expect(sent.single.menuItemId, 'large');
+    expect(sent.single.isTakeout, isTrue);
   });
 
   for (final language in ['ko', 'vi', 'en']) {

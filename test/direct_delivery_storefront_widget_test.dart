@@ -533,6 +533,149 @@ void main() {
     },
   );
 
+  for (final language in ['ko', 'vi', 'en']) {
+    testWidgets(
+      'editable cart preserves sizes and noodles/rice combinations $language',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(const {});
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(390, 844);
+        addTearDown(tester.view.reset);
+        final service = _StorefrontFixtureService(
+          defaultMenu: false,
+          extraItems: [
+            for (final size in ['S', 'L'])
+              for (final meal in ['noodles', 'rice'])
+                DirectOrderMenuItem(
+                  id: '$size-$meal',
+                  categoryId: 'popular',
+                  nameKo: '$size · ${meal == 'noodles' ? '면' : '밥'} · 짬뽕',
+                  nameVi: '$size · $meal · Jjamppong',
+                  nameEn: '$size · $meal · Jjamppong',
+                  description: 'Registered menu detail',
+                  price: size == 'S' ? 190000 : 370000,
+                  imageUrl: null,
+                  vatCategory: 'food',
+                  sortOrder: 0,
+                  menuOptionKey: jsonEncode([
+                    size,
+                    'unknown',
+                    '',
+                    size == 'S' ? 190000 : 370000,
+                    {
+                      'menu_id': 'dish',
+                      'meal_choice': meal,
+                      'names': {
+                        'name_ko': '짬뽕',
+                        'name_vi': 'Jjamppong',
+                        'name_en': 'Jjamppong',
+                      },
+                    },
+                  ]),
+                ),
+          ],
+        );
+        await tester.pumpWidget(
+          _fixtureApp(service: service, locale: Locale(language)),
+        );
+        await tester.pumpAndSettle();
+        final reads = service.fetchStorefrontCalls;
+        for (final (size, meal) in [('S', 'noodles'), ('L', 'rice')]) {
+          final add = find.byKey(const Key('direct_add_option_dish'));
+          await _revealMenu(tester, add);
+          await tester.tap(add);
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(Key('menu_size_${size}_$meal')));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.byKey(const Key('direct_view_cart')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('direct_cart_item_S-noodles')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('direct_cart_item_L-rice')),
+          findsOneWidget,
+        );
+        if (language == 'ko') {
+          await _captureCustomerUi(tester, 'editable-options-cart');
+        }
+        await tester.tap(find.byKey(const Key('direct_cart_S-noodles_plus')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const Key('direct_cart_S-noodles_quantity')),
+              )
+              .data,
+          '2',
+        );
+        await tester.tap(
+          find.byKey(const Key('direct_cart_S-noodles_options')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('menu_size_S_rice')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('direct_cart_item_S-noodles')),
+          findsNothing,
+        );
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const Key('direct_cart_S-rice_quantity')),
+              )
+              .data,
+          '2',
+        );
+        await tester.tap(find.byKey(const Key('direct_cart_S-rice_minus')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('direct_cart_S-rice_details')));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Registered menu detail'),
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(TextButton),
+              )
+              .last,
+        );
+        await tester.pumpAndSettle();
+        final remove = find.byKey(const Key('direct_cart_L-rice_remove'));
+        await tester.ensureVisible(remove);
+        await tester.pumpAndSettle();
+        await tester.tap(remove);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('direct_cart_item_L-rice')), findsNothing);
+        expect(service.fetchStorefrontCalls, reads);
+        expect(service.submitCalls, 0);
+        await tester.ensureVisible(
+          find.byKey(const Key('direct_cart_S-rice_remove')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('direct_cart_S-rice_remove')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.byKey(const Key('direct_cart_address')),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('cart survives closing and reopening the storefront', (
     tester,
   ) async {

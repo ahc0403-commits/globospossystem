@@ -225,6 +225,7 @@ void main() {
             'portion_code': 'S',
             'spice_level': 'spicy',
             'spice_choice': 'Mild',
+            'meal_choices': true,
           },
         ],
       );
@@ -234,6 +235,7 @@ void main() {
       expect(row.nameKo, '국수');
       expect(row.toJson()['portion_code'], 'S');
       expect(row.toJson()['spice_level'], 'spicy');
+      expect(row.toJson()['meal_choices'], isTrue);
       final old = Excel.decodeBytes(bytes);
       final sheet = old.tables[menuImportSheetName]!;
       for (final header in menuOptionsExcelHeaders.reversed) {
@@ -251,6 +253,13 @@ void main() {
       final issues = <String>[];
       parseMenuOptionsExcelRow({'양(S/L)': 0}, (_) => 'M', 42, issues);
       expect(issues.single, contains('42행'));
+      issues.clear();
+      expect(
+        parseMenuOptionsExcelRow({'면밥선택': 0}, (_) => 'false', 43, issues),
+        {'meal_choices': false},
+      );
+      parseMenuOptionsExcelRow({'면밥선택': 0}, (_) => 'maybe', 44, issues);
+      expect(issues.single, contains('44행'));
     },
   );
   testWidgets(

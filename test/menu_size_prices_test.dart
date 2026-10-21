@@ -9,6 +9,38 @@ import 'package:globos_pos_system/features/admin/menu_import/menu_excel_roundtri
 
 void main() {
   test(
+    'meal selection metadata is structured, localized and retained in edits',
+    () {
+      final registered = MenuOptions.fromJson({
+        'meal_choices': true,
+        'spice_level': 'unknown',
+      });
+      expect(
+        registered.copyWith(spice: 'spicy').toJson()['meal_choices'],
+        isTrue,
+      );
+      expect(registered, isNot(const MenuOptions()));
+      final metadata = MenuSizeMetadata.fromKey(
+        jsonEncode([
+          '',
+          'unknown',
+          '',
+          165000,
+          {
+            'menu_id': 'dish',
+            'meal_choice': 'rice',
+            'names': {'name_ko': '짬뽕'},
+          },
+        ]),
+      )!;
+      expect(metadata.menuId, 'dish');
+      expect(metadata.label('ko'), '밥');
+      expect(metadata.label('vi'), 'Cơm');
+      expect(metadata.label('en'), 'Rice');
+    },
+  );
+
+  test(
     'one catalog dish owns both sizes and exports one row with both prices',
     () {
       final rows = [
@@ -120,6 +152,12 @@ void main() {
       );
       await tester.pump();
       expect(find.byKey(const Key('admin_menu_portion')), findsNothing);
+      await tester.ensureVisible(
+        find.byKey(const Key('admin_menu_meal_choices')),
+      );
+      await tester.tap(find.byKey(const Key('admin_menu_meal_choices')));
+      await tester.pumpAndSettle();
+      expect(value.toJson()['meal_choices'], isTrue);
       expect(value.validSizePrices, isTrue);
       expect(value.toJson()['size_prices'], {'S': 190000, 'L': 370000});
       expect(tester.takeException(), isNull);

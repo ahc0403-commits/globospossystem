@@ -60,6 +60,12 @@ requests and higher-priority instructions take precedence.
 - Preserve original prices, translations, VAT and immutable order snapshots.
   Never invent spice choices, prices or recipe multipliers. Unknown spiciness
   remains distinct from not spicy. Other stores keep their existing behavior.
+- Menus may require noodles/rice selection (`meal_choices`). The parent and
+  internal choice projections keep stable sellable IDs for each size/meal
+  combination. Register choices through a real authenticated administrator so
+  the existing approved invoice policy records the actual registering actor.
+- Customer carts keep distinct choices, permit option/quantity edits and removal,
+  and send orders only after explicit checkout.
 - Carry the selected price's `menu_option_key` through carts and offline drafts;
   validate the complete batch and require reselection after a price edit.
 
@@ -72,6 +78,9 @@ requests and higher-priority instructions take precedence.
   distinct stored floors 1F/2F/3F, and other stores' checker workflows. Queue
   `kitchen_direct_to_floor` is the source snapshot; tray quantity fields are
   compatibility projections, not evidence of a checker actor.
+- JeonGabok uses the active KDS revision/broadcast rollout. Kitchen completion
+  invalidates the assigned stored floor directly; floor timers start at
+  `kitchen_done`. Delivery/pickup preparation must not notify a table floor.
 
 - `process_payment` is the atomic single-order payment entry point. Determine
   its effective definition by migration order, not a fixed historical filename.

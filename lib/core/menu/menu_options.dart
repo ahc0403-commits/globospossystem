@@ -8,7 +8,9 @@ class MenuOptions {
     this.spice = 'unknown',
     this.choice = '',
     this.sizePrices = const {},
+    this.mealChoices = false,
   });
+  final bool mealChoices;
   final String portion;
   final String spice;
   final String choice;
@@ -24,7 +26,9 @@ class MenuOptions {
     String? spice,
     String? choice,
     Map<String, double>? sizePrices,
+    bool? mealChoices,
   }) => MenuOptions(
+    mealChoices: mealChoices ?? this.mealChoices,
     portion: portion ?? this.portion,
     spice: spice ?? this.spice,
     choice: choice ?? this.choice,
@@ -32,6 +36,7 @@ class MenuOptions {
   );
 
   factory MenuOptions.fromJson(Map<String, dynamic> json) => MenuOptions(
+    mealChoices: json['meal_choices'] == true,
     portion: json['portion_code']?.toString() ?? '',
     spice: json['spice_level']?.toString() ?? 'unknown',
     choice: json['spice_choice']?.toString() ?? '',
@@ -43,6 +48,7 @@ class MenuOptions {
   );
 
   Map<String, dynamic> toJson() => {
+    'meal_choices': mealChoices,
     'portion_code': hasSizes ? 'S' : portion,
     'size_prices': sizePrices,
     'spice_level': spice,
@@ -52,14 +58,21 @@ class MenuOptions {
   @override
   bool operator ==(Object other) =>
       other is MenuOptions &&
+      mealChoices == other.mealChoices &&
       portion == other.portion &&
       spice == other.spice &&
       choice == other.choice &&
       sizePrices['S'] == other.sizePrices['S'] &&
       sizePrices['L'] == other.sizePrices['L'];
   @override
-  int get hashCode =>
-      Object.hash(portion, spice, choice, sizePrices['S'], sizePrices['L']);
+  int get hashCode => Object.hash(
+    portion,
+    spice,
+    choice,
+    sizePrices['S'],
+    sizePrices['L'],
+    mealChoices,
+  );
 }
 
 String menuBaseName(Map<String, dynamic> item, String key) {
@@ -104,6 +117,26 @@ class MenuOptionsEditor extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            SwitchListTile(
+              key: const Key('admin_menu_meal_choices'),
+              title: Text(
+                text(
+                  '면·밥 필수 선택',
+                  'Bắt buộc chọn mì/cơm',
+                  'Require noodles or rice',
+                ),
+              ),
+              subtitle: Text(
+                text(
+                  '고객이 면 또는 밥을 선택합니다. 가격은 등록된 메뉴 가격을 사용합니다.',
+                  'Khách chọn mì hoặc cơm với giá món đã đăng ký.',
+                  'Customers choose noodles or rice at the registered menu price.',
+                ),
+              ),
+              value: value.mealChoices,
+              onChanged: (enabled) =>
+                  onChanged(value.copyWith(mealChoices: enabled)),
+            ),
             if (allowSizes) ...[
               SwitchListTile(
                 key: const Key('admin_menu_has_sizes'),
@@ -158,6 +191,7 @@ class MenuOptionsEditor extends StatelessWidget {
                 ],
                 onChanged: (v) => onChanged(
                   MenuOptions(
+                    mealChoices: value.mealChoices,
                     portion: v ?? '',
                     spice: value.spice,
                     choice: value.choice,
@@ -188,6 +222,7 @@ class MenuOptionsEditor extends StatelessWidget {
               ],
               onChanged: (v) => onChanged(
                 MenuOptions(
+                  mealChoices: value.mealChoices,
                   portion: value.portion,
                   spice: v ?? 'unknown',
                   choice: value.choice,
@@ -209,6 +244,7 @@ class MenuOptionsEditor extends StatelessWidget {
               ),
               onChanged: (v) => onChanged(
                 MenuOptions(
+                  mealChoices: value.mealChoices,
                   portion: value.portion,
                   spice: value.spice,
                   choice: v,

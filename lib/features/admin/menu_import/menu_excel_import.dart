@@ -382,6 +382,7 @@ const menuOptionsExcelHeaders = [
   '맵기선택명',
   'S가격(VND)',
   'L가격(VND)',
+  '면밥선택',
 ];
 Map<String, dynamic>? parseMenuOptionsExcelRow(
   Map<String, int> headers,
@@ -390,6 +391,13 @@ Map<String, dynamic>? parseMenuOptionsExcelRow(
   List<String> issues,
 ) {
   final result = <String, dynamic>{};
+  if (headers.containsKey('면밥선택')) {
+    final value = text('면밥선택').toLowerCase();
+    if (!['', 'true', 'false', 'yes', 'no', '1', '0'].contains(value)) {
+      issues.add('$row행: 면밥선택은 true 또는 false여야 합니다.');
+    }
+    result['meal_choices'] = ['true', 'yes', '1'].contains(value);
+  }
   if (headers.containsKey('S가격(VND)') || headers.containsKey('L가격(VND)')) {
     final small = text('S가격(VND)');
     final large = text('L가격(VND)');

@@ -24,6 +24,13 @@ class _OperationalCoverage {
 
 const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
+    source: 'lib/core/menu/customer_cart.dart',
+    directCalls: 1,
+    test: 'test/qr_order_operational_ui_test.dart',
+    additionalTests: ['test/direct_delivery_storefront_widget_test.dart'],
+    markers: ['_details'],
+  ),
+  _OperationalCoverage(
     source: 'lib/core/menu/menu_sizes.dart',
     directCalls: 1,
     test: 'test/qr_order_operational_ui_test.dart',
@@ -504,7 +511,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 172 dialog and sheet entrypoints map to operational tests', () {
+  test('all 173 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -516,10 +523,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 169);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 170);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      172,
+      173,
     );
 
     final inventory = File(

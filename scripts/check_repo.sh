@@ -65,6 +65,10 @@ deno test --config supabase/functions/direct-order-translation-dispatcher/deno.j
 
 printf 'CHECK_REPO_STEP=menu_size_prices_sql\n'
 bash scripts/test_menu_size_prices.sh
+printf 'CHECK_REPO_STEP=menu_meal_choices_cart_sql\n'
+bash scripts/test_menu_meal_choices_cart.sh
+printf 'CHECK_REPO_STEP=jeongabok_floor_live_sync_sql\n'
+bash scripts/test_jeongabok_floor_live_sync.sh
 
 printf 'CHECK_REPO_STEP=menu_localization_sql\n'
 bash scripts/test_menu_localization.sh

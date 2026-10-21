@@ -1,3 +1,4 @@
+import '../../core/menu/customer_cart.dart';
 import '../../core/menu/menu_sizes.dart';
 import 'direct_order_translation.dart';
 import 'direct_order_menu_search.dart';
@@ -733,140 +734,164 @@ class _DirectOrderStorefrontScreenState
       );
 
   Future<void> _showCart() async {
-    final items = _storefront!.items
-        .where((item) => (_cart[item.id] ?? 0) > 0)
-        .toList();
     final openAddress = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       constraints: const BoxConstraints(maxWidth: 640),
       builder: (context) => StatefulBuilder(
-        builder: (context, refreshSheet) => SafeArea(
-          child: SizedBox(
-            key: const Key('direct_cart_sheet'),
-            height: MediaQuery.sizeOf(context).height * 0.78,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.shopping_cart_outlined),
-                  title: Text(
-                    _copy.cart,
-                    style: Theme.of(context).textTheme.titleLarge,
+        builder: (context, refreshSheet) {
+          final items = _storefront!.items
+              .where((item) => (_cart[item.id] ?? 0) > 0)
+              .toList();
+          Future<void> change(Future<void> Function() action) async {
+            await action();
+            if (context.mounted) refreshSheet(() {});
+          }
+
+          return SafeArea(
+            child: SizedBox(
+              key: const Key('direct_cart_sheet'),
+              height: MediaQuery.sizeOf(context).height * 0.78,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.shopping_cart_outlined),
+                    title: Text(
+                      _copy.cart,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    subtitle: Text(_copy.itemsCount(_cartCount)),
+                    trailing: IconButton(
+                      key: const Key('direct_cart_close'),
+                      tooltip: _copy.close,
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
                   ),
-                  subtitle: Text(_copy.itemsCount(_cartCount)),
-                  trailing: IconButton(
-                    key: const Key('direct_cart_close'),
-                    tooltip: _copy.close,
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const Divider(height: 24),
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      final quantity = _cart[item.id]!;
-                      return Column(
-                        key: Key('direct_cart_item_${item.id}'),
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            item.localizedName(_languageCode),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          if (item.isCombo) ...[
-                            Text(
-                              item.comboComponents
-                                  .map(
-                                    (c) =>
-                                        '${c.localizedName(_languageCode)} × ${c.quantity * quantity}',
-                                  )
-                                  .join(', '),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const Divider(height: 24),
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        final quantity = _cart[item.id]!;
+                        return CustomerCartItemCard(
+                          key: Key('direct_cart_item_${item.id}'),
+                          id: 'direct_cart_${item.id}',
+                          name: item.localizedName(_languageCode),
+                          price: item.price,
+                          quantity: quantity,
+                          language: _languageCode,
+                          imageUrl: item.imageUrl,
+                          description: item.description,
+                          onMinus: () =>
+                              change(() => _changeQuantity(item.id, -1)),
+                          onPlus: () =>
+                              change(() => _changeQuantity(item.id, 1)),
+                          onRemove: () => change(
+                            () => _changeQuantity(
+                              item.id,
+                              -(_cart[item.id] ?? 0),
                             ),
-                            Text(_comboChoiceSummary(item)),
-                            if (item.comboDrinkChoiceCount > 0)
-                              TextButton(
-                                onPressed: () async {
-                                  await _changeQuantity(item.id, 0);
-                                  if (context.mounted) refreshSheet(() {});
-                                },
-                                child: Text(_copy.comboDrinks),
-                              ),
-                          ],
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${_money.format(item.price)} × $quantity',
-                                ),
-                              ),
-                              const SizedBox(width: 12),
+                          ),
+                          onEdit: item.sizeMetadata == null
+                              ? null
+                              : () =>
+                                    change(() => _editDirectCartOptions(item)),
+                          children: [
+                            if (item.isCombo) ...[
                               Text(
-                                _money.format(item.price * quantity),
-                                style: Theme.of(context).textTheme.titleMedium,
+                                item.comboComponents
+                                    .map(
+                                      (c) =>
+                                          '${c.localizedName(_languageCode)} × ${c.quantity * quantity}',
+                                    )
+                                    .join(', '),
                               ),
+                              Text(_comboChoiceSummary(item)),
+                              if (item.comboDrinkChoiceCount > 0)
+                                TextButton(
+                                  onPressed: () async {
+                                    await _changeQuantity(item.id, 0);
+                                    if (context.mounted) refreshSheet(() {});
+                                  },
+                                  child: Text(_copy.comboDrinks),
+                                ),
                             ],
-                          ),
-                          if (_itemNotes[item.id]?.isNotEmpty == true)
-                            Text(
-                              '${_copy.itemRequest}: ${_itemNotes[item.id]}',
+                            if (_itemNotes[item.id]?.isNotEmpty == true)
+                              Text(
+                                '${_copy.itemRequest}: ${_itemNotes[item.id]}',
+                              ),
+                            TextButton.icon(
+                              key: Key('direct_cart_request_${item.id}'),
+                              onPressed: () async {
+                                await _editItemRequest(item);
+                                if (context.mounted) refreshSheet(() {});
+                              },
+                              icon: const Icon(Icons.edit_note),
+                              label: Text(_copy.addItemRequest),
                             ),
-                          TextButton.icon(
-                            key: Key('direct_cart_request_${item.id}'),
-                            onPressed: () async {
-                              await _editItemRequest(item);
-                              if (context.mounted) refreshSheet(() {});
-                            },
-                            icon: const Icon(Icons.edit_note),
-                            label: Text(_copy.addItemRequest),
-                          ),
-                        ],
-                      );
-                    },
+                          ],
+                        );
+                      },
+                    ),
                   ),
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: Text(_copy.subtotal)),
-                          const SizedBox(width: 12),
-                          Text(
-                            key: const Key('direct_cart_subtotal'),
-                            _money.format(_cartSubtotal),
-                            style: Theme.of(context).textTheme.titleLarge,
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: Text(_copy.subtotal)),
+                            const SizedBox(width: 12),
+                            Text(
+                              key: const Key('direct_cart_subtotal'),
+                              _money.format(_cartSubtotal),
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _isPickup ? _copy.vatNotice : _copy.cartQuoteNotice,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        TextButton(
+                          key: const Key('direct_cart_continue_shopping'),
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            cartText(
+                              _languageCode,
+                              '메뉴 더 담기',
+                              'Chọn thêm món',
+                              'Continue shopping',
+                            ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _isPickup ? _copy.vatNotice : _copy.cartQuoteNotice,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        key: const Key('direct_cart_address'),
-                        onPressed: () => Navigator.pop(context, true),
-                        icon: const Icon(Icons.arrow_forward_rounded),
-                        label: Text(_isPickup ? _copy.contact : _copy.address),
-                      ),
-                    ],
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          key: const Key('direct_cart_address'),
+                          onPressed: items.isEmpty
+                              ? null
+                              : () => Navigator.pop(context, true),
+                          icon: const Icon(Icons.arrow_forward_rounded),
+                          label: Text(
+                            _isPickup ? _copy.contact : _copy.address,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
     if (mounted && openAddress == true) {
@@ -2135,6 +2160,92 @@ class _DirectOrderStorefrontScreenState
     );
   }
 
+  Future<void> _addMenuOption(
+    DirectOrderMenuItem item,
+    List<DirectOrderMenuItem> options,
+  ) async {
+    final selected = await showMenuSizePicker(
+      context,
+      title: item.catalogName(_languageCode),
+      languageCode: _languageCode,
+      options: [
+        for (final option in options)
+          MenuSizeOption(
+            id: option.id,
+            size: option.sizeMetadata!.size,
+            mealChoice: option.sizeMetadata!.mealChoice,
+            price: option.price,
+          ),
+      ],
+    );
+    if (selected == null || !mounted) return;
+    await _changeQuantity(selected.optionId, 1);
+  }
+
+  Future<void> _editDirectCartOptions(DirectOrderMenuItem item) async {
+    final group = item.sizeMetadata?.menuId;
+    if (group == null || _comboSelecting || _submitting) return;
+    final options = _storefront!.items
+        .where((o) => o.sizeMetadata?.menuId == group)
+        .toList();
+    final selected = await showMenuSizePicker(
+      context,
+      title: item.catalogName(_languageCode),
+      languageCode: _languageCode,
+      options: [
+        for (final option in options)
+          MenuSizeOption(
+            id: option.id,
+            size: option.sizeMetadata!.size,
+            mealChoice: option.sizeMetadata!.mealChoice,
+            price: option.price,
+          ),
+      ],
+    );
+    if (selected == null ||
+        !mounted ||
+        selected.optionId == item.id ||
+        !_cart.containsKey(item.id)) {
+      return;
+    }
+    final quantity = _cart[item.id]! + (_cart[selected.optionId] ?? 0);
+    final notes = <String>{
+      ?_itemNotes[item.id],
+      ?_itemNotes[selected.optionId],
+    }.where((n) => n.isNotEmpty).join('\n');
+    if (quantity > 50 || notes.length > 300) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            cartText(
+              _languageCode,
+              '수량 또는 요청사항을 줄인 뒤 옵션을 변경해 주세요.',
+              'Giảm số lượng hoặc ghi chú trước khi đổi tùy chọn.',
+              'Reduce quantity or notes before merging these options.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    final target = _storefront!.items
+        .where((o) => o.id == selected.optionId)
+        .firstOrNull;
+    if (target == null) return;
+    setState(() {
+      _cart.remove(item.id);
+      _itemNotes.remove(item.id);
+      _cartOptionKeys.remove(item.id);
+      _comboDrinkChoices.remove(item.id);
+      _cart[target.id] = quantity;
+      if (target.menuOptionKey != null) {
+        _cartOptionKeys[target.id] = target.menuOptionKey!;
+      }
+      if (notes.isNotEmpty) _itemNotes[target.id] = notes;
+    });
+    _scheduleCartSave();
+  }
+
   Widget _sizedMenuCard(
     DirectOrderMenuItem item,
     List<DirectOrderMenuItem> options,
@@ -2174,29 +2285,25 @@ class _DirectOrderStorefrontScreenState
               options
                   .map(
                     (option) =>
-                        '${option.sizeMetadata!.size} ${_money.format(option.price)}',
+                        '${option.sizeMetadata!.label(_languageCode)} ${_money.format(option.price)}',
                   )
                   .join(' · '),
             ),
           ],
         ),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: IconButton(
+          key: Key('direct_add_option_${item.sizeMetadata!.menuId}'),
+          tooltip: cartText(
+            _languageCode,
+            '다른 옵션 추가',
+            'Thêm tùy chọn khác',
+            'Add another option',
+          ),
+          onPressed: () => _addMenuOption(item, options),
+          icon: const Icon(Icons.add_shopping_cart),
+        ),
         onTap: () async {
-          final selected = await showMenuSizePicker(
-            context,
-            title: item.catalogName(_languageCode),
-            languageCode: _languageCode,
-            options: [
-              for (final option in options)
-                MenuSizeOption(
-                  id: option.id,
-                  size: option.sizeMetadata!.size,
-                  price: option.price,
-                ),
-            ],
-          );
-          if (selected == null || !mounted) return;
-          await _changeQuantity(selected.optionId, 1);
+          await _addMenuOption(item, options);
         },
       ),
     );

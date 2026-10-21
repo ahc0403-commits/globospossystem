@@ -16,11 +16,13 @@ const _migrationPath =
 // Owner-corrected size selection uses one catalog card and retains chosen price
 // IDs. QR operational UI tests cover KO/VI/EN, 200% text, stale price reset,
 // and retention of the registered photo and description.
+// 2026-10-21: editable customer cart is covered by QR operational tests for
+// both S/L insertion orders, meal choices, edits/removal and no premature submit.
 // QR VAT copy excludes tax without asserting one rate for mixed-rate items;
 // qr_order_operational_ui_test covers the notice and scaled viewport layout.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      '51b82708c23e4a0c558f144f036bc604f6ea7ce65cfb7a7f33ed82cc119166bb',
+      '91036e738e5f43786a85a0de6bca9833c153ca4c7b2b88e7c6699896e74efc75',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.

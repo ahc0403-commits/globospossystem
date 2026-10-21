@@ -517,6 +517,10 @@ class _MenuBrowser extends StatelessWidget {
                                             id: option['id'].toString(),
                                             size: option['portion_code']
                                                 .toString(),
+                                            mealChoice:
+                                                option['meal_choice']
+                                                    ?.toString() ??
+                                                '',
                                             price: (option['price'] as num)
                                                 .toDouble(),
                                           ),

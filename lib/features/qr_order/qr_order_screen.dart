@@ -1,3 +1,4 @@
+import '../../core/menu/customer_cart.dart';
 import '../../core/menu/menu_sizes.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -483,13 +484,94 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     });
   }
 
+  Future<void> _addRegisteredOption(
+    QrMenuItem item,
+    List<QrMenuItem> options,
+  ) async {
+    final selected = await showMenuSizePicker(
+      context,
+      title: item.catalogName(_languageCode),
+      languageCode: _languageCode,
+      allowTakeout: _menu!.isTakeoutEnabled,
+      options: [
+        for (final option in options)
+          MenuSizeOption(
+            id: option.id,
+            size: option.sizeMetadata!.size,
+            mealChoice: option.sizeMetadata!.mealChoice,
+            price: option.price,
+          ),
+      ],
+    );
+    if (selected == null || !mounted) return;
+    final option = options.firstWhere((o) => o.id == selected.optionId);
+    await _setQuantity(
+      option,
+      (_cart[_lineKey(option.id, selected.isTakeout)] ?? 0) + 1,
+      isTakeout: selected.isTakeout,
+    );
+  }
+
+  Future<void> _editCartOption(QrMenuItem item, bool isTakeout) async {
+    final options = _sizeGroups[item.sizeMetadata?.menuId];
+    if (options == null) return;
+    final selected = await showMenuSizePicker(
+      context,
+      title: item.catalogName(_languageCode),
+      languageCode: _languageCode,
+      allowTakeout: _menu!.isTakeoutEnabled,
+      initialTakeout: isTakeout,
+      options: [
+        for (final option in options)
+          MenuSizeOption(
+            id: option.id,
+            size: option.sizeMetadata!.size,
+            mealChoice: option.sizeMetadata!.mealChoice,
+            price: option.price,
+          ),
+      ],
+    );
+    if (!mounted || selected == null) return;
+    final source = _lineKey(item.id, isTakeout),
+        target = _lineKey(selected.optionId, selected.isTakeout);
+    if (source == target || !_cart.containsKey(source)) return;
+    final quantity = _cart[source]! + (_cart[target] ?? 0);
+    if (quantity > 20) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            cartText(
+              _languageCode,
+              '같은 옵션은 최대 20개까지 담을 수 있습니다.',
+              'Tối đa 20 phần cho mỗi tùy chọn.',
+              'Maximum 20 per option.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    final option = _menu!.items
+        .where((o) => o.id == selected.optionId)
+        .firstOrNull;
+    if (option == null) return;
+    setState(() {
+      _cart.remove(source);
+      _cartOptionKeys.remove(source);
+      _comboDrinkChoices.remove(source);
+      _cart[target] = quantity;
+      _cartOptionKeys[target] = option.menuOptionKey;
+      _clientOrderId = null;
+    });
+  }
+
   Widget _sizedMenuTile(QrMenuItem item) {
     final options = _sizeGroups[item.sizeMetadata!.menuId] ?? [item];
     final title = item.catalogName(_languageCode);
     final prices = options
         .map(
           (option) =>
-              '${option.sizeMetadata!.size} ${_currency.format(option.price)} VND',
+              '${option.sizeMetadata!.label(_languageCode)} ${_currency.format(option.price)} VND',
         )
         .join(' · ');
     return Semantics(
@@ -499,27 +581,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         child: InkWell(
           key: Key('qr_choose_size_${item.sizeMetadata!.menuId}'),
           onTap: () async {
-            final selected = await showMenuSizePicker(
-              context,
-              title: title,
-              languageCode: _languageCode,
-              allowTakeout: _menu!.isTakeoutEnabled,
-              options: [
-                for (final option in options)
-                  MenuSizeOption(
-                    id: option.id,
-                    size: option.sizeMetadata!.size,
-                    price: option.price,
-                  ),
-              ],
-            );
-            if (selected == null || !mounted) return;
-            final option = options.firstWhere((o) => o.id == selected.optionId);
-            await _setQuantity(
-              option,
-              (_cart[_lineKey(option.id, selected.isTakeout)] ?? 0) + 1,
-              isTakeout: selected.isTakeout,
-            );
+            await _addRegisteredOption(item, options);
           },
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -566,6 +628,19 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                   'vi' => 'Chọn cỡ',
                   _ => 'Choose size',
                 }),
+                OutlinedButton.icon(
+                  key: Key('qr_add_option_${item.sizeMetadata!.menuId}'),
+                  onPressed: () => _addRegisteredOption(item, options),
+                  icon: const Icon(Icons.add_shopping_cart),
+                  label: Text(
+                    cartText(
+                      _languageCode,
+                      '다른 옵션 추가',
+                      'Thêm tùy chọn khác',
+                      'Add another option',
+                    ),
+                  ),
+                ),
                 for (final option in options)
                   for (final takeout
                       in _menu!.isTakeoutEnabled ? [false, true] : [false])
@@ -574,7 +649,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                         padding: const EdgeInsets.only(top: 8),
                         child: _QrLabeledStepper(
                           label:
-                              '${option.sizeMetadata!.size} · ${takeout ? _copy.takeout : _copy.dineIn}',
+                              '${option.sizeMetadata!.label(_languageCode)} · ${takeout ? _copy.takeout : _copy.dineIn}',
                           itemId: takeout ? '${option.id}_takeout' : option.id,
                           itemName: option.localizedName(_languageCode),
                           quantity: _cart[_lineKey(option.id, takeout)]!,
@@ -601,9 +676,12 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       builder: (context) => _QrReviewDialog(
         copy: _copy,
         languageCode: _languageCode,
-        lines: _cartItems,
-        totalLabel: '${_currency.format(_cartTotal)} VND',
-        comboDrinkNames: {
+        readLines: () => _cartItems,
+        onQuantity: (item, quantity, takeout) =>
+            _setQuantity(item, quantity, isTakeout: takeout),
+        onEditOptions: _editCartOption,
+        readTotal: () => '${_currency.format(_cartTotal)} VND',
+        readComboDrinkNames: () => {
           for (final line in _cartItems)
             line.lineKey: [
               for (final choiceId
@@ -614,7 +692,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted || _cart.isEmpty) return;
 
     setState(() {
       _isSubmitting = true;
@@ -1979,174 +2057,192 @@ class _QrComboDrinkDialogState extends State<_QrComboDrinkDialog> {
   }
 }
 
-class _QrReviewDialog extends StatelessWidget {
+class _QrReviewDialog extends StatefulWidget {
   const _QrReviewDialog({
     required this.copy,
     required this.languageCode,
-    required this.lines,
-    required this.totalLabel,
-    required this.comboDrinkNames,
+    required this.readLines,
+    required this.readTotal,
+    required this.onQuantity,
+    required this.onEditOptions,
+    required this.readComboDrinkNames,
   });
 
   final QrOrderCopy copy;
   final String languageCode;
   final List<({QrMenuItem item, int quantity, bool isTakeout, String lineKey})>
-  lines;
-  final String totalLabel;
-  final Map<String, List<String>> comboDrinkNames;
+  Function()
+  readLines;
+  final String Function() readTotal;
+  final Future<void> Function(QrMenuItem, int, bool) onQuantity;
+  final Future<void> Function(QrMenuItem, bool) onEditOptions;
+  final Map<String, List<String>> Function() readComboDrinkNames;
+
+  @override
+  State<_QrReviewDialog> createState() => _QrReviewDialogState();
+}
+
+class _QrReviewDialogState extends State<_QrReviewDialog> {
+  bool _busy = false;
+  Future<void> _edit(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.88;
+    final copy = widget.copy, languageCode = widget.languageCode;
+    final lines = widget.readLines(), totalLabel = widget.readTotal();
+    final comboDrinkNames = widget.readComboDrinkNames();
     return Dialog(
       key: const Key('qr_confirm_dialog'),
       insetPadding: const EdgeInsets.all(16),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 560, maxHeight: maxHeight),
+        constraints: BoxConstraints(
+          maxWidth: 560,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(ToastSpacingTokens.lg),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(
-                    copy.confirmTitle,
-                    style: AppFonts.system(
-                      color: ToastColorTokens.textPrimary,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      height: 1.25,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: ToastSpacingTokens.sm),
-                Text(
-                  copy.confirmBody,
-                  style: AppFonts.system(
-                    color: ToastColorTokens.textSecondary,
-                    fontSize: 14,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: ToastSpacingTokens.lg),
-                SizedBox(
-                  child: ListView.separated(
-                    key: const Key('qr_review_items'),
-                    physics: const NeverScrollableScrollPhysics(),
-                    shrinkWrap: true,
-                    itemCount: lines.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: ToastSpacingTokens.lg),
-                    itemBuilder: (context, index) {
-                      final line = lines[index];
-                      final drinks = comboDrinkNames[line.lineKey] ?? const [];
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  line.item.localizedName(languageCode),
-                                  style: AppFonts.system(
-                                    color: ToastColorTokens.textPrimary,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.4,
-                                  ),
-                                ),
-                                const SizedBox(height: ToastSpacingTokens.xs),
-                                Text(
-                                  line.isTakeout ? copy.takeout : copy.dineIn,
-                                  key: Key('qr_review_mode_${line.lineKey}'),
-                                  style: AppFonts.system(
-                                    color: line.isTakeout
-                                        ? ToastColorTokens.warning
-                                        : ToastColorTokens.textSecondary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                if (drinks.isNotEmpty) ...[
-                                  const SizedBox(height: ToastSpacingTokens.xs),
-                                  Text(
-                                    drinks.join(', '),
-                                    key: Key(
-                                      'qr_review_combo_drinks_${line.isTakeout ? '${line.item.id}_takeout' : line.item.id}',
-                                    ),
-                                    style: AppFonts.system(
-                                      color: ToastColorTokens.textSecondary,
-                                      fontSize: 13,
-                                      height: 1.4,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        copy.confirmTitle,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(copy.confirmBody),
+                      const SizedBox(height: 16),
+                      if (lines.isEmpty)
+                        Text(
+                          cartText(
+                            languageCode,
+                            '장바구니가 비었습니다.',
+                            'Giỏ hàng trống.',
+                            'Your cart is empty.',
+                          ),
+                        ),
+                      ListView.separated(
+                        key: const Key('qr_review_items'),
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: lines.length,
+                        separatorBuilder: (_, _) => const Divider(height: 24),
+                        itemBuilder: (context, index) {
+                          final line = lines[index];
+                          final drinks =
+                              comboDrinkNames[line.lineKey] ?? const [];
+                          return CustomerCartItemCard(
+                            id: 'qr_cart_${line.lineKey}',
+                            name: line.item.localizedName(languageCode),
+                            price: line.item.price,
+                            quantity: line.quantity,
+                            language: languageCode,
+                            imageUrl: line.item.imageUrl,
+                            description: line.item.description,
+                            maxQuantity: 20,
+                            onMinus: () => _edit(
+                              () => widget.onQuantity(
+                                line.item,
+                                line.quantity - 1,
+                                line.isTakeout,
+                              ),
+                            ),
+                            onPlus: () => _edit(
+                              () => widget.onQuantity(
+                                line.item,
+                                line.quantity + 1,
+                                line.isTakeout,
+                              ),
+                            ),
+                            onRemove: () => _edit(
+                              () => widget.onQuantity(
+                                line.item,
+                                0,
+                                line.isTakeout,
+                              ),
+                            ),
+                            onEdit: line.item.sizeMetadata == null
+                                ? null
+                                : () => _edit(
+                                    () => widget.onEditOptions(
+                                      line.item,
+                                      line.isTakeout,
                                     ),
                                   ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: ToastSpacingTokens.sm),
-                          Text(
-                            '×${line.quantity}',
-                            style: AppFonts.system(
-                              color: ToastColorTokens.textPrimary,
-                              fontWeight: FontWeight.w800,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                            children: [
+                              Text(
+                                line.isTakeout ? copy.takeout : copy.dineIn,
+                                key: Key('qr_review_mode_${line.lineKey}'),
+                              ),
+                              if (drinks.isNotEmpty)
+                                Text(
+                                  drinks.join(', '),
+                                  key: Key(
+                                    'qr_review_combo_drinks_${line.isTakeout ? '${line.item.id}_takeout' : line.item.id}',
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
-                const Divider(height: ToastSpacingTokens.xxl),
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  spacing: 16,
-                  runSpacing: 8,
-                  children: [
-                    Text(
-                      copy.reviewTotal,
-                      style: AppFonts.system(
-                        color: ToastColorTokens.textSecondary,
-                        fontWeight: FontWeight.w700,
+              ),
+              const Divider(height: 24),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                spacing: 12,
+                children: [
+                  Text(copy.reviewTotal),
+                  Text(
+                    totalLabel,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => Navigator.pop(context, false),
+                    child: Text(
+                      cartText(
+                        languageCode,
+                        '메뉴 더 담기',
+                        'Chọn thêm món',
+                        'Continue shopping',
                       ),
                     ),
-                    Text(
-                      totalLabel,
-                      style: AppFonts.system(
-                        color: ToastColorTokens.accentStrong,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: ToastSpacingTokens.lg),
-                Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: ToastSpacingTokens.sm,
-                  runSpacing: ToastSpacingTokens.sm,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: Text(copy.cancel),
-                    ),
-                    FilledButton(
-                      key: const Key('qr_confirm_submit'),
-                      onPressed: () => Navigator.of(context).pop(true),
-                      child: Text(copy.submit),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                  FilledButton(
+                    key: const Key('qr_confirm_submit'),
+                    onPressed: lines.isEmpty || _busy
+                        ? null
+                        : () => Navigator.pop(context, true),
+                    child: Text(copy.submit),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -2672,17 +2768,17 @@ class QrOrderCopy {
   };
 
   String get confirmTitle => switch (code) {
-    'ko' => '주문 확인',
-    'vi' => 'Xác nhận gọi món',
-    _ => 'Review your order',
+    'ko' => '장바구니',
+    'vi' => 'Giỏ hàng',
+    _ => 'Your cart',
   };
 
   String get confirmBody => switch (code) {
-    'ko' => '주문완료를 누르면 주문확인서가 주방과 해당 층에 출력되고 캐셔로 바로 전달됩니다.',
+    'ko' => '메뉴와 옵션·수량을 확인해 주세요. 주문하기를 누르면 주방으로 전송됩니다.',
     'vi' =>
-      'Khi hoàn tất, phiếu xác nhận sẽ được in tại bếp và tầng hiện tại, đồng thời đơn sẽ được chuyển đến thu ngân.',
+      'Kiểm tra món, tùy chọn và số lượng. Nhấn Gửi đơn hàng để chuyển đến bếp.',
     _ =>
-      'When completed, confirmation slips print in the kitchen and on this floor, and the order goes straight to the cashier.',
+      'Check items, options and quantities. Place order sends the items to the kitchen and the order goes straight to the cashier.',
   };
 
   String get chooseComboDrinksTitle => switch (code) {
@@ -2717,9 +2813,9 @@ class QrOrderCopy {
   };
 
   String get review => switch (code) {
-    'ko' => '주문 검토',
-    'vi' => 'Xem lại món',
-    _ => 'Review order',
+    'ko' => '장바구니 보기',
+    'vi' => 'Xem giỏ hàng',
+    _ => 'View cart',
   };
 
   String get reviewTotal => switch (code) {
@@ -2729,9 +2825,9 @@ class QrOrderCopy {
   };
 
   String get submit => switch (code) {
-    'ko' => '주문완료',
-    'vi' => 'Hoàn tất đơn hàng',
-    _ => 'Complete order',
+    'ko' => '주문하기',
+    'vi' => 'Gửi đơn hàng',
+    _ => 'Place order',
   };
 
   String get processing => switch (code) {

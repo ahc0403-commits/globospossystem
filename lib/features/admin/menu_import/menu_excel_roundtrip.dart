@@ -251,6 +251,7 @@ List<int> buildMenuRoundTripWorkbook({
           DoubleCellValue(MenuOptions.fromJson(item).sizePrices['L']!)
         else
           TextCellValue(''),
+        BoolCellValue(item['meal_choices'] == true),
       ]);
     }
   }

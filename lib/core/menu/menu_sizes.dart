@@ -6,8 +6,18 @@ import 'package:intl/intl.dart';
 /// One catalog dish owns its size prices. Existing sellable IDs are retained
 /// only on the selected price so historical orders and invoice mappings survive.
 class MenuSizeMetadata {
-  const MenuSizeMetadata(this.menuId, this.names, this.size);
+  const MenuSizeMetadata(
+    this.menuId,
+    this.names,
+    this.size, {
+    this.mealChoice = '',
+  });
+  final String mealChoice;
   final String menuId;
+  String label(String languageCode) => [
+    size,
+    mealChoiceLabel(mealChoice, languageCode),
+  ].where((v) => v.isNotEmpty).join(' · ');
   final String size;
   final Map<String, dynamic> names;
 
@@ -19,13 +29,18 @@ class MenuSizeMetadata {
       final data = Map<String, dynamic>.from(value[4] as Map);
       final id = data['menu_id'];
       final names = data['names'];
-      if (id is! String || names is! Map || !['S', 'L'].contains(value[0])) {
+      if (id is! String ||
+          names is! Map ||
+          !['', 'S', 'L'].contains(value[0]) ||
+          (value[0] == '' &&
+              !['noodles', 'rice'].contains(data['meal_choice']))) {
         return null;
       }
       return MenuSizeMetadata(
         id,
         Map<String, dynamic>.from(names),
         value[0] as String,
+        mealChoice: data['meal_choice']?.toString() ?? '',
       );
     } on FormatException {
       return null;
@@ -65,7 +80,9 @@ class MenuSizeOption {
     required this.id,
     required this.size,
     required this.price,
+    this.mealChoice = '',
   });
+  final String mealChoice;
   final String id;
   final String size;
   final double price;
@@ -83,6 +100,7 @@ Future<MenuSizeSelection?> showMenuSizePicker(
   required List<MenuSizeOption> options,
   required String languageCode,
   bool allowTakeout = false,
+  bool initialTakeout = false,
 }) {
   final money = NumberFormat('#,###', 'vi_VN');
   String text(String ko, String vi, String en) => switch (languageCode) {
@@ -90,7 +108,7 @@ Future<MenuSizeSelection?> showMenuSizePicker(
     'vi' => vi,
     _ => en,
   };
-  var takeout = false;
+  var takeout = allowTakeout && initialTakeout;
   return showDialog<MenuSizeSelection>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -103,7 +121,11 @@ Future<MenuSizeSelection?> showMenuSizePicker(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                text('사이즈를 선택해 주세요.', 'Vui lòng chọn cỡ.', 'Choose a size.'),
+                text(
+                  '옵션을 선택해 주세요.',
+                  'Vui lòng chọn tùy chọn.',
+                  'Choose an option.',
+                ),
               ),
               if (allowTakeout)
                 SwitchListTile(
@@ -116,7 +138,9 @@ Future<MenuSizeSelection?> showMenuSizePicker(
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: OutlinedButton(
-                    key: Key('menu_size_${option.size}'),
+                    key: Key(
+                      'menu_size_${option.size}${option.mealChoice.isEmpty ? '' : '_${option.mealChoice}'}',
+                    ),
                     onPressed: () => Navigator.pop(
                       context,
                       MenuSizeSelection(option.id, takeout),
@@ -124,7 +148,7 @@ Future<MenuSizeSelection?> showMenuSizePicker(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
-                        '${option.size} · ${money.format(option.price)} VND',
+                        '${[option.size, mealChoiceLabel(option.mealChoice, languageCode)].where((v) => v.isNotEmpty).join(' · ')} · ${money.format(option.price)} VND',
                       ),
                     ),
                   ),
@@ -142,3 +166,14 @@ Future<MenuSizeSelection?> showMenuSizePicker(
     ),
   );
 }
+
+String mealChoiceLabel(String choice, String languageCode) =>
+    switch ((choice, languageCode)) {
+      ('noodles', 'ko') => '면',
+      ('rice', 'ko') => '밥',
+      ('noodles', 'vi') => 'Mì',
+      ('rice', 'vi') => 'Cơm',
+      ('noodles', _) => 'Noodles',
+      ('rice', _) => 'Rice',
+      _ => '',
+    };
