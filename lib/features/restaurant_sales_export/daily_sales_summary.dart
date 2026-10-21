@@ -51,6 +51,12 @@ class DailySalesSummary {
            (r) => DepositStore.fromJson(Map<String, dynamic>.from(r as Map)),
          ),
        ),
+       restaurantStores = List.unmodifiable(
+         (row['restaurant_stores'] as List? ?? const []).map(
+           (r) =>
+               SalesReportStore.fromJson(Map<String, dynamic>.from(r as Map)),
+         ),
+       ),
        sourceRevision = row['source_revision'] as String?,
        exportMetadataDeferred = row['export_metadata_deferred'] == true,
        mappingRevision = (row['mapping_revision'] as num?)?.toInt(),
@@ -82,7 +88,9 @@ class DailySalesSummary {
   final String? sourceRevision;
   final bool exportMetadataDeferred;
   final DateTime? asOf;
+  // Legacy RPC field names remain compatible with older POS releases.
   final List<DepositStore> bunsikStores;
+  final List<SalesReportStore> restaurantStores;
   final int? missingPhotoStores,
       bunsikStoreCount,
       bunsikClosedStores,
@@ -152,4 +160,32 @@ class DepositStore {
     }
     return DepositStore(row['store_id'] as String, row['store_name'] as String);
   }
+}
+
+class SalesReportStore {
+  SalesReportStore.fromJson(Map<String, dynamic> row)
+    : id = row['store_id'] as String,
+      name = row['store_name'] as String,
+      receiptCount = DailySalesSummary._optionalCount(row['receipt_count'])!,
+      gross = DailySalesSummary._amount(row['gross']),
+      cash = DailySalesSummary._amount(row['cash']),
+      bankTransfer = DailySalesSummary._amount(row['bank_transfer']),
+      otherPayments = DailySalesSummary._amount(row['other_payments']),
+      supply = DailySalesSummary._amount(row['supply']),
+      vat = DailySalesSummary._amount(row['vat']),
+      missingMappingCount = DailySalesSummary._optionalCount(
+        row['missing_mapping_count'],
+      )!,
+      closingStatus = row['closing_status'] as String,
+      policyReady = row['policy_ready'] == true {
+    if (id.isEmpty ||
+        name.isEmpty ||
+        !const ['closed', 'pending', 'no_sales'].contains(closingStatus)) {
+      throw const FormatException('SALES_SUMMARY_SCOPE_INVALID');
+    }
+  }
+  final String id, name, closingStatus;
+  final int receiptCount, missingMappingCount;
+  final double gross, cash, bankTransfer, otherPayments, supply, vat;
+  final bool policyReady;
 }

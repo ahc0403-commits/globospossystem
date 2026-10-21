@@ -128,7 +128,7 @@ class _RestaurantSalesExportScreenState
             !_isDownloading &&
             TickerMode.valuesOf(context).enabled &&
             ModalRoute.of(context)?.isCurrent != false) {
-          unawaited(_load());
+          unawaited(_load(background: true));
         }
       });
     }
@@ -403,6 +403,42 @@ class _RestaurantSalesExportScreenState
               : (id) => setState(() => _selectedTaxEntityId = id),
         ),
         const SizedBox(height: 16),
+        if (summary.restaurantStores.isNotEmpty) ...[
+          for (final store in summary.restaurantStores)
+            Card(
+              key: ValueKey('sales_report_store_${store.id}'),
+              child: ListTile(
+                title: Text(store.name),
+                subtitle: Text(
+                  [
+                    '${_copy('영수증', 'Hóa đơn', 'Receipts')} ${store.receiptCount} · ${money(store.gross)}',
+                    '${_copy('현금', 'Tiền mặt', 'Cash')} ${money(store.cash)} · ${_copy('계좌이체', 'Chuyển khoản', 'Bank transfer')} ${money(store.bankTransfer)} · ${_copy('카드·기타', 'Thẻ / khác', 'Card / other')} ${money(store.otherPayments)}',
+                    '${_copy('공급가액', 'Tiền trước thuế', 'Supply')} ${money(store.supply)} · VAT ${money(store.vat)}',
+                    switch (store.closingStatus) {
+                      'closed' => _copy('마감 완료', 'Đã chốt ca', 'Closed'),
+                      'pending' => _copy(
+                        '미마감',
+                        'Chưa chốt ca',
+                        'Closing pending',
+                      ),
+                      _ => _copy('매출 없음', 'Chưa có doanh thu', 'No sales'),
+                    },
+                    if (store.missingMappingCount > 0)
+                      '${_copy('계산서 매핑 필요', 'Cần ánh xạ hóa đơn', 'Invoice mapping required')}: ${store.missingMappingCount}',
+                    if (!store.policyReady)
+                      _copy(
+                        '자동 계산서 매핑 정책 설정 필요',
+                        'Cần thiết lập chính sách ánh xạ',
+                        'Automatic invoice mapping policy required',
+                      ),
+                    if (summary.bank == null)
+                      context.l10n.salesDepositNoAccount,
+                  ].join('\n'),
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+        ],
         DailyDepositPanel(
           summary: summary,
           onBank: _isDownloading
@@ -941,14 +977,15 @@ class _RestaurantSalesExportScreenState
     });
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool background = false}) async {
     final generation = ++_loadGeneration;
     final day = _businessDate;
     setState(() {
       _isLoading = true;
-      _statusMessage = null;
-      _statusIsError = false;
-      _summaries = const [];
+      if (!background) {
+        _statusMessage = null;
+        _statusIsError = false;
+      }
     });
     try {
       if (widget.loader == null) {

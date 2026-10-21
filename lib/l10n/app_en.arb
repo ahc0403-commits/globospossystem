@@ -4207,7 +4207,7 @@
   "salesDepositBankTitle": "Customer bank transfers",
   "salesDepositBankNote": "POS collection records · excluded from cash deposits",
   "salesDepositPhotoTitle": "Photo · next-day corporate deposit",
-  "salesDepositCashTitle": "BunsikClub cash · next-day corporate deposit",
+  "salesDepositCashTitle": "Restaurant cash · Next-day legal entity bank deposit",
   "salesDepositDate": "Deposit date: {date}",
   "@salesDepositDate": {
     "placeholders": {

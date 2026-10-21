@@ -4206,7 +4206,7 @@
   "salesDepositBankTitle": "Doanh thu chuyển khoản của khách",
   "salesDepositBankNote": "Ghi nhận thu tiền POS · không cộng vào tiền mặt cần nộp",
   "salesDepositPhotoTitle": "Photo · tiền nộp tài khoản pháp nhân ngày hôm sau",
-  "salesDepositCashTitle": "Tiền mặt BunsikClub · nộp tài khoản pháp nhân ngày hôm sau",
+  "salesDepositCashTitle": "Tiền mặt nhà hàng · Dự kiến nộp tài khoản pháp nhân ngày mai",
   "salesDepositDate": "Ngày dự kiến nộp: {date}",
   "@salesDepositDate": {
     "placeholders": {

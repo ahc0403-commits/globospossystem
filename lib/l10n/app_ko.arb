@@ -4206,7 +4206,7 @@
   "salesDepositBankTitle": "고객 계좌이체 매출",
   "salesDepositBankNote": "POS 수금 기록 · 현금 입금 예정액에서 제외",
   "salesDepositPhotoTitle": "포토 · 익일 법인통장 입금 예정액",
-  "salesDepositCashTitle": "분식클럽 현금 · 익일 법인통장 입금 예정액",
+  "salesDepositCashTitle": "식당 현금 · 익일 법인통장 입금 예정액",
   "salesDepositDate": "입금 예정일: {date}",
   "@salesDepositDate": {
     "placeholders": {
