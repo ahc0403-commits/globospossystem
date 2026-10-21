@@ -13,7 +13,10 @@ assert container.startswith('pos-report-ready-test-')
 workers = int(os.environ.get('GLOBOS_DEPOSIT_PERF_CONCURRENCY', '20'))
 assert 1 <= workers <= 20
 def sql(query):
-    return subprocess.run(['docker','exec','-i',container,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-U','postgres','-d','report_ready_test'],input=query,text=True,capture_output=True,check=True,timeout=180).stdout.strip()
+    result = subprocess.run(['docker','exec','-i',container,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-U','postgres','-d','report_ready_test'],input=query,text=True,capture_output=True,timeout=180)
+    if result.returncode:
+        raise RuntimeError(result.stderr)
+    return result.stdout.strip()
 
 def nested_plans():
     plans=[]
@@ -57,7 +60,7 @@ for stores in (5,50,500):
     INSERT INTO order_items(id,order_id,quantity,unit_price,total_amount_ex_tax,vat_rate,vat_amount,paying_amount_inc_tax,created_at,status,is_service_item,item_type)
     SELECT md5('deposit-scale-item-'||i)::uuid,md5('deposit-scale-order-'||i)::uuid,1,10000,10000,8,800,10800,'2026-10-02 12:00+07','served',false,'menu_item' FROM generate_series(1,{stores*200}) i;
     INSERT INTO daily_closings(restaurant_id,closing_date,close_source,counted_cash_amount,opening_cash_amount,payments_cash,payments_total,expected_cash_amount,cash_variance)
-    SELECT id,'2026-10-02','manual',7160000,5000000,2160000,2160000,7160000,0 FROM restaurants WHERE tax_entity_id='19000000-0000-0000-0000-000000000001';
+    SELECT id,'2026-10-02','manual',7160000,5000000,2160000,2160000,7160000,0 FROM restaurants WHERE id IN(SELECT md5('deposit-scale-store-'||i)::uuid FROM generate_series(1,{stores}) i);
     ANALYZE; SELECT pg_stat_reset();
     """)
     def query(actor=1):

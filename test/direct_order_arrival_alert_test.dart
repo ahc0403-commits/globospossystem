@@ -153,6 +153,21 @@ void main() {
         }
         bytes = utf8.encode(source);
       }
+      if (entry.key.startsWith('lib/l10n/app_localizations')) {
+        // The cash report now includes all restaurant brands. Normalize only
+        // that independently tested label; every existing alert stays frozen.
+        var source = utf8.decode(bytes);
+        for (final label in const <String, String>{
+          "Restaurant cash · Next-day legal entity bank deposit":
+              "BunsikClub cash · next-day corporate deposit",
+          "식당 현금 · 익일 법인통장 입금 예정액": "분식클럽 현금 · 익일 법인통장 입금 예정액",
+          "Tiền mặt nhà hàng · Dự kiến nộp tài khoản pháp nhân ngày mai":
+              "Tiền mặt BunsikClub · nộp tài khoản pháp nhân ngày hôm sau",
+        }.entries) {
+          source = source.replaceAll(label.key, label.value);
+        }
+        bytes = utf8.encode(source);
+      }
       expect(
         sha256.convert(bytes).toString(),
         entry.value,
