@@ -143,6 +143,7 @@ class CashierScreen extends ConsumerStatefulWidget {
 
 class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _selectedMethod;
+  String? _selectedNonRevenueType;
   int _wetTissueDraftQuantity = 0;
   String? _wetTissueConfirmedOrderId;
   String? _initializedRestaurantId;
@@ -551,12 +552,14 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
   }
 
-  Future<Map<String, String>?> _showNonRevenueDialog() async {
+  Future<Map<String, String>?> _showNonRevenueDialog({
+    String initialType = 'staff_meal',
+  }) async {
     final l10n = context.l10n;
     final reasonController = TextEditingController();
     final staffNameController = TextEditingController();
     final pinController = TextEditingController();
-    var type = 'staff_meal';
+    var type = initialType;
     String? validationMessage;
 
     try {
@@ -585,6 +588,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
                         key: const Key('cashier_non_revenue_type_input'),
+                        isExpanded: true,
                         initialValue: type,
                         decoration: InputDecoration(
                           labelText: l10n.cashierNonRevenueType,
@@ -1117,6 +1121,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       _combinedOrderIds.clear();
       _isCombinedPaymentMode = false;
       _selectedMethod = null;
+      _selectedNonRevenueType = null;
       _showPaymentQueueOnCompact = true;
     });
     await showDialog<void>(
@@ -1272,6 +1277,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
       setState(() {
         _selectedMethod = null;
+        _selectedNonRevenueType = null;
         _prepareWetTissueForOrder(payableOrder!);
         _showPaymentQueueOnCompact = false;
         _orderSearchResult = result;
@@ -1436,6 +1442,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       _selectedTableId = table.id;
       if (payableOrder != null) {
         _selectedMethod = null;
+        _selectedNonRevenueType = null;
         _prepareWetTissueForOrder(payableOrder);
         _showPaymentQueueOnCompact = false;
       }
@@ -1569,6 +1576,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       _combinedOrderIds.clear();
                       if (_isCombinedPaymentMode) {
                         _selectedMethod = null;
+                        _selectedNonRevenueType = null;
                       }
                     });
                   },
@@ -1688,6 +1696,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         }
                         setState(() {
                           _selectedMethod = null;
+                          _selectedNonRevenueType = null;
                           _prepareWetTissueForOrder(order);
                           _showPaymentQueueOnCompact = false;
                         });
@@ -1895,6 +1904,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               : _SelectedOrderView(
                   order: selectedOrder,
                   selectedMethod: _selectedMethod,
+                  selectedNonRevenueType: _selectedNonRevenueType,
+                  onSelectNonRevenueType: (type) => setState(() {
+                    _selectedMethod = paymentMethodService;
+                    _selectedNonRevenueType = type;
+                  }),
                   canCancelOrders: canCancelOrders,
                   canProcessNonRevenue: canProcessNonRevenue,
                   canApplyDiscount: canApplyDiscount,
@@ -1933,7 +1947,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     setState(() {
                       _wetTissueDraftQuantity = quantity;
                       _wetTissueConfirmedOrderId = null;
-                      _selectedMethod = null;
+                      if (!isServicePaymentMethod(_selectedMethod ?? '')) {
+                        _selectedMethod = null;
+                      }
                     });
                   },
                   onConfirmWetTissue: (quantity) async {
@@ -1948,13 +1964,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     if (success && mounted) {
                       setState(() {
                         _wetTissueConfirmedOrderId = selectedOrder.orderId;
-                        _selectedMethod = null;
                       });
                     }
                     return success;
                   },
                   onSelectMethod: (method) async {
-                    setState(() => _selectedMethod = method);
+                    setState(() {
+                      _selectedMethod = method;
+                      _selectedNonRevenueType = null;
+                    });
                     final order = paymentState.selectedOrder;
                     if (method != paymentMethodBankTransfer ||
                         order == null ||
@@ -2217,7 +2235,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     }
                     Map<String, String>? nonRevenueInput;
                     if (isServicePaymentMethod(method)) {
-                      nonRevenueInput = await _showNonRevenueDialog();
+                      nonRevenueInput = await _showNonRevenueDialog(
+                        initialType: _selectedNonRevenueType ?? 'staff_meal',
+                      );
                       if (nonRevenueInput == null) {
                         return;
                       }
@@ -2252,6 +2272,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       }
                       setState(() {
                         _selectedMethod = null;
+                        _selectedNonRevenueType = null;
                         _lastCompletedOrderId = paymentOrder.orderId;
                         _showPaymentQueueOnCompact = true;
                       });
@@ -2390,6 +2411,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       }
                       setState(() {
                         _selectedMethod = null;
+                        _selectedNonRevenueType = null;
                         _lastCompletedOrderId = selectedOrder.orderId;
                         _showPaymentQueueOnCompact = true;
                       });
@@ -2482,7 +2504,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     await notifier.cancelOrder(selectedOrder.orderId, storeId);
                     if (context.mounted &&
                         ref.read(paymentProvider).error == null) {
-                      setState(() => _selectedMethod = null);
+                      setState(() {
+                        _selectedMethod = null;
+                        _selectedNonRevenueType = null;
+                      });
                       _showCancellationUndoSnackBar(
                         message: l10n.cashierOrderCancelled,
                         restoredMessage: l10n.cancelledOrderRestored,
@@ -2508,6 +2533,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   onBackToTables: () {
                     setState(() {
                       _selectedMethod = null;
+                      _selectedNonRevenueType = null;
                       _showPaymentQueueOnCompact = true;
                     });
                     notifier.clearSelection();
@@ -2986,7 +3012,14 @@ class _CashierCompactCommandBar extends ConsumerWidget {
       backgroundColor: PosColors.surface,
       child: Row(
         children: [
-          const AppNavBar(showLogout: false),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width < 640
+                  ? 160
+                  : double.infinity,
+            ),
+            child: const AppNavBar(showLogout: false),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: SingleChildScrollView(
@@ -3769,6 +3802,8 @@ class _SelectedOrderView extends StatelessWidget {
   const _SelectedOrderView({
     required this.order,
     required this.selectedMethod,
+    required this.selectedNonRevenueType,
+    required this.onSelectNonRevenueType,
     required this.canCancelOrders,
     required this.canProcessNonRevenue,
     required this.canApplyDiscount,
@@ -3798,6 +3833,8 @@ class _SelectedOrderView extends StatelessWidget {
 
   final CashierOrder order;
   final String? selectedMethod;
+  final String? selectedNonRevenueType;
+  final ValueChanged<String> onSelectNonRevenueType;
   final bool canCancelOrders;
   final bool canProcessNonRevenue;
   final bool canApplyDiscount;
@@ -3884,6 +3921,8 @@ class _SelectedOrderView extends StatelessWidget {
         final paymentRail = _CashierPaymentRail(
           order: order,
           selectedMethod: effectiveSelectedMethod,
+          selectedNonRevenueType: selectedNonRevenueType,
+          onSelectNonRevenueType: onSelectNonRevenueType,
           regularMethods: regularMethods,
           canProcessNonRevenue: canProcessNonRevenue,
           canApplyDiscount: canApplyDiscount && order.activeDiscount == null,
@@ -3933,6 +3972,8 @@ class _SelectedOrderView extends StatelessWidget {
                     _CashierPaymentRail(
                       order: order,
                       selectedMethod: effectiveSelectedMethod,
+                      selectedNonRevenueType: selectedNonRevenueType,
+                      onSelectNonRevenueType: onSelectNonRevenueType,
                       regularMethods: regularMethods,
                       canProcessNonRevenue: canProcessNonRevenue,
                       canApplyDiscount:
@@ -4661,6 +4702,8 @@ class _CashierPaymentRail extends StatelessWidget {
   const _CashierPaymentRail({
     required this.order,
     required this.selectedMethod,
+    required this.selectedNonRevenueType,
+    required this.onSelectNonRevenueType,
     required this.regularMethods,
     required this.canProcessNonRevenue,
     required this.canApplyDiscount,
@@ -4685,6 +4728,8 @@ class _CashierPaymentRail extends StatelessWidget {
 
   final CashierOrder order;
   final String? selectedMethod;
+  final String? selectedNonRevenueType;
+  final ValueChanged<String> onSelectNonRevenueType;
   final List<_PaymentMethod> regularMethods;
   final bool canProcessNonRevenue;
   final bool canApplyDiscount;
@@ -4734,7 +4779,10 @@ class _CashierPaymentRail extends StatelessWidget {
     final methodActions = _CashierPaymentActions(
       paymentOptions: paymentOptions,
       selectedMethod: selectedMethod,
+      selectedNonRevenueType: selectedNonRevenueType,
+      onSelectNonRevenueType: onSelectNonRevenueType,
       isServiceSelected: isServiceSelected,
+      canSelectNonRevenue: canProcessNonRevenue && order.paymentCount == 0,
       isProcessing: isProcessing,
       isOnline: isOnline,
       canCompletePayment: canCompletePayment,
@@ -5330,7 +5378,10 @@ class _CashierPaymentActions extends StatelessWidget {
   const _CashierPaymentActions({
     required this.paymentOptions,
     required this.selectedMethod,
+    required this.selectedNonRevenueType,
+    required this.onSelectNonRevenueType,
     required this.isServiceSelected,
+    required this.canSelectNonRevenue,
     required this.isProcessing,
     required this.isOnline,
     required this.canCompletePayment,
@@ -5349,7 +5400,10 @@ class _CashierPaymentActions extends StatelessWidget {
 
   final List<_PaymentMethod> paymentOptions;
   final String? selectedMethod;
+  final String? selectedNonRevenueType;
+  final ValueChanged<String> onSelectNonRevenueType;
   final bool isServiceSelected;
+  final bool canSelectNonRevenue;
   final bool isProcessing;
   final bool isOnline;
   final bool canCompletePayment;
@@ -5368,15 +5422,43 @@ class _CashierPaymentActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final nonRevenueChoices = Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        for (final choice in [
+          ('staff_meal', l10n.cashierNonRevenueStaffMeal),
+          ('influencer_invite', l10n.cashierNonRevenueInfluencer),
+        ])
+          ChoiceChip(
+            key: Key('cashier_non_revenue_choice_${choice.$1}'),
+            label: Text(
+              choice.$2,
+              style: TextStyle(fontSize: dense ? 12 : null),
+            ),
+            visualDensity: dense
+                ? VisualDensity.compact
+                : VisualDensity.standard,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            selected: isServiceSelected && selectedNonRevenueType == choice.$1,
+            onSelected: isProcessing || !isOnline || !canCompletePayment
+                ? null
+                : (_) => onSelectNonRevenueType(choice.$1),
+          ),
+      ],
+    );
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          l10n.cashierPaymentMethod,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-        ),
+        if (canSelectNonRevenue && dense)
+          nonRevenueChoices
+        else
+          Text(
+            l10n.cashierPaymentMethod,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
         SizedBox(height: dense ? 4 : 10),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -5407,6 +5489,10 @@ class _CashierPaymentActions extends StatelessWidget {
             );
           },
         ),
+        if (canSelectNonRevenue && !dense) ...[
+          const SizedBox(height: 10),
+          nonRevenueChoices,
+        ],
         if (isServiceSelected) ...[
           SizedBox(height: dense ? 6 : 10),
           Container(

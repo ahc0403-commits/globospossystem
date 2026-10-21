@@ -33,8 +33,10 @@ const _frozenAlertFiles = <String, String>{
   // Corporate collection account has cashier/customer display coverage.
   // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   // Scheduled delivery closure has cashier overlay coverage; alert paths stay unchanged.
+  // 2026-10-21: staff/influencer shortcuts and compact cashier layout have
+  // operational widget coverage; bank/arrival alert behavior is unchanged.
   'lib/features/cashier/cashier_screen.dart':
-      '4053eeee83aa4a862b9411ca49c4121ea0f539812a6f8011c4ca089cad0112a9',
+      '4b57518e1ed51024498f22513a2b6c915254a97c20eaa23da76719a723168c7c',
   'lib/features/kitchen/kitchen_screen.dart':
       '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
   // Intentional event-merge fix; behavioral regressions live in

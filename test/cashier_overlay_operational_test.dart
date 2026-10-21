@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:globos_pos_system/core/services/collection_bank_service.dart';
 import 'package:globos_pos_system/core/payments/collection_bank.dart';
@@ -6,6 +8,8 @@ import 'package:globos_pos_system/core/payments/collection_bank.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1137,6 +1141,149 @@ void main() {
     },
   );
 
+  for (final type in ['staff_meal', 'influencer_invite']) {
+    for (final size in [const Size(1440, 1000), const Size(600, 900)]) {
+      testWidgets('$type is selectable before wet tissues at $size', (
+        tester,
+      ) async {
+        final harness = await _pumpCashier(tester, physicalSize: size);
+        await tester.tap(find.byKey(const Key('cashier_order_$_orderId')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        final choice = find.byKey(Key('cashier_non_revenue_choice_$type'));
+        await tester.ensureVisible(choice);
+        await tester.tap(choice);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.widget<ChoiceChip>(choice).selected, isTrue);
+        expect(harness.notifier.nonRevenuePaymentCalls, 0);
+        expect(
+          find.byKey(const Key('cashier_non_revenue_dialog')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const Key('cashier_wet_tissue_required_hint')),
+          findsOneWidget,
+        );
+        final quantity = size.width < 1000 ? 1 : 0;
+        if (quantity == 1) {
+          final increment = find.byKey(
+            const Key('cashier_wet_tissue_increment'),
+          );
+          await tester.ensureVisible(increment);
+          await tester.tap(increment);
+          await tester.pumpAndSettle();
+          expect(tester.widget<ChoiceChip>(choice).selected, isTrue);
+        }
+
+        final confirm = find.byKey(const Key('cashier_wet_tissue_confirm'));
+        await tester.ensureVisible(confirm);
+        await tester.tap(confirm);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.widget<ChoiceChip>(choice).selected, isTrue);
+        expect(harness.notifier.confirmedWetTissueQuantity, quantity);
+        await _captureNonRevenueScreen(tester, '${type}_${size.width.toInt()}');
+
+        final submit = find.byKey(const Key('payment_submit_button'));
+        await tester.ensureVisible(submit);
+        await tester.tap(submit);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final typeInput = tester.widget<DropdownButtonFormField<String>>(
+          find.byKey(const Key('cashier_non_revenue_type_input')),
+        );
+        expect(typeInput.initialValue, type);
+        final staff = find.byKey(const Key('cashier_non_revenue_staff_input'));
+        expect(staff, type == 'staff_meal' ? findsOneWidget : findsNothing);
+
+        await tester.tap(find.byKey(const Key('cashier_non_revenue_submit')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(harness.notifier.nonRevenuePaymentCalls, 0);
+        if (type == 'staff_meal') {
+          await tester.enterText(staff, 'Test Staff');
+        }
+        await tester.enterText(
+          find.byKey(const Key('cashier_non_revenue_reason_input')),
+          'Approved test meal',
+        );
+        await tester.enterText(
+          find.byKey(const Key('cashier_non_revenue_pin_input')),
+          '2468',
+        );
+        await tester.tap(find.byKey(const Key('cashier_non_revenue_submit')));
+        await _pumpUntilFound(
+          tester,
+          find.byKey(const Key('cashier_payment_completion_dialog')),
+        );
+        expect(harness.notifier.nonRevenuePaymentCalls, 1);
+        expect(harness.notifier.nonRevenueType, type);
+        expect(harness.notifier.nonRevenuePaymentAmounts, [140000]);
+        expect(
+          harness.notifier.nonRevenueStaffName,
+          type == 'staff_meal' ? 'Test Staff' : '',
+        );
+        expect(harness.notifier.nonRevenueManagerPin, '2468');
+        _dismiss(tester, const Key('cashier_payment_completion_dialog'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('offline non-revenue choices cannot start checkout', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(tester, isOnline: false);
+    await tester.tap(find.byKey(const Key('cashier_order_$_orderId')));
+    await tester.pumpAndSettle();
+    for (final type in ['staff_meal', 'influencer_invite']) {
+      final choice = find.byKey(Key('cashier_non_revenue_choice_$type'));
+      expect(tester.widget<ChoiceChip>(choice).onSelected, isNull);
+    }
+    expect(harness.notifier.nonRevenuePaymentCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('non-revenue selection clears when another table is opened', (
+    tester,
+  ) async {
+    await _pumpCashier(tester, includeSecondOrder: true);
+    await _selectOrder(tester);
+    final choice = find.byKey(
+      const Key('cashier_non_revenue_choice_influencer_invite'),
+    );
+    await tester.ensureVisible(choice);
+    await tester.tap(choice);
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChoiceChip>(choice).selected, isTrue);
+    await tester.tap(find.byKey(const Key('cashier_order_cashier-order-b2')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChoiceChip>(choice).selected, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unauthorized role has no non-revenue shortcuts', (tester) async {
+    await _pumpCashier(
+      tester,
+      authState: const PosAuthState(role: 'waiter', storeId: _storeId),
+    );
+    await tester.tap(find.byKey(const Key('cashier_order_$_orderId')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('cashier_non_revenue_choice_staff_meal')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('cashier_non_revenue_choice_influencer_invite')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('all non-post-payment Cashier overlays open from live controls', (
     tester,
   ) async {
@@ -2115,7 +2262,9 @@ Future<_CashierHarness> _pumpCashier(
           deliveryStatusPollInterval: const Duration(hours: 1),
           bankTransferAlertServiceOverride:
               bankTransferAlertService ?? _NoopBankTransferAlertService(),
-          bankTransferAlertSoundServiceOverride: bankTransferAlertSoundService,
+          bankTransferAlertSoundServiceOverride:
+              bankTransferAlertSoundService ??
+              _RecordingBankTransferAlertSoundService(),
           bankTransferAlertPollInterval: bankTransferAlertPollInterval,
         ),
       ),
@@ -2170,6 +2319,10 @@ Future<_CashierHarness> _pumpCashier(
         ),
       ],
       child: MaterialApp.router(
+        builder: (context, child) => RepaintBoundary(
+          key: const Key('cashier_screen_capture'),
+          child: child!,
+        ),
         debugShowCheckedModeBanner: false,
         theme: AppTheme.build(),
         locale: const Locale('vi'),
@@ -2211,6 +2364,30 @@ Future<void> _selectOrder(WidgetTester tester) async {
     find.byKey(const Key('cashier_wet_tissue_required_hint')),
     findsNothing,
   );
+}
+
+Future<void> _captureNonRevenueScreen(WidgetTester tester, String name) async {
+  final path = Platform.environment['CAPTURE_NON_REVENUE_UI'];
+  if (path == null) return;
+  await tester.runAsync(() async {
+    final loader = FontLoader('Pretendard')
+      ..addFont(rootBundle.load('assets/fonts/PretendardVariable.ttf'));
+    await loader.load();
+    final icons = FontLoader('MaterialIcons')
+      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await icons.load();
+  });
+  await tester.pumpAndSettle();
+  await tester.runAsync(() async {
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const Key('cashier_screen_capture')),
+    );
+    final picture = await boundary.toImage();
+    final bytes = await picture.toByteData(format: ui.ImageByteFormat.png);
+    Directory(path).createSync(recursive: true);
+    File('$path/$name.png').writeAsBytesSync(bytes!.buffer.asUint8List());
+    picture.dispose();
+  });
 }
 
 Future<void> _openAndDismiss(

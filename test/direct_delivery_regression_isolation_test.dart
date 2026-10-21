@@ -33,8 +33,11 @@ const _frozenFiles = <String, String>{
   // Non-revenue checkout now reconfirms totals after concurrent additions.
   // Scheduled delivery closure disables reopen; cashier_overlay_operational_test
   // covers the CLOSED hours label while preserving existing checkout behavior.
+  // 2026-10-21: explicit staff/influencer selection retains the existing
+  // atomic SERVICE payment and manager PIN; desktop/compact selection,
+  // wet-tissue gating and offline behavior have operational widget coverage.
   'lib/features/cashier/cashier_screen.dart':
-      '4053eeee83aa4a862b9411ca49c4121ea0f539812a6f8011c4ca089cad0112a9',
+      '4b57518e1ed51024498f22513a2b6c915254a97c20eaa23da76719a723168c7c',
   // 2026-10-20: immutable portion/spice names are covered by menu_portion_spice_test.
   // Bounded history and event-scoped reads are exercised with the real SDK
   // in kitchen_query_bounds_test and operational_refresh_realtime_test.

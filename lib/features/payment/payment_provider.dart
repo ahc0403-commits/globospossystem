@@ -1902,7 +1902,7 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
         'The payment amount no longer matches the current order total.',
       'DISCOUNT_PIN_REJECTED' => 'Manager PIN is incorrect.',
       'DISCOUNT_PIN_NOT_CONFIGURED' =>
-        'Set a discount manager PIN before applying discounts.',
+        'Set a manager PIN in store settings before discounts or non-revenue checkout.',
       'DISCOUNT_PROOF_REQUIRED' => 'A discount proof photo is required.',
       'DISCOUNT_REASON_REQUIRED' => 'Enter a reason for the discount.',
       'DISCOUNT_ALREADY_ACTIVE' => 'This order already has an active discount.',
