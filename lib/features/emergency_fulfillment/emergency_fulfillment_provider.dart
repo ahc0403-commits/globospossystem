@@ -459,10 +459,16 @@ class EmergencyFulfillmentItem {
     final rawComponents = json['combo_components'];
     return EmergencyFulfillmentItem(
       menuOptionKey: json['menu_option_snapshot'] is Map
-          ? jsonEncode([
-              for (final key in ['portion_code', 'spice_level', 'spice_choice'])
-                (json['menu_option_snapshot'] as Map)[key],
-            ])
+          ? (json['menu_option_snapshot'] as Map)['choice_signature']
+                    ?.toString() ??
+                jsonEncode([
+                  for (final key in [
+                    'portion_code',
+                    'spice_level',
+                    'spice_choice',
+                  ])
+                    (json['menu_option_snapshot'] as Map)[key],
+                ])
           : '',
       id: json['id']?.toString() ?? '',
       orderItemId: json['order_item_id']?.toString() ?? '',
@@ -1503,6 +1509,7 @@ class LeftoverPackagingTask {
 
 class EmergencyFulfillmentState {
   const EmergencyFulfillmentState({
+    this.operatingWorkflow,
     this.assigned = false,
     this.assignmentResolved = false,
     this.active = false,
@@ -1521,6 +1528,7 @@ class EmergencyFulfillmentState {
     this.error,
   });
 
+  final Map<String, dynamic>? operatingWorkflow;
   final bool assigned;
   final bool assignmentResolved;
   final bool active;
@@ -1541,6 +1549,7 @@ class EmergencyFulfillmentState {
   bool get isDraining => active && !fulfillmentMode.isPaperless;
 
   EmergencyFulfillmentState copyWith({
+    Map<String, dynamic>? operatingWorkflow,
     bool? assigned,
     bool? assignmentResolved,
     bool? active,
@@ -1559,6 +1568,7 @@ class EmergencyFulfillmentState {
     String? error,
     bool clearError = false,
   }) => EmergencyFulfillmentState(
+    operatingWorkflow: operatingWorkflow ?? this.operatingWorkflow,
     assigned: assigned ?? this.assigned,
     assignmentResolved: assignmentResolved ?? this.assignmentResolved,
     active: active ?? this.active,
@@ -1594,6 +1604,9 @@ class EmergencyFulfillmentState {
               .toList(growable: false)
         : const <EmergencyFulfillmentOrder>[];
     return EmergencyFulfillmentState(
+      operatingWorkflow: json['operating_workflow'] is Map
+          ? Map<String, dynamic>.from(json['operating_workflow'] as Map)
+          : null,
       assigned: json['assigned'] == true,
       assignmentResolved: json.containsKey('assigned'),
       active: json['active'] == true,

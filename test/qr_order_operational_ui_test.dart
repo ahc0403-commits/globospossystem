@@ -1,3 +1,5 @@
+import 'fixtures/menu_choice_data.dart';
+import 'package:globos_pos_system/core/menu/menu_choices.dart';
 import 'dart:convert';
 import 'dart:async';
 
@@ -170,6 +172,70 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('QR sends real menu ID with distinct registered selections', (
+    tester,
+  ) async {
+    List<QrOrderLine>? submitted;
+    final key = catalogKey();
+    final catalog = MenuChoiceCatalog.fromKey(key)!;
+    final menu = QrOrderMenu(
+      storeId: 'store',
+      storeName: 'Choice store',
+      tableNumber: '1',
+      floorLabel: '1F',
+      categories: const [QrMenuCategory(id: 'main', name: 'Main')],
+      items: [
+        QrMenuItem(
+          id: 'choice',
+          categoryId: 'main',
+          name: 'Choice dish',
+          price: 10000,
+          menuOptionKey: key,
+        ),
+      ],
+    );
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetch: (_) async => menu,
+        place: (_, items, _, _) async {
+          submitted = items;
+          return _result;
+        },
+      ),
+    );
+    for (final spice in ['Mild', 'Hot']) {
+      final add = find.byKey(const Key('qr_add_choice'));
+      await tester.ensureVisible(add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      for (final label in [if (spice == 'Hot') 'Cay', 'Vừa']) {
+        final row = find.widgetWithText(ListTile, label);
+        await tester.ensureVisible(row);
+        await tester.tap(
+          find.descendant(of: row, matching: find.byType(Checkbox)),
+        );
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const Key('menu_choice_confirm')));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.byKey(const Key('qr_open_review')));
+    await tester.pumpAndSettle();
+    final mild = catalog
+        .select({'mild': 1, 'normal': 1}, 'qr')
+        .lineId('choice');
+    final hot = catalog.select({'hot': 1, 'normal': 1}, 'qr').lineId('choice');
+    expect(find.byKey(Key('qr_cart_$mild|dine_in_quantity')), findsOneWidget);
+    expect(find.byKey(Key('qr_cart_$hot|dine_in_quantity')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+    await tester.pumpAndSettle();
+    expect(submitted!.length, 2);
+    expect(submitted!.map((line) => line.menuItemId).toSet(), {'choice'});
+    expect(submitted!.map((line) => line.menuOptionKey).toSet().length, 2);
+    _expectNoLayoutFailure(tester);
+  });
+
   QrOrderMenu sizesMenu({double largePrice = 370000, bool withMedia = false}) =>
       QrOrderMenu(
         storeName: 'JeonGabok',

@@ -75,3 +75,44 @@ run_sql < test/sql/store_operating_payment_concurrency_setup.sql >/dev/null
 python3 scripts/tests/store_operating_payment_concurrency.py "$operating_fixture"
 run_sql < test/sql/store_operating_sales_contract_test.sql
 run_sql < test/sql/store_operating_existing_flow_test.sql
+
+# Stage 2b: registered choices across the real public/request/order/payment paths.
+for operating_migration in \
+  20261021180000_registered_menu_choices.sql \
+  20261021181000_menu_choice_intake.sql \
+  20261021182000_menu_choice_stock.sql; do
+ docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < "supabase/migrations/$operating_migration" >/dev/null
+done
+run_sql < test/sql/registered_menu_choices_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/direct_order_line_identity_test.sql
+run_sql < test/sql/store_operating_payment_stock_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_operating_choice_contract_test.sql
+
+# Stages 3/4: versioned multi-kitchen preparation and guarded publication.
+for operating_migration in \
+  20261021190000_store_workflow_publication.sql \
+  20261021191000_multi_kitchen_progress.sql \
+  20261021192000_workflow_order_mutations.sql \
+  20261021193000_workflow_client_scope.sql; do
+ docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < "supabase/migrations/$operating_migration" >/dev/null
+done
+run_sql < test/sql/store_workflow_progress_test.sql
+run_sql < test/sql/store_workflow_alerts_test.sql
+run_sql < test/sql/store_workflow_direct_test.sql
+run_sql < test/sql/store_workflow_undo_test.sql
+run_sql < test/sql/store_workflow_move_fifo_test.sql
+run_sql < test/sql/store_workflow_bunsik_test.sql
+run_sql < test/sql/store_workflow_publication_test.sql
+run_sql < test/sql/store_workflow_scale_test.sql
+run_sql < test/sql/store_operating_existing_flow_test.sql
+run_sql < test/sql/registered_menu_choices_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
+run_sql < test/sql/store_operating_purge_contract_test.sql
+run_sql < test/sql/store_workflow_purge_test.sql
+run_sql < test/sql/store_workflow_upgrade_contract_test.sql
+run_sql < test/sql/store_workflow_concurrency_setup.sql >/dev/null
+python3 scripts/tests/store_workflow_concurrency.py "$operating_fixture"

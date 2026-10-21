@@ -17,6 +17,7 @@ import 'widgets/route_preview.dart';
 import 'widgets/table_bulk_editor.dart';
 import 'widgets/workforce_setup_card.dart';
 import 'widgets/operating_profile_card.dart';
+import '../store_workflow/workflow_setup_card.dart';
 
 class StoreSetupScreen extends ConsumerStatefulWidget {
   const StoreSetupScreen({super.key, required this.storeId});
@@ -322,6 +323,7 @@ class _StoreTemplateStep extends StatelessWidget {
           onProvision: onProvisionAccount,
         ),
         OperatingProfileCard(restaurantId: storeId),
+        WorkflowSetupCard(storeId: storeId),
       ],
     );
   }

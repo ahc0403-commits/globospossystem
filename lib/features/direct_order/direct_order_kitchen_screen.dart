@@ -1,4 +1,7 @@
 import 'direct_order_translation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../store_workflow/preparation_board.dart';
+import '../store_workflow/workflow_service.dart';
 import 'direct_order_requirements.dart';
 import 'dart:async';
 
@@ -25,6 +28,7 @@ class DirectOrderKitchenScreen extends ConsumerStatefulWidget {
 
 class _DirectOrderKitchenScreenState
     extends ConsumerState<DirectOrderKitchenScreen> {
+  Map<String, dynamic>? _workflow;
   Timer? _timer;
   List<Map<String, dynamic>> _tickets = const [];
   String? _filter;
@@ -72,6 +76,28 @@ class _DirectOrderKitchenScreenState
     if (storeId == null) return;
     if (!silent) setState(() => _loading = true);
     try {
+      Map<String, dynamic>? workflow;
+      try {
+        workflow = await WorkflowService().call('store_workflow_device_v1', {
+          'p_store_id': storeId,
+        });
+      } on PostgrestException catch (error) {
+        if (error.code != 'PGRST202' ||
+            !error.message.contains('store_workflow_device_v1')) {
+          rethrow;
+        }
+      }
+      if (!mounted || storeId != ref.read(authProvider).storeId) return;
+      if (workflow?['active_id'] != null) {
+        setState(() {
+          _workflow = workflow;
+          _loading = false;
+          _error = null;
+          _tickets = [];
+        });
+        return;
+      }
+      _workflow = workflow;
       final tickets = await directOrderStaffService.listTickets(
         storeId: storeId,
         statuses: _filter == null ? null : [_filter!],
@@ -127,6 +153,17 @@ class _DirectOrderKitchenScreenState
   @override
   Widget build(BuildContext context) {
     final storeId = ref.watch(authProvider).storeId;
+    final userId = ref.watch(authProvider).user?.id;
+    if (_workflow?['active_id'] != null && storeId != null && userId != null) {
+      return PreparationBoard(
+        key: ValueKey('$storeId:${_workflow!['active_id']}:$userId'),
+        storeId: storeId,
+        userId: userId,
+        workflow: _workflow!,
+        navigation: const AppNavBar(),
+      );
+    }
+
     if (storeId != null) {
       ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
         _,

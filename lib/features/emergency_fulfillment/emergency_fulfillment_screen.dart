@@ -17,6 +17,8 @@ import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
+import '../auth/auth_provider.dart';
+import '../store_workflow/preparation_board.dart';
 import 'customer_delivery_screen.dart';
 import 'emergency_fulfillment_provider.dart';
 import 'kitchen_checket_handoff_sheet.dart';
@@ -39,6 +41,8 @@ class EmergencyFulfillmentScreen extends ConsumerStatefulWidget {
 
 class _EmergencyFulfillmentScreenState
     extends ConsumerState<EmergencyFulfillmentScreen> {
+  String? _workflowWaitingRelease;
+
   bool _initialSnapshotObserved = false;
   bool _alarmEnabled = false;
   bool _flashing = false;
@@ -400,6 +404,72 @@ class _EmergencyFulfillmentScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(emergencyFulfillmentProvider);
+    final workflow = state.operatingWorkflow;
+    final workflowUser = ref.watch(authProvider).user?.id;
+    if (workflow != null &&
+        state.restaurantId != null &&
+        workflowUser != null &&
+        (workflow['quiesced'] == true ||
+            (_workflowWaitingRelease != null &&
+                _workflowWaitingRelease == workflow['candidate_id'] &&
+                workflow['active_id'] != workflow['candidate_id']))) {
+      return Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              WorkflowDeviceBanner(
+                storeId: state.restaurantId!,
+                userId: workflowUser,
+                workflow: workflow,
+                legacyPending: state.pendingOutboxCount,
+                onQuiesced: (value) {
+                  setState(
+                    () => _workflowWaitingRelease = value
+                        ? workflow['candidate_id'] as String?
+                        : null,
+                  );
+                  unawaited(
+                    ref.read(emergencyFulfillmentProvider.notifier).load(),
+                  );
+                },
+              ),
+              IconButton(
+                onPressed: () =>
+                    ref.read(emergencyFulfillmentProvider.notifier).load(),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (state.stationType == 'kitchen' &&
+        workflow?['active_id'] != null &&
+        state.restaurantId != null &&
+        workflowUser != null) {
+      return PreparationBoard(
+        key: ValueKey(
+          '${state.restaurantId}:${workflow!['active_id']}:$workflowUser',
+        ),
+        storeId: state.restaurantId!,
+        userId: workflowUser,
+        workflow: workflow,
+        legacyPending: state.pendingOutboxCount,
+        navigation: const AppNavBar(),
+        packagingPanel: state.leftoverPackagingTasks.isEmpty
+            ? null
+            : _LeftoverPackagingTaskPanel(
+                tasks: state.leftoverPackagingTasks,
+                copy: _EmergencyCopy.of(
+                  context,
+                  directToFloor: state.kitchenDirectToFloor,
+                ),
+                busy: _actionBusy,
+                onAdvance: _advanceLeftoverPackaging,
+              ),
+      );
+    }
+
     final copy = _EmergencyCopy.of(
       context,
       directToFloor: state.kitchenDirectToFloor,
@@ -440,6 +510,25 @@ class _EmergencyFulfillmentScreenState
           child: Column(
             children: [
               const OfflineBanner(),
+              if (workflow != null &&
+                  state.restaurantId != null &&
+                  workflowUser != null)
+                WorkflowDeviceBanner(
+                  storeId: state.restaurantId!,
+                  userId: workflowUser,
+                  workflow: workflow,
+                  legacyPending: state.pendingOutboxCount,
+                  onQuiesced: (value) {
+                    setState(
+                      () => _workflowWaitingRelease = value
+                          ? workflow['candidate_id'] as String?
+                          : null,
+                    );
+                    unawaited(
+                      ref.read(emergencyFulfillmentProvider.notifier).load(),
+                    );
+                  },
+                ),
               _EmergencyHeader(
                 directToFloor: state.kitchenDirectToFloor,
                 title: headerStation == null || headerStation == 'kitchen'

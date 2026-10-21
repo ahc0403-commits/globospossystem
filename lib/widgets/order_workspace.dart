@@ -1,3 +1,4 @@
+import '../core/menu/menu_choices.dart';
 import '../core/menu/menu_sizes.dart';
 import '../core/i18n/menu_localization.dart';
 import 'dart:async';
@@ -30,6 +31,7 @@ class OrderWorkspace extends StatelessWidget {
     required this.orderState,
     required this.allowSubmitWithoutCart,
     required this.onAddToCart,
+    this.onReplaceCartItem,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
     required this.onSetCartItemTakeout,
@@ -58,6 +60,7 @@ class OrderWorkspace extends StatelessWidget {
   final OrderState orderState;
   final bool allowSubmitWithoutCart;
   final ValueChanged<CartItem> onAddToCart;
+  final void Function(CartItem, CartItem)? onReplaceCartItem;
   final ValueChanged<CartItem> onIncrementCartItem;
   final ValueChanged<CartItem> onDecrementCartItem;
   final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
@@ -159,6 +162,10 @@ class OrderWorkspace extends StatelessWidget {
                         onSelectCategory: (categoryId) =>
                             menuNotifier?.selectCategory(categoryId),
                         onAddItem: canCreateSales ? onAddToCart : (_) {},
+                        allItems: menuState.items.valueOrNull ?? const [],
+                        onReplaceCartItem: canCreateSales
+                            ? onReplaceCartItem
+                            : null,
                         onIncrementCartItem: canCreateSales
                             ? onIncrementCartItem
                             : (_) {},
@@ -196,6 +203,8 @@ class OrderWorkspace extends StatelessWidget {
                 onSelectCategory: (categoryId) =>
                     menuNotifier?.selectCategory(categoryId),
                 onAddItem: canCreateSales ? onAddToCart : (_) {},
+                allItems: menuState.items.valueOrNull ?? const [],
+                onReplaceCartItem: canCreateSales ? onReplaceCartItem : null,
                 onIncrementCartItem: canCreateSales
                     ? onIncrementCartItem
                     : (_) {},
@@ -327,6 +336,8 @@ class _MenuBrowser extends StatelessWidget {
     required this.cart,
     required this.onSelectCategory,
     required this.onAddItem,
+    this.onReplaceCartItem,
+    this.allItems = const [],
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
     required this.onSetCartItemTakeout,
@@ -340,6 +351,8 @@ class _MenuBrowser extends StatelessWidget {
   final List<CartItem> cart;
   final ValueChanged<String> onSelectCategory;
   final ValueChanged<CartItem> onAddItem;
+  final List<Map<String, dynamic>> allItems;
+  final void Function(CartItem, CartItem)? onReplaceCartItem;
   final ValueChanged<CartItem> onIncrementCartItem;
   final ValueChanged<CartItem> onDecrementCartItem;
   final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
@@ -427,6 +440,18 @@ class _MenuBrowser extends StatelessWidget {
           if (cart.isNotEmpty) ...[
             const SizedBox(height: 8),
             _SelectedMenuList(
+              onEdit: onReplaceCartItem == null
+                  ? null
+                  : (item) async {
+                      final replacement = await _chooseCartReplacement(
+                        context,
+                        allItems,
+                        item,
+                      );
+                      if (replacement != null) {
+                        onReplaceCartItem!(item, replacement);
+                      }
+                    },
               cart: cart,
               formatter: currency,
               onIncrementCartItem: onIncrementCartItem,
@@ -471,7 +496,6 @@ class _MenuBrowser extends StatelessWidget {
                         itemBuilder: (context, index) {
                           final item = filteredItems[index];
                           final menuItemId = item['id']?.toString() ?? '';
-                          final name = item['name']?.toString() ?? '-';
                           final displayName = _localizedMenuDataLabel(
                             context,
                             context.menuName(item),
@@ -530,35 +554,19 @@ class _MenuBrowser extends StatelessWidget {
                                     final option = options.firstWhere(
                                       (o) => o['id'] == selected.optionId,
                                     );
-                                    onAddItem(
-                                      CartItem(
-                                        menuItemId: option['id'].toString(),
-                                        menuOptionKey: option['menu_option_key']
-                                            ?.toString(),
-                                        name: option['name'].toString(),
-                                        nameKo: option['name_ko']?.toString(),
-                                        nameVi: option['name_vi']?.toString(),
-                                        nameEn: option['name_en']?.toString(),
-                                        price: (option['price'] as num)
-                                            .toDouble(),
-                                        quantity: 1,
-                                      ),
+                                    if (!context.mounted) return;
+                                    final cartItem = await _chooseCartItem(
+                                      context,
+                                      option,
                                     );
+                                    if (cartItem != null) onAddItem(cartItem);
                                     return;
                                   }
-                                  onAddItem(
-                                    CartItem(
-                                      menuItemId: menuItemId,
-                                      menuOptionKey: item['menu_option_key']
-                                          ?.toString(),
-                                      name: name,
-                                      nameKo: item['name_ko']?.toString(),
-                                      nameVi: item['name_vi']?.toString(),
-                                      nameEn: item['name_en']?.toString(),
-                                      price: price,
-                                      quantity: 1,
-                                    ),
+                                  final cartItem = await _chooseCartItem(
+                                    context,
+                                    item,
                                   );
+                                  if (cartItem != null) onAddItem(cartItem);
                                 };
 
                           return Semantics(
@@ -702,6 +710,7 @@ class _MenuBrowser extends StatelessWidget {
 class _SelectedMenuList extends StatelessWidget {
   const _SelectedMenuList({
     required this.cart,
+    this.onEdit,
     required this.formatter,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
@@ -709,6 +718,7 @@ class _SelectedMenuList extends StatelessWidget {
   });
 
   final List<CartItem> cart;
+  final ValueChanged<CartItem>? onEdit;
   final NumberFormat formatter;
   final ValueChanged<CartItem> onIncrementCartItem;
   final ValueChanged<CartItem> onDecrementCartItem;
@@ -767,6 +777,7 @@ class _SelectedMenuList extends StatelessWidget {
                   final item = cart[index];
                   return _SelectedMenuListItem(
                     item: item,
+                    onEdit: onEdit,
                     formatter: formatter,
                     onIncrementCartItem: onIncrementCartItem,
                     onDecrementCartItem: onDecrementCartItem,
@@ -785,6 +796,7 @@ class _SelectedMenuList extends StatelessWidget {
 class _SelectedMenuListItem extends StatelessWidget {
   const _SelectedMenuListItem({
     required this.item,
+    this.onEdit,
     required this.formatter,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
@@ -792,6 +804,7 @@ class _SelectedMenuListItem extends StatelessWidget {
   });
 
   final CartItem item;
+  final ValueChanged<CartItem>? onEdit;
   final NumberFormat formatter;
   final ValueChanged<CartItem> onIncrementCartItem;
   final ValueChanged<CartItem> onDecrementCartItem;
@@ -819,15 +832,18 @@ class _SelectedMenuListItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  item.localizedName(
-                    Localizations.localeOf(context).languageCode,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                InkWell(
+                  onTap: onEdit == null ? null : () => onEdit!(item),
+                  child: Text(
+                    item.localizedName(
+                      Localizations.localeOf(context).languageCode,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 Text(
@@ -2903,4 +2919,88 @@ String _localizedMenuDataLabel(BuildContext context, Object? value) {
     },
     _ => raw,
   };
+}
+
+Future<CartItem?> _chooseCartItem(
+  BuildContext context,
+  Map<String, dynamic> item, {
+  String? initialKey,
+}) async {
+  final key = item['menu_option_key']?.toString();
+  final catalog = MenuChoiceCatalog.fromKey(key);
+  MenuChoiceSelection? selection;
+  if (catalog != null) {
+    selection = await showMenuChoicePicker(
+      context,
+      title: item['name'].toString(),
+      catalog: catalog,
+      channel: 'pos',
+      initialKey: initialKey,
+      language: Localizations.localeOf(context).languageCode,
+    );
+    if (selection == null) return null;
+  }
+  String? name(String field, String language) => item[field] == null
+      ? null
+      : selection?.name(item[field].toString(), language) ??
+            item[field].toString();
+  return CartItem(
+    menuItemId: item['id'].toString(),
+    menuOptionKey: selection?.key ?? key,
+    name: name('name', 'ko') ?? '',
+    nameKo: name('name_ko', 'ko'),
+    nameVi: name('name_vi', 'vi'),
+    nameEn: name('name_en', 'en'),
+    price: selection?.price ?? parseDecimalInput(item['price'].toString()) ?? 0,
+    quantity: 1,
+  );
+}
+
+Future<CartItem?> _chooseCartReplacement(
+  BuildContext context,
+  List<Map<String, dynamic>> rows,
+  CartItem original,
+) async {
+  var item = rows.where((r) => r['id'] == original.menuItemId).firstOrNull;
+  if (item == null) return null;
+  final group = MenuSizeMetadata.fromKey(
+    item['menu_option_key']?.toString(),
+  )?.menuId;
+  if (group != null) {
+    final options = rows
+        .where(
+          (r) =>
+              MenuSizeMetadata.fromKey(
+                    r['menu_option_key']?.toString(),
+                  )?.menuId ==
+                  group &&
+              r['is_available'] == true &&
+              r['is_archived'] != true,
+        )
+        .toList();
+    final size = await showMenuSizePicker(
+      context,
+      title: original.localizedName(
+        Localizations.localeOf(context).languageCode,
+      ),
+      languageCode: Localizations.localeOf(context).languageCode,
+      options: [
+        for (final r in options)
+          MenuSizeOption(
+            id: r['id'].toString(),
+            size: r['portion_code']?.toString() ?? '',
+            mealChoice: r['meal_choice']?.toString() ?? '',
+            price: (r['price'] as num).toDouble(),
+          ),
+      ],
+    );
+    if (size == null || !context.mounted) return null;
+    item = options.firstWhere((r) => r['id'] == size.optionId);
+  }
+  if (!context.mounted) return null;
+  return (await _chooseCartItem(
+    context,
+    item,
+    initialKey: original.menuOptionKey,
+  ))?.copyWith(quantity: original.quantity, isTakeout: original.isTakeout);
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'menu_choice_editor.dart';
 import 'package:flutter/material.dart';
 
 /// One registered dish can own both S/L prices. The chosen size is retained
@@ -9,7 +11,9 @@ class MenuOptions {
     this.choice = '',
     this.sizePrices = const {},
     this.mealChoices = false,
+    this.choiceDefinition,
   });
+  final Map<String, dynamic>? choiceDefinition;
   final bool mealChoices;
   final String portion;
   final String spice;
@@ -27,8 +31,10 @@ class MenuOptions {
     String? choice,
     Map<String, double>? sizePrices,
     bool? mealChoices,
+    Map<String, dynamic>? choiceDefinition,
   }) => MenuOptions(
     mealChoices: mealChoices ?? this.mealChoices,
+    choiceDefinition: choiceDefinition ?? this.choiceDefinition,
     portion: portion ?? this.portion,
     spice: spice ?? this.spice,
     choice: choice ?? this.choice,
@@ -37,6 +43,9 @@ class MenuOptions {
 
   factory MenuOptions.fromJson(Map<String, dynamic> json) => MenuOptions(
     mealChoices: json['meal_choices'] == true,
+    choiceDefinition: json['choice_definition'] is Map
+        ? Map<String, dynamic>.from(json['choice_definition'] as Map)
+        : null,
     portion: json['portion_code']?.toString() ?? '',
     spice: json['spice_level']?.toString() ?? 'unknown',
     choice: json['spice_choice']?.toString() ?? '',
@@ -49,6 +58,7 @@ class MenuOptions {
 
   Map<String, dynamic> toJson() => {
     'meal_choices': mealChoices,
+    if (choiceDefinition != null) 'choice_definition': choiceDefinition,
     'portion_code': hasSizes ? 'S' : portion,
     'size_prices': sizePrices,
     'spice_level': spice,
@@ -58,6 +68,7 @@ class MenuOptions {
   @override
   bool operator ==(Object other) =>
       other is MenuOptions &&
+      jsonEncode(choiceDefinition) == jsonEncode(other.choiceDefinition) &&
       mealChoices == other.mealChoices &&
       portion == other.portion &&
       spice == other.spice &&
@@ -72,6 +83,7 @@ class MenuOptions {
     sizePrices['S'],
     sizePrices['L'],
     mealChoices,
+    jsonEncode(choiceDefinition),
   );
 }
 
@@ -89,10 +101,12 @@ class MenuOptionsEditor extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.allowSizes = false,
+    this.storeId,
   });
   final MenuOptions value;
   final ValueChanged<MenuOptions> onChanged;
   final bool allowSizes;
+  final String? storeId;
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +131,12 @@ class MenuOptionsEditor extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            MenuChoiceEditor(
+              definition: value.choiceDefinition,
+              storeId: storeId,
+              onChanged: (definition) =>
+                  onChanged(value.copyWith(choiceDefinition: definition)),
+            ),
             SwitchListTile(
               key: const Key('admin_menu_meal_choices'),
               title: Text(
@@ -192,6 +212,7 @@ class MenuOptionsEditor extends StatelessWidget {
                 onChanged: (v) => onChanged(
                   MenuOptions(
                     mealChoices: value.mealChoices,
+                    choiceDefinition: value.choiceDefinition,
                     portion: v ?? '',
                     spice: value.spice,
                     choice: value.choice,
@@ -223,6 +244,7 @@ class MenuOptionsEditor extends StatelessWidget {
               onChanged: (v) => onChanged(
                 MenuOptions(
                   mealChoices: value.mealChoices,
+                  choiceDefinition: value.choiceDefinition,
                   portion: value.portion,
                   spice: v ?? 'unknown',
                   choice: value.choice,
@@ -245,6 +267,7 @@ class MenuOptionsEditor extends StatelessWidget {
               onChanged: (v) => onChanged(
                 MenuOptions(
                   mealChoices: value.mealChoices,
+                  choiceDefinition: value.choiceDefinition,
                   portion: value.portion,
                   spice: value.spice,
                   choice: v,

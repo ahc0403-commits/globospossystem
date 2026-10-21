@@ -1,3 +1,4 @@
+import '../../core/menu/menu_choices.dart';
 import '../../core/menu/menu_sizes.dart';
 import 'dart:convert';
 
@@ -211,6 +212,25 @@ class DirectOrderMenuItem {
     this.comboDrinkOptions = const [],
     this.comboComponents = const [],
   });
+
+  DirectOrderMenuItem withChoice(MenuChoiceSelection selection) =>
+      DirectOrderMenuItem(
+        id: selection.lineId(id),
+        menuOptionKey: selection.key,
+        price: selection.price,
+        nameKo: selection.name(nameKo, 'ko'),
+        nameVi: selection.name(nameVi, 'vi'),
+        nameEn: selection.name(nameEn, 'en'),
+        categoryId: categoryId,
+        description: description,
+        imageUrl: imageUrl,
+        vatCategory: vatCategory,
+        sortOrder: sortOrder,
+        isCombo: isCombo,
+        comboDrinkChoiceCount: comboDrinkChoiceCount,
+        comboDrinkOptions: comboDrinkOptions,
+        comboComponents: comboComponents,
+      );
 
   final String? menuOptionKey;
   final String id;
