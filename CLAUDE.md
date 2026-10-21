@@ -85,6 +85,9 @@ requests and higher-priority instructions take precedence.
 - JeonGabok uses the active KDS revision/broadcast rollout. Kitchen completion
   invalidates the assigned stored floor directly; floor timers start at
   `kitchen_done`. Delivery/pickup preparation must not notify a table floor.
+- JeonGabok kitchen item taps record cooking start only. The explicit floor
+  handoff selection records `kitchen_done` and makes only that quantity ready
+  and blinking on the assigned floor. Never alias cooking start to handoff.
 
 - `process_payment` is the atomic single-order payment entry point. Determine
   its effective definition by migration order, not a fixed historical filename.

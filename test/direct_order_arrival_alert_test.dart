@@ -85,6 +85,27 @@ void main() {
       expect(file.existsSync(), isTrue, reason: entry.key);
       var bytes = file.readAsBytesSync();
       if (entry.key.startsWith('lib/l10n/app_localizations')) {
+        // Menu ordering adds five independent generated members. Remove only
+        // those members before comparing the existing alert byte baseline.
+        var source = utf8.decode(bytes);
+        for (final key in const [
+          'menuMoveItemFirst',
+          'menuMoveItemUp',
+          'menuMoveItemDown',
+          'menuOrderSaved',
+          'menuOrderFailed',
+        ]) {
+          final member = entry.key.endsWith('/app_localizations.dart')
+              ? RegExp(
+                  '\n  /// No description provided for @$key\\.[\\s\\S]*?\n  String get $key;\n',
+                )
+              : RegExp('\n  @override\n  String get $key =>[\\s\\S]*?;\n');
+          expect(member.allMatches(source), hasLength(1), reason: key);
+          source = source.replaceFirst(member, '');
+        }
+        bytes = utf8.encode(source);
+      }
+      if (entry.key.startsWith('lib/l10n/app_localizations')) {
         // Independent brand copy is appended by gen-l10n. Keep the existing
         // alert baseline exact while allowing this unrelated, tested addition.
         // The new counted-cash label has its own ko/vi/en responsive tests.

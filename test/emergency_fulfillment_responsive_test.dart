@@ -645,6 +645,153 @@ void main() {
   );
 
   testWidgets(
+    'JeonGabok menu tap starts cooking and only floor handoff completes it',
+    (tester) async {
+      final active = _activeState('kitchen');
+      final food = EmergencyFulfillmentItem.fromJson({
+        'id': 'jgb-food',
+        'order_item_id': 'jgb-order-item',
+        'name_ko': '국수',
+        'name_vi': 'Mì',
+        'name_en': 'Noodles',
+        'ordered_quantity': 1,
+        'workflow_version': 2,
+        'kitchen_direct_to_floor': true,
+      });
+      final fixture = _FixtureEmergencyNotifier(
+        active.copyWith(
+          kitchenDirectToFloor: true,
+          orders: [
+            active.orders.single.copyWith(items: [food]),
+          ],
+        ),
+      );
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+      );
+      await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+      await tester.pump();
+      expect(find.byTooltip('조리 시작'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('emergency_menu_item_jgb-food')));
+      await tester.pump();
+      expect(fixture.recordedProgress, [('jgb-food', 'kitchen_started', 1)]);
+      final cooking = fixture.state.orders.single.items.single;
+      expect(cooking.kitchenStartedQuantity, 1);
+      expect(cooking.kitchenDoneQuantity, 0);
+      expect(cooking.isReadyFromPreviousStageAt('floor'), isFalse);
+      expect(find.text('조리중 · 층 전달 전'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('emergency_menu_item_complete_jgb-food')),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.byKey(const Key('emergency_detail_home')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('kitchen_checket_handoff')));
+      await tester.pumpAndSettle();
+      final group = buildKitchenChecketMenuGroups(fixture.state.orders).single;
+      await tester.tap(
+        find.byKey(ValueKey('kitchen_checket_plus_${group.key}')),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('kitchen_checket_complete')));
+      await tester.pumpAndSettle();
+      expect(fixture.kitchenChecketBatches, [
+        {group.key: 1},
+      ]);
+      expect(
+        fixture.state.orders.single.items.single.isReadyFromPreviousStageAt(
+          'floor',
+        ),
+        isTrue,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('floor pulses only handed-off food and pending direct drinks', (
+    tester,
+  ) async {
+    EmergencyFulfillmentItem food(
+      String id, {
+      int handed = 0,
+      int served = 0,
+      bool drink = false,
+    }) => EmergencyFulfillmentItem.fromJson({
+      'id': id,
+      'order_item_id': 'order-$id',
+      'name_ko': id,
+      'name_vi': id,
+      'name_en': id,
+      'ordered_quantity': 1,
+      'workflow_version': 2,
+      'kitchen_direct_to_floor': true,
+      'kitchen_started_quantity': drink ? 0 : 1,
+      'kitchen_done_quantity': handed,
+      'tray_received_quantity': handed,
+      'tray_dispatched_quantity': handed,
+      'floor_served_quantity': served,
+      'fulfillment_route': drink ? 'floor_direct' : 'kitchen_tray_floor',
+    });
+    final active = _activeState('floor');
+    final fixture = _FixtureEmergencyNotifier(
+      active.copyWith(
+        kitchenDirectToFloor: true,
+        orders: [
+          active.orders.single.copyWith(
+            items: [
+              food('waiting'),
+              food('handed', handed: 1),
+              food('served', handed: 1, served: 1),
+              food('drink', drink: true),
+            ],
+          ),
+        ],
+      ),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+    Color? color(String id) =>
+        (tester
+                    .widget<Container>(
+                      find.byKey(Key('emergency_card_menu_pulse_$id')),
+                    )
+                    .decoration!
+                as BoxDecoration)
+            .color;
+    final handedBefore = color('handed');
+    final drinkBefore = color('drink');
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(color('waiting'), Colors.transparent);
+    expect(color('served'), Colors.transparent);
+    expect(color('handed'), isNot(handedBefore));
+    expect(color('drink'), isNot(drinkBefore));
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('emergency_menu_item_complete_waiting')),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
     'JeonGabok guest 1F uses the stored 2F floor without relabeling data',
     (tester) async {
       final fixture = _FixtureEmergencyNotifier(

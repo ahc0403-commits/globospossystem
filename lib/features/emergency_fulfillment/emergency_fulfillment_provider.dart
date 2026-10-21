@@ -407,7 +407,9 @@ class EmergencyFulfillmentItem {
     kitchenStartedQuantity:
         stage == 'kitchen_started' ||
             (stage == 'kitchen_done' && usesKitchenHandoffWorkflow)
-        ? quantity
+        ? stage == 'kitchen_done' && kitchenDirectToFloor
+              ? math.max(kitchenStartedQuantity, quantity)
+              : quantity
         : kitchenStartedQuantity,
     kitchenDoneQuantity: stage == 'kitchen_done' || stage == 'tray_ready'
         ? quantity

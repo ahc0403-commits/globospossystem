@@ -591,8 +591,22 @@ class _EmergencyFulfillmentScreenState
         error: state.error,
         readyPulseOn: _readyPulseOn,
         onBack: () => setState(() => _selectedOrderId = null),
-        onItemAction: (item) => _completeItem(item, stationType),
-        onItemRevert: (item) => _revertItem(item, stationType),
+        onItemAction: (item) => _completeItem(
+          item,
+          stationType,
+          preparationOnly:
+              item.kitchenDirectToFloor &&
+              !selected.isDelivery &&
+              !selected.isDirectPickup,
+        ),
+        onItemRevert: (item) => _revertItem(
+          item,
+          stationType,
+          preparationOnly:
+              item.kitchenDirectToFloor &&
+              !selected.isDelivery &&
+              !selected.isDirectPickup,
+        ),
         onServeReady: stationType == 'floor' && selected.hasReadyUnservedFood
             ? () => _serveReadyOrder(selected)
             : null,
@@ -720,15 +734,19 @@ class _EmergencyFulfillmentScreenState
 
   Future<void> _completeItem(
     EmergencyFulfillmentItem item,
-    String stationType,
-  ) async {
+    String stationType, {
+    bool preparationOnly = false,
+  }) async {
     if (_actionBusy) return;
     setState(() => _actionBusy = true);
     final notifier = ref.read(emergencyFulfillmentProvider.notifier);
     try {
       switch (stationType) {
         case 'kitchen':
-          await notifier.recordProgress(itemId: item.id, stage: 'kitchen_done');
+          await notifier.recordProgress(
+            itemId: item.id,
+            stage: preparationOnly ? 'kitchen_started' : 'kitchen_done',
+          );
         case 'tray':
           if (item.usesKitchenHandoffWorkflow) {
             await notifier.recordProgress(
@@ -797,9 +815,17 @@ class _EmergencyFulfillmentScreenState
 
   Future<void> _revertItem(
     EmergencyFulfillmentItem item,
-    String stationType,
-  ) async {
-    if (_actionBusy || !item.isRevertibleAt(stationType)) return;
+    String stationType, {
+    bool preparationOnly = false,
+  }) async {
+    final revertPreparation =
+        stationType == 'kitchen' &&
+        preparationOnly &&
+        item.kitchenStartedQuantity > item.kitchenDoneQuantity;
+    if (_actionBusy ||
+        (!revertPreparation && !item.isRevertibleAt(stationType))) {
+      return;
+    }
     setState(() => _actionBusy = true);
     final notifier = ref.read(emergencyFulfillmentProvider.notifier);
     try {
@@ -807,7 +833,7 @@ class _EmergencyFulfillmentScreenState
         case 'kitchen':
           await notifier.recordProgress(
             itemId: item.id,
-            stage: 'kitchen_done',
+            stage: revertPreparation ? 'kitchen_started' : 'kitchen_done',
             delta: -1,
           );
         case 'tray':
@@ -2322,8 +2348,18 @@ class _EmergencyMenuRow extends StatelessWidget {
     final item = entry.fulfillmentItem;
     final displayItem = entry.displayItem;
     final batch = entry.batch;
+    final preparationOnly =
+        stationType == 'kitchen' &&
+        item.kitchenDirectToFloor &&
+        !isDelivery &&
+        !isDirectPickup;
     final (value, limit) = switch (stationType) {
-      'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
+      'kitchen' => (
+        preparationOnly
+            ? item.kitchenStartedQuantity
+            : item.kitchenDoneQuantity,
+        item.requiredQuantity,
+      ),
       'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
       'floor' => (
         item.floorServedQuantity,
@@ -2348,7 +2384,11 @@ class _EmergencyMenuRow extends StatelessWidget {
         !disabledAtStation &&
         limit > 0 &&
         value < limit;
-    final canRevert = !busy && item.isRevertibleAt(stationType);
+    final canRevert =
+        !busy &&
+        (item.isRevertibleAt(stationType) ||
+            (preparationOnly &&
+                item.kitchenStartedQuantity > item.kitchenDoneQuantity));
     final blinkReady =
         (stationType == 'tray' || stationType == 'floor') &&
         readyFromPreviousStage &&
@@ -2459,8 +2499,12 @@ class _EmergencyMenuRow extends StatelessWidget {
                   ? copy.floorDirectOnly
                   : done
                   ? copy.completed
+                  : preparationOnly && value > 0
+                  ? copy.cookingBeforeHandoff
                   : readyFromPreviousStage
                   ? copy.menuStatusPreviousStageReady
+                  : stationType == 'floor' && !item.isFloorDirect
+                  ? copy.waitingForPrevious
                   : copy.waitingForAction,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -2490,13 +2534,20 @@ class _EmergencyMenuRow extends StatelessWidget {
                   key: ValueKey(
                     'emergency_menu_item_complete_${displayItem.id}',
                   ),
-                  tooltip: copy.actionOne(
-                    stationType,
-                    isDelivery: isDelivery,
-                    isDirectPickup: isDirectPickup,
-                  ),
+                  tooltip: preparationOnly
+                      ? copy.startCooking
+                      : copy.actionOne(
+                          stationType,
+                          isDelivery: isDelivery,
+                          isDirectPickup: isDirectPickup,
+                        ),
                   onPressed: canAdvance ? onTap : null,
-                  icon: const Icon(Icons.check_rounded, size: 20),
+                  icon: Icon(
+                    preparationOnly
+                        ? Icons.play_arrow_rounded
+                        : Icons.check_rounded,
+                    size: 20,
+                  ),
                 ),
               ],
             );
@@ -2909,20 +2960,33 @@ class _EmergencyCopy {
   };
   String get orderedQuantity => _pick('주문 수량', 'Số lượng', 'Ordered');
   String get completed => _pick('완료', 'Hoàn tất', 'Completed');
+  String get startCooking => _pick('조리 시작', 'Bắt đầu nấu', 'Start cooking');
+  String get cookingBeforeHandoff => _pick(
+    '조리중 · 층 전달 전',
+    'Đang nấu · chưa chuyển tầng',
+    'Cooking · awaiting floor handoff',
+  );
   String get menuStatusGuide =>
       _pick('메뉴 상태 안내', 'Hướng dẫn trạng thái món', 'Menu status guide');
   String get menuStatusCompleted =>
       _pick('녹색 - 완료', 'Xanh lá - Hoàn tất', 'Green - Completed');
   String get menuStatusInProgress =>
       _pick('검은색 - 진행중', 'Đen - Đang xử lý', 'Black - In progress');
-  String get menuStatusPreviousStageReady => _pick(
-    '파란색 - 전 단계 완료·다음 단계 인계 전',
-    'Xanh dương - Bước trước đã xong·chưa bàn giao',
-    'Blue - Previous stage complete·not handed off',
-  );
+  String get menuStatusPreviousStageReady => directToFloor
+      ? _pick(
+          '파란색 - 전달 완료·서빙 대기',
+          'Xanh dương - Đã bàn giao·chờ phục vụ',
+          'Blue - Handed off·awaiting service',
+        )
+      : _pick(
+          '파란색 - 전 단계 완료·다음 단계 인계 전',
+          'Xanh dương - Bước trước đã xong·chưa bàn giao',
+          'Blue - Previous stage complete·not handed off',
+        );
   String get waitingForAction => _pick('처리 대기', 'Chờ xử lý', 'Action required');
-  String get waitingForPrevious =>
-      _pick('이전 단계 대기', 'Chờ công đoạn trước', 'Waiting for previous stage');
+  String get waitingForPrevious => directToFloor
+      ? _pick('주방 전달 대기', 'Chờ bếp bàn giao', 'Waiting for kitchen handoff')
+      : _pick('이전 단계 대기', 'Chờ công đoạn trước', 'Waiting for previous stage');
   String get floorDirectOnly => _pick(
     '층에서 직접 제공',
     'Phục vụ trực tiếp tại tầng',
@@ -2935,13 +2999,20 @@ class _EmergencyCopy {
     'Đồ uống được tầng trực tiếp chuẩn bị và phục vụ.',
     'Prepare and serve these beverages directly from the floor.',
   );
-  String get floorFoodsTitle =>
-      _pick('주방·트레이 음식', 'Món từ bếp và khay', 'Food from kitchen and tray');
-  String get floorFoodsBody => _pick(
-    '주방 조리와 트레이 인계를 마친 음식입니다.',
-    'Món đã hoàn tất tại bếp và được bàn giao qua khay.',
-    'Food completed by the kitchen and handed off through the tray.',
-  );
+  String get floorFoodsTitle => directToFloor
+      ? _pick('주방 음식', 'Món từ bếp', 'Food from kitchen')
+      : _pick('주방·트레이 음식', 'Món từ bếp và khay', 'Food from kitchen and tray');
+  String get floorFoodsBody => directToFloor
+      ? _pick(
+          '주방에서 층 전달을 완료한 음식만 깜빡이며 서빙할 수 있습니다.',
+          'Chỉ món đã được bếp bàn giao mới nhấp nháy và có thể phục vụ.',
+          'Only food handed off by the kitchen flashes and can be served.',
+        )
+      : _pick(
+          '주방 조리와 트레이 인계를 마친 음식입니다.',
+          'Món đã hoàn tất tại bếp và được bàn giao qua khay.',
+          'Food completed by the kitchen and handed off through the tray.',
+        );
   String get totalOrders => _pick('총 주문', 'Tổng đơn', 'Total');
   String totalQuantityProgress(int completed, int total) {
     final remaining = math.max(0, total - completed);
