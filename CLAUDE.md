@@ -66,6 +66,9 @@ requests and higher-priority instructions take precedence.
   the existing approved invoice policy records the actual registering actor.
 - Customer carts keep distinct choices, permit option/quantity edits and removal,
   and send orders only after explicit checkout.
+- JeonGabok's QR active-order history keeps all current unpaid order lines,
+  including served dishes, until payment closes the order. A ten-minute display
+  version reset must not hide those lines during additional ordering.
 - Carry the selected price's `menu_option_key` through carts and offline drafts;
   validate the complete batch and require reselection after a price edit.
 
