@@ -29,3 +29,6 @@ run_sql < supabase/migrations/20260811160000_usb_printer_endpoints.sql >/dev/nul
 run_sql < supabase/migrations/20261019160000_store_opening_printer_modes.sql >/dev/null
 run_sql < supabase/migrations/20261019160000_store_opening_printer_modes.sql >/dev/null
 run_sql < test/sql/store_opening_printer_modes_test.sql
+run_sql < test/fixtures/store_kds_workflow_setup.sql >/dev/null
+run_sql < supabase/migrations/20261021150000_store_kds_workflow_settings.sql >/dev/null
+run_sql < test/sql/store_kds_workflow_test.sql

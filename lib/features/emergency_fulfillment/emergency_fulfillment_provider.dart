@@ -735,7 +735,7 @@ class EmergencyFulfillmentOrder {
     (int, int) progressAt(EmergencyFulfillmentItem item) =>
         switch (stationType) {
           'kitchen' => (item.kitchenDoneQuantity, item.requiredQuantity),
-          'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
+          'tray' => (item.trayDispatchedQuantity, item.requiredQuantity),
           'floor' => (
             item.floorServedQuantity,
             item.isFloorDirect

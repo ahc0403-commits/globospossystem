@@ -4390,5 +4390,13 @@
   "storeSetupValidationModePermission": "Chỉ Super Admin được đổi chế độ vận hành. Quản trị viên khác có thể thiết lập máy in cho chế độ hiện tại.",
   "storeSetupValidationUsbName": "Nhập tên máy in Windows cho kết nối USB.",
   "storeSetupValidationConnection": "Chọn kết nối và dùng cùng thông tin cho các tuyến dùng chung máy in.",
-  "storeSetupValidationPaperlessReceipt": "Vận hành không giấy cần đúng một tuyến in hóa đơn thu ngân."
+  "storeSetupValidationPaperlessReceipt": "Vận hành không giấy cần đúng một tuyến in hóa đơn thu ngân.",
+  "storeSetupServiceWorkflowTitle": "Quy trình phục vụ món",
+  "storeSetupKitchenTrayFloor": "Bếp → Khay → Tầng (BunsikClub)",
+  "storeSetupKitchenFloor": "Bếp → Tầng (JeonGabok)",
+  "storeSetupServiceWorkflowHelp": "Áp dụng theo cửa hàng. Hoàn tất đơn đang mở trước khi đổi quy trình.",
+  "storeSetupWorkflowInvalid": "Vui lòng chọn quy trình phục vụ món.",
+  "storeSetupWorkflowBusy": "Hoàn tất đơn và bàn giao đang mở trước khi đổi quy trình.",
+  "storeSetupWorkflowPermission": "Chỉ quản trị viên cao nhất được đổi quy trình phục vụ.",
+  "storeSetupWorkflowJeongabok": "JeonGabok bàn giao món trực tiếp từ bếp lên tầng."
 }
