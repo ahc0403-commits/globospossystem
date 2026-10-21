@@ -1,0 +1,11 @@
+do $$begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon;end if;if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated;end if;if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role;end if;end$$;
+create table public.restaurants(id uuid primary key,brand_id uuid,is_active boolean);
+create table public.inventory_items(id uuid primary key,restaurant_id uuid,name text,current_stock numeric,unit text,reorder_point numeric,updated_at timestamptz,is_active boolean);
+create table public.store_employees(id uuid primary key,store_id uuid,employee_number text,full_name text,phone text,bank_name text,bank_account_number text,probation_start_date date,employment_start_date date,updated_at timestamptz,is_active boolean);
+create table public.photo_objet_sales(id uuid primary key,store_id uuid,sale_date date,gross_sales bigint,transaction_count integer,pulled_at timestamptz);
+create table public.daily_closings(id uuid primary key,restaurant_id uuid,closing_date date,payments_cash numeric,payments_bank_transfer numeric,created_at timestamptz);
+create table public.orders(id uuid primary key,restaurant_id uuid,status text,created_at timestamptz);
+create table public.payment_adjustments(id uuid primary key,restaurant_id uuid,adjustment_type text,amount numeric,created_at timestamptz);
+create table public.attendance_logs(id uuid primary key,restaurant_id uuid,employee_id uuid,type text,logged_at timestamptz);
+create table public.payroll_records(id uuid primary key,restaurant_id uuid,period_start date,period_end date,total_amount numeric,status text,updated_at timestamptz);
+create index on public.attendance_logs(restaurant_id,employee_id,logged_at desc,id desc);
