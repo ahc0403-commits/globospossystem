@@ -14,7 +14,9 @@
 
 현재 운영 schema만 export(업무 데이터 없음): `/tmp/globos-lifecycle-production-before-schema-20261022.sql`.
 기존 전체 검사: `/tmp/globos-lifecycle-final-check2.log` exit 0; 최신 Flutter 2,495 통과/98 skip.
-운영 배포 묶음 리허설과 CI·SHA·운영 적용·배포·사후 검증 결과는 실행 후 기록한다.
+운영 배포 묶음의 원자적 rollback/실제 적용·component 이력·기존 흐름·결제 parity·주방 인계·신고·품질/입고·보류 로트·폐점·소속 이전 리허설 통과: `/tmp/globos-lifecycle-atomic-rehearsal7.log`. 최종 리허설 `/tmp/globos-lifecycle-atomic-final.log` 및 적용 후 schema 검증 모드 `/tmp/globos-lifecycle-deployed-mode-local3.log`도 통과했다. 최초 리허설의 보존 검증 SQL 컬럼/시그니처 및 로컬 권한·과거 영수증 fixture 누락을 수정하고 전체를 다시 통과했다. CI·SHA·운영 적용·배포·사후 검증 결과는 실행 후 기록한다.
+
+운영 Auth 준비/테스트 데이터 위생 검사: exit 0, `/tmp/globos-lifecycle-auth-preflight.log`. PR: https://github.com/ahc0403-commits/globospossystem/pull/614 .
 
 ## 현재 상태
 
