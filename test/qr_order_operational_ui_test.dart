@@ -418,6 +418,8 @@ void main() {
           },
         ),
       );
+      expect(find.text('Chọn tùy chọn'), findsOneWidget);
+      expect(find.text('Chọn cỡ'), findsNothing);
       for (final meal in ['noodles', 'rice']) {
         await tester.tap(find.byKey(const Key('qr_add_option_noodles')));
         await tester.pumpAndSettle();

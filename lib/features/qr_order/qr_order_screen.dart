@@ -677,6 +677,9 @@ class _QrOrderScreenState extends State<QrOrderScreen>
 
   Widget _sizedMenuTile(QrMenuItem item) {
     final options = _sizeGroups[item.sizeMetadata!.menuId] ?? [item];
+    final hasMealChoices = options.any(
+      (option) => option.sizeMetadata!.mealChoice.isNotEmpty,
+    );
     final title = item.catalogName(_languageCode);
     final prices = options
         .map(
@@ -733,11 +736,20 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                 const SizedBox(height: 8),
                 Text(prices),
                 const SizedBox(height: 8),
-                Text(switch (_languageCode) {
-                  'ko' => '사이즈 선택',
-                  'vi' => 'Chọn cỡ',
-                  _ => 'Choose size',
-                }),
+                Text(
+                  hasMealChoices
+                      ? cartText(
+                          _languageCode,
+                          '옵션 선택',
+                          'Chọn tùy chọn',
+                          'Choose options',
+                        )
+                      : switch (_languageCode) {
+                          'ko' => '사이즈 선택',
+                          'vi' => 'Chọn cỡ',
+                          _ => 'Choose size',
+                        },
+                ),
                 OutlinedButton.icon(
                   key: Key('qr_add_option_${item.sizeMetadata!.menuId}'),
                   onPressed: () => _addRegisteredOption(item, options),
