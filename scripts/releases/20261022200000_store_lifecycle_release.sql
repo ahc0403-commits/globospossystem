@@ -9104,7 +9104,7 @@ INSERT INTO supabase_migrations.schema_migrations(version,name,statements)
 DO $verify$
 BEGIN
  IF (SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version BETWEEN '20261021163000' AND '20261022193000' AND version<>'20261021230000')<>35
- OR to_regprocedure('public.admin_preview_store_registration_v1(uuid,uuid,jsonb)') IS NULL
+ OR to_regprocedure('public.admin_preview_store_registration_v1(uuid,uuid,jsonb,text)') IS NULL
  OR to_regprocedure('public.admin_get_store_lifecycle_v1(uuid)') IS NULL
  OR to_regprocedure('public.admin_transition_store_lifecycle_v1(uuid,bigint,text,text,text)') IS NULL
  OR to_regprocedure('public.inventory_lot_workspace_v1(uuid,uuid,uuid)') IS NULL
