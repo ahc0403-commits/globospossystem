@@ -91,7 +91,7 @@ END $$;
 DO $$ DECLARE d text; BEGIN
  d:=pg_get_functiondef('public.procurement_workspace_page_core(uuid,jsonb,jsonb)'::regprocedure);
  IF position('jsonb_build_object(''demand'',public.procurement_demand_evidence(p_store_id,p_office_actor))' IN d)=0 THEN RAISE EXCEPTION 'DEMAND_PAGE_PATCH_MISMATCH'; END IF;
- d:=replace(d,'jsonb_build_object(''demand'',public.procurement_demand_evidence(p_store_id,p_office_actor))','public.procurement_demand_page_v1(p_store_id,nullif(p_query->>''demand_after'','''')::uuid,p_office_actor)'); EXECUTE d;
+ d:=replace(d,'jsonb_build_object(''demand'',public.procurement_demand_evidence(p_store_id,p_office_actor))','CASE WHEN p_query->>''demand_page_size''=''50'' THEN public.procurement_demand_page_v1(p_store_id,nullif(p_query->>''demand_after'','''')::uuid,p_office_actor) ELSE jsonb_build_object(''demand'',public.procurement_demand_evidence(p_store_id,p_office_actor)) END'); EXECUTE d;
  -- A release after reinspection is not another supplier delivery. Only receipts
  -- with a promised date enter the punctuality denominator.
  d:=pg_get_functiondef('public.procurement_supplier_evidence(uuid,jsonb)'::regprocedure);

@@ -64,7 +64,7 @@ class ProcurementWorkspacePage extends StatefulWidget {
 
 class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
   Map<String, dynamic> _data = {};
-  final Map<String, dynamic> _query = {};
+  final Map<String, dynamic> _query = {'demand_page_size': 50};
   String? _selectedOrderId;
   String copy(String key) => procurementProcessLabel(
     key,

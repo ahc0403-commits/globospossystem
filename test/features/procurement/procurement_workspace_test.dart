@@ -55,6 +55,7 @@ void main() {
       );
       await tester.pump();
       expect(queries.single['request_scope'], 'all');
+      expect(queries.single['demand_page_size'], 50);
       expect(queries.single['request_sort'], 'created');
       expect(queries.single.containsKey('created_from'), false);
       refresh.value++;

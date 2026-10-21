@@ -105,7 +105,7 @@ if [[ -n "${STORE_LIFECYCLE_REHEARSED_SCHEMA_OUT:-}" ]]; then
 fi
 if [[ -z "$release_deployed" ]]; then run_sql < test/sql/store_operating_payment_parity_test.sql; fi
 # Real stored procedures, synthetic records only, each test rolls back.
-for release_test in store_operating_existing_flow_test store_operating_payment_stock_test store_workflow_bunsik_test store_workflow_direct_test sales_reporting_batches_test procurement_quality_profiles_test inventory_lots_test shared_area_receivers_test store_closure_boundaries_test store_identity_transfer_test; do
+for release_test in store_operating_existing_flow_test store_operating_payment_stock_test store_workflow_bunsik_test store_workflow_direct_test sales_reporting_batches_test procurement_demand_client_compat_test procurement_quality_profiles_test inventory_lots_test shared_area_receivers_test store_closure_boundaries_test store_identity_transfer_test; do
  run_sql < "test/sql/$release_test.sql"
 done
 if [[ -n "$release_deployed" ]]; then

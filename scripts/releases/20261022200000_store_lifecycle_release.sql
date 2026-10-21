@@ -35,7 +35,7 @@ INSERT INTO lifecycle_release_components VALUES ('20261022170000','store_operati
 INSERT INTO lifecycle_release_components VALUES ('20261022180000','procurement_reconciliation_evidence','b9718753dceab787fcb79385c7a5ef1fde94c3cb0fb860af27146cbf7a5d7dcd');
 INSERT INTO lifecycle_release_components VALUES ('20261022181000','store_reopening_preparation','9d1951784cb8f4b8c6f0544eb5b38eb89012b5af830b3cb76a572489558e31a0');
 INSERT INTO lifecycle_release_components VALUES ('20261022182000','procurement_quality_review','cf72a3dfb2387d513ae6db72b430139530efad532d00bbc7c8c9df16b78d43e5');
-INSERT INTO lifecycle_release_components VALUES ('20261022190000','procurement_demand_initial_plans','16b1a903be80431674ca4fabe0ab15c009e7001ffe07d242851427c55f67e22e');
+INSERT INTO lifecycle_release_components VALUES ('20261022190000','procurement_demand_initial_plans','2ba0764881d28e742014b1312303786eb0492fe9630bba212528057e44900263');
 INSERT INTO lifecycle_release_components VALUES ('20261022191000','store_identity_transfers','6c19165d8b9050dae9eabdf5ac8c9888b4e312c76a0056670644cca9c290ea07');
 INSERT INTO lifecycle_release_components VALUES ('20261022192000','lifecycle_read_boundaries','99536277cebf75d74e62729b6fb44b7f6e63c25429d3596983ae8ff73b8d8171');
 INSERT INTO lifecycle_release_components VALUES ('20261022193000','lifecycle_financial_boundaries','091862fe87c3482e535446831959f4eb581e83358d0ddccc294081319f5b9599');
@@ -8889,7 +8889,7 @@ END $$;
 DO $$ DECLARE d text; BEGIN
  d:=pg_get_functiondef('public.procurement_workspace_page_core(uuid,jsonb,jsonb)'::regprocedure);
  IF position('jsonb_build_object(''demand'',public.procurement_demand_evidence(p_store_id,p_office_actor))' IN d)=0 THEN RAISE EXCEPTION 'DEMAND_PAGE_PATCH_MISMATCH'; END IF;
- d:=replace(d,'jsonb_build_object(''demand'',public.procurement_demand_evidence(p_store_id,p_office_actor))','public.procurement_demand_page_v1(p_store_id,nullif(p_query->>''demand_after'','''')::uuid,p_office_actor)'); EXECUTE d;
+ d:=replace(d,'jsonb_build_object(''demand'',public.procurement_demand_evidence(p_store_id,p_office_actor))','CASE WHEN p_query->>''demand_page_size''=''50'' THEN public.procurement_demand_page_v1(p_store_id,nullif(p_query->>''demand_after'','''')::uuid,p_office_actor) ELSE jsonb_build_object(''demand'',public.procurement_demand_evidence(p_store_id,p_office_actor)) END'); EXECUTE d;
  -- A release after reinspection is not another supplier delivery. Only receipts
  -- with a promised date enter the punctuality denominator.
  d:=pg_get_functiondef('public.procurement_supplier_evidence(uuid,jsonb)'::regprocedure);

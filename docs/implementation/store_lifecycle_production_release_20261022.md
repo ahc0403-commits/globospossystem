@@ -18,6 +18,14 @@
 
 운영 Auth 준비/테스트 데이터 위생 검사: exit 0, `/tmp/globos-lifecycle-auth-preflight.log`. PR: https://github.com/ahc0403-commits/globospossystem/pull/614 .
 
+## 구형 발주 화면 호환성 보완
+
+운영 적용 직전, 기존 `procurement_workspace_page` 호출도 일괄 50행으로 바뀌어 구형 화면에서 51번째 이후 수요 근거가 숨는 경계를 발견했다. 운영 적용 전에 자동 파이프라인을 중지했다(운영 DB 미적용 확인).
+
+새 화면은 `demand_page_size=50`을 명시하고, 해당 요청만 키셋 페이지를 반환한다. 구형 요청은 기존 2,000품목 상한 내 전체 근거를 유지한다. 61품목 fixture에서 구형 61행과 새 화면 50+11행, 중복/누락 없음, 양방향 전환 후 구형 61행 유지를 실제 workspace RPC로 검증했다. 수정된 원자적 bundle 재적용/rollback·기존 흐름 재검증도 통과했다: `/tmp/globos-lifecycle-compat-atomic.log`.
+
+이 보완을 포함한 최종 커밋의 CI와 병합 커밋 CI 성공 후에만 운영 적용한다.
+
 ## 현재 상태
 
 배포 준비 중. 운영 DB 변경·Vercel 배포는 아직 실행하지 않았다.
