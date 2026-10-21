@@ -1097,7 +1097,6 @@ CREATE OR REPLACE FUNCTION "public"."process_payment_without_scoped_promotions"(
     SET "search_path" TO 'public', 'auth'
     AS $$
 DECLARE
-  v_tax jsonb;
   v_actor                  users%ROWTYPE;
   v_order                  orders%ROWTYPE;
   v_payment                payments%ROWTYPE;
@@ -1105,9 +1104,6 @@ DECLARE
   v_discount               order_discounts%ROWTYPE;
   v_has_discount           boolean := false;
   v_table_id               uuid;
-  v_item                   RECORD;
-  v_recipe                 RECORD;
-  v_deduct_qty             decimal(12,3);
   v_food_subtotal          decimal(15,2) := 0;
   v_alcohol_subtotal       decimal(15,2) := 0;
   v_menu_inc_total         decimal(15,2) := 0;
@@ -1116,10 +1112,6 @@ DECLARE
   v_sc_pretax              decimal(15,2);
   v_sc_vat                 decimal(15,2);
   v_sc_total               decimal(15,2);
-  v_pretax                 decimal(15,2);
-  v_vat_rate               decimal(5,2);
-  v_vat_amt                decimal(15,2);
-  v_total_inc              decimal(15,2);
   v_is_revenue             boolean := true;
   v_payment_method_storage text := p_method;
   v_order_total            decimal(15,2) := 0;
@@ -1128,7 +1120,6 @@ DECLARE
   v_remaining_due          decimal(15,2) := 0;
   v_should_complete        boolean := false;
   v_vat_pricing_mode       text := 'exclusive';
-  v_line_gross             decimal(15,2);
   v_discount_total         decimal(15,2) := 0;
   v_discount_cents         bigint := 0;
   v_remainder_cents        bigint := 0;
@@ -1236,82 +1227,35 @@ BEGIN
 
   TRUNCATE TABLE payment_discount_lines;
 
-  FOR v_item IN
-    SELECT
-      oi.id,
-      oi.menu_item_id,
-      oi.unit_price,
-      oi.quantity,
-      oi.display_name,
-      oi.label,
-      oi.created_at,
-      COALESCE(oi.is_service_item, false) AS is_service_item,
-      COALESCE(mi.vat_category, 'food') AS vat_category,
-      COALESCE(oi.vat_profile_snapshot,jsonb_build_array(jsonb_build_object('rate',CASE WHEN oi.vat_rate IN (8,10) THEN oi.vat_rate ELSE mi.effective_vat_rate END,'weight',1))) AS tax_profile
-    FROM order_items oi
-    LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-    WHERE oi.order_id = p_order_id
-      AND oi.status <> 'cancelled'
-      AND oi.item_type = 'menu_item'
-    ORDER BY oi.created_at, oi.id
-  LOOP
-    IF v_item.is_service_item THEN
-      UPDATE order_items
-      SET vat_rate = 0,
-          vat_amount = 0,
-          total_amount_ex_tax = 0,
-          paying_amount_inc_tax = 0
-      WHERE id = v_item.id;
-      CONTINUE;
-    END IF;
+  UPDATE public.order_items SET vat_rate=0,vat_amount=0,total_amount_ex_tax=0,paying_amount_inc_tax=0
+  WHERE order_id=p_order_id AND restaurant_id=p_store_id AND status<>'cancelled'
+    AND item_type='menu_item' AND is_service_item=true;
 
-    v_line_gross := ROUND(v_item.unit_price * v_item.quantity, 2);
-    v_tax := public.direct_order_payment_vat(v_item.tax_profile,v_line_gross,v_vat_pricing_mode);
-    v_vat_rate := (v_tax->>'vat_rate')::numeric;
-    v_pretax := (v_tax->>'supply')::numeric;
-    v_vat_amt := (v_tax->>'vat')::numeric;
-    v_total_inc := (v_tax->>'total')::numeric;
+  WITH lines AS MATERIALIZED (
+    SELECT oi.id,oi.menu_item_id,oi.unit_price,oi.quantity,oi.display_name,oi.label,oi.created_at,
+      coalesce(mi.vat_category,'food') vat_category,
+      coalesce(oi.vat_profile_snapshot,jsonb_build_array(jsonb_build_object('rate',
+        CASE WHEN oi.vat_rate IN (8,10) THEN oi.vat_rate ELSE mi.effective_vat_rate END,'weight',1))) tax_profile
+    FROM public.order_items oi LEFT JOIN public.menu_items mi ON mi.id=oi.menu_item_id
+    WHERE oi.order_id=p_order_id AND oi.restaurant_id=p_store_id AND oi.status<>'cancelled'
+      AND oi.item_type='menu_item' AND coalesce(oi.is_service_item,false)=false
+  ), priced AS MATERIALIZED (
+    SELECT l.*,public.direct_order_payment_vat(l.tax_profile,round(l.unit_price*l.quantity,2),v_vat_pricing_mode) tax
+    FROM lines l
+  ), inserted AS (
+    INSERT INTO payment_discount_lines(line_id,menu_item_id,unit_price,quantity,display_name,label,
+      vat_category,vat_rate,tax_profile,undiscounted_pretax,undiscounted_vat,undiscounted_inc,line_inc_cents,created_at)
+    SELECT id,menu_item_id,unit_price,quantity,display_name,label,vat_category,(tax->>'vat_rate')::numeric,
+      tax_profile,(tax->>'supply')::numeric,(tax->>'vat')::numeric,(tax->>'total')::numeric,
+      round((tax->>'total')::numeric*100)::bigint,created_at FROM priced RETURNING line_id
+  ) SELECT
+    (SELECT coalesce(sum((tax->>'total')::numeric),0) FROM priced),
+    (SELECT coalesce(sum(round((tax->>'total')::numeric*100)::bigint),0) FROM priced),
+    coalesce(sum((part->>'total_amount_ex_tax')::numeric) FILTER(WHERE (part->>'vat_rate')::numeric=10),0),
+    coalesce(sum((part->>'total_amount_ex_tax')::numeric) FILTER(WHERE (part->>'vat_rate')::numeric=8),0)
+  INTO v_menu_inc_total,v_menu_inc_cents,v_alcohol_subtotal,v_food_subtotal
+  FROM priced p CROSS JOIN LATERAL jsonb_array_elements(p.tax->'parts') part;
 
-    INSERT INTO payment_discount_lines (
-      line_id,
-      menu_item_id,
-      unit_price,
-      quantity,
-      display_name,
-      label,
-      vat_category,
-      vat_rate,
-      tax_profile,
-      undiscounted_pretax,
-      undiscounted_vat,
-      undiscounted_inc,
-      line_inc_cents,
-      created_at
-    )
-    VALUES (
-      v_item.id,
-      v_item.menu_item_id,
-      v_item.unit_price,
-      v_item.quantity,
-      v_item.display_name,
-      v_item.label,
-      v_item.vat_category,
-      v_vat_rate,
-      v_item.tax_profile,
-      v_pretax,
-      v_vat_amt,
-      v_total_inc,
-      ROUND(v_total_inc * 100)::bigint,
-      v_item.created_at
-    );
-
-    v_menu_inc_total := v_menu_inc_total + v_total_inc;
-    v_menu_inc_cents := v_menu_inc_cents + ROUND(v_total_inc * 100)::bigint;
-
-    SELECT v_alcohol_subtotal+COALESCE(sum((p->>'total_amount_ex_tax')::numeric) FILTER(WHERE (p->>'vat_rate')::numeric=10),0),
-           v_food_subtotal+COALESCE(sum((p->>'total_amount_ex_tax')::numeric) FILTER(WHERE (p->>'vat_rate')::numeric=8),0)
-      INTO v_alcohol_subtotal,v_food_subtotal FROM jsonb_array_elements(v_tax->'parts') p;
-  END LOOP;
 
   SELECT *
   INTO v_discount
@@ -1379,39 +1323,22 @@ BEGIN
          IS DISTINCT FROM v_discount_cents THEN
       RAISE EXCEPTION 'PROMOTION_ALLOCATION_MISMATCH';
     END IF;
-    UPDATE payment_discount_lines line
-    SET allocated_discount_cents = COALESCE((
-      SELECT round(allocation.discount_amount * 100)::bigint
-      FROM public.order_discount_lines allocation
-      WHERE allocation.order_discount_id = v_discount.id
-        AND allocation.order_item_id = line.line_id
-    ), 0)
-    WHERE line.line_id IS NOT NULL;
+    WITH allocations AS (
+      SELECT line.line_id,coalesce(round(a.discount_amount*100)::bigint,0) cents
+      FROM payment_discount_lines line LEFT JOIN public.order_discount_lines a
+        ON a.order_discount_id=v_discount.id AND a.order_item_id=line.line_id
+    ) UPDATE payment_discount_lines line SET allocated_discount_cents=a.cents
+    FROM allocations a WHERE a.line_id=line.line_id;
   END IF;
 
-  FOR v_item IN
-    SELECT *
-    FROM payment_discount_lines
-    ORDER BY created_at, line_id
-  LOOP
-    v_total_inc := ROUND(GREATEST(v_item.line_inc_cents - v_item.allocated_discount_cents, 0)::numeric / 100, 2);
-    v_tax := public.direct_order_payment_vat(v_item.tax_profile,
-      round(v_item.unit_price*v_item.quantity,2),v_vat_pricing_mode,v_item.allocated_discount_cents::numeric/100);
-    v_vat_rate := (v_tax->>'vat_rate')::numeric;
-    v_pretax := (v_tax->>'supply')::numeric;
-    v_vat_amt := (v_tax->>'vat')::numeric;
-    v_total_inc := (v_tax->>'total')::numeric;
+  WITH priced AS MATERIALIZED (
+    SELECT line_id,public.direct_order_payment_vat(tax_profile,round(unit_price*quantity,2),
+      v_vat_pricing_mode,allocated_discount_cents::numeric/100) tax FROM payment_discount_lines
+  ) UPDATE public.order_items oi SET vat_rate=(p.tax->>'vat_rate')::numeric,
+    vat_amount=(p.tax->>'vat')::numeric,total_amount_ex_tax=(p.tax->>'supply')::numeric,
+    paying_amount_inc_tax=(p.tax->>'total')::numeric,vat_breakdown=p.tax->'parts'
+  FROM priced p WHERE oi.id=p.line_id;
 
-    UPDATE order_items
-    SET
-      vat_rate = v_vat_rate,
-      vat_amount = v_vat_amt,
-      total_amount_ex_tax = v_pretax,
-      paying_amount_inc_tax = v_total_inc,
-      vat_breakdown = v_tax->'parts'
-    WHERE id = v_item.line_id;
-
-  END LOOP;
 
   IF v_sc_rate > 0 AND v_food_subtotal > 0 THEN
     v_sc_pretax := ROUND(v_food_subtotal * v_sc_rate / 100, CASE WHEN COALESCE(NULLIF(current_setting('pos.direct_combo_snapshot',true),''),'{}')<>'{}' THEN 0 ELSE 2 END);

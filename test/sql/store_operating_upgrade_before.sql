@@ -1,6 +1,7 @@
 CREATE SCHEMA operating_test;
 CREATE TABLE operating_test.function_baseline AS
- SELECT p.oid::regprocedure::text signature,md5(pg_get_functiondef(p.oid)) hash
+ SELECT p.oid::regprocedure::text signature,md5(pg_get_functiondef(p.oid)) hash,
+ p.proacl::text acl,p.proowner owner_id,p.prosecdef security_definer,p.proconfig config
  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prokind='f';
 BEGIN;
 SELECT set_config('request.jwt.claim.sub','92000000-0000-4000-8000-000000000099',true);

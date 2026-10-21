@@ -40,6 +40,15 @@ run_sql < test/sql/store_operating_upgrade_after.sql
 run_sql < test/sql/store_operating_existing_flow_test.sql
 
 run_sql < test/sql/direct_order_line_upgrade_before.sql >/dev/null
+python3 - "$operating_schema" <<'PY' | run_sql >/dev/null
+from pathlib import Path
+import sys
+source=Path(sys.argv[1]).read_text()
+name='"public"."process_payment_without_scoped_promotions"'
+start=source.index('CREATE OR REPLACE FUNCTION '+name+'(')
+definition=source[start:source.index('\nALTER FUNCTION ',start)]
+print(definition.replace(name,'"operating_test"."payment_before_operating"',1))
+PY
 
 # Stage 2a upgrades the line snapshot contract atomically; the old uniqueness
 # guard remains until the complete choice protocol is implemented.
@@ -47,9 +56,12 @@ docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U pos
   < supabase/migrations/20261021170000_direct_order_line_identity.sql >/dev/null
 docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
   < supabase/migrations/20261021171000_invoice_mapping_pending_marker.sql >/dev/null
+run_sql < test/sql/store_operating_final_contract_test.sql
 run_sql < test/sql/direct_order_line_upgrade_after.sql
 run_sql < test/sql/direct_order_line_identity_test.sql
 run_sql < test/sql/store_operating_payment_stock_test.sql
+run_sql < test/sql/store_operating_payment_parity_test.sql
 run_sql < test/sql/store_operating_payment_concurrency_setup.sql >/dev/null
 python3 scripts/tests/store_operating_payment_concurrency.py "$operating_fixture"
+run_sql < test/sql/store_operating_sales_contract_test.sql
 run_sql < test/sql/store_operating_existing_flow_test.sql
