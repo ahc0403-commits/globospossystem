@@ -4399,5 +4399,24 @@
   "storeSetupWorkflowInvalid": "Select a food service workflow.",
   "storeSetupWorkflowBusy": "Finish open orders and handoffs before changing the workflow.",
   "storeSetupWorkflowPermission": "Only a super administrator can change the service workflow.",
-  "storeSetupWorkflowJeongabok": "JeonGabok hands food from the kitchen directly to the floor."
+  "storeSetupWorkflowJeongabok": "JeonGabok hands food from the kitchen directly to the floor.",
+  "operatingProfileTitle": "Current operating setup",
+  "operatingProfileDescription": "Review the service route and assigned stations. Saving a baseline preserves this setup for future changes.",
+  "operatingProfileReview": "Review current setup",
+  "operatingProfileCapture": "Save current baseline",
+  "operatingProfileUnavailable": "This review is not yet available on this server. Existing store setup remains available.",
+  "operatingProfileFailed": "Could not read or save the operating setup. Retry after checking your connection and access.",
+  "operatingProfileChanged": "The saved setup changed. Refresh it before saving again.",
+  "operatingProfileDirectRoute": "Kitchen → floor → customer",
+  "operatingProfileTrayRoute": "Kitchen → tray → floor → customer",
+  "operatingProfileCurrent": "The saved baseline matches the current setup.",
+  "operatingProfileNeedsCapture": "Save the current setup to preserve its station assignments.",
+  "operatingProfileAccounts": "{count} assigned accounts",
+  "@operatingProfileAccounts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
