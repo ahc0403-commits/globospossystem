@@ -216,6 +216,29 @@ void main() {
     });
   }
 
+  testWidgets('fractional cash total generates the displayed whole-VND QR', (
+    tester,
+  ) async {
+    final report = _Report(cash: 3389971.9);
+    await mount(tester, 'store_admin', reportFixture: report);
+    final cashCard = find.byKey(const Key('reports_payment_cash'));
+    await tester.ensureVisible(cashCard);
+    await tester.tap(find.descendant(of: cashCard, matching: find.text('현금')));
+    await tester.pumpAndSettle();
+    final dialog = tester.widget<CashDepositQrDialog>(
+      find.byType(CashDepositQrDialog),
+    );
+    expect(dialog.amount, 3389972);
+    expect(report.state.summary!.cashTotal, 3389971.9);
+    final generate = find.byKey(const Key('cash_deposit_generate_qr'));
+    await tester.ensureVisible(generate);
+    await tester.tap(generate);
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(requests, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'unapplied picker edits keep the displayed report date and amount',
     (tester) async {
@@ -249,7 +272,7 @@ void main() {
     'loading result': () => _Report(loading: true),
     'multi-day range': () => _Report(multiDay: true),
     'zero amount': () => _Report(cash: 0),
-    'fractional amount': () => _Report(cash: 1.5),
+    'amount below one dong after rounding': () => _Report(cash: 0.49),
   }.entries) {
     testWidgets('${invalid.key} cannot generate a guessed transfer', (
       tester,

@@ -143,14 +143,12 @@ String cashDepositQrPayload({
   );
 }
 
-/// Report money must remain exact; never round or invent a manual amount.
+/// Bank deposits use whole VND, matching the amount shown on the report.
+/// Round the final total once; never alter payment or accounting records.
 int? cashDepositReportAmount(num? value) {
-  if (value == null ||
-      !value.isFinite ||
-      value <= 0 ||
-      value > 9999999999999 ||
-      value != value.truncateToDouble()) {
+  if (value == null || !value.isFinite || value <= 0 || value > 9999999999999) {
     return null;
   }
-  return value.toInt();
+  final amount = value.round();
+  return amount > 0 && amount <= 9999999999999 ? amount : null;
 }

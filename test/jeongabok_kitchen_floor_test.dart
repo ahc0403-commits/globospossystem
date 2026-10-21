@@ -52,6 +52,31 @@ void main() {
     );
   });
 
+  test(
+    'tray shows ordered quantities while waiting for kitchen completion',
+    () {
+      final pending = item();
+      final order = EmergencyFulfillmentOrder(
+        queueId: 'queue',
+        orderId: 'order',
+        queueNo: 1,
+        tableNumber: '2107',
+        floorLabel: '2F',
+        createdAt: DateTime(2026),
+        items: [pending],
+      );
+      final display = order.displayItemsAt('tray').single;
+      expect(display.completedQuantity, 0);
+      expect(display.totalQuantity, 2);
+      expect(pending.isActionableAt('tray'), isFalse);
+      expect(
+        pending.withStage('kitchen_done', 1).isActionableAt('tray'),
+        isTrue,
+      );
+      expect(pending.withStage('kitchen_done', 1).readyUnservedQuantity, 0);
+    },
+  );
+
   test('store workflow survives state updates including an empty board', () {
     final state = EmergencyFulfillmentState.fromJson({
       'assigned': true,

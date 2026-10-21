@@ -2360,7 +2360,7 @@ class _EmergencyMenuRow extends StatelessWidget {
             : item.kitchenDoneQuantity,
         item.requiredQuantity,
       ),
-      'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
+      'tray' => (item.trayDispatchedQuantity, item.requiredQuantity),
       'floor' => (
         item.floorServedQuantity,
         item.isFloorDirect ? item.orderedQuantity : item.trayDispatchedQuantity,
