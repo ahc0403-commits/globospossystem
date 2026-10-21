@@ -12,6 +12,7 @@ class StoreSetupPrinterStep extends StatelessWidget {
     required this.onPrinterChanged,
     required this.onFloor1Changed,
     required this.onOperationChanged,
+    this.onServiceWorkflowChanged,
     required this.enabled,
   });
 
@@ -20,6 +21,7 @@ class StoreSetupPrinterStep extends StatelessWidget {
   final ValueChanged<PhysicalPrinterSlot> onFloor1Changed;
   final ValueChanged<StorePrinterOperation> onOperationChanged;
   final bool enabled;
+  final ValueChanged<StoreServiceWorkflow>? onServiceWorkflowChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +64,33 @@ class StoreSetupPrinterStep extends StatelessWidget {
               ? context.l10n.storeSetupPaperlessDescription
               : context.l10n.storeSetupPhysicalDescription,
         ),
+        const SizedBox(height: 16),
+        Text(
+          context.l10n.storeSetupServiceWorkflowTitle,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final workflow in StoreServiceWorkflow.values)
+              ChoiceChip(
+                key: Key('store_setup_workflow_${workflow.code}'),
+                label: Text(
+                  workflow == StoreServiceWorkflow.kitchenFloor
+                      ? context.l10n.storeSetupKitchenFloor
+                      : context.l10n.storeSetupKitchenTrayFloor,
+                ),
+                selected: draft.serviceWorkflow == workflow,
+                onSelected: enabled && onServiceWorkflowChanged != null
+                    ? (_) => onServiceWorkflowChanged!(workflow)
+                    : null,
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(context.l10n.storeSetupServiceWorkflowHelp),
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {

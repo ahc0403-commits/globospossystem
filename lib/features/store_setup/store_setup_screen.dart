@@ -197,6 +197,7 @@ class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
                           onPrinterChanged: notifier.updatePrinter,
                           onFloor1Changed: notifier.setFloor1Slot,
                           onOperationChanged: notifier.setOperation,
+                          onServiceWorkflowChanged: notifier.setServiceWorkflow,
                           enabled: !state.isBusy,
                         ),
                       ),

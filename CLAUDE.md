@@ -74,13 +74,17 @@ requests and higher-priority instructions take precedence.
 
 ## Payments and operating times
 
-- **JeonGabok Binh Thanh has no checker (owner decision 2026-10-20).** Only
-  store `273b057e-3b69-46e3-93c1-6194c2802849` uses kitchen completion ->
+- **JeonGabok Binh Thanh has no checker (owner decision 2026-10-20).**
+  the default for store `273b057e-3b69-46e3-93c1-6194c2802849` is kitchen completion ->
   assigned floor readiness -> customer service. Retire `jgbt_tray1`; do not
   provision or reactivate a checker for this store. Preserve its audit history,
   distinct stored floors 1F/2F/3F, and other stores' checker workflows. Queue
   `kitchen_direct_to_floor` is the source snapshot; tray quantity fields are
   compatibility projections, not evidence of a checker actor.
+- BunsikClub defaults to kitchen -> tray -> floor. Store opening setup saves
+  `restaurant_settings.kds_workflow` independently of paperless/printing mode.
+  Only a super administrator can change it, after open orders and handoffs drain.
+  Existing queue snapshots and JeonGabok's retired checker/floor labels remain intact.
 - JeonGabok guest 1F/2F tables retain stored 2F/3F labels. Owner confirmed
   `jgbt_floor_1f` serves stored 2F and `jgbt_floor_2f` serves stored 3F.
   Keep this mapping after profile edits; render guest floor labels on KDS.

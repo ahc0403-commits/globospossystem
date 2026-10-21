@@ -166,6 +166,14 @@ abstract final class WorkforcePresetCatalog {
 
 enum PhysicalPrinterSlot { cashier, kitchen, floor2, floor3 }
 
+enum StoreServiceWorkflow { kitchenTrayFloor, kitchenFloor }
+
+extension StoreServiceWorkflowCode on StoreServiceWorkflow {
+  String get code => this == StoreServiceWorkflow.kitchenFloor
+      ? 'kitchen_floor'
+      : 'kitchen_tray_floor';
+}
+
 enum StorePrinterOperation { paperless, posPrint }
 
 extension StorePrinterOperationCode on StorePrinterOperation {
@@ -502,6 +510,7 @@ class StoreOpeningDraft {
     required this.printers,
     this.floor1Slot = PhysicalPrinterSlot.cashier,
     this.operation = StorePrinterOperation.posPrint,
+    this.serviceWorkflow = StoreServiceWorkflow.kitchenTrayFloor,
   });
 
   final String storeId;
@@ -511,6 +520,7 @@ class StoreOpeningDraft {
   final Map<PhysicalPrinterSlot, PhysicalPrinterDraft> printers;
   final PhysicalPrinterSlot floor1Slot;
   final StorePrinterOperation operation;
+  final StoreServiceWorkflow serviceWorkflow;
 
   List<PhysicalPrinterSlot> get requiredPrinterSlots =>
       operation == StorePrinterOperation.paperless
@@ -530,6 +540,7 @@ class StoreOpeningDraft {
     Map<PhysicalPrinterSlot, PhysicalPrinterDraft>? printers,
     PhysicalPrinterSlot? floor1Slot,
     StorePrinterOperation? operation,
+    StoreServiceWorkflow? serviceWorkflow,
   }) {
     return StoreOpeningDraft(
       storeId: storeId,
@@ -539,6 +550,7 @@ class StoreOpeningDraft {
       printers: printers ?? this.printers,
       floor1Slot: floor1Slot ?? this.floor1Slot,
       operation: operation ?? this.operation,
+      serviceWorkflow: serviceWorkflow ?? this.serviceWorkflow,
     );
   }
 }

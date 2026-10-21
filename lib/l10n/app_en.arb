@@ -4391,5 +4391,13 @@
   "storeSetupValidationModePermission": "Only Super Admin can change the store operation mode. Other admins can configure printers for the current mode.",
   "storeSetupValidationUsbName": "Enter the Windows printer name for the USB connection.",
   "storeSetupValidationConnection": "Select a connection and use the same connection for routes sharing a physical printer.",
-  "storeSetupValidationPaperlessReceipt": "Paperless operation requires exactly one cashier receipt route."
+  "storeSetupValidationPaperlessReceipt": "Paperless operation requires exactly one cashier receipt route.",
+  "storeSetupServiceWorkflowTitle": "Food service workflow",
+  "storeSetupKitchenTrayFloor": "Kitchen → Tray → Floor (BunsikClub)",
+  "storeSetupKitchenFloor": "Kitchen → Floor (JeonGabok)",
+  "storeSetupServiceWorkflowHelp": "Applies to this store. Finish open orders before changing the workflow.",
+  "storeSetupWorkflowInvalid": "Select a food service workflow.",
+  "storeSetupWorkflowBusy": "Finish open orders and handoffs before changing the workflow.",
+  "storeSetupWorkflowPermission": "Only a super administrator can change the service workflow.",
+  "storeSetupWorkflowJeongabok": "JeonGabok hands food from the kitchen directly to the floor."
 }
