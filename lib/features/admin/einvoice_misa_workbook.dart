@@ -130,6 +130,11 @@ List<int> buildMisaPendingInvoiceWorkbook(
       'misa_discount_amount',
     ].map(TextCellValue.new).toList(),
   );
+  final storeTotals =
+      <
+        String,
+        ({String name, String code, String entity, double gross, int receipts})
+      >{};
   double sourceTotal = 0;
   var roundedTotal = 0;
   final sourceItems = <String>{};
@@ -149,6 +154,10 @@ List<int> buildMisaPendingInvoiceWorkbook(
       'snapshot_version',
       'line_hash',
       'payment_methods',
+      'store_id',
+      'store_code',
+      'store_name',
+      'store_name_origin',
     ].map(TextCellValue.new).toList(),
   );
 
@@ -199,6 +208,21 @@ List<int> buildMisaPendingInvoiceWorkbook(
     )) {
       throw const FormatException('MISA_EXPORT_SOURCE_VAT_SUMMARY_MISMATCH');
     }
+    final storeId = _text(job['store_id']);
+    final storeKey = '${_text(job['tax_entity_id'])}:$storeId';
+    final previous = storeTotals[storeKey];
+    storeTotals[storeKey] = (
+      name: _text(job['store_name']),
+      code: _text(job['store_code']),
+      entity: _text(job['tax_entity_id']),
+      gross:
+          (previous?.gross ?? 0) +
+          preparedLines.fold<double>(
+            0,
+            (s, l) => s + l.amounts.supplyAmount + l.amounts.vatAmount,
+          ),
+      receipts: (previous?.receipts ?? 0) + 1,
+    );
     for (var lineIndex = 0; lineIndex < preparedLines.length; lineIndex++) {
       final prepared = preparedLines[lineIndex];
       final line = prepared.line;
@@ -275,7 +299,7 @@ List<int> buildMisaPendingInvoiceWorkbook(
         DoubleCellValue(_number(line['misa_discount_amount'])),
       ]);
       ledger.appendRow([
-        IntCellValue(2),
+        IntCellValue(3),
         TextCellValue(
           _saleDate(job)
               .toUtc()
@@ -295,14 +319,40 @@ List<int> buildMisaPendingInvoiceWorkbook(
         IntCellValue(_number(job['snapshot_version'], fallback: 1).toInt()),
         TextCellValue(sha256.convert(utf8.encode(jsonEncode(line))).toString()),
         TextCellValue(jsonEncode(job['payment_methods'] ?? [])),
+        TextCellValue(_text(job['store_id'])),
+        TextCellValue(_text(job['store_code'])),
+        TextCellValue(_text(job['store_name'])),
+        TextCellValue(_text(job['store_name_origin'] ?? 'current_registry')),
       ]);
     }
   }
 
+  final stores = workbook['Store Reconciliation'];
+  stores.appendRow(
+    [
+      'tax_entity_id',
+      'store_id',
+      'store_code',
+      'store_name',
+      'receipt_count',
+      'source_gross',
+    ].map(TextCellValue.new).toList(),
+  );
+  for (final key in storeTotals.keys.toList()..sort()) {
+    final value = storeTotals[key]!;
+    stores.appendRow([
+      TextCellValue(value.entity),
+      TextCellValue(key.substring(value.entity.length + 1)),
+      TextCellValue(value.code),
+      TextCellValue(value.name),
+      IntCellValue(value.receipts),
+      DoubleCellValue(value.gross),
+    ]);
+  }
   final contract = workbook['Export Contract'];
   for (final entry in {
-    'format_version': 'pos-sales-xlsx-v3',
-    'ledger_version': '2',
+    'format_version': 'pos-sales-xlsx-v4',
+    'ledger_version': '3',
     'generation_id': generationId ?? const Uuid().v4(),
     'content_sha256': sha256
         .convert(utf8.encode(jsonEncode(ordered)))

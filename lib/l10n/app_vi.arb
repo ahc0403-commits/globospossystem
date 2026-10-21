@@ -4398,5 +4398,25 @@
   "storeSetupWorkflowInvalid": "Vui lòng chọn quy trình phục vụ món.",
   "storeSetupWorkflowBusy": "Hoàn tất đơn và bàn giao đang mở trước khi đổi quy trình.",
   "storeSetupWorkflowPermission": "Chỉ quản trị viên cao nhất được đổi quy trình phục vụ.",
-  "storeSetupWorkflowJeongabok": "JeonGabok bàn giao món trực tiếp từ bếp lên tầng."
+  "storeSetupWorkflowJeongabok": "JeonGabok bàn giao món trực tiếp từ bếp lên tầng.",
+  "operatingProfileTitle": "Cấu hình vận hành hiện tại",
+  "operatingProfileRecordedAssignments": "Phân công được ghi nhận gần nhất",
+  "operatingProfileDescription": "Xem quy trình phục vụ và phân công trạm. Lưu cấu hình làm mốc để đối chiếu các thay đổi sau này.",
+  "operatingProfileReview": "Xem cấu hình hiện tại",
+  "operatingProfileCapture": "Lưu cấu hình làm mốc",
+  "operatingProfileUnavailable": "Máy chủ chưa hỗ trợ phần xem này. Bạn vẫn có thể dùng thiết lập cửa hàng hiện có.",
+  "operatingProfileFailed": "Không thể đọc hoặc lưu cấu hình. Hãy kiểm tra kết nối và quyền truy cập rồi thử lại.",
+  "operatingProfileChanged": "Cấu hình đã lưu đã thay đổi. Hãy tải lại trước khi lưu.",
+  "operatingProfileDirectRoute": "Bếp → tầng → khách",
+  "operatingProfileTrayRoute": "Bếp → khay → tầng → khách",
+  "operatingProfileCurrent": "Cấu hình đã lưu khớp với cấu hình hiện tại.",
+  "operatingProfileNeedsCapture": "Lưu cấu hình hiện tại để giữ lại các phân công trạm.",
+  "operatingProfileAccounts": "{count} tài khoản được phân công",
+  "@operatingProfileAccounts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

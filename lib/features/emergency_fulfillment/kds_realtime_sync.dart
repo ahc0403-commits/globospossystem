@@ -26,6 +26,7 @@ class KdsSyncConfig {
     this.sessionId,
     this.stationType,
     this.floorLabel,
+    this.serviceAreaCodes = const [],
   });
 
   const KdsSyncConfig.legacy()
@@ -35,7 +36,8 @@ class KdsSyncConfig {
       restaurantId = null,
       sessionId = null,
       stationType = null,
-      floorLabel = null;
+      floorLabel = null,
+      serviceAreaCodes = const [];
 
   final KdsSyncMode mode;
   final int revision;
@@ -44,6 +46,10 @@ class KdsSyncConfig {
   final String? sessionId;
   final String? stationType;
   final String? floorLabel;
+  final List<String> serviceAreaCodes;
+  List<String> get servedAreas => serviceAreaCodes.isEmpty
+      ? [if (floorLabel != null) floorLabel!]
+      : serviceAreaCodes;
 
   bool hasSameSubscriptionAs(KdsSyncConfig other) =>
       mode == other.mode &&
@@ -51,7 +57,8 @@ class KdsSyncConfig {
       restaurantId == other.restaurantId &&
       sessionId == other.sessionId &&
       stationType == other.stationType &&
-      floorLabel == other.floorLabel;
+      floorLabel == other.floorLabel &&
+      listEquals(serviceAreaCodes, other.serviceAreaCodes);
 
   factory KdsSyncConfig.fromJson(Map<String, dynamic> json) => KdsSyncConfig(
     mode: KdsSyncMode.fromValue(json['mode']),
@@ -61,6 +68,9 @@ class KdsSyncConfig {
     sessionId: json['session_id']?.toString(),
     stationType: json['station_type']?.toString(),
     floorLabel: json['floor_label']?.toString(),
+    serviceAreaCodes: (json['service_area_codes'] as List? ?? [])
+        .whereType<String>()
+        .toList(),
   );
 }
 
@@ -359,6 +369,7 @@ class KdsRealtimeSync {
     config.sessionId ?? 'none',
     config.stationType ?? 'none',
     config.floorLabel ?? 'none',
+    if (config.serviceAreaCodes.isNotEmpty) config.serviceAreaCodes.join(','),
   ].join(':');
 
   Future<void> start() async {
@@ -379,11 +390,13 @@ class KdsRealtimeSync {
     final station = config.stationType;
     if (storeId == null || station == null) return;
     final topics = <String>{'kds:$storeId:control'};
-    topics.add(
-      station == 'floor'
-          ? 'kds:$storeId:floor:${config.floorLabel ?? ''}'
-          : 'kds:$storeId:$station',
-    );
+    if (station == 'floor') {
+      topics.addAll(
+        config.servedAreas.map((area) => 'kds:$storeId:floor:$area'),
+      );
+    } else {
+      topics.add('kds:$storeId:$station');
+    }
     for (final topic in topics) {
       final channel = client
           .channel(topic, opts: const RealtimeChannelConfig(private: true))

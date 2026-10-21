@@ -12,8 +12,12 @@ class CombinedSalesExport {
     required this.sellerLegalName,
     required this.restaurant,
     required this.photo,
+    this.sourceRevision,
+    this.mappingRevision,
   });
 
+  final String? sourceRevision;
+  final int? mappingRevision;
   final String taxEntityId;
   final String sellerTaxCode;
   final String sellerLegalName;
@@ -135,15 +139,46 @@ class SalesExportArtifact {
       const JsonEncoder.withIndent('  ').convert(manifest);
 }
 
-SalesExportArtifact buildCombinedSalesArtifact(CombinedSalesExport export) {
-  final id = const Uuid().v4();
+SalesExportArtifact buildCombinedSalesArtifact(
+  CombinedSalesExport export, {
+  String? batchId,
+}) {
+  final id = batchId ?? const Uuid().v4();
   final bytes = buildCombinedSalesWorkbook(export, generationId: id);
+  final counts = <String, int>{};
+  final gross = <String, double>{};
+  void add(String store, num amount) {
+    counts.update(store, (n) => n + 1, ifAbsent: () => 1);
+    gross.update(store, (n) => n + amount, ifAbsent: () => amount.toDouble());
+  }
+
+  for (final receipt
+      in export.restaurant?.receipts ?? <RestaurantSalesReceipt>[]) {
+    add(receipt.storeId, receipt.grossSales);
+  }
+  for (final receipt
+      in export.photo?.receipts ?? <PhotoSalesRegisteredReceipt>[]) {
+    add(receipt.storeId, receipt.amount);
+  }
+  final stores = counts.keys.toList()..sort();
   return SalesExportArtifact(bytes, {
-    'format_version': 'pos-sales-xlsx-v3',
-    'ledger_version': 2,
+    'format_version': 'pos-sales-xlsx-v4',
+    'ledger_version': 3,
     'generation_id': id,
+    if (batchId != null) 'reporting_batch_id': batchId,
+    'source_revision': export.sourceRevision,
+    'mapping_revision': export.mappingRevision,
     'business_date': export.businessDate,
     'tax_entity_id': export.taxEntityId,
+    'store_ids': stores,
+    'store_totals': [
+      for (final store in stores)
+        {
+          'store_id': store,
+          'receipt_count': counts[store],
+          'gross': gross[store]!.toStringAsFixed(2),
+        },
+    ],
     'file_sha256': sha256.convert(bytes).toString(),
     'file_size': bytes.length,
     'receipt_count': export.receiptCount,

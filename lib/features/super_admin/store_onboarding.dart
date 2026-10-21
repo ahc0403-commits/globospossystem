@@ -1,13 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../main.dart';
 import 'brand_dialog.dart';
+import 'store_registration_config.dart';
 import 'super_admin_provider.dart';
 
 String _loginEmail(Map<dynamic, dynamic> item) =>
@@ -34,10 +38,68 @@ class StoreOnboardingService {
           .map((row) => Map<String, dynamic>.from(row as Map))
           .toList();
 
+  Future<Map<String, dynamic>> previewRegistration(
+    String request,
+    String brand,
+    String code,
+    Map<String, dynamic> config,
+  ) async => Map<String, dynamic>.from(
+    await client.rpc(
+          'admin_preview_store_registration_v1',
+          params: {
+            'p_request_id': request,
+            'p_brand_id': brand,
+            'p_code': code.isEmpty ? null : code,
+            'p_config': config,
+          },
+        )
+        as Map,
+  );
+
   Future<String> create(Map<String, dynamic> input) async => (await client.rpc(
-    'admin_create_store_onboarding_v1',
-    params: input,
+    'admin_register_store_v1',
+    params: {
+      'p_request_id': input['p_request_id'],
+      'p_input': {
+        'name': input['p_name'],
+        'address': input['p_address'],
+        'code': input['p_code'],
+        'brand': input['p_brand_id'],
+        'entity': input['p_tax_entity_id'],
+        'mode': input['p_operation_mode'],
+        'charge': input['p_per_person_charge'],
+        'config': input['p_config'],
+      },
+    },
   )).toString();
+
+  String? get _draftKey => client.auth.currentUser == null
+      ? null
+      : 'store-registration-v1:${client.rest.url}:${client.auth.currentUser!.id}';
+
+  Future<Map<String, dynamic>?> readDraft() async {
+    final key = _draftKey;
+    if (key == null) return null;
+    final text = (await SharedPreferences.getInstance()).getString(key);
+    return text == null
+        ? null
+        : Map<String, dynamic>.from(jsonDecode(text) as Map);
+  }
+
+  Future<void> writeDraft(Map<String, dynamic> draft) async {
+    final key = _draftKey;
+    if (key == null) return;
+    final saved = await (await SharedPreferences.getInstance()).setString(
+      key,
+      jsonEncode(draft),
+    );
+    if (!saved) throw StateError('REGISTRATION_DRAFT_NOT_SAVED');
+  }
+
+  Future<void> clearDraft() async {
+    final key = _draftKey;
+    if (key != null) await (await SharedPreferences.getInstance()).remove(key);
+  }
 
   Future<Map<String, dynamic>?> forStore(String store) async {
     final data = await client.rpc(
@@ -87,9 +149,10 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
   final _address = TextEditingController();
   final _code = TextEditingController();
   final _charge = TextEditingController();
-  final _request = const Uuid().v4();
+  String _request = const Uuid().v4();
   final _form = GlobalKey<FormState>();
-  final _floors = <String>{'1F', '2F', '3F'};
+  Map<String, dynamic> _config = defaultStoreRegistrationConfig();
+  bool _codeReserved = false;
   String? _entity;
   String? _brand;
   String _mode = 'standard';
@@ -111,7 +174,63 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
         ? <Map<String, dynamic>>[]
         : state.brandsForTaxEntity(_entity!);
     _brand = brands.length == 1 ? brands.single['id'].toString() : null;
-    if (widget.storeId != null) _load();
+    if (widget.storeId != null) {
+      _load();
+    } else {
+      _restoreDraft();
+    }
+  }
+
+  Map<String, dynamic> _draft({bool attempted = false}) => {
+    'request_id': _request,
+    'name': _name.text,
+    'address': _address.text,
+    'code': _code.text,
+    'entity': _entity,
+    'brand': _brand,
+    'mode': _mode,
+    'charge': _charge.text,
+    'config': _config,
+    'reserved': _codeReserved,
+    'attempted': attempted,
+  };
+
+  Future<void> _restoreDraft() async {
+    setState(() => _busy = true);
+    final service = ref.read(storeOnboardingServiceProvider);
+    try {
+      final draft = await service.readDraft();
+      if (!mounted || draft == null) return;
+      setState(() {
+        _request = draft['request_id'] as String;
+        _name.text = draft['name'] as String? ?? '';
+        _address.text = draft['address'] as String? ?? '';
+        _code.text = draft['code'] as String? ?? '';
+        _charge.text = draft['charge'] as String? ?? '';
+        _entity = draft['entity'] as String?;
+        _brand = draft['brand'] as String?;
+        _mode = draft['mode'] as String? ?? 'standard';
+        _config = Map<String, dynamic>.from(draft['config'] as Map);
+        _codeReserved = draft['reserved'] == true;
+      });
+      if (draft['attempted'] == true) {
+        try {
+          final result = await service.status(_request);
+          if (mounted) {
+            setState(() {
+              _result = result;
+              _created = true;
+            });
+          }
+        } on PostgrestException catch (error) {
+          if (!error.message.contains('JOB_NOT_FOUND')) rethrow;
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _load() async {
@@ -134,10 +253,7 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
   }
 
   Future<void> _previewIds() async {
-    if (!_form.currentState!.validate() ||
-        _brand == null ||
-        _entity == null ||
-        _floors.isEmpty) {
+    if (!_form.currentState!.validate() || _brand == null || _entity == null) {
       return;
     }
     setState(() {
@@ -145,13 +261,20 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
       _failed = false;
     });
     try {
-      final rows = await ref
-          .read(storeOnboardingServiceProvider)
-          .preview(
-            _brand!,
-            _code.text.trim().toUpperCase(),
-            _floors.toList()..sort(),
-          );
+      final service = ref.read(storeOnboardingServiceProvider);
+      await service.writeDraft(_draft());
+      final result = await service.previewRegistration(
+        _request,
+        _brand!,
+        _code.text.trim().toUpperCase(),
+        _config,
+      );
+      _code.text = result['code'] as String;
+      _codeReserved = true;
+      await service.writeDraft(_draft());
+      final rows = (result['accounts'] as List)
+          .map((r) => Map<String, dynamic>.from(r as Map))
+          .toList();
       if (mounted) setState(() => _preview = rows);
     } catch (_) {
       if (mounted) setState(() => _failed = true);
@@ -172,6 +295,7 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
     final service = ref.read(storeOnboardingServiceProvider);
     try {
       if (!_created) {
+        await service.writeDraft(_draft(attempted: true));
         await service.create({
           'p_request_id': _request,
           'p_name': _name.text.trim(),
@@ -179,7 +303,7 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
           'p_code': _code.text.trim().toUpperCase(),
           'p_brand_id': _brand,
           'p_tax_entity_id': _entity,
-          'p_floors': _floors.toList()..sort(),
+          'p_config': _config,
           'p_operation_mode': _mode,
           'p_per_person_charge': _mode == 'standard'
               ? null
@@ -193,6 +317,7 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
       final result = await service.run(
         _result?['job_id']?.toString() ?? _request,
       );
+      if (result['status'] == 'complete') await service.clearDraft();
       if (mounted) setState(() => _result = result);
     } catch (_) {
       // A lost response can follow a committed store creation. Recover its
@@ -279,18 +404,19 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
                     TextFormField(
                       key: const Key('store_abbreviation'),
                       controller: _code,
-                      enabled: !_busy,
+                      enabled: !_busy && !_codeReserved,
                       maxLength: 6,
                       textCapitalization: TextCapitalization.characters,
                       decoration: InputDecoration(
                         labelText: l10n.storeAbbreviation,
-                        helperText: l10n.abbreviationHint,
+                        helperText: registrationText(context, 'automaticCode'),
                         helperMaxLines: 3,
                       ),
                       validator: (v) =>
-                          RegExp(
-                            r'^[A-Z][A-Z0-9]{1,5}$',
-                          ).hasMatch((v ?? '').trim().toUpperCase())
+                          (v ?? '').trim().isEmpty ||
+                              RegExp(
+                                r'^[A-Z][A-Z0-9]{1,5}$',
+                              ).hasMatch((v ?? '').trim().toUpperCase())
                           ? null
                           : l10n.abbreviationError,
                       onChanged: (_) => setState(() => _preview = null),
@@ -414,25 +540,14 @@ class _StoreOnboardingState extends ConsumerState<StoreOnboardingDialog> {
                             : l10n.superAdminPerPersonCharge,
                       ),
                     const SizedBox(height: 12),
-                    Text(l10n.onboardingFloors),
-                    Wrap(
-                      spacing: 8,
-                      children: ['1F', '2F', '3F']
-                          .map(
-                            (floor) => FilterChip(
-                              label: Text(floor),
-                              selected: _floors.contains(floor),
-                              onSelected: _busy
-                                  ? null
-                                  : (v) => setState(() {
-                                      v
-                                          ? _floors.add(floor)
-                                          : _floors.remove(floor);
-                                      _preview = null;
-                                    }),
-                            ),
-                          )
-                          .toList(),
+                    StoreRegistrationConfigEditor(
+                      key: ValueKey('registration_config_$_request'),
+                      value: _config,
+                      enabled: !_busy,
+                      onChanged: (value) => setState(() {
+                        _config = value;
+                        _preview = null;
+                      }),
                     ),
                     OutlinedButton(
                       key: const Key('onboarding_preview'),

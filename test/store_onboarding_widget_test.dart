@@ -81,6 +81,37 @@ class _Service extends StoreOnboardingService {
     ];
   }
 
+  Map<String, dynamic>? draft;
+  @override
+  Future<Map<String, dynamic>?> readDraft() async => draft;
+  @override
+  Future<void> writeDraft(Map<String, dynamic> value) async {
+    draft = Map.from(value);
+  }
+
+  @override
+  Future<void> clearDraft() async {
+    draft = null;
+  }
+
+  @override
+  Future<Map<String, dynamic>> previewRegistration(
+    String request,
+    String brand,
+    String code,
+    Map<String, dynamic> config,
+  ) async {
+    final resolved = code.isEmpty ? 'ST0123' : code;
+    final accounts = await preview(
+      brand,
+      resolved,
+      (config['areas'] as List)
+          .map((a) => (a as Map)['code'].toString())
+          .toList(),
+    );
+    return {'code': resolved, 'accounts': accounts};
+  }
+
   @override
   Future<String> create(Map<String, dynamic> values) async {
     creates++;
@@ -181,7 +212,7 @@ void main() {
       final admin = _Admin();
       await _mount(tester, service, admin);
       await _fill(tester);
-      expect(find.text('jgbt_floor_3f@globos.world'), findsOneWidget);
+      expect(find.text('jgbt_floor_hall@globos.world'), findsOneWidget);
       service.pending = Completer<void>();
       final save = find.byKey(const Key('onboarding_save'));
       await tester.ensureVisible(save);
@@ -236,23 +267,58 @@ void main() {
     expect(service.runs, 1);
     expect(admin.loads, 1);
   });
-  testWidgets(
-    'changing abbreviation invalidates preview and requires a new preview',
-    (tester) async {
-      final service = _Service();
-      await _mount(tester, service, _Admin());
-      await _fill(tester);
-      await tester.enterText(
-        find.byKey(const Key('store_abbreviation')),
-        'JG02',
-      );
-      await tester.pump();
-      expect(
-        tester
-            .widget<FilledButton>(find.byKey(const Key('onboarding_save')))
-            .onPressed,
-        isNull,
-      );
-    },
-  );
+  testWidgets('reserved code stays fixed and layout changes require preview', (
+    tester,
+  ) async {
+    final service = _Service();
+    await _mount(tester, service, _Admin());
+    await _fill(tester);
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('store_abbreviation')))
+          .enabled,
+      isFalse,
+    );
+    await _tap(tester, 'registration_add_area');
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('onboarding_save')))
+          .onPressed,
+      isNull,
+    );
+  });
+  testWidgets('blank code and floorless hall survive restart before create', (
+    tester,
+  ) async {
+    final service = _Service();
+    await _mount(tester, service, _Admin());
+    await tester.enterText(find.byKey(const Key('store_name')), 'Single hall');
+    await _tap(tester, 'onboarding_preview');
+    expect(service.draft!['code'], 'ST0123');
+    final request = service.draft!['request_id'];
+    await tester.pumpWidget(const SizedBox());
+    await _mount(tester, service, _Admin());
+    await _tap(tester, 'onboarding_preview');
+    await _tap(tester, 'onboarding_save');
+    expect(service.input!['p_request_id'], request);
+    expect(service.input!['p_code'], 'ST0123');
+    expect((service.input!['p_config'] as Map)['areas'], [
+      {'code': 'HALL', 'name': 'Hall', 'physical_floor': null},
+    ]);
+    expect(service.draft, isNull);
+  });
+  testWidgets('restart after a lost create response resumes the durable job', (
+    tester,
+  ) async {
+    final service = _Service()..lostCreate = true;
+    await _mount(tester, service, _Admin());
+    await _fill(tester);
+    await _tap(tester, 'onboarding_save');
+    await tester.pumpWidget(const SizedBox());
+    await _mount(tester, service, _Admin());
+    service.lostCreate = false;
+    await _tap(tester, 'onboarding_save');
+    expect(service.creates, 1);
+    expect(service.runs, 1);
+  });
 }

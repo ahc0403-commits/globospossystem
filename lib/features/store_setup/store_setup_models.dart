@@ -359,6 +359,7 @@ class StoreOpeningTemplate {
     Map<PhysicalPrinterSlot, PhysicalPrinterDraft> printers, {
     PhysicalPrinterSlot floor1Slot = PhysicalPrinterSlot.cashier,
     StorePrinterOperation operation = StorePrinterOperation.posPrint,
+    List<String> areaCodes = floors,
   }) {
     PhysicalPrinterDraft printer(PhysicalPrinterSlot slot) => printers[slot]!;
 
@@ -398,27 +399,23 @@ class StoreOpeningTemplate {
           purpose: 'kitchen',
           slot: PhysicalPrinterSlot.kitchen,
         ),
-        route(
-          label: 'TEST-1F',
-          name: '1F via ${printer(floor1Slot).name}',
-          purpose: 'floor',
-          floor: '1F',
-          slot: floor1Slot,
-        ),
-        route(
-          label: 'TEST-2F',
-          name: printer(PhysicalPrinterSlot.floor2).name,
-          purpose: 'floor',
-          floor: '2F',
-          slot: PhysicalPrinterSlot.floor2,
-        ),
-        route(
-          label: 'TEST-3F',
-          name: printer(PhysicalPrinterSlot.floor3).name,
-          purpose: 'floor',
-          floor: '3F',
-          slot: PhysicalPrinterSlot.floor3,
-        ),
+        for (final area in areaCodes)
+          route(
+            label: 'TEST-$area',
+            name:
+                '$area via ${printer(switch (area) {
+                  '2F' => PhysicalPrinterSlot.floor2,
+                  '3F' => PhysicalPrinterSlot.floor3,
+                  _ => floor1Slot,
+                }).name}',
+            purpose: 'floor',
+            floor: area,
+            slot: switch (area) {
+              '2F' => PhysicalPrinterSlot.floor2,
+              '3F' => PhysicalPrinterSlot.floor3,
+              _ => floor1Slot,
+            },
+          ),
       ],
     ];
   }
@@ -523,15 +520,14 @@ class StoreOpeningDraft {
   final StoreServiceWorkflow serviceWorkflow;
 
   List<PhysicalPrinterSlot> get requiredPrinterSlots =>
-      operation == StorePrinterOperation.paperless
-      ? const [PhysicalPrinterSlot.cashier]
-      : PhysicalPrinterSlot.values;
+      destinations.map((d) => d.physicalSlot).toSet().toList();
 
   List<LogicalDestinationDraft> get destinations =>
       StoreOpeningTemplate.deriveDestinations(
         printers,
         floor1Slot: floor1Slot,
         operation: operation,
+        areaCodes: floors,
       );
 
   StoreOpeningDraft copyWith({

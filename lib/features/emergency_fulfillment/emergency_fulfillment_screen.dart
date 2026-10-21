@@ -17,6 +17,8 @@ import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
+import '../auth/auth_provider.dart';
+import '../store_workflow/preparation_board.dart';
 import 'customer_delivery_screen.dart';
 import 'emergency_fulfillment_provider.dart';
 import 'kitchen_checket_handoff_sheet.dart';
@@ -39,6 +41,8 @@ class EmergencyFulfillmentScreen extends ConsumerStatefulWidget {
 
 class _EmergencyFulfillmentScreenState
     extends ConsumerState<EmergencyFulfillmentScreen> {
+  String? _workflowWaitingRelease;
+
   bool _initialSnapshotObserved = false;
   bool _alarmEnabled = false;
   bool _flashing = false;
@@ -400,6 +404,72 @@ class _EmergencyFulfillmentScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(emergencyFulfillmentProvider);
+    final workflow = state.operatingWorkflow;
+    final workflowUser = ref.watch(authProvider).user?.id;
+    if (workflow != null &&
+        state.restaurantId != null &&
+        workflowUser != null &&
+        (workflow['quiesced'] == true ||
+            (_workflowWaitingRelease != null &&
+                _workflowWaitingRelease == workflow['candidate_id'] &&
+                workflow['active_id'] != workflow['candidate_id']))) {
+      return Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              WorkflowDeviceBanner(
+                storeId: state.restaurantId!,
+                userId: workflowUser,
+                workflow: workflow,
+                legacyPending: state.pendingOutboxCount,
+                onQuiesced: (value) {
+                  setState(
+                    () => _workflowWaitingRelease = value
+                        ? workflow['candidate_id'] as String?
+                        : null,
+                  );
+                  unawaited(
+                    ref.read(emergencyFulfillmentProvider.notifier).load(),
+                  );
+                },
+              ),
+              IconButton(
+                onPressed: () =>
+                    ref.read(emergencyFulfillmentProvider.notifier).load(),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (state.stationType == 'kitchen' &&
+        workflow?['active_id'] != null &&
+        state.restaurantId != null &&
+        workflowUser != null) {
+      return PreparationBoard(
+        key: ValueKey(
+          '${state.restaurantId}:${workflow!['active_id']}:$workflowUser',
+        ),
+        storeId: state.restaurantId!,
+        userId: workflowUser,
+        workflow: workflow,
+        legacyPending: state.pendingOutboxCount,
+        navigation: const AppNavBar(),
+        packagingPanel: state.leftoverPackagingTasks.isEmpty
+            ? null
+            : _LeftoverPackagingTaskPanel(
+                tasks: state.leftoverPackagingTasks,
+                copy: _EmergencyCopy.of(
+                  context,
+                  directToFloor: state.kitchenDirectToFloor,
+                ),
+                busy: _actionBusy,
+                onAdvance: _advanceLeftoverPackaging,
+              ),
+      );
+    }
+
     final copy = _EmergencyCopy.of(
       context,
       directToFloor: state.kitchenDirectToFloor,
@@ -412,17 +482,24 @@ class _EmergencyFulfillmentScreenState
         expected != null &&
         state.stationType != null &&
         state.stationType != expected;
-    final firstFloorSummary = buildTrayFloorTransitionSummary(
-      state.orders,
-      '1F',
-    );
-    final secondFloorSummary = buildTrayFloorTransitionSummary(
-      state.orders,
-      '2F',
-    );
-    final customerDeliveryBoxes = state.floorLabel == null
-        ? const <CustomerDeliveryBox>[]
-        : buildCustomerDeliveryBoxes(state.orders, state.floorLabel!);
+    final areaSet = <String>{
+      ...state.serviceAreaCodes,
+      ...state.orders.map((o) => o.floorLabel).where((f) => f.isNotEmpty),
+    };
+    // Old snapshots have no area inventory and historically show both floors.
+    if (!state.serviceAreaConfigurationKnown &&
+        state.serviceAreaCodes.isEmpty &&
+        areaSet.every((a) => const ['1F', '2F', '3F'].contains(a))) {
+      areaSet.addAll(['1F', '2F']);
+    }
+    final areaCodes = areaSet.toList()..sort();
+    final areaSummaries = areaCodes
+        .map((area) => buildTrayFloorTransitionSummary(state.orders, area))
+        .toList();
+    final customerDeliveryBoxes = <CustomerDeliveryBox>[
+      for (final area in state.servedAreas)
+        ...buildCustomerDeliveryBoxes(state.orders, area),
+    ];
 
     return PopScope(
       canPop: _selectedOrderId == null,
@@ -440,11 +517,35 @@ class _EmergencyFulfillmentScreenState
           child: Column(
             children: [
               const OfflineBanner(),
+              if (workflow != null &&
+                  state.restaurantId != null &&
+                  workflowUser != null)
+                WorkflowDeviceBanner(
+                  storeId: state.restaurantId!,
+                  userId: workflowUser,
+                  workflow: workflow,
+                  legacyPending: state.pendingOutboxCount,
+                  onQuiesced: (value) {
+                    setState(
+                      () => _workflowWaitingRelease = value
+                          ? workflow['candidate_id'] as String?
+                          : null,
+                    );
+                    unawaited(
+                      ref.read(emergencyFulfillmentProvider.notifier).load(),
+                    );
+                  },
+                ),
               _EmergencyHeader(
                 directToFloor: state.kitchenDirectToFloor,
                 title: headerStation == null || headerStation == 'kitchen'
                     ? context.l10n.kitchenTitle
-                    : copy.stationTitle(headerStation, state.floorLabel),
+                    : copy.stationTitle(
+                        headerStation,
+                        state.servedAreas.length > 1
+                            ? state.servedAreas.join(' / ')
+                            : state.floorLabel,
+                      ),
                 active: state.active,
                 draining: state.isDraining,
                 alarmEnabled: _alarmEnabled,
@@ -463,8 +564,10 @@ class _EmergencyFulfillmentScreenState
                     ? () => _openKitchenChecket(state)
                     : null,
                 trayFloorPendingQuantity: headerStation == 'tray'
-                    ? firstFloorSummary.totalQuantity +
-                          secondFloorSummary.totalQuantity
+                    ? areaSummaries.fold<int>(
+                        0,
+                        (total, area) => total + area.totalQuantity,
+                      )
                     : null,
                 onTrayFloorTransition:
                     headerStation == 'tray' &&
@@ -473,11 +576,7 @@ class _EmergencyFulfillmentScreenState
                         !stationMismatch &&
                         _selectedOrderId == null &&
                         !_showRecent
-                    ? () => _openTrayFloorTransition(
-                        state,
-                        firstFloorSummary,
-                        secondFloorSummary,
-                      )
+                    ? () => _openTrayFloorTransition(state, areaSummaries)
                     : null,
                 customerDeliveryQuantity: headerStation == 'floor'
                     ? customerDeliveryBoxes.fold<int>(
@@ -492,10 +591,29 @@ class _EmergencyFulfillmentScreenState
                         !stationMismatch &&
                         _selectedOrderId == null &&
                         !_showRecent
-                    ? () => _openCustomerDelivery(
-                        state.floorLabel ?? '1F',
-                        customerDeliveryBoxes,
-                      )
+                    ? () async {
+                        final area = state.servedAreas.length > 1
+                            ? await showDialog<String>(
+                                context: context,
+                                builder: (context) => SimpleDialog(
+                                  children: [
+                                    for (final code in state.servedAreas)
+                                      SimpleDialogOption(
+                                        onPressed: () =>
+                                            Navigator.pop(context, code),
+                                        child: Text(copy.floorName(code)),
+                                      ),
+                                  ],
+                                ),
+                              )
+                            : state.floorLabel;
+                        if (area != null && mounted) {
+                          _openCustomerDelivery(
+                            area,
+                            buildCustomerDeliveryBoxes(state.orders, area),
+                          );
+                        }
+                      }
                     : null,
                 showHomeButton: _selectedOrderId != null,
                 onHome: () => setState(() => _selectedOrderId = null),
@@ -694,16 +812,14 @@ class _EmergencyFulfillmentScreenState
 
   Future<void> _openTrayFloorTransition(
     EmergencyFulfillmentState state,
-    TrayFloorTransitionSummary firstFloor,
-    TrayFloorTransitionSummary secondFloor,
+    List<TrayFloorTransitionSummary> areas,
   ) async {
     await showDialog<void>(
       context: context,
       useSafeArea: false,
       builder: (dialogContext) => Dialog.fullscreen(
         child: TrayFloorTransitionSheet(
-          firstFloor: firstFloor,
-          secondFloor: secondFloor,
+          areas: areas,
           unsupportedFloorQuantity: trayUnsupportedFloorQuantity(state.orders),
           onSubmit: (summary) => ref
               .read(emergencyFulfillmentProvider.notifier)

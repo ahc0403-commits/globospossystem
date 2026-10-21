@@ -1,3 +1,5 @@
+import '../procurement/procurement_order_review_dialog.dart';
+import '../procurement/inventory_lot_workspace.dart';
 import '../procurement/procurement_receipt_report_pdf.dart';
 import '../../main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
@@ -573,6 +575,23 @@ class _InventoryOrderWorkflowScreenState
             ),
           ),
           actions: [
+            if (_storeId != null)
+              IconButton(
+                tooltip: _text(
+                  ko: '재고·로트 관리',
+                  en: 'Stock and lots',
+                  vi: 'Tồn kho và lô',
+                ),
+                icon: const Icon(Icons.inventory_2_outlined),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => InventoryLotWorkspace(
+                      storeId: _storeId!,
+                      admin: _role == 'super_admin',
+                    ),
+                  ),
+                ),
+              ),
             if (!_receivingOnly)
               IconButton(
                 key: const Key('inventory_procurement_workspace'),
@@ -1222,6 +1241,49 @@ class _InventoryOrderWorkflowScreenState
                 ),
               ],
             ),
+            if (_role == 'super_admin')
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final accounting in [false, true])
+                    OutlinedButton.icon(
+                      icon: Icon(
+                        accounting
+                            ? Icons.account_balance_outlined
+                            : Icons.rule,
+                      ),
+                      label: Text(
+                        accounting
+                            ? _text(
+                                ko: 'Office 대사 증거',
+                                en: 'Office reconciliation',
+                                vi: 'Đối chiếu Office',
+                              )
+                            : _text(
+                                ko: '검수 기준 변경',
+                                en: 'Amend inspection criteria',
+                                vi: 'Đổi tiêu chí kiểm tra',
+                              ),
+                      ),
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              final result = await showDialog<dynamic>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (_) => ProcurementOrderReviewDialog(
+                                  storeId: order['restaurant_id'].toString(),
+                                  orderId: order['id'].toString(),
+                                  accounting: accounting,
+                                ),
+                              );
+                              if (result != null && mounted) {
+                                _refreshInPlace();
+                              }
+                            },
+                    ),
+                ],
+              ),
             if (!receivingMode) ...[
               const SizedBox(height: 16),
               _buildOrderActions(order, lines),
@@ -2137,6 +2199,14 @@ class _InventoryOrderWorkflowScreenState
         barrierDismissible: false,
         builder: (_) => ProcurementInspectionDialog(
           lines: lines,
+          locations: (_detail?['inventory_locations'] as List? ?? [])
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(),
+          employees: (_detail?['inspection_employees'] as List? ?? [])
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(),
           payload: payload,
           uploadPhoto: (file) async => _service.uploadInventoryReceiptStatement(
             storeId: _string(order['restaurant_id']),
@@ -3159,6 +3229,13 @@ class _InventoryOrderWorkflowScreenState
 
   String _friendlyError(Object error) {
     final raw = error.toString();
+    if (raw.contains('QUALITY_')) {
+      return _text(
+        ko: '승인된 품질 기준과 검수 직원·실측 온도·잔여 기한·표본·사진을 확인하고 다시 검수하십시오.',
+        en: 'Check approved criteria, inspector, measured temperature, remaining shelf life, samples and photos, then inspect again.',
+        vi: 'Kiểm tra tiêu chí đã duyệt, nhân viên, nhiệt độ, hạn dùng, mẫu và ảnh rồi kiểm lại.',
+      );
+    }
     final code = RegExp(r'INVENTORY_[A-Z0-9_]+').firstMatch(raw)?.group(0);
     return switch (code) {
       'INVENTORY_RECEIPT_INSPECTOR_REQUIRED' => _text(

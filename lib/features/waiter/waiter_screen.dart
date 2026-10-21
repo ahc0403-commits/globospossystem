@@ -477,6 +477,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
           ? l10n.restaurantDailySalesClosed
           : l10n.restaurantKitchenClosed,
       onAddToCart: orderNotifier.addToCart,
+      onReplaceCartItem: orderNotifier.replaceCartItem,
       onIncrementCartItem: (cartItem) {
         orderNotifier.addToCart(cartItem.copyWith(quantity: 1));
       },

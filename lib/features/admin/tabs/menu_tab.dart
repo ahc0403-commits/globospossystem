@@ -1232,6 +1232,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     ),
                   const SizedBox(height: 16),
                   MenuOptionsEditor(
+                    storeId: menuNotifier.storeId,
                     allowSizes:
                         menuNotifier.storeId ==
                         '273b057e-3b69-46e3-93c1-6194c2802849',
@@ -1521,6 +1522,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     const SizedBox(height: 16),
                   ],
                   MenuOptionsEditor(
+                    storeId: menuNotifier.storeId,
                     allowSizes:
                         menuNotifier.storeId ==
                         '273b057e-3b69-46e3-93c1-6194c2802849',

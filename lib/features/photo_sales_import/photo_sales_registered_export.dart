@@ -202,6 +202,9 @@ List<Map<String, dynamic>> buildPhotoSalesRegisteredMisaJobs(
     .map(
       (receipt) => <String, dynamic>{
         'source_system': 'photo_objet_moers',
+        'store_id': receipt.storeId,
+        'store_name': receipt.storeName,
+        'store_name_origin': 'current_registry',
         'tax_entity_id': export.taxEntityId,
         'receipt_id': receipt.sourceHash,
         'snapshot_version': 2,

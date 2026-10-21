@@ -20,9 +20,12 @@ const _migrationPath =
 // both S/L insertion orders, meal choices, edits/removal and no premature submit.
 // QR VAT copy excludes tax without asserting one rate for mixed-rate items;
 // qr_order_operational_ui_test covers the notice and scaled viewport layout.
+// Registered generic choices now share the same QR cart. The operational QR
+// tests cover two selections of one menu, real sellable IDs, explicit submit,
+// old S/L and noodles/rice, and stale selection handling.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      '91036e738e5f43786a85a0de6bca9833c153ca4c7b2b88e7c6699896e74efc75',
+      '75dc873ba5eabc98a0aaac77c43711bdfc6e4d5ca3ff9b08330df8adbc9d4d31',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.

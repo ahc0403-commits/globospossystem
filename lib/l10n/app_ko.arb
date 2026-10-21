@@ -4398,5 +4398,25 @@
   "storeSetupWorkflowInvalid": "음식 제공 동선을 선택해 주세요.",
   "storeSetupWorkflowBusy": "진행 중인 주문과 전달 작업을 마친 뒤 음식 제공 동선을 변경해 주세요.",
   "storeSetupWorkflowPermission": "음식 제공 동선 변경은 최고 관리자만 가능합니다.",
-  "storeSetupWorkflowJeongabok": "전가복은 트레이 없이 주방에서 층으로 전달합니다."
+  "storeSetupWorkflowJeongabok": "전가복은 트레이 없이 주방에서 층으로 전달합니다.",
+  "operatingProfileTitle": "현재 운영 구성",
+  "operatingProfileDescription": "음식 제공 동선과 담당 배정을 확인합니다. 현재 구성을 기록하면 이후 변경과 비교할 기준이 보존됩니다.",
+  "operatingProfileReview": "현재 구성 확인",
+  "operatingProfileCapture": "현재 구성 기록",
+  "operatingProfileUnavailable": "이 서버는 운영 구성 조회를 아직 지원하지 않습니다. 기존 매장 설정은 계속 사용할 수 있습니다.",
+  "operatingProfileFailed": "운영 구성을 읽거나 기록하지 못했습니다. 연결과 접근 권한을 확인한 뒤 다시 시도해 주세요.",
+  "operatingProfileChanged": "기록된 구성이 변경되었습니다. 현재 구성을 다시 확인한 뒤 기록해 주세요.",
+  "operatingProfileDirectRoute": "주방 → 층 → 고객",
+  "operatingProfileTrayRoute": "주방 → 트레이 → 층 → 고객",
+  "operatingProfileCurrent": "기록된 기준과 현재 구성이 일치합니다.",
+  "operatingProfileRecordedAssignments": "마지막으로 기록한 담당 배정",
+  "operatingProfileNeedsCapture": "현재 구성을 기록하면 담당 배정이 함께 보존됩니다.",
+  "operatingProfileAccounts": "담당 계정 {count}개",
+  "@operatingProfileAccounts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

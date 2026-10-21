@@ -1,3 +1,4 @@
+import '../../core/menu/menu_choices.dart';
 import '../../core/menu/customer_cart.dart';
 import '../../core/menu/menu_sizes.dart';
 import 'direct_order_translation.dart';
@@ -550,16 +551,41 @@ class _DirectOrderStorefrontScreenState
 
   Future<void> _changeQuantity(String itemId, int delta) async {
     if (_comboSelecting || _submitting) return;
-    final item = _storefront!.items.firstWhere((item) => item.id == itemId);
+    if ((_cart[itemId] ?? 0) + delta <= 0) {
+      setState(() {
+        _cart.remove(itemId);
+        _itemNotes.remove(itemId);
+        _cartOptionKeys.remove(itemId);
+        _comboDrinkChoices.remove(itemId);
+      });
+      _scheduleCartSave();
+      return;
+    }
+    var item = _cartMenuItem(itemId);
+    if (item == null) return;
+    final catalog = MenuChoiceCatalog.fromKey(item.menuOptionKey);
+    if (catalog != null && delta > 0) {
+      final selected = await showMenuChoicePicker(
+        context,
+        title: item.localizedName(_languageCode),
+        catalog: catalog,
+        channel: 'direct',
+        language: _languageCode,
+      );
+      if (!mounted || selected == null) return;
+      item = item.withChoice(selected);
+      itemId = item.id;
+    }
+    final selectedItem = item;
     final next = ((_cart[itemId] ?? 0) + delta).clamp(0, 50);
     List<String>? choices;
-    if (next > 0 && item.comboDrinkChoiceCount > 0) {
+    if (next > 0 && selectedItem.comboDrinkChoiceCount > 0) {
       _comboSelecting = true;
       try {
         choices = await showDirectOrderDialog<List<String>>(
           context: context,
           builder: (_) => DirectOrderComboDialog(
-            item: item,
+            item: selectedItem,
             quantity: next,
             languageCode: _languageCode,
             initial: _comboDrinkChoices[itemId] ?? const [],
@@ -577,8 +603,8 @@ class _DirectOrderStorefrontScreenState
         _cartOptionKeys.remove(itemId);
         _comboDrinkChoices.remove(itemId);
       } else {
-        if (!_cart.containsKey(itemId) && item.menuOptionKey != null) {
-          _cartOptionKeys[itemId] = item.menuOptionKey!;
+        if (!_cart.containsKey(itemId) && selectedItem.menuOptionKey != null) {
+          _cartOptionKeys[itemId] = selectedItem.menuOptionKey!;
         }
         _cart[itemId] = next;
         if (choices != null) _comboDrinkChoices[itemId] = choices;
@@ -622,26 +648,17 @@ class _DirectOrderStorefrontScreenState
   ) {
     if (_cart.isNotEmpty) return;
     _submitDraftId = draft.id;
-    for (final item in storefront.items) {
-      final quantity = draft.cart[item.id];
-      if (quantity == null ||
-          draft.menuOptionKeys[item.id] != item.menuOptionKey) {
-        continue;
+    for (final entry in draft.cart.entries) {
+      _cart[entry.key] = entry.value;
+      if (draft.menuOptionKeys[entry.key] case final key?) {
+        _cartOptionKeys[entry.key] = key;
       }
-      if (item.menuOptionKey != null) {
-        _cartOptionKeys[item.id] = item.menuOptionKey!;
+      if (draft.itemNotes[entry.key] case final note?) {
+        _itemNotes[entry.key] = note;
       }
-      final choices = draft.comboChoices[item.id] ?? const <String>[];
-      if (item.comboDrinkChoiceCount > 0 &&
-          (choices.length != item.comboDrinkChoiceCount * quantity ||
-              choices.any(
-                (id) => !item.comboDrinkOptions.any((o) => o.menuItemId == id),
-              ))) {
-        continue;
+      if (draft.comboChoices[entry.key] case final choices?) {
+        _comboDrinkChoices[entry.key] = choices;
       }
-      _cart[item.id] = quantity;
-      if (draft.itemNotes[item.id] case final note?) _itemNotes[item.id] = note;
-      if (choices.isNotEmpty) _comboDrinkChoices[item.id] = choices;
     }
     _fulfillmentType = draft.pickup
         ? DirectOrderFulfillmentType.pickup
@@ -663,15 +680,42 @@ class _DirectOrderStorefrontScreenState
         .join(', ');
   }
 
-  double get _cartSubtotal {
-    final itemById = {
-      for (final item in _storefront?.items ?? const <DirectOrderMenuItem>[])
-        item.id: item,
+  DirectOrderMenuItem? _cartMenuItem(String lineId) {
+    final base = _storefront?.items
+        .where((item) => item.id == menuChoiceBaseId(lineId))
+        .firstOrNull;
+    if (base == null) return null;
+    final choice = MenuChoiceSelection.fromKey(_cartOptionKeys[lineId]);
+    return choice == null ? base : base.withChoice(choice);
+  }
+
+  List<DirectOrderMenuItem> get _cartMenuItems {
+    final order = {
+      for (var index = 0; index < (_storefront?.items.length ?? 0); index++)
+        _storefront!.items[index].id: index,
     };
-    return _cart.entries.fold<double>(0, (sum, entry) {
-      return sum + (itemById[entry.key]?.price ?? 0) * entry.value;
+    return [
+      for (final id in _cart.keys)
+        if (_cartMenuItem(id) case final item?) item,
+    ]..sort((a, b) {
+      final compare = (order[menuChoiceBaseId(a.id)] ?? 0).compareTo(
+        order[menuChoiceBaseId(b.id)] ?? 0,
+      );
+      return compare == 0 ? a.id.compareTo(b.id) : compare;
     });
   }
+
+  bool get _hasStaleCart => _cart.keys.any((id) {
+    final base = _storefront?.items
+        .where((item) => item.id == menuChoiceBaseId(id))
+        .firstOrNull;
+    return base == null ||
+        !menuChoiceKeyMatches(_cartOptionKeys[id], base.menuOptionKey);
+  });
+  double get _cartSubtotal => _cartMenuItems.fold(
+    0,
+    (sum, item) => sum + item.price * (_cart[item.id] ?? 0),
+  );
 
   int get _cartCount => _cart.values.fold(0, (sum, value) => sum + value);
 
@@ -741,8 +785,9 @@ class _DirectOrderStorefrontScreenState
       constraints: const BoxConstraints(maxWidth: 640),
       builder: (context) => StatefulBuilder(
         builder: (context, refreshSheet) {
-          final items = _storefront!.items
-              .where((item) => (_cart[item.id] ?? 0) > 0)
+          final items = _cartMenuItems;
+          final unavailable = _cart.keys
+              .where((id) => _cartMenuItem(id) == null)
               .toList();
           Future<void> change(Future<void> Function() action) async {
             await action();
@@ -773,9 +818,35 @@ class _DirectOrderStorefrontScreenState
                   Expanded(
                     child: ListView.separated(
                       padding: const EdgeInsets.all(16),
-                      itemCount: items.length,
+                      itemCount: items.length + unavailable.length,
                       separatorBuilder: (_, __) => const Divider(height: 24),
                       itemBuilder: (context, index) {
+                        if (index >= items.length) {
+                          final id = unavailable[index - items.length];
+                          return ListTile(
+                            title: Text(
+                              cartText(
+                                _languageCode,
+                                '현재 판매하지 않는 메뉴',
+                                'Món hiện không còn bán',
+                                'Item no longer available',
+                              ),
+                            ),
+                            subtitle: Text('× ${_cart[id]}'),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: cartText(
+                                _languageCode,
+                                '삭제',
+                                'Xóa',
+                                'Remove',
+                              ),
+                              onPressed: () => change(
+                                () => _changeQuantity(id, -(_cart[id] ?? 0)),
+                              ),
+                            ),
+                          );
+                        }
                         final item = items[index];
                         final quantity = _cart[item.id]!;
                         return CustomerCartItemCard(
@@ -797,7 +868,12 @@ class _DirectOrderStorefrontScreenState
                               -(_cart[item.id] ?? 0),
                             ),
                           ),
-                          onEdit: item.sizeMetadata == null
+                          onEdit:
+                              item.sizeMetadata == null &&
+                                  MenuChoiceSelection.fromKey(
+                                        item.menuOptionKey,
+                                      ) ==
+                                      null
                               ? null
                               : () =>
                                     change(() => _editDirectCartOptions(item)),
@@ -944,6 +1020,9 @@ class _DirectOrderStorefrontScreenState
           locale: _languageCode,
         );
         _session = session;
+      }
+      if (_hasStaleCart) {
+        throw const DirectOrderException('DIRECT_ORDER_MENU_CHANGED');
       }
       final submission = await widget.service.submit(
         slug: widget.slug,
@@ -2183,6 +2262,66 @@ class _DirectOrderStorefrontScreenState
   }
 
   Future<void> _editDirectCartOptions(DirectOrderMenuItem item) async {
+    var base = _storefront!.items
+        .where((i) => i.id == menuChoiceBaseId(item.id))
+        .firstOrNull;
+    var catalog = MenuChoiceCatalog.fromKey(base?.menuOptionKey);
+    if (base != null && catalog != null && base.sizeMetadata != null) {
+      final options = _storefront!.items
+          .where((o) => o.sizeMetadata?.menuId == base!.sizeMetadata!.menuId)
+          .toList();
+      final size = await showMenuSizePicker(
+        context,
+        title: base.catalogName(_languageCode),
+        languageCode: _languageCode,
+        options: [
+          for (final option in options)
+            MenuSizeOption(
+              id: option.id,
+              size: option.sizeMetadata!.size,
+              mealChoice: option.sizeMetadata!.mealChoice,
+              price: option.price,
+            ),
+        ],
+      );
+      if (!mounted || size == null) return;
+      base = options.firstWhere((o) => o.id == size.optionId);
+      catalog = MenuChoiceCatalog.fromKey(base.menuOptionKey);
+    }
+    if (base != null && catalog != null) {
+      final selected = await showMenuChoicePicker(
+        context,
+        title: base.localizedName(_languageCode),
+        catalog: catalog,
+        channel: 'direct',
+        language: _languageCode,
+        initialKey: item.menuOptionKey,
+      );
+      if (!mounted || selected == null || !_cart.containsKey(item.id)) return;
+      final target = selected.lineId(base.id);
+      if (target == item.id) return;
+      final quantity = _cart[item.id]! + (_cart[target] ?? 0);
+      final notes = {
+        ?_itemNotes[item.id],
+        ?_itemNotes[target],
+      }.where((n) => n.isNotEmpty).join('\n');
+      if (quantity > 50 || notes.length > 300) return;
+      setState(() {
+        _cart[target] = quantity;
+        _cartOptionKeys[target] = selected.key;
+        if (notes.isNotEmpty) _itemNotes[target] = notes;
+        _comboDrinkChoices[target] = [
+          ...?_comboDrinkChoices[target],
+          ...?_comboDrinkChoices[item.id],
+        ];
+        _cart.remove(item.id);
+        _cartOptionKeys.remove(item.id);
+        _itemNotes.remove(item.id);
+        _comboDrinkChoices.remove(item.id);
+      });
+      _scheduleCartSave();
+      return;
+    }
     final group = item.sizeMetadata?.menuId;
     if (group == null || _comboSelecting || _submitting) return;
     final options = _storefront!.items

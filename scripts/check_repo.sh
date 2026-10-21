@@ -19,6 +19,19 @@ bash test/print_station_receipt_only_sql_test.sh
 printf 'CHECK_REPO_STEP=store_opening_printer_modes\n'
 bash test/store_opening_printer_modes_sql_test.sh
 
+printf 'CHECK_REPO_STEP=store_operating_profiles\n'
+bash scripts/test_store_operating_profiles.sh
+
+printf 'CHECK_REPO_STEP=operating_payment_core\n'
+bash scripts/test_operating_payment_core.sh
+
+# A supplied schema-only export exercises every current production trigger and
+# function without connecting to production or copying business data.
+if [[ -n "${STORE_OPERATING_UPGRADE_SCHEMA:-}" ]]; then
+  printf 'CHECK_REPO_STEP=store_operating_current_schema_upgrade\n'
+  bash scripts/test_store_operating_upgrade.sh "$STORE_OPERATING_UPGRADE_SCHEMA"
+fi
+
 printf 'CHECK_REPO_STEP=store_account_onboarding\n'
 bash test/store_account_onboarding_sql_test.sh
 bash test/store_account_onboarding_deploy_contract_test.sh
@@ -43,6 +56,7 @@ deno test --no-config supabase/functions/_shared/retired_deliberry_test.ts
 
 printf 'CHECK_REPO_STEP=atomic_release_bundle_contract\n'
 python3 scripts/build_pos_recipient_release.py --check
+python3 scripts/build_store_lifecycle_release.py --check
 printf 'CHECK_REPO_STEP=pos_receipt_ledger_sql\n'
 bash test/pos_receipt_ledger_sql_test.sh
 printf 'CHECK_REPO_STEP=migration_version_uniqueness\n'

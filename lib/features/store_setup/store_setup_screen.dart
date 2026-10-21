@@ -1,3 +1,4 @@
+import '../store_procurement/store_procurement_setup_card.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,10 @@ import 'widgets/print_test_checklist.dart';
 import 'widgets/readiness_summary.dart';
 import 'widgets/route_preview.dart';
 import 'widgets/table_bulk_editor.dart';
+import 'widgets/store_lifecycle_card.dart';
 import 'widgets/workforce_setup_card.dart';
+import 'widgets/operating_profile_card.dart';
+import '../store_workflow/workflow_setup_card.dart';
 
 class StoreSetupScreen extends ConsumerStatefulWidget {
   const StoreSetupScreen({super.key, required this.storeId});
@@ -183,6 +187,14 @@ class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
                         title: Text(context.l10n.storeSetupStepTables),
                         isActive: state.step >= 1,
                         content: TableBulkEditor(
+                          areaLabels: state.store['service_areas'] is List
+                              ? {
+                                  for (final area
+                                      in state.store['service_areas'] as List)
+                                    (area as Map)['code'].toString():
+                                        area['name'].toString(),
+                                }
+                              : null,
                           tables: state.draft.tables,
                           onAdd: notifier.addTables,
                           onRemove: notifier.removeTableAt,
@@ -218,12 +230,21 @@ class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
                       Step(
                         title: Text(context.l10n.storeSetupStepTests),
                         isActive: state.step >= 5,
-                        content: _TestsStep(
-                          state: state,
-                          onRun: notifier.runAllTests,
-                          onRetry: notifier.retryTest,
-                          onConfirm: notifier.confirmPhysicalOutput,
-                          onRefresh: notifier.refreshReadiness,
+                        content: Column(
+                          children: [
+                            _TestsStep(
+                              state: state,
+                              onRun: notifier.runAllTests,
+                              onRetry: notifier.retryTest,
+                              onConfirm: notifier.confirmPhysicalOutput,
+                              onRefresh: notifier.refreshReadiness,
+                            ),
+                            if (auth.role == 'super_admin' &&
+                                state.store['registered_config'] == true)
+                              StoreLifecycleCard(storeId: storeId),
+                            if (auth.role == 'super_admin')
+                              StoreProcurementSetupCard(storeId: storeId),
+                          ],
                         ),
                       ),
                     ],
@@ -302,12 +323,30 @@ class _StoreTemplateStep extends StatelessWidget {
                   '${store['is_active'] == true ? context.l10n.yes : context.l10n.no}',
                 ),
                 const Divider(height: 28),
-                Text(
-                  context.l10n.storeSetupTemplateName,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Text(context.l10n.storeSetupTemplateDescription),
-                Text(context.l10n.storeSetupFloors),
+                if (store['registered_config'] == true) ...[
+                  Text(switch (Localizations.localeOf(context).languageCode) {
+                    'ko' => '등록한 운영 구역',
+                    'vi' => 'Khu vực đã đăng ký',
+                    _ => 'Registered service areas',
+                  }, style: Theme.of(context).textTheme.titleLarge),
+                  for (final area in (store['service_areas'] as List? ?? []))
+                    Text(
+                      '${area['name']}${area['physical_floor'] == null ? '' : ' · ${area['physical_floor']}'}',
+                    ),
+                  if ((store['service_areas'] as List? ?? []).isEmpty)
+                    Text(switch (Localizations.localeOf(context).languageCode) {
+                      'ko' => '포장·배달 전용 · 홀과 테이블 없음',
+                      'vi' => 'Chỉ mang đi/giao hàng · không có bàn',
+                      _ => 'Pickup/delivery only · no tables',
+                    }),
+                ] else ...[
+                  Text(
+                    context.l10n.storeSetupTemplateName,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  Text(context.l10n.storeSetupTemplateDescription),
+                  Text(context.l10n.storeSetupFloors),
+                ],
               ],
             ),
           ),
@@ -320,6 +359,8 @@ class _StoreTemplateStep extends StatelessWidget {
           onRefresh: onRefreshWorkforce,
           onProvision: onProvisionAccount,
         ),
+        OperatingProfileCard(restaurantId: storeId),
+        WorkflowSetupCard(storeId: storeId),
       ],
     );
   }

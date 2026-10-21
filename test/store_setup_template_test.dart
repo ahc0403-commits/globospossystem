@@ -2,6 +2,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/store_setup/store_setup_models.dart';
 
 void main() {
+  test('floorless hall and pickup use only configured routes and devices', () {
+    final draft = StoreOpeningDraft(
+      storeId: 'new',
+      floors: const ['HALL'],
+      printers: StoreOpeningTemplate.defaultPrinters(),
+    );
+    expect(draft.destinations.map((d) => d.routeKey), [
+      'receipt/',
+      'kitchen/',
+      'floor/HALL',
+    ]);
+    expect(draft.requiredPrinterSlots, [
+      PhysicalPrinterSlot.cashier,
+      PhysicalPrinterSlot.kitchen,
+    ]);
+    expect(draft.copyWith(floors: []).destinations.map((d) => d.purpose), [
+      'receipt',
+      'kitchen',
+    ]);
+    expect(
+      draft
+          .copyWith(operation: StorePrinterOperation.paperless)
+          .destinations
+          .single
+          .purpose,
+      'receipt',
+    );
+  });
   test(
     'new stores receive distinct local SM/requester/receiver codes and preserve old configured IDs',
     () {

@@ -1,10 +1,44 @@
 import 'package:excel/excel.dart';
+import 'package:globos_pos_system/features/restaurant_sales_export/sales_reporting_batch_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/photo_sales_import/photo_sales_registered_export.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/combined_sales_export.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export.dart';
 
 void main() {
+  test(
+    'reporting delta contains only frozen members and validates money/store identity',
+    () {
+      final original = combineSalesExportsByTaxEntity(
+        restaurantExports: [_restaurantExport()],
+        photoExports: [_photoExport()],
+      ).single;
+      final r = original.restaurant!.receipts.single;
+      final batch = <String, dynamic>{
+        'business_date': original.businessDate,
+        'tax_entity_id': original.taxEntityId,
+        'receipt_count': 1,
+        'gross': r.grossSales,
+        'members': [
+          {
+            'source': 'restaurant_pos',
+            'id': r.receiptId,
+            'store_id': r.storeId,
+            'store_name': r.storeName,
+            'gross': r.grossSales,
+            'source_hash': r.sourceHash,
+          },
+        ],
+      };
+      final delta = selectSalesBatch(original, batch);
+      expect(delta.receiptCount, 1);
+      expect(delta.photo, isNull);
+      expect(delta.grossSales, r.grossSales);
+      (batch['members'] as List).single['store_id'] = 'other-store';
+      expect(() => selectSalesBatch(original, batch), throwsFormatException);
+    },
+  );
+
   test('combines Restaurant and Photo sales only inside one tax entity', () {
     final combined = combineSalesExportsByTaxEntity(
       restaurantExports: [_restaurantExport()],
@@ -34,6 +68,31 @@ void main() {
     expect(_cell(rows[9], 11), 'Lần');
     expect(_cell(rows[9], 14), '50000');
     expect(_cell(rows[9], 16), '4000');
+    final ledger = workbook.tables['POS Ledger']!.rows;
+    expect(
+      ledger
+          .skip(1)
+          .every((r) => _cell(r, 14).isNotEmpty && _cell(r, 16).isNotEmpty),
+      isTrue,
+    );
+    final manifest = buildCombinedSalesArtifact(combined.single).manifest;
+    expect(manifest['ledger_version'], 3);
+    expect(manifest['store_ids'], hasLength(2));
+    final reconciliation = workbook.tables['Store Reconciliation']!.rows;
+    expect(reconciliation, hasLength(3));
+    expect(
+      reconciliation
+          .skip(1)
+          .fold<double>(0, (s, r) => s + double.parse(_cell(r, 5))),
+      combined.single.grossSales,
+    );
+    expect(
+      (manifest['store_totals'] as List).fold<double>(
+        0,
+        (s, r) => s + double.parse(r['gross']),
+      ),
+      combined.single.grossSales,
+    );
   });
 
   test('preserves the existing Restaurant red-invoice MISA columns', () {

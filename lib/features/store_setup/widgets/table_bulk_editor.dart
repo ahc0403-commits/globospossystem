@@ -8,12 +8,14 @@ class TableBulkEditor extends StatefulWidget {
   const TableBulkEditor({
     super.key,
     required this.tables,
+    this.areaLabels,
     required this.onAdd,
     required this.onRemove,
     required this.onReassign,
   });
 
   final List<StoreSetupTableDraft> tables;
+  final Map<String, String>? areaLabels;
   final ValueChanged<List<StoreSetupTableDraft>> onAdd;
   final ValueChanged<int> onRemove;
   final void Function(Set<int> indexes, String floor) onReassign;
@@ -79,6 +81,17 @@ class _TableBulkEditorState extends State<TableBulkEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final areas =
+        widget.areaLabels ?? const {'1F': 'G', '2F': '1F', '3F': '2F'};
+    if (areas.isEmpty) return const SizedBox.shrink();
+    if (!areas.containsKey(_floor)) _floor = areas.keys.first;
+    final areaLabel = widget.areaLabels == null
+        ? context.l10n.storeSetupFloor
+        : switch (Localizations.localeOf(context).languageCode) {
+            'ko' => '구역',
+            'vi' => 'Khu vực',
+            _ => 'Area',
+          };
     final duplicateNumbers = duplicateTableNumbers(widget.tables);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -132,13 +145,10 @@ class _TableBulkEditorState extends State<TableBulkEditor> {
               width: 110,
               child: DropdownButtonFormField<String>(
                 initialValue: _floor,
-                decoration: InputDecoration(
-                  labelText: context.l10n.storeSetupFloor,
-                ),
+                decoration: InputDecoration(labelText: areaLabel),
                 items: [
-                  DropdownMenuItem(value: '1F', child: Text('G')),
-                  DropdownMenuItem(value: '2F', child: Text('1F')),
-                  DropdownMenuItem(value: '3F', child: Text('2F')),
+                  for (final area in areas.entries)
+                    DropdownMenuItem(value: area.key, child: Text(area.value)),
                 ],
                 onChanged: (value) => setState(() => _floor = value ?? '1F'),
               ),
@@ -195,7 +205,7 @@ class _TableBulkEditorState extends State<TableBulkEditor> {
                     }),
               title: Text(
                 '${widget.tables[index].tableNumber} · '
-                '${displayFloorLabel(widget.tables[index].floorLabel)} · '
+                '${areas[widget.tables[index].floorLabel] ?? displayFloorLabel(widget.tables[index].floorLabel)} · '
                 '${widget.tables[index].seatCount}',
               ),
               subtitle: widget.tables[index].isProtected
@@ -213,15 +223,15 @@ class _TableBulkEditorState extends State<TableBulkEditor> {
           Wrap(
             spacing: 8,
             children: [
-              for (final floor in StoreOpeningTemplate.floors)
+              for (final floor in areas.keys)
                 OutlinedButton(
                   onPressed: () {
                     widget.onReassign({..._selected}, floor);
                     setState(_selected.clear);
                   },
                   child: Text(
-                    '${context.l10n.storeSetupFloor} '
-                    '${displayFloorLabel(floor)}',
+                    '$areaLabel '
+                    '${areas[floor]}',
                   ),
                 ),
             ],

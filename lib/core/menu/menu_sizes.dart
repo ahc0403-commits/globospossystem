@@ -24,7 +24,12 @@ class MenuSizeMetadata {
   static MenuSizeMetadata? fromKey(String? key) {
     if (key == null) return null;
     try {
-      final value = jsonDecode(key);
+      var value = jsonDecode(key);
+      if (value is Map && value['schema'] == 2) {
+        final legacy = value['legacy_key'];
+        if (legacy is! String) return null;
+        value = jsonDecode(legacy);
+      }
       if (value is! List || value.length != 5 || value[4] is! Map) return null;
       final data = Map<String, dynamic>.from(value[4] as Map);
       final id = data['menu_id'];

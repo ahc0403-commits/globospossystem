@@ -1,3 +1,4 @@
+import '../menu/menu_choices.dart';
 import '../menu/menu_sizes.dart';
 import '../i18n/menu_localization.dart';
 import '../../main.dart';
@@ -110,6 +111,24 @@ class QrMenuItem {
     this.comboDrinkChoiceCount = 0,
     this.comboDrinkOptions = const [],
   });
+
+  QrMenuItem withChoice(MenuChoiceSelection selection) => QrMenuItem(
+    id: selection.lineId(id),
+    menuOptionKey: selection.key,
+    price: selection.price,
+    nameKo: selection.name(nameKo, 'ko'),
+    nameVi: selection.name(nameVi, 'vi'),
+    nameEn: selection.name(nameEn, 'en'),
+    categoryId: categoryId,
+    name: selection.name(name, 'ko'),
+    description: description,
+    imageUrl: imageUrl,
+    originalPrice: originalPrice,
+    discountPercent: discountPercent,
+    isCombo: isCombo,
+    comboDrinkChoiceCount: comboDrinkChoiceCount,
+    comboDrinkOptions: comboDrinkOptions,
+  );
 
   final String? menuOptionKey;
   final String id;

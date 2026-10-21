@@ -1,3 +1,4 @@
+import '../../core/menu/menu_choices.dart';
 import '../../core/menu/customer_cart.dart';
 import '../../core/menu/menu_sizes.dart';
 import 'dart:async';
@@ -76,7 +77,8 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   String _lineKey(String itemId, bool isTakeout) =>
       '$itemId|${isTakeout ? 'takeout' : 'dine_in'}';
 
-  String _menuItemIdFromLineKey(String lineKey) => lineKey.split('|').first;
+  String _menuItemIdFromLineKey(String lineKey) =>
+      menuChoiceBaseId(lineKey.split('|').first);
 
   @override
   void initState() {
@@ -256,15 +258,12 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         };
         final stale = _cart.keys
             .where(
-              (line) =>
-                  _cartOptionKeys[line] != keys[_menuItemIdFromLineKey(line)],
+              (line) => !menuChoiceKeyMatches(
+                _cartOptionKeys[line],
+                keys[_menuItemIdFromLineKey(line)],
+              ),
             )
             .toList();
-        for (final line in stale) {
-          _cart.remove(line);
-          _cartOptionKeys.remove(line);
-          _comboDrinkChoices.remove(line);
-        }
         if (stale.isNotEmpty) {
           _failure = _copy.failureFor('QR_MENU_ITEM_UNAVAILABLE');
         }
@@ -391,18 +390,30 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   get _cartItems {
     final menu = _menu;
     if (menu == null) return const [];
+    final byId = {for (final item in menu.items) item.id: item};
     return [
-      for (final item in menu.items)
-        for (final isTakeout
-            in menu.isTakeoutEnabled ? const [false, true] : const [false])
-          if ((_cart[_lineKey(item.id, isTakeout)] ?? 0) > 0)
-            (
-              item: item,
-              quantity: _cart[_lineKey(item.id, isTakeout)]!,
-              isTakeout: isTakeout,
-              lineKey: _lineKey(item.id, isTakeout),
-            ),
+      for (final entry
+          in (_cart.entries.toList()..sort((a, b) {
+            final order = menu.items
+                .indexOf(byId[_menuItemIdFromLineKey(a.key)]!)
+                .compareTo(
+                  menu.items.indexOf(byId[_menuItemIdFromLineKey(b.key)]!),
+                );
+            return order == 0 ? a.key.compareTo(b.key) : order;
+          })))
+        if (byId[_menuItemIdFromLineKey(entry.key)] case final base?)
+          (
+            item: _selectedMenuItem(base, _cartOptionKeys[entry.key]),
+            quantity: entry.value,
+            isTakeout: entry.key.endsWith('|takeout'),
+            lineKey: entry.key,
+          ),
     ];
+  }
+
+  QrMenuItem _selectedMenuItem(QrMenuItem base, String? key) {
+    final choice = MenuChoiceSelection.fromKey(key);
+    return choice == null ? base : base.withChoice(choice);
   }
 
   double get _cartTotal {
@@ -411,6 +422,21 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       total += line.item.price * line.quantity;
     }
     return total;
+  }
+
+  bool get _hasStaleCart {
+    final keys = {
+      for (final item in _menu?.items ?? <QrMenuItem>[])
+        item.id: item.menuOptionKey,
+    };
+    return _cart.keys.any(
+      (line) =>
+          !keys.containsKey(_menuItemIdFromLineKey(line)) ||
+          !menuChoiceKeyMatches(
+            _cartOptionKeys[line],
+            keys[_menuItemIdFromLineKey(line)],
+          ),
+    );
   }
 
   int get _cartCount => _cart.values.fold(0, (sum, qty) => sum + qty);
@@ -429,15 +455,42 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     int quantity, {
     required bool isTakeout,
   }) async {
+    if (quantity <= 0) {
+      final key = _lineKey(item.id, isTakeout);
+      setState(() {
+        _cart.remove(key);
+        _cartOptionKeys.remove(key);
+        _comboDrinkChoices.remove(key);
+        _clientOrderId = null;
+      });
+      return;
+    }
     if (isTakeout && _menu?.isTakeoutEnabled != true) return;
     if (_menu?.items.any(
           (current) =>
-              current.id == item.id &&
-              current.menuOptionKey == item.menuOptionKey,
+              current.id == menuChoiceBaseId(item.id) &&
+              (MenuChoiceCatalog.fromKey(item.menuOptionKey) != null ||
+                  menuChoiceKeyMatches(
+                    item.menuOptionKey,
+                    current.menuOptionKey,
+                  )),
         ) !=
         true) {
       setState(() => _failure = _copy.failureFor('QR_MENU_ITEM_UNAVAILABLE'));
       return;
+    }
+    final catalog = MenuChoiceCatalog.fromKey(item.menuOptionKey);
+    if (catalog != null && quantity > 0) {
+      final selected = await showMenuChoicePicker(
+        context,
+        title: item.localizedName(_languageCode),
+        catalog: catalog,
+        channel: 'qr',
+        language: _languageCode,
+      );
+      if (!mounted || selected == null) return;
+      item = item.withChoice(selected);
+      quantity += _cart[_lineKey(item.id, isTakeout)] ?? 0;
     }
     final lineKey = _lineKey(item.id, isTakeout);
     final currentQuantity = _cart[lineKey] ?? 0;
@@ -513,6 +566,63 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   }
 
   Future<void> _editCartOption(QrMenuItem item, bool isTakeout) async {
+    var base = _menu!.items
+        .where((i) => i.id == menuChoiceBaseId(item.id))
+        .firstOrNull;
+    var catalog = MenuChoiceCatalog.fromKey(base?.menuOptionKey);
+    var selectedTakeout = isTakeout;
+    if (base != null && catalog != null && base.sizeMetadata != null) {
+      final options = _sizeGroups[base.sizeMetadata!.menuId]!;
+      final size = await showMenuSizePicker(
+        context,
+        title: base.catalogName(_languageCode),
+        languageCode: _languageCode,
+        allowTakeout: _menu!.isTakeoutEnabled,
+        initialTakeout: isTakeout,
+        options: [
+          for (final option in options)
+            MenuSizeOption(
+              id: option.id,
+              size: option.sizeMetadata!.size,
+              mealChoice: option.sizeMetadata!.mealChoice,
+              price: option.price,
+            ),
+        ],
+      );
+      if (!mounted || size == null) return;
+      base = options.firstWhere((o) => o.id == size.optionId);
+      selectedTakeout = size.isTakeout;
+      catalog = MenuChoiceCatalog.fromKey(base.menuOptionKey);
+    }
+    if (base != null && catalog != null) {
+      final selected = await showMenuChoicePicker(
+        context,
+        title: base.localizedName(_languageCode),
+        catalog: catalog,
+        channel: 'qr',
+        language: _languageCode,
+        initialKey: item.menuOptionKey,
+      );
+      if (!mounted || selected == null) return;
+      final source = _lineKey(item.id, isTakeout),
+          target = _lineKey(selected.lineId(base.id), selectedTakeout);
+      if (source == target || !_cart.containsKey(source)) return;
+      final quantity = _cart[source]! + (_cart[target] ?? 0);
+      if (quantity > 20) return;
+      setState(() {
+        _cart[target] = quantity;
+        _cartOptionKeys[target] = selected.key;
+        _comboDrinkChoices[target] = [
+          ...?_comboDrinkChoices[target],
+          ...?_comboDrinkChoices[source],
+        ];
+        _cart.remove(source);
+        _cartOptionKeys.remove(source);
+        _comboDrinkChoices.remove(source);
+        _clientOrderId = null;
+      });
+      return;
+    }
     final options = _sizeGroups[item.sizeMetadata?.menuId];
     if (options == null) return;
     final selected = await showMenuSizePicker(
@@ -693,6 +803,10 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     );
 
     if (confirmed != true || !mounted || _cart.isEmpty) return;
+    if (_hasStaleCart) {
+      setState(() => _failure = _copy.failureFor('QR_MENU_ITEM_UNAVAILABLE'));
+      return;
+    }
 
     setState(() {
       _isSubmitting = true;
@@ -714,7 +828,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         items: [
           for (final line in submittedItems)
             QrOrderLine(
-              menuItemId: line.item.id,
+              menuItemId: menuChoiceBaseId(line.item.id),
               menuOptionKey: _cartOptionKeys[line.lineKey],
               quantity: line.quantity,
               isTakeout: line.isTakeout,
@@ -921,7 +1035,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
           count: _cartCount,
           totalLabel: '${_currency.format(_cartTotal)} VND',
           isSubmitting: _isSubmitting,
-          onSubmit: _cart.isEmpty ? null : _submitOrder,
+          onSubmit: _cart.isEmpty || _hasStaleCart ? null : _submitOrder,
         ),
         body: SafeArea(
           child: Align(
@@ -2174,7 +2288,12 @@ class _QrReviewDialogState extends State<_QrReviewDialog> {
                                 line.isTakeout,
                               ),
                             ),
-                            onEdit: line.item.sizeMetadata == null
+                            onEdit:
+                                line.item.sizeMetadata == null &&
+                                    MenuChoiceSelection.fromKey(
+                                          line.item.menuOptionKey,
+                                        ) ==
+                                        null
                                 ? null
                                 : () => _edit(
                                     () => widget.onEditOptions(

@@ -459,10 +459,16 @@ class EmergencyFulfillmentItem {
     final rawComponents = json['combo_components'];
     return EmergencyFulfillmentItem(
       menuOptionKey: json['menu_option_snapshot'] is Map
-          ? jsonEncode([
-              for (final key in ['portion_code', 'spice_level', 'spice_choice'])
-                (json['menu_option_snapshot'] as Map)[key],
-            ])
+          ? (json['menu_option_snapshot'] as Map)['choice_signature']
+                    ?.toString() ??
+                jsonEncode([
+                  for (final key in [
+                    'portion_code',
+                    'spice_level',
+                    'spice_choice',
+                  ])
+                    (json['menu_option_snapshot'] as Map)[key],
+                ])
           : '',
       id: json['id']?.toString() ?? '',
       orderItemId: json['order_item_id']?.toString() ?? '',
@@ -1290,10 +1296,9 @@ TrayFloorTransitionSummary allocateTrayFloorTransitionSelections(
 int trayUnsupportedFloorQuantity(Iterable<EmergencyFulfillmentOrder> orders) =>
     orders
         .where(
-          (order) => !const {
-            '1F',
-            '2F',
-          }.contains(order.floorLabel.trim().toUpperCase()),
+          (order) => !RegExp(
+            r'^[A-Z0-9][A-Z0-9_-]{0,15}$',
+          ).hasMatch(order.floorLabel.trim().toUpperCase()),
         )
         .expand((order) => order.trayFloorPendingItems())
         .fold(0, (total, item) => total + item.trayPendingQuantity);
@@ -1503,6 +1508,7 @@ class LeftoverPackagingTask {
 
 class EmergencyFulfillmentState {
   const EmergencyFulfillmentState({
+    this.operatingWorkflow,
     this.assigned = false,
     this.assignmentResolved = false,
     this.active = false,
@@ -1511,6 +1517,8 @@ class EmergencyFulfillmentState {
     this.sessionId,
     this.stationType,
     this.floorLabel,
+    this.serviceAreaCodes = const [],
+    this.serviceAreaConfigurationKnown = false,
     this.fulfillmentMode = FulfillmentMode.paperless,
     this.kitchenDirectToFloor = false,
     this.orders = const [],
@@ -1521,6 +1529,7 @@ class EmergencyFulfillmentState {
     this.error,
   });
 
+  final Map<String, dynamic>? operatingWorkflow;
   final bool assigned;
   final bool assignmentResolved;
   final bool active;
@@ -1529,6 +1538,11 @@ class EmergencyFulfillmentState {
   final String? sessionId;
   final String? stationType;
   final String? floorLabel;
+  final List<String> serviceAreaCodes;
+  final bool serviceAreaConfigurationKnown;
+  List<String> get servedAreas => serviceAreaCodes.isEmpty
+      ? [if (floorLabel != null) floorLabel!]
+      : serviceAreaCodes;
   final FulfillmentMode fulfillmentMode;
   final bool kitchenDirectToFloor;
   final List<EmergencyFulfillmentOrder> orders;
@@ -1541,6 +1555,7 @@ class EmergencyFulfillmentState {
   bool get isDraining => active && !fulfillmentMode.isPaperless;
 
   EmergencyFulfillmentState copyWith({
+    Map<String, dynamic>? operatingWorkflow,
     bool? assigned,
     bool? assignmentResolved,
     bool? active,
@@ -1549,6 +1564,8 @@ class EmergencyFulfillmentState {
     String? sessionId,
     String? stationType,
     String? floorLabel,
+    List<String>? serviceAreaCodes,
+    bool? serviceAreaConfigurationKnown,
     FulfillmentMode? fulfillmentMode,
     bool? kitchenDirectToFloor,
     List<EmergencyFulfillmentOrder>? orders,
@@ -1559,6 +1576,7 @@ class EmergencyFulfillmentState {
     String? error,
     bool clearError = false,
   }) => EmergencyFulfillmentState(
+    operatingWorkflow: operatingWorkflow ?? this.operatingWorkflow,
     assigned: assigned ?? this.assigned,
     assignmentResolved: assignmentResolved ?? this.assignmentResolved,
     active: active ?? this.active,
@@ -1567,6 +1585,9 @@ class EmergencyFulfillmentState {
     sessionId: sessionId ?? this.sessionId,
     stationType: stationType ?? this.stationType,
     floorLabel: floorLabel ?? this.floorLabel,
+    serviceAreaCodes: serviceAreaCodes ?? this.serviceAreaCodes,
+    serviceAreaConfigurationKnown:
+        serviceAreaConfigurationKnown ?? this.serviceAreaConfigurationKnown,
     fulfillmentMode: fulfillmentMode ?? this.fulfillmentMode,
     kitchenDirectToFloor: kitchenDirectToFloor ?? this.kitchenDirectToFloor,
     orders: orders ?? this.orders,
@@ -1594,6 +1615,9 @@ class EmergencyFulfillmentState {
               .toList(growable: false)
         : const <EmergencyFulfillmentOrder>[];
     return EmergencyFulfillmentState(
+      operatingWorkflow: json['operating_workflow'] is Map
+          ? Map<String, dynamic>.from(json['operating_workflow'] as Map)
+          : null,
       assigned: json['assigned'] == true,
       assignmentResolved: json.containsKey('assigned'),
       active: json['active'] == true,
@@ -1602,6 +1626,11 @@ class EmergencyFulfillmentState {
       sessionId: json['session_id']?.toString(),
       stationType: json['station_type']?.toString(),
       floorLabel: json['floor_label']?.toString(),
+      serviceAreaConfigurationKnown:
+          json['service_area_configuration_known'] == true,
+      serviceAreaCodes: (json['service_area_codes'] as List? ?? [])
+          .whereType<String>()
+          .toList(),
       fulfillmentMode: FulfillmentMode.fromValue(
         json['fulfillment_mode'] ?? 'paperless',
       ),
@@ -2029,6 +2058,7 @@ class EmergencyFulfillmentNotifier
       snapshot.sessionId ?? '',
       snapshot.stationType ?? '',
       snapshot.floorLabel ?? '',
+      snapshot.serviceAreaCodes.join(','),
     ].join(':');
     if (_subscriptionKey == subscriptionKey) return;
     await _disposeSubscriptions();
@@ -2052,6 +2082,7 @@ class EmergencyFulfillmentNotifier
           sessionId: snapshot.sessionId,
           stationType: snapshot.stationType,
           floorLabel: snapshot.floorLabel,
+          serviceAreaCodes: snapshot.serviceAreaCodes,
         ),
         onChange: _applyKdsChange,
         onBootstrapRequired: _requestKdsBootstrap,
@@ -2335,7 +2366,7 @@ class EmergencyFulfillmentNotifier
         task.status == 'awaiting_tray_to_kitchen' ||
             task.status == 'awaiting_tray_return',
       'floor' =>
-        task.floorLabel == state.floorLabel &&
+        state.servedAreas.contains(task.floorLabel) &&
             (task.status == 'awaiting_floor_pickup' ||
                 task.status == 'awaiting_floor_delivery'),
       _ => false,

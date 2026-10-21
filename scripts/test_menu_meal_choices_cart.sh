@@ -38,3 +38,9 @@ run_sql < test/sql/menu_meal_choices_cart_test.sql
 run_sql < supabase/migrations/20261021110000_admin_menu_item_order.sql >/dev/null
 run_sql < scripts/verify_admin_menu_item_order.sql
 run_sql < test/sql/admin_menu_item_order_test.sql
+
+run_sql <<'SQL' >/dev/null
+CREATE TABLE public.inventory_items(id uuid PRIMARY KEY,restaurant_id uuid,name text);
+SQL
+run_sql < supabase/migrations/20261021180000_registered_menu_choices.sql >/dev/null
+run_sql < test/sql/registered_menu_choice_definition_test.sql

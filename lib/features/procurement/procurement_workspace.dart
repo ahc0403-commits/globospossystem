@@ -1091,7 +1091,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
         '${d['product_name']} · ${d['current_stock_base'] ?? '—'} ${d['base_unit']}',
       ),
       subtitle: Text(
-        '${t('최소재고 / 일 사용량 / 일 폐기량', 'Minimum / daily usage / daily waste', 'Tối thiểu / dùng mỗi ngày / hủy mỗi ngày')}: ${d['minimum_stock_base'] ?? '—'} / ${d['actual_daily_usage_base']} / ${d['waste_daily_base']}\n${t('입고 예정 / 미발주 요청', 'Inbound / unallocated requests', 'Đang giao / yêu cầu chưa đặt')}: ${d['inbound_quantity_base']} / ${d['pending_request_quantity_base']}\n${d['stock_updated_at'] ?? '—'} · ${d['mapping_count'] == 1 && d['stock_fresh'] == true ? t('재고 자료 확인됨', 'Stock data current', 'Dữ liệu kho hiện hành') : t('재고·품목 연결 확인 필요', 'Stock / item mapping needs review', 'Cần kiểm tra tồn / liên kết mặt hàng')}',
+        '${t('최소재고 / 일 사용량 / 일 폐기량', 'Minimum / daily usage / daily waste', 'Tối thiểu / dùng mỗi ngày / hủy mỗi ngày')}: ${d['minimum_stock_base'] ?? '—'} / ${d['actual_daily_usage_base']} / ${d['waste_daily_base']}\n${t('입고 예정 / 미발주 요청', 'Inbound / unallocated requests', 'Đang giao / yêu cầu chưa đặt')}: ${d['inbound_quantity_base']} / ${d['pending_request_quantity_base']}\n${t('보류 / 사용 가능', 'Held / usable', 'Tạm giữ / khả dụng')}: ${d['held_quantity_base'] ?? '—'} / ${d['usable_stock_base'] ?? d['current_stock_base']}\n${t('관측 기간 / 사용일', 'Window / observed days', 'Kỳ / ngày có sử dụng')}: ${d['usage_window_days']} / ${d['observed_usage_days']} · ${d['evidence_version'] ?? ''}\n${t('초기 승인 계획', 'Approved initial plan', 'Kế hoạch ban đầu đã duyệt')}: ${map(d['initial_plan'])['quantity_base'] ?? (d['needs_initial_plan'] == true ? t('승인 필요', 'Approval needed', 'Cần phê duyệt') : '—')} ${d['base_unit']} · ${map(d['initial_plan'])['valid_until'] ?? ''}\n${t('추천 공식', 'Recommendation formula', 'Công thức gợi ý')}: ${d['recommendation_formula'] ?? ''}\n${t('공급업체별 납기 / 최소 발주 / 환산', 'Supplier lead days / MOQ / conversion', 'Ngày giao / MOQ / quy đổi theo NCC')}: ${rows(d['supplier_terms']).map((s) => '${s['lead_time_days']} / ${s['min_order_quantity']} / ${s['order_unit_quantity_base']}').join('; ')}\n${d['stock_updated_at'] ?? '—'} · ${d['mapping_count'] == 1 && d['stock_fresh'] == true ? t('재고 자료 확인됨', 'Stock data current', 'Dữ liệu kho hiện hành') : t('재고·품목 연결 확인 필요', 'Stock / item mapping needs review', 'Cần kiểm tra tồn / liên kết mặt hàng')}',
       ),
     ),
   );
@@ -1547,6 +1547,37 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                     ),
                     children: [
                       for (final d in rows(_data['demand'])) _demandCard(d),
+                      Wrap(
+                        children: [
+                          if (_query['demand_after'] != null)
+                            TextButton(
+                              onPressed: unavailable
+                                  ? null
+                                  : () {
+                                      _query.remove('demand_after');
+                                      _load();
+                                    },
+                              child: Text(t('처음', 'First', 'Đầu')),
+                            ),
+                          if (_data['demand_next_cursor'] != null)
+                            TextButton(
+                              onPressed: unavailable
+                                  ? null
+                                  : () {
+                                      _query['demand_after'] =
+                                          _data['demand_next_cursor'];
+                                      _load();
+                                    },
+                              child: Text(
+                                t(
+                                  '다음 50품목',
+                                  'Next 50 items',
+                                  '50 mặt hàng tiếp',
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
 

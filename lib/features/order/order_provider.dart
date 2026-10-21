@@ -104,6 +104,24 @@ class OrderNotifier extends StateNotifier<OrderState> {
     state = state.copyWith(cart: current, clearError: true);
   }
 
+  void replaceCartItem(CartItem original, CartItem replacement) {
+    if (!state.cart.any((item) => item.lineKey == original.lineKey)) return;
+    final current = state.cart
+        .where((item) => item.lineKey != original.lineKey)
+        .toList();
+    final index = current.indexWhere(
+      (item) => item.lineKey == replacement.lineKey,
+    );
+    if (index < 0) {
+      current.add(replacement);
+    } else {
+      current[index] = current[index].copyWith(
+        quantity: current[index].quantity + replacement.quantity,
+      );
+    }
+    state = state.copyWith(cart: current, clearError: true);
+  }
+
   void removeFromCart(CartItem target) {
     state = state.copyWith(
       cart: state.cart.where((item) => item.lineKey != target.lineKey).toList(),

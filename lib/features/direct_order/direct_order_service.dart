@@ -1,3 +1,4 @@
+import '../../core/menu/menu_choices.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -473,7 +474,7 @@ class DirectOrderService {
             .where((entry) => entry.value > 0)
             .map(
               (entry) => {
-                'menu_item_id': entry.key,
+                'menu_item_id': menuChoiceBaseId(entry.key),
                 if (menuOptionKeys.containsKey(entry.key))
                   'menu_option_key': menuOptionKeys[entry.key],
                 'quantity': entry.value,

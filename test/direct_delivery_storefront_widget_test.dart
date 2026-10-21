@@ -1,3 +1,5 @@
+import 'fixtures/menu_choice_data.dart';
+import 'package:globos_pos_system/core/menu/menu_choices.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -461,6 +463,86 @@ Future<void> _openAddress(WidgetTester tester, {bool fillDiners = true}) async {
 }
 
 void main() {
+  testWidgets('general selections remain separate, editable and recoverable', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final key = catalogKey();
+    final catalog = MenuChoiceCatalog.fromKey(key)!;
+    final service = _StorefrontFixtureService(
+      defaultMenu: false,
+      restoreDrafts: true,
+      extraItems: [
+        DirectOrderMenuItem(
+          id: 'choice',
+          categoryId: 'popular',
+          nameKo: '선택 메뉴',
+          nameVi: 'Món lựa chọn',
+          nameEn: 'Choice dish',
+          description: '',
+          price: 10000,
+          imageUrl: null,
+          vatCategory: 'food',
+          sortOrder: 0,
+          menuOptionKey: key,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      _fixtureApp(service: service, locale: const Locale('en')),
+    );
+    await tester.pumpAndSettle();
+    for (final spice in ['Mild', 'Hot']) {
+      final add = find.byKey(const Key('direct_add_choice'));
+      await _revealMenu(tester, add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      for (final label in [if (spice == 'Hot') spice, 'Normal']) {
+        final row = find.widgetWithText(ListTile, label);
+        await tester.ensureVisible(row);
+        await tester.tap(
+          find.descendant(of: row, matching: find.byType(Checkbox)),
+        );
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const Key('menu_choice_confirm')));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.byKey(const Key('direct_view_cart')));
+    await tester.pumpAndSettle();
+    final mild = catalog
+        .select({'mild': 1, 'normal': 1}, 'direct')
+        .lineId('choice');
+    final hot = catalog
+        .select({'hot': 1, 'normal': 1}, 'direct')
+        .lineId('choice');
+    expect(find.byKey(Key('direct_cart_item_$mild')), findsOneWidget);
+    expect(find.byKey(Key('direct_cart_item_$hot')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(Key('direct_cart_${hot}_options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('direct_cart_${hot}_options')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Mild'),
+        matching: find.byType(Checkbox),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('menu_choice_confirm')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(Key('direct_cart_item_$hot')), findsNothing);
+    expect(
+      tester.widget<Text>(find.byKey(Key('direct_cart_${mild}_quantity'))).data,
+      '2',
+    );
+    expect(service.submitCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'customer taps one dish and chooses S/L prices without extra catalog reads',
     (tester) async {

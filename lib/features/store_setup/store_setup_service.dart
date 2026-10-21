@@ -82,7 +82,8 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
           .from('tables')
           .select('id, table_number, seat_count, floor_label, status')
           .eq('restaurant_id', storeId)
-          .order('table_number'),
+          .order('table_number')
+          .limit(501),
       _client
           .from('printer_destinations')
           .select(
@@ -90,16 +91,31 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
             'physical_printers(name, printer_endpoints(endpoint_type, ip, port, device_name, priority, is_active))',
           )
           .eq('restaurant_id', storeId)
-          .order('purpose'),
+          .order('purpose')
+          .limit(21),
       _client
           .from('restaurant_settings')
           .select('fulfillment_mode, kds_workflow')
           .eq('restaurant_id', storeId)
           .maybeSingle(),
+      _client.rpc(
+        'admin_get_store_service_areas_v1',
+        params: {'p_store_id': storeId},
+      ),
     ]);
 
+    if ((responses[1] as List).length > 500 ||
+        (responses[2] as List).length > 20) {
+      throw StateError('STORE_SETUP_CONFIG_LIMIT');
+    }
+
     return StoreSetupExistingConfig(
-      store: Map<String, dynamic>.from(responses[0] as Map),
+      store: {
+        ...Map<String, dynamic>.from(responses[0] as Map),
+        'registered_config': (responses[4] as Map)['registered'] == true,
+        if ((responses[4] as Map)['registered'] == true)
+          'service_areas': (responses[4] as Map)['areas'],
+      },
       operation: (responses[3] as Map?)?['fulfillment_mode'] == 'paperless'
           ? StorePrinterOperation.paperless
           : StorePrinterOperation.posPrint,
