@@ -95,7 +95,7 @@ begin
    count(*) filter(where i.current_stock>0 and i.reorder_point is not null
      and i.current_stock<=i.reorder_point) as low_stock,
    count(*) filter(where i.current_stock is null) as unrecorded,
-   count(*) filter(where i.current_stock>0 and i.reorder_point is null) as threshold_missing,
+   count(*) filter(where i.reorder_point is null) as threshold_missing,
    max(i.updated_at) as updated_at,
    coalesce(jsonb_agg(jsonb_build_object('item_id',i.id,'name',i.name,'quantity',i.current_stock,'unit',i.unit,'reorder_point',i.reorder_point) order by i.display_rank) filter(where (i.current_stock<=0 or i.current_stock<=i.reorder_point) and i.display_rank<=20),'[]'::jsonb) as alerts
    from inventory_rows i group by i.restaurant_id),
