@@ -97,6 +97,9 @@ bash scripts/test_bunsik_inventory_stocktake.sh
 bash scripts/test_inventory_workflow_all_stores.sh
 bash scripts/test_procurement_v2.sh
 
+printf 'CHECK_REPO_STEP=photo_operations_read_models\n'
+bash scripts/test_photo_operations_read_models.sh
+
 printf 'CHECK_REPO_STEP=payroll_attendance_sql_api\n'
 bash scripts/test_payroll_attendance_postgrest.sh
 
