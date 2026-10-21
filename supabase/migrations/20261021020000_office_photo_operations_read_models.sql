@@ -95,6 +95,7 @@ begin
    count(*) filter(where i.current_stock>0 and i.reorder_point is not null
      and i.current_stock<=i.reorder_point) as low_stock,
    count(*) filter(where i.current_stock is null) as unrecorded,
+   count(*) filter(where i.current_stock>0 and i.reorder_point is null) as threshold_missing,
    max(i.updated_at) as updated_at,
    coalesce(jsonb_agg(jsonb_build_object('item_id',i.id,'name',i.name,'quantity',i.current_stock,'unit',i.unit,'reorder_point',i.reorder_point) order by i.display_rank) filter(where (i.current_stock<=0 or i.current_stock<=i.reorder_point) and i.display_rank<=20),'[]'::jsonb) as alerts
    from inventory_rows i group by i.restaurant_id),
@@ -115,7 +116,7 @@ begin
      'working',coalesce(attendance.working,0),'earliest_open_clock_in',attendance.earliest_open_clock_in,'staff',coalesce(attendance.staff,'[]'::jsonb)) end,
    'inventory',case when s.id=any(p_inventory_ids) then jsonb_build_object(
      'items',coalesce(inventory.items,0),'out_of_stock',inventory.out_of_stock,
-     'low_stock',inventory.low_stock,'unrecorded',inventory.unrecorded,'updated_at',inventory.updated_at,'alerts',coalesce(inventory.alerts,'[]'::jsonb)) end,
+     'low_stock',inventory.low_stock,'unrecorded',inventory.unrecorded,'threshold_missing',inventory.threshold_missing,'updated_at',inventory.updated_at,'alerts',coalesce(inventory.alerts,'[]'::jsonb)) end,
    'payroll',case when s.id=any(p_payroll_ids) then jsonb_build_object(
      'records',coalesce(payroll.records,0),'total',payroll.total,'updated_at',payroll.updated_at) end
    ) order by s.id),'[]'::jsonb)) into result from stores s

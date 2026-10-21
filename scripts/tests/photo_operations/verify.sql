@@ -29,6 +29,10 @@ do $$declare ids uuid[];r jsonb;p jsonb;begin
  if has_function_privilege('authenticated','office_photo_operations_report(uuid[],date,date,uuid[],uuid[],uuid[],uuid[])','execute') then raise exception 'ACL_LEAK';end if;
  raise notice 'PASS: aggregate separation, mixed grants, exact payroll period, masks, cross-store denial, bounds and ACL';
 end $$;
+update inventory_items set reorder_point=null where restaurant_id=(select min(id::text)::uuid from restaurants);
+do $$declare ids uuid[];r jsonb;begin select array_agg(id order by id) into ids from restaurants;
+ r:=office_photo_operations_report(ids,'2026-10-01','2026-10-20',ids,ids,ids,ids);
+ if (r#>>'{rows,0,inventory,threshold_missing}')::int<>1 then raise exception 'UNKNOWN_THRESHOLD_HIDDEN';end if;end$$;
 -- Simulate an overnight open shift and later clock-out: only the latest event counts.
 insert into attendance_logs select gen_random_uuid(),store_id,id,'clock_out','2026-10-20 17:00+07' from store_employees;
 do $$declare ids uuid[];r jsonb;begin select array_agg(id order by id) into ids from restaurants;
