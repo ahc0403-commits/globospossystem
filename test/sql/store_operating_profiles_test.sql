@@ -10,6 +10,8 @@ INSERT INTO public.users(id,auth_id,role)
  ('e2000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,
  CASE WHEN n=1 THEN 'super_admin' WHEN n=2 THEN 'store_admin' ELSE 'kitchen' END
  FROM generate_series(1,10)n;
+UPDATE public.users SET restaurant_id=CASE WHEN id<='e1000000-0000-4000-8000-000000000006'::uuid
+ THEN '273b057e-3b69-46e3-93c1-6194c2802849'::uuid ELSE '8bc9eef5-dcd5-46b1-b931-23f77132322c'::uuid END;
 INSERT INTO public.fixture_store_access VALUES('e2000000-0000-4000-8000-000000000002','8bc9eef5-dcd5-46b1-b931-23f77132322c');
 INSERT INTO public.tables(restaurant_id,table_number,floor_label)
  SELECT r.id,n::text,n::text||'F' FROM public.restaurants r CROSS JOIN generate_series(1,3)n;
@@ -56,6 +58,15 @@ BEGIN
   SELECT j,(first->>'baseline_version_id')::uuid,id FROM public.store_service_stations WHERE restaurant_id=b LIMIT 1;
   RAISE EXCEPTION 'cross-store station accepted';
  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+ BEGIN
+  INSERT INTO public.emergency_station_assignments(restaurant_id,user_id,station_type,floor_label)
+  VALUES(j,'e1000000-0000-4000-8000-000000000007','floor','1F');
+  PERFORM public.admin_capture_store_operating_baseline_v1(j,1);
+  RAISE EXCEPTION 'foreign-store account captured';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM<>'OPERATING_PROFILE_LEGACY_ASSIGNMENT_CONFLICT' THEN RAISE; END IF;
+ END;
+ ASSERT (SELECT count(*)=1 FROM public.store_operating_versions WHERE restaurant_id=j);
 END $$;
 SELECT 'OPERATING_PROFILE_LEGACY_IDENTITY=PASS';
 

@@ -10,7 +10,8 @@ DO $$ BEGIN
   'direct_order_prepare_combo_items','direct_order_public_submit','direct_order_public_submit_v2',
   'direct_order_approve_payment','direct_order_approve_payment_before_combo',
   'snapshot_direct_order_item_vat','snapshot_order_item_combo_components','snapshot_order_item_vat',
-  'capture_menu_option_batch','direct_order_deduct_combo_stock','process_payment_without_scoped_promotions')),
+  'capture_menu_option_batch','direct_order_deduct_combo_stock','process_payment_without_scoped_promotions',
+  'process_payment_before_promotion_read_split')),
  'unrelated function changed';
  ASSERT (SELECT count(*)=2 FROM operating_test.function_baseline b
  JOIN pg_proc p ON p.oid=to_regprocedure(b.signature)

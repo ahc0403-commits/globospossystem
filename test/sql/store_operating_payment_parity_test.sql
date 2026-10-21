@@ -1,4 +1,4 @@
--- Compare the exact pre-upgrade payment core with the new set-based core on
+-- Compare the exact pre-upgrade promotion wrapper/core with the new batch on
 -- the same order IDs. A subtransaction rolls the old run back before replay.
 BEGIN;
 SELECT set_config('request.jwt.claim.sub','92000000-0000-4000-8000-000000000099',true);
@@ -7,12 +7,12 @@ LANGUAGE plpgsql AS $$ DECLARE remaining numeric; initial numeric:=1; result jso
  IF EXISTS(SELECT 1 FROM public.order_discounts d JOIN public.restaurants r ON r.id=d.restaurant_id
  JOIN public.brands b ON b.id=r.brand_id WHERE d.order_id=oid AND d.discount_mode='percent' AND d.discount_value=100
  AND NOT coalesce(b.service_charge_enabled,false)) THEN initial:=0; END IF;
- IF legacy THEN PERFORM operating_test.payment_before_operating(oid,shop,initial,'CASH');
- ELSE PERFORM public.process_payment_without_scoped_promotions(oid,shop,initial,'CASH'); END IF;
+ IF legacy THEN PERFORM operating_test.payment_wrapper_before_operating(oid,shop,initial,'CASH');
+ ELSE PERFORM public.process_payment_before_promotion_read_split(oid,shop,initial,'CASH'); END IF;
  SELECT sum(paying_amount_inc_tax)-initial INTO remaining FROM public.order_items WHERE order_id=oid AND status<>'cancelled';
  IF (SELECT status<>'completed' FROM public.orders WHERE id=oid) THEN
- IF legacy THEN PERFORM operating_test.payment_before_operating(oid,shop,remaining,'BANKTRANSFER');
- ELSE PERFORM public.process_payment_without_scoped_promotions(oid,shop,remaining,'BANKTRANSFER'); END IF;
+ IF legacy THEN PERFORM operating_test.payment_wrapper_before_operating(oid,shop,remaining,'BANKTRANSFER');
+ ELSE PERFORM public.process_payment_before_promotion_read_split(oid,shop,remaining,'BANKTRANSFER'); END IF;
  END IF;
  SELECT jsonb_build_object(
   'status',(SELECT status FROM public.orders WHERE id=oid),
@@ -59,7 +59,8 @@ BEGIN
    INSERT INTO public.order_discounts(restaurant_id,order_id,discount_type,discount_mode,discount_value,discount_amount,
     proof_storage_path,applied_by,approved_via,reason)
    VALUES(shop,oid,'manual',CASE WHEN scenario.discount_mode IN ('percent','full') THEN 'percent' ELSE 'amount' END,
-    CASE WHEN scenario.discount_mode='full' THEN 100 WHEN scenario.discount_mode='percent' THEN 13.37 ELSE 5.01 END,0,'fixture/proof',auth.uid(),
+    CASE WHEN scenario.discount_mode='full' THEN 100 WHEN scenario.discount_mode='percent' THEN 13.37 ELSE 5.01 END,
+    CASE WHEN scenario.discount_mode='targeted' THEN 5.01 ELSE 0 END,'fixture/proof',auth.uid(),
     CASE WHEN scenario.discount_mode='targeted' THEN 'scheduled_promotion' ELSE 'manager_pin' END,'Isolated differential fixture') RETURNING id INTO discount;
    IF scenario.discount_mode='targeted' THEN
     INSERT INTO public.order_discount_lines(order_discount_id,restaurant_id,order_item_id,menu_item_id,line_amount_before_discount,discount_percent,discount_amount)

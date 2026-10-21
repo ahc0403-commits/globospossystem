@@ -4401,6 +4401,7 @@
   "storeSetupWorkflowPermission": "Only a super administrator can change the service workflow.",
   "storeSetupWorkflowJeongabok": "JeonGabok hands food from the kitchen directly to the floor.",
   "operatingProfileTitle": "Current operating setup",
+  "operatingProfileRecordedAssignments": "Last recorded assignments",
   "operatingProfileDescription": "Review the service route and assigned stations. Saving a baseline preserves this setup for future changes.",
   "operatingProfileReview": "Review current setup",
   "operatingProfileCapture": "Save current baseline",

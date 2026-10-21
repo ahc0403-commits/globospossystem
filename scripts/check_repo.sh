@@ -22,6 +22,9 @@ bash test/store_opening_printer_modes_sql_test.sh
 printf 'CHECK_REPO_STEP=store_operating_profiles\n'
 bash scripts/test_store_operating_profiles.sh
 
+printf 'CHECK_REPO_STEP=operating_payment_core\n'
+bash scripts/test_operating_payment_core.sh
+
 # A supplied schema-only export exercises every current production trigger and
 # function without connecting to production or copying business data.
 if [[ -n "${STORE_OPERATING_UPGRADE_SCHEMA:-}" ]]; then

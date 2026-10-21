@@ -109,6 +109,8 @@ class _OperatingProfileCardState extends State<OperatingProfileCard> {
                     ? l10n.operatingProfileCurrent
                     : l10n.operatingProfileNeedsCapture,
               ),
+              if (profile.stations.isNotEmpty)
+                Text(l10n.operatingProfileRecordedAssignments),
               for (final station in profile.stations)
                 ListTile(
                   contentPadding: EdgeInsets.zero,

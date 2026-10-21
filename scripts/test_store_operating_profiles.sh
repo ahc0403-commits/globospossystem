@@ -20,5 +20,6 @@ a=s.index('CREATE OR REPLACE FUNCTION public.require_admin_actor_for_restaurant(
 print(s[a:s.index('$$;',a)+3])
 PY
 run_sql < supabase/migrations/20261021163000_store_operating_profiles.sql >/dev/null
+run_sql < supabase/migrations/20261021172000_operating_profile_purge_compat.sql >/dev/null
 run_sql < test/sql/store_operating_profiles_test.sql
 python3 scripts/tests/store_operating_profile_concurrency.py "$operating_fixture"

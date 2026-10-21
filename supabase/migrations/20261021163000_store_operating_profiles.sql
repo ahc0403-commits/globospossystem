@@ -79,7 +79,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_catalog AS $$
    WHERE restaurant_id=p_store_id ORDER BY id LIMIT 2001)t
  ), accounts AS (
   SELECT jsonb_agg(jsonb_build_object('id',a.id,'user_id',a.user_id,'kind',a.station_type,
-   'floor',a.floor_label,'user_active',u.is_active) ORDER BY a.id) data,count(*) count
+   'floor',a.floor_label,'user_active',u.is_active,'user_store_id',u.restaurant_id) ORDER BY a.id) data,count(*) count
   FROM (SELECT id,user_id,station_type,floor_label FROM public.emergency_station_assignments
    WHERE restaurant_id=p_store_id AND is_active ORDER BY id LIMIT 201)a
   LEFT JOIN public.users u ON u.id=a.user_id
@@ -143,6 +143,7 @@ BEGIN
  ) THEN RAISE EXCEPTION 'OPERATING_PROFILE_LEGACY_ASSIGNMENT_CONFLICT'; END IF;
  IF EXISTS(SELECT 1 FROM jsonb_array_elements(source->'assignments') a
   WHERE (a->>'user_active')::boolean IS DISTINCT FROM true
+   OR (a->>'user_store_id')::uuid IS DISTINCT FROM p_store_id
    OR a->>'kind' NOT IN ('kitchen','tray','floor')
    OR (a->>'kind'='floor' AND nullif(a->>'floor','') IS NULL)) THEN
   RAISE EXCEPTION 'OPERATING_PROFILE_LEGACY_ASSIGNMENT_CONFLICT'; END IF;

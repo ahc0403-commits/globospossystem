@@ -12,12 +12,16 @@ WITH scope AS MATERIALIZED (
   SELECT m.restaurant_id, count(*) AS count FROM public.menu_items m
   JOIN scope s ON s.id=m.restaurant_id WHERE NOT m.is_archived GROUP BY m.restaurant_id
 ), assignments AS (
-  SELECT a.restaurant_id, a.station_type, a.floor_label, count(*) AS count
+  SELECT a.restaurant_id, a.station_type, a.floor_label, count(*) AS count,
+    count(*) FILTER (WHERE u.id IS NULL OR u.is_active IS DISTINCT FROM true
+      OR u.restaurant_id IS DISTINCT FROM a.restaurant_id) AS conflicting_accounts
   FROM public.emergency_station_assignments a JOIN scope s ON s.id=a.restaurant_id
+  LEFT JOIN public.users u ON u.id=a.user_id
   WHERE a.is_active GROUP BY a.restaurant_id,a.station_type,a.floor_label
 ), station_counts AS (
   SELECT restaurant_id,jsonb_agg(jsonb_build_object('kind',station_type,
-    'stored_floor',floor_label,'accounts',count) ORDER BY station_type,floor_label) AS stations
+    'stored_floor',floor_label,'accounts',count,'conflicting_accounts',conflicting_accounts)
+    ORDER BY station_type,floor_label) AS stations
   FROM assignments GROUP BY restaurant_id
 )
 SELECT jsonb_build_object('restaurant_id',s.id,'name',s.name,

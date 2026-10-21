@@ -177,6 +177,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(backend.captures, 1);
       expect(backend.receivedRevision, 0);
+      expect(find.text('마지막으로 기록한 담당 배정'), findsOneWidget);
       expect(find.textContaining('담당 계정 2개'), findsOneWidget);
       expect(find.textContaining('2F'), findsOneWidget);
       expect(find.textContaining('3F'), findsNothing);

@@ -9,7 +9,7 @@
 |---|---|---|
 | 0 현행 계약 | 로컬 전체 기준선 통과, 운영 읽기 확인 | 기존 매장 fixture와 유효 운영 함수 확인 |
 | 1 운영 프로필·명시 배정 | 기존 흐름 기록·조회 및 관리자 UI 검증 완료; 장치/새 흐름 활성화는 후속 단계 | 기존 계정·층·주문·설정 보존, 매장 범위/동시성 검증 |
-| 2 메뉴·요청행 전체 연결 | 요청행 식별·결제 재고 집합 처리 구현/검증 중 | 모든 채널·스냅샷·금액·재고·출력 연결 검증 |
+| 2 메뉴·요청행 전체 연결 | 2a 요청행 식별·결제 집합 처리 검증 완료; 일반 옵션·카트 연결은 미완료 | 모든 채널·스냅샷·금액·재고·출력 연결 검증 |
 | 3 단계 진행·변경 작업 | 대기 | 취소/이동·준비 lot·알림·권한·복구 검증 |
 | 4 모의 운영·게시 | 대기 | 설정 해시·장치 확인·동시 접수·부분 실패 처리 |
 | 5 전환·대사 | 대기 | 전체 검사, 데이터 업그레이드/복귀, 현장 검증 |
@@ -76,12 +76,21 @@
 - `scripts/test_store_operating_profiles.sh`: 동일 ID, 구역의 타 매장 연결 차단,
   실제 authenticated 역할의 RPC/테이블 접근, 불변 버전, stale revision,
   전가복 저장 3F 두 계정 보존, 2,000테이블 한도 통과.
-  격리 측정: 소스 읽기 2회/2행(기록+반환), 총 약 6.15ms. 현장 p95가 아니다.
+  최종 격리 측정: 소스 읽기 2회/2행(기록+반환), 총 약 6.59ms. 현장 p95가 아니다.
 - `scripts/test_store_operating_upgrade.sh <public,pos_invoice_private schema.sql>` 통과:
   기존 함수 1,239개와 주요 테이블 15개 내용이 그대로 유지되고,
   변경 전후 전가복 시작→수량 인계→층 서빙 및 분식클럽 주방→트레이→층 서빙 통과.
 - 신규/기존 개점 Flutter 테스트 31개 통과, store_setup 정적 분석 통과.
 - 실제 장치 연결·출력, 운영 DDL, 배포는 실행하지 않았다.
+- 후속 점검에서 신규 외래키가 기존 비활성 매장 영구 삭제를 막는 문제를 격리 DB에서 재현했다.
+  `20261021172000_operating_profile_purge_compat.sql`은 부모 매장의 실제 삭제에만 구성 이력을
+  연쇄 정리한다. 개별 이력의 수정·삭제는 계속 거부한다. 삭제 검사는 transition table을 통해
+  문장 단위로 처리한다. 기존 삭제 RPC의 super admin·비활성·slug·연결 계정 조건과 감사 기록,
+  다른 두 매장 데이터 보존을 모두 검증했다. 운영 매장 삭제는 수행하지 않았다.
+- 관리자 화면은 현재 동선과 마지막으로 기록한 담당 배정을 명확히 구분해 표시한다.
+- 잘못된 기존 배정이 기준으로 확정되지 않도록 활성 계정의 실제 매장 소속도 검사한다.
+  타 매장 계정을 연결한 fixture의 capture 거부·전체 rollback을 검증했다.
+  운영 읽기 재확인에서 두 매장 각각 활성 배정 4개, 소속/활성 충돌 0개였다.
 
 ### 2단계 중 주문행·결제 기반(2a)
 
@@ -107,6 +116,13 @@
   subtransaction으로 되돌린 뒤 신규 실행과 대조했다. 세금 포함/별도 × 서비스 요금 on/off ×
   할인 없음/정률/정액/특정 행/전액 할인 20조합에서 행별 VAT·할인·결제·재고 원장·비동기 큐가 일치했다.
 - 별도 두 connection의 동시 결제에서 공유 원료 2개, 결제 2개, 재고 원장 4개의 대사 통과.
+- `20261021173000_batch_promotion_payment_allocations.sql`: 예약 할인 wrapper에 남아 있던
+  행별 VAT 갱신도 일괄 UPDATE로 변경했다. 위 20조합의 비교를 실제 이전 wrapper와 core를
+  함께 실행하는 방식으로 확장해 재통과했다. 기존 권한·잠금·할인 복원 규칙을 보존했다.
+- `scripts/test_operating_payment_core.sh`를 기본 `check_repo.sh`에 추가했다. 운영 스키마 파일이
+  없어도 기존 저장소 fixture와 실제 계산 함수로 20조합, 500행/1,002원장, 부분 결제·중복 거부를
+  매번 검사한다. 이 좁은 fixture의 권한과 송장 캡처는 테스트용이며, 실 권한·MISA trigger·KDS는
+  별도의 현재 스키마 업그레이드 검사로 확인한다. 두 검사를 서로 대체한 것으로 취급하지 않는다.
 - 일반 선택군, 요청행 기반 카트/구형 초안 변환, 새 선택의 출력·KDS 연결은 **미완료**다.
   이 때문에 기존 요청당 메뉴 중복 제약을 유지한다. 맵기/짜기 등 신규 선택이나 다중 주방을
   현재 매장에 활성화하지 않았다. 단계 2 전체 완료로 표시하지 않는다.
@@ -118,14 +134,34 @@
 - 미적용 매장 구성 파일만 `20261021163000_store_operating_profiles.sql`로 변경했다.
   SQL SHA256 `d51f7e50a8df7d500e5f4b580d9f9b6fb1b37cd8ae46c9929fbfd8b64da19b5b`가 변경 전후 동일하다.
   163000의 로컬/최신 main/운영 이력 미사용과 local+main 경로 합집합의 버전 고유성을 확인했다.
+- 위 SHA는 이름 변경 당시의 동일성 증거다. 이후 미적용 163000에 계정 매장 소속 검사를 보완했으며,
+  최종 SQL SHA256은 `8aa48635f524e89663ec0d968dcb1bd1a60ebf601ddeab7e6f87d85e5011a767`이다.
+  다섯 신규 migration(163000/170000/171000/172000/173000)은 운영 미적용 상태를 읽기로 확인했다.
 - 운영에 적용된 160000 파일·migration history는 변경하지 않았다. 새 운영 스키마를 다시
   읽어 매출 집계 두 overload의 정의/권한 보존을 업그레이드 검증에서 확인했다.
-  현재 운영 스키마의 기존 함수 1,239개 중 의도한 11개 외 정의 변경 없음,
+  현재 운영 스키마의 기존 함수 1,239개 중 의도한 12개(예약 할인 wrapper 포함) 외 정의 변경 없음,
   모든 기존 함수의 owner/ACL/security definer/search_path 보존을 확인했다.
   실 결제 fixture에서 전가복 1건 10,800 VND, 분식클럽 2건 21,600 VND,
   추가 등록 무매출 매장 표시, 두 overload 결과 일치와 일반 계정 접근 거부도 통과했다.
 - 새 매출 함수 운영 MD5: `(date)` `5f32a8731128341ffd1593997b01d0c3`,
   `(date,boolean)` `c25e31662f27cbdcf428ff3fd6641b07`.
+
+### 검증된 소스 범위
+
+- `9965ccd7` 기준 `STORE_OPERATING_UPGRADE_SCHEMA=/tmp/globos-architecture-upgrade-schema-main-20261021.sql bash scripts/check_repo.sh`
+  종료 코드 0. 정적 분석, Flutter **2,455 통과 / 기존 98 skip**, SQL·Deno/API 검사 및 release web build 통과.
+  로그: `/tmp/globos-architecture-main-final-check.log`.
+- 이후 삭제 호환·예약 할인 wrapper·배정 표시 보완에 대해 변경 경로 검사를 다시 실행했다.
+  현재 스키마 전체 업그레이드(12개 함수 변경/기존 권한 보존), 두 매장 인계,
+  실제 이전 wrapper 포함 20조합, 500행 재고, 두 연결 동시 결제, 최신 매출 두 overload와 삭제 조건 통과.
+  로그: `/tmp/globos-operating-all-final-upgrade.log`.
+- 기본 CI용 결제 core 검사, 프로필 SQL/동시 capture, 관리자 위젯 8개, 정적 분석,
+  migration 번호 고유성·shell 문법 검사도 통과했다.
+  주요 로그: `/tmp/globos-operating-payment-ci-final.log`, `/tmp/globos-operating-profile-scope-final.log`,
+  `/tmp/globos-operating-final-widget.log`, `/tmp/globos-operating-final-analyze.log`.
+- 최종 UI 문구를 포함한 release web build도 재통과했다. 로그: `/tmp/globos-operating-final-build.log`.
+- 구현 커밋을 원격으로 push하거나 PR/배포/운영 migration을 실행하지 않았다. 로컬 회귀검증은
+  실제 태블릿·프린터·현장 네트워크 검증 및 정확한 배포 SHA의 CI 성공을 대신하지 않는다.
 
 ## 남은 완료 조건
 

@@ -4409,6 +4409,7 @@
   "operatingProfileDirectRoute": "주방 → 층 → 고객",
   "operatingProfileTrayRoute": "주방 → 트레이 → 층 → 고객",
   "operatingProfileCurrent": "기록된 기준과 현재 구성이 일치합니다.",
+  "operatingProfileRecordedAssignments": "마지막으로 기록한 담당 배정",
   "operatingProfileNeedsCapture": "현재 구성을 기록하면 담당 배정이 함께 보존됩니다.",
   "operatingProfileAccounts": "담당 계정 {count}개",
   "@operatingProfileAccounts": {

@@ -48,6 +48,11 @@ name='"public"."process_payment_without_scoped_promotions"'
 start=source.index('CREATE OR REPLACE FUNCTION '+name+'(')
 definition=source[start:source.index('\nALTER FUNCTION ',start)]
 print(definition.replace(name,'"operating_test"."payment_before_operating"',1))
+name='"public"."process_payment_before_promotion_read_split"'
+start=source.index('CREATE OR REPLACE FUNCTION '+name+'(')
+definition=source[start:source.index('\nALTER FUNCTION ',start)]
+print(definition.replace(name,'"operating_test"."payment_wrapper_before_operating"',1)
+      .replace('public.process_payment_without_scoped_promotions(', 'operating_test.payment_before_operating('))
 PY
 
 # Stage 2a upgrades the line snapshot contract atomically; the old uniqueness
@@ -56,6 +61,11 @@ docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U pos
   < supabase/migrations/20261021170000_direct_order_line_identity.sql >/dev/null
 docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
   < supabase/migrations/20261021171000_invoice_mapping_pending_marker.sql >/dev/null
+docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < supabase/migrations/20261021172000_operating_profile_purge_compat.sql >/dev/null
+docker exec -i --env PGPASSWORD=fixture-only "$operating_fixture" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < supabase/migrations/20261021173000_batch_promotion_payment_allocations.sql >/dev/null
+run_sql < test/sql/store_operating_purge_contract_test.sql
 run_sql < test/sql/store_operating_final_contract_test.sql
 run_sql < test/sql/direct_order_line_upgrade_after.sql
 run_sql < test/sql/direct_order_line_identity_test.sql

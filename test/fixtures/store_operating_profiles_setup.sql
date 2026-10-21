@@ -1,6 +1,6 @@
 CREATE TABLE public.brands(id uuid PRIMARY KEY,management_model text);
 CREATE TABLE public.restaurants(id uuid PRIMARY KEY,name text NOT NULL,is_active boolean DEFAULT true,brand_id uuid REFERENCES brands(id));
-CREATE TABLE public.users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),auth_id uuid,role text,is_active boolean DEFAULT true);
+CREATE TABLE public.users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),auth_id uuid,role text,is_active boolean DEFAULT true,restaurant_id uuid REFERENCES restaurants(id));
 CREATE TABLE public.fixture_store_access(auth_id uuid,store_id uuid);
 CREATE FUNCTION public.is_super_admin() RETURNS boolean LANGUAGE sql STABLE AS $$
  SELECT EXISTS(SELECT 1 FROM public.users WHERE auth_id=auth.uid() AND role='super_admin' AND is_active) $$;
