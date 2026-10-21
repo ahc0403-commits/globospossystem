@@ -152,8 +152,8 @@ run_sql <<'SQL'
 ALTER TABLE public.restaurants ADD COLUMN created_at timestamptz NOT NULL DEFAULT '-infinity';
 INSERT INTO tax_entity VALUES('19000000-0000-0000-0000-000000000001','NEW-ENTITY','New seller') ON CONFLICT DO NOTHING;
 SQL
-run_sql < supabase/migrations/20261021140000_all_store_sales_reporting.sql
-run_sql < supabase/migrations/20261021140000_all_store_sales_reporting.sql
+run_sql < supabase/migrations/20261021160000_all_store_sales_reporting.sql
+run_sql < supabase/migrations/20261021160000_all_store_sales_reporting.sql
 run_sql < test/sql/all_store_sales_reporting_test.sql
 if [[ -n "${GLOBOS_ALL_STORE_PERF_OUTPUT:-}" ]]; then
   python3 scripts/tests/deposit_breakdown_performance.py "$db_name" "$GLOBOS_ALL_STORE_PERF_OUTPUT"
