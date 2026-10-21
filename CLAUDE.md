@@ -107,9 +107,12 @@ requests and higher-priority instructions take precedence.
 - Supabase bytea values use `\x...` hex. Use `decodeByteaToString()` in Edge
   Functions, not `atob()`; see the vault's
   `90_REFERENCE/04_DECISIONS_AND_INVARIANTS.md` for the contract.
-- General daily cash close is 23:00 Asia/Ho_Chi_Minh. Restaurant order cutoff
-  is 21:30, grace ends at 21:45, and finalization is 22:20; these are separate
-  operating contracts.
+- **Owner correction 2026-10-21:** completed actual sales remain reportable
+  regardless of payment time. The owner decides final sales confirmation;
+  legacy scheduled finalization results must not block reporting or claim an
+  owner confirmation. Do not reactivate automatic 22:20 sales finalization.
+  Daily cash closing and configured ordering hours are separate workflows;
+  this reporting fix does not change their runtime behavior.
 - **Customer delivery fees are disabled by the owner's 2026-10-12 decision.**
   Do not create delivery fee quotes, invoice mappings, order items (including
   zero-value placeholders), or supplemental delivery sales. New fee-free

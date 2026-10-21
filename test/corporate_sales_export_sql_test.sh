@@ -158,4 +158,8 @@ run_sql < test/sql/all_store_sales_reporting_test.sql
 if [[ -n "${GLOBOS_ALL_STORE_PERF_OUTPUT:-}" ]]; then
   python3 scripts/tests/deposit_breakdown_performance.py "$db_name" "$GLOBOS_ALL_STORE_PERF_OUTPUT"
 fi
+run_sql < test/sql/owner_sales_reporting_setup.sql
+run_sql < supabase/migrations/20261021230000_owner_sales_reporting.sql
+run_sql < supabase/migrations/20261021230000_owner_sales_reporting.sql
+run_sql < test/sql/owner_sales_reporting_test.sql
 printf 'CORPORATE_SALES_SQL_TEST=PASS\n'
