@@ -75,11 +75,14 @@ begin
    from public.payment_adjustments a where a.restaurant_id=any(p_finance_ids)
    and a.created_at >= p_from::timestamp at time zone 'Asia/Ho_Chi_Minh'
    and a.created_at < (p_to+1)::timestamp at time zone 'Asia/Ho_Chi_Minh' group by a.restaurant_id),
- latest_events as materialized(select distinct on(l.restaurant_id,l.employee_id)
-   l.restaurant_id,l.employee_id,e.full_name,l.type,l.logged_at from public.attendance_logs l
-   join public.store_employees e on e.id=l.employee_id and e.store_id=l.restaurant_id and e.is_active
-   where l.restaurant_id=any(p_hr_ids) and l.logged_at<cutoff
+ last_clock_events as materialized(select distinct on(l.restaurant_id,l.employee_id)
+   l.restaurant_id,l.employee_id,l.type,l.logged_at from public.attendance_logs l
+   where l.restaurant_id=any(p_hr_ids) and l.employee_id is not null and l.logged_at<cutoff
    order by l.restaurant_id,l.employee_id,l.logged_at desc,l.id desc),
+ photo_employees as materialized(select id,store_id,full_name from public.store_employees
+   where store_id=any(p_hr_ids) and is_active),
+ latest_events as materialized(select l.*,e.full_name from last_clock_events l
+   join photo_employees e on e.id=l.employee_id and e.store_id=l.restaurant_id),
  ranked_events as (select *,row_number() over(partition by restaurant_id order by (type='clock_in') desc,full_name,employee_id) as display_rank from latest_events),
  attendance as (select restaurant_id as store_id,count(*) filter(where type='clock_in') as working,
    min(logged_at) filter(where type='clock_in') as earliest_open_clock_in,
