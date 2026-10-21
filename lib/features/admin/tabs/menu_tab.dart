@@ -203,6 +203,20 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       selectedCategoryId: selectedCategoryId,
       numberFormat: numberFormat,
       scrollable: scrollable,
+      isReordering: menuState.isReorderingItems,
+      onMove: (itemId, move) async {
+        final success = await menuNotifier.moveMenuItem(
+          categoryId: selectedCategoryId!,
+          itemId: itemId,
+          move: move,
+        );
+        if (!context.mounted) return;
+        if (success) {
+          showSuccessToast(context, l10n.menuOrderSaved);
+        } else {
+          showErrorToast(context, l10n.menuOrderFailed);
+        }
+      },
       onToggleAvailability: menuNotifier.toggleAvailability,
       onTogglePublicVisibility: menuNotifier.togglePublicVisibility,
       onEditItem: (item) =>
@@ -2337,6 +2351,8 @@ class _ItemsPanel extends StatelessWidget {
     required this.onTogglePublicVisibility,
     required this.onEditItem,
     required this.onDeleteItem,
+    required this.onMove,
+    required this.isReordering,
     this.scrollable = true,
   });
 
@@ -2349,6 +2365,8 @@ class _ItemsPanel extends StatelessWidget {
   onTogglePublicVisibility;
   final ValueChanged<Map<String, dynamic>> onEditItem;
   final ValueChanged<Map<String, dynamic>> onDeleteItem;
+  final void Function(String itemId, String move) onMove;
+  final bool isReordering;
   final bool scrollable;
 
   @override
@@ -2410,6 +2428,7 @@ class _ItemsPanel extends StatelessWidget {
                   };
 
                   return Container(
+                    key: ValueKey('admin_menu_row_$itemId'),
                     decoration: BoxDecoration(
                       color: AppColors.surface1,
                       borderRadius: BorderRadius.circular(10),
@@ -2501,6 +2520,35 @@ class _ItemsPanel extends StatelessWidget {
                           runSpacing: 8,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            IconButton(
+                              key: Key('admin_menu_item_first_$itemId'),
+                              tooltip: l10n.menuMoveItemFirst,
+                              onPressed: isReordering || index == 0
+                                  ? null
+                                  : () => onMove(itemId, 'first'),
+                              icon: const Icon(
+                                Icons.vertical_align_top,
+                                size: 20,
+                              ),
+                            ),
+                            IconButton(
+                              key: Key('admin_menu_item_up_$itemId'),
+                              tooltip: l10n.menuMoveItemUp,
+                              onPressed: isReordering || index == 0
+                                  ? null
+                                  : () => onMove(itemId, 'up'),
+                              icon: const Icon(Icons.arrow_upward, size: 20),
+                            ),
+                            IconButton(
+                              key: Key('admin_menu_item_down_$itemId'),
+                              tooltip: l10n.menuMoveItemDown,
+                              onPressed:
+                                  isReordering ||
+                                      index == selectedItems.length - 1
+                                  ? null
+                                  : () => onMove(itemId, 'down'),
+                              icon: const Icon(Icons.arrow_downward, size: 20),
+                            ),
                             if (isCombo)
                               ToastStatusBadge(
                                 label: l10n.menuComboBadge,

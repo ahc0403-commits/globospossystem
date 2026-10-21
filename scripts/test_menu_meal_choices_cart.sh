@@ -34,3 +34,7 @@ run_sql < test/sql/menu_size_prices_contract_test.sql
 
 run_sql < supabase/migrations/20261021090000_menu_meal_choices_cart.sql >/dev/null
 run_sql < test/sql/menu_meal_choices_cart_test.sql
+
+run_sql < supabase/migrations/20261021110000_admin_menu_item_order.sql >/dev/null
+run_sql < scripts/verify_admin_menu_item_order.sql
+run_sql < test/sql/admin_menu_item_order_test.sql

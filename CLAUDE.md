@@ -78,6 +78,10 @@ requests and higher-priority instructions take precedence.
   distinct stored floors 1F/2F/3F, and other stores' checker workflows. Queue
   `kitchen_direct_to_floor` is the source snapshot; tray quantity fields are
   compatibility projections, not evidence of a checker actor.
+- JeonGabok guest 1F/2F tables retain stored 2F/3F labels. Owner confirmed
+  `jgbt_floor_1f` serves stored 2F and `jgbt_floor_2f` serves stored 3F.
+  Keep this mapping after profile edits; render guest floor labels on KDS.
+  Floor-direct beverages are enabled for this store.
 - JeonGabok uses the active KDS revision/broadcast rollout. Kitchen completion
   invalidates the assigned stored floor directly; floor timers start at
   `kitchen_done`. Delivery/pickup preparation must not notify a table floor.

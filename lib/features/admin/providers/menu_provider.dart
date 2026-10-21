@@ -11,12 +11,14 @@ class MenuState {
     this.items = const AsyncValue.loading(),
     this.selectedCategoryId,
     this.error,
+    this.isReorderingItems = false,
   });
 
   final AsyncValue<List<Map<String, dynamic>>> categories;
   final AsyncValue<List<Map<String, dynamic>>> items;
   final String? selectedCategoryId;
   final String? error;
+  final bool isReorderingItems;
 
   MenuState copyWith({
     AsyncValue<List<Map<String, dynamic>>>? categories,
@@ -25,8 +27,10 @@ class MenuState {
     String? error,
     bool clearSelectedCategory = false,
     bool clearError = false,
+    bool? isReorderingItems,
   }) {
     return MenuState(
+      isReorderingItems: isReorderingItems ?? this.isReorderingItems,
       categories: categories ?? this.categories,
       items: items ?? this.items,
       selectedCategoryId: clearSelectedCategory
@@ -38,11 +42,14 @@ class MenuState {
 }
 
 class MenuNotifier extends StateNotifier<MenuState> {
-  MenuNotifier(this.storeId) : super(const MenuState()) {
+  MenuNotifier(this.storeId, {MenuService? service})
+    : _service = service ?? menuService,
+      super(const MenuState()) {
     fetchAll();
   }
 
   final String storeId;
+  final MenuService _service;
 
   String _mapMenuError(Object error, String fallback) {
     if (error is! PostgrestException) {
@@ -112,7 +119,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
   Future<void> fetchCategories() async {
     state = state.copyWith(categories: const AsyncValue.loading());
     try {
-      final categories = await menuService.fetchCategories(storeId);
+      final categories = await _service.fetchCategories(storeId);
 
       final selectedId = state.selectedCategoryId;
       final hasSelectedId =
@@ -135,7 +142,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
   Future<void> fetchItems() async {
     state = state.copyWith(items: const AsyncValue.loading());
     try {
-      final items = await menuService.fetchItems(storeId);
+      final items = await _service.fetchItems(storeId);
       state = state.copyWith(items: AsyncValue.data(items), clearError: true);
     } catch (error, stackTrace) {
       state = state.copyWith(items: AsyncValue.error(error, stackTrace));
@@ -154,7 +161,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
   }) async {
     try {
       final currentCategories = state.categories.valueOrNull ?? [];
-      await menuService.addCategory(
+      await _service.addCategory(
         storeId: storeId,
         nameKo: nameKo,
         nameVi: nameVi,
@@ -181,7 +188,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String analyticsGroup,
   }) async {
     try {
-      await menuService.updateCategory(
+      await _service.updateCategory(
         categoryId: categoryId,
         nameKo: nameKo,
         nameVi: nameVi,
@@ -201,7 +208,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
 
   Future<bool> deleteCategory(String categoryId) async {
     try {
-      await menuService.deleteCategory(categoryId);
+      await _service.deleteCategory(categoryId);
       await fetchCategories();
       state = state.copyWith(clearError: true);
       return true;
@@ -217,7 +224,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     final previous = state.categories.valueOrNull ?? const [];
     state = state.copyWith(categories: AsyncValue.data(categories));
     try {
-      await menuService.reorderCategories(
+      await _service.reorderCategories(
         storeId: storeId,
         categoryIds: categories
             .map((category) => category['id']?.toString() ?? '')
@@ -232,6 +239,52 @@ class MenuNotifier extends StateNotifier<MenuState> {
         categories: AsyncValue.data(previous),
         error: _mapMenuError(error, 'Failed to reorder categories.'),
       );
+      return false;
+    }
+  }
+
+  Future<bool> moveMenuItem({
+    required String categoryId,
+    required String itemId,
+    required String move,
+  }) async {
+    if (state.isReorderingItems) return false;
+    state = state.copyWith(isReorderingItems: true, clearError: true);
+    try {
+      final orders = await _service.moveMenuItem(
+        storeId: storeId,
+        categoryId: categoryId,
+        itemId: itemId,
+        move: move,
+      );
+      if (!mounted) return false;
+      final sortById = {
+        for (final row in orders) row['id'].toString(): row['sort_order'],
+      };
+      final items =
+          [
+            for (final item
+                in state.items.valueOrNull ?? <Map<String, dynamic>>[])
+              if (item['category_id']?.toString() == categoryId &&
+                  sortById.containsKey(item['id'].toString()))
+                {...item, 'sort_order': sortById[item['id'].toString()]}
+              else
+                item,
+          ]..sort((a, b) {
+            final order = ((a['sort_order'] as num?) ?? 0).compareTo(
+              (b['sort_order'] as num?) ?? 0,
+            );
+            return order != 0
+                ? order
+                : a['id'].toString().compareTo(b['id'].toString());
+          });
+      state = state.copyWith(
+        items: AsyncValue.data(items),
+        isReorderingItems: false,
+      );
+      return true;
+    } catch (_) {
+      if (mounted) state = state.copyWith(isReorderingItems: false);
       return false;
     }
   }
@@ -254,7 +307,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     try {
       final sortOrder = _nextSortOrder(categoryId);
 
-      created = await menuService.addMenuItem(
+      created = await _service.addMenuItem(
         storeId: storeId,
         categoryId: categoryId,
         nameKo: nameKo,
@@ -272,7 +325,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         throw StateError('MENU_ITEM_ID_REQUIRED');
       }
       if (isCombo) {
-        await menuService.setMenuCombo(
+        await _service.setMenuCombo(
           itemId: itemId,
           isCombo: true,
           components: comboComponents,
@@ -286,7 +339,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
       final itemId = created?['id']?.toString();
       if (itemId != null && itemId.isNotEmpty) {
         try {
-          await menuService.deleteMenuItem(itemId);
+          await _service.deleteMenuItem(itemId);
         } catch (_) {}
       }
       state = state.copyWith(
@@ -315,7 +368,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     MenuImageUploadResult? uploaded;
     try {
       final sortOrder = _nextSortOrder(categoryId);
-      created = await menuService.addMenuItem(
+      created = await _service.addMenuItem(
         storeId: storeId,
         categoryId: categoryId,
         nameKo: nameKo,
@@ -333,7 +386,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         throw StateError('MENU_ITEM_ID_REQUIRED');
       }
       if (isCombo) {
-        await menuService.setMenuCombo(
+        await _service.setMenuCombo(
           itemId: itemId,
           isCombo: true,
           components: comboComponents,
@@ -341,12 +394,12 @@ class MenuNotifier extends StateNotifier<MenuState> {
         );
       }
 
-      uploaded = await menuService.uploadMenuImage(
+      uploaded = await _service.uploadMenuImage(
         storeId: storeId,
         itemId: itemId,
         file: photo,
       );
-      await menuService.setMenuItemImage(
+      await _service.setMenuItemImage(
         itemId: itemId,
         imageUrl: uploaded.publicUrl,
         storagePath: uploaded.storagePath,
@@ -357,13 +410,13 @@ class MenuNotifier extends StateNotifier<MenuState> {
     } catch (error, _) {
       if (uploaded != null) {
         try {
-          await menuService.removeMenuImageObject(uploaded.storagePath);
+          await _service.removeMenuImageObject(uploaded.storagePath);
         } catch (_) {}
       }
       final itemId = created?['id']?.toString();
       if (itemId != null && itemId.isNotEmpty) {
         try {
-          await menuService.deleteMenuItem(itemId);
+          await _service.deleteMenuItem(itemId);
         } catch (_) {}
       }
       state = state.copyWith(
@@ -375,7 +428,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
 
   Future<bool> toggleAvailability(String itemId, bool isAvailable) async {
     try {
-      await menuService.toggleAvailability(itemId, isAvailable);
+      await _service.toggleAvailability(itemId, isAvailable);
       await fetchItems();
       state = state.copyWith(clearError: true);
       return true;
@@ -389,7 +442,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
 
   Future<bool> archiveMenuItem(String itemId) async {
     try {
-      await menuService.archiveMenuItem(itemId);
+      await _service.archiveMenuItem(itemId);
       await fetchItems();
       state = state.copyWith(clearError: true);
       return true;
@@ -406,7 +459,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     bool isVisiblePublic,
   ) async {
     try {
-      await menuService.togglePublicVisibility(itemId, isVisiblePublic);
+      await _service.togglePublicVisibility(itemId, isVisiblePublic);
       await fetchItems();
       state = state.copyWith(clearError: true);
       return true;
@@ -446,7 +499,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required double price,
   }) async {
     try {
-      await menuService.updateMenuItem(
+      await _service.updateMenuItem(
         itemId: itemId,
         nameKo: nameKo,
         nameVi: nameVi,
@@ -472,7 +525,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required bool floorDirect,
   }) async {
     try {
-      await menuService.setMenuFulfillmentRoute(
+      await _service.setMenuFulfillmentRoute(
         itemId: itemId,
         floorDirect: floorDirect,
       );
@@ -497,7 +550,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     int drinkChoiceCount = 0,
   }) async {
     try {
-      await menuService.setMenuCombo(
+      await _service.setMenuCombo(
         itemId: itemId,
         isCombo: isCombo,
         components: components,
@@ -521,19 +574,19 @@ class MenuNotifier extends StateNotifier<MenuState> {
   }) async {
     MenuImageUploadResult? uploaded;
     try {
-      uploaded = await menuService.uploadMenuImage(
+      uploaded = await _service.uploadMenuImage(
         storeId: storeId,
         itemId: itemId,
         file: photo,
       );
-      await menuService.setMenuItemImage(
+      await _service.setMenuItemImage(
         itemId: itemId,
         imageUrl: uploaded.publicUrl,
         storagePath: uploaded.storagePath,
       );
       if (previousStoragePath != null && previousStoragePath.isNotEmpty) {
         try {
-          await menuService.removeMenuImageObject(previousStoragePath);
+          await _service.removeMenuImageObject(previousStoragePath);
         } catch (_) {}
       }
       await fetchItems();
@@ -542,7 +595,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     } catch (error, _) {
       if (uploaded != null) {
         try {
-          await menuService.removeMenuImageObject(uploaded.storagePath);
+          await _service.removeMenuImageObject(uploaded.storagePath);
         } catch (_) {}
       }
       state = state.copyWith(
@@ -557,10 +610,10 @@ class MenuNotifier extends StateNotifier<MenuState> {
     String? storagePath,
   }) async {
     try {
-      await menuService.setMenuItemImage(itemId: itemId);
+      await _service.setMenuItemImage(itemId: itemId);
       if (storagePath != null && storagePath.isNotEmpty) {
         try {
-          await menuService.removeMenuImageObject(storagePath);
+          await _service.removeMenuImageObject(storagePath);
         } catch (_) {}
       }
       await fetchItems();
@@ -578,7 +631,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     List<Map<String, dynamic>> rows,
   ) async {
     try {
-      final result = await menuService.importMenuItems(
+      final result = await _service.importMenuItems(
         storeId: storeId,
         rows: rows,
       );
@@ -598,7 +651,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required List<Map<String, dynamic>> items,
   }) async {
     try {
-      final result = await menuService.updateMenuWorkbook(
+      final result = await _service.updateMenuWorkbook(
         storeId: storeId,
         categories: categories,
         items: items,

@@ -105,7 +105,8 @@ class MenuService {
         )
         .eq('restaurant_id', storeId)
         .eq('is_archived', false)
-        .order('sort_order', ascending: true);
+        .order('sort_order', ascending: true)
+        .order('id', ascending: true);
     return menuCatalogRows(
       response
           .map<Map<String, dynamic>>((i) => Map<String, dynamic>.from(i))
@@ -203,6 +204,26 @@ class MenuService {
       'admin_reorder_menu_categories',
       params: {'p_store_id': storeId, 'p_category_ids': categoryIds},
     );
+  }
+
+  Future<List<Map<String, dynamic>>> moveMenuItem({
+    required String storeId,
+    required String categoryId,
+    required String itemId,
+    required String move,
+  }) async {
+    final response = await supabase.rpc(
+      'admin_move_menu_item',
+      params: {
+        'p_store_id': storeId,
+        'p_category_id': categoryId,
+        'p_item_id': itemId,
+        'p_move': move,
+      },
+    );
+    return (response as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList(growable: false);
   }
 
   Future<void> setMenuCombo({

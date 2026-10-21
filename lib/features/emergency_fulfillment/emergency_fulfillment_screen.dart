@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/utils/floor_label.dart';
 import '../../core/services/emergency_additional_order_voice_message.dart';
 import '../../core/services/emergency_order_voice_message.dart';
 import '../../core/services/emergency_web_bridge.dart';
@@ -1512,7 +1513,7 @@ class _EmergencyOrderCard extends StatelessWidget {
         ? '${copy.order} ${order.queueNo}, ${copy.takeout} ${order.tableNumber}, '
               '${visibleItems.length} ${copy.items}, $totalProgress'
         : '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
-              '${order.floorLabel}, ${visibleItems.length} ${copy.items}, '
+              '${copy.floorName(order.floorLabel)}, ${visibleItems.length} ${copy.items}, '
               '$totalProgress';
     final semantics = trayReady
         ? '$baseSemantics, ${copy.trayReadyWaiting}'
@@ -1975,7 +1976,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                         Text(
                           order.isDelivery || order.isDirectPickup
                               ? copy.stageTitle(stationType)
-                              : '${order.floorLabel} · ${copy.stageTitle(stationType)}',
+                              : '${copy.floorName(order.floorLabel)} · ${copy.stageTitle(stationType)}',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
                                 color: _stationColor(stationType),
@@ -2758,12 +2759,15 @@ class _EmergencyCopy {
     _ => ko,
   };
 
+  String floorName(String? floor) =>
+      directToFloor ? displayFloorLabel(floor ?? '2F') : floor ?? '1F';
+
   String stationTitle(String? station, String? floor) => switch (station) {
     'tray' => _pick('트레이', 'Khay', 'Tray'),
     'floor' => _pick(
-      '${floor ?? '1F'} 주문확인',
-      'Tầng ${floor ?? '1F'}',
-      '${floor ?? '1F'} floor',
+      '${floorName(floor)} 주문확인',
+      'Tầng ${floorName(floor)}',
+      '${floorName(floor)} floor',
     ),
     _ => _pick('주방', 'Bếp', 'Kitchen'),
   };

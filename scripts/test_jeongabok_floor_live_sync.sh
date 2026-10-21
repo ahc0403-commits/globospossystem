@@ -46,3 +46,7 @@ run_sql < test/sql/jeongabok_floor_live_sync_before.sql
 run_sql < supabase/migrations/20261021100000_jeongabok_floor_live_sync.sql >/dev/null
 run_sql < scripts/verify_jeongabok_floor_live_sync.sql
 run_sql < test/sql/jeongabok_floor_live_sync_test.sql
+
+run_sql < test/sql/jeongabok_floor_account_alignment_before.sql
+run_sql < supabase/migrations/20261021120000_jeongabok_floor_account_alignment.sql >/dev/null
+run_sql < test/sql/jeongabok_floor_account_alignment_test.sql

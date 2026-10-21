@@ -644,6 +644,28 @@ void main() {
     },
   );
 
+  testWidgets(
+    'JeonGabok guest 1F uses the stored 2F floor without relabeling data',
+    (tester) async {
+      final fixture = _FixtureEmergencyNotifier(
+        _activeState(
+          'floor',
+        ).copyWith(kitchenDirectToFloor: true, floorLabel: '2F'),
+      );
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(390, 844),
+        locale: const Locale('ko'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('1F 주문확인'), findsOneWidget);
+      expect(find.text('2F 주문확인'), findsNothing);
+      expect(fixture.state.floorLabel, '2F');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('floor workflow has no G-floor surface and renders on mobile', (
     tester,
   ) async {
