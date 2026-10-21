@@ -96,15 +96,18 @@ void main() {
     },
   );
 
-  test('uses only exact positive reported dong amounts without rounding', () {
+  test('rounds only the final cash deposit to the displayed whole VND', () {
     for (final amount in [1, 1622160.0, 9999999999999]) {
       expect(cashDepositReportAmount(amount), amount.toInt());
     }
+    expect(cashDepositReportAmount(3389971.9), 3389972);
+    expect(cashDepositReportAmount(1.5), 2);
+    expect(cashDepositReportAmount(3389971.1), 3389971);
     for (final amount in [
       null,
       0,
       -1,
-      1.5,
+      0.49,
       double.nan,
       double.infinity,
       10000000000000,
