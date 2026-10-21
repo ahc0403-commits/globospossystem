@@ -22,3 +22,9 @@ applies the real migration twice, and verifies identical financial payloads
 including a 23:32 receipt, unchanged history and source definitions, scheduler
 scope, authorization and future-date guards. Production deployment and actual
 download verification are recorded separately in local release evidence.
+
+The disposable SQL server loads the real pg_cron extension with job execution
+disabled. The migration runs as the non-superuser `postgres` job owner, without
+direct UPDATE permission on `cron.job`, and disables the sales job through
+`cron.alter_job(jobid, active := false)`. This exercises Supabase's production
+extension permission boundary while retaining the separate cash-closing job.

@@ -6,9 +6,13 @@ CREATE FUNCTION restaurant_finalize_daily_sales() RETURNS void LANGUAGE sql AS '
 CREATE FUNCTION restaurant_finalize_daily_sales_at(date,timestamptz) RETURNS void LANGUAGE sql AS 'SELECT';
 REVOKE ALL ON FUNCTION restaurant_finalize_daily_sales(),restaurant_finalize_daily_sales_at(date,timestamptz) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION restaurant_finalize_daily_sales() TO service_role;
-CREATE SCHEMA cron;
-CREATE TABLE cron.job(jobname text PRIMARY KEY,active boolean);
-INSERT INTO cron.job VALUES('restaurant-daily-sales-finalize-2220-hcm',true),('daily-closing-2300-hcm',true);
+-- Use the real extension with its production permission boundary: postgres owns
+-- these jobs but cannot update the extension's metadata table directly.
+-- The disposable server has cron.launch_active_jobs=off, so no jobs execute.
+SELECT fixture_assert(NOT has_table_privilege(current_user,'cron.job','UPDATE'),'production cron metadata is not directly writable');
+SELECT fixture_assert(has_function_privilege(current_user,'cron.alter_job(bigint,text,text,text,text,boolean)','EXECUTE'),'production job owner may use cron management API');
+SELECT cron.schedule('restaurant-daily-sales-finalize-2220-hcm','20 15 * * *','SELECT 1');
+SELECT cron.schedule('daily-closing-2300-hcm','0 16 * * *','SELECT 1');
 CREATE TABLE owner_sales_baseline AS SELECT
  get_pos_daily_sales_export_page('2026-10-08','10000000-0000-0000-0000-000000000001','restaurant_pos') page,
  get_restaurant_daily_sales_exports_by_tax_entity('2026-10-08') grouped,
