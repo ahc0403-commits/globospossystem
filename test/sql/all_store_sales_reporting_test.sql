@@ -4,6 +4,10 @@ INSERT INTO restaurants(id,name,brand_id,tax_entity_id,is_active,created_at) VAL
  ('26000000-0000-0000-0000-000000000001','New brand restaurant','26000000-0000-0000-0000-000000000099','10000000-0000-0000-0000-000000000001',true,'2026-10-17 10:00+07'),
  ('26000000-0000-0000-0000-000000000002','New store without sales',NULL,'10000000-0000-0000-0000-000000000001',true,'2026-10-17 10:00+07'),
  ('26000000-0000-0000-0000-000000000003','Registered after report day',NULL,'10000000-0000-0000-0000-000000000001',true,'2026-10-19 10:00+07');
+INSERT INTO restaurants(id,name,brand_id,tax_entity_id,is_active,created_at) VALUES
+ ('26000000-0000-0000-0000-000000000004','No sales but cash payout',NULL,'10000000-0000-0000-0000-000000000001',true,'2026-10-17 10:00+07');
+INSERT INTO direct_order_driver_cash_movements(restaurant_id,kind,method,amount,occurred_at) VALUES
+ ('26000000-0000-0000-0000-000000000004','payout','CASH',5000,'2026-10-18 10:00+07');
 INSERT INTO orders VALUES('36000000-0000-0000-0000-000000000001','completed','dine_in');
 INSERT INTO payments(order_id,restaurant_id,created_at,amount_portion,amount,method,is_revenue) VALUES
  ('36000000-0000-0000-0000-000000000001','26000000-0000-0000-0000-000000000001','2026-10-18 10:00+07',10800,21600,'CASH',true),
@@ -22,6 +26,9 @@ DO $$DECLARE report jsonb; e jsonb; store jsonb; BEGIN
  PERFORM fixture_assert(EXISTS(SELECT 1 FROM jsonb_array_elements(e->'bunsik_stores') x WHERE x->>'store_id'='26000000-0000-0000-0000-000000000001'),'closing picker automatically includes other brands');
  PERFORM fixture_assert(EXISTS(SELECT 1 FROM jsonb_array_elements(e->'restaurant_stores') x WHERE x->>'store_id'='26000000-0000-0000-0000-000000000002' AND x->>'closing_status'='no_sales'),'registered no-sales store visible');
  PERFORM fixture_assert(NOT EXISTS(SELECT 1 FROM jsonb_array_elements(e->'bunsik_stores') x WHERE x->>'store_id'='26000000-0000-0000-0000-000000000002'),'no-sales store does not block daily cash close');
+ PERFORM fixture_assert(EXISTS(SELECT 1 FROM jsonb_array_elements(e->'restaurant_stores') x WHERE x->>'store_id'='26000000-0000-0000-0000-000000000004' AND x->>'closing_status'='pending')
+ AND EXISTS(SELECT 1 FROM jsonb_array_elements(e->'bunsik_stores') x WHERE x->>'store_id'='26000000-0000-0000-0000-000000000004'), 'cash-only adjustment keeps a no-sales restaurant in the closing scope');
+ PERFORM fixture_assert((e->>'bunsik_expected_deposit')::numeric=5800, 'cash-only payout included exactly once in expected deposit');
  PERFORM fixture_assert(NOT EXISTS(SELECT 1 FROM jsonb_array_elements(e->'restaurant_stores') x WHERE x->>'store_id'='26000000-0000-0000-0000-000000000003'),'future registration does not alter historical store scope');
  PERFORM fixture_assert((SELECT jsonb_agg(x-'export_metadata_deferred') FROM jsonb_array_elements(get_pos_daily_sales_summary('2026-10-18')->'entities') x)=(SELECT jsonb_agg(x-'export_metadata_deferred') FROM jsonb_array_elements(get_pos_daily_sales_summary('2026-10-18',true)->'entities') x),'both metadata overloads remain equivalent');
 END $$;

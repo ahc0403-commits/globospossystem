@@ -41,20 +41,33 @@ BEGIN
  AND h.effective_from<(p_business_date+1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
  AND (h.effective_to IS NULL OR h.effective_to>p_business_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
  ORDER BY r.id,h.effective_from DESC,h.created_at DESC),
+ store_activity AS MATERIALIZED(SELECT m.restaurant_id store_id FROM public.direct_order_driver_cash_movements m
+ WHERE m.occurred_at>=p_business_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+ AND m.occurred_at<(p_business_date+1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+ AND (m.kind='payout' OR (m.kind='recovery' AND m.method='CASH'))
+ UNION SELECT x.restaurant_id FROM public.direct_order_refund_records x
+ JOIN public.direct_order_refund_evidence evidence ON evidence.refund_id=x.id AND evidence.method='CASH'
+ WHERE x.recorded_at>=p_business_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+ AND x.recorded_at<(p_business_date+1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+ UNION SELECT d.restaurant_id FROM public.daily_closings d WHERE d.closing_date=p_business_date),
  report_store_scope AS(SELECT r.id store_id,r.name store_name,r.tax_entity_id FROM registry_sellers r
  WHERE r.is_active AND r.created_at<(p_business_date+1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
  AND r.brand_id IS DISTINCT FROM '77000000-0000-0000-0000-000000000001'::uuid
  AND r.id<>'3a268807-771f-4fd4-84fe-e1b0b00de40a'::uuid
  AND r.tax_entity_id IS DISTINCT FROM '8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1'::uuid
  UNION SELECT r.id,r.name,s.tax_entity_id FROM store_receipts s JOIN public.restaurants r ON r.id=s.store_id
- UNION SELECT r.id,r.name,s.tax_entity_id FROM store_payments s JOIN public.restaurants r ON r.id=s.store_id),
+ UNION SELECT r.id,r.name,s.tax_entity_id FROM store_payments s JOIN public.restaurants r ON r.id=s.store_id
+ UNION SELECT r.id,r.name,r.tax_entity_id FROM store_activity a JOIN registry_sellers r ON r.id=a.store_id
+ WHERE r.brand_id IS DISTINCT FROM '77000000-0000-0000-0000-000000000001'::uuid
+ AND r.id<>'3a268807-771f-4fd4-84fe-e1b0b00de40a'::uuid
+ AND r.tax_entity_id IS DISTINCT FROM '8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1'::uuid),
  store_summaries AS(SELECT s.tax_entity_id,jsonb_agg(jsonb_build_object(
  'store_id',s.store_id,'store_name',s.store_name,'receipt_count',COALESCE(receipt.receipt_count,0),
  'gross',COALESCE(receipt.gross,0),'cash',COALESCE(payment.cash,0),'bank_transfer',COALESCE(payment.bank,0),'other_payments',COALESCE(payment.other,0),
  'supply',COALESCE(tax.supply,0),'vat',COALESCE(tax.vat,0),'missing_mapping_count',COALESCE(tax.missing_mapping_count,0),
- 'closing_status',CASE WHEN dc.close_source='manual' THEN 'closed' WHEN receipt.receipt_count IS NOT NULL OR payment.store_id IS NOT NULL THEN 'pending' ELSE 'no_sales' END,
+ 'closing_status',CASE WHEN dc.close_source='manual' THEN 'closed' WHEN receipt.receipt_count IS NOT NULL OR payment.store_id IS NOT NULL OR activity.store_id IS NOT NULL THEN 'pending' ELSE 'no_sales' END,
  'policy_ready',policy.id IS NOT NULL) ORDER BY s.store_name,s.store_id) stores
- FROM report_store_scope s LEFT JOIN store_receipts receipt ON receipt.store_id=s.store_id AND receipt.tax_entity_id=s.tax_entity_id
+ FROM report_store_scope s LEFT JOIN store_activity activity ON activity.store_id=s.store_id LEFT JOIN store_receipts receipt ON receipt.store_id=s.store_id AND receipt.tax_entity_id=s.tax_entity_id
  LEFT JOIN store_payments payment ON payment.store_id=s.store_id AND payment.tax_entity_id=s.tax_entity_id
  LEFT JOIN store_tax tax ON tax.store_id=s.store_id AND tax.tax_entity_id=s.tax_entity_id
  LEFT JOIN public.daily_closings dc ON dc.restaurant_id=s.store_id AND dc.closing_date=p_business_date
@@ -62,8 +75,8 @@ BEGIN
  AND policy.effective_from<=statement_timestamp() AND policy.effective_to IS NULL GROUP BY s.tax_entity_id),
  bunsik_scope AS MATERIALIZED(SELECT r.id,r.name,s.tax_entity_id FROM public.restaurants r
  JOIN (SELECT store_id,tax_entity_id FROM store_receipts UNION SELECT store_id,tax_entity_id FROM store_payments
- UNION SELECT d.restaurant_id,r.tax_entity_id FROM public.daily_closings d JOIN registry_sellers r ON r.id=d.restaurant_id
- WHERE d.closing_date=p_business_date AND r.brand_id IS DISTINCT FROM '77000000-0000-0000-0000-000000000001'::uuid) s ON s.store_id=r.id
+ UNION SELECT a.store_id,r.tax_entity_id FROM store_activity a JOIN registry_sellers r ON r.id=a.store_id
+ WHERE r.brand_id IS DISTINCT FROM '77000000-0000-0000-0000-000000000001'::uuid) s ON s.store_id=r.id
  WHERE r.id<>'3a268807-771f-4fd4-84fe-e1b0b00de40a'::uuid
  AND s.tax_entity_id IS DISTINCT FROM '8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1'::uuid),
 $ctes$||substr(d,b);
