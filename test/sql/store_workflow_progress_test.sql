@@ -78,6 +78,10 @@ BEGIN
  PERFORM public.cashier_restore_item_quantity(shop,operation);
  ASSERT (SELECT started=3 AND done=3 FROM public.store_preparation_steps WHERE id=s1),'restore did not restore intermediate stage';
  ASSERT (SELECT quantity=3 FROM public.order_items WHERE id=oi),'partial restore failed';
+ ASSERT (SELECT revision>4 FROM public.store_preparation_steps WHERE id=s1),'restore reused a stale preparation revision';
+ PERFORM set_config('request.jwt.claim.sub','92000000-0000-4000-8000-000000000001',true);
+ BEGIN PERFORM public.store_preparation_progress_v1(shop,gen_random_uuid(),'undo_done',jsonb_build_array(jsonb_build_object('step_id',s1,'revision',4,'quantity',1))); RAISE EXCEPTION 'PRE_CANCEL_REQUEST_REPLAYED_AFTER_RESTORE'; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM='WORKFLOW_PROGRESS_CHANGED'; END;
+ PERFORM set_config('request.jwt.claim.sub','92000000-0000-4000-8000-000000000099',true);
  INSERT INTO public.tables(restaurant_id,table_number,floor_label) VALUES(shop,'1982','3F') RETURNING id INTO target_table;
  operation:=gen_random_uuid();
  r:=public.cashier_move_order_items(shop,o.id,target_table,jsonb_build_array(jsonb_build_object('item_id',oi,'quantity',1,'expected_quantity',3)),operation);

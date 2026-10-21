@@ -41,7 +41,7 @@ BEGIN
   EXECUTE format('UPDATE public.%I t SET %s FROM jsonb_populate_recordset(NULL::public.%I,$1) x WHERE t.id=x.id',table_name,assignments,table_name) USING operation.before_progress->kind;
 
  END LOOP;
- UPDATE public.store_preparation_steps s SET started=x.started,done=x.done,revision=x.revision,started_at=x.started_at,done_at=x.done_at,updated_by=x.updated_by
+ UPDATE public.store_preparation_steps s SET started=x.started,done=x.done,revision=greatest(s.revision,x.revision)+1,started_at=x.started_at,done_at=x.done_at,updated_by=x.updated_by
  FROM jsonb_populate_recordset(NULL::public.store_preparation_steps,coalesce(operation.before_progress->'preparation','[]'))x WHERE s.id=x.id;
  PERFORM set_config('globos.cashier_item_mutation','off',true);
  INSERT INTO public.order_cancellation_reversals(cancellation_ledger_id,restaurant_id,order_id,order_item_id,restored_by) VALUES(operation.ledger_id,p_store_id,operation.order_id,item.id,auth.uid());
