@@ -33,4 +33,13 @@ SELECT pg_stat_statements_reset();
 SELECT setup_assert(jsonb_array_length(public.emergency_add_order_batch_timings('[]'))=502,'500-row workflow reader');
 SELECT setup_assert(coalesce((SELECT sum(calls)=1 FROM pg_stat_statements WHERE query LIKE '%array_agg(restaurant_id)%' AND query NOT LIKE '%pg_stat_statements%'),false),'workflow configuration read once for 500 queue rows');
 SELECT calls,rows,total_exec_time FROM pg_stat_statements WHERE query LIKE '%array_agg(restaurant_id)%' AND query NOT LIKE '%pg_stat_statements%';
+SELECT pg_stat_statements_reset();
+SELECT public.kds_uses_direct_floor_workflow('273b057e-3b69-46e3-93c1-6194c2802849');
+INSERT INTO public.workflow_fixture_events(restaurant_id,queue_id,stage,details)
+ SELECT q.restaurant_id,q.id,'kitchen_done',jsonb_build_object('kitchen_direct_to_floor',q.kitchen_direct_to_floor)
+ FROM public.emergency_order_queue q WHERE restaurant_id IN ('273b057e-3b69-46e3-93c1-6194c2802849','8bc9eef5-dcd5-46b1-b931-23f77132322c') LIMIT 500;
+SELECT setup_assert((SELECT count(*)=500 FROM public.workflow_fixture_changes),'500 event snapshots delivered');
+SELECT setup_assert((SELECT count(*) FILTER(WHERE direct)=250 FROM public.workflow_fixture_deliveries),'broadcast respects mixed store snapshots');
+SELECT setup_assert(coalesce((SELECT sum(calls)=1 FROM pg_stat_statements WHERE query LIKE '%array_agg(restaurant_id)%' AND query NOT LIKE '%pg_stat_statements%'),false),'500 event triggers reuse snapshots with no configuration lookups per item');
+SELECT setup_assert(NOT has_function_privilege('authenticated','public.kds_direct_floor_store_ids()','EXECUTE'),'internal configuration IDs are not exposed as an RPC');
 SELECT 'STORE_KDS_WORKFLOW_SQL=PASS';

@@ -20,3 +20,40 @@ INSERT INTO public.restaurant_settings(restaurant_id) VALUES
 CREATE FUNCTION public.emergency_add_order_batch_timings(p_orders jsonb) RETURNS jsonb LANGUAGE sql STABLE AS $$
  SELECT jsonb_agg(public.kds_is_direct_floor_store(q.restaurant_id)) FROM public.emergency_order_queue q;
 $$;
+
+CREATE TABLE public.workflow_fixture_events(id uuid DEFAULT gen_random_uuid(),restaurant_id uuid,queue_id uuid,stage text,details jsonb);
+CREATE TABLE public.workflow_fixture_changes(id uuid DEFAULT gen_random_uuid(),restaurant_id uuid,payload jsonb,target_stations text[]);
+CREATE TABLE public.workflow_fixture_deliveries(direct boolean);
+CREATE FUNCTION public.kds_capture_fulfillment_event() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_queue public.emergency_order_queue%ROWTYPE; v_payload jsonb; v_delivery boolean:=false;
+BEGIN
+ SELECT * INTO v_queue FROM public.emergency_order_queue WHERE id=NEW.queue_id;
+ IF public.kds_is_direct_floor_store(NEW.restaurant_id) THEN PERFORM 1; END IF;
+ v_payload:=jsonb_build_object('stage',NEW.stage);
+ v_payload := v_payload || jsonb_build_object('no_floor_delivery', v_delivery);
+ INSERT INTO public.workflow_fixture_changes(restaurant_id,payload,target_stations) VALUES(NEW.restaurant_id,v_payload,ARRAY['kitchen','tray']);
+ RETURN NEW;
+END $$;
+CREATE FUNCTION public.kds_direct_filter_targets() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+ IF NOT public.kds_is_direct_floor_store(NEW.restaurant_id) THEN RETURN NEW; END IF;
+ NEW.target_stations:=ARRAY['kitchen','floor']; RETURN NEW;
+END $$;
+CREATE FUNCTION public.kds_broadcast_change() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_change public.workflow_fixture_changes%ROWTYPE;
+BEGIN
+ SELECT * INTO v_change FROM public.workflow_fixture_changes WHERE id=NEW.id;
+ IF public.kds_is_direct_floor_store(v_change.restaurant_id) THEN
+  INSERT INTO public.workflow_fixture_deliveries VALUES(true);
+ ELSE INSERT INTO public.workflow_fixture_deliveries VALUES(false); END IF;
+ RETURN NEW;
+END $$;
+CREATE FUNCTION public.sync_direct_delivery_ticket_from_kds() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+ IF public.kds_is_direct_floor_store(NEW.restaurant_id) AND NEW.stage='kitchen_done' THEN RETURN NEW; END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER workflow_capture AFTER INSERT ON public.workflow_fixture_events FOR EACH ROW EXECUTE FUNCTION public.kds_capture_fulfillment_event();
+CREATE TRIGGER workflow_delivery AFTER INSERT ON public.workflow_fixture_events FOR EACH ROW EXECUTE FUNCTION public.sync_direct_delivery_ticket_from_kds();
+CREATE TRIGGER workflow_filter BEFORE INSERT ON public.workflow_fixture_changes FOR EACH ROW EXECUTE FUNCTION public.kds_direct_filter_targets();
+CREATE TRIGGER workflow_broadcast AFTER INSERT ON public.workflow_fixture_changes FOR EACH ROW EXECUTE FUNCTION public.kds_broadcast_change();

@@ -18,7 +18,8 @@ CREATE FUNCTION public.kds_direct_floor_store_ids() RETURNS uuid[]
  FROM public.restaurant_settings WHERE kds_workflow='kitchen_floor';
 $$;
 REVOKE ALL ON FUNCTION public.kds_direct_floor_store_ids() FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.kds_direct_floor_store_ids() TO authenticated,service_role;
+-- Internal aggregation is called only by the scoped SECURITY DEFINER RPCs.
+REVOKE ALL ON FUNCTION public.kds_direct_floor_store_ids() FROM authenticated,service_role;
 -- Keep kds_is_direct_floor_store as JeonGabok's immutable identity predicate:
 -- guest floor labels and the permanently retired checker are store-specific.
 CREATE FUNCTION public.kds_uses_direct_floor_workflow(p_store_id uuid)
@@ -51,6 +52,45 @@ BEGIN
  END LOOP;
 END;
 $patch$;
+
+-- Per-row event triggers already have the queue/change snapshot in memory.
+-- Reuse it instead of re-reading store configuration for each event.
+DO $snapshots$
+DECLARE definition text; old_text text;
+BEGIN
+ IF to_regprocedure('public.kds_capture_fulfillment_event()') IS NOT NULL THEN
+  definition:=pg_get_functiondef('public.kds_capture_fulfillment_event()'::regprocedure);
+  definition:=replace(definition,'public.kds_uses_direct_floor_workflow(NEW.restaurant_id)',
+   'COALESCE(v_queue.kitchen_direct_to_floor, false)');
+  old_text:=$old$v_payload := v_payload || jsonb_build_object('no_floor_delivery', v_delivery);$old$;
+  IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'KDS_CAPTURE_WORKFLOW_SNAPSHOT_ANCHOR_MISSING'; END IF;
+  definition:=replace(definition,old_text,$new$v_payload := v_payload || jsonb_build_object('no_floor_delivery', v_delivery,
+    'kitchen_direct_to_floor', COALESCE(v_queue.kitchen_direct_to_floor, false));$new$);
+  EXECUTE definition;
+ END IF;
+ IF to_regprocedure('public.kds_direct_filter_targets()') IS NOT NULL THEN
+  definition:=pg_get_functiondef('public.kds_direct_filter_targets()'::regprocedure);
+  old_text:='public.kds_uses_direct_floor_workflow(NEW.restaurant_id)';
+  IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'KDS_FILTER_WORKFLOW_SNAPSHOT_ANCHOR_MISSING'; END IF;
+  EXECUTE replace(definition,old_text,
+   'COALESCE((NEW.payload->>''kitchen_direct_to_floor'')::boolean, public.kds_is_direct_floor_store(NEW.restaurant_id))');
+ END IF;
+ IF to_regprocedure('public.kds_broadcast_change()') IS NOT NULL THEN
+  definition:=pg_get_functiondef('public.kds_broadcast_change()'::regprocedure);
+  old_text:='COALESCE(v_change.restaurant_id = ANY((SELECT public.kds_direct_floor_store_ids())::uuid[]), false)';
+  IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'KDS_BROADCAST_WORKFLOW_SNAPSHOT_ANCHOR_MISSING'; END IF;
+  EXECUTE replace(definition,old_text,
+   'COALESCE((v_change.payload->>''kitchen_direct_to_floor'')::boolean, public.kds_is_direct_floor_store(v_change.restaurant_id))');
+ END IF;
+ IF to_regprocedure('public.sync_direct_delivery_ticket_from_kds()') IS NOT NULL THEN
+  definition:=pg_get_functiondef('public.sync_direct_delivery_ticket_from_kds()'::regprocedure);
+  old_text:='public.kds_uses_direct_floor_workflow(NEW.restaurant_id)';
+  IF position(old_text IN definition)=0 THEN RAISE EXCEPTION 'KDS_DELIVERY_WORKFLOW_SNAPSHOT_ANCHOR_MISSING'; END IF;
+  EXECUTE replace(definition,old_text,
+   'COALESCE((NEW.details->>''kitchen_direct_to_floor'')::boolean, public.kds_is_direct_floor_store(NEW.restaurant_id))');
+ END IF;
+END;
+$snapshots$;
 
 CREATE FUNCTION public.kds_store_workflow_errors(p_store_id uuid,p_workflow text)
  RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,auth,pg_catalog AS $$
@@ -159,7 +199,8 @@ BEGIN
  OR public.kds_uses_direct_floor_workflow('8bc9eef5-dcd5-46b1-b931-23f77132322c')
  OR public.kds_uses_direct_floor_workflow(NULL)
  OR has_function_privilege('anon','public.admin_apply_store_opening_config_v3(uuid,jsonb,jsonb,text,text)','EXECUTE')
- OR has_function_privilege('authenticated','public.kds_store_workflow_errors(uuid,text)','EXECUTE') THEN
+ OR has_function_privilege('authenticated','public.kds_store_workflow_errors(uuid,text)','EXECUTE')
+ OR has_function_privilege('authenticated','public.kds_direct_floor_store_ids()','EXECUTE') THEN
   RAISE EXCEPTION 'STORE_KDS_WORKFLOW_POSTCONDITION_FAILED';
  END IF;
 END;
