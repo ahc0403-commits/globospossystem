@@ -1010,6 +1010,121 @@ void main() {
     },
   );
 
+  for (final directToFloor in [false, true]) {
+    testWidgets(
+      'floor beverage whole card pulses until served (direct kitchen: $directToFloor)',
+      (tester) async {
+        EmergencyFulfillmentState snapshot(int served, {int ordered = 2}) {
+          final base = _floorDirectState('floor');
+          return base.copyWith(
+            kitchenDirectToFloor: directToFloor,
+            orders: [
+              base.orders.single.copyWith(
+                items: [
+                  EmergencyFulfillmentItem.fromJson({
+                    'id': 'drink-1',
+                    'order_item_id': 'order-item-drink-1',
+                    'name_vi': 'Coca-Cola',
+                    'ordered_quantity': ordered,
+                    'floor_served_quantity': served,
+                    'fulfillment_route': 'floor_direct',
+                    'workflow_version': 2,
+                    'kitchen_direct_to_floor': directToFloor,
+                  }),
+                  EmergencyFulfillmentItem.fromJson({
+                    'id': 'waiting-food',
+                    'order_item_id': 'waiting-food-line',
+                    'name_vi': 'Meal waiting in kitchen',
+                    'ordered_quantity': 1,
+                    'workflow_version': 2,
+                    'kitchen_direct_to_floor': directToFloor,
+                  }),
+                ],
+              ),
+            ],
+          );
+        }
+
+        final fixture = _FixtureEmergencyNotifier(snapshot(0));
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+        );
+        final surface = find.byKey(
+          const ValueKey('emergency_order_card_surface_order-direct'),
+        );
+        Color? cardColor() => tester.widget<Material>(surface).color;
+        final header = find.byKey(
+          const ValueKey('emergency_order_card_header_order-direct'),
+        );
+        Future<void> capture(String phase) async {
+          final directory = Platform.environment['KDS_BEVERAGE_SCREENSHOT_DIR'];
+          if (directory == null) return;
+          await tester.runAsync(() async {
+            final layer =
+                tester.binding.renderViews.first.debugLayer! as OffsetLayer;
+            final image = await layer.toImage(
+              const Rect.fromLTWH(0, 0, 1024, 768),
+            );
+            final png = await image.toByteData(format: ui.ImageByteFormat.png);
+            await Directory(directory).create(recursive: true);
+            await File(
+              '$directory/floor-$directToFloor-$phase.png',
+            ).writeAsBytes(png!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        final initial = cardColor();
+        final initialHeader = tester.widget<Container>(header).color;
+        await capture('off');
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), isNot(initial));
+        expect(tester.widget<Container>(header).color, isNot(initialHeader));
+        await capture('on');
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), initial);
+
+        // A refresh and partial serving must leave the remainder blinking.
+        fixture.seed(snapshot(1));
+        await tester.pump();
+        final partial = cardColor();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), isNot(partial));
+
+        // Food still in the kitchen must not keep a served drink blinking.
+        fixture.seed(snapshot(2));
+        await tester.pump();
+        final complete = cardColor();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), complete);
+        expect(
+          tester
+              .widget<Container>(
+                find.byKey(const Key('emergency_card_menu_pulse_drink-1')),
+              )
+              .decoration,
+          isA<BoxDecoration>().having(
+            (decoration) => decoration.color,
+            'served drink background',
+            Colors.transparent,
+          ),
+        );
+
+        // Adding drinks to the same open order restarts the alert.
+        fixture.seed(snapshot(2, ordered: 3));
+        await tester.pump();
+        final added = cardColor();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), isNot(added));
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('floor pulses only handed-off food and pending direct drinks', (
     tester,
   ) async {
