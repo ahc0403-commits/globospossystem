@@ -1581,6 +1581,44 @@ void main() {
     },
   );
 
+  for (final scenario in [
+    (stored: '2F', displayed: '1F', direct: true),
+    (stored: '3F', displayed: '2F', direct: true),
+    (stored: 'HALL', displayed: 'HALL', direct: true),
+    (stored: '2F', displayed: '2F', direct: false),
+  ]) {
+    testWidgets(
+      'customer delivery title uses guest area ${scenario.displayed} for '
+      '${scenario.stored}, direct=${scenario.direct}',
+      (tester) async {
+        final fixture = _FixtureEmergencyNotifier(
+          EmergencyFulfillmentState(
+            assigned: true,
+            active: true,
+            restaurantId: 'store-bt',
+            sessionId: 'session-1',
+            stationType: 'floor',
+            floorLabel: scenario.stored,
+            kitchenDirectToFloor: scenario.direct,
+          ),
+        );
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+          expectedStationType: 'floor',
+        );
+
+        await tester.tap(find.byKey(const Key('customer_delivery')));
+        await tester.pumpAndSettle();
+        expect(find.text('${scenario.displayed} · 고객전달'), findsOneWidget);
+        expect(fixture.state.floorLabel, scenario.stored);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final station in ['tray', 'floor']) {
     testWidgets('$station transfer button opens even with zero waiting food', (
       tester,

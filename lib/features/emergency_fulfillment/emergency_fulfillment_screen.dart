@@ -609,7 +609,7 @@ class _EmergencyFulfillmentScreenState
                             : state.floorLabel;
                         if (area != null && mounted) {
                           _openCustomerDelivery(
-                            area,
+                            copy.floorName(area),
                             buildCustomerDeliveryBoxes(state.orders, area),
                           );
                         }
