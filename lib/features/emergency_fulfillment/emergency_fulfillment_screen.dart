@@ -1721,7 +1721,7 @@ class _EmergencyOrderCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
             color: effectiveBorderTone,
-            width: stationReady ? 4 : 2,
+            width: trayReady ? 4 : 2,
           ),
         ),
         clipBehavior: Clip.antiAlias,
