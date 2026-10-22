@@ -1667,10 +1667,19 @@ class _EmergencyOrderCard extends StatelessWidget {
         stationType == 'tray' &&
         order.oldestTrayReadySequence != null &&
         order.trayFloorPendingItems().isNotEmpty;
-    final cardColor = trayReady && readyPulseOn
+    // Floor-direct drinks are ready when ordered, independently of kitchen
+    // handoff sequences. Make the table visible even when its menu row is
+    // clipped or staff are looking across a busy floor board.
+    final floorReady =
+        stationType == 'floor' &&
+        visibleItems.any(
+          (item) => item.readyFromPreviousStage && !item.completed,
+        );
+    final stationReady = trayReady || floorReady;
+    final cardColor = stationReady && readyPulseOn
         ? PosColors.info.withValues(alpha: 0.18)
         : PosColors.surface;
-    final effectiveBorderTone = trayReady && readyPulseOn
+    final effectiveBorderTone = stationReady && readyPulseOn
         ? PosColors.info
         : borderTone;
     // The header is the station-level clock. Supplemental batches retain
@@ -1712,7 +1721,7 @@ class _EmergencyOrderCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
             color: effectiveBorderTone,
-            width: trayReady ? 4 : 2,
+            width: stationReady ? 4 : 2,
           ),
         ),
         clipBehavior: Clip.antiAlias,
@@ -1723,8 +1732,9 @@ class _EmergencyOrderCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
+                key: ValueKey('emergency_order_card_header_${order.orderId}'),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                color: tone,
+                color: floorReady && readyPulseOn ? PosColors.info : tone,
                 child: Row(
                   children: [
                     Expanded(
