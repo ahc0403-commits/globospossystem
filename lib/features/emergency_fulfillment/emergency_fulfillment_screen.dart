@@ -165,7 +165,7 @@ class _EmergencyFulfillmentScreenState
       _triggerAlarm(newOrders.map((order) => order.tableNumber));
     }
     final selectedOrderId = _selectedOrderId;
-    if (selectedOrderId != null) {
+    if (selectedOrderId != null && !_actionBusy) {
       final previousOrder =
           <EmergencyFulfillmentOrder>[
                 ...?previous?.orders,
@@ -183,7 +183,15 @@ class _EmergencyFulfillmentScreenState
       final completedSelectedOrder =
           previousOrder?.isRecentlyCompleteAt(stationType) == false &&
           nextOrder?.isRecentlyCompleteAt(stationType) == true;
-      if (nextOrder == null || completedSelectedOrder) {
+      final readyWorkFinished =
+          (stationType == 'tray' || stationType == 'floor') &&
+          nextOrder != null &&
+          !nextOrder.hasActionableQuantity(stationType) &&
+          (previousOrder?.hasActionableQuantity(stationType) == true ||
+              previous?.pendingQueueIds.contains(nextOrder.queueId) == true);
+      if (nextOrder == null ||
+          ((completedSelectedOrder || readyWorkFinished) &&
+              !next.pendingQueueIds.contains(nextOrder.queueId))) {
         setState(() => _selectedOrderId = null);
       }
     }
@@ -854,33 +862,44 @@ class _EmergencyFulfillmentScreenState
     bool preparationOnly = false,
   }) async {
     if (_actionBusy) return;
+    final orderId = _selectedOrderId;
     setState(() => _actionBusy = true);
     final notifier = ref.read(emergencyFulfillmentProvider.notifier);
     try {
+      EmergencyProgressResult result;
       switch (stationType) {
         case 'kitchen':
-          await notifier.recordProgress(
+          result = await notifier.recordProgress(
             itemId: item.id,
             stage: preparationOnly ? 'kitchen_started' : 'kitchen_done',
           );
         case 'tray':
           if (item.usesKitchenHandoffWorkflow) {
-            await notifier.recordProgress(
+            result = await notifier.recordProgress(
               itemId: item.id,
               stage: 'tray_dispatched',
             );
           } else {
-            await notifier.recordProgress(
+            result = await notifier.recordProgress(
               itemId: item.id,
               stage: 'tray_received',
             );
-            await notifier.recordProgress(
+            if (result != EmergencyProgressResult.confirmed) return;
+            result = await notifier.recordProgress(
               itemId: item.id,
               stage: 'tray_dispatched',
             );
           }
         case 'floor':
-          await notifier.recordProgress(itemId: item.id, stage: 'floor_served');
+          result = await notifier.recordProgress(
+            itemId: item.id,
+            stage: 'floor_served',
+          );
+        default:
+          return;
+      }
+      if (mounted && result == EmergencyProgressResult.confirmed) {
+        _returnToBoardWhenReadyWorkFinished(orderId, stationType);
       }
     } finally {
       if (mounted) setState(() => _actionBusy = false);
@@ -891,12 +910,34 @@ class _EmergencyFulfillmentScreenState
     if (_actionBusy || !order.hasReadyUnservedFood) return;
     setState(() => _actionBusy = true);
     try {
-      await ref
+      final success = await ref
           .read(emergencyFulfillmentProvider.notifier)
           .completeOrder(queueId: order.queueId);
+      if (mounted && success) {
+        _returnToBoardWhenReadyWorkFinished(order.orderId, 'floor');
+      }
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
+  }
+
+  void _returnToBoardWhenReadyWorkFinished(
+    String? orderId,
+    String stationType,
+  ) {
+    if (orderId == null || _selectedOrderId != orderId) return;
+    final state = ref.read(emergencyFulfillmentProvider);
+    final order = [
+      ...state.orders,
+      ...state.completedOrders,
+    ].where((order) => order.orderId == orderId).firstOrNull;
+    if (order != null && state.pendingQueueIds.contains(order.queueId)) return;
+    final finished =
+        order == null ||
+        ((stationType == 'tray' || stationType == 'floor')
+            ? !order.hasActionableQuantity(stationType)
+            : order.isRecentlyCompleteAt(stationType));
+    if (finished) setState(() => _selectedOrderId = null);
   }
 
   Future<void> _advanceLeftoverPackaging(LeftoverPackagingTask task) async {
@@ -2175,7 +2216,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
               copy: copy,
               onHome: onBack,
               onRevert: onRevert,
-              onServeReady: onServeReady,
+              onServeReady: pending ? null : onServeReady,
             ),
           ],
         ),
@@ -2476,14 +2517,19 @@ class _EmergencyMenuRow extends StatelessWidget {
             : item.kitchenDoneQuantity,
         item.requiredQuantity,
       ),
-      'tray' => (item.trayDispatchedQuantity, item.requiredQuantity),
+      'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
       'floor' => (
         item.floorServedQuantity,
-        item.isFloorDirect ? item.orderedQuantity : item.trayDispatchedQuantity,
+        item.isFloorDirect
+            ? item.requiredQuantity
+            : item.trayDispatchedQuantity,
       ),
       _ => (0, item.orderedQuantity),
     };
     final done = item.isDisplayCompletedAt(stationType);
+    final completedLabel = done && !item.isCompletedAt(stationType)
+        ? copy.readyPortionCompleted(item.requiredQuantity - value)
+        : copy.completed;
     final readyFromPreviousStage = item.isReadyFromPreviousStageAt(stationType);
     final menuColor = done
         ? PosColors.success
@@ -2517,7 +2563,7 @@ class _EmergencyMenuRow extends StatelessWidget {
           '${disabledAtStation
               ? copy.floorDirectOnly
               : done
-              ? copy.completed
+              ? completedLabel
               : copy.waitingForAction}',
       child: GestureDetector(
         key: ValueKey('emergency_menu_item_${displayItem.id}'),
@@ -2614,7 +2660,7 @@ class _EmergencyMenuRow extends StatelessWidget {
               disabledAtStation
                   ? copy.floorDirectOnly
                   : done
-                  ? copy.completed
+                  ? completedLabel
                   : preparationOnly && value > 0
                   ? copy.cookingBeforeHandoff
                   : readyFromPreviousStage
@@ -3179,10 +3225,37 @@ class _EmergencyCopy {
     'Phục vụ tất cả món đã sẵn sàng',
     'Serve all ready food',
   );
+  String readyPortionCompleted(int remaining) => _pick(
+    '준비분 전달 완료 · 남은 수량 $remaining',
+    'Đã giao phần sẵn sàng · Còn $remaining',
+    'Ready portion handed over · $remaining remaining',
+  );
   String elapsedMinutes(int minutes) =>
       _pick('$minutes분 경과', 'Đã chờ $minutes phút', '$minutes min elapsed');
 
   String errorMessage(String error) {
+    if (error.contains('EMERGENCY_QUANTITY_CHAIN_VIOLATION')) {
+      return _pick(
+        '현재 전달 가능한 수량을 확인해 주세요. 준비되지 않았거나 이미 전달된 음식입니다.',
+        'Kiểm tra số lượng sẵn sàng. Món chưa sẵn sàng hoặc đã được giao.',
+        'Check the ready quantity. This item is not ready or has already been handed over.',
+      );
+    }
+    if (error.contains('EMERGENCY_ORDER_REFRESH_PENDING')) {
+      return _pick(
+        '전달은 완료되었습니다. 최신 수량을 동기화하고 있습니다.',
+        'Đã giao món. Đang đồng bộ số lượng mới nhất.',
+        'Handoff confirmed. Synchronizing the latest quantities.',
+      );
+    }
+    if (error.contains('EMERGENCY_PROGRESS_QUEUED') ||
+        error.contains('EMERGENCY_ORDER_ACTION_QUEUED')) {
+      return _pick(
+        '전송 대기 중입니다. 연결이 복구되면 전달 기록을 전송합니다.',
+        'Đang chờ gửi. Sẽ đồng bộ bàn giao khi có kết nối.',
+        'Waiting to send. The handoff will sync when the connection returns.',
+      );
+    }
     if (error.contains('KDS_TRAY_FLOOR_BATCH_STALE')) {
       return _pick(
         '층별 전달 수량이 변경되었습니다. 화면을 다시 열어 주세요.',

@@ -393,6 +393,7 @@ class EmergencyFulfillmentItem {
   EmergencyFulfillmentItem withStage(
     String stage,
     int quantity, {
+    bool preserveKitchenStarted = false,
     bool updateOldestReadySequence = false,
     int? oldestReadySequence,
     bool updateOldestTrayReadySequence = false,
@@ -407,7 +408,8 @@ class EmergencyFulfillmentItem {
     kitchenStartedQuantity:
         stage == 'kitchen_started' ||
             (stage == 'kitchen_done' && usesKitchenHandoffWorkflow)
-        ? stage == 'kitchen_done' && kitchenDirectToFloor
+        ? stage == 'kitchen_done' &&
+                  (kitchenDirectToFloor || preserveKitchenStarted)
               ? math.max(kitchenStartedQuantity, quantity)
               : quantity
         : kitchenStartedQuantity,
@@ -1839,6 +1841,8 @@ List<EmergencyHandoffNotice> emergencyHandoffNotices(
   return notices;
 }
 
+enum EmergencyProgressResult { confirmed, queued, rejected }
+
 class EmergencyFulfillmentNotifier
     extends StateNotifier<EmergencyFulfillmentState> {
   EmergencyFulfillmentNotifier({SupabaseClient? client})
@@ -1872,6 +1876,8 @@ class EmergencyFulfillmentNotifier
   int _snapshotFailureCount = 0;
   int _realtimeRevision = 0;
   final Map<String, int> _ticketRevisions = {};
+  final Map<String, Future<void>> _ticketRefreshes = {};
+  final Set<String> _progressInFlight = {};
   final math.Random _pollRandom = math.Random();
 
   Future<void> load({bool showLoading = true}) async {
@@ -2312,10 +2318,21 @@ class EmergencyFulfillmentNotifier
     }
   }
 
-  Future<void> _refreshKdsTicket(String queueId) async {
+  Future<void> _refreshKdsTicket(String queueId) =>
+      _ticketRefreshes.putIfAbsent(queueId, () async {
+        try {
+          await _fetchKdsTicket(queueId);
+        } finally {
+          _ticketRefreshes.remove(queueId);
+        }
+      });
+
+  Future<void> _fetchKdsTicket(String queueId) async {
     final kdsSync = _kdsSync;
-    if (kdsSync == null || !mounted) return;
-    final result = await kdsSync.loadTicket(queueId);
+    if (!mounted) return;
+    final result = kdsSync == null
+        ? await SupabaseKdsSyncGateway(_client).loadTicket(queueId)
+        : await kdsSync.loadTicket(queueId);
     if (!mounted || !identical(kdsSync, _kdsSync)) return;
     final appliedRevision = _ticketRevisions[queueId] ?? 0;
     if (result.revision < appliedRevision) return;
@@ -2422,80 +2439,80 @@ class EmergencyFulfillmentNotifier
     final updatesTrayReadySequence = row.containsKey(
       'oldest_tray_ready_sequence',
     );
-    final nextOrders = state.orders
-        .map((order) {
-          var orderChanged = false;
-          final nextItems = order.items
-              .map((item) {
-                if (item.id != itemId) return item;
-                found = true;
-                orderChanged = true;
-                return item
-                    .withStage(
-                      'kitchen_started',
-                      row.containsKey('kitchen_started_quantity')
-                          ? _asInt(row['kitchen_started_quantity'])
-                          : item.kitchenStartedQuantity,
-                    )
-                    .withStage(
-                      'kitchen_done',
-                      _asInt(row['kitchen_done_quantity']),
-                    )
-                    .withStage(
-                      'tray_received',
-                      _asInt(row['tray_received_quantity']),
-                    )
-                    .withStage(
-                      'tray_dispatched',
-                      _asInt(row['tray_dispatched_quantity']),
-                    )
-                    .withStage(
-                      'floor_served',
-                      _asInt(row['floor_served_quantity']),
-                      updateOldestReadySequence: updatesReadySequence,
-                      oldestReadySequence: row['oldest_ready_sequence'] == null
-                          ? null
-                          : _asInt(row['oldest_ready_sequence']),
-                      updateOldestTrayReadySequence: updatesTrayReadySequence,
-                      oldestTrayReadySequence:
-                          row['oldest_tray_ready_sequence'] == null
-                          ? null
-                          : _asInt(row['oldest_tray_ready_sequence']),
-                    );
-              })
-              .toList(growable: false);
-          if (!orderChanged) return order;
-          var nextOrder = order.copyWith(items: nextItems);
-          if (updatesReadySequence) {
-            final sequences = nextItems
-                .map((item) => item.oldestReadySequence)
-                .whereType<int>()
-                .toList(growable: false);
-            nextOrder = nextOrder.copyWith(
-              oldestReadySequence: sequences.isEmpty
-                  ? null
-                  : sequences.reduce(
-                      (left, right) => left < right ? left : right,
-                    ),
-              clearOldestReadySequence: sequences.isEmpty,
-            );
-          }
-          if (updatesTrayReadySequence) {
-            final sequences = nextItems
-                .map((item) => item.oldestTrayReadySequence)
-                .whereType<int>()
-                .toList(growable: false);
-            nextOrder = nextOrder.copyWith(
-              oldestTrayReadySequence: sequences.isEmpty
-                  ? null
-                  : sequences.reduce(
-                      (left, right) => left < right ? left : right,
-                    ),
-              clearOldestTrayReadySequence: sequences.isEmpty,
-            );
-          }
-          return nextOrder;
-        })
+    EmergencyFulfillmentOrder applyRow(EmergencyFulfillmentOrder order) {
+      var orderChanged = false;
+      final nextItems = order.items
+          .map((item) {
+            if (item.id != itemId) return item;
+            found = true;
+            orderChanged = true;
+            return item
+                .withStage(
+                  'kitchen_started',
+                  row.containsKey('kitchen_started_quantity')
+                      ? _asInt(row['kitchen_started_quantity'])
+                      : item.kitchenStartedQuantity,
+                )
+                .withStage(
+                  'kitchen_done',
+                  _asInt(row['kitchen_done_quantity']),
+                  preserveKitchenStarted: true,
+                )
+                .withStage(
+                  'tray_received',
+                  _asInt(row['tray_received_quantity']),
+                )
+                .withStage(
+                  'tray_dispatched',
+                  _asInt(row['tray_dispatched_quantity']),
+                )
+                .withStage(
+                  'floor_served',
+                  _asInt(row['floor_served_quantity']),
+                  updateOldestReadySequence: updatesReadySequence,
+                  oldestReadySequence: row['oldest_ready_sequence'] == null
+                      ? null
+                      : _asInt(row['oldest_ready_sequence']),
+                  updateOldestTrayReadySequence: updatesTrayReadySequence,
+                  oldestTrayReadySequence:
+                      row['oldest_tray_ready_sequence'] == null
+                      ? null
+                      : _asInt(row['oldest_tray_ready_sequence']),
+                );
+          })
+          .toList(growable: false);
+      if (!orderChanged) return order;
+      var nextOrder = order.copyWith(items: nextItems);
+      if (updatesReadySequence) {
+        final sequences = nextItems
+            .map((item) => item.oldestReadySequence)
+            .whereType<int>()
+            .toList(growable: false);
+        nextOrder = nextOrder.copyWith(
+          oldestReadySequence: sequences.isEmpty
+              ? null
+              : sequences.reduce((left, right) => left < right ? left : right),
+          clearOldestReadySequence: sequences.isEmpty,
+        );
+      }
+      if (updatesTrayReadySequence) {
+        final sequences = nextItems
+            .map((item) => item.oldestTrayReadySequence)
+            .whereType<int>()
+            .toList(growable: false);
+        nextOrder = nextOrder.copyWith(
+          oldestTrayReadySequence: sequences.isEmpty
+              ? null
+              : sequences.reduce((left, right) => left < right ? left : right),
+          clearOldestTrayReadySequence: sequences.isEmpty,
+        );
+      }
+      return nextOrder;
+    }
+
+    final nextOrders = state.orders.map(applyRow).toList(growable: false);
+    final nextCompleted = state.completedOrders
+        .map(applyRow)
         .toList(growable: false);
     if (!found) return false;
 
@@ -2507,7 +2524,11 @@ class EmergencyFulfillmentNotifier
         state.stationType ?? 'kitchen',
       ),
     );
-    state = state.copyWith(orders: nextOrders, clearError: true);
+    state = state.copyWith(
+      orders: nextOrders,
+      completedOrders: nextCompleted,
+      clearError: true,
+    );
     return true;
   }
 
@@ -2518,89 +2539,131 @@ class EmergencyFulfillmentNotifier
   bool applyRealtimeItemRowForTesting(Map<String, dynamic> row) =>
       _applyRealtimeItemRow(row);
 
-  Future<void> recordProgress({
+  Future<EmergencyProgressResult> recordProgress({
     required String itemId,
     required String stage,
     int delta = 1,
   }) async {
-    final matchingItem = state.orders
-        .expand((order) => order.items)
-        .where((item) => item.id == itemId)
-        .cast<EmergencyFulfillmentItem?>()
-        .firstWhere((_) => true, orElse: () => null);
-    final floorDirect = matchingItem?.isFloorDirect == true;
-    final comboComponent =
-        matchingItem?.sourceKind == 'combo_component' && !floorDirect;
-    final eventId = _uuid.v4();
-    final payload = <String, dynamic>{
-      'event_id': eventId,
-      'item_id': itemId,
-      'stage': stage,
-      'delta': delta,
-      'floor_direct': floorDirect,
-      'combo_component': comboComponent,
-      'workflow_v2': matchingItem?.usesKitchenHandoffWorkflow == true,
-    };
-    final previous = state;
-    _applyOptimistic(itemId: itemId, stage: stage, delta: delta);
+    if (!_progressInFlight.add(itemId)) return EmergencyProgressResult.rejected;
     try {
-      final response = await _sendProgress(payload);
-      if (_syncMode == KdsSyncMode.active) {
-        final result = _commandResult(response);
-        if (result.containsKey('floor_served_quantity') ||
-            result.containsKey('kitchen_done_quantity')) {
-          _applyAuthoritativeProgress(itemId, result);
-        }
-      } else {
-        await load(showLoading: false);
+      final order = [...state.orders, ...state.completedOrders]
+          .where((order) => order.items.any((item) => item.id == itemId))
+          .firstOrNull;
+      final item = order?.items.where((item) => item.id == itemId).firstOrNull;
+      if (item == null || state.pendingQueueIds.contains(order!.queueId)) {
+        return EmergencyProgressResult.rejected;
       }
-    } catch (error) {
-      if (error is PostgrestException) {
-        state = previous.copyWith(error: error.message);
-        return;
-      }
+      final eventId = _uuid.v4();
+      final payload = <String, dynamic>{
+        'event_id': eventId,
+        'item_id': itemId,
+        'queue_id': order.queueId,
+        'stage': stage,
+        'delta': delta,
+        'floor_direct': item.isFloorDirect,
+        'combo_component':
+            item.sourceKind == 'combo_component' && !item.isFloorDirect,
+        'workflow_v2': item.usesKitchenHandoffWorkflow,
+      };
+      late final Map<String, dynamic> response;
+      final commandRevision = _realtimeRevision;
       try {
-        await _putOutbox(eventId, payload);
-        state = state.copyWith(
-          pendingOutboxCount: state.pendingOutboxCount + 1,
-          error: 'EMERGENCY_PROGRESS_QUEUED',
-        );
-      } catch (_) {
-        state = previous.copyWith(error: 'EMERGENCY_PROGRESS_FAILED: $error');
+        response = await _sendProgress(payload);
+      } catch (error) {
+        if (!mounted) return EmergencyProgressResult.rejected;
+        if (error is PostgrestException) {
+          // No optimistic snapshot rollback: realtime updates to this or other
+          // orders received during the request must remain intact.
+          state = state.copyWith(error: error.message);
+          return EmergencyProgressResult.rejected;
+        }
+        try {
+          await _putOutbox(eventId, payload);
+          if (!mounted) return EmergencyProgressResult.queued;
+          state = state.copyWith(
+            pendingOutboxCount: state.pendingOutboxCount + 1,
+            pendingQueueIds: {...state.pendingQueueIds, order.queueId},
+            error: 'EMERGENCY_PROGRESS_QUEUED',
+          );
+          return EmergencyProgressResult.queued;
+        } catch (_) {
+          if (mounted) {
+            state = state.copyWith(error: 'EMERGENCY_PROGRESS_FAILED');
+          }
+          return EmergencyProgressResult.rejected;
+        }
+      }
+      if (!mounted) return EmergencyProgressResult.confirmed;
+      final result = _commandResult(response);
+      if (commandRevision == _realtimeRevision &&
+          (result.containsKey('floor_served_quantity') ||
+              result.containsKey('kitchen_done_quantity'))) {
+        _applyAuthoritativeProgress(itemId, result);
+      } else {
+        await _refreshConfirmedCommand(order.queueId);
+      }
+      if (mounted && delta < 0) _restoreReopenedHistoryOrder(order.queueId);
+      return EmergencyProgressResult.confirmed;
+    } finally {
+      _progressInFlight.remove(itemId);
+    }
+  }
+
+  Future<void> _refreshConfirmedCommand(String queueId) async {
+    try {
+      await _refreshKdsTicket(queueId);
+    } catch (_) {
+      // The write already committed. Never enqueue it again because the
+      // following read failed; broadcast/reconciliation will refresh it.
+      if (mounted) {
+        state = state.copyWith(error: 'EMERGENCY_ORDER_REFRESH_PENDING');
       }
     }
+  }
+
+  void _restoreReopenedHistoryOrder(String queueId) {
+    final order = state.completedOrders
+        .where((order) => order.queueId == queueId)
+        .firstOrNull;
+    if (order == null ||
+        order.isRecentlyCompleteAt(state.stationType ?? 'kitchen')) {
+      return;
+    }
+    state = state.copyWith(
+      orders: [
+        ...state.orders.where((current) => current.queueId != queueId),
+        order,
+      ],
+      completedOrders: state.completedOrders
+          .where((current) => current.queueId != queueId)
+          .toList(growable: false),
+    );
   }
 
   Future<bool> completeOrder({required String queueId}) async {
     final order = state.orders
         .where((candidate) => candidate.queueId == queueId)
-        .cast<EmergencyFulfillmentOrder?>()
-        .firstWhere((_) => true, orElse: () => null);
+        .firstOrNull;
+    if (order == null || state.pendingQueueIds.contains(queueId)) return false;
     final actionId = _uuid.v4();
     final payload = <String, dynamic>{
-      'kind':
-          order?.usesKitchenHandoffWorkflow == true &&
-              state.stationType == 'floor'
+      'kind': order.usesKitchenHandoffWorkflow && state.stationType == 'floor'
           ? 'serve_ready_order'
           : 'complete_order',
       'queue_id': queueId,
       'action_id': actionId,
     };
-    final previous = state;
-    _applyOptimisticOrderCompletion(queueId: queueId, actionId: actionId);
     try {
       await _sendOutboxPayload(payload);
-      if (_syncMode != KdsSyncMode.active) {
-        await load(showLoading: false);
-      }
-      return true;
     } catch (error) {
+      if (!mounted) return false;
       if (error is PostgrestException) {
-        state = previous.copyWith(error: error.message);
+        state = state.copyWith(error: error.message);
         return false;
       }
       try {
         await _putOutbox(actionId, payload);
+        if (!mounted) return true;
         state = state.copyWith(
           pendingOutboxCount: state.pendingOutboxCount + 1,
           pendingQueueIds: {...state.pendingQueueIds, queueId},
@@ -2608,10 +2671,14 @@ class EmergencyFulfillmentNotifier
         );
         return true;
       } catch (_) {
-        state = previous.copyWith(error: 'EMERGENCY_ORDER_ACTION_FAILED');
+        if (mounted) {
+          state = state.copyWith(error: 'EMERGENCY_ORDER_ACTION_FAILED');
+        }
         return false;
       }
     }
+    await _refreshConfirmedCommand(queueId);
+    return true;
   }
 
   Future<bool> completeKitchenChecketBatch(Map<String, int> selections) async {
@@ -2822,42 +2889,8 @@ class EmergencyFulfillmentNotifier
     }
   }
 
-  void _applyOptimistic({
-    required String itemId,
-    required String stage,
-    required int delta,
-  }) {
-    final actionAt = DateTime.now().toUtc();
-    _realtimeRevision += 1;
-    state = state.copyWith(
-      orders: state.orders
-          .map((order) {
-            final nextOrder = order.copyWith(
-              items: order.items
-                  .map((item) {
-                    if (item.id != itemId) return item;
-                    final next = item.quantityForStage(stage) + delta;
-                    return item.withStage(
-                      stage,
-                      next.clamp(0, item.requiredQuantity),
-                    );
-                  })
-                  .toList(growable: false),
-            );
-            return nextOrder.copyWith(
-              stationCompletedAt: nextOrder.isCompleteForStage(stage)
-                  ? actionAt
-                  : null,
-              clearStationCompletedAt: delta < 0,
-            );
-          })
-          .toList(growable: false),
-      clearError: true,
-    );
-  }
-
   void _applyAuthoritativeProgress(String itemId, Map<String, dynamic> result) {
-    final matchingItem = state.orders
+    final matchingItem = [...state.orders, ...state.completedOrders]
         .expand((order) => order.items)
         .where((item) => item.id == itemId)
         .cast<EmergencyFulfillmentItem?>()
@@ -3064,57 +3097,6 @@ class EmergencyFulfillmentNotifier
       default:
         return _sendProgress(payload);
     }
-  }
-
-  void _applyOptimisticOrderCompletion({
-    required String queueId,
-    required String actionId,
-  }) {
-    final stationType = state.stationType;
-    _realtimeRevision += 1;
-    state = state.copyWith(
-      orders: state.orders
-          .map((order) {
-            if (order.queueId != queueId) return order;
-            return order.copyWith(
-              lastActionId: actionId,
-              lastActionAt: DateTime.now().toUtc(),
-              stationCompletedAt: DateTime.now().toUtc(),
-              items: order.items
-                  .map((item) {
-                    if (item.isFloorDirect && stationType != 'floor') {
-                      return item;
-                    }
-                    return switch (stationType) {
-                      'kitchen' => item.withStage(
-                        'kitchen_done',
-                        item.requiredQuantity,
-                      ),
-                      'tray' =>
-                        item
-                            .withStage(
-                              'tray_received',
-                              item.kitchenDoneQuantity,
-                            )
-                            .withStage(
-                              'tray_dispatched',
-                              item.kitchenDoneQuantity,
-                            ),
-                      'floor' => item.withStage(
-                        'floor_served',
-                        item.isFloorDirect
-                            ? item.requiredQuantity
-                            : item.trayDispatchedQuantity,
-                      ),
-                      _ => item,
-                    };
-                  })
-                  .toList(growable: false),
-            );
-          })
-          .toList(growable: false),
-      clearError: true,
-    );
   }
 
   Future<void> _putOutbox(String id, Map<String, dynamic> payload) async {

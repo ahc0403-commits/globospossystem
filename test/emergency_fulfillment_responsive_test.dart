@@ -1,9 +1,16 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:globos_pos_system/core/ui/pos_design_tokens.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
@@ -31,7 +38,7 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
   Future<void> load({bool showLoading = true}) async {}
 
   @override
-  Future<void> recordProgress({
+  Future<EmergencyProgressResult> recordProgress({
     required String itemId,
     required String stage,
     int delta = 1,
@@ -58,6 +65,7 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
           )
           .toList(growable: false),
     );
+    return EmergencyProgressResult.confirmed;
   }
 
   @override
@@ -207,9 +215,295 @@ class _FixtureEmergencyControlNotifier extends EmergencyControlNotifier {
   }
 }
 
+class _DeferredEmergencyNotifier extends _FixtureEmergencyNotifier {
+  _DeferredEmergencyNotifier(super.initialState);
+  final outcome = Completer<EmergencyProgressResult>();
+
+  @override
+  Future<EmergencyProgressResult> recordProgress({
+    required String itemId,
+    required String stage,
+    int delta = 1,
+  }) async {
+    final result = await outcome.future;
+    if (result == EmergencyProgressResult.confirmed) {
+      return super.recordProgress(itemId: itemId, stage: stage, delta: delta);
+    }
+    seed(
+      state.copyWith(
+        pendingQueueIds: result == EmergencyProgressResult.queued
+            ? {state.orders.single.queueId}
+            : {},
+        error: result == EmergencyProgressResult.queued
+            ? 'EMERGENCY_PROGRESS_QUEUED'
+            : 'EMERGENCY_QUANTITY_CHAIN_VIOLATION',
+      ),
+    );
+    return result;
+  }
+}
+
+EmergencyFulfillmentState _partialReadyState(
+  String station, {
+  int items = 1,
+  int ready = 1,
+}) => EmergencyFulfillmentState(
+  assigned: true,
+  assignmentResolved: true,
+  active: true,
+  restaurantId: 'store-bt',
+  sessionId: 'session-1',
+  stationType: station,
+  floorLabel: '1F',
+  orders: [
+    EmergencyFulfillmentOrder(
+      queueId: 'queue-partial',
+      orderId: 'order-partial',
+      queueNo: 1,
+      tableNumber: '101',
+      floorLabel: '1F',
+      createdAt: DateTime.utc(2026, 10, 22),
+      workflowVersion: 2,
+      items: List.generate(
+        items,
+        (index) => EmergencyFulfillmentItem(
+          id: 'partial-$index',
+          orderItemId: 'line-$index',
+          nameKo: '음식 $index',
+          nameVi: 'Meal $index',
+          nameEn: 'Meal $index',
+          orderedQuantity: 2,
+          kitchenStartedQuantity: 2,
+          kitchenDoneQuantity: ready,
+          trayReceivedQuantity: station == 'floor' ? ready : 0,
+          trayDispatchedQuantity: station == 'floor' ? ready : 0,
+          floorServedQuantity: 0,
+          needsReview: false,
+          workflowVersion: 2,
+        ),
+      ),
+    ),
+  ],
+);
+
 void main() {
+  for (final station in ['tray', 'floor']) {
+    testWidgets(
+      '$station partial single handoff returns to board without completing unprepared food',
+      (tester) async {
+        final fixture = _FixtureEmergencyNotifier(_partialReadyState(station));
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+        );
+        await tester.tap(
+          find.byKey(const Key('emergency_order_order-partial')),
+        );
+        await tester.pump();
+        expect(find.text('0 / 1'), findsOneWidget);
+        await tester.tap(
+          find.byKey(const Key('emergency_menu_item_complete_partial-0')),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const Key('emergency_order_detail_order-partial')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const Key('emergency_order_order-partial')),
+          findsOneWidget,
+        );
+        expect(fixture.state.orders.single.isCompleteAt(station), isFalse);
+        expect(fixture.completedQueues, isEmpty);
+        expect(
+          fixture.recordedProgress.single.$2,
+          station == 'tray' ? 'tray_dispatched' : 'floor_served',
+        );
+        await tester.tap(
+          find.byKey(const Key('emergency_order_order-partial')),
+        );
+        await tester.pump();
+        expect(find.text('준비분 전달 완료 · 남은 수량 1'), findsOneWidget);
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byKey(const Key('emergency_menu_item_complete_partial-0')),
+              )
+              .onPressed,
+          isNull,
+        );
+      },
+    );
+
+    testWidgets(
+      '$station keeps remaining ready menus above the completed menu',
+      (tester) async {
+        final fixture = _FixtureEmergencyNotifier(
+          _partialReadyState(station, items: 2),
+        );
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+        );
+        await tester.tap(
+          find.byKey(const Key('emergency_order_order-partial')),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const Key('emergency_menu_item_complete_partial-0')),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const Key('emergency_order_detail_order-partial')),
+          findsOneWidget,
+        );
+        final done = tester.getTopLeft(
+          find.byKey(const Key('emergency_menu_item_partial-0')),
+        );
+        final pending = tester.getTopLeft(
+          find.byKey(const Key('emergency_menu_item_partial-1')),
+        );
+        expect(
+          done.dy > pending.dy ||
+              (done.dy == pending.dy && done.dx > pending.dx),
+          isTrue,
+        );
+        final screenshotDir =
+            Platform.environment['KDS_PARTIAL_SCREENSHOT_DIR'];
+        if (screenshotDir != null) {
+          await tester.pump(const Duration(milliseconds: 350));
+          await tester.runAsync(() async {
+            final layer =
+                tester.binding.renderViews.first.debugLayer! as OffsetLayer;
+            final image = await layer.toImage(
+              const Rect.fromLTWH(0, 0, 1024, 768),
+            );
+            final png = await image.toByteData(format: ui.ImageByteFormat.png);
+            await Directory(screenshotDir).create(recursive: true);
+            await File(
+              '$screenshotDir/$station-partial.png',
+            ).writeAsBytes(png!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+        await tester.tap(
+          find.byKey(const Key('emergency_menu_item_complete_partial-1')),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const Key('emergency_order_detail_order-partial')),
+          findsNothing,
+        );
+        expect(fixture.recordedProgress, hasLength(2));
+      },
+    );
+  }
+
+  testWidgets(
+    'tray never enables individual handoff before cooking completion',
+    (tester) async {
+      final fixture = _FixtureEmergencyNotifier(
+        _partialReadyState('tray', ready: 0),
+      );
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+      );
+      await tester.tap(find.byKey(const Key('emergency_order_order-partial')));
+      await tester.pump();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('emergency_menu_item_complete_partial-0')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(fixture.recordedProgress, isEmpty);
+    },
+  );
+
+  for (final outcome in EmergencyProgressResult.values) {
+    testWidgets('individual handoff waits for server then handles $outcome', (
+      tester,
+    ) async {
+      final fixture = _DeferredEmergencyNotifier(_partialReadyState('floor'));
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+      );
+      await tester.tap(find.byKey(const Key('emergency_order_order-partial')));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('emergency_menu_item_complete_partial-0')),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const Key('emergency_order_detail_order-partial')),
+        findsOneWidget,
+      );
+      expect(fixture.state.orders.single.items.single.floorServedQuantity, 0);
+      fixture.outcome.complete(outcome);
+      await tester.pump();
+      expect(
+        find.byKey(const Key('emergency_order_detail_order-partial')),
+        outcome == EmergencyProgressResult.confirmed
+            ? findsNothing
+            : findsOneWidget,
+      );
+      if (outcome == EmergencyProgressResult.queued) {
+        expect(find.text('전송 대기 중입니다. 연결이 복구되면 전달 기록을 전송합니다.'), findsOneWidget);
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byKey(const Key('emergency_menu_item_complete_partial-0')),
+              )
+              .onPressed,
+          isNull,
+        );
+        fixture.seed(
+          fixture.state.copyWith(
+            pendingQueueIds: {},
+            clearError: true,
+            orders: [
+              fixture.state.orders.single.copyWith(
+                items: [
+                  fixture.state.orders.single.items.single.withStage(
+                    'floor_served',
+                    1,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const Key('emergency_order_detail_order-partial')),
+          findsNothing,
+        );
+        expect(fixture.state.orders.single.isCompleteAt('floor'), isFalse);
+      }
+    });
+  }
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
+    if (Platform.environment['KDS_PARTIAL_SCREENSHOT_DIR'] != null) {
+      await (FontLoader(
+        AppFonts.family,
+      )..addFont(rootBundle.load(AppFonts.assetPath))).load();
+      await (FontLoader(
+        'MaterialIcons',
+      )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+    }
     await Supabase.initialize(
       url: 'https://example.supabase.co',
       anonKey: 'test-anon-key',
