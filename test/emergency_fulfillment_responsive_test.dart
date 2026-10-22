@@ -1014,7 +1014,7 @@ void main() {
     testWidgets(
       'floor beverage whole card pulses until served (direct kitchen: $directToFloor)',
       (tester) async {
-        EmergencyFulfillmentState snapshot(int served) {
+        EmergencyFulfillmentState snapshot(int served, {int ordered = 2}) {
           final base = _floorDirectState('floor');
           return base.copyWith(
             kitchenDirectToFloor: directToFloor,
@@ -1025,7 +1025,7 @@ void main() {
                     'id': 'drink-1',
                     'order_item_id': 'order-item-drink-1',
                     'name_vi': 'Coca-Cola',
-                    'ordered_quantity': 2,
+                    'ordered_quantity': ordered,
                     'floor_served_quantity': served,
                     'fulfillment_route': 'floor_direct',
                     'workflow_version': 2,
@@ -1114,7 +1114,7 @@ void main() {
         );
 
         // Adding drinks to the same open order restarts the alert.
-        fixture.seed(snapshot(1));
+        fixture.seed(snapshot(2, ordered: 3));
         await tester.pump();
         final added = cardColor();
         await tester.pump(const Duration(milliseconds: 500));
