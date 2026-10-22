@@ -83,6 +83,8 @@ printf 'CHECK_REPO_STEP=menu_meal_choices_cart_sql\n'
 bash scripts/test_menu_meal_choices_cart.sh
 printf 'CHECK_REPO_STEP=jeongabok_floor_live_sync_sql\n'
 bash scripts/test_jeongabok_floor_live_sync.sh
+printf 'CHECK_REPO_STEP=kds_partial_item_handoff_sql\n'
+bash scripts/test_kds_partial_item_handoff.sh
 printf 'CHECK_REPO_STEP=jeongabok_qr_full_history_sql\n'
 bash scripts/test_jeongabok_qr_full_history.sh
 
