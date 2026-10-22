@@ -134,6 +134,68 @@ void main() {
     expect(find.text('PR-HANDOFF'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'request detail shows resolved and historic material codes without extra reads',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final queries = <Map<String, dynamic>>[];
+      final request = {
+        'id': 'pr-codes',
+        'request_no': 'PR-CODES',
+        'status': 'submitted',
+        'reason': 'Restock',
+        'row_version': 2,
+        'allowed_actions': <String>[],
+        'lines': [
+          {
+            'product_name': 'Rice',
+            'product_code': 'WR073',
+            'product_code_snapshot': 'OLD073',
+            'requested_quantity': 1,
+            'requested_unit': 'bag',
+          },
+          {
+            'product_name': 'Gloves',
+            'product_code_snapshot': 'PPE-02',
+            'requested_quantity': 1,
+            'requested_unit': 'box',
+          },
+        ],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProcurementWorkspacePage(
+            requesterView: true,
+            load: () async => workspace(),
+            loadPage: (query) async {
+              queries.add({...query});
+              return {
+                ...workspace(),
+                'requests': [request],
+                if (query['request_id'] != null) 'request_detail': request,
+              };
+            },
+            execute: (a, b, c, d, e) async =>
+                throw StateError('Viewing a PR must not execute a command'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('PR-CODES').first);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.textContaining('Material code: WR073'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.textContaining('Material code: WR073'), findsOneWidget);
+      expect(find.textContaining('Material code: PPE-02'), findsOneWidget);
+      expect(find.textContaining('OLD073'), findsNothing);
+      expect(queries, hasLength(2));
+      expect(queries.last['request_id'], 'pr-codes');
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('disabled store cannot create requests', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(

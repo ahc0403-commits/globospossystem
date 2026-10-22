@@ -203,7 +203,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                 // Reports are a user-selected period snapshot. Live POS events
                 // must not remount the tab and restart its report query.
                 ReportsTab() => 0,
-                TablesTab() => _revisionForDomains({'tables', 'orders', 'payments'}),
+                // The table/order/payment providers refresh in place. Keep
+                // selection, filters and unsaved layout edits on reconnects.
+                TablesTab() => 0,
                 MenuTab() => _revisionForDomains({'menu', 'inventory'}),
                 StaffTab() => _revisionForDomains({'staff', 'attendance'}),
                 AttendanceTab() => _revisionForDomains({'attendance', 'staff'}),

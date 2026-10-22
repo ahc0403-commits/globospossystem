@@ -78,11 +78,13 @@ void main() {
           await tester.pumpAndSettle();
           expect(queries.length, 2);
           expect(queries.last['request_id'], 'pr-0');
+          // Material codes add a subtitle line. Keep drags below the viewport
+          // height so lazy list children are observed instead of skipped.
           await tester.scrollUntilVisible(
             find.textContaining('Test line ${lines - 1}'),
-            1000,
+            250,
             scrollable: find.byType(Scrollable).first,
-            maxScrolls: 200,
+            maxScrolls: 400,
           );
           expect(find.textContaining('Test line ${lines - 1}'), findsOneWidget);
           expect(queries.length, 2);

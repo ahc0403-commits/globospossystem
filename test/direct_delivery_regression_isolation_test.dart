@@ -23,9 +23,11 @@ const _migrationPath =
 // Registered generic choices now share the same QR cart. The operational QR
 // tests cover two selections of one menu, real sellable IDs, explicit submit,
 // old S/L and noodles/rice, and stale selection handling.
+// 2026-10-22: meal choices use an options label; size-only dishes retain
+// the size label. qr_order_operational_ui_test covers the registered choices.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      '75dc873ba5eabc98a0aaac77c43711bdfc6e4d5ca3ff9b08330df8adbc9d4d31',
+      '807c21e6948ef488ea648cb95e339b621bf1177c7fdc9bdd0f61b31dba83461b',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.
