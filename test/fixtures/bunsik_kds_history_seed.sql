@@ -74,4 +74,3 @@ ANALYZE public.emergency_order_queue;
 ANALYZE public.emergency_fulfillment_items;
 ANALYZE public.emergency_fulfillment_events;
 ANALYZE public.order_items;
-

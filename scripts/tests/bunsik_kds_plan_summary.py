@@ -42,4 +42,3 @@ Path(sys.argv[2]).write_text(json.dumps(result, indent=2) + "\n")
 if not plans or large:
     raise SystemExit("Unexpected broad business-table scan in scoped history/snapshot")
 print("BUNSIK_NESTED_SCAN_SCOPE=PASS no_business_scan_over_10000_rows")
-

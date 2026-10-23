@@ -140,4 +140,3 @@ for line in (out/'memory-samples.jsonl').read_text().splitlines():
  'method':'docker stats sampled during HTTP runs; includes PostgreSQL shared/cache memory; not Flutter heap'},indent=2)+'\n')
 print('BUNSIK_KDS_FULL_SCHEMA_LOAD=PASS rollback_reapply=PASS errors=0 max_reads_per_terminal=2')
 PY
-

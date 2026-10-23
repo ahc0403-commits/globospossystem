@@ -128,4 +128,3 @@ BEGIN
 END $test$;
 ROLLBACK;
 SELECT 'BUNSIK_KDS_HISTORY=PASS pagination_ties_parity_floor_scope_bounds_privileges';
-

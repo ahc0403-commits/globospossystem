@@ -18,4 +18,3 @@ run_sql < supabase/migrations/20261023060000_bunsik_kds_bounded_history.sql >/de
 run_sql -v historical=4463 -v today=300 < test/fixtures/bunsik_kds_history_seed.sql > "$scratch/seed.log" 2>&1 || { tail -15 "$scratch/seed.log"; exit 1; }
 run_sql < test/sql/bunsik_kds_history_test.sql
 printf 'BUNSIK_KDS_HISTORY_FIXTURE=PASS historical=4463 today=300 network=none\n'
-

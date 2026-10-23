@@ -20,4 +20,3 @@ DROP FUNCTION public.bunsik_kds_batch_timings_v1(jsonb);
 DROP FUNCTION public.bunsik_kds_completed_core_v1(integer,timestamptz,uuid);
 NOTIFY pgrst,'reload schema';
 COMMIT;
-

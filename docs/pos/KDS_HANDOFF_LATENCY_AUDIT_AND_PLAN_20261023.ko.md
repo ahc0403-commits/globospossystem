@@ -149,4 +149,3 @@
 6. 관련 Flutter·SQL 회귀 → `bash scripts/check_repo.sh` → 정확한 pushed SHA의 필수 GitHub Actions → `scripts/deploy_pos_production.sh` 순으로 릴리스한다. 배포와 현장 시간 측정은 각각 별도 증거로 남긴다.
 
 현재 수행한 것은 운영 읽기 조사, 소스/배포 기준 비교, SQL 실행 계획과 축소 SELECT 확인, 이 계획 및 집계 파일 작성이다. 구현 변경이 없어 앱 빌드·Flutter 테스트·배포는 수행하지 않았다. 기존 구매/재고 작업 파일은 보존했다.
-

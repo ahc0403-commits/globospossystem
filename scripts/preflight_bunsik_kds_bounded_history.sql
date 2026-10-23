@@ -14,4 +14,3 @@ BEGIN
   AND kds_workflow='kitchen_tray_floor' AND fulfillment_mode='paperless')
  THEN RAISE EXCEPTION 'BUNSIK_KDS_OPERATIONAL_SCOPE_CHANGED'; END IF;
 END $$;
-
