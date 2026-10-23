@@ -63,6 +63,7 @@ class _StorefrontFixtureService extends DirectOrderService {
   bool defaultMenu;
   final Future<void> Function(DirectOrderProofAttempt)? proofHandler;
   bool failStatus = false;
+  Future<DirectOrderStatus> Function()? statusHandler;
   int storefrontCalls = 0;
   DirectOrderAddress? submittedAddress;
   Map<String, String>? submittedItemNotes;
@@ -73,6 +74,18 @@ class _StorefrontFixtureService extends DirectOrderService {
   int clearActiveRequestCalls = 0;
   final clearedOrderKeys = <String>[];
   var fetchStatusCalls = 0;
+  String updateRevision = '0';
+  int updateRevisionCalls = 0;
+  Future<String> Function()? revisionHandler;
+  @override
+  Future<String> fetchUpdateRevision({
+    required DirectOrderSession session,
+    required String requestId,
+  }) async {
+    updateRevisionCalls++;
+    return revisionHandler == null ? updateRevision : revisionHandler!();
+  }
+
   int requirementDecisionCalls = 0;
   var listOrdersCalls = 0;
   bool? submittedUtensilsRequested;
@@ -200,6 +213,7 @@ class _StorefrontFixtureService extends DirectOrderService {
     required String requestId,
   }) async {
     fetchStatusCalls += 1;
+    if (statusHandler != null) return statusHandler!();
     if (failStatus) {
       throw const DirectOrderException('DIRECT_ORDER_TEMPORARILY_UNAVAILABLE');
     }
@@ -324,6 +338,7 @@ Widget _fixtureApp({
   Future<XFile?> Function()? pickProofImage,
   DirectOrderCustomerPushService? pushService,
   Duration statusSafetyRefreshInterval = const Duration(seconds: 15),
+  Duration chatRefreshInterval = const Duration(hours: 1),
 }) => ProviderScope(
   child: RepaintBoundary(
     key: const Key('direct_customer_visual_boundary'),
@@ -353,6 +368,8 @@ Widget _fixtureApp({
         pickProofImage: pickProofImage,
         pushService: pushService,
         statusSafetyRefreshInterval: statusSafetyRefreshInterval,
+        chatRefreshInterval: chatRefreshInterval,
+        chatRefreshJitter: Duration.zero,
       ),
     ),
   ),
@@ -1351,6 +1368,147 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('direct_upload_payment_proof')));
     await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'pending payment allows direct replacement and keeps the new photo authoritative',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      DirectOrderStatus pending(String id) => DirectOrderStatus(
+        requestId: 'proof-request',
+        referenceCode: 'DPROOF01',
+        state: 'awaiting_payment_review',
+        quote: DirectOrderQuote(
+          id: 'quote-1',
+          menuTotal: 125000,
+          serviceChargeTotal: 0,
+          deliveryFeeTotal: 0,
+          finalTotal: 125000,
+          status: 'locked',
+          expiresAt: DateTime.utc(2020),
+        ),
+        messages: [
+          DirectOrderMessage(
+            id: id,
+            senderType: 'customer',
+            messageType: 'payment_proof',
+            body: null,
+            hasAttachment: true,
+            createdAt: DateTime.utc(2026),
+            metadata: const {'quote_id': 'quote-1', 'quote_version': 1},
+          ),
+        ],
+      );
+      late _StorefrontFixtureService service;
+      DirectOrderProofAttempt? sent;
+      service = _StorefrontFixtureService(
+        activeStatus: pending('old-photo'),
+        proofHandler: (attempt) async {
+          sent = attempt;
+          attempt.complete = true;
+          attempt.messageId = 'new-photo';
+          service.activeStatus = pending('new-photo');
+        },
+      );
+      await tester.pumpWidget(
+        _fixtureApp(service: service, pickProofImage: photo),
+      );
+      await tester.pumpAndSettle();
+      final replace = find.byKey(const Key('direct_replace_payment_proof'));
+      final detailReads = service.fetchStatusCalls;
+      final listReads = service.listOrdersCalls;
+      await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(replace);
+      await tester.tap(replace);
+      await tester.pumpAndSettle();
+      expect(find.byType(QrImageView), findsNothing);
+      await tester.tap(find.byKey(const Key('direct_confirm_payment_proof')));
+      await tester.pumpAndSettle();
+      expect(sent?.expectedMessageId, 'old-photo');
+      expect(sent?.reviewRequestId, isNull);
+      expect(service.fetchStatusCalls - detailReads, 1);
+      expect(service.listOrdersCalls, listReads);
+      expect(find.byKey(const Key('direct_proof_sent')), findsOneWidget);
+      expect(replace, findsOneWidget);
+      expect(service.submitCalls, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('stalled proof status refresh does not hold the upload button', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    final gate = Completer<DirectOrderStatus>();
+    late _StorefrontFixtureService service;
+    service = _StorefrontFixtureService(
+      activeStatus: quoted(),
+      proofHandler: (attempt) async {
+        attempt.complete = true;
+        attempt.messageId = 'new-photo';
+        service.statusHandler = () => gate.future;
+      },
+    );
+    await tester.pumpWidget(
+      _fixtureApp(
+        service: service,
+        pickProofImage: photo,
+        statusSafetyRefreshInterval: const Duration(minutes: 10),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openProof(tester);
+    await tester.tap(find.byKey(const Key('direct_confirm_payment_proof')));
+    await tester.pumpAndSettle();
+    final replace = find.byKey(const Key('direct_replace_payment_proof'));
+    expect(tester.widget<TextButton>(replace).onPressed, isNotNull);
+    await tester.pump(const Duration(seconds: 11));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('direct_refresh_proof_status')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('direct_proof_sent')), findsOneWidget);
+    service.statusHandler = null;
+    gate.complete(quoted());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('direct_proof_sent')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final detail in ['', '   ']) {
+    testWidgets(
+      'manual delivery accepts optional detail ${detail.isEmpty ? 'empty' : 'whitespace'}',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(const {});
+        final service = _StorefrontFixtureService();
+        await tester.pumpWidget(_fixtureApp(service: service));
+        await tester.pumpAndSettle();
+        await _openAddress(tester);
+        for (final entry in {
+          'direct_address_input': '123 Test street, Ho Chi Minh',
+          'direct_address_detail': detail,
+          'direct_recipient_name': 'Test Recipient',
+          'direct_recipient_phone': '+84901234567',
+        }.entries) {
+          await tester.scrollUntilVisible(
+            find.byKey(Key(entry.key)),
+            -180,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.enterText(find.byKey(Key(entry.key)), entry.value);
+        }
+        await _revealSubmit(tester);
+        await tester.tap(find.byKey(const Key('direct_submit_quote_request')));
+        await tester.pumpAndSettle();
+        expect(service.submitCalls, 1);
+        expect(service.submittedAddress?.detailAddress, '');
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
   }
 
   testWidgets(
@@ -3753,6 +3911,110 @@ void main() {
       );
       expect(push.disables, 2);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'chat checks only a tiny revision and fetches selected changes automatically',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: const DirectOrderStatus(
+          requestId: 'fixture-request',
+          referenceCode: 'D12345678',
+          state: 'awaiting_quote',
+          support: {'chat_open': true},
+          messages: [],
+        ),
+      );
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: service,
+          chatRefreshInterval: const Duration(seconds: 2),
+          statusSafetyRefreshInterval: const Duration(hours: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      final detailCalls = service.fetchStatusCalls;
+      final listCalls = service.listOrdersCalls;
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(service.updateRevisionCalls, 2);
+      expect(service.fetchStatusCalls, detailCalls);
+      expect(service.listOrdersCalls, listCalls);
+      service.activeStatus = DirectOrderStatus(
+        requestId: 'fixture-request',
+        referenceCode: 'D12345678',
+        state: 'awaiting_quote',
+        support: const {'chat_open': true},
+        messages: [
+          DirectOrderMessage(
+            id: 'automatic-message',
+            senderType: 'cashier',
+            messageType: 'text',
+            body: 'Message arrived automatically',
+            hasAttachment: false,
+            createdAt: DateTime.utc(2026, 10, 23),
+          ),
+        ],
+      );
+      service.updateRevision = '1';
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.text('Message arrived automatically'), findsOneWidget);
+      expect(service.fetchStatusCalls, detailCalls + 1);
+      expect(service.listOrdersCalls, listCalls);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'completed order keeps open chat, reconnects after a bounded stalled check, and pauses in background',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      final service = _StorefrontFixtureService(
+        activeStatus: const DirectOrderStatus(
+          requestId: 'fixture-request',
+          referenceCode: 'D12345678',
+          state: 'approved',
+          fulfillmentStatus: 'completed',
+          support: {'chat_open': true},
+          messages: [],
+        ),
+      );
+      service.revisionHandler = () => Completer<String>().future;
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: service,
+          chatRefreshInterval: const Duration(seconds: 2),
+          statusSafetyRefreshInterval: const Duration(hours: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(service.clearActiveRequestCalls, 0);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pump();
+      expect(find.byKey(const Key('direct_chat_reconnecting')), findsOneWidget);
+      service.revisionHandler = null;
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('direct_chat_reconnecting')), findsNothing);
+      final calls = service.updateRevisionCalls;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump(const Duration(seconds: 20));
+      expect(service.updateRevisionCalls, calls);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(service.updateRevisionCalls, greaterThan(calls));
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

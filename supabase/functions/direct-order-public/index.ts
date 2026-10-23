@@ -11,7 +11,11 @@ type RpcClient = {
 
 export type DirectOrderDependencies = {
   allowedOrigins: readonly string[];
-  consumeRateLimit: (request: Request, action: string) => Promise<boolean>;
+  consumeRateLimit: (
+    request: Request,
+    action: string,
+    body: JsonObject,
+  ) => Promise<boolean>;
   allowInternalRequest: (request: Request, action: string) => boolean;
   execute: (
     action: string,
@@ -46,6 +50,7 @@ export const directOrderActionRegistry = Object.freeze(
     issue_order_access: { actor: "public", rateLimit: 10 },
     decide_pickup: { actor: "public", rateLimit: 60 },
     status: { actor: "public", rateLimit: 60 },
+    updates: { actor: "public", rateLimit: 1000 },
     status_v2: { actor: "public", rateLimit: 60 },
     status_v3: { actor: "public", rateLimit: 60 },
     status_v4: { actor: "public", rateLimit: 60 },
@@ -73,8 +78,10 @@ export const directOrderActionRegistry = Object.freeze(
     cancel: { actor: "public", rateLimit: 60 },
     proof_upload_url: { actor: "public", rateLimit: 10 },
     proof_upload_url_v2: { actor: "public", rateLimit: 10 },
+    proof_upload_url_v3: { actor: "public", rateLimit: 10 },
     proof_commit: { actor: "public", rateLimit: 60 },
     proof_commit_v2: { actor: "public", rateLimit: 60 },
+    proof_commit_v3: { actor: "public", rateLimit: 60 },
     staff_proof_url: { actor: "staff", rateLimit: null },
     cleanup_expired_pii: { actor: "internal", rateLimit: null },
   } as const,
@@ -372,7 +379,7 @@ export function createDirectOrderHandler(
     try {
       if (
         publicActions.has(action) &&
-        !await dependencies.consumeRateLimit(request, action)
+        !await dependencies.consumeRateLimit(request, action, body)
       ) {
         return jsonResponse(
           request,
@@ -815,6 +822,16 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_FALLBACK_VERIFICATION_FAILED: internalFailure,
   DIRECT_ORDER_QUOTE_CHANGED: conflict("DIRECT_ORDER_QUOTE_CHANGED"),
   DIRECT_ORDER_ADDRESS_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_NOTE_AUDIENCE_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_CHAT_AUDIENCE_VERIFICATION_FAILED: internalFailure,
+  DIRECT_ORDER_CHAT_RATE_LIMITED: {
+    status: 429,
+    publicCode: "TOO_MANY_REQUESTS",
+  },
+  DIRECT_ORDER_OPTIONAL_ADDRESS_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_OPTIONAL_RECEIPT_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_OPTIONAL_PRINT_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_ADDRESS_PROOF_VERIFICATION_FAILED: internalFailure,
   DIRECT_ORDER_ANALYTICS_ANCHOR_DRIFT: internalFailure,
   DIRECT_ORDER_CLEANUP_ANCHOR_DRIFT: internalFailure,
   DIRECT_ORDER_LIST_ANCHOR_DRIFT: internalFailure,
@@ -892,6 +909,100 @@ export function directOrderDinerCount(value: unknown): number {
     throw new SafeHttpError(400, "DIRECT_ORDER_DINER_COUNT_INVALID");
   }
   return value;
+}
+
+export function directOrderProofV3Args(body: JsonObject): JsonObject {
+  // Require the compare-and-set field even for a first submission (null).
+  if (!("expected_message_id" in body)) {
+    throw new SafeHttpError(400, "INVALID_REQUEST");
+  }
+  return {
+    p_session_id: requiredUuid(body, "session_id"),
+    p_request_id: requiredUuid(body, "request_id"),
+    p_quote_id: requiredUuid(body, "quote_id"),
+    p_expected_message_id: body.expected_message_id == null
+      ? null
+      : requiredUuid(body, "expected_message_id"),
+    p_review_request_id: body.review_request_id == null
+      ? null
+      : requiredUuid(body, "review_request_id"),
+  };
+}
+
+export async function executeProofV3(
+  action: "proof_upload_url_v3" | "proof_commit_v3",
+  body: JsonObject,
+  dependencies: {
+    commitOrAuthorize: (args: JsonObject) => Promise<unknown>;
+    hashSecret: (secret: string) => Promise<string>;
+    verify: (path: string) => Promise<void>;
+    reserve: (path: string) => Promise<{ token: string; signedUrl: string }>;
+  },
+): Promise<unknown> {
+  const args = directOrderProofV3Args(body);
+  if (action === "proof_commit_v3") {
+    const path = requiredString(body, "path", 240);
+    if (!validProofPath(path, String(args.p_request_id))) {
+      throw new SafeHttpError(400, "INVALID_PROOF");
+    }
+    const commitArgs = {
+      ...args,
+      p_secret_hash: await dependencies.hashSecret(
+        requiredString(body, "secret", 128, secretPattern),
+      ),
+      p_storage_path: path,
+    };
+    // Authorize ownership before touching private Storage. A committed immutable
+    // path can recover a lost response even after the payment has been approved.
+    const context = asObject(
+      await dependencies.commitOrAuthorize({
+        ...commitArgs,
+        p_verify_only: true,
+      }),
+    );
+    if (context.idempotent === true) return context;
+    const storeId = requiredUuid(context, "store_id");
+    if (!path.startsWith(`${storeId}/${args.p_request_id}/`)) {
+      throw new SafeHttpError(400, "INVALID_PROOF");
+    }
+    await dependencies.verify(path);
+    return await dependencies.commitOrAuthorize(commitArgs);
+  }
+  const mimeType = requiredString(body, "mime_type", 64);
+  const extension = allowedProofTypes.get(mimeType);
+  const size = Number(body.size_bytes);
+  if (
+    !extension || !Number.isInteger(size) || size < 1 || size > 5242880
+  ) {
+    throw new SafeHttpError(400, "INVALID_PROOF");
+  }
+  const context = asObject(
+    await dependencies.commitOrAuthorize({
+      ...args,
+      p_secret_hash: await dependencies.hashSecret(
+        requiredString(body, "secret", 128, secretPattern),
+      ),
+    }),
+  );
+  const storeId = requiredUuid(context, "store_id");
+  const prefix = `${storeId}/${args.p_request_id}/`;
+  const path = body.path == null
+    ? `${prefix}${crypto.randomUUID()}.${extension}`
+    : requiredString(body, "path", 240);
+  if (
+    !validProofPath(path, String(args.p_request_id)) ||
+    !path.startsWith(prefix) || !path.endsWith(`.${extension}`)
+  ) {
+    throw new SafeHttpError(400, "INVALID_PROOF");
+  }
+  const signed = await dependencies.reserve(path);
+  return {
+    path,
+    token: signed.token,
+    signed_url: signed.signedUrl,
+    max_bytes: 5242880,
+    mime_type: mimeType,
+  };
 }
 
 export function normalizeRpcError(message: string): SafeHttpError {
@@ -1066,6 +1177,7 @@ export async function resolveOrderScopedRequest(
     "orders_v4",
     "orders_v5",
     "status",
+    "updates",
     "status_v2",
     "status_v3",
     "status_v4",
@@ -1083,8 +1195,10 @@ export async function resolveOrderScopedRequest(
     "charge_consent",
     "proof_upload_url",
     "proof_upload_url_v2",
+    "proof_upload_url_v3",
     "proof_commit",
     "proof_commit_v2",
+    "proof_commit_v3",
     "refund_details",
     "customer_attachment_upload",
     "customer_attachment_commit",
@@ -1309,6 +1423,15 @@ function productionDependencies(): DirectOrderDependencies {
               : {}),
           },
         );
+      }
+      case "updates": {
+        return await rpc(service, "direct_order_public_updates", {
+          p_session_id: requiredUuid(body, "session_id"),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
+          p_request_id: requiredUuid(body, "request_id"),
+        });
       }
       case "status": {
         const sessionId = requiredUuid(body, "session_id");
@@ -1694,6 +1817,29 @@ function productionDependencies(): DirectOrderDependencies {
           p_request_id: requestId,
         });
       }
+      case "proof_upload_url_v3":
+      case "proof_commit_v3":
+        return await executeProofV3(action, body, {
+          hashSecret,
+          commitOrAuthorize: (args) =>
+            rpc(service, "direct_order_public_proof_v3", args),
+          verify: (path) =>
+            verifyProofUpload(
+              service.storage.from("direct-order-proofs"),
+              path,
+            ),
+          reserve: async (path) => {
+            const signed = await service.storage.from("direct-order-proofs")
+              .createSignedUploadUrl(path, { upsert: false });
+            if (signed.error || !signed.data?.token) {
+              throw new SafeHttpError(
+                503,
+                "PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE",
+              );
+            }
+            return signed.data;
+          },
+        });
       case "proof_upload_url":
       case "proof_upload_url_v2": {
         const isV2 = body.action === "proof_upload_url_v2";
@@ -1951,21 +2097,42 @@ function productionDependencies(): DirectOrderDependencies {
 
   return {
     allowedOrigins,
-    consumeRateLimit: async (request: Request, action: string) => {
+    consumeRateLimit: async (
+      request: Request,
+      action: string,
+      body: JsonObject,
+    ) => {
       const address = clientAddress(request);
       if (!address) return false;
       const key = await hmacSha256Hex(
         `${action.replace(/_v[23]$/, "")}:${address}`,
         rateLimitSecret,
       );
+      const scopedRead = action === "status_v11" || action === "orders_v5";
+      const frequentRead = action === "updates" || scopedRead;
       const data = await rpc(service, "direct_order_consume_public_rate", {
         p_request_key: key,
-        p_limit: directOrderActionRegistry[
+        p_limit: frequentRead ? 1000 : directOrderActionRegistry[
           action as keyof typeof directOrderActionRegistry
         ]?.rateLimit ?? 60,
-        p_window_seconds: 60,
+        // A shared restaurant Wi-Fi must not collapse all customers into one
+        // 60/minute chat bucket. The authenticated RPC also limits each order.
+        p_window_seconds: frequentRead ? 10 : 60,
       });
-      return data === true;
+      if (data !== true) return false;
+      if (!scopedRead) return true;
+      const identity = [
+        action,
+        requiredUuid(body, "session_id"),
+        body.request_id == null ? "list" : requiredUuid(body, "request_id"),
+        requiredString(body, "secret", 128, secretPattern),
+      ].join(":");
+      // Persist only an HMAC, never the credential or the customer IP.
+      return await rpc(service, "direct_order_consume_public_rate", {
+        p_request_key: await hmacSha256Hex(identity, rateLimitSecret),
+        p_limit: 60,
+        p_window_seconds: 60,
+      }) === true;
     },
     allowInternalRequest: (request: Request, action: string) =>
       action === "cleanup_expired_pii" && cleanupSecret.length >= 32 &&

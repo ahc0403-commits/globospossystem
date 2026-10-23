@@ -25,6 +25,8 @@ class _Auth extends AuthNotifier {
 }
 
 class _PhotoService extends DirectOrderStaffService {
+  String? chatBody;
+  int detailReads = 0, listReads = 0;
   bool photo = true;
   bool resubmissionPending = false;
   bool failDetail = false;
@@ -45,15 +47,19 @@ class _PhotoService extends DirectOrderStaffService {
     List<String>? states,
     String? fulfillmentType,
     int limit = 100,
-  }) async => [
-    {'id': 'request', 'reference_code': 'D2A54A36B', 'state': state},
-  ];
+  }) async {
+    listReads++;
+    return [
+      {'id': 'request', 'reference_code': 'D2A54A36B', 'state': state},
+    ];
+  }
 
   @override
   Future<Map<String, dynamic>> requestDetail({
     required String storeId,
     required String requestId,
   }) async {
+    detailReads++;
     if (failDetail) throw StateError('detail unavailable');
     return {
       'request': {
@@ -74,6 +80,16 @@ class _PhotoService extends DirectOrderStaffService {
         },
       ],
       'messages': [
+        if (chatBody != null)
+          {
+            'id': 'chat-new',
+            'request_id': requestId,
+            'sender_type': 'customer',
+            'message_type': 'text',
+            'body': chatBody,
+            'has_attachment': false,
+            'created_at': '2026-10-23T00:00:00Z',
+          },
         if (photo)
           {
             'id': photoId,
@@ -145,7 +161,11 @@ class _PhotoService extends DirectOrderStaffService {
   }
 }
 
-Future<void> _pump(WidgetTester tester, _PhotoService service) async {
+Future<void> _pump(
+  WidgetTester tester,
+  _PhotoService service, {
+  Stream<PosLiveEvent>? liveEvents,
+}) async {
   tester.view.physicalSize = const Size(1450, 1700);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -164,9 +184,9 @@ Future<void> _pump(WidgetTester tester, _PhotoService service) async {
     ProviderScope(
       overrides: [
         authProvider.overrideWith((ref) => _Auth()),
-        posLiveEventsProvider(
-          'store',
-        ).overrideWith((ref) => const Stream<PosLiveEvent>.empty()),
+        posLiveEventsProvider('store').overrideWith(
+          (ref) => liveEvents ?? const Stream<PosLiveEvent>.empty(),
+        ),
       ],
       child: MaterialApp.router(
         theme: AppTheme.build(),
@@ -237,6 +257,38 @@ void main() {
         'p_quote_id': 'quote',
         'p_proof_message_id': 'photo',
       });
+    },
+  );
+
+  testWidgets(
+    'staff chat receives bursts automatically with one selected detail read',
+    (tester) async {
+      final events = StreamController<PosLiveEvent>.broadcast();
+      addTearDown(events.close);
+      final service = _PhotoService();
+      await _pump(tester, service, liveEvents: events.stream);
+      final lists = service.listReads, details = service.detailReads;
+      service.chatBody = 'Customer message arrived automatically';
+      for (var i = 0; i < 20; i++) {
+        events.add(
+          const PosLiveEvent(
+            domain: 'direct_order_chat',
+            sourceTable: 'direct_order_messages',
+            eventType: 'INSERT',
+            restaurantId: 'store',
+          ),
+        );
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+      expect(service.detailReads, details + 1);
+      expect(service.listReads, lists);
+      expect(
+        find.text('Customer message arrived automatically'),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

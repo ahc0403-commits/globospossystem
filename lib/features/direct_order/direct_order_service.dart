@@ -1,5 +1,6 @@
 import '../../core/menu/menu_choices.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -34,15 +35,20 @@ class DirectOrderProofAttempt {
     required this.bytes,
     required this.mimeType,
     this.reviewRequestId,
+    this.expectedMessageId,
   });
 
   final String requestId;
   final String quoteId;
   final String? reviewRequestId;
-  final Uint8List bytes;
+  final String? expectedMessageId;
+  Uint8List bytes;
   final String mimeType;
   String? path;
   String? token;
+  String? messageId;
+  DateTime? tokenIssuedAt;
+  Future<void>? _inFlight;
   bool storageAttempted = false;
   bool uploaded = false;
   bool complete = false;
@@ -101,6 +107,28 @@ class DirectOrderService {
   static const _seenAlertKeyPrefix = 'direct_order_seen_alerts_v1_';
   final DirectOrderInvoker? _invoker;
   final DirectOrderProofUploader? _proofUploader;
+
+  static const proofReservationTimeout = Duration(seconds: 15);
+  static const proofUploadTimeout = Duration(seconds: 60);
+  static const proofCommitTimeout = Duration(seconds: 20);
+  static const proofStatusTimeout = Duration(seconds: 10);
+  static const proofTotalTimeout = Duration(seconds: 120);
+
+  Future<T> _proofStep<T>(
+    Future<T> Function() operation,
+    Duration limit,
+    Stopwatch clock,
+  ) {
+    final remaining = proofTotalTimeout - clock.elapsed;
+    if (remaining <= Duration.zero) {
+      throw const DirectOrderException('DIRECT_ORDER_PROOF_TIMEOUT');
+    }
+    return operation().timeout(
+      remaining < limit ? remaining : limit,
+      onTimeout: () =>
+          throw const DirectOrderException('DIRECT_ORDER_PROOF_TIMEOUT'),
+    );
+  }
 
   Future<DirectOrderCartDraft?> loadCartDraft(String slug) async {
     final key = '$_cartKeyPrefix$slug';
@@ -618,8 +646,24 @@ class DirectOrderService {
       'action': 'status_v11',
       ...session.credentials,
       'request_id': requestId,
-    });
+    }).timeout(proofStatusTimeout);
     return DirectOrderStatus.fromJson(data);
+  }
+
+  Future<String> fetchUpdateRevision({
+    required DirectOrderSession session,
+    required String requestId,
+  }) async {
+    final data = await _invoke({
+      'action': 'updates',
+      ...session.credentials,
+      'request_id': requestId,
+    }).timeout(proofStatusTimeout);
+    _expectExactResponseFields(data, const {'revision'});
+    if (data['revision'] is! String || (data['revision'] as String).isEmpty) {
+      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+    }
+    return data['revision'] as String;
   }
 
   Future<List<DirectOrderSummary>> listOrders({
@@ -628,7 +672,7 @@ class DirectOrderService {
     final data = await _invokeValue({
       'action': 'orders_v5',
       ...session.credentials,
-    });
+    }).timeout(proofStatusTimeout);
     if (data is! List) {
       throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
     }
@@ -663,6 +707,7 @@ class DirectOrderService {
     required String mimeType,
     required Uint8List bytes,
   }) async {
+    final clock = Stopwatch()..start();
     final payload = {
       if (chargeId != null) 'charge_id': chargeId,
       'path': path,
@@ -672,46 +717,67 @@ class DirectOrderService {
     // A previous upload or commit may have succeeded despite a lost response.
     // Recover the same immutable path first; only a missing object needs upload.
     try {
-      await supportRequest(
+      await _proofStep(
+        () => supportRequest(
+          session: session,
+          requestId: requestId,
+          action: chargeId == null
+              ? 'customer_chat_attachment_commit'
+              : 'customer_attachment_commit',
+          payload: payload,
+        ),
+        proofCommitTimeout,
+        clock,
+      );
+      return;
+    } on DirectOrderException catch (error) {
+      if (error.code != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
+    }
+    final upload = await _proofStep(
+      () => supportRequest(
+        session: session,
+        requestId: requestId,
+        action: chargeId == null
+            ? 'customer_chat_attachment_upload'
+            : 'customer_attachment_upload',
+        payload: payload,
+      ),
+      proofReservationTimeout,
+      clock,
+    );
+    final injected = _proofUploader;
+    if (injected != null) {
+      await _proofStep(
+        () => injected(path, upload['token'] as String, bytes, mimeType),
+        proofUploadTimeout,
+        clock,
+      );
+    } else {
+      await _proofStep(
+        () => supabase.storage
+            .from('direct-order-chat')
+            .uploadBinaryToSignedUrl(
+              path,
+              upload['token'] as String,
+              bytes,
+              FileOptions(contentType: mimeType, upsert: false),
+              0,
+            ),
+        proofUploadTimeout,
+        clock,
+      );
+    }
+    await _proofStep(
+      () => supportRequest(
         session: session,
         requestId: requestId,
         action: chargeId == null
             ? 'customer_chat_attachment_commit'
             : 'customer_attachment_commit',
         payload: payload,
-      );
-      return;
-    } on DirectOrderException catch (error) {
-      if (error.code != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
-    }
-    final upload = await supportRequest(
-      session: session,
-      requestId: requestId,
-      action: chargeId == null
-          ? 'customer_chat_attachment_upload'
-          : 'customer_attachment_upload',
-      payload: payload,
-    );
-    final injected = _proofUploader;
-    if (injected != null) {
-      await injected(path, upload['token'] as String, bytes, mimeType);
-    } else {
-      await supabase.storage
-          .from('direct-order-chat')
-          .uploadBinaryToSignedUrl(
-            path,
-            upload['token'] as String,
-            bytes,
-            FileOptions(contentType: mimeType),
-          );
-    }
-    await supportRequest(
-      session: session,
-      requestId: requestId,
-      action: chargeId == null
-          ? 'customer_chat_attachment_commit'
-          : 'customer_attachment_commit',
-      payload: payload,
+      ),
+      proofCommitTimeout,
+      clock,
     );
   }
 
@@ -778,6 +844,7 @@ class DirectOrderService {
     required String requestId,
     required String quoteId,
     String? reviewRequestId,
+    String? expectedMessageId,
     required Uint8List bytes,
     required String mimeType,
   }) async {
@@ -787,6 +854,7 @@ class DirectOrderService {
         requestId: requestId,
         quoteId: quoteId,
         reviewRequestId: reviewRequestId,
+        expectedMessageId: expectedMessageId,
         bytes: bytes,
         mimeType: mimeType,
       ),
@@ -798,8 +866,28 @@ class DirectOrderService {
     required DirectOrderProofAttempt attempt,
     void Function()? onChanged,
     bool allowUpload = true,
+  }) {
+    // Share one running write; a retry cannot race another upload of this photo.
+    final running = attempt._inFlight;
+    if (running != null) return running;
+    final operation = _resumePaymentProof(
+      session: session,
+      attempt: attempt,
+      onChanged: onChanged,
+      allowUpload: allowUpload,
+    ).whenComplete(() => attempt._inFlight = null);
+    attempt._inFlight = operation;
+    return operation;
+  }
+
+  Future<void> _resumePaymentProof({
+    required DirectOrderSession session,
+    required DirectOrderProofAttempt attempt,
+    void Function()? onChanged,
+    required bool allowUpload,
   }) async {
     if (attempt.complete) return;
+    final clock = Stopwatch()..start();
     if (!const {
           'image/jpeg',
           'image/png',
@@ -814,6 +902,7 @@ class DirectOrderService {
       'request_id': attempt.requestId,
       'quote_id': attempt.quoteId,
       'review_request_id': attempt.reviewRequestId,
+      'expected_message_id': attempt.expectedMessageId,
     };
     Future<void> commit() async {
       attempt.outcomeUncertain = true;
@@ -821,11 +910,15 @@ class DirectOrderService {
       onChanged?.call();
       Map<String, dynamic> response;
       try {
-        response = await _invoke({
-          ...identity,
-          'action': 'proof_commit_v2',
-          'path': attempt.path,
-        });
+        response = await _proofStep(
+          () => _invoke({
+            ...identity,
+            'action': 'proof_commit_v3',
+            'path': attempt.path,
+          }),
+          proofCommitTimeout,
+          clock,
+        );
       } on DirectOrderException catch (error) {
         if (const {
           'INVALID_PROOF',
@@ -834,6 +927,7 @@ class DirectOrderService {
           'DIRECT_ORDER_PROOF_REVIEW_NOT_ALLOWED',
           'DIRECT_ORDER_QUOTE_CHANGED',
           'DIRECT_ORDER_PROOF_PATH_INVALID',
+          'DIRECT_ORDER_PAYMENT_REVIEW_CHANGED',
         }.contains(error.code)) {
           attempt.outcomeUncertain = false;
         }
@@ -845,7 +939,7 @@ class DirectOrderService {
         'review_request_id',
         'idempotent',
       });
-      _requiredResponseString(response, 'message_id');
+      final messageId = _requiredResponseString(response, 'message_id');
       if (_requiredResponseString(response, 'state') !=
               'awaiting_payment_review' ||
           response['idempotent'] is! bool ||
@@ -853,6 +947,9 @@ class DirectOrderService {
         throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
       }
       attempt.complete = true;
+      attempt.messageId = messageId;
+      // A completed transfer can be recovered by message ID without its bytes.
+      attempt.bytes = Uint8List(0);
       attempt.stage = DirectOrderProofStage.complete;
       attempt.outcomeUncertain = false;
       onChanged?.call();
@@ -873,15 +970,23 @@ class DirectOrderService {
     if (!allowUpload) {
       throw const DirectOrderException('DIRECT_ORDER_PROOF_NOT_ALLOWED');
     }
-    if (attempt.path == null) {
+    if (attempt.path == null ||
+        attempt.tokenIssuedAt == null ||
+        DateTime.now().difference(attempt.tokenIssuedAt!) >
+            const Duration(seconds: 45)) {
       attempt.stage = DirectOrderProofStage.preparing;
       onChanged?.call();
-      final upload = await _invoke({
-        ...identity,
-        'action': 'proof_upload_url_v2',
-        'mime_type': attempt.mimeType,
-        'size_bytes': attempt.bytes.length,
-      });
+      final upload = await _proofStep(
+        () => _invoke({
+          ...identity,
+          'action': 'proof_upload_url_v3',
+          if (attempt.path != null) 'path': attempt.path,
+          'mime_type': attempt.mimeType,
+          'size_bytes': attempt.bytes.length,
+        }),
+        proofReservationTimeout,
+        clock,
+      );
       _expectExactResponseFields(upload, const {
         'path',
         'token',
@@ -898,8 +1003,12 @@ class DirectOrderService {
       }
       final path = _requiredResponseString(upload, 'path');
       final token = _requiredResponseString(upload, 'token');
+      if (attempt.path != null && path != attempt.path) {
+        throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
+      }
       attempt.path = path;
       attempt.token = token;
+      attempt.tokenIssuedAt = DateTime.now();
     }
     attempt.storageAttempted = true;
     attempt.stage = DirectOrderProofStage.uploading;
@@ -907,21 +1016,30 @@ class DirectOrderService {
     onChanged?.call();
     final uploader = _proofUploader;
     if (uploader != null) {
-      await uploader(
-        attempt.path!,
-        attempt.token!,
-        attempt.bytes,
-        attempt.mimeType,
+      await _proofStep(
+        () => uploader(
+          attempt.path!,
+          attempt.token!,
+          attempt.bytes,
+          attempt.mimeType,
+        ),
+        proofUploadTimeout,
+        clock,
       );
     } else {
-      await supabase.storage
-          .from('direct-order-proofs')
-          .uploadBinaryToSignedUrl(
-            attempt.path!,
-            attempt.token!,
-            attempt.bytes,
-            FileOptions(contentType: attempt.mimeType, upsert: false),
-          );
+      await _proofStep(
+        () => supabase.storage
+            .from('direct-order-proofs')
+            .uploadBinaryToSignedUrl(
+              attempt.path!,
+              attempt.token!,
+              attempt.bytes,
+              FileOptions(contentType: attempt.mimeType, upsert: false),
+              0,
+            ),
+        proofUploadTimeout,
+        clock,
+      );
     }
     attempt.uploaded = true;
     await commit();

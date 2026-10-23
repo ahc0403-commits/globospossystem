@@ -63,6 +63,8 @@ class _DirectOrderCashierScreenState
   String _deliveryProvider = 'grab';
   Timer? _timer;
   Timer? _chatRefreshTimer;
+  bool _chatRefreshing = false;
+  bool _chatDirty = false;
   List<Map<String, dynamic>> _requests = const [];
   Map<String, dynamic>? _detail;
   DirectOrderDriverReceiptStatus _driverReceiptStatus =
@@ -835,9 +837,47 @@ class _DirectOrderCashierScreenState
 
   void _handleLiveEvent(PosLiveEvent event) {
     if (!event.affects({'direct_order_chat'})) return;
-    _chatRefreshTimer?.cancel();
-    _chatRefreshTimer = Timer(const Duration(milliseconds: 100), () {
-      if (mounted) _refresh(silent: true);
+    _chatDirty = true;
+    _scheduleChatRefresh();
+  }
+
+  void _scheduleChatRefresh() {
+    _chatRefreshTimer ??= Timer(const Duration(milliseconds: 100), () async {
+      _chatRefreshTimer = null;
+      if (!mounted || !_chatDirty) return;
+      if (_busy || _chatRefreshing || _loading) {
+        _chatRefreshTimer = Timer(const Duration(seconds: 1), () {
+          _chatRefreshTimer = null;
+          if (mounted) _scheduleChatRefresh();
+        });
+        return;
+      }
+      _chatDirty = false;
+      final store = _storeId;
+      final selected = _selectedId;
+      if (store == null) return;
+      if (selected == null) {
+        await _refresh(silent: true);
+        return;
+      }
+      _chatRefreshing = true;
+      final revision = ++_refreshRevision;
+      try {
+        final detail = await directOrderStaffService
+            .requestDetail(storeId: store, requestId: selected)
+            .timeout(const Duration(seconds: 10));
+        if (mounted &&
+            revision == _refreshRevision &&
+            _storeId == store &&
+            _selectedId == selected) {
+          setState(() => _detail = detail);
+        }
+      } catch (_) {
+        // The existing safety refresh reconciles a failed live read.
+      } finally {
+        _chatRefreshing = false;
+        if (mounted && _chatDirty) _scheduleChatRefresh();
+      }
     });
   }
 

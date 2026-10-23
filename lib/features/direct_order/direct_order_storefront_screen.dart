@@ -17,6 +17,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/payments/vietqr_payload.dart';
+import '../../core/payments/vietqr_bank_link.dart';
+import 'direct_order_bank_handoff.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/utils/polling_utils.dart';
@@ -46,6 +48,8 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
     this.service = directOrderService,
     this.statusSafetyRefreshInterval = const Duration(seconds: 15),
     this.statusSafetyRefreshJitter = const Duration(seconds: 3),
+    this.chatRefreshInterval = const Duration(seconds: 2),
+    this.chatRefreshJitter = const Duration(milliseconds: 500),
     this.pollRandom,
     this.now = DateTime.now,
     this.pickProofImage,
@@ -58,6 +62,7 @@ class DirectOrderStorefrontScreen extends StatefulWidget {
   final DirectOrderService service;
   final Duration statusSafetyRefreshInterval;
   final Duration statusSafetyRefreshJitter;
+  final Duration chatRefreshInterval, chatRefreshJitter;
   final math.Random? pollRandom;
   final DateTime Function() now;
   final Future<XFile?> Function()? pickProofImage;
@@ -100,6 +105,7 @@ class _DirectOrderStorefrontScreenState
   final _proofAttempts = <String, DirectOrderProofAttempt>{};
   final _proofErrors = <String, String>{};
   final _proofRefreshFailures = <String>{};
+  final _proofStatusReads = <String, Future<void>>{};
   final _submittedChargeVersions = <String, int>{};
   String? _proofBusyRequestId;
   final _money = NumberFormat.currency(
@@ -120,6 +126,10 @@ class _DirectOrderStorefrontScreenState
       DirectOrderFulfillmentType.delivery;
   bool get _isPickup => _fulfillmentType == DirectOrderFulfillmentType.pickup;
   Timer? _statusTimer;
+  Timer? _chatTimer;
+  bool _chatChecking = false;
+  int _chatFailures = 0;
+  String? _chatRevision, _chatRevisionRequest;
   Timer? _hoursTimer;
   bool _loading = true;
   bool _submitting = false;
@@ -173,6 +183,9 @@ class _DirectOrderStorefrontScreenState
         oldWidget.accessKey != widget.accessKey) {
       _statusMutationRevision++;
       _statusTimer?.cancel();
+      _chatTimer?.cancel();
+      _chatRevision = null;
+      _chatRevisionRequest = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _load();
       });
@@ -186,6 +199,7 @@ class _DirectOrderStorefrontScreenState
     _persistCart();
     _menuSearchController.dispose();
     _statusTimer?.cancel();
+    _chatTimer?.cancel();
     _hoursTimer?.cancel();
     _pushService.dispose();
     _dinerController.dispose();
@@ -263,6 +277,7 @@ class _DirectOrderStorefrontScreenState
       _persistCart();
       _statusTimer?.cancel();
       _statusTimer = null;
+      _chatTimer?.cancel();
       _hoursTimer?.cancel();
       _hoursTimer = null;
     }
@@ -428,8 +443,10 @@ class _DirectOrderStorefrontScreenState
     bool force = false,
   }) async {
     if (status.fulfillmentStatus == 'completed' &&
-            !_hasCompletionRefund(status) ||
-        status.support['chat_open'] == false) {
+            !_hasCompletionRefund(status) &&
+            status.support['chat_open'] != true ||
+        status.support['chat_open'] == false ||
+        status.support['access_open'] == false) {
       _closedProgress = directOrderCustomerProgress(
         status.state,
         status.fulfillmentStatus,
@@ -532,18 +549,16 @@ class _DirectOrderStorefrontScreenState
         setState(() => _pausedByServer = true);
       }
     }
-    if (mounted) setState(() => _view = view);
+    if (mounted) {
+      setState(() => _view = view);
+      _startChatPolling();
+    }
   }
 
   bool get _hasPendingUpdates =>
       !_orderClosed &&
       (_orders.any((order) => !order.isTerminal) ||
-          (_status?.support['chat_open'] == true &&
-              const {
-                'cancelled',
-                'rejected',
-                'expired',
-              }.contains(_status?.state)) ||
+          _status?.support['chat_open'] == true ||
           (_status?.delivery?.offer?.status == 'accepted' &&
               (_status?.delivery?.offer?.refundDue ?? 0) > 0 &&
               _status?.delivery?.offer?.refundRecorded == false) ||
@@ -1077,6 +1092,7 @@ class _DirectOrderStorefrontScreenState
   }
 
   void _startStatusPolling() {
+    _startChatPolling();
     _statusTimer?.cancel();
     _statusTimer = null;
     if (!_isForeground || !_hasPendingUpdates) return;
@@ -1094,6 +1110,82 @@ class _DirectOrderStorefrontScreenState
         }
       },
     );
+  }
+
+  bool get _canWatchChat =>
+      mounted &&
+      _isForeground &&
+      !_orderClosed &&
+      _session != null &&
+      _status != null &&
+      _status!.support['chat_open'] != false &&
+      _view == _CustomerView.status;
+
+  void _startChatPolling() {
+    _chatTimer?.cancel();
+    if (!_canWatchChat) return;
+    final multiplier = 1 << math.min(_chatFailures, 4);
+    final delay = Duration(
+      milliseconds: (widget.chatRefreshInterval.inMilliseconds * multiplier)
+          .clamp(1, 30000),
+    );
+    _chatTimer = Timer(
+      jitteredPollDelay(
+        delay,
+        maximumJitter: widget.chatRefreshJitter,
+        random: _pollRandom,
+      ),
+      () async {
+        await _checkChatUpdates();
+        if (mounted) _startChatPolling();
+      },
+    );
+  }
+
+  Future<void> _checkChatUpdates() async {
+    if (!_canWatchChat || _chatChecking || _refreshingStatus) return;
+    _chatChecking = true;
+    final session = _session!;
+    final requestId = _status!.requestId;
+    final generation = _statusMutationRevision;
+    bool current() =>
+        mounted &&
+        _session == session &&
+        _status?.requestId == requestId &&
+        generation == _statusMutationRevision;
+    try {
+      final revision = await widget.service
+          .fetchUpdateRevision(session: session, requestId: requestId)
+          .timeout(DirectOrderService.proofStatusTimeout);
+      if (!current()) return;
+      if (_chatRevisionRequest != requestId || revision != _chatRevision) {
+        final status = await widget.service
+            .fetchStatus(session: session, requestId: requestId)
+            .timeout(DirectOrderService.proofStatusTimeout);
+        if (!current()) return;
+        setState(() {
+          _status = status;
+          _orders = [
+            for (final order in _orders)
+              if (order.requestId == requestId)
+                DirectOrderSummary.fromStatus(status)
+              else
+                order,
+          ];
+        });
+        _chatRevision = revision;
+        _chatRevisionRequest = requestId;
+        unawaited(_notifyForStatus(status));
+        await _publishOrderLink(status);
+      }
+      if (current() && _chatFailures != 0) setState(() => _chatFailures = 0);
+    } catch (_) {
+      if (current()) {
+        setState(() => _chatFailures = math.min(4, _chatFailures + 1));
+      }
+    } finally {
+      _chatChecking = false;
+    }
   }
 
   Future<void> _refreshStatus({bool silent = false}) async {
@@ -1407,7 +1499,7 @@ class _DirectOrderStorefrontScreenState
     if (quote == null) return false;
     if (status.state == 'awaiting_payment_review' &&
         quote.status == 'locked' &&
-        status.proofReview?.canResubmit == true) {
+        supportNumber(status.support['food_received']) == 0) {
       return true;
     }
     return status.state == 'quoted' &&
@@ -1537,9 +1629,34 @@ class _DirectOrderStorefrontScreenState
         : _copy.prepaidHelp;
   }
 
+  String? _latestProofId(DirectOrderStatus status) {
+    final saved = _proofAttempts[status.requestId];
+    if (saved?.complete == true && saved?.quoteId == status.quote?.id) {
+      return saved?.messageId;
+    }
+    final proofs =
+        status.messages
+            .where(
+              (message) =>
+                  message.senderType == 'customer' &&
+                  message.messageType == 'payment_proof' &&
+                  message.hasAttachment &&
+                  message.metadata['quote_id'] == status.quote?.id &&
+                  message.metadata['charge_id'] == null,
+            )
+            .toList()
+          ..sort((a, b) {
+            final time = a.createdAt.compareTo(b.createdAt);
+            return time == 0 ? a.id.compareTo(b.id) : time;
+          });
+    return proofs.isEmpty ? null : proofs.last.id;
+  }
+
   DirectOrderProofAttempt? _proofAttemptFor(DirectOrderStatus status) {
     final attempt = _proofAttempts[status.requestId];
     return attempt?.quoteId == status.quote?.id &&
+            (attempt?.complete == true ||
+                attempt?.expectedMessageId == _latestProofId(status)) &&
             attempt?.reviewRequestId ==
                 (status.proofReview?.canResubmit == true
                     ? status.proofReview?.id
@@ -1552,8 +1669,9 @@ class _DirectOrderStorefrontScreenState
     final session = _session;
     final status = _status;
     if (_proofUploading || session == null || status?.quote == null) return;
+    final expectedMessageId = _latestProofId(status!);
     var attempt =
-        _proofAttemptFor(status!) ??
+        _proofAttemptFor(status) ??
         (retry ? _proofAttempts[status.requestId] : null);
     if ((!retry || attempt == null) && !_canSendProof(status)) return;
     setState(() {
@@ -1596,7 +1714,7 @@ class _DirectOrderStorefrontScreenState
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(
-              status.proofReview?.canResubmit == true
+              status.state == 'awaiting_payment_review'
                   ? _copy.replaceProof
                   : _copy.attachProof,
             ),
@@ -1639,12 +1757,14 @@ class _DirectOrderStorefrontScreenState
             _status?.requestId != status.requestId ||
             _status?.quote?.id != status.quote!.id ||
             _status?.proofReview?.id != status.proofReview?.id ||
+            _latestProofId(_status!) != expectedMessageId ||
             !_canSendProof(_status!)) {
           return;
         }
         attempt = DirectOrderProofAttempt(
           requestId: status.requestId,
           quoteId: status.quote!.id,
+          expectedMessageId: expectedMessageId,
           reviewRequestId: status.proofReview?.canResubmit == true
               ? status.proofReview?.id
               : null,
@@ -1666,7 +1786,7 @@ class _DirectOrderStorefrontScreenState
           if (mounted) setState(() {});
         },
       );
-      await _refreshProofStatus(session, status.requestId);
+      unawaited(_refreshProofStatus(session, status.requestId));
     } catch (error) {
       if (mounted) {
         if (attempt == null) _showError(error);
@@ -1676,7 +1796,7 @@ class _DirectOrderStorefrontScreenState
               : 'PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE',
         );
         // Reconcile a changed quote, staff approval or another device's upload.
-        await _refreshProofStatus(session, status.requestId);
+        unawaited(_refreshProofStatus(session, status.requestId));
       }
     } finally {
       if (mounted) {
@@ -1692,13 +1812,25 @@ class _DirectOrderStorefrontScreenState
   Future<void> _refreshProofStatus(
     DirectOrderSession session,
     String requestId,
+  ) {
+    final key = '${session.id}:$requestId:$_statusMutationRevision';
+    return _proofStatusReads.putIfAbsent(
+      key,
+      () => _readProofStatus(session, requestId).whenComplete(() {
+        _proofStatusReads.remove(key);
+      }),
+    );
+  }
+
+  Future<void> _readProofStatus(
+    DirectOrderSession session,
+    String requestId,
   ) async {
     final revision = _statusMutationRevision;
     try {
-      final latest = await widget.service.fetchStatus(
-        session: session,
-        requestId: requestId,
-      );
+      final latest = await widget.service
+          .fetchStatus(session: session, requestId: requestId)
+          .timeout(DirectOrderService.proofStatusTimeout);
       if (!mounted ||
           _status?.requestId != requestId ||
           revision != _statusMutationRevision) {
@@ -1708,6 +1840,18 @@ class _DirectOrderStorefrontScreenState
         _statusMutationRevision++;
         _status = latest;
         _proofRefreshFailures.remove(requestId);
+        final sent = _proofAttempts[requestId];
+        if (sent?.complete == true &&
+            (latest.quote?.id != sent?.quoteId ||
+                !const {
+                  'quoted',
+                  'awaiting_payment_review',
+                }.contains(latest.state) ||
+                latest.messages.any(
+                  (message) => message.id == sent?.messageId,
+                ))) {
+          _proofAttempts.remove(requestId);
+        }
       });
     } catch (_) {
       if (mounted) setState(() => _proofRefreshFailures.add(requestId));
@@ -2754,6 +2898,7 @@ class _DirectOrderStorefrontScreenState
           maxLines: 2,
           decoration: InputDecoration(
             labelText: _copy.deliveryNote,
+            helperText: _copy.privateNoteHelp,
             prefixIcon: const Icon(Icons.notes_rounded),
           ),
         ),
@@ -3487,8 +3632,17 @@ class _DirectOrderStorefrontScreenState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 12),
-        if (sent) ...[
+        if (sent && !busy && (attempt == null || attempt.complete)) ...[
           Text(_copy.proofSent, key: const Key('direct_proof_sent')),
+          if (canSend) ...[
+            TextButton.icon(
+              key: const Key('direct_replace_payment_proof'),
+              onPressed: _proofUploading ? null : () => _uploadProof(),
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: Text(_copy.replaceProof),
+            ),
+            Text(_copy.doNotPayAgain),
+          ],
           if (_proofRefreshFailures.contains(status.requestId)) ...[
             Text(_copy.proofStatusUnavailable),
             TextButton(
@@ -3713,6 +3867,14 @@ class _DirectOrderStorefrontScreenState
                           _storefront!.bank.accountHolder,
                         ),
                         _copyBankLine(_copy.transferReference, reference),
+                        if (VietQrBankLink.safeReturnUri(Uri.base, widget.slug)
+                            case final uri?)
+                          DirectOrderBankHandoff(
+                            bank: _storefront!.bank,
+                            amount: amount.round(),
+                            reference: reference,
+                            returnUri: uri,
+                          ),
                       ] else ...[
                         Text(
                           charge == null
@@ -3900,6 +4062,19 @@ class _DirectOrderStorefrontScreenState
                 ),
               ],
             ),
+            if (_chatFailures > 0)
+              Container(
+                key: const Key('direct_chat_reconnecting'),
+                padding: const EdgeInsets.all(10),
+                color: const Color(0xfffff3cd),
+                child: Text(
+                  _copy.chatReconnecting,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xff8a4400),
+                  ),
+                ),
+              ),
             const Divider(),
             if (status.requirements.isNotEmpty) ...[
               Text(
