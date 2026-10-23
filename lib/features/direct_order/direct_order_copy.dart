@@ -1,6 +1,11 @@
 import 'direct_order_stage.dart';
 
 class DirectOrderCopy {
+  String get chatReconnecting => _pick(
+    '새 메시지 자동 연결을 다시 시도하고 있습니다. 필요하면 새로고침을 눌러주세요.',
+    'Đang kết nối lại tự động. VUI LÒNG TẢI LẠI ĐỂ CẬP NHẬT TIN NHẮN MỚI NHẤT.',
+    'Reconnecting automatically. Refresh to check the latest messages.',
+  );
   const DirectOrderCopy(this.languageCode);
 
   final String languageCode;
@@ -321,6 +326,11 @@ class DirectOrderCopy {
     'Use intake pause when busy. The page cannot be disabled while orders are in progress.',
   );
   String errorMessage(String code) => switch (code) {
+    'DIRECT_ORDER_PROOF_TIMEOUT' => _pick(
+      '사진 전송 결과를 아직 확인하지 못했습니다. 다시 시도하면 같은 사진의 전송 결과를 먼저 확인합니다.',
+      'Chưa xác nhận được kết quả gửi ảnh. Thử lại để kiểm tra ảnh đã gửi trước.',
+      'The image result is not confirmed yet. Retry to check the same upload first.',
+    ),
     'DIRECT_ORDER_COOKING_NOT_COMPLETE' => _pick(
       '조리 완료 후 기사를 호출할 수 있습니다.',
       'Chỉ đặt tài xế sau khi làm xong món.',
@@ -714,7 +724,33 @@ class DirectOrderCopy {
     'Nhập chi tiết để tài xế dễ tìm',
     'Add details so the driver can find you',
   );
-  String get deliveryNote => _pick('요청사항', 'Ghi chú', 'Note');
+  String get deliveryNote => _pick(
+    '관리자에게 남길 메모 (선택)',
+    'Ghi chú riêng cho thu ngân (tùy chọn)',
+    'Note for the cashier (optional)',
+  );
+  String get privateNoteHelp => _pick(
+    '조리 요청은 메뉴별 요청사항에 입력해주세요.',
+    'Yêu cầu chế biến: ghi tại từng món.',
+    'Add cooking requests to the individual dish.',
+  );
+  String get yourBankApp =>
+      _pick('이체할 은행 앱', 'Ứng dụng ngân hàng của bạn', 'Your banking app');
+  String get openBankApp => _pick(
+    '은행 앱에서 이체',
+    'Chuyển khoản bằng ứng dụng ngân hàng',
+    'Transfer in banking app',
+  );
+  String get bankAppHelp => _pick(
+    '은행 앱에서 수취인·계좌·금액을 확인한 뒤 승인해주세요. 이체 후 확인 사진을 보내주세요.',
+    'Kiểm tra người nhận, tài khoản và số tiền trong ứng dụng rồi xác nhận. Sau đó gửi ảnh chuyển khoản.',
+    'Check the recipient, account and amount in your bank app before approving. Then send the transfer photo.',
+  );
+  String get bankAppFallback => _pick(
+    '앱이 열리지 않으면 외부 브라우저에서 열거나 위 QR·계좌 복사를 이용해주세요.',
+    'Nếu không mở được ứng dụng, hãy mở bằng trình duyệt ngoài hoặc dùng mã QR / sao chép tài khoản ở trên.',
+    'If the app does not open, use an external browser or the QR / copy account options above.',
+  );
   String get submitForPickup => _pick(
     '포장 주문 금액 확인 요청',
     'Yêu cầu xác nhận đơn mang đi',
@@ -728,9 +764,9 @@ class DirectOrderCopy {
   String get submitForQuote =>
       _pick('주문 요청', 'Gửi yêu cầu đặt món', 'Request order');
   String get requiredFields => _pick(
-    '배송 주소(3자 이상), 상세주소, 받는 분, 전화번호를 모두 입력해 주세요.',
-    'Vui lòng nhập địa chỉ giao hàng (ít nhất 3 ký tự), địa chỉ chi tiết, tên và số điện thoại.',
-    'Enter a delivery address (at least 3 characters), address details, recipient and phone number.',
+    '배송 주소(3자 이상), 받는 분, 전화번호를 입력해 주세요.',
+    'Vui lòng nhập địa chỉ giao hàng (ít nhất 3 ký tự), tên và số điện thoại.',
+    'Enter a delivery address (at least 3 characters), recipient and phone number.',
   );
   String get awaitingQuote => _pick(
     '매장에서 주문을 확인하고 있습니다.',

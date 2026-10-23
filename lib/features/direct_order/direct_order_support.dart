@@ -505,7 +505,7 @@ class _DirectOrderAttachmentButtonState
       // The message is committed. A failed refresh must not keep the previous
       // attachment as the only available action in this conversation.
       _clearDraft();
-      await onSent();
+      await onSent().timeout(DirectOrderService.proofStatusTimeout);
       if (!mounted || revision != _scopeRevision) return;
       _clearDraft();
     } catch (error) {

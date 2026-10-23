@@ -1,0 +1,306 @@
+00:00 +0: loading /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart
+00:00 +0: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: URL failure keeps the same photo and retries only the failed stage
+00:00 +1: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: lost Storage response commits the saved path without uploading twice
+00:00 +2: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: definitely missing Storage object retries the same signed path
+00:00 +3: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: lost commit response recovers one message with the original quote/review
+00:00 +4: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: a changed/expired order may reconcile but cannot upload new bytes
+00:00 +5: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: malformed reservation cannot leave a path without a token
+00:00 +6: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: oversized or unsupported photos call neither API nor Storage
+00:00 +7: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: (setUpAll)
+supabase.supabase_flutter: INFO: ***** Supabase init completed ***** 
+00:00 +7: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff service sends exact reviewed photo, quote and amount to RPC
+00:00 +8: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +9: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +10: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +11: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +12: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +13: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +14: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +15: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +16: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:00 +17: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:01 +18: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:01 +19: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:01 +20: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:01 +21: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:01 +22: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:01 +23: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
+00:01 +24: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:01 +25: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:01 +26: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:01 +27: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:01 +28: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:01 +29: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:01 +30: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +31: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +32: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +33: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +33: /Users/andreahn/globos_pos_system/test/direct_order_requirements_test.dart: driver copy receives the agreed delivery instructions
+capabilities.length is already loaded
+00:02 +34: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +35: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +36: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +37: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +38: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +38: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: missing beneficiary never falls back to a personal account
+capabilities.length is already loaded
+00:02 +39: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +40: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +41: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +41: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: service receipts do not request transfers even with a bank
+capabilities.length is already loaded
+00:02 +42: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +43: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +43: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: pickup kitchen slip includes order type and reference
+capabilities.length is already loaded
+00:02 +43: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +44: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +44: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: direct-pay driver slip never calls the Grab fee prepaid
+capabilities.length is already loaded
+00:02 +45: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +45: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: kitchen keeps three diners while omitting utensils
+capabilities.length is already loaded
+00:02 +46: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +46: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: floor keeps three diners while omitting utensils
+capabilities.length is already loaded
+00:02 +47: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +47: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: tray keeps three diners while omitting utensils
+capabilities.length is already loaded
+00:02 +48: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +48: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: confirmation keeps three diners while omitting utensils
+capabilities.length is already loaded
+00:02 +49: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +49: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: queued driver receipt retains diners and omits disposable utensils
+capabilities.length is already loaded
+00:02 +50: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +50: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: queued and native customer receipts omit utensils without changing totals
+capabilities.length is already loaded
+00:02 +51: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +51: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: queued payment receipt prints customer and per-menu requests
+capabilities.length is already loaded
+00:02 +52: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +53: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +53: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: blank requests add no empty note block
+capabilities.length is already loaded
+00:02 +54: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +54: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: kitchen shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +55: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +55: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: kitchen shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +56: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +56: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: kitchen shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +57: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +57: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: kitchen identifies missing direct counts on every form
+capabilities.length is already loaded
+00:02 +58: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +58: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: floor shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +59: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +59: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: floor shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +60: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +60: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: floor shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +61: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +61: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: floor identifies missing direct counts on every form
+capabilities.length is already loaded
+00:02 +62: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +62: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: tray shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +63: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +63: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: tray shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +64: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +64: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: tray shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +65: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +65: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: tray identifies missing direct counts on every form
+capabilities.length is already loaded
+00:02 +66: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +66: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: confirmation shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +67: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +67: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: confirmation shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +68: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +68: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: confirmation shows packing count only for delivery/pickup
+capabilities.length is already loaded
+00:02 +69: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +69: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: confirmation identifies missing direct counts on every form
+capabilities.length is already loaded
+00:02 +70: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +70: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: packing header carries 1 sets before menus even without method
+capabilities.length is already loaded
+00:02 +71: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +71: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: packing header carries 3 sets before menus even without method
+capabilities.length is already loaded
+00:02 +72: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +72: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: packing header carries 10 sets before menus even without method
+capabilities.length is already loaded
+00:02 +73: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +73: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: packing header carries 100 sets before menus even without method
+capabilities.length is already loaded
+00:02 +74: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +74: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: identified direct receipts show a staff check for missing/invalid counts
+capabilities.length is already loaded
+capabilities.length is already loaded
+capabilities.length is already loaded
+00:02 +75: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: general selections remain separate, editable and recoverable
+00:02 +75: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: malformed queued packing values require a staff check rather than truncation
+capabilities.length is already loaded
+00:02 +76: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: missing photo disables approval with visible reason
+00:02 +76: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: malformed queued packing values require a staff check rather than truncation
+capabilities.length is already loaded
+capabilities.length is already loaded
+capabilities.length is already loaded
+capabilities.length is already loaded
+capabilities.length is already loaded
+00:02 +77: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: missing photo disables approval with visible reason
+00:02 +77: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: regular receipts do not invent disposable sets
+capabilities.length is already loaded
+00:02 +78: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: missing photo disables approval with visible reason
+00:02 +78: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: payment receipt emits ESC/POS payload with cut command
+capabilities.length is already loaded
+00:02 +79: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +80: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +80: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: payment receipt prints zero VAT numerically when VAT is absent
+capabilities.length is already loaded
+00:02 +81: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +81: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: delivery driver receipt includes address and charged Grab total
+capabilities.length is already loaded
+00:02 +82: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +82: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: driver receipt omits an optional empty detail line
+capabilities.length is already loaded
+00:02 +83: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +84: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +84: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: frozen print agent fallback renders the dedicated driver slip
+capabilities.length is already loaded
+00:02 +85: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +86: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +87: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +87: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: service receipts include non-revenue service note
+capabilities.length is already loaded
+00:02 +88: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +88: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: bank transfer receipts use the bank transfer method label
+capabilities.length is already loaded
+00:02 +89: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +89: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: service item lines are excluded from customer receipt body
+capabilities.length is already loaded
+00:02 +90: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +90: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: floor and tray tickets lead with large floor table header
+capabilities.length is already loaded
+capabilities.length is already loaded
+00:02 +91: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +92: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +92: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: 2F and 3F order confirmation slips show item prices and total
+capabilities.length is already loaded
+capabilities.length is already loaded
+00:02 +93: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +93: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: 2F and 3F added-order confirmations identify and total all items
+capabilities.length is already loaded
+capabilities.length is already loaded
+00:02 +94: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +94: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: combo components are preserved and printed for kitchen prep
+capabilities.length is already loaded
+00:02 +95: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +95: /Users/andreahn/globos_pos_system/test/receipt_builder_contract_test.dart: all fixed printer copy is Vietnamese only
+capabilities.length is already loaded
+capabilities.length is already loaded
+00:02 +96: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +97: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer taps one dish and chooses S/L prices without extra catalog reads
+00:02 +98: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: resubmission disables approval with visible reason
+00:02 +99: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: editable cart preserves sizes and noodles/rice combinations ko
+00:03 +100: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: editable cart preserves sizes and noodles/rice combinations ko
+00:03 +101: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: in-flight staff approval cannot be clicked twice
+00:03 +102: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: editable cart preserves sizes and noodles/rice combinations vi
+00:04 +103: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: editable cart preserves sizes and noodles/rice combinations vi
+00:04 +104: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: server rejection stays pending and shows the actual reason
+00:04 +105: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: editable cart preserves sizes and noodles/rice combinations en
+00:04 +106: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: lost approval response refreshes the completed order
+00:04 +107: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: cart survives closing and reopening the storefront
+00:04 +108: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: cart survives closing and reopening the storefront
+00:04 +109: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: menu search uses current names without additional server calls
+00:05 +110: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: combo selects 1 drinks and retains distinct choices across quantities
+00:05 +111: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: combo selects 2 drinks and retains distinct choices across quantities
+00:06 +112: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile customer confirms a pinned request without another detail read
+00:06 +113: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: utensil choice fits a 320px phone in ko with larger text
+00:06 +114: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: utensil choice fits a 320px phone in vi with larger text
+00:06 +115: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: utensil choice fits a 320px phone in en with larger text
+00:06 +116: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile cooking completion appears above chat before packing is ready
+00:07 +117: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: completed delivery retains server-approved refund and evidence access
+00:07 +118: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: three diners can opt out of utensils and edits retain the choice
+00:07 +119: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: refresh batches alerts for 1 orders without extra detail requests
+00:07 +120: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: refresh batches alerts for 10 orders without extra detail requests
+00:07 +121: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: refresh batches alerts for 50 orders without extra detail requests
+00:07 +122: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: scoped order loads and refreshes with one status and no list request
+00:07 +123: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile delivery and ordinary chat expose exact selectable links with copy
+00:08 +124: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: menu search and category selection compose without server reads
+00:08 +125: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: pending payment allows direct replacement and keeps the new photo authoritative
+00:08 +126: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: stalled proof status refresh does not hold the upload button
+00:08 +127: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: manual delivery accepts optional detail empty
+00:08 +128: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: manual delivery accepts optional detail whitespace
+00:09 +129: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: category selection is pinned, local and preserves cart across locale and address
+00:09 +130: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: many long categories can reach the last category at 360.0
+00:09 +131: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: many long categories can reach the last category at 390.0
+00:09 +132: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: many long categories can reach the last category at 768.0
+00:09 +133: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: many long categories can reach the last category at 1024.0
+00:09 +134: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: many long categories can reach the last category at 1440.0
+00:09 +135: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: empty menu hides unused categories and provides refresh
+00:09 +136: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: direct screenshot picker cancellation sends nothing
+00:09 +137: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: failed screenshot retries the retained photo without payment dialog
+00:09 +138: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: commit success remains sent when status refresh fails
+00:09 +139: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: picker is guarded from the first click and preview cancel sends nothing
+00:10 +140: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: cart preview lists selected items without submitting an order
+00:10 +141: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: cart preview is localized and responsive in all three locales
+00:11 +142: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: cart preview scrolls through long names and many selected items
+00:11 +143: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: open storefront refreshes automatically at Vietnam 11:00
+00:11 +144: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: open storefront refreshes automatically at Vietnam 22:00
+00:11 +145: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: pickup needs contact only and shows store collection address
+00:11 +146: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: pickup ready shows collection code instead of dispatch progress
+00:11 +147: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: completed order closes its access while retaining the saved address
+00:11 +148: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: order history shows each order with its own status
+00:11 +149: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: cashier Grab policy changes customer instructions and transfer QR amount
+00:12 +150: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile quote remains visible in ko at 320.0
+00:12 +151: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile quote remains visible in vi at 320.0
+00:12 +152: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile quote remains visible in en at 320.0
+00:12 +153: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile quote remains visible in ko at 390.0
+00:12 +154: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile quote remains visible in vi at 390.0
+00:12 +155: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile quote remains visible in en at 390.0
+00:12 +156: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile quote and composer remain usable above the keyboard
+00:12 +157: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: open payment sheet follows a changed quote and removes QR after approval
+00:12 +158: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: shortfall QR prefills bank, exact 47628 VND and its reference
+00:12 +159: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile underpayment uses outstanding amount and charge state pending
+00:12 +160: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile underpayment uses outstanding amount and charge state review
+00:12 +161: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile underpayment uses outstanding amount and charge state paid
+00:12 +162: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: mobile underpayment uses outstanding amount and charge state none
+00:12 +163: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: additional payment sheet updates the server balance and stops after proof review
+00:13 +164: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: expired quote never exposes a transfer QR from the pinned amount
+00:13 +165: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: successful balance proof suppresses another transfer when refresh fails
+00:13 +166: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: underpayment card and sheet fit a small phone in ko with larger text
+00:13 +167: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: underpayment card and sheet fit a small phone in vi with larger text
+00:13 +168: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: underpayment card and sheet fit a small phone in en with larger text
+00:13 +169: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: quoted order shows VAT and complete bank transfer details
+00:13 +170: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: proof review asks for an image without asking for payment again
+00:13 +171: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: paused storefront shows an apology and loads order history
+00:13 +172: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: paused storefront keeps an active order status visible
+00:13 +173: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: closed apology is responsive in every supported locale
+00:13 +174: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: submit race transitions to the closed apology state
+00:13 +175: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: storefront stays usable at all required responsive widths
+00:13 +176: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: manual address submits without coordinates at Size(390.0, 844.0)
+00:13 +177: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: manual address submits without coordinates at Size(1440.0, 900.0)
+00:14 +178: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: required fields and invalid phone prevent manual submission
+00:14 +179: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: legacy saved address stays editable and is resubmitted as manual
+00:14 +180: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: sent chat message renders without a second status round trip
+00:14 +181: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: customer sees actual fulfillment with separate payment and collapsed details
+00:14 +182: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: driver handoff requires dispatch evidence on the customer card
+00:14 +183: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: item requests survive locale changes, cart review and submission
+00:14 +184: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: driver-paid delivery fee is unconfirmed rather than shown as zero
+00:14 +185: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: ongoing order details use stored items and show tax and separate delivery payment
+00:14 +186: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: foreground cooking packing and payment notices keep distinct meanings
+00:14 +187: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: push permission is explicit and an unfinished enable survives closing settings
+00:14 +188: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: chat checks only a tiny revision and fetches selected changes automatically
+00:14 +189: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: completed order keeps open chat, reconnects after a bounded stalled check, and pauses in background
+00:14 +190: /Users/andreahn/globos_pos_system/test/direct_delivery_storefront_widget_test.dart: (tearDownAll)
+00:14 +190: All tests passed!

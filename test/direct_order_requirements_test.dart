@@ -178,6 +178,69 @@ void main() {
     });
   }
 
+  testWidgets(
+    'private cashier reply has an explicit audience and needs no paper translation',
+    (tester) async {
+      DirectOrderRequirementReply? reply;
+      const note = DirectOrderRequirement(
+        id: 'private',
+        version: 1,
+        requestText: '관리자에게만 남기는 메모',
+        sourceLocale: 'ko',
+        status: 'awaiting_reply',
+      );
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                reply = await showDialog<DirectOrderRequirementReply>(
+                  context: context,
+                  builder: (_) => const DirectOrderRequirementReplyDialog(
+                    requirement: note,
+                  ),
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('관리자·캐셔 전용'), findsOneWidget);
+      expect(find.byKey(const Key('requirement_print_request')), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('requirement_reply_body')),
+        '관리자가 확인했습니다.',
+      );
+      await tester.tap(find.byKey(const Key('requirement_reply_submit')));
+      await tester.pumpAndSettle();
+      expect(reply!.printScope, 'cashier');
+      expect(reply!.body, '관리자가 확인했습니다.');
+      await tester.pumpWidget(
+        _app(
+          DirectOrderRequirementCard(
+            onReply: () {},
+            requirement: const DirectOrderRequirement(
+              id: 'confirmed-private',
+              version: 2,
+              requestText: 'Private fixture',
+              status: 'confirmed',
+            ),
+            cashier: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('requirement_reply_confirmed-private')),
+        findsOneWidget,
+      );
+      await _capture(tester, 'cashier-private-note');
+    },
+  );
+
   testWidgets('cashier composes a real reply and reviewed paper text', (
     tester,
   ) async {
