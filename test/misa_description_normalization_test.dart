@@ -160,6 +160,50 @@ void main() {
       isFalse,
     );
   });
+  test('seven Description edits preserve six synthetic invoice groups', () {
+    final fixtures = misaEmailDeliveryFixtureJobs();
+    final jobs = <Map<String, dynamic>>[];
+    var nameIndex = 0;
+    for (var i = 0; i < 6; i++) {
+      final job =
+          jsonDecode(jsonEncode(fixtures[i == 0 ? 0 : 1]))
+              as Map<String, dynamic>;
+      job['receipt_id'] = 'seven-six-fixture-$i';
+      job['receipt_number'] = 'SAMPLE-${i + 1}';
+      job['created_at'] = '2026-10-23T0$i:00:00Z';
+      for (final line in job['line_items_snapshot'] as List) {
+        line['order_item_id'] = 'seven-six-line-$nameIndex';
+        line['invoice_name_vi'] =
+            actualDescriptions[nameIndex++ % actualDescriptions.length];
+      }
+      jobs.add(job);
+    }
+    final original = jsonEncode(jobs);
+    final audit = <Map<String, dynamic>>[];
+    final bytes = buildMisaPendingInvoiceWorkbook(
+      jobs,
+      generationId: 'synthetic-seven-edits-six-invoices',
+      descriptionNormalizations: audit,
+    );
+    final workbook = Excel.decodeBytes(bytes);
+    final rows = workbook['Hóa đơn GTGT'].rows.skip(8).toList();
+    expect(rows, hasLength(7));
+    expect(rows.map((r) => text(r[0])).toSet(), hasLength(6));
+    expect(rows.every((r) => !text(r[10]).contains('🌶')), isTrue);
+    expect(audit, hasLength(7));
+    expect(audit.map((r) => r['receipt_id']).toSet(), hasLength(6));
+    expect(jsonEncode(jobs), original);
+    final sampleFolder = Platform.environment['MISA_DESCRIPTION_SAMPLE_DIR'];
+    if (sampleFolder != null && sampleFolder.isNotEmpty) {
+      final folder = Directory(sampleFolder)..createSync(recursive: true);
+      File(
+        '${folder.path}/seven-edits-six-invoices.xlsx',
+      ).writeAsBytesSync(bytes);
+      File(
+        '${folder.path}/seven-edits-six-invoices-source.json',
+      ).writeAsStringSync(original);
+    }
+  });
   test(
     'empty normalized name reports the exact receipt, line, menu and field',
     () {

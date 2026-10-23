@@ -9,7 +9,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
-from misa_description_audit import POLICY, AUDIT_HEADERS, verify_record, permitted_cluster, verify_description_only_change, verify_source_manifest_descriptions
+from misa_description_audit import POLICY, AUDIT_HEADERS, verify_record, permitted_cluster, verify_description_only_change, verify_source_manifest_descriptions, read_rows
 
 class DescriptionAuditTest(unittest.TestCase):
     def setUp(self):
@@ -84,6 +84,43 @@ class DescriptionAuditTest(unittest.TestCase):
         self.assertEqual(manifest,saved)
         manifest['receipts'][0]['lines'][0]['invoice_name']+=' changed'
         with self.assertRaises(ValueError):verify_source_manifest_descriptions(manifest,self.source/'sample.xlsx')
+    def test_source_audit_rejects_duplicate_target_rows(self):
+        sheets=read_rows(self.source/'sample.xlsx')
+        sheets['Description Normalization'][3]=copy.deepcopy(sheets['Description Normalization'][2])
+        self.write_book(self.source/'duplicate.xlsx',sheets)
+        manifest={'receipts':[{'sequence':1,'kind':'restaurant','receipt_id':'receipt','lines':[{'invoice_name':self.record['original_description']}]}]}
+        with self.assertRaises(ValueError):verify_source_manifest_descriptions(manifest,self.source/'duplicate.xlsx')
+    def test_source_audit_binds_all_original_ledger_ids(self):
+        manifest={'receipts':[{'sequence':1,'kind':'restaurant','receipt_id':'receipt','lines':[{'invoice_name':self.record['original_description']}]}]}
+        for column in ('B','D','E','F','G'):
+            with self.subTest(column=column):
+                sheets=read_rows(self.source/'sample.xlsx')
+                sheets['Description Normalization'][2][column]='different-id'
+                self.write_book(self.source/'wrong-id.xlsx',sheets)
+                with self.assertRaises(ValueError):verify_source_manifest_descriptions(manifest,self.source/'wrong-id.xlsx')
+    def test_photo_emoji_is_preserved_in_mixed_and_legacy_workbooks(self):
+        before=read_rows(self.source/'before.xlsx')
+        after=read_rows(self.source/'sample.xlsx')
+        for sheets in (before,after):
+            sheets['Hóa đơn GTGT'][10]={'A':'2','K':'Photo 🌶'}
+            sheets['POS Ledger'][3]={'A':Decimal('3'),'D':'photo_objet_moers','E':'photo','G':'photo-line','H':'photo-menu','I':Decimal('2'),'J':Decimal('10'),'M':'original-photo-hash'}
+        self.write_book(self.source/'mixed-before.xlsx',before)
+        self.write_book(self.source/'mixed-after.xlsx',after)
+        manifest={'receipts':[
+            {'sequence':1,'kind':'restaurant','receipt_id':'receipt','lines':[{'invoice_name':self.record['original_description']}]},
+            {'sequence':2,'kind':'photo','receipt_id':'photo','lines':[{'invoice_name':'Photo 🌶'}]}]}
+        self.assertEqual(verify_description_only_change(self.source/'mixed-before.xlsx',self.source/'mixed-after.xlsx')['description_changes'],1)
+        self.assertEqual(verify_source_manifest_descriptions(manifest,self.source/'mixed-after.xlsx')['source_description_lines_verified'],2)
+        self.assertEqual(verify_description_only_change(self.source/'mixed-before.xlsx',self.source/'mixed-before.xlsx')['description_changes'],0)
+    def test_source_sequences_cannot_repeat_and_omit_an_invoice(self):
+        sheets=read_rows(self.source/'before.xlsx')
+        sheets['Hóa đơn GTGT'][10]={'A':'2','K':self.record['original_description']}
+        sheets['POS Ledger'][3]=copy.deepcopy(sheets['POS Ledger'][2])
+        sheets['POS Ledger'][3].update({'I':Decimal('2'),'J':Decimal('10')})
+        self.write_book(self.source/'two-invoices.xlsx',sheets)
+        receipt={'sequence':1,'kind':'restaurant','receipt_id':'receipt','lines':[{'invoice_name':self.record['original_description']}]}
+        manifest={'receipts':[receipt,copy.deepcopy(receipt)]}
+        with self.assertRaises(ValueError):verify_source_manifest_descriptions(manifest,self.source/'two-invoices.xlsx')
     def test_money_and_menu_identity_changes_are_rejected(self):
         for target,cell in [('xl/worksheets/sheet1.xml','O9'),('xl/worksheets/sheet2.xml','H2')]:
             with tempfile.TemporaryDirectory() as tmp:

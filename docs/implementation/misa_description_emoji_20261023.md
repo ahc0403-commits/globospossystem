@@ -39,7 +39,9 @@ python3 scripts/compare_misa_workbook_structure.py \
 - 2026-10-22 원본의 실제 고추 포함 Description 5개를 읽기 전용으로 확인했다. 이 문자열과 가상 금액으로 별도 샘플을 생성했다. 운영 파일과 MISA ID는 변경하지 않았다.
 - 일반 문자·성조·한글·보조 문자 보존, VS/ZWJ/국기/키캡, 원본·금액·고객·해시 보존, 멱등성, 포토 불변, 오류 위치 및 통합 산출물 감사를 테스트한다.
 - Python 독립 감사 검사는 실제 단어·숫자·원문·메뉴 ID·금액·정책·삭제 위치 변경을 거절한다.
+- 독립 대조는 감사 행 중복, 원장과 다른 영수증·계산서·품목·메뉴 ID 및 중복 계산서 순번을 거절한다. 포토 품목명은 이모지가 있어도 원문 그대로 대조한다.
 - 샘플 대조: Description 5개만 변경, 다른 모든 데이터 셀·원본 Ledger 해시 동일, 독립 원문 8개 품목 대조.
+- 추가 가상 샘플은 6개 계산서의 Description 7곳을 제거하는 배치를 재현한다. 10월 23일 실제 신고 파일이나 실제 203건/463품목을 재생성·업로드한 결과가 아니다.
 - 정규화는 이미 받은 문자열을 메모리에서 처리하며 행별 DB/API 호출을 추가하지 않는다. CPU 비용은 문자 수에, 감사 메모리는 변경된 문자소와 품목 수에 비례한다. 10,000행 미세 측정은 별도 `performance.json`에 기록하며 UI 지연이나 운영 전체 메모리 측정으로 간주하지 않는다.
 
 원자료: [Unicode Emoji 데이터](https://www.unicode.org/Public/18.0.0/ucd/emoji/emoji-data.txt), [Unicode Emoji 사양](https://www.unicode.org/reports/tr51/), [Dart characters](https://pub.dev/packages/characters). 생성 스크립트는 원자료 SHA-256을 고정하고 Unicode 라이선스를 함께 보존한다.

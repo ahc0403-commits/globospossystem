@@ -116,19 +116,43 @@ def read_rows(file):
             sheets[sheet.attrib['name']] = rows
         return sheets
 
+def audit_records(sheets):
+    contract = {r['A']: r['B'] for r in sheets['Export Contract'].values()}
+    policy = contract.get('description_normalization_policy')
+    if policy not in (None, POLICY):
+        raise ValueError('Unknown Description policy')
+    audit = sheets.get('Description Normalization', {})
+    columns = 'ABCDEFGHIJ'
+    if audit and [audit.get(1, {}).get(c) for c in columns] != AUDIT_HEADERS:
+        raise ValueError('Description audit header mismatch')
+    if audit and policy != POLICY:
+        raise ValueError('Description audit has no declared policy')
+    records = {}
+    for index, row in audit.items():
+        if index == 1:
+            continue
+        record = dict(zip(AUDIT_HEADERS, (row[c] for c in columns)))
+        target = int(record['excel_row'])
+        if target in records:
+            raise ValueError('Duplicate Description audit row')
+        records[target] = record
+    return policy, records
+
+def verify_audit_identity(record, index, ledger, row):
+    identity = ledger.get(index, {})
+    for key, col in [('invoice_sequence', 'I'), ('source_system', 'D'),
+                     ('receipt_id', 'E'), ('order_item_id', 'G'), ('menu_item_id', 'H')]:
+        if str(record[key]) != str(identity.get(col, '')):
+            raise ValueError(f'Description audit identity mismatch at row {index}')
+    if (str(row.get('A')) != str(record['invoice_sequence']) or
+            record['source_system'] != 'restaurant_pos'):
+        raise ValueError(f'Description audit scope mismatch at row {index}')
+
 def verify_description_only_change(before_file, after_file):
     before, after = read_rows(before_file), read_rows(after_file)
     if set(before) - {'Description Normalization'} != set(after) - {'Description Normalization'}:
         raise ValueError('Unexpected workbook sheet change')
-    audit = after.get('Description Normalization',{})
-    if audit and list(audit.get(1,{}).values()) != AUDIT_HEADERS:
-        raise ValueError('Description audit header mismatch')
-    records = {}
-    for row in list(audit.values())[1:]:
-        record = dict(zip(AUDIT_HEADERS,row.values()))
-        index = int(record['excel_row'])
-        if index in records: raise ValueError('Duplicate Description audit row')
-        records[index] = record
+    policy, records = audit_records(after)
     ledger = {int(row['J']):row for i,row in before['POS Ledger'].items() if i > 1}
     changes = 0
     for sheet, rows in before.items():
@@ -136,8 +160,8 @@ def verify_description_only_change(before_file, after_file):
         if sheet == 'Export Contract':
             old = {r['A']:r['B'] for r in rows.values()}
             new = {r['A']:r['B'] for r in after[sheet].values()}
-            if new.pop('description_normalization_policy',None) != POLICY:
-                raise ValueError('Description normalization policy missing')
+            new.pop('description_normalization_policy',None)
+            old.pop('description_normalization_policy',None)
             old.pop('generation_id',None);new.pop('generation_id',None)
             if old != new: raise ValueError('Export Contract source/count/amount mismatch')
             continue
@@ -146,14 +170,13 @@ def verify_description_only_change(before_file, after_file):
             updated = dict(after[sheet][index])
             if sheet == 'Hóa đơn GTGT' and index in records:
                 record = records.pop(index)
-                identity = ledger.get(index,{})
-                for key,col in [('invoice_sequence','I'),('source_system','D'),('receipt_id','E'),('order_item_id','G'),('menu_item_id','H')]:
-                    if str(record[key]) != str(identity.get(col,'')):
-                        raise ValueError(f'Description audit identity mismatch at row {index}')
-                if str(row.get('A')) != str(record['invoice_sequence']) or verify_record(row['K'],record) != updated.get('K'):
+                verify_audit_identity(record, index, ledger, row)
+                if verify_record(row['K'],record) != updated.get('K'):
                     raise ValueError(f'Description mismatch at row {index}')
                 updated['K'] = row['K'];changes += 1
-            elif sheet == 'Hóa đơn GTGT' and index > 8 and residual_emoji(str(updated.get('K',''))):
+            elif (sheet == 'Hóa đơn GTGT' and index > 8 and policy == POLICY and
+                  ledger.get(index, {}).get('D') == 'restaurant_pos' and
+                  residual_emoji(str(updated.get('K','')))):
                 raise ValueError(f'Missing Description audit at row {index}')
             if row != updated: raise ValueError(f'{sheet}: unexpected data change at row {index}')
     if records: raise ValueError('Unbound Description audit rows')
@@ -166,18 +189,16 @@ def verify_source_manifest_descriptions(manifest, workbook):
     values taken from the uploaded workbook. The manifest is not modified.
     """
     sheets=read_rows(workbook)
-    contract={r['A']:r['B'] for r in sheets['Export Contract'].values()}
-    policy=contract.get('description_normalization_policy')
-    if policy not in (None,POLICY):raise ValueError('Unknown Description policy')
-    audit=sheets.get('Description Normalization',{})
-    if audit and list(audit.get(1,{}).values())!=AUDIT_HEADERS:raise ValueError('Description audit header mismatch')
-    records={int(r['C']):dict(zip(AUDIT_HEADERS,r.values())) for i,r in audit.items() if i>1}
+    policy,records=audit_records(sheets)
     ledger={int(row['J']):row for i,row in sheets['POS Ledger'].items() if i>1}
     invoices={}
     for index,row in sheets['Hóa đơn GTGT'].items():
         if index>8:invoices.setdefault(str(row.get('A')),[]).append((index,row))
     receipts=manifest.get('receipts',[])
     if len(receipts)!=len(invoices):raise ValueError('Source receipt count differs')
+    sequences=[str(receipt['sequence']) for receipt in receipts]
+    if len(set(sequences))!=len(sequences) or set(sequences)!=set(invoices):
+        raise ValueError('Source invoice sequences differ or are duplicated')
     count=0
     for receipt in receipts:
         sequence=str(receipt['sequence'])
@@ -191,6 +212,7 @@ def verify_source_manifest_descriptions(manifest, workbook):
             record=records.pop(index,None)
             if record:
                 if policy!=POLICY or receipt.get('kind')=='photo':raise ValueError('Description policy scope differs')
+                verify_audit_identity(record, index, ledger, row)
                 expected=verify_record(original,record)
             else:
                 expected=original
