@@ -9,7 +9,7 @@ service-and-support
 00:00 +6: /Users/andreahn/globos_pos_system/test/direct_order_recipient_policy_test.dart: recipient chat advice needs no fare or customer booking approval
 00:00 +7: /Users/andreahn/globos_pos_system/test/direct_order_recipient_policy_test.dart: recipient chat advice needs no fare or customer booking approval
 00:00 +8: /Users/andreahn/globos_pos_system/test/direct_order_support_test.dart: (setUpAll)
-supabase.supabase_flutter: INFO: ***** Supabase init completed ***** 
+supabase.supabase_flutter: INFO: ***** Supabase init completed *****
 00:00 +8: /Users/andreahn/globos_pos_system/test/direct_order_recipient_policy_test.dart: unquoted recipient order has no pending delivery price
 00:00 +9: /Users/andreahn/globos_pos_system/test/direct_order_support_test.dart: receipt review requires actual amount, bank reference and explicit comparison
 00:00 +10: /Users/andreahn/globos_pos_system/test/direct_order_support_test.dart: receipt review requires actual amount, bank reference and explicit comparison

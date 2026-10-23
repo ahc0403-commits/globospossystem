@@ -7,7 +7,7 @@
 00:00 +5: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: malformed reservation cannot leave a path without a token
 00:00 +6: /Users/andreahn/globos_pos_system/test/direct_order_proof_retry_test.dart: oversized or unsupported photos call neither API nor Storage
 00:00 +7: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: (setUpAll)
-supabase.supabase_flutter: INFO: ***** Supabase init completed ***** 
+supabase.supabase_flutter: INFO: ***** Supabase init completed *****
 00:00 +7: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff service sends exact reviewed photo, quote and amount to RPC
 00:00 +8: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
 00:00 +9: /Users/andreahn/globos_pos_system/test/direct_order_photo_approval_test.dart: staff chat receives bursts automatically with one selected detail read
