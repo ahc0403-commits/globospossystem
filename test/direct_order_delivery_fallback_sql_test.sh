@@ -605,9 +605,9 @@ if [[ "${DIRECT_ORDER_ADDRESS_PROOF_TEST:-0}" == "1" ]]; then
  python3 "$PHOTO_ROOT/test/fixtures/direct_order_address_proof_predecessor.py" "$PHOTO_ROOT" > "$PHOTO_TMP/address_proof_predecessor.sql"
  run_sql "$PHOTO_TMP/address_proof_predecessor.sql" > "$PHOTO_TMP/address_proof_setup.log" 2>&1 || { cat "$PHOTO_TMP/address_proof_setup.log"; exit 1; }
  run_sql "$PHOTO_ROOT/test/sql/direct_order_address_proof_before.sql"
- run_sql "$PHOTO_ROOT/supabase/migrations/20261023090000_direct_order_address_and_proof_replacement.sql"
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261023120000_direct_order_address_and_proof_replacement.sql"
  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_address_and_proof_replacement_test.sql"
- run_sql "$PHOTO_ROOT/supabase/migrations/20261023110000_direct_order_chat_updates_and_note_audience.sql"
+ run_sql "$PHOTO_ROOT/supabase/migrations/20261023121000_direct_order_chat_updates_and_note_audience.sql"
  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_chat_audience_test.sql"
  python3 "$PHOTO_ROOT/scripts/tests/direct_order_proof_replacement_concurrency.py" "$PHOTO_CONTAINER"
 fi
