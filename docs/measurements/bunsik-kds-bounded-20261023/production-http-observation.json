@@ -1,0 +1,110 @@
+{
+  "window": {
+    "start": "2026-10-23T07:13:00Z",
+    "end": "2026-10-23T07:16:40Z"
+  },
+  "source": "Supabase unified edge_logs response.origin_time, ms",
+  "grouping": "Four active Bunsik assigned profiles mapped in memory; auth IDs/IPs/tokens omitted",
+  "rows": [
+    {
+      "errors": 0,
+      "max_ms": 102,
+      "p50_ms": 79,
+      "p95_ms": 102,
+      "requests": 14,
+      "rpc": "get_emergency_station_snapshot",
+      "station": "floor 1F",
+      "status_codes": [
+        "200"
+      ]
+    },
+    {
+      "errors": 0,
+      "max_ms": 108,
+      "p50_ms": 86,
+      "p95_ms": 108,
+      "requests": 14,
+      "rpc": "get_emergency_station_today_completed",
+      "station": "floor 1F",
+      "status_codes": [
+        "200"
+      ]
+    },
+    {
+      "errors": 0,
+      "max_ms": 132,
+      "p50_ms": 82,
+      "p95_ms": 132,
+      "requests": 13,
+      "rpc": "get_emergency_station_snapshot",
+      "station": "floor 2F",
+      "status_codes": [
+        "200"
+      ]
+    },
+    {
+      "errors": 0,
+      "max_ms": 137,
+      "p50_ms": 78,
+      "p95_ms": 137,
+      "requests": 13,
+      "rpc": "get_emergency_station_today_completed",
+      "station": "floor 2F",
+      "status_codes": [
+        "200"
+      ]
+    },
+    {
+      "errors": 0,
+      "max_ms": 159,
+      "p50_ms": 131,
+      "p95_ms": 159,
+      "requests": 14,
+      "rpc": "get_emergency_station_snapshot",
+      "station": "kitchen",
+      "status_codes": [
+        "200"
+      ]
+    },
+    {
+      "errors": 0,
+      "max_ms": 170,
+      "p50_ms": 104,
+      "p95_ms": 170,
+      "requests": 14,
+      "rpc": "get_emergency_station_today_completed",
+      "station": "kitchen",
+      "status_codes": [
+        "200"
+      ]
+    },
+    {
+      "errors": 0,
+      "max_ms": 150,
+      "p50_ms": 133,
+      "p95_ms": 150,
+      "requests": 14,
+      "rpc": "get_emergency_station_snapshot",
+      "station": "tray",
+      "status_codes": [
+        "200"
+      ]
+    },
+    {
+      "errors": 0,
+      "max_ms": 108,
+      "p50_ms": 102,
+      "p95_ms": 108,
+      "requests": 14,
+      "rpc": "get_emergency_station_today_completed",
+      "station": "tray",
+      "status_codes": [
+        "200"
+      ]
+    }
+  ],
+  "limitations": [
+    "Short immediate post-release window, not peak-hour capacity or device render/audio measurement.",
+    "Existing completed-history RPC uses the new bounded compatibility path; this does not establish that every open device loaded the new web bundle."
+  ]
+}
