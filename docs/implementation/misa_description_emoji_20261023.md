@@ -39,3 +39,12 @@ python3 scripts/compare_misa_workbook_structure.py \
 - 정규화는 이미 받은 문자열을 메모리에서 처리하며 행별 DB/API 호출을 추가하지 않는다. CPU 비용은 문자 수에, 감사 메모리는 변경된 문자소와 품목 수에 비례한다. 10,000행 미세 측정은 별도 `performance.json`에 기록하며 UI 지연이나 운영 전체 메모리 측정으로 간주하지 않는다.
 
 원자료: [Unicode Emoji 데이터](https://www.unicode.org/Public/18.0.0/ucd/emoji/emoji-data.txt), [Unicode Emoji 사양](https://www.unicode.org/reports/tr51/), [Dart characters](https://pub.dev/packages/characters). 생성 스크립트는 원자료 SHA-256을 고정하고 Unicode 라이선스를 함께 보존한다.
+
+가상금액 샘플 재생성(실제 업로드용 아님):
+
+```sh
+MISA_DESCRIPTION_SAMPLE_DIR=/tmp/misa-description-sample \
+  flutter test test/misa_description_normalization_test.dart
+```
+
+테스트는 기본적으로 공유 임시 경로에 파일을 쓰지 않는다.

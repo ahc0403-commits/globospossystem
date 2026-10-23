@@ -123,13 +123,15 @@ void main() {
         sha256.convert(utf8.encode(jsonEncode(firstLine))).toString(),
       );
       expect(jsonEncode(jobs), original);
-      final folder = Directory('/tmp/misa-description-emoji-20261023')
-        ..createSync(recursive: true);
-      File('${folder.path}/sample.xlsx').writeAsBytesSync(bytes);
-      File('${folder.path}/source-jobs.json').writeAsStringSync(original);
-      File(
-        '${folder.path}/description-normalizations.json',
-      ).writeAsStringSync(jsonEncode(audit));
+      final sampleFolder = Platform.environment['MISA_DESCRIPTION_SAMPLE_DIR'];
+      if (sampleFolder != null && sampleFolder.isNotEmpty) {
+        final folder = Directory(sampleFolder)..createSync(recursive: true);
+        File('${folder.path}/sample.xlsx').writeAsBytesSync(bytes);
+        File('${folder.path}/source-jobs.json').writeAsStringSync(original);
+        File(
+          '${folder.path}/description-normalizations.json',
+        ).writeAsStringSync(jsonEncode(audit));
+      }
     },
   );
   test('Photo-only format and Description remain unchanged', () {
