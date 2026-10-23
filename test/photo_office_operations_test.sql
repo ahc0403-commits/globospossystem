@@ -9,6 +9,12 @@ begin
  assert jsonb_array_length(page->'rows')=2,'Pen is excluded';
  assert (page->'rows'->0->>'quantity')::numeric=0.5,'decimal current_stock, not quantity';
  assert (page->'rows'->1->>'quantity')::numeric=1.9;
+ page:=public.office_photo_inventory_page(a);
+ assert jsonb_array_length(page->'rows')=1 and page->'rows'->0->>'name'='Tissue','existing inventory route must also exclude Pen';
+ page:=public.office_photo_operations_report(array[a,b],'2026-10-01','2026-10-15',array[a,b],array[a,b],array[a,b],array[a,b]);
+ assert (page->'rows'->0->'inventory'->>'items')::integer=1,'existing report must share tracked POS inventory';
+ assert (page->'rows'->1->'inventory'->>'items')::integer=1;
+
  begin perform public.office_photo_stock_page(array['20000000-0000-0000-0000-000000000003'::uuid]);raise exception 'expected denial';exception when insufficient_privilege then null;end;
  begin perform public.office_photo_on_shift(array['20000000-0000-0000-0000-000000000003'::uuid]);raise exception 'expected shift scope denial';exception when insufficient_privilege then null;end;
  begin perform public.office_photo_stock_page(null);raise exception 'expected null scope denial';exception when insufficient_privilege then null;end;
@@ -47,3 +53,19 @@ do $$declare p jsonb;cursor uuid;counted integer:=0;calls integer:=0;version jso
  assert counted=61 and calls=3;
  raise notice 'Payroll scale fixture: employees=%, source RPC calls=%, max page=25',counted,calls;
 end $$;
+
+-- Employees who left still receive a period preview when they have work records.
+insert into public.store_employees(id,store_id,employee_number,full_name,employment_role,is_active) values
+('10000000-0000-0000-0002-000000000001','20000000-0000-0000-0000-000000000001','LEFT1','Former fixture','full_time',false),
+('10000000-0000-0000-0002-000000000002','20000000-0000-0000-0000-000000000001','LEFT2','No work fixture','full_time',false);
+insert into public.attendance_logs(id,restaurant_id,employee_id,type,logged_at) values
+(gen_random_uuid(),'20000000-0000-0000-0000-000000000001','10000000-0000-0000-0002-000000000001','clock_in','2026-10-05T02:00:00Z'),
+(gen_random_uuid(),'20000000-0000-0000-0000-000000000001','10000000-0000-0000-0002-000000000001','clock_out','2026-10-05T10:00:00Z');
+do $$declare p jsonb;begin
+ p:=public.office_photo_payroll_batch(array['20000000-0000-0000-0000-000000000001'::uuid],'2026-10-01','2026-10-15',null,'10000000-0000-0000-0002-000000000001');
+ assert jsonb_array_length(p->'inputs')=1 and jsonb_array_length(p->'inputs'->0->'logs')=2,'former employee work must remain in the payroll period';
+ p:=public.office_photo_payroll_batch(array['20000000-0000-0000-0000-000000000001'::uuid],'2026-09-01','2026-09-30',null,'10000000-0000-0000-0002-000000000001');
+ assert jsonb_array_length(p->'inputs')=0,'do not pull former staff without work in the selected period';
+ p:=public.office_photo_payroll_batch(array['20000000-0000-0000-0000-000000000001'::uuid],'2026-10-01','2026-10-15',null,'10000000-0000-0000-0002-000000000002');
+ assert jsonb_array_length(p->'inputs')=0,'inactive staff without records stay excluded';
+end$$;

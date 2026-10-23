@@ -8,6 +8,14 @@ do $$ declare p record; definition text; begin
  if (select count(*) from information_schema.columns where table_schema='public' and table_name='inventory_items' and column_name in('current_stock','restaurant_id','unit','reorder_point'))<>4 then
   raise exception 'POS inventory source schema differs';
  end if;
+ if to_regprocedure('public.office_photo_inventory_page(uuid,uuid)') is null
+ or to_regprocedure('public.office_photo_operations_report(uuid[],date,date,uuid[],uuid[],uuid[],uuid[])') is null then
+  raise exception 'Existing Photo inventory/report contracts are required';
+ end if;
+ if position('i.restaurant_id=p_store_id and i.is_active and (p_after' in pg_get_functiondef('public.office_photo_inventory_page(uuid,uuid)'::regprocedure))=0
+ or position('i.restaurant_id=any(p_inventory_ids) and i.is_active)' in pg_get_functiondef('public.office_photo_operations_report(uuid[],date,date,uuid[],uuid[],uuid[],uuid[])'::regprocedure))=0 then
+  raise exception 'Existing inventory/report predicate differs; inspect before applying';
+ end if;
  if (select count(*) from pg_proc where pronamespace='public'::regnamespace and proname in('get_financial_input_page','get_employee_financial_input_page'))<>2 then
   raise exception 'Financial input RPC set differs';
  end if;

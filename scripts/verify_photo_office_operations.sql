@@ -1,6 +1,8 @@
 begin;
 do $$ declare p regprocedure;name text;ids uuid[];result jsonb;begin
  foreach name in array array[
+  'public.office_photo_inventory_page(uuid,uuid)',
+  'public.office_photo_operations_report(uuid[],date,date,uuid[],uuid[],uuid[],uuid[])',
   'public.office_photo_stock_page(uuid[],uuid)',
   'public.office_photo_stock_count(uuid,uuid,numeric,bigint,uuid,uuid,text,numeric,numeric)',
   'public.office_photo_on_shift(uuid[],uuid)',
@@ -13,6 +15,10 @@ do $$ declare p regprocedure;name text;ids uuid[];result jsonb;begin
  end loop;
  if has_table_privilege('anon','public.v_financial_payroll_staff','select') or has_table_privilege('authenticated','public.v_financial_payroll_staff','select') then raise exception 'Financial staff projection must stay private';end if;
  if (select count(*) from pg_proc where pronamespace='public'::regnamespace and proname in('get_financial_input_page','get_employee_financial_input_page') and position('FROM public.v_financial_payroll_staff WHERE store_id = ANY($1)' in pg_get_functiondef(oid))>0)<>2 then raise exception 'Financial input projection was not updated';end if;
+ if position('i.office_tracking_enabled' in pg_get_functiondef('public.office_photo_inventory_page(uuid,uuid)'::regprocedure))=0
+ or position('i.office_tracking_enabled' in pg_get_functiondef('public.office_photo_operations_report(uuid[],date,date,uuid[],uuid[],uuid[],uuid[])'::regprocedure))=0 then
+  raise exception 'Existing Photo reads do not share the tracked POS inventory';
+ end if;
  select array_agg(id) into ids from(select id from public.restaurants where is_active and brand_id='77000000-0000-0000-0000-000000000001' order by id limit 50)x;
  if ids is null then raise exception 'No existing Photo store available for read verification';end if;
  result:=public.office_photo_stock_page(ids);

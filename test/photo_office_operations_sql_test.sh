@@ -11,6 +11,7 @@ createdb -U postgres -h "$PHOTO_TMP" -p 5432 photo_operations
 PHOTO_PSQL=(psql -U postgres -h "$PHOTO_TMP" -p 5432 -d photo_operations -X -v ON_ERROR_STOP=1)
 "${PHOTO_PSQL[@]}" -f "$PHOTO_ROOT/test/fixtures/photo_office_base_setup.sql" >/dev/null
 "${PHOTO_PSQL[@]}" -f "$PHOTO_ROOT/test/fixtures/photo_office_operations_setup.sql" >/dev/null
+"${PHOTO_PSQL[@]}" -f "$PHOTO_ROOT/supabase/migrations/20261021020000_office_photo_operations_read_models.sql" >/dev/null
 "${PHOTO_PSQL[@]}" -f "$PHOTO_ROOT/scripts/preflight_photo_office_operations.sql"
 "${PHOTO_PSQL[@]}" -f "$PHOTO_ROOT/supabase/migrations/20261023100000_photo_office_operations.sql" >/dev/null
 "${PHOTO_PSQL[@]}" -f "$PHOTO_ROOT/scripts/verify_photo_office_operations.sql"

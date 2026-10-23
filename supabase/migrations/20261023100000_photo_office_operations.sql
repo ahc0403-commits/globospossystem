@@ -8,6 +8,21 @@ update public.inventory_items i set office_tracking_enabled=false
 from public.restaurants r where r.id=i.restaurant_id and r.brand_id='77000000-0000-0000-0000-000000000001'
 and lower(btrim(i.name)) in ('pen','bút','sticker');
 
+-- Existing report and inventory entry points share the same tracked POS set.
+-- Replace exact read predicates; preserve each RPC's authorization and shape.
+do $$ declare definition text; changed text; begin
+ definition:=pg_get_functiondef('public.office_photo_inventory_page(uuid,uuid)'::regprocedure);
+ changed:=replace(definition,'i.restaurant_id=p_store_id and i.is_active and (p_after',
+  'i.restaurant_id=p_store_id and i.is_active and i.office_tracking_enabled and (p_after');
+ if changed=definition then raise exception 'PHOTO_EXISTING_INVENTORY_CONTRACT_CHANGED';end if;
+ execute changed;
+ definition:=pg_get_functiondef('public.office_photo_operations_report(uuid[],date,date,uuid[],uuid[],uuid[],uuid[])'::regprocedure);
+ changed:=replace(definition,'i.restaurant_id=any(p_inventory_ids) and i.is_active)',
+  'i.restaurant_id=any(p_inventory_ids) and i.is_active and i.office_tracking_enabled)');
+ if changed=definition then raise exception 'PHOTO_EXISTING_REPORT_CONTRACT_CHANGED';end if;
+ execute changed;
+end $$;
+
 create table public.office_photo_inventory_requests (
  request_id uuid primary key, office_actor_id uuid not null, store_id uuid not null references public.restaurants(id),
  item_id uuid not null references public.inventory_items(id), payload jsonb not null,
@@ -193,9 +208,16 @@ begin
  where r.id is null or not r.is_active or r.brand_id<>'77000000-0000-0000-0000-000000000001') then raise exception 'PAYROLL_INPUT_QUERY_INVALID';end if;
  select jsonb_object_agg(store_id,version) into versions from public.office_photo_source_versions where store_id=any(p_store_ids);
  if p_expected_version is not null and p_expected_version<>versions then raise exception 'PAYROLL_INPUT_CHANGED' using errcode='40001';end if;
- with candidates as materialized (
+ with worked_inactive as materialized (
+ select distinct e.id from public.store_employees e join public.attendance_logs l on l.employee_id=e.id and l.restaurant_id=e.store_id
+ where e.store_id=any(p_store_ids) and not e.is_active and e.employment_role in('part_timer','full_time')
+ and (p_after is null or e.id>p_after) and (p_employee_id is null or e.id=p_employee_id)
+ and l.logged_at>=(p_from::timestamp at time zone 'Asia/Ho_Chi_Minh')
+ and l.logged_at<((p_to+1)::timestamp at time zone 'Asia/Ho_Chi_Minh')
+ ), candidates as materialized (
  select e.id,e.store_id,e.employee_number,e.full_name,e.employment_role,e.employment_start_date
- from public.store_employees e where e.store_id=any(p_store_ids) and e.is_active
+ from public.store_employees e left join worked_inactive w on w.id=e.id
+ where e.store_id=any(p_store_ids) and (e.is_active or w.id is not null)
  and e.employment_role in('part_timer','full_time') and (p_after is null or e.id>p_after)
  and (p_employee_id is null or e.id=p_employee_id) order by e.id limit 26
  ), staff as materialized(select * from candidates order by id limit 25),

@@ -23,3 +23,13 @@ declare v_query text;begin v_query:='SELECT id, store_id, employee_number, full_
  FROM public.store_employees WHERE store_id = ANY($1) AND id = $9';return v_query;end $$;
 -- Existing single-employee contract is replaced by the forward migration.
 create function public.office_photo_payroll_inputs(uuid,uuid,date,date) returns jsonb language sql stable security definer as $$select '{}'::jsonb$$;
+
+-- Existing Photo read models are installed before the new forward migration.
+alter table public.store_employees add column phone text, add column bank_name text,
+ add column bank_account_number text, add column probation_start_date date,
+ add column updated_at timestamptz;
+create table public.photo_objet_sales(store_id uuid,sale_date date,gross_sales numeric,transaction_count integer,pulled_at timestamptz);
+create table public.daily_closings(restaurant_id uuid,closing_date date,payments_cash numeric,payments_bank_transfer numeric,created_at timestamptz);
+create table public.orders(restaurant_id uuid,status text,created_at timestamptz);
+create table public.payment_adjustments(restaurant_id uuid,adjustment_type text,amount numeric,created_at timestamptz);
+create table public.payroll_records(restaurant_id uuid,total_amount numeric,period_start date,period_end date,status text,updated_at timestamptz);
