@@ -561,9 +561,16 @@ class _EmergencyFulfillmentScreenState
                 onEnableAlarm: state.assigned
                     ? () => _enableAlarm(state)
                     : null,
-                onRefresh: () => ref
-                    .read(emergencyFulfillmentProvider.notifier)
-                    .load(showLoading: false),
+                onRefresh: () async {
+                  final notifier = ref.read(
+                    emergencyFulfillmentProvider.notifier,
+                  );
+                  if (_showRecent && state.restaurantId == bunsikKdsStoreId) {
+                    await notifier.loadCompletedHistory();
+                  } else {
+                    await notifier.load(showLoading: false);
+                  }
+                },
                 onKitchenChecket:
                     headerStation == 'kitchen' &&
                         state.active &&
@@ -688,7 +695,10 @@ class _EmergencyFulfillmentScreenState
     );
     final recentByOrderId = <String, EmergencyFulfillmentOrder>{
       for (final order in state.completedOrders) order.orderId: order,
-      for (final order in state.orders)
+      for (final order
+          in state.restaurantId == bunsikKdsStoreId
+              ? const <EmergencyFulfillmentOrder>[]
+              : state.orders)
         if (order.isRecentlyCompleteAt(stationType)) order.orderId: order,
     };
     final recentOrders = recentByOrderId.values.toList(growable: false)
@@ -762,11 +772,80 @@ class _EmergencyFulfillmentScreenState
             activeCount: activeOrders.length,
             recentCount: recentOrders.length,
             copy: copy,
-            onChanged: (showRecent) => setState(() {
-              _showRecent = showRecent;
-              _page = 0;
-            }),
+            onChanged: (showRecent) {
+              setState(() {
+                _showRecent = showRecent;
+                _page = 0;
+              });
+              if (showRecent && state.restaurantId == bunsikKdsStoreId) {
+                unawaited(
+                  ref
+                      .read(emergencyFulfillmentProvider.notifier)
+                      .loadCompletedHistory(),
+                );
+              }
+            },
           ),
+          if (_showRecent && state.restaurantId == bunsikKdsStoreId) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                TextButton.icon(
+                  key: const Key('bunsik_history_previous'),
+                  onPressed:
+                      state.completedHistory.loading ||
+                          state.completedHistory.page == 0
+                      ? null
+                      : () {
+                          setState(() => _page = 0);
+                          unawaited(
+                            ref
+                                .read(emergencyFulfillmentProvider.notifier)
+                                .loadCompletedHistory(direction: -1),
+                          );
+                        },
+                  icon: const Icon(Icons.chevron_left),
+                  label: Text(copy.previousPage),
+                ),
+                Text('${state.completedHistory.page + 1}'),
+                TextButton.icon(
+                  key: const Key('bunsik_history_next'),
+                  onPressed:
+                      state.completedHistory.loading ||
+                          !state.completedHistory.hasMore
+                      ? null
+                      : () {
+                          setState(() => _page = 0);
+                          unawaited(
+                            ref
+                                .read(emergencyFulfillmentProvider.notifier)
+                                .loadCompletedHistory(direction: 1),
+                          );
+                        },
+                  icon: const Icon(Icons.chevron_right),
+                  label: Text(copy.nextPage),
+                ),
+                if (state.completedHistory.loading)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                if (state.completedHistory.error != null)
+                  TextButton.icon(
+                    key: const Key('bunsik_history_retry'),
+                    onPressed: () => ref
+                        .read(emergencyFulfillmentProvider.notifier)
+                        .loadCompletedHistory(),
+                    icon: const Icon(Icons.refresh),
+                    label: Text(copy.orderLoadFailed),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
           _EmergencyMenuStatusLegend(stationType: stationType, copy: copy),
           if (state.error != null) ...[
@@ -776,13 +855,27 @@ class _EmergencyFulfillmentScreenState
           const SizedBox(height: 10),
           Expanded(
             child: orders.isEmpty
-                ? _EmergencyLockedState(
-                    icon: _showRecent
-                        ? Icons.history_toggle_off_rounded
-                        : Icons.task_alt_rounded,
-                    title: _showRecent ? copy.noRecent : copy.noOrders,
-                    body: _showRecent ? copy.noRecentBody : copy.noOrdersBody,
-                  )
+                ? _showRecent &&
+                          state.restaurantId == bunsikKdsStoreId &&
+                          state.completedHistory.loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _showRecent &&
+                            state.restaurantId == bunsikKdsStoreId &&
+                            state.completedHistory.error != null
+                      ? _EmergencyLockedState(
+                          icon: Icons.sync_problem_rounded,
+                          title: copy.orderLoadFailed,
+                          body: copy.historyLoadFailedBody,
+                        )
+                      : _EmergencyLockedState(
+                          icon: _showRecent
+                              ? Icons.history_toggle_off_rounded
+                              : Icons.task_alt_rounded,
+                          title: _showRecent ? copy.noRecent : copy.noOrders,
+                          body: _showRecent
+                              ? copy.noRecentBody
+                              : copy.noOrdersBody,
+                        )
                 : _EmergencyOrderBoard(
                     orders: orders,
                     stationType: stationType,
@@ -3059,6 +3152,11 @@ class _EmergencyCopy {
   String get alarmOn => _pick('음성 켜짐', 'Đã bật giọng nói', 'Voice on');
   String get pendingSync => _pick('전송 대기', 'Chờ đồng bộ', 'Pending sync');
   String get refresh => _pick('새로고침', 'Làm mới', 'Refresh');
+  String get historyLoadFailedBody => _pick(
+    '새로고침을 눌러 완료 내역을 다시 불러오세요.',
+    'Nhấn Làm mới để tải lại lịch sử hoàn tất.',
+    'Refresh to load completion history again.',
+  );
   String get waiting => _pick('대기', 'Đang chờ', 'Waiting');
   String get recentCompleted =>
       _pick('최근 완료', 'Vừa hoàn tất', 'Recently completed');

@@ -18,6 +18,21 @@ import 'kds_realtime_sync.dart';
 const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
 const emergencyFloorDirectBeverageAlarmCoalesceDelay = Duration(seconds: 2);
 const emergencyAdditionalOrderAlarmCoalesceDelay = Duration(seconds: 2);
+const bunsikKdsStoreId = '8bc9eef5-dcd5-46b1-b931-23f77132322c';
+
+class KdsCompletedHistoryStatus {
+  const KdsCompletedHistoryStatus({
+    this.loading = false,
+    this.page = 0,
+    this.hasMore = false,
+    this.error,
+  });
+
+  final bool loading;
+  final int page;
+  final bool hasMore;
+  final String? error;
+}
 
 Duration emergencySnapshotRetryDelay(int consecutiveFailures) =>
     switch (consecutiveFailures) {
@@ -52,7 +67,8 @@ EmergencyFulfillmentState preserveEmergencyStationTimings(
   }
 
   final previousOrdersByQueueId = <String, EmergencyFulfillmentOrder>{
-    for (final order in [...previous.orders, ...previous.completedOrders])
+    // Live rows win over an older, independently loaded history page.
+    for (final order in [...previous.completedOrders, ...previous.orders])
       order.queueId: order,
   };
   EmergencyFulfillmentOrder preserve(EmergencyFulfillmentOrder order) {
@@ -1525,6 +1541,7 @@ class EmergencyFulfillmentState {
     this.kitchenDirectToFloor = false,
     this.orders = const [],
     this.completedOrders = const [],
+    this.completedHistory = const KdsCompletedHistoryStatus(),
     this.leftoverPackagingTasks = const [],
     this.pendingOutboxCount = 0,
     this.pendingQueueIds = const {},
@@ -1549,6 +1566,7 @@ class EmergencyFulfillmentState {
   final bool kitchenDirectToFloor;
   final List<EmergencyFulfillmentOrder> orders;
   final List<EmergencyFulfillmentOrder> completedOrders;
+  final KdsCompletedHistoryStatus completedHistory;
   final List<LeftoverPackagingTask> leftoverPackagingTasks;
   final int pendingOutboxCount;
   final Set<String> pendingQueueIds;
@@ -1572,6 +1590,7 @@ class EmergencyFulfillmentState {
     bool? kitchenDirectToFloor,
     List<EmergencyFulfillmentOrder>? orders,
     List<EmergencyFulfillmentOrder>? completedOrders,
+    KdsCompletedHistoryStatus? completedHistory,
     List<LeftoverPackagingTask>? leftoverPackagingTasks,
     int? pendingOutboxCount,
     Set<String>? pendingQueueIds,
@@ -1594,6 +1613,7 @@ class EmergencyFulfillmentState {
     kitchenDirectToFloor: kitchenDirectToFloor ?? this.kitchenDirectToFloor,
     orders: orders ?? this.orders,
     completedOrders: completedOrders ?? this.completedOrders,
+    completedHistory: completedHistory ?? this.completedHistory,
     leftoverPackagingTasks:
         leftoverPackagingTasks ?? this.leftoverPackagingTasks,
     pendingOutboxCount: pendingOutboxCount ?? this.pendingOutboxCount,
@@ -1721,7 +1741,8 @@ emergencyKitchenAdditionalOrderNotices(
   }
 
   final previousOrders = <String, EmergencyFulfillmentOrder>{
-    for (final order in [...previous.orders, ...previous.completedOrders])
+    // Live rows win over an older, independently loaded history page.
+    for (final order in [...previous.completedOrders, ...previous.orders])
       order.orderId: order,
   };
   final notices = <EmergencyKitchenAdditionalOrderNotice>[];
@@ -1771,7 +1792,8 @@ List<EmergencyFloorDirectBeverageNotice> emergencyFloorDirectBeverageNotices(
   }
 
   final previousQuantities = <String, int>{
-    for (final order in [...previous.orders, ...previous.completedOrders])
+    // Live rows win over an older, independently loaded history page.
+    for (final order in [...previous.completedOrders, ...previous.orders])
       for (final item in order.items)
         if (item.isFloorDirect) item.id: item.orderedQuantity,
   };
@@ -1816,7 +1838,8 @@ List<EmergencyHandoffNotice> emergencyHandoffNotices(
   }
 
   final previousOrders = <String, EmergencyFulfillmentOrder>{
-    for (final order in [...previous.orders, ...previous.completedOrders])
+    // Live rows win over an older, independently loaded history page.
+    for (final order in [...previous.completedOrders, ...previous.orders])
       order.orderId: order,
   };
   final notices = <EmergencyHandoffNotice>[];
@@ -1845,11 +1868,14 @@ enum EmergencyProgressResult { confirmed, queued, rejected }
 
 class EmergencyFulfillmentNotifier
     extends StateNotifier<EmergencyFulfillmentState> {
-  EmergencyFulfillmentNotifier({SupabaseClient? client})
-    : _providedClient = client,
-      super(const EmergencyFulfillmentState());
+  EmergencyFulfillmentNotifier({
+    SupabaseClient? client,
+    @visibleForTesting this.enableRealtimeSubscriptions = true,
+  }) : _providedClient = client,
+       super(const EmergencyFulfillmentState());
 
   final SupabaseClient? _providedClient;
+  final bool enableRealtimeSubscriptions;
   SupabaseClient get _client => _providedClient ?? supabase;
 
   static const _uuid = Uuid();
@@ -1879,6 +1905,207 @@ class EmergencyFulfillmentNotifier
   final Map<String, Future<void>> _ticketRefreshes = {};
   final Set<String> _progressInFlight = {};
   final math.Random _pollRandom = math.Random();
+  // Foreground snapshots are serialized by _refreshing. History, timing and
+  // mode reads share one auxiliary lane: at most two reads per device, with
+  // no per-ticket requests and no history work on the handoff critical path.
+  Future<void> _bunsikAuxiliaryTail = Future.value();
+  Future<void>? _bunsikAuxiliaryRefresh;
+  bool _bunsikAuxiliaryRequested = false;
+  int _bunsikSnapshotRevision = 0;
+  String? _bunsikHistoryScope;
+  int _bunsikHistoryGeneration = 0;
+  final List<Map<String, dynamic>?> _bunsikHistoryCursors = [null];
+  Map<String, dynamic>? _bunsikHistoryNext;
+
+  String _bunsikScope(EmergencyFulfillmentState value) => [
+    _client.auth.currentUser?.id ?? '',
+    value.restaurantId,
+    value.sessionId,
+    value.stationType,
+    value.floorLabel,
+    value.servedAreas.join(','),
+    DateTime.now()
+        .toUtc()
+        .add(const Duration(hours: 7))
+        .toIso8601String()
+        .substring(0, 10),
+  ].join(':');
+
+  Future<T> _bunsikAuxiliaryRead<T>(Future<T> Function() request) {
+    final result = _bunsikAuxiliaryTail.then((_) => request());
+    _bunsikAuxiliaryTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return result;
+  }
+
+  Future<void> loadCompletedHistory({int direction = 0}) async {
+    if (!mounted ||
+        state.restaurantId != bunsikKdsStoreId ||
+        !state.assigned ||
+        state.completedHistory.loading) {
+      return;
+    }
+    final scope = _bunsikScope(state);
+    if (_bunsikHistoryScope != scope) return;
+    var page = state.completedHistory.page;
+    if (direction > 0) {
+      if (!state.completedHistory.hasMore || _bunsikHistoryNext == null) return;
+      page += 1;
+    } else if (direction < 0) {
+      if (page == 0) return;
+      page -= 1;
+    } else {
+      page = 0;
+    }
+    final cursor = direction > 0
+        ? _bunsikHistoryNext
+        : _bunsikHistoryCursors[page];
+    final generation = ++_bunsikHistoryGeneration;
+    final previous = state.completedHistory;
+    state = state.copyWith(
+      completedHistory: KdsCompletedHistoryStatus(
+        loading: true,
+        page: previous.page,
+        hasMore: previous.hasMore,
+      ),
+    );
+    bool current() =>
+        mounted &&
+        generation == _bunsikHistoryGeneration &&
+        scope == _bunsikHistoryScope &&
+        scope == _bunsikScope(state);
+    try {
+      final raw = await _bunsikAuxiliaryRead(() async {
+        if (!current()) return null;
+        return _client.rpc(
+          'get_bunsik_kds_completed_page_v1',
+          params: {
+            'p_limit': 50,
+            'p_before_completed_at': cursor?['completed_at'],
+            'p_before_queue_id': cursor?['queue_id'],
+          },
+        );
+      });
+      if (!current()) return;
+      if (raw is! Map ||
+          raw['orders'] is! List ||
+          (raw['orders'] as List).length > 50 ||
+          (raw['has_more'] == true && raw['next_cursor'] is! Map)) {
+        throw const FormatException('KDS_HISTORY_RESPONSE_INVALID');
+      }
+      final orders = (raw['orders'] as List)
+          .whereType<Map>()
+          .map(
+            (row) => EmergencyFulfillmentOrder.fromJson(
+              Map<String, dynamic>.from(row),
+            ),
+          )
+          .toList(growable: false);
+      if (direction > 0) {
+        _bunsikHistoryCursors.removeRange(page, _bunsikHistoryCursors.length);
+        _bunsikHistoryCursors.add(cursor);
+      } else if (direction == 0) {
+        _bunsikHistoryCursors.removeRange(1, _bunsikHistoryCursors.length);
+      }
+      _bunsikHistoryNext = raw['next_cursor'] is Map
+          ? Map<String, dynamic>.from(raw['next_cursor'] as Map)
+          : null;
+      state = state.copyWith(
+        completedOrders: orders,
+        completedHistory: KdsCompletedHistoryStatus(
+          page: page,
+          hasMore: raw['has_more'] == true,
+        ),
+      );
+    } catch (_) {
+      if (current()) {
+        state = state.copyWith(
+          completedHistory: KdsCompletedHistoryStatus(
+            page: previous.page,
+            hasMore: previous.hasMore,
+            error: 'KDS_HISTORY_FAILED',
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _refreshBunsikAuxiliary() {
+    _bunsikAuxiliaryRequested = true;
+    if (_bunsikAuxiliaryRefresh != null) return _bunsikAuxiliaryRefresh!;
+    _bunsikAuxiliaryRequested = false;
+    return _bunsikAuxiliaryRefresh =
+        _bunsikAuxiliaryRead(() async {
+          final scope = _bunsikScope(state);
+          final snapshotRevision = _bunsikSnapshotRevision;
+          final realtimeRevision = _realtimeRevision;
+          bool current() =>
+              mounted &&
+              scope == _bunsikHistoryScope &&
+              scope == _bunsikScope(state) &&
+              snapshotRevision == _bunsikSnapshotRevision &&
+              realtimeRevision == _realtimeRevision;
+          if (!current()) return;
+          final raw = await _optionalRpc('get_emergency_station_timings');
+          if (!current()) {
+            if (mounted && scope == _bunsikHistoryScope) {
+              _bunsikAuxiliaryRequested = true;
+            }
+            return;
+          }
+          final timings = <String, Map>{
+            if (raw is List)
+              for (final row in raw.whereType<Map>())
+                row['queue_id'].toString(): row,
+          };
+          EmergencyFulfillmentOrder merge(EmergencyFulfillmentOrder order) {
+            final timing = timings[order.queueId];
+            return timing == null
+                ? order
+                : order.copyWith(
+                    stationStartedAt: _optionalDateTime(
+                      timing['station_started_at'],
+                    ),
+                    clearStationCompletedAt:
+                        timing.containsKey('station_completed_at') &&
+                        timing['station_completed_at'] == null,
+                    stationCompletedAt: _optionalDateTime(
+                      timing['station_completed_at'],
+                    ),
+                  );
+          }
+
+          state = state.copyWith(
+            orders: state.orders.map(merge).toList(growable: false),
+          );
+          final mode = await _optionalRpcForBunsikMode();
+          if (current() && mode != null) {
+            state = state.copyWith(
+              fulfillmentMode: FulfillmentMode.fromValue(mode),
+            );
+          }
+        }).whenComplete(() {
+          _bunsikAuxiliaryRefresh = null;
+          if (_bunsikAuxiliaryRequested &&
+              mounted &&
+              state.restaurantId == bunsikKdsStoreId) {
+            unawaited(_refreshBunsikAuxiliary());
+          }
+        });
+  }
+
+  Future<dynamic> _optionalRpcForBunsikMode() async {
+    try {
+      return await _client.rpc(
+        'get_store_fulfillment_mode',
+        params: {'p_store_id': bunsikKdsStoreId},
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> load({bool showLoading = true}) async {
     if (!mounted) return;
@@ -1938,10 +2165,27 @@ class EmergencyFulfillmentNotifier
         EmergencyFulfillmentState.fromJson(json),
         state,
       );
+      final boundedBunsik = storeId == bunsikKdsStoreId && bootstrap == null;
+      final historyScope = boundedBunsik ? _bunsikScope(immediate) : null;
+      final sameHistoryScope =
+          historyScope != null && historyScope == _bunsikHistoryScope;
+      if (historyScope != _bunsikHistoryScope) {
+        _bunsikHistoryScope = historyScope;
+        _bunsikHistoryGeneration += 1;
+        _bunsikHistoryCursors.clear();
+        _bunsikHistoryCursors.add(null);
+        _bunsikHistoryNext = null;
+      }
+      if (boundedBunsik) _bunsikSnapshotRevision += 1;
       state = immediate.copyWith(
         isLoading: false,
         fulfillmentMode: state.fulfillmentMode,
-        completedOrders: state.completedOrders,
+        completedOrders: boundedBunsik && !sameHistoryScope
+            ? const []
+            : state.completedOrders,
+        completedHistory: sameHistoryScope
+            ? state.completedHistory
+            : const KdsCompletedHistoryStatus(),
         pendingOutboxCount: state.pendingOutboxCount,
         pendingQueueIds: state.pendingQueueIds,
         clearError: true,
@@ -1950,6 +2194,22 @@ class EmergencyFulfillmentNotifier
         await _subscribe(immediate, syncConfig);
       }
       if (!mounted) return;
+
+      if (boundedBunsik) {
+        final pendingRecords = emergencyOutboxRecordsForStore(
+          await EmergencyWebBridge.readOutbox(),
+          storeId,
+        );
+        if (!mounted) return;
+        state = state.copyWith(
+          pendingOutboxCount: pendingRecords.length,
+          pendingQueueIds: emergencyPendingQueueIds(pendingRecords),
+          error: outboxError,
+          clearError: outboxError == null,
+        );
+        unawaited(_refreshBunsikAuxiliary());
+        return;
+      }
 
       if (bootstrap != null) {
         json['completed_orders'] = bootstrap.completedOrders;
@@ -1997,7 +2257,10 @@ class EmergencyFulfillmentNotifier
       if (bootstrap != null) {
         await _subscribe(state, syncConfig);
       }
-    } catch (error) {
+    } catch (error, stack) {
+      if (kDebugMode) {
+        debugPrintStack(stackTrace: stack, label: 'KDS snapshot failed');
+      }
       if (!mounted) return;
       _refreshRequested = false;
       _snapshotFailureCount += 1;
@@ -2057,6 +2320,7 @@ class EmergencyFulfillmentNotifier
     EmergencyFulfillmentState snapshot,
     KdsSyncConfig syncConfig,
   ) async {
+    if (!enableRealtimeSubscriptions) return;
     final storeId = snapshot.restaurantId;
     final subscriptionKey = <String>[
       syncConfig.mode.name,
