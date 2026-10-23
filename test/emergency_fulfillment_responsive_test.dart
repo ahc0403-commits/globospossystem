@@ -293,6 +293,60 @@ EmergencyFulfillmentState _partialReadyState(
 );
 
 void main() {
+  testWidgets(
+    'JeonGabok visual is immediate and continuous events keep first 500ms window',
+    (tester) async {
+      final original = _partialReadyState('floor', ready: 0).copyWith(
+        boundedJeongabok: true,
+        restaurantId: '273b057e-3b69-46e3-93c1-6194c2802849',
+      );
+      final fixture = _FixtureEmergencyNotifier(original);
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+      );
+      // Establish baseline after the screen listener starts.
+      fixture.seed(original);
+      await tester.pump();
+      for (var i = 1; i <= 5; i++) {
+        final order = original.orders.single;
+        fixture.seed(
+          original.copyWith(
+            orders: [
+              order.copyWith(
+                items: [order.items.single.withStage('tray_dispatched', i)],
+              ),
+            ],
+          ),
+        );
+        await tester.pump(
+          i == 1 ? Duration.zero : const Duration(milliseconds: 100),
+        );
+        expect(
+          tester
+              .widget<Scaffold>(
+                find.byKey(const Key('emergency_fulfillment_screen')),
+              )
+              .backgroundColor,
+          const Color(0xFFFFE0B2),
+        );
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 2050));
+      expect(
+        tester
+            .widget<Scaffold>(
+              find.byKey(const Key('emergency_fulfillment_screen')),
+            )
+            .backgroundColor,
+        isNot(const Color(0xFFFFE0B2)),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('Bunsik bounded history navigation and retry fit a phone', (
     tester,
   ) async {

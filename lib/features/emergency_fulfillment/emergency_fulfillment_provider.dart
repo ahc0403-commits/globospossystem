@@ -1542,6 +1542,7 @@ class EmergencyFulfillmentState {
     this.orders = const [],
     this.completedOrders = const [],
     this.completedHistory = const KdsCompletedHistoryStatus(),
+    this.boundedJeongabok = false,
     this.leftoverPackagingTasks = const [],
     this.pendingOutboxCount = 0,
     this.pendingQueueIds = const {},
@@ -1567,6 +1568,9 @@ class EmergencyFulfillmentState {
   final List<EmergencyFulfillmentOrder> orders;
   final List<EmergencyFulfillmentOrder> completedOrders;
   final KdsCompletedHistoryStatus completedHistory;
+  final bool boundedJeongabok;
+  bool get usesBoundedHistory =>
+      restaurantId == bunsikKdsStoreId || boundedJeongabok;
   final List<LeftoverPackagingTask> leftoverPackagingTasks;
   final int pendingOutboxCount;
   final Set<String> pendingQueueIds;
@@ -1591,6 +1595,7 @@ class EmergencyFulfillmentState {
     List<EmergencyFulfillmentOrder>? orders,
     List<EmergencyFulfillmentOrder>? completedOrders,
     KdsCompletedHistoryStatus? completedHistory,
+    bool? boundedJeongabok,
     List<LeftoverPackagingTask>? leftoverPackagingTasks,
     int? pendingOutboxCount,
     Set<String>? pendingQueueIds,
@@ -1614,6 +1619,7 @@ class EmergencyFulfillmentState {
     orders: orders ?? this.orders,
     completedOrders: completedOrders ?? this.completedOrders,
     completedHistory: completedHistory ?? this.completedHistory,
+    boundedJeongabok: boundedJeongabok ?? this.boundedJeongabok,
     leftoverPackagingTasks:
         leftoverPackagingTasks ?? this.leftoverPackagingTasks,
     pendingOutboxCount: pendingOutboxCount ?? this.pendingOutboxCount,
@@ -1905,6 +1911,15 @@ class EmergencyFulfillmentNotifier
   final Map<String, Future<void>> _ticketRefreshes = {};
   final Set<String> _progressInFlight = {};
   final math.Random _pollRandom = math.Random();
+  final KdsReadCoordinator _jeongabokReads = KdsReadCoordinator();
+  bool _boundedJeongabok = false;
+  SupabaseKdsSyncGateway _gateway({bool? bounded}) => SupabaseKdsSyncGateway(
+    _client,
+    coordinator: (bounded ?? _boundedJeongabok) || _boundedJeongabok
+        ? _jeongabokReads
+        : null,
+    boundedJeongabok: bounded ?? _boundedJeongabok,
+  );
   // Foreground snapshots are serialized by _refreshing. History, timing and
   // mode reads share one auxiliary lane: at most two reads per device, with
   // no per-ticket requests and no history work on the handoff critical path.
@@ -1942,7 +1957,7 @@ class EmergencyFulfillmentNotifier
 
   Future<void> loadCompletedHistory({int direction = 0}) async {
     if (!mounted ||
-        state.restaurantId != bunsikKdsStoreId ||
+        !state.usesBoundedHistory ||
         !state.assigned ||
         state.completedHistory.loading) {
       return;
@@ -1964,6 +1979,7 @@ class EmergencyFulfillmentNotifier
         : _bunsikHistoryCursors[page];
     final generation = ++_bunsikHistoryGeneration;
     final previous = state.completedHistory;
+    final viewRevision = _realtimeRevision;
     state = state.copyWith(
       completedHistory: KdsCompletedHistoryStatus(
         loading: true,
@@ -1977,18 +1993,38 @@ class EmergencyFulfillmentNotifier
         scope == _bunsikHistoryScope &&
         scope == _bunsikScope(state);
     try {
-      final raw = await _bunsikAuxiliaryRead(() async {
+      Future<dynamic> request() async {
         if (!current()) return null;
         return _client.rpc(
-          'get_bunsik_kds_completed_page_v1',
+          state.boundedJeongabok
+              ? 'get_jeongabok_kds_completed_page_v1'
+              : 'get_bunsik_kds_completed_page_v1',
           params: {
             'p_limit': 50,
             'p_before_completed_at': cursor?['completed_at'],
             'p_before_queue_id': cursor?['queue_id'],
           },
         );
-      });
+      }
+
+      final raw = await (state.boundedJeongabok
+          ? _jeongabokReads.run(request)
+          : _bunsikAuxiliaryRead(request));
       if (!current()) return;
+      if (state.boundedJeongabok && viewRevision != _realtimeRevision) {
+        throw StateError('KDS_HISTORY_CHANGED_DURING_READ');
+      }
+      if (state.boundedJeongabok &&
+          (raw is! Map ||
+              raw['sync'] is! Map ||
+              !_matchesJeongabokConfig(
+                KdsSyncConfig.fromJson(
+                  Map<String, dynamic>.from(raw['sync'] as Map),
+                ),
+              ))) {
+        unawaited(_requestKdsBootstrap());
+        throw StateError('KDS_HISTORY_ASSIGNMENT_CHANGED');
+      }
       if (raw is! Map ||
           raw['orders'] is! List ||
           (raw['orders'] as List).length > 50 ||
@@ -2123,15 +2159,17 @@ class EmergencyFulfillmentNotifier
       final outboxError = await _flushOutbox();
       if (!mounted) return;
       var syncConfig = await _loadKdsSyncConfig();
+      _boundedJeongabok = syncConfig.boundedJeongabok;
       if (!mounted) return;
       KdsBootstrap? bootstrap;
       dynamic raw;
       if (syncConfig.mode == KdsSyncMode.active) {
         try {
-          bootstrap = await SupabaseKdsSyncGateway(_client).loadBootstrap();
+          bootstrap = await _gateway().loadBootstrap();
           syncConfig = bootstrap.config;
           raw = bootstrap.snapshot;
         } catch (_) {
+          if (_boundedJeongabok) rethrow;
           if (!mounted) return;
           // A staged or failed v2 rollout must preserve the established KDS
           // path. The per-store flag can be corrected without blocking work.
@@ -2166,7 +2204,8 @@ class EmergencyFulfillmentNotifier
         state,
       );
       final boundedBunsik = storeId == bunsikKdsStoreId && bootstrap == null;
-      final historyScope = boundedBunsik ? _bunsikScope(immediate) : null;
+      final boundedHistory = boundedBunsik || syncConfig.boundedJeongabok;
+      final historyScope = boundedHistory ? _bunsikScope(immediate) : null;
       final sameHistoryScope =
           historyScope != null && historyScope == _bunsikHistoryScope;
       if (historyScope != _bunsikHistoryScope) {
@@ -2180,7 +2219,8 @@ class EmergencyFulfillmentNotifier
       state = immediate.copyWith(
         isLoading: false,
         fulfillmentMode: state.fulfillmentMode,
-        completedOrders: boundedBunsik && !sameHistoryScope
+        boundedJeongabok: syncConfig.boundedJeongabok,
+        completedOrders: boundedHistory && !sameHistoryScope
             ? const []
             : state.completedOrders,
         completedHistory: sameHistoryScope
@@ -2195,6 +2235,24 @@ class EmergencyFulfillmentNotifier
       }
       if (!mounted) return;
 
+      if (syncConfig.boundedJeongabok) {
+        final pending = emergencyOutboxRecordsForStore(
+          await EmergencyWebBridge.readOutbox(),
+          storeId,
+        );
+        if (!mounted) return;
+        state = state.copyWith(
+          pendingOutboxCount: pending.length,
+          pendingQueueIds: emergencyPendingQueueIds(pending),
+          error: outboxError,
+          clearError: outboxError == null,
+          fulfillmentMode: FulfillmentMode.fromValue(
+            bootstrap!.fulfillmentMode,
+          ),
+        );
+        await _subscribe(state, syncConfig);
+        return;
+      }
       if (boundedBunsik) {
         final pendingRecords = emergencyOutboxRecordsForStore(
           await EmergencyWebBridge.readOutbox(),
@@ -2309,8 +2367,9 @@ class EmergencyFulfillmentNotifier
 
   Future<KdsSyncConfig> _loadKdsSyncConfig() async {
     try {
-      return await SupabaseKdsSyncGateway(_client).loadConfig();
+      return await _gateway(bounded: false).loadConfig();
     } catch (_) {
+      if (_boundedJeongabok) rethrow;
       // The additive migration can be deployed before the Flutter client.
       return const KdsSyncConfig.legacy();
     }
@@ -2324,6 +2383,7 @@ class EmergencyFulfillmentNotifier
     final storeId = snapshot.restaurantId;
     final subscriptionKey = <String>[
       syncConfig.mode.name,
+      syncConfig.boundedSyncVersion.toString(),
       storeId ?? '',
       snapshot.sessionId ?? '',
       snapshot.stationType ?? '',
@@ -2343,9 +2403,10 @@ class EmergencyFulfillmentNotifier
     if (syncConfig.mode != KdsSyncMode.legacy) {
       _kdsSync = KdsRealtimeSync(
         client: _client,
-        gateway: SupabaseKdsSyncGateway(_client),
+        gateway: _gateway(),
         config: KdsSyncConfig(
           mode: syncConfig.mode,
+          boundedSyncVersion: syncConfig.boundedSyncVersion,
           revision: syncConfig.revision,
           assigned: snapshot.assigned,
           restaurantId: storeId,
@@ -2355,6 +2416,10 @@ class EmergencyFulfillmentNotifier
           serviceAreaCodes: snapshot.serviceAreaCodes,
         ),
         onChange: _applyKdsChange,
+        onBatch: syncConfig.boundedJeongabok ? _applyKdsBatch : null,
+        watchdogInterval: syncConfig.boundedJeongabok
+            ? const Duration(seconds: 5)
+            : const Duration(seconds: 30),
         onBootstrapRequired: _requestKdsBootstrap,
         onConnected: _onKdsConnected,
         onError: (error, stack) {
@@ -2366,6 +2431,7 @@ class EmergencyFulfillmentNotifier
         if (!mounted) return;
       } catch (error) {
         if (!mounted) return;
+        if (syncConfig.boundedJeongabok) rethrow;
         if (kDebugMode) debugPrint('KDS realtime start fallback: $error');
         await _kdsSync?.dispose();
         if (!mounted) return;
@@ -2592,44 +2658,121 @@ class EmergencyFulfillmentNotifier
       });
 
   Future<void> _fetchKdsTicket(String queueId) async {
-    final kdsSync = _kdsSync;
-    if (!mounted) return;
-    final result = kdsSync == null
-        ? await SupabaseKdsSyncGateway(_client).loadTicket(queueId)
-        : await kdsSync.loadTicket(queueId);
-    if (!mounted || !identical(kdsSync, _kdsSync)) return;
-    final appliedRevision = _ticketRevisions[queueId] ?? 0;
-    if (result.revision < appliedRevision) return;
-    _ticketRevisions[queueId] = result.revision;
-    final rawTicket = result.ticket;
-    final nextOrders = state.orders
-        .where((order) => order.queueId != queueId)
-        .toList(growable: true);
-    EmergencyFulfillmentOrder? ticket;
-    if (rawTicket != null) {
-      ticket = EmergencyFulfillmentOrder.fromJson(rawTicket);
-      nextOrders.add(ticket);
-      nextOrders.sort(
-        (left, right) => compareEmergencyOrdersForStation(
-          left,
-          right,
-          state.stationType ?? 'kitchen',
-        ),
-      );
+    if (_boundedJeongabok) {
+      await _refreshKdsTickets([queueId]);
+      return;
     }
-    final replacement = ticket;
-    final nextCompleted = state.completedOrders
-        .where((order) => order.queueId != queueId || replacement != null)
-        .map(
-          (order) => order.queueId == queueId && replacement != null
-              ? replacement
-              : order,
+    final sync = _kdsSync;
+    final result = sync == null
+        ? await _gateway().loadTicket(queueId)
+        : await sync.loadTicket(queueId);
+    if (!mounted || !identical(sync, _kdsSync)) return;
+    _applyTicketResults(result.revision, {queueId: result.ticket});
+  }
+
+  @visibleForTesting
+  Future<void> applyKdsBatchForTesting(List<KdsChangeEnvelope> changes) =>
+      _applyKdsBatch(changes);
+
+  Future<void> _applyKdsBatch(List<KdsChangeEnvelope> changes) async {
+    final generation = _subscriptionGeneration;
+    final pending = <String, int>{};
+    Future<void> flush() async {
+      final entries = pending.entries.toList(growable: false);
+      pending.clear();
+      for (var offset = 0; offset < entries.length; offset += 50) {
+        if (!mounted || generation != _subscriptionGeneration) return;
+        final chunk = entries.skip(offset).take(50).toList(growable: false);
+        await _refreshKdsTickets(
+          chunk.map((e) => e.key).toList(growable: false),
+          minimumRevision: chunk.map((e) => e.value).reduce(math.max),
+        );
+      }
+    }
+
+    for (final change in changes) {
+      if (!mounted || generation != _subscriptionGeneration) return;
+      if (change.kind != 'ticket_invalidated' ||
+          (change.sessionId != null && change.sessionId != state.sessionId)) {
+        await flush();
+        await _applyKdsChange(change);
+      } else {
+        final id = change.queueId ?? change.payload['queue_id']?.toString();
+        if (id != null && id.isNotEmpty) pending[id] = change.revision;
+      }
+    }
+    await flush();
+  }
+
+  bool _matchesJeongabokConfig(KdsSyncConfig config) =>
+      config.boundedJeongabok &&
+      config.restaurantId == state.restaurantId &&
+      config.sessionId == state.sessionId &&
+      config.stationType == state.stationType &&
+      config.floorLabel == state.floorLabel &&
+      listEquals(config.servedAreas, state.servedAreas);
+
+  Future<void> _refreshKdsTickets(
+    List<String> ids, {
+    int minimumRevision = 0,
+  }) async {
+    final generation = _subscriptionGeneration;
+    final viewRevision = _realtimeRevision;
+    final scope = _bunsikScope(state);
+    final result = await _gateway().loadTickets(ids);
+    if (!mounted || generation != _subscriptionGeneration) return;
+    if (viewRevision != _realtimeRevision) {
+      throw StateError('KDS_BATCH_CHANGED_DURING_READ');
+    }
+    if (scope != _bunsikScope(state)) {
+      throw StateError('KDS_BATCH_SCOPE_CHANGED');
+    }
+    if (!_matchesJeongabokConfig(result.config)) {
+      unawaited(_requestKdsBootstrap());
+      throw StateError('KDS_BATCH_ASSIGNMENT_CHANGED');
+    }
+    if (result.revision < minimumRevision) {
+      throw StateError('KDS_BATCH_STALE_REVISION');
+    }
+    _applyTicketResults(result.revision, result.tickets);
+  }
+
+  void _applyTicketResults(
+    int revision,
+    Map<String, Map<String, dynamic>?> results,
+  ) {
+    final accepted = <String, EmergencyFulfillmentOrder?>{};
+    for (final entry in results.entries) {
+      if (revision < (_ticketRevisions[entry.key] ?? 0)) continue;
+      _ticketRevisions[entry.key] = revision;
+      accepted[entry.key] = entry.value == null
+          ? null
+          : EmergencyFulfillmentOrder.fromJson(entry.value!);
+    }
+    if (accepted.isEmpty) return;
+    final orders =
+        state.orders
+            .where((o) => !accepted.containsKey(o.queueId))
+            .toList(growable: true)
+          ..addAll(accepted.values.whereType<EmergencyFulfillmentOrder>())
+          ..sort(
+            (a, b) => compareEmergencyOrdersForStation(
+              a,
+              b,
+              state.stationType ?? 'kitchen',
+            ),
+          );
+    final completed = state.completedOrders
+        .where(
+          (o) =>
+              !accepted.containsKey(o.queueId) || accepted[o.queueId] != null,
         )
+        .map((o) => accepted[o.queueId] ?? o)
         .toList(growable: false);
     _realtimeRevision += 1;
     state = state.copyWith(
-      orders: nextOrders,
-      completedOrders: nextCompleted,
+      orders: orders,
+      completedOrders: completed,
       clearError: true,
     );
   }
@@ -2666,6 +2809,9 @@ class EmergencyFulfillmentNotifier
 
   Future<void> _requestKdsBootstrap() async {
     if (!mounted) return;
+    // A new bootstrap establishes a new cursor even when assignments match.
+    await _disposeSubscriptions();
+    _subscriptionKey = null;
     unawaited(load(showLoading: false));
   }
 
@@ -2945,6 +3091,25 @@ class EmergencyFulfillmentNotifier
     return true;
   }
 
+  Future<void> _refreshConfirmedQueues(Iterable<String> queueIds) async {
+    if (!_boundedJeongabok) {
+      await load(showLoading: false);
+      return;
+    }
+    try {
+      final ids = queueIds.toSet().toList(growable: false);
+      for (var i = 0; i < ids.length; i += 50) {
+        await _refreshKdsTickets(ids.skip(i).take(50).toList(growable: false));
+      }
+    } catch (_) {
+      // The command is committed. Recovery re-reads through the watchdog;
+      // never enqueue the write again because its follow-up read failed.
+      if (mounted) {
+        state = state.copyWith(error: 'KDS_CONFIRMED_REFRESH_FAILED');
+      }
+    }
+  }
+
   Future<bool> completeKitchenChecketBatch(Map<String, int> selections) async {
     List<KitchenChecketAllocation> allocations;
     try {
@@ -2964,7 +3129,7 @@ class EmergencyFulfillmentNotifier
     };
     try {
       await _sendOutboxPayload(payload);
-      await load(showLoading: false);
+      await _refreshConfirmedQueues(allocations.map((a) => a.queueId));
       return true;
     } catch (error) {
       if (error is PostgrestException) {
@@ -3004,7 +3169,7 @@ class EmergencyFulfillmentNotifier
     };
     try {
       await _sendOutboxPayload(payload);
-      await load(showLoading: false);
+      await _refreshConfirmedQueues(summary.allocations.map((a) => a.queueId));
       return true;
     } catch (error) {
       if (error is PostgrestException) {
@@ -3043,7 +3208,7 @@ class EmergencyFulfillmentNotifier
     };
     try {
       await _sendOutboxPayload(payload);
-      await load(showLoading: false);
+      await _refreshConfirmedQueues(allocations.map((a) => a.queueId));
       return true;
     } catch (error) {
       if (error is PostgrestException) {

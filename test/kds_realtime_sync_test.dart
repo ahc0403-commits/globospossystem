@@ -100,6 +100,47 @@ void main() {
     });
   });
 
+  test('batch failure keeps cursor until the entire page applies', () async {
+    final revisions = _MemoryRevisionStore();
+    final errors = <Object>[];
+    var fail = true;
+    final batch = _batch(
+      scanned: 8,
+      current: 8,
+      hasMore: false,
+      revisions: [5, 6, 7, 8],
+    );
+    final sync = KdsRealtimeSync(
+      client: SupabaseClient('http://localhost:54321', 'test'),
+      gateway: _FakeGateway([batch, batch]),
+      config: const KdsSyncConfig(
+        mode: KdsSyncMode.active,
+        revision: 4,
+        assigned: true,
+        restaurantId: 'store-1',
+      ),
+      onChange: (_) async => throw StateError('per-ticket path'),
+      onBatch: (changes) async {
+        expect(changes.length, 4);
+        if (fail) throw StateError('second chunk failed');
+      },
+      onBootstrapRequired: () async {},
+      onConnected: () async {},
+      onError: (e, _) => errors.add(e),
+      revisionStore: revisions,
+    );
+    addTearDown(sync.dispose);
+    sync.seedCursorForTesting(4);
+    await sync.catchUp();
+    expect(sync.cursor, 4);
+    expect(revisions.writes, isEmpty);
+    fail = false;
+    await sync.catchUp();
+    expect(sync.cursor, 8);
+    expect(revisions.writes, [8]);
+    expect(errors.length, 1);
+  });
+
   group('KDS durable catch-up', () {
     test('authoritative bootstrap resets a stale stored cursor', () {
       expect(
