@@ -1,0 +1,42 @@
+{
+  "captured_at_vietnam": "2026-10-23T14:23:48+07:00",
+  "production_aggregates": {
+    "queue_total": 80,
+    "today": 15,
+    "max_daily_last_7_days": 38,
+    "nonempty_orders": 79,
+    "line_mean": 4.09,
+    "line_p95": 9,
+    "line_max": 22,
+    "line_histogram": {
+      "0": 1,
+      "1": 17,
+      "2": 12,
+      "3": 12,
+      "4": 10,
+      "5": 3,
+      "6": 11,
+      "7": 4,
+      "8": 6,
+      "9": 3,
+      "22": 1
+    },
+    "active_assignments": {
+      "kitchen": 1,
+      "stored_2F": 1,
+      "stored_3F": 2
+    }
+  },
+  "warning": "Assignments are not a physical online-terminal census. No production business rows or credentials copied.",
+  "schema_only_export_sha256": "ebd0e183e73abbef3e2b747406be1b3280da9e96164a5381ab21364429465e95",
+  "migration_sha256": "acf8e79c0f3a2799aa0144c90efc333141be01340e517e88a3c62ea8ac7f1078",
+  "http_requests_measured": 3744,
+  "read_concurrency_per_terminal": 1,
+  "synthetic_http_delta_log": "Empty delta response; 100 changes, duplicate IDs and partial failure exercised by Flutter catch-up tests. The HTTP batch workload requests up to 100 IDs in two sequential calls.",
+  "unmeasured": [
+    "physical button to remote frame",
+    "physical first audible speech",
+    "Flutter heap",
+    "online physical terminal count"
+  ]
+}

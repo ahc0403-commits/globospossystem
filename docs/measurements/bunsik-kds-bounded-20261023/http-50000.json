@@ -1,0 +1,144 @@
+{
+  "historical_queues": 50000,
+  "today_queues": 120,
+  "line_distribution": {
+    "mean": 4.45,
+    "p95_approx": 9,
+    "maximum": 15
+  },
+  "database": "PostgreSQL 17.6 production schema with synthetic rows",
+  "limits": {
+    "db_cpu": 2,
+    "db_memory_mb": 2048,
+    "postgrest_pool": 10,
+    "postgrest_cpu": 1,
+    "postgrest_memory_mb": 512,
+    "history_page": 50,
+    "read_lanes_per_terminal": 2
+  },
+  "runs": [
+    {
+      "terminals": 4,
+      "rounds": 5,
+      "duration_s": 0.661,
+      "errors": 0,
+      "max_in_flight_per_terminal": 2,
+      "metrics": {
+        "get_bunsik_kds_completed_page_v1": {
+          "requests": 20,
+          "p50_ms": 42.653,
+          "p95_ms": 64.763,
+          "p99_ms": 67.636,
+          "max_ms": 67.636,
+          "max_response_bytes": 268002
+        },
+        "get_emergency_station_snapshot": {
+          "requests": 20,
+          "p50_ms": 60.504,
+          "p95_ms": 119.524,
+          "p99_ms": 140.891,
+          "max_ms": 140.891,
+          "max_response_bytes": 586750
+        },
+        "get_emergency_station_timings": {
+          "requests": 20,
+          "p50_ms": 4.42,
+          "p95_ms": 70.96,
+          "p99_ms": 72.548,
+          "max_ms": 72.548,
+          "max_response_bytes": 19894
+        },
+        "get_kds_sync_config": {
+          "requests": 20,
+          "p50_ms": 1.884,
+          "p95_ms": 4.561,
+          "p99_ms": 41.424,
+          "max_ms": 41.424,
+          "max_response_bytes": 283
+        }
+      }
+    },
+    {
+      "terminals": 8,
+      "rounds": 5,
+      "duration_s": 1.759,
+      "errors": 0,
+      "max_in_flight_per_terminal": 2,
+      "metrics": {
+        "get_bunsik_kds_completed_page_v1": {
+          "requests": 40,
+          "p50_ms": 175.274,
+          "p95_ms": 280.409,
+          "p99_ms": 294.841,
+          "max_ms": 294.841,
+          "max_response_bytes": 268002
+        },
+        "get_emergency_station_snapshot": {
+          "requests": 40,
+          "p50_ms": 207.197,
+          "p95_ms": 401.092,
+          "p99_ms": 420.298,
+          "max_ms": 420.298,
+          "max_response_bytes": 586750
+        },
+        "get_emergency_station_timings": {
+          "requests": 40,
+          "p50_ms": 88.429,
+          "p95_ms": 105.744,
+          "p99_ms": 110.236,
+          "max_ms": 110.236,
+          "max_response_bytes": 19894
+        },
+        "get_kds_sync_config": {
+          "requests": 40,
+          "p50_ms": 29.708,
+          "p95_ms": 67.47,
+          "p99_ms": 78.473,
+          "max_ms": 78.473,
+          "max_response_bytes": 283
+        }
+      }
+    },
+    {
+      "terminals": 40,
+      "rounds": 5,
+      "duration_s": 7.982,
+      "errors": 0,
+      "max_in_flight_per_terminal": 2,
+      "metrics": {
+        "get_bunsik_kds_completed_page_v1": {
+          "requests": 200,
+          "p50_ms": 515.74,
+          "p95_ms": 1672.9,
+          "p99_ms": 2465.062,
+          "max_ms": 4323.949,
+          "max_response_bytes": 268002
+        },
+        "get_emergency_station_snapshot": {
+          "requests": 200,
+          "p50_ms": 555.327,
+          "p95_ms": 1925.92,
+          "p99_ms": 2618.374,
+          "max_ms": 4447.006,
+          "max_response_bytes": 586750
+        },
+        "get_emergency_station_timings": {
+          "requests": 200,
+          "p50_ms": 461.024,
+          "p95_ms": 1687.751,
+          "p99_ms": 2264.065,
+          "max_ms": 3893.665,
+          "max_response_bytes": 19894
+        },
+        "get_kds_sync_config": {
+          "requests": 200,
+          "p50_ms": 393.189,
+          "p95_ms": 1772.849,
+          "p99_ms": 2143.947,
+          "max_ms": 3064.993,
+          "max_response_bytes": 283
+        }
+      }
+    }
+  ]
+}

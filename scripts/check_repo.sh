@@ -71,6 +71,9 @@ bash scripts/test_attendance_storage_policy.sh
 printf 'CHECK_REPO_STEP=office_store_batch_sql\n'
 bash scripts/test_office_store_batch_reads.sh
 
+printf 'CHECK_REPO_STEP=photo_office_operations_sql\n'
+bash test/photo_office_operations_sql_test.sh
+
 printf 'CHECK_REPO_STEP=daily_table_operational_reset_sql\n'
 bash scripts/test_daily_table_operational_reset.sh
 
@@ -88,6 +91,10 @@ printf 'CHECK_REPO_STEP=jeongabok_floor_live_sync_sql\n'
 bash scripts/test_jeongabok_floor_live_sync.sh
 printf 'CHECK_REPO_STEP=kds_partial_item_handoff_sql\n'
 bash scripts/test_kds_partial_item_handoff.sh
+printf 'CHECK_REPO_STEP=bunsik_kds_bounded_history_sql\n'
+bash scripts/test_bunsik_kds_history.sh
+printf 'CHECK_REPO_STEP=jeongabok_kds_bounded_sync_sql\n'
+bash scripts/test_jeongabok_kds_bounded_sync.sh
 printf 'CHECK_REPO_STEP=jeongabok_qr_full_history_sql\n'
 bash scripts/test_jeongabok_qr_full_history.sh
 

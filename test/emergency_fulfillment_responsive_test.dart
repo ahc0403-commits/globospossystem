@@ -31,6 +31,12 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
   final List<String> completedQueues = [];
   final List<(String, String)> revertedActions = [];
   final List<Map<String, int>> kitchenChecketBatches = [];
+  final List<int> historyDirections = [];
+
+  @override
+  Future<void> loadCompletedHistory({int direction = 0}) async {
+    historyDirections.add(direction);
+  }
 
   void seed(EmergencyFulfillmentState value) => state = value;
 
@@ -287,6 +293,109 @@ EmergencyFulfillmentState _partialReadyState(
 );
 
 void main() {
+  testWidgets(
+    'JeonGabok visual is immediate and continuous events keep first 500ms window',
+    (tester) async {
+      final original = _partialReadyState('floor', ready: 0).copyWith(
+        boundedJeongabok: true,
+        restaurantId: '273b057e-3b69-46e3-93c1-6194c2802849',
+      );
+      final fixture = _FixtureEmergencyNotifier(original);
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+      );
+      // Establish baseline after the screen listener starts.
+      fixture.seed(original);
+      await tester.pump();
+      for (var i = 1; i <= 5; i++) {
+        final order = original.orders.single;
+        fixture.seed(
+          original.copyWith(
+            orders: [
+              order.copyWith(
+                items: [order.items.single.withStage('tray_dispatched', i)],
+              ),
+            ],
+          ),
+        );
+        await tester.pump(
+          i == 1 ? Duration.zero : const Duration(milliseconds: 100),
+        );
+        expect(
+          tester
+              .widget<Scaffold>(
+                find.byKey(const Key('emergency_fulfillment_screen')),
+              )
+              .backgroundColor,
+          const Color(0xFFFFE0B2),
+        );
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 2050));
+      expect(
+        tester
+            .widget<Scaffold>(
+              find.byKey(const Key('emergency_fulfillment_screen')),
+            )
+            .backgroundColor,
+        isNot(const Color(0xFFFFE0B2)),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('Bunsik bounded history navigation and retry fit a phone', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(
+      const EmergencyFulfillmentState(
+        assigned: true,
+        assignmentResolved: true,
+        active: true,
+        restaurantId: bunsikKdsStoreId,
+        sessionId: 'fixture-session',
+        stationType: 'floor',
+        floorLabel: '1F',
+        completedHistory: KdsCompletedHistoryStatus(
+          hasMore: true,
+          error: 'KDS_HISTORY_FAILED',
+        ),
+      ),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(360, 740),
+      locale: const Locale('ko'),
+    );
+    await tester.tap(find.textContaining('최근 완료'));
+    await tester.pump();
+    expect(fixture.historyDirections, [0]);
+    expect(find.byKey(const Key('bunsik_history_retry')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('bunsik_history_next')));
+    await tester.pump();
+    expect(fixture.historyDirections.last, 1);
+    expect(tester.takeException(), isNull);
+    final screenshotDir = Platform.environment['KDS_HISTORY_SCREENSHOT_DIR'];
+    if (screenshotDir != null) {
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.runAsync(() async {
+        final layer =
+            tester.binding.renderViews.first.debugLayer! as OffsetLayer;
+        final image = await layer.toImage(const Rect.fromLTWH(0, 0, 360, 740));
+        final png = await image.toByteData(format: ui.ImageByteFormat.png);
+        await Directory(screenshotDir).create(recursive: true);
+        await File(
+          '$screenshotDir/bunsik-history-phone.png',
+        ).writeAsBytes(png!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+  });
+
   for (final station in ['tray', 'floor']) {
     testWidgets(
       '$station partial single handoff returns to board without completing unprepared food',
@@ -496,7 +605,8 @@ void main() {
   }
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
-    if (Platform.environment['KDS_PARTIAL_SCREENSHOT_DIR'] != null) {
+    if (Platform.environment['KDS_PARTIAL_SCREENSHOT_DIR'] != null ||
+        Platform.environment['KDS_HISTORY_SCREENSHOT_DIR'] != null) {
       await (FontLoader(
         AppFonts.family,
       )..addFont(rootBundle.load(AppFonts.assetPath))).load();
@@ -507,6 +617,7 @@ void main() {
     await Supabase.initialize(
       url: 'https://example.supabase.co',
       anonKey: 'test-anon-key',
+      authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
     );
   });
 

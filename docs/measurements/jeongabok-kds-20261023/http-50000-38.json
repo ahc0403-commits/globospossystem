@@ -1,0 +1,201 @@
+{
+  "total_queues": 50000,
+  "today_queues": 38,
+  "database": "PostgreSQL17.6 full production schema; synthetic rows only",
+  "line_distribution": {
+    "80_queue_histogram": {
+      "0": 1,
+      "1": 17,
+      "2": 12,
+      "3": 12,
+      "4": 10,
+      "5": 3,
+      "6": 11,
+      "7": 4,
+      "8": 6,
+      "9": 3,
+      "22": 1
+    }
+  },
+  "limits": {
+    "db_cpu": 2,
+    "db_memory_mib": 2048,
+    "postgrest_cpu": 1,
+    "postgrest_memory_mib": 512,
+    "pool": 10,
+    "batch": 50,
+    "server_batch_cap": 100,
+    "history_page": 50,
+    "max_reads_per_terminal": 1
+  },
+  "runs": [
+    {
+      "terminals": 4,
+      "roles": [
+        "kitchen",
+        "stored2F",
+        "stored3F-A",
+        "stored3F-B"
+      ],
+      "mode": "synchronized burst, faster than normal 5s watchdog",
+      "rounds": 3,
+      "duration_s": 0.513,
+      "errors": 0,
+      "max_in_flight_per_terminal": 1,
+      "metrics": {
+        "get_jeongabok_kds_bootstrap_v3": {
+          "requests": 12,
+          "p50_ms": 23.632,
+          "p95_ms": 54.147,
+          "p99_ms": 54.147,
+          "max_ms": 54.147,
+          "max_response_bytes": 328589
+        },
+        "get_jeongabok_kds_completed_page_v1": {
+          "requests": 12,
+          "p50_ms": 26.121,
+          "p95_ms": 50.058,
+          "p99_ms": 50.058,
+          "max_ms": 50.058,
+          "max_response_bytes": 329027
+        },
+        "get_jeongabok_kds_tickets_v3": {
+          "requests": 24,
+          "p50_ms": 12.926,
+          "p95_ms": 24.018,
+          "p99_ms": 27.244,
+          "max_ms": 27.244,
+          "max_response_bytes": 193606
+        },
+        "get_kds_changes_v2": {
+          "requests": 12,
+          "p50_ms": 2.308,
+          "p95_ms": 4.675,
+          "p99_ms": 4.675,
+          "max_ms": 4.675,
+          "max_response_bytes": 118
+        },
+        "get_kds_sync_config": {
+          "requests": 12,
+          "p50_ms": 2.252,
+          "p95_ms": 2.81,
+          "p99_ms": 2.81,
+          "max_ms": 2.81,
+          "max_response_bytes": 312
+        }
+      }
+    },
+    {
+      "terminals": 8,
+      "roles": [
+        "kitchen",
+        "stored2F",
+        "stored3F-A",
+        "stored3F-B"
+      ],
+      "mode": "synchronized burst, faster than normal 5s watchdog",
+      "rounds": 3,
+      "duration_s": 0.874,
+      "errors": 0,
+      "max_in_flight_per_terminal": 1,
+      "metrics": {
+        "get_jeongabok_kds_bootstrap_v3": {
+          "requests": 24,
+          "p50_ms": 36.344,
+          "p95_ms": 74.988,
+          "p99_ms": 99.09,
+          "max_ms": 99.09,
+          "max_response_bytes": 328589
+        },
+        "get_jeongabok_kds_completed_page_v1": {
+          "requests": 24,
+          "p50_ms": 91.166,
+          "p95_ms": 111.034,
+          "p99_ms": 116.541,
+          "max_ms": 116.541,
+          "max_response_bytes": 329027
+        },
+        "get_jeongabok_kds_tickets_v3": {
+          "requests": 48,
+          "p50_ms": 19.501,
+          "p95_ms": 77.483,
+          "p99_ms": 98.893,
+          "max_ms": 98.893,
+          "max_response_bytes": 193606
+        },
+        "get_kds_changes_v2": {
+          "requests": 24,
+          "p50_ms": 4.632,
+          "p95_ms": 32.235,
+          "p99_ms": 61.889,
+          "max_ms": 61.889,
+          "max_response_bytes": 118
+        },
+        "get_kds_sync_config": {
+          "requests": 24,
+          "p50_ms": 3.217,
+          "p95_ms": 47.201,
+          "p99_ms": 55.334,
+          "max_ms": 55.334,
+          "max_response_bytes": 312
+        }
+      }
+    },
+    {
+      "terminals": 40,
+      "roles": [
+        "kitchen",
+        "stored2F",
+        "stored3F-A",
+        "stored3F-B"
+      ],
+      "mode": "synchronized burst, faster than normal 5s watchdog",
+      "rounds": 3,
+      "duration_s": 5.122,
+      "errors": 0,
+      "max_in_flight_per_terminal": 1,
+      "metrics": {
+        "get_jeongabok_kds_bootstrap_v3": {
+          "requests": 120,
+          "p50_ms": 288.701,
+          "p95_ms": 582.771,
+          "p99_ms": 714.87,
+          "max_ms": 716.394,
+          "max_response_bytes": 328589
+        },
+        "get_jeongabok_kds_completed_page_v1": {
+          "requests": 120,
+          "p50_ms": 300.885,
+          "p95_ms": 685.285,
+          "p99_ms": 870.277,
+          "max_ms": 1007.661,
+          "max_response_bytes": 329027
+        },
+        "get_jeongabok_kds_tickets_v3": {
+          "requests": 240,
+          "p50_ms": 199.023,
+          "p95_ms": 596.719,
+          "p99_ms": 698.723,
+          "max_ms": 798.24,
+          "max_response_bytes": 193606
+        },
+        "get_kds_changes_v2": {
+          "requests": 120,
+          "p50_ms": 148.512,
+          "p95_ms": 516.074,
+          "p99_ms": 684.699,
+          "max_ms": 685.313,
+          "max_response_bytes": 118
+        },
+        "get_kds_sync_config": {
+          "requests": 120,
+          "p50_ms": 114.287,
+          "p95_ms": 544.353,
+          "p99_ms": 853.108,
+          "max_ms": 881.592,
+          "max_response_bytes": 312
+        }
+      }
+    }
+  ]
+}

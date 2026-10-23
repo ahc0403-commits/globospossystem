@@ -6,9 +6,11 @@ import {
   type DirectOrderDependencies,
   directOrderDinerCount,
   directOrderLocale,
+  directOrderProofV3Args,
   directOrderPushSubscriptionArgs,
   directOrderRequirementDecisionArgs,
   directOrderSecretKeyName,
+  executeProofV3,
   type JsonObject,
   normalizeRpcError,
   resolveOrderScopedRequest,
@@ -21,6 +23,227 @@ import {
   validProofPath,
   verifyProofUpload,
 } from "./index.ts";
+
+Deno.test("v3 proof locks replacement identity and renews the same private object", async () => {
+  const store = "11111111-1111-4111-8111-111111111111";
+  const requestId = "22222222-2222-4222-8222-222222222222";
+  const old = "33333333-3333-4333-8333-333333333333";
+  const body = {
+    session_id: requestId,
+    request_id: requestId,
+    quote_id: old,
+    secret: "a".repeat(48),
+    expected_message_id: old,
+    review_request_id: null,
+    mime_type: "image/png",
+    size_bytes: 1024,
+  };
+  const calls: JsonObject[] = [];
+  const verified: string[] = [];
+  const paths: string[] = [];
+  const dependencies = {
+    hashSecret: (_: string) => Promise.resolve("hashed-fixture"),
+    commitOrAuthorize: (args: JsonObject) => {
+      calls.push(args);
+      return Promise.resolve(
+        args.p_storage_path && args.p_verify_only !== true
+          ? {
+            message_id: "replacement",
+            state: "awaiting_payment_review",
+            review_request_id: null,
+            idempotent: true,
+          }
+          : { store_id: store },
+      );
+    },
+    verify: (path: string) => {
+      verified.push(path);
+      return Promise.resolve();
+    },
+    reserve: (path: string) => {
+      paths.push(path);
+      return Promise.resolve({
+        token: "token",
+        signedUrl: "https://fixture.invalid/upload",
+      });
+    },
+  };
+  const reserved = await executeProofV3(
+    "proof_upload_url_v3",
+    body,
+    dependencies,
+  ) as JsonObject;
+  await executeProofV3(
+    "proof_upload_url_v3",
+    { ...body, path: reserved.path },
+    dependencies,
+  );
+  assertEquals(
+    paths,
+    [reserved.path, reserved.path],
+    "renewal preserves immutable identity",
+  );
+  const committed = await executeProofV3("proof_commit_v3", {
+    ...body,
+    path: reserved.path,
+  }, dependencies) as JsonObject;
+  assertEquals(verified, [reserved.path], "bytes verified before commit");
+  assertEquals(
+    calls.every((args) =>
+      args.p_expected_message_id === old &&
+      args.p_secret_hash === "hashed-fixture"
+    ),
+    true,
+    "quote and previous evidence remain fixed and only a secret hash reaches SQL",
+  );
+  assertEquals(
+    committed.idempotent,
+    true,
+    "lost response can recover its original receipt",
+  );
+  assertEquals(Object.keys(reserved).sort(), [
+    "max_bytes",
+    "mime_type",
+    "path",
+    "signed_url",
+    "token",
+  ], "strict reservation fields");
+
+  for (
+    const invalid of [
+      { ...body, mime_type: "image/heic" },
+      { ...body, size_bytes: 5242881 },
+      { ...body, path: `${old}/${requestId}/${old}.png` },
+      { ...body, path: `${store}/${old}/${old}.png` },
+      { ...body, path: `${store}/${requestId}/${old}.jpg` },
+    ]
+  ) {
+    const count = paths.length;
+    let error: unknown;
+    try {
+      await executeProofV3("proof_upload_url_v3", invalid, dependencies);
+    } catch (caught) {
+      error = caught;
+    }
+    assertEquals(
+      error instanceof SafeHttpError && error.code === "INVALID_PROOF",
+      true,
+      "invalid file or ownership rejected",
+    );
+    assertEquals(
+      paths.length,
+      count,
+      "invalid reservation never reaches Storage",
+    );
+  }
+});
+
+Deno.test("proof ownership is checked before Storage and committed replay needs no download", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const body = {
+    session_id: id,
+    request_id: id,
+    quote_id: id,
+    expected_message_id: null,
+    secret: "a".repeat(48),
+    path: `${id}/${id}/${id}.png`,
+  };
+  let reads = 0;
+  const deps = {
+    hashSecret: (_: string) => Promise.resolve("hash"),
+    commitOrAuthorize: (_: JsonObject): Promise<unknown> =>
+      Promise.reject(new SafeHttpError(404, "DIRECT_ORDER_REQUEST_NOT_FOUND")),
+    verify: (_: string) => {
+      reads++;
+      return Promise.resolve();
+    },
+    reserve: (_: string) =>
+      Promise.resolve({ token: "token", signedUrl: "unused" }),
+  };
+  try {
+    await executeProofV3("proof_commit_v3", body, deps);
+    throw new Error("Ownership allowed");
+  } catch (error) {
+    assertEquals(
+      error instanceof SafeHttpError,
+      true,
+      "authorization rejected",
+    );
+  }
+  assertEquals(reads, 0, "unauthorized proof never touches private Storage");
+  const result = await executeProofV3("proof_commit_v3", body, {
+    ...deps,
+    commitOrAuthorize: (_: JsonObject) =>
+      Promise.resolve({
+        message_id: id,
+        state: "awaiting_payment_review",
+        review_request_id: null,
+        idempotent: true,
+      }),
+  }) as JsonObject;
+  assertEquals(result.message_id, id, "already committed identity recovered");
+  assertEquals(
+    reads,
+    0,
+    "immutable replay does not depend on Storage availability",
+  );
+});
+
+Deno.test("v3 proof compare-and-set is required, typed and order-scoped", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const body: JsonObject = {
+    session_id: id,
+    request_id: id,
+    quote_id: id,
+    expected_message_id: null,
+  };
+  assertEquals(
+    directOrderProofV3Args(body).p_expected_message_id,
+    null,
+    "first photo explicitly expects none",
+  );
+  for (
+    const invalid of [{ session_id: id, request_id: id, quote_id: id }, {
+      ...body,
+      expected_message_id: "invalid",
+    }, { ...body, review_request_id: false }]
+  ) {
+    let error: unknown;
+    try {
+      directOrderProofV3Args(invalid);
+    } catch (caught) {
+      error = caught;
+    }
+    assertEquals(
+      error instanceof SafeHttpError && error.status === 400,
+      true,
+      "malformed replacement identity rejected",
+    );
+  }
+  for (const action of ["proof_upload_url_v3", "proof_commit_v3"]) {
+    const resolved = await resolveOrderScopedRequest(
+      {
+        rpc: () =>
+          Promise.resolve({
+            data: {
+              session_id: id,
+              request_id: id,
+              secret_hash: "a".repeat(64),
+              slug: "fixture",
+            },
+            error: null,
+          }),
+      },
+      action,
+      { ...body, order_scoped: true, secret: "a".repeat(48) },
+    );
+    assertEquals(
+      resolved.requestId,
+      id,
+      "order access can use new proof actions",
+    );
+  }
+});
 
 Deno.test("proof verification retains files on list/download/read failures", async () => {
   const path = "store/request/photo.png";
@@ -333,6 +556,7 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "issue_order_access",
       "decide_pickup",
       "status",
+      "updates",
       "status_v2",
       "status_v3",
       "status_v4",
@@ -360,8 +584,10 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "cancel",
       "proof_upload_url",
       "proof_upload_url_v2",
+      "proof_upload_url_v3",
       "proof_commit",
       "proof_commit_v2",
+      "proof_commit_v3",
       "staff_proof_url",
       "cleanup_expired_pii",
     ],
@@ -494,7 +720,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    200,
+    207,
     "registered SQL error count",
   );
   assertEquals(
