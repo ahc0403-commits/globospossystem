@@ -3,6 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'procurement_presentation.dart';
 import 'procurement_process_labels.dart';
+import 'procurement_request_lines.dart';
 
 /// Supplier documents render only the explicitly allowed projection fields.
 Future<Uint8List> buildProcurementDocumentPdf(
@@ -25,7 +26,10 @@ Future<Uint8List> buildProcurementDocumentPdf(
   String text(dynamic value) => value?.toString() ?? '—';
   num number(dynamic value) =>
       value is num ? value : num.tryParse(value?.toString() ?? '') ?? 0;
-  final lines = (data['lines'] as List? ?? []).whereType<Map>().toList();
+  final sourceLines = (data['lines'] as List? ?? []).whereType<Map>();
+  final lines = supplier
+      ? sourceLines.toList()
+      : procurementSortedRequestLines(sourceLines);
   num? estimate(Map line) {
     if (line['estimated_amount'] != null) {
       return number(line['estimated_amount']);
@@ -60,11 +64,7 @@ Future<Uint8List> buildProcurementDocumentPdf(
   }
 
   String internalItem(Map line) {
-    final code =
-        (line['product_code'] ?? line['product_code_snapshot'])
-            ?.toString()
-            .trim() ??
-        '';
+    final code = procurementMaterialCode(line);
     final specification = line['specification_snapshot']?.toString() ?? '';
     return '${text(line['product_name'])}${code.isEmpty ? '' : '\n$code'}${carryText(line)}${specification.isEmpty ? '' : '\n$specification'}';
   }
@@ -280,11 +280,6 @@ Future<Uint8List> buildProcurementDocumentPdf(
           pw.Text(text(data['contact_name'])),
         ] else ...[
           pw.Text('${copy('reason')}: ${text(data['reason'])}'),
-          if (data['submitted_at'] != null)
-            pw.Text(
-              '${copy('submittedAt')}: ${procurementDate(data['submitted_at'], includeTime: true)}',
-              style: const pw.TextStyle(fontSize: 8),
-            ),
           if (data['memo'] != null && data['memo'].toString().isNotEmpty)
             pw.Text('${copy('notes')}: ${data['memo']}'),
         ],

@@ -7,6 +7,7 @@ import 'procurement_process_labels.dart';
 import 'dart:convert';
 import '../../core/utils/time_utils.dart';
 import 'procurement_presentation.dart';
+import 'procurement_request_lines.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -1284,8 +1285,44 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     final unavailable = _busy || _pending != null;
     final detailView = widget.approvalView && _selectedId != null;
     final compact = MediaQuery.sizeOf(context).width < 600;
+    final unifiedRequester =
+        requesterView &&
+        widget.onOpenReceiving != null &&
+        actor['can_receive'] == true;
     return Scaffold(
       appBar: AppBar(
+        bottom: unifiedRequester
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(66),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: SegmentedButton<bool>(
+                    key: const Key('procurement_request_receiving_switch'),
+                    segments: [
+                      ButtonSegment(
+                        value: false,
+                        icon: const Icon(Icons.playlist_add_check),
+                        label: Text(copy('requestApprovals')),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        icon: const Icon(Icons.inventory_2_outlined),
+                        label: Text(copy('receiving')),
+                      ),
+                    ],
+                    selected: const {false},
+                    onSelectionChanged: unavailable
+                        ? null
+                        : (values) {
+                            if (values.contains(true)) {
+                              widget.onOpenReceiving!();
+                            }
+                          },
+                  ),
+                ),
+              )
+            : null,
         leading: detailView
             ? IconButton(
                 key: const Key('procurement_detail_back'),
@@ -1316,7 +1353,8 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
         ),
         actions: [
           if (compact &&
-              (widget.onOpenReceiving != null &&
+              (!unifiedRequester &&
+                      widget.onOpenReceiving != null &&
                       actor['can_receive'] != false ||
                   widget.onOpenLegacy != null))
             PopupMenuButton<String>(
@@ -1325,7 +1363,8 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                   ? widget.onOpenReceiving?.call()
                   : widget.onOpenLegacy?.call(),
               itemBuilder: (_) => [
-                if (widget.onOpenReceiving != null &&
+                if (!unifiedRequester &&
+                    widget.onOpenReceiving != null &&
                     actor['can_receive'] != false)
                   PopupMenuItem(
                     value: 'receiving',
@@ -1339,6 +1378,7 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
               ],
             ),
           if (!compact &&
+              !unifiedRequester &&
               widget.onOpenReceiving != null &&
               actor['can_receive'] != false)
             TextButton(
@@ -1728,7 +1768,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
                     '${selected['request_no']}',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  for (final line in rows(selected['lines']))
+                  for (final line in procurementSortedRequestLines(
+                    rows(selected['lines']),
+                  ))
                     ListTile(
                       title: Text(
                         '${line['product_name']} · ${line['requested_quantity']} ${line['requested_unit']}',

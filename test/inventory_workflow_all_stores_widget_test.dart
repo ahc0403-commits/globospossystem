@@ -506,7 +506,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(service.listLoads, 1);
       expect(find.textContaining('PO-OPERATING'), findsWidgets);
-      await tester.tap(find.text('Orders & approvals'));
+      await tester.tap(find.text('Requests & approvals'));
       await tester.pumpAndSettle();
       expect(find.text('PR-ROOT · Draft'), findsOneWidget);
       await tester.tap(find.widgetWithText(TextButton, 'Historical orders'));
@@ -877,7 +877,7 @@ void main() {
     );
     await tester.ensureVisible(field);
     await tester.enterText(field, '7');
-    await tester.tap(find.text('Orders & approvals'));
+    await tester.tap(find.text('Requests & approvals'));
     await tester.pumpAndSettle();
     expect(find.text('Unsaved receipt'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
