@@ -42,6 +42,7 @@ class Fixture {
   int snapshotNumber = 1;
   String floor = '2F';
   String? ticketFloor;
+  Completer<void>? ticketGate;
   int active = 0;
   int maxActive = 0;
   final calls = <String>[];
@@ -124,6 +125,7 @@ class Fixture {
                   })
                 : await history!(body);
           case 'get_jeongabok_kds_tickets_v3':
+            if (ticketGate != null) await ticketGate!.future;
             final ids = List<String>.from(
               (jsonDecode(request.body) as Map)['p_queue_ids'],
             );
@@ -335,6 +337,65 @@ void main() {
       );
       await f.settle();
       expect(f.notifier.state.orders.map((o) => o.queueId), ['queue-1']);
+    },
+  );
+  test('a slow ticket cannot overwrite confirmed progress', () async {
+    final f = Fixture();
+    addTearDown(f.close);
+    await f.start();
+    f.ticketGate = Completer<void>();
+    final pending = f.notifier.applyKdsBatchForTesting([change(1, 'queue-1')]);
+    await f.settle();
+    expect(
+      f.notifier.applyRealtimeItemRowForTesting({
+        'id': 'item-1',
+        'ordered_quantity': 1,
+        'kitchen_done_quantity': 1,
+        'tray_received_quantity': 1,
+        'tray_dispatched_quantity': 1,
+        'floor_served_quantity': 1,
+      }),
+      true,
+    );
+    final assertion = expectLater(pending, throwsStateError);
+    f.ticketGate!.complete();
+    await assertion;
+    expect(f.notifier.state.orders.single.items.single.floorServedQuantity, 1);
+  });
+  test(
+    'slow history cannot replace newer progress or leave loading stuck',
+    () async {
+      final f = Fixture();
+      addTearDown(f.close);
+      await f.start();
+      final gate = Completer<http.Response>();
+      f.history = (_) => gate.future;
+      final pending = f.notifier.loadCompletedHistory();
+      await f.settle();
+      expect(
+        f.notifier.applyRealtimeItemRowForTesting({
+          'id': 'item-1',
+          'ordered_quantity': 1,
+          'kitchen_done_quantity': 1,
+          'tray_received_quantity': 1,
+          'tray_dispatched_quantity': 1,
+          'floor_served_quantity': 1,
+        }),
+        true,
+      );
+      gate.complete(
+        response({
+          'orders': [ticket(1)],
+          'has_more': false,
+        }),
+      );
+      await pending;
+      expect(
+        f.notifier.state.orders.single.items.single.floorServedQuantity,
+        1,
+      );
+      expect(f.notifier.state.completedOrders, isEmpty);
+      expect(f.notifier.state.completedHistory.loading, false);
     },
   );
   test('transient reads stop at three attempts and retain one lane', () async {

@@ -39,9 +39,9 @@ HTTP delta fixture는 빈 로그의 복구 응답을 시험했다. 100개 변경
 
 ## 검증과 재현
 
-- `test/jeongabok_kds_bounded_sync_test.dart`: 필수 이력 분리, 공유 읽기 lane, 100개 변경/중복, 제어 경계, 부분 실패, tombstone 누락, stale revision, 응답 중 재배정, 3회 재시도와 영구 오류.
+- `test/jeongabok_kds_bounded_sync_test.dart`: 필수 이력 분리, 공유 읽기 lane, 100개 변경/중복, 제어 경계, 부분 실패, tombstone 누락, stale revision, 응답 중 재배정/확정 수량 변경, 3회 재시도와 영구 오류.
 - `test/kds_realtime_sync_test.dart`: batch 처리 실패 시 cursor 보존과 전체 성공 후 저장, 기존 delta 순서·범위·복구 계약.
-- `test/emergency_fulfillment_responsive_test.dart`: 즉시 시각 알림과 최초 500ms window, 기존 화면/부분 전달/음료/콤보 계약. 관련 Flutter 테스트 총 96개 통과.
+- `test/emergency_fulfillment_responsive_test.dart`: 즉시 시각 알림과 최초 500ms window, 기존 화면/부분 전달/음료/콤보 계약. 관련 Flutter 테스트 총 98개 통과.
 - `scripts/test_jeongabok_kds_bounded_sync.sh`: SQL 범위·권한·현재 단건 카드와 동등성(전체 schema 실행), 불변 메뉴 선택·부분 수량·ready sequence·취소·픽업/배달·직접 음료·종료 세션, rollback/reapply.
 - `scripts/measure_jeongabok_kds_sync.sh <schema-only.sql> <output-dir>`: 전체 운영 schema에서 위 부하와 nested 실행 계획·응답 크기·메모리 재현.
 - 전체 저장소 검사와 exact-main 필수 GitHub Actions 성공 후 `scripts/deploy_pos_production.sh`의 DB-only 단일 migration과 web-only를 순차 실행한다.

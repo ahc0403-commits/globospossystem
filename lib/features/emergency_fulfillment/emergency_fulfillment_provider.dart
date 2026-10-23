@@ -1979,6 +1979,7 @@ class EmergencyFulfillmentNotifier
         : _bunsikHistoryCursors[page];
     final generation = ++_bunsikHistoryGeneration;
     final previous = state.completedHistory;
+    final viewRevision = _realtimeRevision;
     state = state.copyWith(
       completedHistory: KdsCompletedHistoryStatus(
         loading: true,
@@ -2010,6 +2011,9 @@ class EmergencyFulfillmentNotifier
           ? _jeongabokReads.run(request)
           : _bunsikAuxiliaryRead(request));
       if (!current()) return;
+      if (state.boundedJeongabok && viewRevision != _realtimeRevision) {
+        throw StateError('KDS_HISTORY_CHANGED_DURING_READ');
+      }
       if (state.boundedJeongabok &&
           (raw is! Map ||
               raw['sync'] is! Map ||
@@ -2713,9 +2717,13 @@ class EmergencyFulfillmentNotifier
     int minimumRevision = 0,
   }) async {
     final generation = _subscriptionGeneration;
+    final viewRevision = _realtimeRevision;
     final scope = _bunsikScope(state);
     final result = await _gateway().loadTickets(ids);
     if (!mounted || generation != _subscriptionGeneration) return;
+    if (viewRevision != _realtimeRevision) {
+      throw StateError('KDS_BATCH_CHANGED_DURING_READ');
+    }
     if (scope != _bunsikScope(state)) {
       throw StateError('KDS_BATCH_SCOPE_CHANGED');
     }
