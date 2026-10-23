@@ -1,3 +1,5 @@
+import 'misa_description_normalization.dart';
+
 /// Validation data deliberately excludes buyer contact and tax information.
 class SalesExportIssue {
   const SalesExportIssue({
@@ -161,6 +163,14 @@ List<SalesExportIssue> validateSalesExportJobs(
       }
       final line = entry;
       if (!photo) {
+        final description = '${line['invoice_name_vi'] ?? ''}'.trim();
+        if (description.isNotEmpty) {
+          try {
+            normalizeMisaDescription(description);
+          } on FormatException catch (error) {
+            add(line, 'invoice_name_vi', error.message);
+          }
+        }
         for (final field in [
           'order_item_id',
           'invoice_name_vi',

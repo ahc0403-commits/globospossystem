@@ -13,6 +13,9 @@ dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
 flutter test
 
+printf 'CHECK_REPO_STEP=misa_description_normalization_audit\n'
+python3 test/misa_description_audit_test.py
+
 printf 'CHECK_REPO_STEP=print_station_receipt_only\n'
 bash test/print_station_receipt_only_sql_test.sh
 

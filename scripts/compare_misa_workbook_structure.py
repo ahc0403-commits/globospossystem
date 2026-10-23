@@ -100,12 +100,31 @@ def main():
     parser.add_argument('before', type=Path)
     parser.add_argument('after', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--allow-description-normalization', action='store_true',
+                        help='Require an exact source-data comparison allowing only audited emoji deletion')
+    parser.add_argument('--source-manifest', type=Path, help='Independent manifest retaining original invoice_name values')
     args = parser.parse_args()
+    if args.source_manifest and not args.allow_description_normalization:
+        parser.error('--source-manifest requires --allow-description-normalization')
     before, after = inspect(args.before), inspect(args.after)
     differences = compare(before, after)
+    description_audit = None
+    if args.allow_description_normalization:
+        from misa_description_audit import verify_description_only_change, verify_source_manifest_descriptions
+        try:
+            description_audit = verify_description_only_change(args.before, args.after)
+            if args.source_manifest:
+                original_manifest = json.loads(args.source_manifest.read_text())
+                verify_source_manifest_descriptions(original_manifest, args.before)
+                description_audit.update(verify_source_manifest_descriptions(original_manifest, args.after))
+            differences = [v for v in differences if v not in ('worksheet_names', 'Export Contract:contract_keys')]
+        except (ValueError, KeyError, UnicodeError, TypeError):
+            differences.append('description_normalization:source_or_audit_mismatch')
     report = {'structure_matches': not differences, 'differences': differences,
               'before': {k: {field: val for field, val in v.items() if field in ('columns', 'rows', 'invoice_count', 'data_rows', 'invalid_data_types', 'contract')} for k, v in before.items()},
               'after': {k: {field: val for field, val in v.items() if field in ('columns', 'rows', 'invoice_count', 'data_rows', 'invalid_data_types', 'contract')} for k, v in after.items()}}
+    if description_audit is not None:
+        report['description_normalization'] = description_audit
     output = json.dumps(report, ensure_ascii=False, indent=2) + '\n'
     if args.output:
         args.output.write_text(output)

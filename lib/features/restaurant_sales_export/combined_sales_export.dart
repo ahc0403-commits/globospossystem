@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 import '../admin/einvoice_misa_workbook.dart';
+import '../admin/misa_description_normalization.dart';
 import '../photo_sales_import/photo_sales_registered_export.dart';
 import 'restaurant_sales_export.dart';
 
@@ -110,6 +111,7 @@ List<CombinedSalesExport> combineSalesExportsByTaxEntity({
 List<int> buildCombinedSalesWorkbook(
   CombinedSalesExport export, {
   String? generationId,
+  List<Map<String, dynamic>>? descriptionNormalizations,
 }) {
   if (!export.isReadyForDownload) {
     if (export.restaurant != null) {
@@ -128,7 +130,11 @@ List<int> buildCombinedSalesWorkbook(
     if (export.photo case final photo?)
       ...buildPhotoSalesRegisteredMisaJobs(photo),
   ];
-  return buildMisaPendingInvoiceWorkbook(jobs, generationId: generationId);
+  return buildMisaPendingInvoiceWorkbook(
+    jobs,
+    generationId: generationId,
+    descriptionNormalizations: descriptionNormalizations,
+  );
 }
 
 class SalesExportArtifact {
@@ -144,7 +150,12 @@ SalesExportArtifact buildCombinedSalesArtifact(
   String? batchId,
 }) {
   final id = batchId ?? const Uuid().v4();
-  final bytes = buildCombinedSalesWorkbook(export, generationId: id);
+  final descriptionNormalizations = <Map<String, dynamic>>[];
+  final bytes = buildCombinedSalesWorkbook(
+    export,
+    generationId: id,
+    descriptionNormalizations: descriptionNormalizations,
+  );
   final counts = <String, int>{};
   final gross = <String, double>{};
   void add(String store, num amount) {
@@ -164,6 +175,10 @@ SalesExportArtifact buildCombinedSalesArtifact(
   return SalesExportArtifact(bytes, {
     'format_version': 'pos-sales-xlsx-v4',
     'ledger_version': 3,
+    if (export.restaurant != null) ...{
+      'description_normalization_policy': misaDescriptionPolicy,
+      'description_normalizations': descriptionNormalizations,
+    },
     'generation_id': id,
     if (batchId != null) 'reporting_batch_id': batchId,
     'source_revision': export.sourceRevision,
