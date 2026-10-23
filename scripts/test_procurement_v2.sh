@@ -177,3 +177,7 @@ SQL
 # Requester IDs inherit both receiving stages through the real onboarding path.
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261020153000_unified_requester_receiving.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/unified_requester_receiving.test.sql"
+
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261023090000_procurement_buyer_approval_readiness.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_buyer_readiness.test.sql"
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_buyer_readiness_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
