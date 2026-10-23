@@ -211,6 +211,7 @@ void main() {
       _key,
     );
     service.overpaymentDue = 0;
+    service.chatOpen = false;
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
     expect(
@@ -268,6 +269,7 @@ void main() {
         _key,
       );
       service.pickupRefunded = true;
+      service.chatOpen = false;
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
       expect(

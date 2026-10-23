@@ -1,0 +1,9 @@
+00:00 +0: loading /Users/andreahn/globos_pos_system/test/direct_order_bank_handoff_test.dart
+00:00 +0: /Users/andreahn/globos_pos_system/test/direct_order_bank_handoff_test.dart: (setUpAll)
+00:00 +0: /Users/andreahn/globos_pos_system/test/direct_order_bank_handoff_test.dart: bank selection launches one exact transfer and handles opened=true at 320px
+00:00 +1: /Users/andreahn/globos_pos_system/test/direct_order_bank_handoff_test.dart: bank selection launches one exact transfer and handles opened=false at 320px
+00:00 +2: /Users/andreahn/globos_pos_system/test/direct_order_bank_handoff_test.dart: (tearDownAll)
+00:01 +2: /Users/andreahn/globos_pos_system/test/direct_order_requirements_test.dart: (setUpAll)
+00:01 +2: /Users/andreahn/globos_pos_system/test/direct_order_requirements_test.dart: private cashier reply has an explicit audience and needs no paper translation
+00:01 +3: /Users/andreahn/globos_pos_system/test/direct_order_requirements_test.dart: (tearDownAll)
+00:01 +3: All tests passed!

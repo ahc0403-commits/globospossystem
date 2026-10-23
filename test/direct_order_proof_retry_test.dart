@@ -44,7 +44,7 @@ void main() {
       final service = DirectOrderService(
         invoker: (body) async {
           actions.add(body['action'] as String);
-          if (body['action'] == 'proof_upload_url_v2') {
+          if (body['action'] == 'proof_upload_url_v3') {
             if (++urls == 1) {
               throw const DirectOrderException(
                 'PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE',
@@ -69,9 +69,9 @@ void main() {
       expect(photo.complete, isTrue);
       expect(uploads, 1);
       expect(actions, [
-        'proof_upload_url_v2',
-        'proof_upload_url_v2',
-        'proof_commit_v2',
+        'proof_upload_url_v3',
+        'proof_upload_url_v3',
+        'proof_commit_v3',
       ]);
     },
   );
@@ -84,7 +84,7 @@ void main() {
       final service = DirectOrderService(
         invoker: (body) async {
           bodies.add(body);
-          return body['action'] == 'proof_upload_url_v2'
+          return body['action'] == 'proof_upload_url_v3'
               ? upload
               : committed(body);
         },
@@ -102,8 +102,8 @@ void main() {
       await service.resumePaymentProof(session: session, attempt: photo);
       expect(uploads, 1);
       expect(bodies.map((b) => b['action']), [
-        'proof_upload_url_v2',
-        'proof_commit_v2',
+        'proof_upload_url_v3',
+        'proof_commit_v3',
       ]);
       expect(bodies.last['path'], photo.path);
       expect(photo.complete, isTrue);
@@ -118,7 +118,7 @@ void main() {
       var urls = 0;
       final service = DirectOrderService(
         invoker: (body) async {
-          if (body['action'] == 'proof_upload_url_v2') {
+          if (body['action'] == 'proof_upload_url_v3') {
             urls++;
             return upload;
           }
@@ -156,7 +156,7 @@ void main() {
       var uploads = 0;
       final service = DirectOrderService(
         invoker: (body) async {
-          if (body['action'] == 'proof_upload_url_v2') return upload;
+          if (body['action'] == 'proof_upload_url_v3') return upload;
           commits.add(body);
           if (commits.length == 1) {
             messages++;
@@ -227,7 +227,7 @@ void main() {
     var uploads = 0;
     final service = DirectOrderService(
       invoker: (body) async {
-        if (body['action'] == 'proof_upload_url_v2') {
+        if (body['action'] == 'proof_upload_url_v3') {
           urls++;
           return urls == 1 ? {...upload, 'token': ''} : upload;
         }

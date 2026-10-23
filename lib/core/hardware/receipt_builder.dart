@@ -395,7 +395,9 @@ class ReceiptBuilder {
     if (!isPickup) {
       bytes.addAll(generator.text('Dia chi giao hang:'));
       bytes.addAll(generator.text(_escText(formattedAddress)));
-      bytes.addAll(generator.text('Chi tiet: ${_escText(detailAddress)}'));
+      if (detailAddress.trim().isNotEmpty) {
+        bytes.addAll(generator.text('Chi tiet: ${_escText(detailAddress)}'));
+      }
     }
     bytes.addAll(
       _buildPackingHeader(
@@ -1499,7 +1501,7 @@ class QueuedDeliveryDriverReceipt {
       customerName: payload['customer_name']?.toString() ?? '-',
       customerPhone: payload['customer_phone']?.toString() ?? '-',
       formattedAddress: payload['formatted_address']?.toString() ?? '-',
-      detailAddress: payload['detail_address']?.toString() ?? '-',
+      detailAddress: payload['detail_address']?.toString() ?? '',
       items: itemRows
           .whereType<Map>()
           .map((item) {
