@@ -291,6 +291,8 @@ class AttendanceService implements PayrollDataSource {
             'employee_number': row['employee_number'],
             'full_name': row['full_name'],
             'role': row['employment_role'],
+            'photo_policy': row['photo_policy'] == true,
+            'pay_policies': row['pay_policies'],
           },
         )
         .toList(growable: false);

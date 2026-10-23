@@ -1,4 +1,4 @@
-// Extracted from POS payroll_service.dart without changing calculation rules.
+// Shared POS payroll rules, including explicitly scoped Photo policies.
 import 'dart:math';
 import 'src/time_utils.dart';
 
@@ -110,6 +110,10 @@ class StaffPayroll {
     required this.scope,
     this.lateMinutes = 0,
     this.lateReviewAmount = 0,
+    this.employmentRole = '',
+    this.hourlyRate = 0,
+    this.monthlySalary = 0,
+    this.basisComplete = true,
   });
 
   final String userId;
@@ -118,6 +122,9 @@ class StaffPayroll {
   final PayrollScope scope;
   final int lateMinutes;
   final double lateReviewAmount;
+  final double hourlyRate, monthlySalary;
+  final String employmentRole;
+  final bool basisComplete;
 
   int get totalActualMinutes =>
       dailyRecords.fold(0, (sum, record) => sum + record.actualMinutes);
@@ -258,6 +265,7 @@ class PosPayrollCalculator {
       ),
     );
 
+    final staffById = {for (final row in staff) row['user_id'].toString(): row};
     final result = <StaffPayroll>[];
     final generatedAt = DateTime.now().toUtc();
 
@@ -265,10 +273,61 @@ class PosPayrollCalculator {
       final userId = entry.key;
       final userLogs = entry.value;
       final role = userRoles[userId] ?? '';
-      final hourlyRule = hourlyRules[userId];
+      final employee = staffById[userId] ?? const <String, dynamic>{};
+      final photoPolicy = employee['photo_policy'] == true;
+      final policyRows = (employee['pay_policies'] as List? ?? const [])
+          .map((row) => Map<String, dynamic>.from(row as Map))
+          .toList();
+      final fromKey = normalizedPeriodStart.toIso8601String().substring(0, 10);
+      final toKey = periodEnd.toIso8601String().substring(0, 10);
+      final matchingPolicies =
+          policyRows
+              .where(
+                (row) =>
+                    row['effective_from'].toString().compareTo(fromKey) <= 0,
+              )
+              .toList()
+            ..sort(
+              (a, b) => b['effective_from'].toString().compareTo(
+                a['effective_from'].toString(),
+              ),
+            );
+      final policy = matchingPolicies.firstOrNull ?? const <String, dynamic>{};
+      final monthlySalary =
+          double.tryParse('${policy['monthly_salary'] ?? 0}') ?? 0;
+      final standardMinutes =
+          int.tryParse('${policy['standard_monthly_minutes'] ?? 0}') ?? 0;
+      var basisComplete =
+          !(photoPolicy &&
+              role == 'full_time' &&
+              policyRows.any(
+                (row) =>
+                    row['effective_from'].toString().compareTo(fromKey) > 0 &&
+                    row['effective_from'].toString().compareTo(toKey) <= 0,
+              ));
+      final hourlyRule = photoPolicy && role == 'full_time'
+          ? (monthlySalary > 0 && standardMinutes > 0
+                ? <String, dynamic>{
+                    'hourly_rate': monthlySalary * 60 / standardMinutes,
+                    'scheduled_start': '09:00',
+                    'night_start': '22:00',
+                    'night_multiplier': policy['overtime_multiplier'] ?? 1.5,
+                    'holiday_multiplier': 3,
+                    'exclude_sunday': false,
+                  }
+                : null)
+          : hourlyRules[userId];
+      if (photoPolicy && role == 'full_time' && hourlyRule == null) {
+        basisComplete = false;
+      }
       final hourlyRate =
           double.tryParse('${hourlyRule?['hourly_rate'] ?? 0}') ?? 0;
 
+      if (photoPolicy &&
+          role == 'part_timer' &&
+          (hourlyRule == null || hourlyRate != 25000)) {
+        basisComplete = false;
+      }
       final pairs = pairLogs(userLogs);
       final records = <DailyRecord>[];
       var lateMinutes = 0;
@@ -283,7 +342,8 @@ class PosPayrollCalculator {
           double.tryParse('${hourlyRule?['night_multiplier'] ?? 1}') ?? 1;
       final holidayMultiplier =
           double.tryParse('${hourlyRule?['holiday_multiplier'] ?? 1}') ?? 1;
-      final excludeSunday = hourlyRule?['exclude_sunday'] != false;
+      final excludeSunday =
+          !photoPolicy && hourlyRule?['exclude_sunday'] != false;
       final lateThreshold =
           int.tryParse('${hourlyRule?['late_threshold_minutes'] ?? 60}') ?? 60;
       final lateReviewMultiplier =
@@ -304,7 +364,11 @@ class PosPayrollCalculator {
         final isComplete = clockIn != null && clockOut != null;
         final appliesDailyAllowance =
             isComplete && allowanceDatesApplied.add(date);
-        final mealAllowance = appliesDailyAllowance
+        final mealAllowance =
+            appliesDailyAllowance &&
+                (!photoPolicy ||
+                    (role == 'part_timer' &&
+                        allowance?['is_split_shift'] == true))
             ? double.tryParse('${allowance?['meal_allowance_amount'] ?? 0}') ??
                   0
             : 0.0;
@@ -324,7 +388,25 @@ class PosPayrollCalculator {
         var nightMinutes = 0;
         var holidayMinutes = 0;
         if (isComplete) {
-          if (hourlyRule != null) {
+          if (photoPolicy && role == 'full_time' && hourlyRule != null) {
+            // Full-time proration follows the recorded interval. A guessed
+            // part-time shift must not trim an employee's worked hours.
+            final calculation = calcRuleBasedHourlyAmount(
+              clockIn: clockIn,
+              clockOut: clockOut,
+              hourlyRate: hourlyRate,
+              nightStartMinute: nightStart,
+              nightMultiplier: nightMultiplier,
+              holidayMultiplier: holidayMultiplier,
+              excludeSunday: excludeSunday,
+              holidays: holidays,
+            );
+            amount = calculation.amount;
+            nightMinutes = calculation.nightMinutes;
+            holidayMinutes = calculation.holidayMinutes;
+            overtimePayableMinutes = nightMinutes;
+            regularPayableMinutes = actualMinutes - overtimePayableMinutes;
+          } else if (hourlyRule != null) {
             final calculation = calcScheduledRuleBasedHourlyAmount(
               clockIn: clockIn,
               clockOut: clockOut,
@@ -393,6 +475,11 @@ class PosPayrollCalculator {
             ),
             lateMinutes: lateMinutes,
             lateReviewAmount: lateReviewAmount,
+
+            monthlySalary: monthlySalary,
+            hourlyRate: hourlyRate,
+            employmentRole: role,
+            basisComplete: basisComplete,
           ),
         );
       }
@@ -687,7 +774,8 @@ class PosPayrollCalculator {
 
   int _toMinutes(String hhmm) {
     final p = hhmm.split(':');
-    if (p.length != 2) return 0;
+    // PostgreSQL time fields include seconds (HH:mm:ss).
+    if (p.length != 2 && p.length != 3) return 0;
     final h = int.tryParse(p[0]) ?? 0;
     final m = int.tryParse(p[1]) ?? 0;
     return h * 60 + m;

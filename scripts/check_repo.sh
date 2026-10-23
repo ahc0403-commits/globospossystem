@@ -68,6 +68,9 @@ bash scripts/test_attendance_storage_policy.sh
 printf 'CHECK_REPO_STEP=office_store_batch_sql\n'
 bash scripts/test_office_store_batch_reads.sh
 
+printf 'CHECK_REPO_STEP=photo_office_operations_sql\n'
+bash test/photo_office_operations_sql_test.sh
+
 printf 'CHECK_REPO_STEP=daily_table_operational_reset_sql\n'
 bash scripts/test_daily_table_operational_reset.sh
 
