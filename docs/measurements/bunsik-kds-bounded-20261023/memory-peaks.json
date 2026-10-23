@@ -1,0 +1,7 @@
+{
+  "sampled_container_peak_mib": {
+    "database": 451.4,
+    "postgrest": 171.5
+  },
+  "method": "docker stats sampled during HTTP runs; includes PostgreSQL shared/cache memory; not Flutter heap"
+}
