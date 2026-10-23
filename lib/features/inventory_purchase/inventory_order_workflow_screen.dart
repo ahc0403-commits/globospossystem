@@ -731,7 +731,11 @@ class _InventoryOrderWorkflowScreenState
               value: _WorkflowSection.orders,
               icon: const Icon(Icons.shopping_cart_outlined),
               label: Text(
-                _text(ko: '발주·승인', en: 'Orders & approvals', vi: 'Đơn & duyệt'),
+                _text(
+                  ko: '구매요청·승인',
+                  en: 'Requests & approvals',
+                  vi: 'Yêu cầu / duyệt',
+                ),
               ),
             ),
             ButtonSegment(
