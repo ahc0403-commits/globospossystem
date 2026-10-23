@@ -87,6 +87,8 @@ printf 'CHECK_REPO_STEP=kds_partial_item_handoff_sql\n'
 bash scripts/test_kds_partial_item_handoff.sh
 printf 'CHECK_REPO_STEP=bunsik_kds_bounded_history_sql\n'
 bash scripts/test_bunsik_kds_history.sh
+printf 'CHECK_REPO_STEP=jeongabok_kds_bounded_sync_sql\n'
+bash scripts/test_jeongabok_kds_bounded_sync.sh
 printf 'CHECK_REPO_STEP=jeongabok_qr_full_history_sql\n'
 bash scripts/test_jeongabok_qr_full_history.sh
 

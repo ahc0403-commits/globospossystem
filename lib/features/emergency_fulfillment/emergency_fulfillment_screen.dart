@@ -249,10 +249,19 @@ class _EmergencyFulfillmentScreenState
     for (final notice in notices) {
       _pendingAdditionalOrderNotices[notice.orderId] = notice;
     }
-    _additionalOrderAlarmTimer?.cancel();
+    final bounded = ref.read(emergencyFulfillmentProvider).boundedJeongabok;
+    if (bounded) {
+      _flashImmediately();
+      if (_additionalOrderAlarmTimer != null) return;
+    } else {
+      _additionalOrderAlarmTimer?.cancel();
+    }
     _additionalOrderAlarmTimer = Timer(
-      emergencyAdditionalOrderAlarmCoalesceDelay,
+      bounded
+          ? const Duration(milliseconds: 500)
+          : emergencyAdditionalOrderAlarmCoalesceDelay,
       () {
+        _additionalOrderAlarmTimer = null;
         final pending = _pendingAdditionalOrderNotices.values.toList(
           growable: false,
         )..sort((left, right) => left.queueNo.compareTo(right.queueNo));
@@ -273,13 +282,25 @@ class _EmergencyFulfillmentScreenState
         stationType: notice.stationType,
       );
     }
-    _handoffAlarmTimer?.cancel();
-    _handoffAlarmTimer = Timer(emergencyHandoffAlarmCoalesceDelay, () {
-      final pending = _pendingHandoffNotices.values.toList(growable: false)
-        ..sort((left, right) => left.queueNo.compareTo(right.queueNo));
-      _pendingHandoffNotices.clear();
-      _triggerHandoffAlarm(pending);
-    });
+    final bounded = ref.read(emergencyFulfillmentProvider).boundedJeongabok;
+    if (bounded) {
+      _flashImmediately();
+      if (_handoffAlarmTimer != null) return;
+    } else {
+      _handoffAlarmTimer?.cancel();
+    }
+    _handoffAlarmTimer = Timer(
+      bounded
+          ? const Duration(milliseconds: 500)
+          : emergencyHandoffAlarmCoalesceDelay,
+      () {
+        _handoffAlarmTimer = null;
+        final pending = _pendingHandoffNotices.values.toList(growable: false)
+          ..sort((left, right) => left.queueNo.compareTo(right.queueNo));
+        _pendingHandoffNotices.clear();
+        _triggerHandoffAlarm(pending);
+      },
+    );
   }
 
   void _queueFloorDirectBeverageAlarm(
@@ -289,15 +310,33 @@ class _EmergencyFulfillmentScreenState
       0,
       (total, notice) => total + notice.itemCount,
     );
-    _floorDirectBeverageAlarmTimer?.cancel();
+    final bounded = ref.read(emergencyFulfillmentProvider).boundedJeongabok;
+    if (bounded) {
+      _flashImmediately();
+      if (_floorDirectBeverageAlarmTimer != null) return;
+    } else {
+      _floorDirectBeverageAlarmTimer?.cancel();
+    }
     _floorDirectBeverageAlarmTimer = Timer(
-      emergencyFloorDirectBeverageAlarmCoalesceDelay,
+      bounded
+          ? const Duration(milliseconds: 500)
+          : emergencyFloorDirectBeverageAlarmCoalesceDelay,
       () {
+        _floorDirectBeverageAlarmTimer = null;
         final itemCount = _pendingFloorDirectBeverageCount;
         _pendingFloorDirectBeverageCount = 0;
         _triggerFloorDirectBeverageAlarm(itemCount);
       },
     );
+  }
+
+  void _flashImmediately() {
+    if (!mounted) return;
+    setState(() => _flashing = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _flashing = false);
+    });
   }
 
   Future<void> _triggerAlarm(Iterable<String> tableNumbers) async {
@@ -565,7 +604,7 @@ class _EmergencyFulfillmentScreenState
                   final notifier = ref.read(
                     emergencyFulfillmentProvider.notifier,
                   );
-                  if (_showRecent && state.restaurantId == bunsikKdsStoreId) {
+                  if (_showRecent && state.usesBoundedHistory) {
                     await notifier.loadCompletedHistory();
                   } else {
                     await notifier.load(showLoading: false);
@@ -696,7 +735,7 @@ class _EmergencyFulfillmentScreenState
     final recentByOrderId = <String, EmergencyFulfillmentOrder>{
       for (final order in state.completedOrders) order.orderId: order,
       for (final order
-          in state.restaurantId == bunsikKdsStoreId
+          in state.usesBoundedHistory
               ? const <EmergencyFulfillmentOrder>[]
               : state.orders)
         if (order.isRecentlyCompleteAt(stationType)) order.orderId: order,
@@ -777,7 +816,7 @@ class _EmergencyFulfillmentScreenState
                 _showRecent = showRecent;
                 _page = 0;
               });
-              if (showRecent && state.restaurantId == bunsikKdsStoreId) {
+              if (showRecent && state.usesBoundedHistory) {
                 unawaited(
                   ref
                       .read(emergencyFulfillmentProvider.notifier)
@@ -786,7 +825,7 @@ class _EmergencyFulfillmentScreenState
               }
             },
           ),
-          if (_showRecent && state.restaurantId == bunsikKdsStoreId) ...[
+          if (_showRecent && state.usesBoundedHistory) ...[
             const SizedBox(height: 8),
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -856,11 +895,11 @@ class _EmergencyFulfillmentScreenState
           Expanded(
             child: orders.isEmpty
                 ? _showRecent &&
-                          state.restaurantId == bunsikKdsStoreId &&
+                          state.usesBoundedHistory &&
                           state.completedHistory.loading
                       ? const Center(child: CircularProgressIndicator())
                       : _showRecent &&
-                            state.restaurantId == bunsikKdsStoreId &&
+                            state.usesBoundedHistory &&
                             state.completedHistory.error != null
                       ? _EmergencyLockedState(
                           icon: Icons.sync_problem_rounded,

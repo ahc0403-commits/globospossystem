@@ -1,0 +1,7 @@
+{
+  "sampled_container_peak_mib": {
+    "database": 987.8,
+    "postgrest": 129.0
+  },
+  "method": "docker stats; includes DB cache, excludes Flutter heap"
+}

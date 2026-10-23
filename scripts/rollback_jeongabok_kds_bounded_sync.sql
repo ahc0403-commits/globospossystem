@@ -1,0 +1,16 @@
+BEGIN;
+DROP FUNCTION public.get_jeongabok_kds_bootstrap_v3();
+DROP FUNCTION public.get_jeongabok_kds_completed_page_v1(integer,timestamptz,uuid);
+DROP FUNCTION public.jeongabok_kds_station_timings_v3(jsonb,text);
+DROP FUNCTION public.jeongabok_kds_completed_core_v1(integer,timestamptz,uuid);
+DROP FUNCTION public.get_jeongabok_kds_tickets_v3(uuid[]);
+DROP FUNCTION public.jeongabok_kds_tickets_core_v3(uuid[]);
+DROP FUNCTION public.jeongabok_kds_enrich_orders_v1(jsonb,text);
+DROP FUNCTION public.jeongabok_kds_add_component_progress_v1("jsonb");
+DROP FUNCTION public.jeongabok_kds_localize_orders_v1("jsonb");
+DROP FUNCTION public.jeongabok_kds_batch_timings_v1(jsonb);
+DROP FUNCTION public.get_kds_sync_config();
+ALTER FUNCTION public.get_kds_sync_config_pre_jeongabok() RENAME TO get_kds_sync_config;
+GRANT EXECUTE ON FUNCTION public.get_kds_sync_config() TO authenticated;
+NOTIFY pgrst,'reload schema';
+COMMIT;
