@@ -58,6 +58,8 @@ bash scripts/check_repo.sh
 
 전체 검증은 커밋 후 깨끗한 후보 SHA에서 기존 로컬 Linux 계약으로 수행한다.
 
+전체 회귀에서 기존 실제 HTTP 테스트가 부하·에뮬레이션 환경의 연결까지 100ms 안에 완료된다고 가정해 실패했다. 제품의 제한시간 코드는 바꾸지 않고, 테스트의 호출 제한을 2초·작업 제한을 10초로 분리했다. 서버 연결과 5초 이내 취소를 계속 검사하므로 작업 제한까지 기다리는 결함을 허용하지 않으며, 실패하더라도 테스트 서버·클라이언트를 정리한다.
+
 ```bash
 python3 -B scripts/pos_local_release_gate.py run --kind candidate \
   --output /absolute/new/private/late-invoice-candidate-evidence
