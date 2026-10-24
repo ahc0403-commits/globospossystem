@@ -45,6 +45,24 @@ function ordinaryJob(email: string, phone: string, payment = "TM") {
     }],
   };
 }
+Deno.test("registered buyer invoice accepts omitted phone and preserves a leading zero", () => {
+  for (const phone of ["", "02800000000"]) {
+    const job = ordinaryJob("buyer@example.invalid", phone, "CK");
+    job.buyer_snapshot = {
+      ...job.buyer_snapshot,
+      unit_name: "Fixture company",
+      ...{ tax_code: "0012345678", address: "Fixture address" },
+    };
+    const payload = buildCashRegisterInvoicePayload({
+      ...job,
+      buyer_kind: "registered",
+    }, seller);
+    validateCashRegisterInvoicePayload(payload);
+    const invoice = (payload.InvoiceData as any[])[0];
+    assert(invoice.BuyerTaxCode === "0012345678");
+    assert((invoice.BuyerPhoneNumber ?? "") === phone);
+  }
+});
 for (
   const [email, phone] of [
     ["fixture@example.com", "0123456789"],
