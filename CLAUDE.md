@@ -183,3 +183,15 @@ No submitting-operator key or self-reported status is equivalent evidence.
 The workflow/event-policy files under docs are proposals only; remote settings,
 push/PR/merge/deployment and actual GitHub execution remain separately gated.
 See `docs/pos/local-verification/INDEPENDENT_RESULT_VERIFICATION_KO.md`.
+
+## Source publication and normal operational adoption authorization (2026-10-24)
+
+The owner subsequently requested commit/push and normal official operational
+adoption. After full local verification of the final actual candidate SHA,
+source publication, PR and normal merge are authorized when they do not start
+GitHub application tests. Remote security settings, required-check relaxation,
+admin bypass and new credentials remain outside that general authorization.
+Keep the unconfigured independent-result verifier disabled; it is not a new
+release prerequisite. If existing branch protection blocks normal merge, report
+the exact unexecuted step and a concrete before/after security-policy decision.
+A tooling-only release does not require an unnecessary application redeploy.
