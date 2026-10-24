@@ -16,7 +16,7 @@ simulate_release() {
       [[ "${RELEASE_TEST_FAIL_PHASE:-}" != "$1" ]] || return 47
     }
     confirm_production() { record confirm; }
-    preflight() { record clean; record fresh-main; record exact-sha-ci; }
+    preflight() { record clean; record fresh-main; record exact-sha-local; }
     load_env() {
       record env
       if [[ "${RELEASE_TEST_SKIP_AUTH_ENV:-0}" == 1 ]]; then SKIP_AUTH_CHECK=1; fi
@@ -49,7 +49,7 @@ cat >"$RELEASE_TEST_TMP/expected-web" <<'EOF'
 confirm
 clean
 fresh-main
-exact-sha-ci
+exact-sha-local
 env
 client-config
 origin
@@ -73,7 +73,7 @@ steps=open(sys.argv[1]).read().splitlines()
 assert steps.index('checks') < steps.index('edge-deploy') < steps.index('db-apply') < steps.index('web-deploy') < steps.index('login')
 PY
 
-for phase in clean fresh-main exact-sha-ci auth checks; do
+for phase in clean fresh-main exact-sha-local auth checks; do
   : >"$RELEASE_TEST_LOG"
   if RELEASE_TEST_FAIL_PHASE="$phase" simulate_release --web-only --yes >"$RELEASE_TEST_TMP/failure" 2>&1; then
     printf 'ERROR: Failed gate allowed a release: %s\n' "$phase" >&2
