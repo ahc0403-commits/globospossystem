@@ -8,6 +8,9 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import socket
+import socketserver
+import threading
 import sys
 import tempfile
 import unittest
@@ -16,7 +19,7 @@ from unittest.mock import patch
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
-from evidence import InvalidEvidence, evidence_file, flutter_counts, parse_counts, sha256
+from evidence import InvalidEvidence, evidence_file, flutter_counts, parse_counts, sha256, deno_counts, node_counts
 import pos_local_release_gate as gate
 
 loader = importlib.machinery.SourceFileLoader('fixture_docker', str(HERE / 'docker'))
@@ -31,6 +34,11 @@ def suite(name='real test', skipped=False, terminal=True):
     if terminal:
         events.append({'type': 'done', 'success': True})
     return '\n'.join(json.dumps(x) for x in events) + '\n'
+
+
+def summaries():
+    return ('ok | 4 passed | 0 failed (20ms)\n' * 8 +
+            '# tests 3\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n')
 
 
 class ProcessOutputTests(unittest.TestCase):
@@ -82,7 +90,7 @@ class ProcessOutputTests(unittest.TestCase):
             (root / 'scripts').mkdir()
             (root / 'scripts/check_repo.sh').write_text(
                 "printf 'CHECK_REPO_STEP=first\\n'\nprintf 'CHECK_REPO_STEP=store_operating_current_schema_upgrade\\n'\nprintf 'CHECK_REPO_STEP=last\\n'\n")
-            text = 'CHECK_REPO_STEP=first\n' + suite() * 3 + 'CHECK_REPO_STEP=last\nCHECK_REPO_COMPLETE\n'
+            text = 'CHECK_REPO_STEP=first\n' + suite() * 3 + summaries() + 'CHECK_REPO_STEP=last\nCHECK_REPO_COMPLETE\n'
             self.assertEqual(parse_counts({'format':'repository'}, text, root)['completedSuites'], 3)
             for broken in [text.replace('CHECK_REPO_STEP=last\n', ''), text.replace('last', 'first'),
                            text.replace('CHECK_REPO_COMPLETE\n', ''), text + 'late unverified command\n']:
@@ -94,6 +102,35 @@ class ProcessOutputTests(unittest.TestCase):
         for text in ['Ran 0 tests in 0.1s\nOK', 'Ran 3 tests in 0.1s\nOK (skipped=1)', 'not ok 1 - role leak']:
             with self.assertRaises(InvalidEvidence):
                 parse_counts({'format':'unittest'}, text, HERE)
+
+    def test_deno_requires_nonempty_complete_suites_without_ignored_tests(self):
+        self.assertEqual(deno_counts('ok | 4 passed | 0 failed (2ms)')['passed'], 4)
+        for text in ['', 'ok | 0 passed | 0 failed', 'ok | 4 passed | 1 failed',
+                     'ok | 4 passed | 0 failed | 1 ignored', 'ok | 4 passed | 0 failed\n'*2]:
+            with self.subTest(text=text), self.assertRaises(InvalidEvidence): deno_counts(text)
+
+    def test_node_requires_all_counters_and_no_skipped_or_failed_tests(self):
+        text = summaries().split('# tests')[1]
+        text = '# tests'+text
+        self.assertEqual(node_counts(text)['passed'], 3)
+        for broken in [text.replace('# fail 0','# fail 1'), text.replace('# skipped 0','# skipped 1'),
+                       text.replace('# pass 3','# pass 0'), text.replace('# todo 0\n','')]:
+            with self.subTest(text=broken), self.assertRaises(InvalidEvidence): node_counts(broken)
+
+    def test_real_loopback_proxy_relays_bytes_to_fixture_and_closes_on_failure(self):
+        class Echo(socketserver.BaseRequestHandler):
+            def handle(self):
+                self.request.sendall(self.request.recv(1024).upper())
+        with socketserver.ThreadingTCPServer(('127.0.0.1',0), Echo) as server:
+            threading.Thread(target=server.serve_forever,daemon=True).start()
+            listener = socket.socket(); listener.bind(('127.0.0.1',0)); listener.listen(4)
+            process = subprocess.Popen([sys.executable,'-B',str(HERE/'port_proxy.py'),str(listener.fileno()),
+                '127.0.0.1',str(server.server_address[1])],pass_fds=(listener.fileno(),))
+            try:
+                with socket.create_connection(listener.getsockname(),timeout=5) as client:
+                    client.sendall(b'fixture-only'); self.assertEqual(client.recv(1024),b'FIXTURE-ONLY')
+            finally:
+                process.terminate(); process.wait(timeout=5); listener.close(); server.shutdown()
 
 
 class IntegrityTests(unittest.TestCase):
@@ -110,7 +147,10 @@ class IntegrityTests(unittest.TestCase):
             'sourceBefore':self.source, 'sourceAfter':self.source,
             'contractSha256':gate.contract_hash(self.root), 'steps':[]}
         linux = dict(self.recipe['tools'], osId='ubuntu', osVersion='24.04', arch='x86_64')
-        self.value['environment'] = {'linux':linux, 'image':{'Os':'linux','Architecture':'amd64'}}
+        self.value['environment'] = {'linux':linux, 'image':{'Os':'linux','Architecture':'amd64'},
+            'fixtureImages':[{'Id':'sha256:'+'e'*64,'Os':'linux','Architecture':'arm64','RepoDigests':[]}]}
+        nested = self.directory/'nested'; nested.mkdir()
+        (nested/'fixture-images.jsonl').write_text(json.dumps({'runId':'c'*32,'imageId':'sha256:'+'e'*64})+'\n')
         for name, text in [('imageBuild', 'build succeeded\n'), ('toolProbe', json.dumps(linux)+'\n')]:
             log = self.directory / (name + '.log'); log.write_text(text)
             self.value[name] = {'exitCode':0,'log':log.name,'logSha256':sha256(log)}
@@ -120,7 +160,8 @@ class IntegrityTests(unittest.TestCase):
         markers.remove('store_operating_current_schema_upgrade')
         outputs = {'unittest':'Ran 12 tests in 0.1s\n\nOK\n', 'flutter':suite(),
             'command':'Actual isolated SQL assertions completed\n',
-            'repository':''.join('CHECK_REPO_STEP='+x+'\n' for x in markers)+suite()*3+'CHECK_REPO_COMPLETE\n'}
+            'deno':'ok | 4 passed | 0 failed (20ms)\n',
+            'repository':''.join('CHECK_REPO_STEP='+x+'\n' for x in markers)+suite()*3+summaries()+'CHECK_REPO_COMPLETE\n'}
         for step in self.recipe['steps']:
             log = self.directory / (step['id'] + '.log'); log.write_text(outputs[step['format']])
             self.value['steps'].append({'id':step['id'],'argv':step['argv'],'sourceSha':'a'*40,

@@ -19,8 +19,8 @@ An output directory must be new and outside the source checkout. Keep the full
 directory together. `receipt.json` records source SHA/tree/all tracked input
 hashes, environment/tool/package versions, the local image ID, recipe/runner
 hashes, UTC start/end times, real process exit codes, counts and log/artifact
-hashes. Counts distinguish visible Flutter tests, Python assertions, completed
-repository stages and SQL commands. SQL assertions and performance measurements
+hashes. Counts distinguish visible Flutter tests, Deno/Node tests, Python assertions,
+completed repository stages and SQL commands. SQL assertions and performance measurements
 remain in the complete logs; a command count is not an SQL assertion count.
 
 The official `scripts/deploy_pos_production.sh` preflight always executes a new
@@ -46,8 +46,11 @@ The machine-readable recipe is `scripts/local_verification/recipe.json`:
    lint and type checks, all procurement/inventory and API fixtures, repository
    secret scan, npm audit, production deploy/migration regressions, web worker
    compilation and complete Flutter web release build, Git whitespace checks.
-3. Real Linux Chrome independent-terminal authentication tests.
-4. The former restaurant-finalization workflow's isolated regression script.
+3. The official deployer's additional password-lifecycle, SePay webhook,
+   emergency-fulfillment and public-receipt Edge security test suites. Each
+   requires a nonempty complete Deno summary with no failures or ignored tests.
+4. Real Linux Chrome independent-terminal authentication tests.
+5. The former restaurant-finalization workflow's isolated regression script.
 
 The inventory and procurement workflow commands already run in check_repo and
 are not omitted. All five original workflows, including their SDK hashes and
@@ -62,6 +65,8 @@ need SQL fixture environment must later succeed under exactly the same names
 in the real SQL/API suites. Any other skipped mandatory test fails. The two
 existing Windows-only probes are recorded as not applicable on Linux; they
 are not counted as passes. The separate browser suite permits no skips.
+Deno and Node summaries must also contain nonempty completed tests and no
+failure, cancellation, ignored, skipped or pending cases.
 
 The existing optional `STORE_OPERATING_UPGRADE_SCHEMA` export test is outside
 the former required workflow and is not fabricated. This recipe copies no
@@ -88,7 +93,16 @@ The fixture Docker wrapper labels every new test container/network with the
 unique run ID. It rejects collisions, unowned execution/removal and unreviewed
 Docker operations. Cleanup selects only the current run's label; it never
 prunes the engine or stops another task's DB. Existing test scripts retain
-their fail-fast SQL and cleanup behavior. Unexpected fixture operations fail
+their fail-fast SQL and cleanup behavior. Actual fixture image IDs, registry
+digests and OS/architecture are recorded in addition to the tool image; Linux
+DB images may be native arm64 on an Apple host and are not mislabeled x64.
+
+The tool container uses its own bridge namespace. A loopback-only TCP proxy
+connects to the verified owned fixture's private IP; it does not assume Docker
+Desktop host-loopback publishing is reachable. The tool joins only networks
+labeled for its current run and disconnects before their cleanup. Existing
+fixture ports stay bound to host loopback. No public listener is added.
+Unexpected fixture operations fail
 closed and require a reviewed wrapper update.
 
 ## Windows and operational scope

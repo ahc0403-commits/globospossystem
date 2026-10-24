@@ -28,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ['scripts/local_verification/recipe.json',
             'scripts/local_verification/Dockerfile',
             'scripts/local_verification/evidence.py',
-            'scripts/local_verification/docker', 'scripts/pos_local_release_gate.py']
+            'scripts/local_verification/docker', 'scripts/local_verification/port_proxy.py',
+            'scripts/pos_local_release_gate.py']
 
 
 def now():
@@ -160,6 +161,11 @@ def verify(directory, root=ROOT, kind=None, run_id=None):
         log = evidence_file(directory, step['log'])
         require(sha256(log) == step['logSha256'], 'Log missing/tampered')
         require(parse_counts(fixed, log.read_text(errors='replace'), root) == step['counts'], 'False assertion counts')
+    fixtures = [json.loads(line) for line in evidence_file(directory, 'nested/fixture-images.jsonl').read_text().splitlines()]
+    require(fixtures and all(x['runId'] == value['runId'] for x in fixtures), 'Foreign/missing fixture ownership')
+    require({x['imageId'] for x in fixtures} == {x['Id'] for x in value['environment']['fixtureImages']},
+            'Missing DB/fixture image identities')
+    require(all(x['Os'] == 'linux' for x in value['environment']['fixtureImages']), 'Wrong fixture OS')
     require(value.get('artifacts'), 'Missing build artifacts')
     names = set()
     for artifact in value['artifacts']:
@@ -195,7 +201,7 @@ def run(directory, kind, root=ROOT):
              'startedAt': now(), 'timezone': 'UTC', 'sourceBefore': before,
              'contractSha256': contract_hash(root), 'completed': False, 'status': 'RUNNING',
              'steps': [], 'environment': {'host': {'os': platform.system(),
-              'arch': platform.machine(), 'python': platform.python_version(),
+              'arch': platform.machine(), 'release': platform.release(), 'python': platform.python_version(),
               'docker': checked(['docker', '--version'])}},
              'scope': 'Web/server release. Native Windows package requires its unchanged native build path; Linux exclusions are not PASS.'}
     write_receipt(directory, value)
@@ -217,12 +223,13 @@ def run(directory, kind, root=ROOT):
             checked(['git', 'checkout', '--quiet', '--detach', before['sha']], snapshot)
             require(source(snapshot) == before, 'Snapshot differs from committed source')
             uid = os.getuid()
-            checked(['docker', 'run', '-d', '--name', name, '--network', 'host', '--group-add', '0',
+            checked(['docker', 'run', '-d', '--name', name, '--label', 'pos.local.verification=' + run_id, '--group-add', '0',
                      '--user', 'root', '--shm-size', '1g',
                      '-v', '/var/run/docker.sock:/var/run/docker.sock',
                      '-v', str(snapshot) + ':' + str(snapshot),
                      '-v', str(directory) + ':' + str(directory),
                      '--env', 'POS_LOCAL_RUN_ID=' + run_id,
+                     '--env', 'POS_LOCAL_TOOL_CONTAINER=' + name,
                      '--env', 'POS_VERIFICATION_ARTIFACTS=' + str(directory / 'nested'),
                      '--env', 'PATH=' + str(snapshot / 'scripts/local_verification') + ':' +
                        '/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin',
@@ -246,6 +253,13 @@ def run(directory, kind, root=ROOT):
                 record['counts'] = parse_counts(step, (directory / record['log']).read_text(errors='replace'), snapshot)
                 require(source(snapshot) == before == source(root), 'Source changed during verification')
                 write_receipt(directory, value)
+            fixtures = [json.loads(line) for line in
+                        (directory / 'nested/fixture-images.jsonl').read_text().splitlines()]
+            require(fixtures and all(x['runId'] == run_id for x in fixtures), 'Missing/foreign fixture image evidence')
+            image_ids = sorted({x['imageId'] for x in fixtures})
+            images = json.loads(checked(['docker', 'image', 'inspect'] + image_ids))
+            value['environment']['fixtureImages'] = [
+                {k: x[k] for k in ['Id', 'Os', 'Architecture', 'RepoDigests']} for x in images]
             shutil.copytree(snapshot / 'build/web', directory / 'artifacts/web')
             value['artifacts'] = [{'path': str(f.relative_to(directory)), 'sha256': sha256(f), 'bytes': f.stat().st_size}
                                   for area in ['artifacts', 'nested']

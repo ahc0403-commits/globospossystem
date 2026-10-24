@@ -80,9 +80,33 @@ def flutter_counts(output, suites=1, repository=False):
             'unit': 'visible Flutter tests; native exclusions are not PASS'}
 
 
+def deno_counts(output, suites=1):
+    plain = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', output)
+    summaries = re.findall(r'(?m)^ok \| (\d+) passed \| (\d+) failed(?: \| (\d+) ignored)?', plain)
+    require(len(summaries) == suites, 'Missing/extra Deno suite completion')
+    require(all(int(p) > 0 and int(f) == 0 and int(i or 0) == 0 for p,f,i in summaries),
+            'Deno assertions missing/failed/ignored')
+    return {'passed':sum(int(x[0]) for x in summaries), 'failed':0, 'skipped':0,
+            'completedSuites':len(summaries), 'unit':'Deno tests'}
+
+
+def node_counts(output):
+    plain = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', output)
+    counters = {key:re.findall(r'(?m)^# '+key+r' (\d+)$', plain)
+                for key in ['tests','pass','fail','cancelled','skipped','todo']}
+    require(all(len(v) == 1 for v in counters.values()), 'Missing/duplicate Node test completion')
+    values = {key:int(v[0]) for key,v in counters.items()}
+    require(values['tests'] == values['pass'] > 0 and
+            all(values[k] == 0 for k in ['fail','cancelled','skipped','todo']),
+            'Node tests missing/failed/skipped/incomplete')
+    return {'passed':values['pass'], 'failed':0, 'skipped':0, 'unit':'Node tests'}
+
+
 def parse_counts(step, output, root):
     require(output.strip(), 'Empty process log')
     require(not re.search(r'^not ok\b', output, re.M), 'Failed TAP assertion')
+    if step['format'] == 'deno':
+        return deno_counts(output)
     if step['format'] == 'flutter':
         return flutter_counts(output)
     if step['format'] == 'repository':
@@ -97,6 +121,8 @@ def parse_counts(step, output, root):
         require(output.count('\nCHECK_REPO_COMPLETE\n') == 1, 'Invalid repository completion')
         counts = flutter_counts(output, suites=3, repository=True)
         counts['repositoryStages'] = len(actual)
+        counts['deno'] = deno_counts(output, suites=8)
+        counts['node'] = node_counts(output)
         return counts
     if step['format'] == 'unittest':
         count = re.search(r'^Ran (\d+) tests? in ', output, re.M)
