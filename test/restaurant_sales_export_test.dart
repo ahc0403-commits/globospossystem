@@ -217,18 +217,20 @@ void main() {
     expect(awaiting.receipts.last.issues, ['RED_INVOICE_NOT_READY']);
   });
 
-  test('blocks download when Red Invoice delivery contacts are missing', () {
+  test('requires the delivery email while allowing a blank buyer phone', () {
     final payload = _validPayload();
     final receipts = payload['receipts']! as List<Map<String, Object?>>;
-    receipts.last['buyer_email'] = '';
     receipts.last['buyer_phone'] = '';
+
+    final phoneFree = _fixtureExport(payload);
+    expect(phoneFree.isReadyForDownload, isTrue);
+    expect(phoneFree.receipts.last.issues, isEmpty);
+
+    receipts.last['buyer_email'] = '';
 
     final export = _fixtureExport(payload);
     expect(export.isReadyForDownload, isFalse);
-    expect(export.receipts.last.issues, [
-      'MISSING_BUYER_EMAIL',
-      'MISSING_BUYER_PHONE',
-    ]);
+    expect(export.receipts.last.issues, ['MISSING_BUYER_EMAIL']);
   });
 
   test('keeps separate tax rows under one receipt number', () {
