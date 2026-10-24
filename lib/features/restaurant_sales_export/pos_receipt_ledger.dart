@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../red_invoice_intake/buyer_information_form.dart';
 import '../red_invoice_intake/buyer_number.dart';
+import '../red_invoice_intake/late_invoice_dialog.dart';
+import '../red_invoice_intake/late_invoice_service.dart';
 import 'restaurant_sales_export.dart';
 import 'pos_receipt_ledger_service.dart';
 
@@ -16,6 +18,8 @@ Future<void> showPosReceiptLedger(
   required bool red,
   PosReceiptLedgerService? service,
   CompanyTaxLookupService? lookupService,
+  VoidCallback? onChanged,
+  LateInvoiceService? lateInvoiceService,
 }) => showDialog<void>(
   context: context,
   builder: (_) => PosReceiptLedger(
@@ -23,6 +27,8 @@ Future<void> showPosReceiptLedger(
     red: red,
     service: service,
     lookupService: lookupService,
+    onChanged: onChanged,
+    lateInvoiceService: lateInvoiceService,
   ),
 );
 
@@ -33,11 +39,15 @@ class PosReceiptLedger extends StatefulWidget {
     required this.red,
     this.service,
     this.lookupService,
+    this.onChanged,
+    this.lateInvoiceService,
   });
   final RestaurantSalesExport export;
   final bool red;
   final PosReceiptLedgerService? service;
   final CompanyTaxLookupService? lookupService;
+  final VoidCallback? onChanged;
+  final LateInvoiceService? lateInvoiceService;
   @override
   State<PosReceiptLedger> createState() => _PosReceiptLedgerState();
 }
@@ -353,15 +363,50 @@ class _PosReceiptLedgerState extends State<PosReceiptLedger> {
                       '${payment['payment_id']}\n${payment['method']} · ${money(num.tryParse('${payment['amount']}') ?? 0)} · ${payment['paid_at']}',
                     ),
                   const Divider(),
-                  if (buyer.isEmpty)
+                  if (buyer.isEmpty) ...[
                     Text(
                       text(
                         '등록된 구매자 정보가 없습니다.',
                         'Chưa đăng ký người mua.',
                         'No registered buyer information.',
                       ),
-                    )
-                  else ...[
+                    ),
+                    FilledButton.icon(
+                      key: const Key('pos_ledger_late_invoice'),
+                      onPressed: () async {
+                        final saved = await showLateInvoiceDialog(
+                          context,
+                          target: LateInvoiceTarget(
+                            storeId: receipt.storeId,
+                            orderId: receipt.receiptId,
+                            receiptNumber: receipt.displayReceiptNumber,
+                          ),
+                          lookupService: widget.lookupService,
+                          service: widget.lateInvoiceService,
+                        );
+                        if (saved != null && context.mounted) {
+                          update(() => row['buyer'] = saved.buyer);
+                          if (mounted) {
+                            setState(() {
+                              inventory.removeWhere(
+                                (r) => r.receiptId == receipt.receiptId,
+                              );
+                              visible.removeWhere(
+                                (r) => r.receiptId == receipt.receiptId,
+                              );
+                            });
+                            widget.onChanged?.call();
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.post_add),
+                      label: Text(
+                        LateInvoiceCopy(
+                          Localizations.localeOf(context).languageCode,
+                        ).title,
+                      ),
+                    ),
+                  ] else ...[
                     SelectableText(
                       '${copy.type}: ${copy.label(kind)}\n${copy.label(kind)}: $rawNumber',
                     ),

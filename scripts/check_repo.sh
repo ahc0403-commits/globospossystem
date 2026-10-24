@@ -65,6 +65,8 @@ python3 scripts/build_pos_recipient_release.py --check
 python3 scripts/build_store_lifecycle_release.py --check
 printf 'CHECK_REPO_STEP=pos_receipt_ledger_sql\n'
 bash test/pos_receipt_ledger_sql_test.sh
+printf 'CHECK_REPO_STEP=late_red_invoice_sql\n'
+bash test/late_invoice_sql_test.sh
 printf 'CHECK_REPO_STEP=migration_version_uniqueness\n'
 bash test/migration_version_uniqueness_test.sh
 

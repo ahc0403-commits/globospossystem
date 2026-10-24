@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/live_refresh_service.dart';
+import '../../core/services/company_tax_lookup_service.dart';
 import '../../core/utils/coalesced_refresh.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -12,6 +13,8 @@ import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
+import '../red_invoice_intake/late_invoice_dialog.dart';
+import '../red_invoice_intake/late_invoice_service.dart';
 import 'receipt_ledger_model.dart';
 import 'receipt_ledger_service.dart';
 
@@ -32,6 +35,7 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
   final _cursors = <(DateTime?, String?)>[(null, null)];
   final _searchController = TextEditingController();
   ReceiptLedgerPage? _page;
+  final _invoiceStates = <String, String>{};
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
@@ -100,7 +104,10 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
         knownSummary: reset ? null : _page?.summary,
       );
       if (!mounted || generation != _readGeneration) return;
-      setState(() => _page = page);
+      setState(() {
+        _page = page;
+        _invoiceStates.clear();
+      });
     } catch (error) {
       if (!mounted || generation != _readGeneration) return;
       setState(() => _error = error.toString());
@@ -420,6 +427,8 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
                     entry: entry,
                     copy: copy,
                     printing: _printingReceiptId == entry.receiptId,
+                    invoiceState:
+                        _invoiceStates[entry.receiptId] ?? entry.invoiceState,
                     onOpen: () => _showDetail(entry, copy),
                     onReprint: () => _reprint(entry),
                   ),
@@ -458,87 +467,162 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
   Future<void> _showDetail(ReceiptLedgerEntry entry, _ReceiptLedgerCopy copy) =>
       showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          key: const Key('receipt_ledger_detail_dialog'),
-          title: Text(entry.receiptNumber),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 540),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _detail(copy.store, entry.storeName),
-                  _detail(
-                    copy.paidAt,
-                    DateFormat(
-                      'dd/MM/yyyy HH:mm:ss',
-                    ).format(entry.soldAt.toLocal()),
-                  ),
-                  _detail(copy.table, entry.tableNumber),
-                  if (entry.isCombined) ...[
-                    _detail(copy.paymentType, copy.combinedPayment),
-                    _detail(
-                      copy.paymentGroup,
-                      entry.combinedPaymentGroupId ?? '-',
-                    ),
-                  ],
-                  _detail(copy.channel, entry.salesChannel),
-                  _detail(copy.cashier, entry.cashierName),
-                  _detail(copy.status, copy.statusLabel(entry.status)),
-                  _detail(copy.paymentMethod, _paymentLabel(entry)),
-                  if (entry.allocations.length > 1) ...[
-                    const Divider(height: 28),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        copy.orderAllocations,
-                        key: const Key('receipt_ledger_order_allocations'),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    ...entry.allocations.map(_orderAllocation),
-                  ],
-                  if (entry.items.isNotEmpty) ...[
-                    const Divider(height: 28),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        copy.orderedItems,
-                        key: const Key('receipt_ledger_ordered_items'),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    ...entry.items.map(_orderedItem),
-                    const Divider(height: 28),
-                  ],
-                  _detail(copy.grossSales, _money(entry.grossAmount)),
-                  if (entry.adjustedAmount > 0)
-                    _detail(copy.adjustments, _money(entry.adjustedAmount)),
-                  _detail(copy.netSales, _money(entry.netAmount)),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(context.l10n.close),
-            ),
-            if (entry.printable)
-              FilledButton.icon(
-                key: const Key('receipt_ledger_detail_reprint'),
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  _reprint(entry);
-                },
-                icon: const Icon(Icons.print_rounded),
-                label: Text(copy.reprint),
-              ),
-          ],
+        builder: (_) => ReceiptLedgerDetailDialog(
+          entry: entry,
+          invoiceState: _invoiceStates[entry.receiptId],
+          onReprint: () => _reprint(entry),
+          onInvoiceChanged: (value) {
+            if (mounted) {
+              setState(() => _invoiceStates[entry.receiptId] = value.state);
+            }
+          },
         ),
       );
+}
+
+/// The actual receipt dialog is also rendered by the fixture screenshot test.
+class ReceiptLedgerDetailDialog extends StatefulWidget {
+  const ReceiptLedgerDetailDialog({
+    super.key,
+    required this.entry,
+    this.invoiceState,
+    this.onReprint,
+    this.onInvoiceChanged,
+    this.invoiceService,
+    this.lookupService,
+  });
+  final ReceiptLedgerEntry entry;
+  final String? invoiceState;
+  final VoidCallback? onReprint;
+  final ValueChanged<LateInvoiceContext>? onInvoiceChanged;
+  final LateInvoiceService? invoiceService;
+  final CompanyTaxLookupService? lookupService;
+  @override
+  State<ReceiptLedgerDetailDialog> createState() =>
+      _ReceiptLedgerDetailDialogState();
+}
+
+class _ReceiptLedgerDetailDialogState extends State<ReceiptLedgerDetailDialog> {
+  String? updatedState;
+  bool opening = false;
+
+  Future<void> _invoice() async {
+    if (opening) return;
+    setState(() => opening = true);
+    try {
+      final value = await showLateInvoiceDialog(
+        context,
+        target: LateInvoiceTarget(
+          storeId: widget.entry.storeId,
+          receiptNumber: widget.entry.receiptNumber,
+          orderId: widget.entry.orderId,
+          combinedPaymentGroupId: widget.entry.combinedPaymentGroupId,
+        ),
+        service: widget.invoiceService,
+        lookupService: widget.lookupService,
+      );
+      if (value != null && mounted) {
+        setState(() => updatedState = value.state);
+        widget.onInvoiceChanged?.call(value);
+      }
+    } finally {
+      if (mounted) setState(() => opening = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = widget.entry;
+    final copy = _ReceiptLedgerCopy(context);
+    final invoice = LateInvoiceCopy(
+      Localizations.localeOf(context).languageCode,
+    );
+    final state = updatedState ?? widget.invoiceState ?? entry.invoiceState;
+    return AlertDialog(
+      key: const Key('receipt_ledger_detail_dialog'),
+      title: Text(entry.receiptNumber),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detail(copy.store, entry.storeName),
+              _detail(
+                copy.paidAt,
+                DateFormat(
+                  'dd/MM/yyyy HH:mm:ss',
+                ).format(entry.soldAt.toLocal()),
+              ),
+              _detail(copy.table, entry.tableNumber),
+              if (entry.isCombined) ...[
+                _detail(copy.paymentType, copy.combinedPayment),
+                _detail(copy.paymentGroup, entry.combinedPaymentGroupId ?? '-'),
+              ],
+              _detail(copy.channel, entry.salesChannel),
+              _detail(copy.cashier, entry.cashierName),
+              _detail(copy.status, copy.statusLabel(entry.status)),
+              _detail(copy.paymentMethod, _paymentLabel(entry)),
+              if (entry.source == 'pos')
+                _detail(context.l10n.redInvoiceTitle, invoice.status(state)),
+              if (entry.allocations.length > 1) ...[
+                const Divider(height: 28),
+                Text(
+                  copy.orderAllocations,
+                  key: const Key('receipt_ledger_order_allocations'),
+                ),
+                ...entry.allocations.map(_orderAllocation),
+              ],
+              if (entry.items.isNotEmpty) ...[
+                const Divider(height: 28),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    copy.orderedItems,
+                    key: const Key('receipt_ledger_ordered_items'),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ...entry.items.map(_orderedItem),
+                const Divider(height: 28),
+              ],
+              _detail(copy.grossSales, _money(entry.grossAmount)),
+              if (entry.adjustedAmount > 0)
+                _detail(copy.adjustments, _money(entry.adjustedAmount)),
+              _detail(copy.netSales, _money(entry.netAmount)),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.close),
+        ),
+        if (entry.printable)
+          OutlinedButton.icon(
+            key: const Key('receipt_ledger_detail_reprint'),
+            onPressed: widget.onReprint == null
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    widget.onReprint!();
+                  },
+            icon: const Icon(Icons.print_rounded),
+            label: Text(copy.reprint),
+          ),
+        if (entry.source == 'pos' &&
+            (entry.orderId != null || entry.combinedPaymentGroupId != null))
+          FilledButton.icon(
+            key: const Key('receipt_ledger_late_invoice'),
+            onPressed: opening ? null : _invoice,
+            icon: const Icon(Icons.post_add),
+            label: Text(invoice.action(state)),
+          ),
+      ],
+    );
+  }
 
   Widget _orderAllocation(ReceiptLedgerAllocation allocation) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 5),
@@ -607,6 +691,7 @@ class _ReceiptLedgerRow extends StatelessWidget {
     required this.entry,
     required this.copy,
     required this.printing,
+    required this.invoiceState,
     required this.onOpen,
     required this.onReprint,
   });
@@ -614,6 +699,7 @@ class _ReceiptLedgerRow extends StatelessWidget {
   final ReceiptLedgerEntry entry;
   final _ReceiptLedgerCopy copy;
   final bool printing;
+  final String invoiceState;
   final VoidCallback onOpen;
   final VoidCallback onReprint;
 
@@ -677,6 +763,13 @@ class _ReceiptLedgerRow extends StatelessWidget {
                     '${DateFormat('HH:mm:ss').format(entry.soldAt.toLocal())} · ${_paymentLabel(entry)} · ${_money(entry.netAmount)}',
                     style: const TextStyle(color: PosColors.textSecondary),
                   ),
+                  if (entry.source == 'pos')
+                    Text(
+                      LateInvoiceCopy(
+                        Localizations.localeOf(context).languageCode,
+                      ).status(invoiceState),
+                      style: const TextStyle(color: PosColors.info),
+                    ),
                   const SizedBox(height: 8),
                   Align(alignment: Alignment.centerRight, child: action),
                 ],
@@ -718,7 +811,22 @@ class _ReceiptLedgerRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 14),
-                status,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    status,
+                    if (entry.source == 'pos')
+                      Text(
+                        LateInvoiceCopy(
+                          Localizations.localeOf(context).languageCode,
+                        ).status(invoiceState),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: PosColors.info,
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(width: 14),
                 action,
               ],
