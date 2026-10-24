@@ -4,29 +4,28 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('production mutations require clean exact-main Git state', () {
-    final deploy = File(
-      'scripts/deploy_pos_production.sh',
-    ).readAsStringSync();
+    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
 
     expect(deploy, contains(r'REQUIRE_CLEAN_GIT="${REQUIRE_CLEAN_GIT:-1}"'));
     expect(deploy, contains('REQUIRE_CLEAN_GIT=0 is allowed only'));
     expect(deploy, contains('production_deploy_path_requested'));
     expect(deploy, contains('enforce_clean_git'));
     expect(deploy, contains('enforce_origin_main_ancestry'));
-    expect(deploy, contains('enforce_required_github_check'));
-    expect(deploy, contains('POS_REQUIRED_GITHUB_CHECK="POS release contract"'));
+    expect(deploy, contains('enforce_local_release_contract'));
+    expect(deploy, contains('pos_local_release_gate.py'));
+    expect(deploy, contains('--kind exact-main'));
+    expect(deploy, isNot(contains('/check-runs')));
+    expect(deploy, contains('+refs/heads/main:refs/remotes/origin/main'));
+    expect(deploy, contains(r'$(git -C "$ROOT_DIR" rev-parse HEAD)'));
     expect(
       deploy,
-      contains('+refs/heads/main:refs/remotes/origin/main'),
+      isNot(contains('merge-base --is-ancestor origin/main HEAD')),
     );
     expect(
       deploy,
-      contains(r'$(git -C "$ROOT_DIR" rev-parse HEAD)'),
-    );
-    expect(deploy, isNot(contains('merge-base --is-ancestor origin/main HEAD')));
-    expect(
-      deploy,
-      contains('Production deployment requires exact HEAD == freshly fetched origin/main'),
+      contains(
+        'Production deployment requires exact HEAD == freshly fetched origin/main',
+      ),
     );
     expect(deploy, contains('--meta "githubCommitSha=\$release_sha"'));
     expect(deploy, contains('--meta "githubCommitRef=main"'));
@@ -35,10 +34,7 @@ void main() {
     expect(deploy, isNot(contains('ALLOW_GIT_ANCESTRY')));
     expect(deploy, isNot(contains('SKIP_GIT')));
     expect(deploy, contains('apply_migration_by_convention'));
-    expect(
-      deploy,
-      isNot(contains('PHOTO_OBJET_MONITORING_EFFECTIVE_FROM')),
-    );
+    expect(deploy, isNot(contains('PHOTO_OBJET_MONITORING_EFFECTIVE_FROM')));
     expect(
       deploy,
       isNot(contains('apply_photo_objet_expected_slot_ledger.sql')),
@@ -60,10 +56,10 @@ void main() {
     );
     expect(
       preflight.indexOf('enforce_origin_main_ancestry'),
-      lessThan(preflight.indexOf('enforce_required_github_check')),
+      lessThan(preflight.indexOf('enforce_local_release_contract')),
     );
     expect(
-      preflight.indexOf('enforce_required_github_check'),
+      preflight.indexOf('enforce_local_release_contract'),
       lessThan(preflight.indexOf('need_cmd vercel')),
     );
 
@@ -79,9 +75,7 @@ void main() {
   });
 
   test('migration history mismatches fail closed around SQL mutation', () {
-    final deploy = File(
-      'scripts/deploy_pos_production.sh',
-    ).readAsStringSync();
+    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
 
     expect(deploy, contains('migration_history_contains_remote_version'));
     expect(deploy, contains('require_migration_history_absent'));

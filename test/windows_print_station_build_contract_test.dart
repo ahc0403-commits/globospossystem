@@ -9,7 +9,7 @@ void main() {
       'scripts/build_windows_print_station.ps1',
     ).readAsStringSync();
     final workflow = File(
-      '.github/workflows/windows_print_station_build.yml',
+      'docs/pos/local-verification/legacy-github-workflows/windows_print_station_build.yml',
     ).readAsStringSync();
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final runnerCmake = File(

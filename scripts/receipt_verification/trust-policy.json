@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "enabled": false,
+  "repository": "ahc0403-commits/globospossystem",
+  "independentCustodyApproved": false,
+  "protectedWorkflowApproved": false,
+  "trustedExecutors": [],
+  "maxAgeSeconds": 21600,
+  "contractSha256": "a74fb40179a53ec5641a4b79e8447fc754b649e697fadbec5b853f0317bbc953",
+  "protectedInputsSha256": "a449289fccce569fc9cf94f7f89b7da249c250166231a39af1c79acd20ac51d2",
+  "reason": "No independently controlled execution signer or protected verifier workflow is approved. Do not enable using the submitting operator's key.",
+  "repositoryStages": 66,
+  "minimumAssertions": {
+    "local-gate-contract": 21,
+    "independent-receipt-verifier-contract": 28,
+    "repository": 2673,
+    "password-lifecycle-edge": 7,
+    "sepay-webhook-edge": 3,
+    "emergency-fulfillment-edge": 3,
+    "public-receipt-security-edge": 7,
+    "browser-terminal-authentication": 3,
+    "restaurant-finalization-regression": 1
+  }
+}

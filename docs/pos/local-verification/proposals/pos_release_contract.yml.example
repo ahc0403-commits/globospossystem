@@ -1,0 +1,33 @@
+# DESIGN ONLY. Not an active workflow. Not ready to publish/activate.
+# Requires independently controlled executor + protected workflow identity and
+# an approved bootstrap; app_id=15368 alone does not provide either guarantee.
+name: POS Local Result Verification
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  contract:
+    name: POS release contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/receipt_verification/
+            /scripts/local_verification/recipe.json
+      - name: Authenticate independent exact-SHA local result
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -B scripts/receipt_verification/github_readonly.py
+# No conditional skip, continue-on-error, app tests/builds, package installs,
+# artifact/cache uploads, arbitrary URLs, source checkout from PR, signing or
+# check/status writes. The shipped trust policy fails with exit 3 by default.
+# PR-target check -> exact PR HEAD association and stale-head behavior require
+# an explicitly approved remote integration test before activation.
