@@ -25,9 +25,12 @@ const _migrationPath =
 // old S/L and noodles/rice, and stale selection handling.
 // 2026-10-22: meal choices use an options label; size-only dishes retain
 // the size label. qr_order_operational_ui_test covers the registered choices.
+// 2026-10-24: owner-requested cumulative QR balance is covered by
+// qr_payment_summary_test, QR operational lifecycle tests, and the latest
+// safeupdate/payment SQL regression. Only the authorized QR hash is advanced.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      '807c21e6948ef488ea648cb95e339b621bf1177c7fdc9bdd0f61b31dba83461b',
+      '5dd3ac71bbe6dd22414328322182433bca22a89b366e1fea2837718f156bd19a',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.
