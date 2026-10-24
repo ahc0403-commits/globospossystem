@@ -118,9 +118,10 @@ class _LateInvoiceDialogState extends State<LateInvoiceDialog> {
         data = value;
         loading = false;
       });
-    } catch (_) {
+    } catch (failure) {
       if (mounted) {
         setState(() {
+          if (failure is StateError) data = null;
           loading = false;
           error = copy.pick(
             '상태를 불러오지 못했습니다. 다시 확인해 주세요.',
@@ -156,6 +157,7 @@ class _LateInvoiceDialogState extends State<LateInvoiceDialog> {
       requestId = const Uuid().v4();
     }
     lastPayload = payload;
+    FocusScope.of(context).unfocus();
     setState(() {
       saving = true;
       error = null;
@@ -196,6 +198,7 @@ class _LateInvoiceDialogState extends State<LateInvoiceDialog> {
       if (!mounted) return;
       final message = failure is PostgrestException ? failure.message : '';
       setState(() {
+        if (failure is StateError) data = null;
         error = message == 'POS_BUYER_CHANGED'
             ? copy.pick(
                 '다른 직원이 정보를 변경했습니다. 입력을 복사해 보관한 뒤 최신 상태를 다시 확인해 주세요.',
@@ -304,13 +307,16 @@ class _LateInvoiceDialogState extends State<LateInvoiceDialog> {
                   ),
                 ),
               ] else if (value.canEdit) ...[
-                AbsorbPointer(
-                  absorbing: saving,
-                  child: BuyerInformationFields(
-                    controller: buyer!,
-                    storeId: widget.target.storeId,
-                    lookupService: widget.lookupService,
-                    compact: !advanced,
+                ExcludeFocus(
+                  excluding: saving,
+                  child: AbsorbPointer(
+                    absorbing: saving,
+                    child: BuyerInformationFields(
+                      controller: buyer!,
+                      storeId: widget.target.storeId,
+                      lookupService: widget.lookupService,
+                      compact: !advanced,
+                    ),
                   ),
                 ),
                 TextButton(

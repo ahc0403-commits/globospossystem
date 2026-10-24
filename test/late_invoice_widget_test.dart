@@ -191,6 +191,7 @@ void main() {
       await tester.tap(find.byKey(const Key('late_invoice_submit')));
       await tester.pump();
       expect(writes, hasLength(1));
+      expect(tester.testTextInput.hasAnyClients, isFalse);
       expect((writes.single['p_patch'] as Map)['buyer_phone'], '');
       gate.complete();
       await tester.pumpAndSettle();
@@ -370,6 +371,30 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  test('service binds the original login across load and submit', () async {
+    var session = 'one';
+    var calls = 0;
+    final service = LateInvoiceService(
+      sessionScope: () => session,
+      rpc: (name, params) async {
+        calls++;
+        return initial();
+      },
+    );
+    await service.load(target);
+    session = 'two';
+    await expectLater(
+      service.submit(
+        target: target,
+        requestId: 'fixture-request',
+        versions: {'fixture-order': null},
+        patch: completeBuyer(),
+        confirm: true,
+      ),
+      throwsStateError,
+    );
+    expect(calls, 1);
+  });
   test('service rejects completion after login changes', () async {
     var session = 'one';
     final gate = Completer<void>();

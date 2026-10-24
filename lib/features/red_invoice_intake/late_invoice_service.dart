@@ -55,12 +55,17 @@ class LateInvoiceService {
 
   final LateInvoiceRpc _rpc;
   final String Function() _sessionScope;
+  String? _boundSession;
 
   Future<LateInvoiceContext> _call(
     String name,
     Map<String, dynamic> params,
   ) async {
     final session = _sessionScope();
+    _boundSession ??= session;
+    if (_boundSession != session) {
+      throw StateError('POS_LEDGER_SESSION_CHANGED');
+    }
     final value = await _rpc(name, params);
     if (session != _sessionScope()) {
       throw StateError('POS_LEDGER_SESSION_CHANGED');
