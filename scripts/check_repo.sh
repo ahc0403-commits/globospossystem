@@ -11,7 +11,7 @@ flutter pub get --enforce-lockfile
 printf 'CHECK_REPO_STEP=static_analysis\n'
 dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
-flutter test
+flutter test --machine
 
 printf 'CHECK_REPO_STEP=misa_description_normalization_audit\n'
 python3 test/misa_description_audit_test.py
@@ -195,7 +195,7 @@ deno lint supabase/functions/provision-fixed-pos-account/policy.ts supabase/func
 deno check supabase/functions/provision-fixed-pos-account/index.ts
 deno test supabase/functions/provision-fixed-pos-account/policy_test.ts
 printf 'CHECK_REPO_STEP=bounded_data_access_sql_and_dispatch_ownership\n'
-bounded_data_evidence="${TMPDIR:-/tmp}/pos-bounded-check-$$"
+bounded_data_evidence="${POS_VERIFICATION_ARTIFACTS:-${TMPDIR:-/tmp}/pos-bounded-check-$$}"
 python3 scripts/tests/data_access/verify_bounded_reads.py "$bounded_data_evidence/reads"
 python3 scripts/tests/data_access/verify_dispatch_claims.py "$bounded_data_evidence/claims"
 deno check supabase/functions/meinvoice-dispatcher/index.ts \
@@ -255,3 +255,5 @@ flutter build web --release
 printf 'CHECK_REPO_STEP=git_whitespace_contract\n'
 git diff --check
 git show --check --format= HEAD
+
+printf 'CHECK_REPO_COMPLETE\n'

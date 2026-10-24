@@ -1,0 +1,122 @@
+# POS local verification contract
+
+This candidate migrates execution, not the scope of verification. GitHub stores
+and reviews source. No runner, runner registration token, paid CI, production
+credential, production business fixture or Office modification is required.
+
+## Candidate and exact-main runs
+
+Commit the candidate locally, then run from its clean checkout:
+
+```bash
+python3 -B scripts/pos_local_release_gate.py run \
+  --kind candidate --output /absolute/new/private/candidate-evidence
+python3 -B scripts/pos_local_release_gate.py verify \
+  --kind candidate --evidence /absolute/new/private/candidate-evidence
+```
+
+An output directory must be new and outside the source checkout. Keep the full
+directory together. `receipt.json` records source SHA/tree/all tracked input
+hashes, environment/tool/package versions, the local image ID, recipe/runner
+hashes, UTC start/end times, real process exit codes, counts and log/artifact
+hashes. Counts distinguish visible Flutter tests, Python assertions, completed
+repository stages and SQL commands. SQL assertions and performance measurements
+remain in the complete logs; a command count is not an SQL assertion count.
+
+The official `scripts/deploy_pos_production.sh` preflight always executes a new
+`run --kind exact-main` before production mutation. It requires a clean checkout,
+fresh canonical `origin/main == HEAD` before and after validation, and directly
+calls the committed verifier. It does not accept a receipt, alternate recipe,
+resume flag or PASS environment variable. Existing production flags cannot
+skip this recipe. `--dry-run` prints the path and explicitly reports NOT RUN.
+
+`verify` checks integrity and completeness for review. Receipts are not signed;
+an operator who can replace every file can forge a self-consistent bundle.
+Therefore an independently supplied receipt cannot authorize production or
+replace a GitHub security principal. The trusted local execution is the
+deployer's fresh process invocation, tied to its reviewed exact-main source.
+
+## Preserved checks
+
+The machine-readable recipe is `scripts/local_verification/recipe.json`:
+
+1. Local evidence/process/fixture-ownership regression tests.
+2. The entire `bash scripts/check_repo.sh`: locked Flutter dependencies, fatal
+   analysis, full Flutter tests, security/role/tenant SQL and Edge tests, format,
+   lint and type checks, all procurement/inventory and API fixtures, repository
+   secret scan, npm audit, production deploy/migration regressions, web worker
+   compilation and complete Flutter web release build, Git whitespace checks.
+3. Real Linux Chrome independent-terminal authentication tests.
+4. The former restaurant-finalization workflow's isolated regression script.
+
+The inventory and procurement workflow commands already run in check_repo and
+are not omitted. All five original workflows, including their SDK hashes and
+Action commit pins, remain under `legacy-github-workflows/` as provenance. There
+are no active test workflows in `.github/workflows/` in this candidate. This
+does not mutate the existing remote branch's workflows or protection settings.
+
+Flutter emits machine events in the full suite and both SQL/PostgREST suites.
+The verifier requires three successful complete suites, visible nonempty test
+assertions and complete stage markers. Tests initially excluded because they
+need SQL fixture environment must later succeed under exactly the same names
+in the real SQL/API suites. Any other skipped mandatory test fails. The two
+existing Windows-only probes are recorded as not applicable on Linux; they
+are not counted as passes. The separate browser suite permits no skips.
+
+The existing optional `STORE_OPERATING_UPGRADE_SCHEMA` export test is outside
+the former required workflow and is not fabricated. This recipe copies no
+production schema export or business data. Run an approved, sanitized export
+upgrade check separately when the release's migration scope requires it.
+
+## Local environment and fixture ownership
+
+Docker uses a pinned Ubuntu 24.04 amd64 base and checksum-verified official
+Flutter 3.41.6 / Dart 3.11.4, Node 22.22.0, Deno 2.7.13 and Chrome for Testing
+156.0.8078.47 archives. The image build is local and its full log and actual
+image/tool/package identities are recorded. Package repository updates are
+recorded rather than claimed byte-for-byte reproducible. A missing or wrong
+required OS/tool, failed image build or timeout blocks verification.
+
+The runner creates a private temporary Git clone containing committed source
+only. Ignored `.env`, Supabase links, production credentials and user changes
+are not copied. The test process receives fixed fixture settings, not the host
+environment. The host must use an existing local Unix-socket Docker context.
+The tool container shares that local engine so existing SQL fixtures can run;
+this is not a security sandbox for malicious repository code.
+
+The fixture Docker wrapper labels every new test container/network with the
+unique run ID. It rejects collisions, unowned execution/removal and unreviewed
+Docker operations. Cleanup selects only the current run's label; it never
+prunes the engine or stops another task's DB. Existing test scripts retain
+their fail-fast SQL and cleanup behavior. Unexpected fixture operations fail
+closed and require a reviewed wrapper update.
+
+## Windows and operational scope
+
+Run `scripts/build_windows_print_station.ps1` on local Windows x64 with the
+documented Flutter/MSVC dependencies. Preserve its fatal analysis, all 20
+focused test files (including native process-error and connection probes),
+actual Windows compilation, required runtime DLLs, whole package and source
+SHA in `INSTALL.txt`. Keep full logs/tool versions/UTC times/process status and
+the ZIP's SHA-256. Installation, assigned-account login and actual printer
+output remain operational gates. Linux is not a Windows substitute.
+
+This release-tooling change does not alter native app implementation, its SDK
+lockfile or the native packaging command. A Windows package is not produced by
+the web/server recipe and cannot be reported as verified by it. If native
+source/dependencies/packaging change, obtain native final-SHA evidence before
+calling that native release complete. No Windows machine/VM is provisioned by
+this script.
+
+Production targets, Auth readiness, migration-history guards, the official
+deployment path, assigned operational login and affected-feature verification
+remain unchanged. Deterministic local verification does not perform an actual
+sale, tax transmission, production fixture write or operational login.
+
+## Remote boundary
+
+The remote main rule still requires an Actions-app-bound `POS release contract`.
+Do not publish fake statuses or remove that protection to make this candidate
+mergeable. See `REMOTE_PROTECTION_DECISION_KO.md`. Until the separate protection
+decision and authorized remote steps are complete, this is a local candidate,
+not a completed transition or production release.

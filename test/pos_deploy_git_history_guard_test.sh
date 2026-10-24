@@ -126,46 +126,59 @@ bash -c '
   enforce_clean_git
 ' guard "$APPROVED_REPO" >/dev/null 2>&1
 
+rm "$APPROVED_REPO/dirty.txt"
+
+# A fixture verifier exercises the official invocation boundary, not real checks.
+# Real evidence integrity and process-output behavior is covered by Python tests.
+cat >"$APPROVED_REPO/scripts/pos_local_release_gate.py" <<'PYFIXTURE'
+import os,sys
+from pathlib import Path
+assert sys.argv[1:4] == ['run','--kind','exact-main']
+assert sys.argv[4] == '--output' and len(sys.argv) == 6
+assert not Path(sys.argv[5]).exists()
+if os.environ['LOCAL_VERIFIER_FIXTURE_MODE'] == 'fail':
+    raise SystemExit(42)
+Path(sys.argv[5]).mkdir()
+Path(sys.argv[5], 'receipt.json').write_text('fixture only')
+PYFIXTURE
+git -C "$APPROVED_REPO" add scripts/pos_local_release_gate.py
+git -C "$APPROVED_REPO" -c user.name='Deploy Test' -c user.email=deploy-test@globos.test commit --quiet -m 'local verifier fixture'
+git -C "$APPROVED_REPO" push origin main >/dev/null
+
 mkdir -p "$FAKE_BIN"
 cat >"$FAKE_BIN/gh" <<'EOF'
 #!/usr/bin/env bash
-set -euo pipefail
-case "${GITHUB_CHECK_MODE:?}" in
-  success)
-    printf 'completed\tsuccess\thttps://github.com/example/checks/1\n'
-    ;;
-  pending)
-    printf 'in_progress\t\thttps://github.com/example/checks/2\n'
-    ;;
-  api-failure)
-    exit 42
-    ;;
-esac
+printf 'GitHub test lookup must not be invoked\n' >&2
+exit 99
 EOF
 chmod +x "$FAKE_BIN/gh"
-
-PATH="$FAKE_BIN:$PATH" GITHUB_CHECK_MODE=success bash -c '
+PATH="$FAKE_BIN:$PATH" TMPDIR="$TMP_DIR" LOCAL_VERIFIER_FIXTURE_MODE=success bash -c '
   source "$1/scripts/deploy_pos_production.sh"
-  parse_args --skip-smoke-tests
-  enforce_required_github_check
+  parse_args --skip-smoke-tests --skip-checks --no-tests
+  enforce_local_release_contract
 ' guard "$APPROVED_REPO" >/dev/null
 
-for check_mode in pending api-failure; do
-  set +e
-  check_output="$(PATH="$FAKE_BIN:$PATH" GITHUB_CHECK_MODE="$check_mode" bash -c '
-    source "$1/scripts/deploy_pos_production.sh"
-    parse_args --skip-smoke-tests
-    enforce_required_github_check
-  ' guard "$APPROVED_REPO" 2>&1)"
-  check_status=$?
-  set -e
-  [[ "$check_status" -ne 0 ]]
-  if [[ "$check_mode" == pending ]]; then
-    [[ "$check_output" == *"Required GitHub Actions check 'POS release contract' has not succeeded"* ]]
-  else
-    [[ "$check_output" == *'Could not read required GitHub Actions checks'* ]]
-  fi
-done
+set +e
+local_output="$(PATH="$FAKE_BIN:$PATH" TMPDIR="$TMP_DIR" LOCAL_VERIFIER_FIXTURE_MODE=fail bash -c '
+  source "$1/scripts/deploy_pos_production.sh"
+  parse_args --skip-smoke-tests --skip-checks --no-tests
+  enforce_local_release_contract
+' guard "$APPROVED_REPO" 2>&1)"
+local_status=$?
+set -e
+[[ "$local_status" -ne 0 ]]
+[[ "$local_output" == *'Required local release verification failed'* ]]
+
+rm "$APPROVED_REPO/scripts/pos_local_release_gate.py"
+set +e
+missing_output="$(PATH="$FAKE_BIN:$PATH" bash -c '
+  source "$1/scripts/deploy_pos_production.sh"
+  enforce_local_release_contract
+' guard "$APPROVED_REPO" 2>&1)"
+missing_status=$?
+set -e
+[[ "$missing_status" -ne 0 ]]
+[[ "$missing_output" == *'Missing trusted local release verifier'* ]]
 
 cat >"$FAKE_BIN/supabase" <<'EOF'
 #!/usr/bin/env bash

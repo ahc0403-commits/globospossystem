@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "platform": "ubuntu-24.04-x86_64",
+  "tools": {
+    "flutter": "3.41.6",
+    "dart": "3.11.4",
+    "node": "v22.22.0",
+    "deno": "2.7.13",
+    "chrome": "156.0.8078.47"
+  },
+  "steps": [
+    {
+      "id": "local-gate-contract",
+      "argv": ["python3", "-B", "-m", "unittest", "discover", "-s", "scripts/local_verification/tests", "-v"],
+      "format": "unittest",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "repository",
+      "argv": ["bash", "scripts/check_repo.sh"],
+      "format": "repository",
+      "timeoutSeconds": 7200
+    },
+    {
+      "id": "browser-terminal-authentication",
+      "argv": ["flutter", "test", "--no-pub", "--machine", "--platform", "chrome", "test/terminal_auth_browser_test.dart"],
+      "format": "flutter",
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "restaurant-finalization-regression",
+      "argv": ["bash", "scripts/test_restaurant_finalizations.sh"],
+      "format": "command",
+      "timeoutSeconds": 600
+    }
+  ],
+  "coverage": {
+    "inventory_workflow_contract.yml": "repository:inventory_workflow_sql -> scripts/test_inventory_workflow_all_stores.sh",
+    "procurement_contract.yml": "repository:inventory_workflow_sql -> scripts/test_procurement_v2.sh",
+    "pos_release_contract.yml": ["repository", "browser-terminal-authentication"],
+    "restaurant_finalization.yml": "restaurant-finalization-regression",
+    "windows_print_station_build.yml": "scripts/build_windows_print_station.ps1 on local Windows x64; separate native package scope, never counted as Linux PASS"
+  }
+}

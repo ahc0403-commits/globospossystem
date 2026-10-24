@@ -52,4 +52,4 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 PAYROLL_TEST_DB_CONTAINER="$db_name" PAYROLL_TEST_RPC_URL="http://${rest_address}" \
-  flutter test --no-pub test/payroll_attendance_postgrest_test.dart
+  flutter test --no-pub --machine test/payroll_attendance_postgrest_test.dart

@@ -48,9 +48,9 @@ done
 
 grep -Fq 'Photo Objet automatic sales collection is permanently retired.' CLAUDE.md
 grep -Fq 'Missing historical Photo collection slots are not release failures' CLAUDE.md
-grep -Fq 'name: POS Release Contract' .github/workflows/pos_release_contract.yml
-grep -Fq 'name: POS release contract' .github/workflows/pos_release_contract.yml
-grep -Fq 'POS_REQUIRED_GITHUB_CHECK="POS release contract"' scripts/deploy_pos_production.sh
+grep -Fq 'scripts/check_repo.sh' scripts/local_verification/recipe.json
+grep -Fq 'enforce_local_release_contract' scripts/deploy_pos_production.sh
+! grep -Fq '/check-runs' scripts/deploy_pos_production.sh
 
 migration='supabase/migrations/20260916060000_retire_photo_objet_automatic_sales_collection.sql'
 grep -Fq 'PHOTO_OBJET_AUTOMATIC_SALES_COLLECTION_RETIRED' "$migration"

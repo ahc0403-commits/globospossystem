@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Protect other local tasks: fixtures may touch only this run's labeled resources.
+
+This is collision/cleanup protection for reviewed tests, not a Docker sandbox.
+No Docker daemon, credential or runner is created.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+REAL = '/usr/bin/docker'
+LABEL = 'pos.local.verification'
+
+
+def owned(kind, name, run_id):
+    result = subprocess.run([REAL, kind, 'inspect', name], capture_output=True, text=True)
+    if result.returncode:
+        raise ValueError('Fixture resource is missing: ' + name)
+    value = json.loads(result.stdout)[0]
+    labels = value.get('Labels') if kind == 'network' else value.get('Config', {}).get('Labels')
+    if (labels or {}).get(LABEL) != run_id:
+        raise ValueError('Refusing another task resource: ' + name)
+
+
+def target(args, value_options):
+    index = 1
+    while index < len(args):
+        value = args[index]
+        if value in value_options:
+            index += 2
+        elif value.startswith('-'):
+            index += 1
+        else:
+            return value
+    raise ValueError('Missing Docker fixture resource')
+
+
+def prepare(args, run_id):
+    if not re.fullmatch(r'[0-9a-f]{32}', run_id):
+        raise ValueError('Missing local verification run namespace')
+    if args[0] == 'run':
+        if '--name' not in args:
+            raise ValueError('Every fixture container must have a name')
+        name = args[args.index('--name') + 1]
+        existing = subprocess.run([REAL, 'container', 'inspect', name], capture_output=True)
+        if existing.returncode == 0:
+            raise ValueError('Fixture name already exists: ' + name)
+        return ['run', '--label', LABEL + '=' + run_id] + args[1:]
+    if args[:2] == ['network', 'create']:
+        return args[:2] + ['--label', LABEL + '=' + run_id] + args[2:]
+    if args[:2] == ['network', 'rm']:
+        for name in args[2:]:
+            owned('network', name, run_id)
+        return args
+    if args[0] == 'exec':
+        owned('container', target(args, {'-e', '--env', '-u', '--user', '-w', '--workdir'}), run_id)
+    elif args[0] in {'logs', 'port', 'inspect'}:
+        owned('container', target(args, {'--tail', '--since', '-f', '--format'}), run_id)
+    elif args[0] == 'rm':
+        for name in args[1:]:
+            if not name.startswith('-'):
+                owned('container', name, run_id)
+    elif args[0] not in {'version', '--version', 'info', 'pull', 'tag', 'image'}:
+        raise ValueError('Unreviewed Docker operation: ' + args[0])
+    return args
+
+
+if __name__ == '__main__':
+    try:
+        args = prepare(sys.argv[1:], os.environ.get('POS_LOCAL_RUN_ID', ''))
+        os.execv(REAL, [REAL] + args)
+    except (ValueError, KeyError, IndexError) as error:
+        print('LOCAL_FIXTURE_GUARD: ' + str(error), file=sys.stderr)
+        sys.exit(1)
