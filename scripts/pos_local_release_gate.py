@@ -227,7 +227,7 @@ def run(directory, kind, root=ROOT):
                      '--env', 'PATH=' + str(snapshot / 'scripts/local_verification') + ':' +
                        '/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin',
                      '--workdir', str(snapshot), '--entrypoint', '/bin/bash', image_id, '-c',
-                     f'getent passwd {uid} >/dev/null || useradd --uid {uid} --gid 1000 --home-dir /home/ubuntu --no-create-home posverify; exec sleep infinity'])
+                     f'getent passwd {uid} >/dev/null || useradd --uid {uid} --gid 1000 --home-dir /home/ubuntu --no-create-home posverify; chown -R {uid}:1000 /home/ubuntu; exec sleep infinity'])
             container_created = True
             execute = ['docker', 'exec', '--user', str(uid) + ':1000', name]
             value['toolProbe'] = recorded(directory, 'tools', execute + tool_probe(), 120)

@@ -42,7 +42,7 @@ GitHub는 특정 앱을 required status의 출처로 고정할 수 있다.
 |---|---|---|---|
 | A. 현재 보호 유지 | required check/app/strict/admin 모두 그대로 | 동등한 원격 계약 결정 전 로컬 후보 보관. 원격 전환·병합은 미완료 | 이 선택지로 보류 |
 | B. 독립 인적 검토 계약 | approving review `0 → 1 이상`, stale dismissal `false → true`, last-push approval `false → true`, 관리자 강제 유지. 기존 Actions 요구는 **대체 계약 검증·승인 이후에만** 교체 | 기존 write 권한의 독립 검토자가 최종 SHA·recipe·전체 로그/해시·실패/생략을 실제 검토. PR 작성자의 자기 승인은 불가. GitHub 서버는 영수증 내용을 자동 검증하지 못하므로 기존 앱 기반 자동 보호와 동일하다고 주장할 수 없음 | 미승인·미실행 |
-| C. required deployment를 이용한 로컬 증거 연결 | 특정 로컬 검증 environment의 exact-SHA deployment 성공을 required-deployments로 추가하고, 검증 후에만 기존 check 계약 교체 검토 | GitHub에서 테스트를 실행할 필요는 없고 기존 credential에 repo/deployments 쓰기 권한이 있으면 새 token 없이 API 사용 가능하나 현재 쓰기는 미검증. 그러나 같은 credential 소유자가 status를 직접 만들 수 있어 provenance 보장은 자동 확보되지 않음. GitHub를 검증 메타데이터 보관에도 사용하게 되므로 “커밋 보관만” 정책에 별도 결정 필요 | 미승인·API 쓰기 미실행 |
+| C. required deployment를 이용한 로컬 증거 연결 | 특정 로컬 검증 environment의 exact-SHA deployment 성공을 required-deployments로 추가하고, 검증 후에만 기존 check 계약 교체 검토 | GitHub에서 테스트를 실행할 필요는 없고 현 계정 admin/push와 OAuth repo scope는 읽기 조회로 확인됨. 새 token 없이 deployment API를 사용할 권한 근거가 있으나 실제 쓰기는 수행하지 않음. 그러나 같은 credential 소유자가 status를 직접 만들 수 있어 provenance 보장은 자동 확보되지 않음. GitHub를 검증 메타데이터 보관에도 사용하게 되므로 “커밋 보관만” 정책에 별도 결정 필요 | 미승인·API 쓰기 미실행 |
 
 GitHub의 [required deployments 규칙](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
 및 [deployment REST 계약](https://docs.github.com/en/rest/deployments/deployments)은
@@ -55,6 +55,9 @@ SHA별 environment/status 연결을 제공한다. 그것만으로 로컬 프로�
 영수증 인증·최신 SHA 검토 절차를 정하지 않은 채 required check를 빈 배열로 만드는
 실행용 PATCH를 제공하거나 실행하지 않는다. 비용·권한·새 credential 없이 그 제약을
 해결할 수 없다면 A를 유지하고 전체 전환을 미완료로 남긴다.
+
+현 조회에서 `required_conversation_resolution=true`, force push/deletion은 모두 false이며
+적용 branch rules 조회는 빈 배열이었다. 이 조건도 보존해야 한다. 토큰 원문은 조회·출력하지 않았다.
 
 ## 승인 이후에도 보존할 조건
 
