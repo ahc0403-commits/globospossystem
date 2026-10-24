@@ -68,3 +68,22 @@ protect_while_submitting(1003, "SELECT id FROM payments WHERE order_id=md5('late
 print('LATE_INVOICE_REFUND_RACE=PASS original_refund_protected')
 protect_while_submitting(1004, "SELECT pg_advisory_xact_lock(hashtextextended('sales-reporting:'||md5('late-tax')::uuid::text||':'||(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::text,0)); INSERT INTO sales_reporting_claims VALUES('restaurant_pos',md5('late-order-1004')::uuid::text,gen_random_uuid());")
 print('LATE_INVOICE_REPORTING_RACE=PASS confirmed_member_protected')
+
+# A legacy buyer entry may create the first intake while a new screen still
+# holds an empty version. The late request waits on the same order and rejects
+# that stale edit, without overwriting the legacy buyer or creating a new job.
+assert sql('SELECT late_fixture.sale(1005);').returncode == 0
+legacy = subprocess.Popen(base, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True)
+legacy.stdin.write(actor + "BEGIN; SELECT upsert_red_invoice_intake_minimal(md5('late-order-1005')::uuid,late_fixture.shop(1),'cashier','ready','0012345678','Legacy Fixture','Fixture address','buyer@example.invalid',NULL,NULL);\n\\echo LOCKED\nSELECT pg_sleep(1); COMMIT;\n")
+legacy.stdin.close()
+while True:
+    line = legacy.stdout.readline()
+    if 'LOCKED' in line:
+        break
+    assert line, legacy.stderr.read()
+result = sql("SELECT pos_submit_late_invoice(gen_random_uuid(),late_fixture.shop(1),md5('late-order-1005')::uuid,NULL,jsonb_build_object(md5('late-order-1005')::uuid,NULL),late_fixture.patch(),true);")
+assert result.returncode != 0 and 'POS_BUYER_CHANGED' in result.stderr, result.stderr
+assert legacy.wait() == 0
+assert sql("SELECT count(*)=1 AND bool_and(buyer_snapshot->>'unit_name'='Legacy Fixture') FROM meinvoice_jobs WHERE order_id=md5('late-order-1005')::uuid;").stdout.strip().endswith('t')
+print('LATE_INVOICE_LEGACY_WRITER_RACE=PASS original_buyer_preserved')

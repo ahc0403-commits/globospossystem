@@ -25,6 +25,17 @@ BEGIN
  END LOOP;
 END $phone$;
 
+-- The legacy writer also takes the order lock first. This serializes its
+-- intake/job writes with modern buyer edits and late requests, including the
+-- first insert where no intake row exists yet.
+DO $legacy_lock$
+DECLARE d text;anchor text:=E'WHERE id = p_order_id AND restaurant_id = p_store_id\n  LIMIT 1;';
+BEGIN
+ SELECT pg_get_functiondef('public.upsert_red_invoice_intake(uuid,uuid,text,text,text,text,text,text,text,text,text,text,text,text)'::regprocedure) INTO d;
+ IF strpos(d,anchor)=0 THEN RAISE EXCEPTION 'LATE_INVOICE_LEGACY_LOCK_ANCHOR_CHANGED'; END IF;
+ EXECUTE replace(d,anchor,E'WHERE id = p_order_id AND restaurant_id = p_store_id\n  LIMIT 1 FOR UPDATE;');
+END $legacy_lock$;
+
 -- Preserve the same immutable-snapshot contract without a lookup/archive INSERT
 -- per order in a combined request. The row guard is pure; the transition-table
 -- guard checks external reporting and archives the complete changed set once.
