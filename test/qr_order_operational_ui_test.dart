@@ -1106,6 +1106,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('qr_state_success')), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Đã giao 4 · Còn 1'), 200);
     expect(find.text('Đã giao 4 · Còn 1'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 15));
@@ -1154,6 +1155,12 @@ void main() {
     await tester.drag(
       find.byKey(const Key('qr_menu_scroll')),
       const Offset(0, -420),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('qr_add_food')),
+      180,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('qr_add_food')));
@@ -1205,6 +1212,12 @@ void main() {
       ),
     );
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('qr_add_food')),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('qr_add_food')));
     await tester.pump();
     expect(
@@ -1351,4 +1364,81 @@ void main() {
       _expectNoLayoutFailure(tester);
     }
   });
+  testWidgets(
+    'submitted total refreshes cumulatively without reloading the menu',
+    (tester) async {
+      var total = 77760.0;
+      var menuReads = 0;
+      var orderReads = 0;
+      var offline = false;
+      var closed = false;
+      await _pumpQr(
+        tester,
+        service: _service(
+          fetch: (_) async {
+            menuReads++;
+            return _menu;
+          },
+          fetchActive: (_) async {
+            orderReads++;
+            if (offline) throw StateError('offline');
+            if (closed) return _noActiveOrder;
+            return QrActiveOrder(
+              isActive: true,
+              orderId: 'order-a',
+              orderCode: 'order-a',
+              status: 'serving',
+              items: const [],
+              paymentSummary: QrPaymentSummary(
+                totalAmount: total,
+                paidTotal: 10000,
+                remainingDue: total - 10000,
+                calculatedAt: DateTime.utc(2026, 10, 24),
+              ),
+            );
+          },
+          place: (_, _, _, _) async {
+            total = 202760;
+            return _result;
+          },
+        ),
+      );
+      expect(find.text('67.760 ₫'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('qr_add_food')),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_add_food')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('qr_open_review')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('qr_state_success')), findsOneWidget);
+      expect(find.text('192.760 ₫'), findsOneWidget);
+      expect(menuReads, 1);
+      expect(orderReads, 2);
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      expect(menuReads, 1);
+      expect(orderReads, 3);
+      offline = true;
+      await tester.ensureVisible(
+        find.byKey(const Key('qr_payment_summary_refresh')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_payment_summary_refresh')));
+      await tester.pumpAndSettle();
+      expect(find.text('192.760 ₫'), findsOneWidget);
+      expect(find.textContaining('gần nhất'), findsOneWidget);
+      offline = false;
+      closed = true;
+      await tester.tap(find.byKey(const Key('qr_payment_summary_refresh')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('qr_state_success')), findsNothing);
+      expect(find.byKey(const Key('qr_payment_summary')), findsNothing);
+    },
+  );
 }

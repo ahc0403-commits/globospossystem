@@ -53,19 +53,43 @@ s+='ALTER FUNCTION process_payment(uuid,uuid,numeric,text) RENAME TO process_pay
 s+=function('20260428000002_vat_pricing_mode.sql','compute_order_item_tax_amounts') if 'CREATE OR REPLACE FUNCTION public.compute_order_item_tax_amounts(' in text('20260428000002_vat_pricing_mode.sql') else ''
 (tmp/'setup.sql').write_text(s)
 PY
-docker run --detach --rm --name "$EDIT_CONTAINER" --env POSTGRES_HOST_AUTH_METHOD=trust postgres:15 >/dev/null
+docker run --detach --rm --name "$EDIT_CONTAINER" --env POSTGRES_HOST_AUTH_METHOD=trust --env POSTGRES_PASSWORD=fixture-only public.ecr.aws/supabase/postgres:17.6.1.104 >/dev/null
 for ((attempt=0;attempt<60;attempt++)); do
- if docker exec "$EDIT_CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then break; fi
+ if docker exec --env PGPASSWORD=fixture-only "$EDIT_CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then break; fi
  sleep 1
 done
-run_sql() { docker exec -i "$EDIT_CONTAINER" psql -X -U postgres -v ON_ERROR_STOP=1 < "$1"; }
-run_sql "$EDIT_ROOT/test/fixtures/restaurant_vat_integrity_setup.sql" >/dev/null
+docker exec --env PGPASSWORD=fixture-only "$EDIT_CONTAINER" createdb -U supabase_admin cashier_fixture
+run_sql() { docker exec --env PGPASSWORD=fixture-only -i "$EDIT_CONTAINER" psql -X -U supabase_admin -d cashier_fixture -v ON_ERROR_STOP=1 < "$1"; }
+sed '/^CREATE ROLE /d' "$EDIT_ROOT/test/fixtures/restaurant_vat_integrity_setup.sql" > "$EDIT_TMP/base.sql"
+run_sql "$EDIT_TMP/base.sql" >/dev/null
 run_sql "$EDIT_TMP/setup.sql" > "$EDIT_TMP/setup.log" 2>&1 || { cat "$EDIT_TMP/setup.log"; exit 1; }
 run_sql "$EDIT_ROOT/supabase/migrations/20261009152000_cashier_item_move_and_partial_cancel.sql" > "$EDIT_TMP/migration.log" 2>&1 || { cat "$EDIT_TMP/migration.log"; exit 1; }
 run_sql "$EDIT_ROOT/supabase/tests/cashier_item_move_and_partial_cancel_test.sql"
+# Latest production workflow definition, not only the historical October 9 RPC.
+run_sql "$EDIT_ROOT/test/fixtures/table_move_qr_payment_summary_setup.sql"
+python3 - "$EDIT_ROOT" > "$EDIT_TMP/qr-pricing.sql" <<'PYCODE'
+from pathlib import Path
+import sys,re
+root=Path(sys.argv[1])
+for name,filename in [('allocate_vat_cents','20260929010000_beverage_sugar_vat.sql'),('calculate_item_vat','20260929010000_beverage_sugar_vat.sql'),('qr_get_active_order','20260812154000_qr_floor_direct_delivery_progress.sql'),('qr_get_active_order','20260823010000_takeout_leftover_packaging.sql')]:
+ s=(root/'supabase/migrations'/filename).read_text(); m=re.search(r'CREATE (?:OR REPLACE )?FUNCTION public\.'+name+r'\(',s);body=s[m.start():s.index('$$;',m.start())+3]
+ if name=='qr_get_active_order': body=body.replace('public.qr_get_active_order(', 'public.qr_get_active_order_pre_takeout(' if '12154000' in filename else 'public.qr_get_active_order_pre_display_reset(')
+ print(body)
+PYCODE
+run_sql "$EDIT_TMP/qr-pricing.sql"
+# Runtime snapshots carry the immutable VAT profile.
+docker exec --env PGPASSWORD=fixture-only -i "$EDIT_CONTAINER" psql -X -U supabase_admin -d cashier_fixture -v ON_ERROR_STOP=1 <<'SQL'
+ALTER TABLE order_items ADD COLUMN vat_profile_snapshot jsonb;
+SQL
+run_sql "$EDIT_ROOT/supabase/migrations/20261021192000_workflow_order_mutations.sql"
+run_sql "$EDIT_ROOT/test/sql/table_move_safeupdate_before.sql"
+run_sql "$EDIT_ROOT/supabase/migrations/20261024110000_table_move_and_qr_payment_summary.sql"
+run_sql "$EDIT_ROOT/scripts/verify_table_move_and_qr_payment_summary.sql"
+run_sql "$EDIT_ROOT/supabase/tests/table_move_qr_payment_summary_test.sql"
+
 # Run two real transactions: payment owns the order while movement owns the
 # table. Movement must fail promptly without deadlocking or rewriting payment.
-docker exec -i "$EDIT_CONTAINER" psql -X -U postgres -v ON_ERROR_STOP=1 > "$EDIT_TMP/race-fixture.log" <<'SQL'
+docker exec --env PGPASSWORD=fixture-only -i "$EDIT_CONTAINER" psql -X -U supabase_admin -d cashier_fixture -v ON_ERROR_STOP=1 > "$EDIT_TMP/race-fixture.log" <<'SQL'
 CREATE TABLE cashier_race_fixture(store_id uuid,order_id uuid,item_id uuid,target_table_id uuid);
 DO $$ DECLARE store uuid; menu uuid; source_table uuid:=gen_random_uuid(); target uuid:=gen_random_uuid(); o uuid; i uuid; BEGIN
  SELECT restaurant_id,menu_item_id INTO store,menu FROM order_items LIMIT 1;
@@ -75,7 +99,7 @@ DO $$ DECLARE store uuid; menu uuid; source_table uuid:=gen_random_uuid(); targe
  INSERT INTO cashier_race_fixture VALUES(store,o,i,target);
 END $$;
 SQL
-docker exec -i --env PGAPPNAME=cashier_payment_race "$EDIT_CONTAINER" psql -X -U postgres -v ON_ERROR_STOP=1 > "$EDIT_TMP/payment-race.log" 2>&1 <<'SQL' &
+docker exec --env PGPASSWORD=fixture-only -i --env PGAPPNAME=cashier_payment_race "$EDIT_CONTAINER" psql -X -U supabase_admin -d cashier_fixture -v ON_ERROR_STOP=1 > "$EDIT_TMP/payment-race.log" 2>&1 <<'SQL' &
 BEGIN;
 SELECT 1 FROM orders WHERE id=(SELECT order_id FROM cashier_race_fixture) FOR UPDATE;
 SELECT pg_sleep(2);
@@ -85,11 +109,11 @@ SQL
 PAYMENT_RACE_PID=$!
 RACE_LOCK_READY=0
 for ((attempt=0;attempt<100;attempt++)); do
- if [[ "$(docker exec "$EDIT_CONTAINER" psql -X -U postgres -Atc "SELECT count(*) FROM pg_stat_activity WHERE application_name='cashier_payment_race' AND query='SELECT pg_sleep(2);'")" == 1 ]]; then RACE_LOCK_READY=1;break;fi
+ if [[ "$(docker exec --env PGPASSWORD=fixture-only "$EDIT_CONTAINER" psql -X -U supabase_admin -d cashier_fixture -Atc "SELECT count(*) FROM pg_stat_activity WHERE application_name='cashier_payment_race' AND query='SELECT pg_sleep(2);'")" == 1 ]]; then RACE_LOCK_READY=1;break;fi
  sleep 0.02
 done
 [[ "$RACE_LOCK_READY" == 1 ]] || { cat "$EDIT_TMP/payment-race.log";exit 1; }
-docker exec -i "$EDIT_CONTAINER" psql -X -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+docker exec --env PGPASSWORD=fixture-only -i "$EDIT_CONTAINER" psql -X -U supabase_admin -d cashier_fixture -v ON_ERROR_STOP=1 <<'SQL'
 DO $$ DECLARE f cashier_race_fixture%ROWTYPE;BEGIN
  SELECT * INTO f FROM cashier_race_fixture;
  BEGIN
@@ -99,7 +123,7 @@ DO $$ DECLARE f cashier_race_fixture%ROWTYPE;BEGIN
 END $$;
 SQL
 wait "$PAYMENT_RACE_PID" || { cat "$EDIT_TMP/payment-race.log";exit 1; }
-docker exec -i "$EDIT_CONTAINER" psql -X -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+docker exec --env PGPASSWORD=fixture-only -i "$EDIT_CONTAINER" psql -X -U supabase_admin -d cashier_fixture -v ON_ERROR_STOP=1 <<'SQL'
 DO $$ DECLARE f cashier_race_fixture%ROWTYPE;BEGIN
  SELECT * INTO f FROM cashier_race_fixture;
  IF NOT EXISTS(SELECT 1 FROM payments WHERE order_id=f.order_id AND amount=10800) OR (SELECT order_id FROM order_items WHERE id=f.item_id)<>f.order_id OR (SELECT status FROM tables WHERE id=f.target_table_id)<>'available' THEN RAISE EXCEPTION 'PAYMENT_MOVE_RACE_CORRUPTED'; END IF;
