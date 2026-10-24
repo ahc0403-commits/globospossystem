@@ -1,5 +1,7 @@
 \set ON_ERROR_STOP on
 -- Synthetic rows only. Run exclusively in the disposable fixture database.
+-- Match the production business-day boundary, independently of the DB default.
+SET TIME ZONE 'Asia/Ho_Chi_Minh';
 SET session_replication_role=replica;
 CREATE SCHEMA IF NOT EXISTS kds_test;
 CREATE OR REPLACE FUNCTION kds_test.id(n integer) RETURNS uuid LANGUAGE sql IMMUTABLE AS $$

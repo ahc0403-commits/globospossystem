@@ -1,5 +1,6 @@
 \set ON_ERROR_STOP on
 BEGIN;
+SET LOCAL TIME ZONE 'Asia/Ho_Chi_Minh';
 SET LOCAL statement_timeout='15s';
 -- Changes below arrange read fixtures; operational write triggers are out of scope.
 SET LOCAL session_replication_role=replica;
