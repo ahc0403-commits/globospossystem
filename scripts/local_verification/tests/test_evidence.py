@@ -37,7 +37,7 @@ def suite(name='real test', skipped=False, terminal=True):
 
 
 def summaries():
-    return ('ok | 4 passed | 0 failed (20ms)\n' * 8 +
+    return ('ok | 4 passed | 0 failed (20ms)\n' * 9 +
             '# tests 3\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n')
 
 

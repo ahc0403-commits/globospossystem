@@ -130,7 +130,8 @@ def parse_counts(step, output, root):
         require(output.count('\nCHECK_REPO_COMPLETE\n') == 1, 'Invalid repository completion')
         counts = flutter_counts(output, suites=3, repository=True)
         counts['repositoryStages'] = len(actual)
-        counts['deno'] = deno_counts(output, suites=8)
+        # Eight direct suites plus the real bootstrap suite in the deploy fixture.
+        counts['deno'] = deno_counts(output, suites=9)
         counts['node'] = node_counts(output)
         return counts
     if step['format'] == 'unittest':
