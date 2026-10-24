@@ -132,6 +132,13 @@ class ProcessOutputTests(unittest.TestCase):
             finally:
                 process.terminate(); process.wait(timeout=5); listener.close(); server.shutdown()
 
+    def test_optional_external_checkout_is_never_counted_as_a_pass(self):
+        name = 'historical Deliberry -> POS -> Office data flow harness optional historical Office import read fences from external checkout'
+        result = flutter_counts(suite(name,skipped=True)+suite('POS assertions'),suites=2,repository=True)
+        self.assertEqual(result['passed'],1)
+        self.assertEqual(result['unavailableOptionalCrossRepository'],[name])
+        with self.assertRaises(InvalidEvidence): flutter_counts(suite(name,skipped=True)+suite(),suites=2)
+
 
 class IntegrityTests(unittest.TestCase):
     def setUp(self):
@@ -259,8 +266,19 @@ class FixtureOwnershipTests(unittest.TestCase):
                 with self.subTest(args=args), self.assertRaises(ValueError):
                     fixture_docker.prepare(args,'f'*32)
 
+
+    def test_network_links_validate_both_owned_endpoints_before_execution(self):
+        for operation in ['connect','disconnect']:
+            with patch.object(fixture_docker,'owned') as owned:
+                args = ['network',operation,'owned-network','owned-container']
+                self.assertEqual(fixture_docker.prepare(args,'f'*32),args)
+                self.assertEqual(owned.call_args_list,[unittest.mock.call('network','owned-network','f'*32),
+                                                    unittest.mock.call('container','owned-container','f'*32)])
+            with patch.object(fixture_docker,'owned',side_effect=[None,ValueError('foreign container')]):
+                with self.assertRaises(ValueError): fixture_docker.prepare(args,'f'*32)
+
     def test_unreviewed_or_unnamed_operations_refused(self):
-        for args in [['system','prune'],['volume','prune'],['run','postgres:15']]:
+        for args in [['system','prune'],['volume','prune'],['image','prune'],['tag','foreign','other'],['run','postgres:15']]:
             with self.assertRaises(ValueError): fixture_docker.prepare(args,'f'*32)
 
 

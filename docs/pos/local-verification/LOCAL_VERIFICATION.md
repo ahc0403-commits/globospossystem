@@ -62,7 +62,11 @@ Flutter emits machine events in the full suite and both SQL/PostgREST suites.
 The verifier requires three successful complete suites, visible nonempty test
 assertions and complete stage markers. Tests initially excluded because they
 need SQL fixture environment must later succeed under exactly the same names
-in the real SQL/API suites. Any other skipped mandatory test fails. The two
+in the real SQL/API suites. Any other skipped mandatory test fails. The former CI's optional Office-checkout
+static test remains explicitly unavailable when that separate checkout is not
+provided; it is recorded as an optional cross-repository exclusion, never PASS.
+Its POS-side immutable history/read-fence assertions now run independently on
+every full suite, so external checkout absence no longer hides POS assertions. The two
 existing Windows-only probes are recorded as not applicable on Linux; they
 are not counted as passes. The separate browser suite permits no skips.
 Deno and Node summaries must also contain nonempty completed tests and no
@@ -101,6 +105,8 @@ The tool container uses its own bridge namespace. A loopback-only TCP proxy
 connects to the verified owned fixture's private IP; it does not assume Docker
 Desktop host-loopback publishing is reachable. The tool joins only networks
 labeled for its current run and disconnects before their cleanup. Existing
+fixtures may connect/disconnect their DB to a second network only after both
+network and container ownership labels match; unowned links are rejected. Existing
 fixture ports stay bound to host loopback. No public listener is added.
 Unexpected fixture operations fail
 closed and require a reviewed wrapper update.

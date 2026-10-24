@@ -64,6 +64,12 @@ def prepare(args, run_id):
         return ['run', '--label', LABEL + '=' + run_id] + args[1:]
     if args[:2] == ['network', 'create']:
         return args[:2] + ['--label', LABEL + '=' + run_id] + args[2:]
+    if args[:2] in (['network', 'connect'], ['network', 'disconnect']):
+        if len(args) != 4:
+            raise ValueError('Only explicit owned network/container links are reviewed')
+        owned('network', args[2], run_id)
+        owned('container', args[3], run_id)
+        return args
     if args[:2] == ['network', 'rm']:
         for name in args[2:]:
             owned('network', name, run_id)
@@ -76,7 +82,9 @@ def prepare(args, run_id):
         for name in args[1:]:
             if not name.startswith('-'):
                 owned('container', name, run_id)
-    elif args[0] not in {'version', '--version', 'info', 'pull', 'tag', 'image'}:
+    elif args[:2] == ['image', 'inspect']:
+        return args
+    elif args[0] not in {'version', '--version', 'info'}:
         raise ValueError('Unreviewed Docker operation: ' + args[0])
     return args
 

@@ -28,6 +28,11 @@ NATIVE_WINDOWS_TESTS = {
 }
 
 
+OPTIONAL_EXTERNAL_TESTS = {
+    'historical Deliberry -> POS -> Office data flow harness optional historical Office import read fences from external checkout',
+}
+
+
 def flutter_counts(output, suites=1, repository=False):
     starts, ended, skipped, passed_names = {}, set(), [], set()
     complete = 0
@@ -64,10 +69,13 @@ def flutter_counts(output, suites=1, repository=False):
     require(complete == suites and not starts, 'Missing/extra terminal Flutter done')
     require(passed > 0, 'No visible Flutter assertions executed')
     native = []
+    optional = []
     reassigned = []
     for name in skipped:
         if repository and name in NATIVE_WINDOWS_TESTS:
             native.append(name)
+        elif repository and name in OPTIONAL_EXTERNAL_TESTS:
+            optional.append(name)
         elif repository and name in passed_names:
             # The initial full suite lacks SQL fixture env; check_repo runs these
             # same test names again against disposable real SQL/PostgREST later.
@@ -76,7 +84,8 @@ def flutter_counts(output, suites=1, repository=False):
             raise InvalidEvidence('Unaccounted skipped test: ' + name)
     return {'passed': passed, 'failed': 0, 'skipped': len(skipped),
             'reexecutedWithSqlFixture': len(reassigned),
-            'notApplicableOnLinux': sorted(native), 'completedSuites': complete,
+            'notApplicableOnLinux': sorted(native),
+            'unavailableOptionalCrossRepository': sorted(optional), 'completedSuites': complete,
             'unit': 'visible Flutter tests; native exclusions are not PASS'}
 
 
