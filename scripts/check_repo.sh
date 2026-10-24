@@ -25,6 +25,9 @@ bash test/store_opening_printer_modes_sql_test.sh
 printf 'CHECK_REPO_STEP=store_operating_profiles\n'
 bash scripts/test_store_operating_profiles.sh
 
+printf 'CHECK_REPO_STEP=table_move_qr_payment_summary\n'
+bash test/cashier_item_edit_sql_test.sh
+
 printf 'CHECK_REPO_STEP=operating_payment_core\n'
 bash scripts/test_operating_payment_core.sh
 

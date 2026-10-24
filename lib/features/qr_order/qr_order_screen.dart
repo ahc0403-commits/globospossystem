@@ -16,6 +16,7 @@ import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/floor_label.dart';
 import '../../core/utils/time_utils.dart';
+import 'qr_payment_summary.dart';
 
 class QrOrderScreen extends StatefulWidget {
   const QrOrderScreen({
@@ -66,6 +67,13 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   Timer? _displayResetTimer;
   Timer? _liveMenuDebounceTimer;
   Timer? _businessDayTimer;
+  Timer? _orderSummaryTimer;
+  Future<void>? _pendingOrderSummary;
+  Future<QrActiveOrder>? _pendingActiveRead;
+  int _activeRequestSerial = 0;
+  bool _paymentSummaryPending = false;
+  bool _paymentSummaryStale = false;
+  bool _isRefreshingPayment = false;
   RealtimeChannel? _menuChannel;
   String? _subscribedStoreId;
   Future<void>? _pendingMenuLoad;
@@ -95,12 +103,14 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     if (state == AppLifecycleState.resumed) {
       unawaited(_loadMenu(showLoading: false));
       _scheduleMenuSafetyRefresh();
+      _scheduleOrderSummaryRefresh();
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
       _menuRefreshTimer?.cancel();
       _menuRefreshTimer = null;
+      _orderSummaryTimer?.cancel();
     }
   }
 
@@ -123,6 +133,57 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         if (mounted) _scheduleMenuSafetyRefresh();
       },
     );
+  }
+
+  void _scheduleOrderSummaryRefresh() {
+    _orderSummaryTimer?.cancel();
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (!mounted ||
+        (lifecycle != null && lifecycle != AppLifecycleState.resumed) ||
+        (_activeOrder?.isActive != true && _result == null)) {
+      return;
+    }
+    _orderSummaryTimer = Timer(
+      Duration(seconds: 15 + _pollRandom.nextInt(4)),
+      () => unawaited(_refreshOrderSummary()),
+    );
+  }
+
+  Future<void> _refreshOrderSummary() {
+    return _pendingOrderSummary ??= _refreshOrderSummaryOnce().whenComplete(() {
+      _pendingOrderSummary = null;
+      _scheduleOrderSummaryRefresh();
+    });
+  }
+
+  Future<QrActiveOrder> _readActiveOrder() {
+    final pending = _pendingActiveRead;
+    if (pending != null) return pending;
+    late final Future<QrActiveOrder> operation;
+    operation = _service.fetchActiveOrder(widget.token).whenComplete(() {
+      if (identical(_pendingActiveRead, operation)) _pendingActiveRead = null;
+    });
+    _pendingActiveRead = operation;
+    return operation;
+  }
+
+  Future<void> _refreshOrderSummaryOnce() async {
+    final serial = ++_activeRequestSerial;
+    setState(() => _isRefreshingPayment = true);
+    try {
+      final order = await _readActiveOrder();
+      if (!mounted || serial != _activeRequestSerial) return;
+      setState(() {
+        _applyActiveOrder(order);
+        _submittedOrderObserved = _result != null && order.isActive;
+      });
+    } catch (_) {
+      if (mounted && serial == _activeRequestSerial) {
+        setState(() => _paymentSummaryStale = true);
+      }
+    } finally {
+      if (mounted) setState(() => _isRefreshingPayment = false);
+    }
   }
 
   void _scheduleBusinessDayRefresh() {
@@ -151,6 +212,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     _displayResetTimer?.cancel();
     _liveMenuDebounceTimer?.cancel();
     _businessDayTimer?.cancel();
+    _orderSummaryTimer?.cancel();
     _menuChannel?.unsubscribe();
     super.dispose();
   }
@@ -221,6 +283,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
 
   Future<void> _loadMenuOnce({required bool showLoading}) async {
     final requestSerial = ++_loadRequestSerial;
+    final activeSerial = ++_activeRequestSerial;
     if (showLoading) {
       setState(() {
         _isLoading = true;
@@ -230,7 +293,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     try {
       final responses = await Future.wait<Object>([
         _service.fetchMenu(widget.token),
-        _service.fetchActiveOrder(widget.token),
+        _readActiveOrder(),
       ]);
       final menu = responses[0] as QrOrderMenu;
       final activeOrder = responses[1] as QrActiveOrder;
@@ -243,7 +306,9 @@ class _QrOrderScreenState extends State<QrOrderScreen>
           final groupId = option.sizeMetadata?.menuId;
           if (groupId != null) (_sizeGroups[groupId] ??= []).add(option);
         }
-        _applyActiveOrder(activeOrder);
+        if (activeSerial == _activeRequestSerial) {
+          _applyActiveOrder(activeOrder);
+        }
         final categoryStillExists = menu.categories.any(
           (category) => category.id == _selectedCategoryId,
         );
@@ -336,6 +401,8 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         next.displayVersion > previous!.displayVersion;
 
     _activeOrder = next;
+    _paymentSummaryPending = false;
+    _paymentSummaryStale = false;
     if (orderClosed || orderChanged) {
       _result = null;
       _cart.clear();
@@ -351,6 +418,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       _submittedOrderObserved = false;
     }
     _scheduleDisplayResetRefresh(next);
+    _scheduleOrderSummaryRefresh();
   }
 
   void _scheduleDisplayResetRefresh(QrActiveOrder order) {
@@ -856,6 +924,8 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         return;
       }
       setState(() {
+        _activeRequestSerial += 1;
+        _paymentSummaryPending = true;
         _result = QrOrderResult(
           orderId: result.orderId,
           orderCode: result.orderCode,
@@ -901,18 +971,23 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   }
 
   Future<void> _refreshActiveOrderAfterSubmit() async {
+    // An in-flight pre-submit read cannot supply the new cumulative balance.
+    await _pendingOrderSummary;
     try {
-      final activeOrder = await _service.fetchActiveOrder(widget.token);
-      if (!mounted || _result == null) return;
-      setState(() {
-        _applyActiveOrder(activeOrder);
-        _submittedOrderObserved = _result != null && activeOrder.isActive;
-      });
+      await _pendingActiveRead;
     } catch (_) {
-      // The success snapshot remains available and the regular refresh loop
-      // retries without making a successful order look like a failure.
+      // A failed earlier read does not invalidate the accepted submission.
     }
+    if (mounted && _result != null) await _refreshOrderSummary();
   }
+
+  Widget _buildPaymentSummary() => QrPaymentSummaryCard(
+    summary: _paymentSummaryPending ? null : _activeOrder?.paymentSummary,
+    languageCode: _languageCode,
+    isStale: _paymentSummaryStale,
+    isLoading: _isRefreshingPayment,
+    onRefresh: () => unawaited(_refreshOrderSummary()),
+  );
 
   Future<void> _requestLeftoverPackaging() async {
     final activeOrder = _activeOrder;
@@ -1031,6 +1106,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
             onAnotherOrder: _startAnotherOrder,
             onRequestLeftoverPackaging: _requestLeftoverPackaging,
             isRequestingLeftoverPackaging: _isRequestingLeftoverPackaging,
+            paymentSummary: _buildPaymentSummary(),
           ),
         ),
       );
@@ -1058,6 +1134,13 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                 key: const Key('qr_menu_scroll'),
                 slivers: [
                   SliverToBoxAdapter(child: _buildHeader(menu)),
+                  if (_activeOrder?.isActive == true)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: _buildPaymentSummary(),
+                      ),
+                    ),
                   if (_activeOrder?.isActive == true &&
                       _activeOrder!.items.isNotEmpty)
                     SliverToBoxAdapter(
@@ -2390,6 +2473,7 @@ class _QrSuccessView extends StatelessWidget {
     required this.onAnotherOrder,
     required this.onRequestLeftoverPackaging,
     required this.isRequestingLeftoverPackaging,
+    required this.paymentSummary,
   });
 
   final QrOrderCopy copy;
@@ -2399,6 +2483,7 @@ class _QrSuccessView extends StatelessWidget {
   final VoidCallback onAnotherOrder;
   final VoidCallback onRequestLeftoverPackaging;
   final bool isRequestingLeftoverPackaging;
+  final Widget paymentSummary;
 
   @override
   Widget build(BuildContext context) {
@@ -2511,6 +2596,8 @@ class _QrSuccessView extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: ToastSpacingTokens.md),
+                  paymentSummary,
                   const SizedBox(height: ToastSpacingTokens.md),
                   SizedBox(
                     width: double.infinity,
