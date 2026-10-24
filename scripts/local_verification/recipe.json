@@ -25,6 +25,21 @@
       "timeoutSeconds": 120
     },
     {
+      "id": "independent-receipt-verifier-contract",
+      "argv": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/receipt_verification/tests",
+        "-v"
+      ],
+      "format": "unittest",
+      "timeoutSeconds": 120
+    },
+    {
       "id": "repository",
       "argv": [
         "bash",

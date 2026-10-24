@@ -40,7 +40,9 @@ deployer's fresh process invocation, tied to its reviewed exact-main source.
 
 The machine-readable recipe is `scripts/local_verification/recipe.json`:
 
-1. Local evidence/process/fixture-ownership regression tests.
+1. Local evidence/process/fixture-ownership regression tests, followed by the
+   independent-result metadata verifier security suite. This extra local step
+   does not enable a remote trust root or attest the submitting operator.
 2. The entire `bash scripts/check_repo.sh`: locked Flutter dependencies, fatal
    analysis, full Flutter tests, security/role/tenant SQL and Edge tests, format,
    lint and type checks, all procurement/inventory and API fixtures, repository
@@ -140,3 +142,15 @@ Do not publish fake statuses or remove that protection to make this candidate
 mergeable. See `REMOTE_PROTECTION_DECISION_KO.md`. Until the separate protection
 decision and authorized remote steps are complete, this is a local candidate,
 not a completed transition or production release.
+
+## Metadata-only GitHub verifier proposal (not activated)
+
+The owner approved design and local implementation of a minimal GitHub result
+verification procedure. All application tests and builds stay local. See
+`INDEPENDENT_RESULT_VERIFICATION_KO.md` for the disabled verifier, independent
+executor/key custody prerequisites, workflow identity/event-policy restrictions,
+exact unchanged branch-protection fields, cost bounds and unapproved remote
+settings proposal. No active workflow, new production key, remote status, push,
+PR, merge or deployment is created by this proposal. The previous eight-step
+403ec1e5 evidence remains tied to that SHA; the additional verifier step belongs
+to the new candidate and cannot inherit the old receipt as a final release PASS.

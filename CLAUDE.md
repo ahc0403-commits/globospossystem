@@ -172,3 +172,14 @@ distinguish candidate validation from a clean freshly fetched exact-main release
 Verify the remote pushed SHA and retain the official deployment and operational
 checks. A missing/failed/skipped check is not PASS. Report remaining executable
 or remote GitHub-check dependencies; do not bypass gates or provision CI runners.
+
+## Minimal result-verifier design authorization (2026-10-24)
+
+The owner approved local design/implementation of a minimal GitHub procedure
+that authenticates independent exact-SHA local results. Application tests and
+builds must remain local. The receipt verifier policy is disabled until an
+independently controlled executor and protected workflow boundary are approved.
+No submitting-operator key or self-reported status is equivalent evidence.
+The workflow/event-policy files under docs are proposals only; remote settings,
+push/PR/merge/deployment and actual GitHub execution remain separately gated.
+See `docs/pos/local-verification/INDEPENDENT_RESULT_VERIFICATION_KO.md`.
