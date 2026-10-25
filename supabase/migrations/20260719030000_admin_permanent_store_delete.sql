@@ -228,6 +228,25 @@ BEGIN
   INTO v_active_count, v_inactive_count
   FROM public.restaurants;
 
+  -- A clean source replay contains only the inactive demonstration row from
+  -- 20260402000001. Validate that exact fresh-install state and remove it with
+  -- the same real purge implementation. Never fabricate the 7/23 operating
+  -- dataset, and never relax its original reviewed production assertions.
+  IF v_active_count = 0 AND v_inactive_count = 1
+     AND EXISTS (
+       SELECT 1 FROM public.restaurants
+       WHERE id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+         AND slug = 'globos-test' AND NOT is_active
+     )
+     AND NOT EXISTS (SELECT 1 FROM auth.users)
+     AND NOT EXISTS (SELECT 1 FROM public.users)
+     AND NOT EXISTS (SELECT 1 FROM public.user_store_access) THEN
+    PERFORM public._purge_inactive_store_data(
+      'aaaaaaaa-0000-0000-0000-000000000001'::uuid, 'globos-test', NULL
+    );
+    RETURN;
+  END IF;
+
   IF v_active_count = 7 AND v_inactive_count = 0 THEN
     CREATE TEMP TABLE store_purge_inactive_profiles
     ON COMMIT DROP

@@ -142,6 +142,13 @@ BEGIN
       SELECT 1 FROM public.photo_objet_monitoring_policies
       WHERE effective_to IS NULL
         AND schedule_version = 'hcm-two-hour-2230-v2'
+    ) AND (
+      -- No operating collection state exists in a schema-only installation.
+      -- Keep all checks for actual policy, slot or raw history without seeding
+      -- a retired collector merely to replay the schema.
+      EXISTS (SELECT 1 FROM public.photo_objet_monitoring_policies)
+      OR EXISTS (SELECT 1 FROM public.photo_objet_expected_slots)
+      OR EXISTS (SELECT 1 FROM public.photo_objet_sales_raw)
     ) THEN
       RAISE EXCEPTION 'PHOTO_2220_OPEN_V2_POLICY_MISSING';
     END IF;

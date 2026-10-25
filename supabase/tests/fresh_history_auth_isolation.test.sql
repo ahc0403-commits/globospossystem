@@ -1,0 +1,22 @@
+-- Run only against an empty, fully replayed isolated database before SAMPLE seeding.
+begin;
+create extension if not exists pgtap with schema extensions;
+set local search_path=public,extensions,auth,pg_catalog;
+select plan(15);
+select is((select count(*) from supabase_migrations.schema_migrations),611::bigint,'every source migration is recorded by the real CLI');
+select is((select count(*) from public.restaurants),0::bigint,'no operating restaurant was fabricated for historical data cutovers');
+select is((select count(*) from auth.users),0::bigint,'no operating Auth identity was cloned');
+insert into auth.users(id,email,raw_user_meta_data) values ('eb100000-0000-4000-8000-000000000001','sample.replay@pos-qa.invalid','{}');
+select is((select count(*) from public.office_user_profiles where auth_id='eb100000-0000-4000-8000-000000000001'),0::bigint,'real POS Auth insert never provisions an Office profile');
+select ok(not has_table_privilege('authenticated','public.office_user_profiles','SELECT,INSERT,UPDATE,DELETE'),'POS browser cannot use retired Office identity rows');
+select is(current_setting('cron.launch_active_jobs'),'off','schedulers were disabled before replay');
+select is((select count(*) from net.http_request_queue),0::bigint,'replay queued no external request');
+select is((select count(*) from cron.job_run_details),0::bigint,'replay executed no scheduled operation');
+select ok(not has_table_privilege('anon','public.office_user_profiles','SELECT,INSERT,UPDATE,DELETE'),'POS anonymous actor cannot access retired Office identity rows');
+select ok(not has_table_privilege('service_role','public.office_user_profiles','SELECT,INSERT,UPDATE,DELETE'),'POS service role cannot use Office identity as a login mapping');
+select is((select count(*) from pg_trigger t where t.tgrelid='auth.users'::regclass and not t.tgisinternal and t.tgfoid='public.handle_new_office_user()'::regprocedure),0::bigint,'legacy Office Auth trigger remains retired after the numbered tail');
+select is((select count(*) from pg_trigger t where t.tgrelid='auth.users'::regclass and not t.tgisinternal and t.tgname in ('reject_production_test_auth_identity','arm_pos_password_change_requirement')),2::bigint,'native POS identity rejection and password guard triggers remain installed');
+select ok(not has_function_privilege('authenticated','public.handle_new_office_user()','EXECUTE'),'browser cannot call retired Office Auth handler');
+select is((select count(*) from information_schema.columns where table_schema='public' and table_name='stores' and column_name in ('id','name','address','is_active')),4::bigint,'real stores compatibility projection retains physical restaurant read contract');
+select ok((select 'security_invoker=true'=any(reloptions) from pg_class where oid='public.stores'::regclass),'compatibility view preserves invoker RLS');
+select * from finish();rollback;

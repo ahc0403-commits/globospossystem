@@ -16,6 +16,11 @@ DECLARE
   v_order_count integer;
   v_gross_amount numeric(18,2);
 BEGIN
+  -- An absent pilot on a new empty install has zero expected pilot receipts.
+  -- Never manufacture the historical orders or tax identity to satisfy checks.
+  IF NOT EXISTS (SELECT 1 FROM public.restaurants)
+     AND NOT EXISTS (SELECT 1 FROM public.orders)
+     AND NOT EXISTS (SELECT 1 FROM public.meinvoice_jobs) THEN RETURN; END IF;
   IF NOT EXISTS (
     SELECT 1
     FROM public.restaurants restaurant
@@ -278,7 +283,7 @@ BEGIN
       AND intake.buyer_email IS NULL
       AND intake.buyer_phone IS NULL
       AND intake.buyer_id IS NULL
-  ) <> 2 THEN
+  ) <> (CASE WHEN EXISTS (SELECT 1 FROM public.restaurants) THEN 2 ELSE 0 END) THEN
     RAISE EXCEPTION 'SAMPLE_MISA_PILOT_RED_RECEIPT_VERIFY_FAILED';
   END IF;
 
@@ -291,7 +296,7 @@ BEGIN
       AND job.buyer_kind = 'registered'
       AND job.status = 'dispatch_paused'
       AND job.buyer_snapshot->>'test_data_only' = 'true'
-  ) <> 2 THEN
+  ) <> (CASE WHEN EXISTS (SELECT 1 FROM public.restaurants) THEN 2 ELSE 0 END) THEN
     RAISE EXCEPTION 'SAMPLE_MISA_PILOT_DISPATCH_GUARD_VERIFY_FAILED';
   END IF;
 END;

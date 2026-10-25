@@ -9,6 +9,10 @@ LOCK TABLE public.inventory_products, public.inventory_items, public.inventory_s
  public.inventory_purchase_orders, public.inventory_receipts IN SHARE ROW EXCLUSIVE MODE;
 -- Known source identities, counts, and test-store guard. No mutations.
 DO $$ BEGIN
+  -- A fresh installation has an empty cutover set, not 208 historical products.
+  -- The source workbook and all result/trigger/lineage checks remain active.
+  IF NOT EXISTS(SELECT 1 FROM public.restaurants) AND NOT EXISTS(SELECT 1 FROM public.inventory_products)
+     AND NOT EXISTS(SELECT 1 FROM auth.users) THEN RETURN; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.restaurants WHERE id='8bc9eef5-dcd5-46b1-b931-23f77132322c' AND brand_id='a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878') OR
      NOT EXISTS (SELECT 1 FROM public.restaurants WHERE id='3a268807-771f-4fd4-84fe-e1b0b00de40a' AND brand_id='a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878' AND lower(name) LIKE '%sample%') THEN
     RAISE EXCEPTION 'BUNSIK_STORE_SCOPE_CHANGED';
@@ -154,7 +158,7 @@ INSERT INTO bunsik_code_map VALUES
   (NULL::uuid,NULL,'GO012','Tăm','Cái','ea',1,'PACKAGING'),
   (NULL::uuid,NULL,'GO013','Túi giấy (đựng xúc xích,…)','Cái','ea',1,'PACKAGING');
 DO $$ BEGIN
-  IF (SELECT count(*) FROM bunsik_code_map m JOIN public.inventory_products p ON p.id=m.product_id AND p.product_code=m.old_code AND p.restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c' AND p.is_active AND p.inventory_item_id IS NOT NULL AND lower(btrim(p.name))=lower(btrim(m.name)))<>104 THEN
+  IF (SELECT count(*) FROM bunsik_code_map m JOIN public.inventory_products p ON p.id=m.product_id AND p.product_code=m.old_code AND p.restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c' AND p.is_active AND p.inventory_item_id IS NOT NULL AND lower(btrim(p.name))=lower(btrim(m.name)))<>(CASE WHEN EXISTS(SELECT 1 FROM public.restaurants) THEN 104 ELSE 0 END) THEN
     RAISE EXCEPTION 'BUNSIK_WORKBOOK_MAPPING_CHANGED';
   END IF;
 END $$;
@@ -183,8 +187,8 @@ INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'inventory_physica
 INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'inventory_transactions',coalesce(jsonb_agg(to_jsonb(t)),'[]') FROM public.inventory_transactions t WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a';
 INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'inventory_products',coalesce(jsonb_agg(to_jsonb(t)),'[]') FROM public.inventory_products t WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a';
 INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'inventory_items',coalesce(jsonb_agg(to_jsonb(t)),'[]') FROM public.inventory_items t WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a';
-INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'binh_products',jsonb_agg(to_jsonb(p)) FROM public.inventory_products p WHERE restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c';
-INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'binh_items',jsonb_agg(to_jsonb(i)) FROM public.inventory_items i WHERE restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c';
+INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'binh_products',coalesce(jsonb_agg(to_jsonb(p)),'[]'::jsonb) FROM public.inventory_products p WHERE restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c';
+INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'binh_items',coalesce(jsonb_agg(to_jsonb(i)),'[]'::jsonb) FROM public.inventory_items i WHERE restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c';
 UPDATE public.inventory_products p SET product_code=m.new_code,updated_at=now()
  FROM bunsik_code_map m WHERE p.id=m.product_id;
 -- Source contains no prices. Register the 19 items for stocktake, but disable
@@ -193,9 +197,9 @@ INSERT INTO public.inventory_suppliers(brand_id,supplier_name,supplier_type,stat
  SELECT DISTINCT 'a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878'::uuid,m.supplier_name,
  CASE WHEN m.new_code LIKE 'GO%' THEN 'packaging' ELSE 'beverage' END,'active',
  'Bunsik Inventory Items - Dung.xlsx; DR / GO. Price terms pending.'
- FROM bunsik_code_map m WHERE m.product_id IS NULL AND NOT EXISTS(
+ FROM bunsik_code_map m WHERE m.product_id IS NULL AND EXISTS(SELECT 1 FROM public.restaurants WHERE id='8bc9eef5-dcd5-46b1-b931-23f77132322c') AND NOT EXISTS(
  SELECT 1 FROM public.inventory_suppliers s WHERE s.brand_id='a3bbff2e-a6f7-4c19-b2bd-410ec9a4f878' AND s.supplier_name=m.supplier_name);
-CREATE TEMP TABLE bunsik_new_items ON COMMIT DROP AS SELECT new_code,gen_random_uuid() item_id,gen_random_uuid() product_id FROM bunsik_code_map WHERE product_id IS NULL;
+CREATE TEMP TABLE bunsik_new_items ON COMMIT DROP AS SELECT new_code,gen_random_uuid() item_id,gen_random_uuid() product_id FROM bunsik_code_map WHERE product_id IS NULL AND EXISTS(SELECT 1 FROM public.restaurants WHERE id='8bc9eef5-dcd5-46b1-b931-23f77132322c');
 INSERT INTO public.inventory_items(id,restaurant_id,name,quantity,unit,current_stock,reorder_point,cost_per_unit,supplier_name,is_active)
  SELECT n.item_id,'8bc9eef5-dcd5-46b1-b931-23f77132322c',m.name,0,m.base_unit,0,0,0,m.supplier_name,true FROM bunsik_new_items n JOIN bunsik_code_map m USING(new_code);
 INSERT INTO public.inventory_products(id,restaurant_id,brand_id,inventory_item_id,product_code,name,category,stock_unit,base_unit,base_unit_factor,is_orderable,is_active)
@@ -243,10 +247,10 @@ INSERT INTO public.inventory_products(id,restaurant_id,brand_id,inventory_item_i
  SELECT c.product_id,'3a268807-771f-4fd4-84fe-e1b0b00de40a',p.brand_id,c.item_id,p.product_code,p.name,p.category,p.stock_unit,p.base_unit,p.base_unit_factor,p.image_url,p.storage_type,p.shelf_life_days,p.is_orderable,p.is_active FROM bunsik_clone c JOIN public.inventory_products p ON p.id=c.source_product_id;
 INSERT INTO public.inventory_supplier_items(supplier_id,product_id,supplier_sku,order_unit,order_unit_quantity_base,min_order_quantity,unit_price,tax_rate,lead_time_days,is_preferred,is_active)
  SELECT s.supplier_id,c.product_id,s.supplier_sku,s.order_unit,s.order_unit_quantity_base,s.min_order_quantity,s.unit_price,s.tax_rate,s.lead_time_days,s.is_preferred,s.is_active FROM bunsik_clone c JOIN public.inventory_supplier_items s ON s.product_id=c.source_product_id;
-INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'clone_ids',jsonb_agg(to_jsonb(c)) FROM bunsik_clone c;
-INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'new_binh_ids',jsonb_agg(to_jsonb(n)) FROM bunsik_new_items n;
+INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'clone_ids',coalesce(jsonb_agg(to_jsonb(c)),'[]'::jsonb) FROM bunsik_clone c;
+INSERT INTO inventory_migration_backup.bunsik_20260930 SELECT 'new_binh_ids',coalesce(jsonb_agg(to_jsonb(n)),'[]'::jsonb) FROM bunsik_new_items n;
 DO $$ BEGIN
- IF (SELECT count(*) FROM public.inventory_products WHERE restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c')<>123 OR (SELECT count(*) FROM public.inventory_products WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a')<>123 THEN RAISE EXCEPTION 'BUNSIK_FINAL_COUNT_INVALID'; END IF;
+ IF (SELECT count(*) FROM public.inventory_products WHERE restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c')<>(CASE WHEN EXISTS(SELECT 1 FROM public.restaurants) THEN 123 ELSE 0 END) OR (SELECT count(*) FROM public.inventory_products WHERE restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a')<>(CASE WHEN EXISTS(SELECT 1 FROM public.restaurants) THEN 123 ELSE 0 END) THEN RAISE EXCEPTION 'BUNSIK_FINAL_COUNT_INVALID'; END IF;
  IF (SELECT count(*) FROM pg_trigger WHERE (tgrelid='public.inventory_receipts'::regclass AND tgname='inventory_receipt_header_change_guard' OR tgrelid='public.inventory_receipt_lines'::regclass AND tgname='inventory_receipt_line_change_guard') AND NOT tgisinternal AND tgenabled='O')<>2 THEN RAISE EXCEPTION 'BUNSIK_RECEIPT_GUARDS_NOT_ENABLED'; END IF;
  IF EXISTS(SELECT 1 FROM public.inventory_products b FULL JOIN public.inventory_products s ON s.restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a' AND s.product_code=b.product_code WHERE b.restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c' AND (s.id IS NULL OR (to_jsonb(b)-ARRAY['id','restaurant_id','inventory_item_id','created_at','updated_at']) IS DISTINCT FROM (to_jsonb(s)-ARRAY['id','restaurant_id','inventory_item_id','created_at','updated_at']))) THEN RAISE EXCEPTION 'BUNSIK_CLONE_PRODUCT_MISMATCH'; END IF;
  IF EXISTS(SELECT 1 FROM public.inventory_products b JOIN public.inventory_products s ON s.restaurant_id='3a268807-771f-4fd4-84fe-e1b0b00de40a' AND s.product_code=b.product_code JOIN public.inventory_items bi ON bi.id=b.inventory_item_id JOIN public.inventory_items si ON si.id=s.inventory_item_id WHERE b.restaurant_id='8bc9eef5-dcd5-46b1-b931-23f77132322c' AND (to_jsonb(bi)-ARRAY['id','restaurant_id','created_at','updated_at']) IS DISTINCT FROM (to_jsonb(si)-ARRAY['id','restaurant_id','created_at','updated_at'])) THEN RAISE EXCEPTION 'BUNSIK_CLONE_STOCK_MISMATCH'; END IF;

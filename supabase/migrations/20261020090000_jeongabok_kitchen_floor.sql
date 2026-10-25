@@ -47,7 +47,7 @@ FOR EACH ROW EXECUTE FUNCTION public.kds_assign_direct_floor_workflow();
 -- fails atomically if new unfinished work arrived after the release preflight.
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM public.restaurants
+  IF EXISTS (SELECT 1 FROM public.restaurants) AND NOT EXISTS (SELECT 1 FROM public.restaurants
     WHERE id = '273b057e-3b69-46e3-93c1-6194c2802849' AND is_active
       AND name = 'JeonGabok Binh Thanh') THEN
     RAISE EXCEPTION 'JEONGABOK_STORE_IDENTITY_CHANGED';

@@ -11,6 +11,12 @@ BEGIN
   FROM public.restaurants
   WHERE id = v_store_id;
 
+  -- A new installation has no operating bank-mapping subject. Preserve the
+  -- mismatch and cross-store bank guards whenever any store already exists.
+  IF v_store_name IS NULL AND NOT EXISTS (SELECT 1 FROM public.restaurants) THEN
+    RETURN;
+  END IF;
+
   IF v_store_name IS DISTINCT FROM 'BunsikClub Binh Thanh' THEN
     RAISE EXCEPTION 'SEPAY_MB_STORE_MISMATCH';
   END IF;

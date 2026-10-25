@@ -74,6 +74,16 @@ DO $$ DECLARE d text; start_at integer; end_at integer; BEGIN
  IF start_at=0 OR end_at<start_at THEN RAISE EXCEPTION 'STORE_CLOSURE_BATCH_PATCH_MISMATCH'; END IF;
  d:=substring(d FROM 1 FOR start_at-1)||'  v_claims_refreshed:=public.store_refresh_closed_claims_v1(p_store_id);'||substring(d FROM end_at+length('END LOOP;')); EXECUTE d;
 END $$;
+-- Early installations returned the physical restaurants composite. PostgreSQL
+-- cannot replace that return type with the stable stores compatibility row.
+-- Preserve exact existing compatibility definitions and never cascade drops.
+DO $return_contract$
+DECLARE existing oid := to_regprocedure('public.admin_deactivate_restaurant(uuid)');
+BEGIN
+ IF existing IS NOT NULL AND (SELECT prorettype FROM pg_proc WHERE oid=existing)<>'public.stores'::regtype THEN
+  DROP FUNCTION public.admin_deactivate_restaurant(uuid);
+ END IF;
+END $return_contract$;
 CREATE OR REPLACE FUNCTION public.admin_deactivate_restaurant(p_store_id uuid) RETURNS public.stores
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth,pg_catalog AS $$
 DECLARE result stores;

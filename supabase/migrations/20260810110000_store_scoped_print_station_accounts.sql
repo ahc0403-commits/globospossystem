@@ -147,6 +147,10 @@ DECLARE
   v_store_id constant uuid := '8bc9eef5-dcd5-46b1-b931-23f77132322c';
   v_existing public.store_fixed_account_requirements%ROWTYPE;
 BEGIN
+  -- No target-specific fixed account exists on a new empty install.
+  IF NOT EXISTS (SELECT 1 FROM public.restaurants) THEN
+    RETURN;
+  END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.restaurants
     WHERE id = v_store_id AND is_active = true
@@ -198,7 +202,9 @@ BEGIN
     RAISE EXCEPTION 'STORE_PRINT_ACCOUNT_CONFIG_VERIFICATION_FAILED';
   END IF;
 
-  IF NOT EXISTS (
+  IF EXISTS (SELECT 1 FROM public.restaurants
+             WHERE id = '8bc9eef5-dcd5-46b1-b931-23f77132322c')
+     AND NOT EXISTS (
     SELECT 1
     FROM public.store_fixed_account_requirements
     WHERE store_id = '8bc9eef5-dcd5-46b1-b931-23f77132322c'::uuid

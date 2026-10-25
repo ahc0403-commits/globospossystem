@@ -1,3 +1,6 @@
+-- POS-native scope includes Photo stores through user_accessible_stores.
+-- Office identity infrastructure was retired by 20260409000012; never
+-- restore Office profiles or use them as POS login mappings here.
 -- Store-scoped change feed for every POS surface except the retired waiter UI.
 --
 -- Clients subscribe to this small, non-sensitive table instead of exposing
@@ -34,13 +37,6 @@ CREATE POLICY pos_live_events_authenticated_read
       SELECT 1
       FROM public.user_accessible_stores(auth.uid()) s(store_id)
       WHERE s.store_id = pos_live_events.restaurant_id
-    )
-    OR (
-      domain = 'photo_ops'
-      AND (
-        public.is_photo_objet_master()
-        OR restaurant_id = public.get_photo_objet_store_id()
-      )
     )
   );
 

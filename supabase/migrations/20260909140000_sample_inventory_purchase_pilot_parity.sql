@@ -20,6 +20,12 @@ DECLARE
   v_source_product_count integer;
   v_source_supplier_item_count integer;
 BEGIN
+  -- No source/target catalog or actor provisioning is fabricated for a new
+  -- installation. Any nonempty installation must satisfy all original guards.
+  IF NOT EXISTS (SELECT 1 FROM public.restaurants)
+     AND NOT EXISTS (SELECT 1 FROM public.inventory_products)
+     AND NOT EXISTS (SELECT 1 FROM public.users)
+     AND NOT EXISTS (SELECT 1 FROM auth.users) THEN RETURN; END IF;
   IF NOT EXISTS (
     SELECT 1
     FROM public.restaurants store

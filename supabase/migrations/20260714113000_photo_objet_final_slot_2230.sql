@@ -165,6 +165,14 @@ BEGIN
       AND schedule_version = 'hcm-two-hour-v1'
   ) AND NOT EXISTS (
     SELECT 1 FROM public.photo_slot_20260714113000_policy_map
+  ) AND (
+    -- A schema-only installation has no legacy collection to cut over. Keep
+    -- every consistency check below, but do not invent an enabled policy just
+    -- to satisfy an operating-data prerequisite. Any real legacy state still
+    -- requires the original strict open-policy check.
+    EXISTS (SELECT 1 FROM public.photo_objet_monitoring_policies)
+    OR EXISTS (SELECT 1 FROM public.photo_objet_expected_slots)
+    OR EXISTS (SELECT 1 FROM public.photo_objet_sales_raw)
   ) THEN
     RAISE EXCEPTION 'PHOTO_2230_OPEN_V1_POLICY_MISSING';
   END IF;

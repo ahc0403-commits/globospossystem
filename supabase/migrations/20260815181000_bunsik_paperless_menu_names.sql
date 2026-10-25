@@ -126,6 +126,9 @@ INSERT INTO paperless_menu_alias(menu_name_ko, seed_name_ko) VALUES
 
 DO $$
 BEGIN
+  -- Empty new installation: the target set is empty, and all set-based
+  -- source, collision and result checks still run. Never seed real stores.
+  IF NOT EXISTS (SELECT 1 FROM public.restaurants) THEN RETURN; END IF;
   IF (
     SELECT count(*)
     FROM public.restaurants

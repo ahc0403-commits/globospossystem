@@ -102,6 +102,11 @@ DECLARE
   v_store_id constant uuid := '8bc9eef5-dcd5-46b1-b931-23f77132322c';
   v_existing public.store_fixed_account_requirements%ROWTYPE;
 BEGIN
+  -- No per-operating-store account is provisioned by a new empty install.
+  -- Nonempty installations retain the original exact active-store guard.
+  IF NOT EXISTS (SELECT 1 FROM public.restaurants) THEN
+    RETURN;
+  END IF;
   IF NOT EXISTS (
     SELECT 1
     FROM public.restaurants

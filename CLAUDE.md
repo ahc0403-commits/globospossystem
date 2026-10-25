@@ -144,8 +144,26 @@ requests and higher-priority instructions take precedence.
 - Flutter tests: `flutter test` (or the relevant test files for focused checks).
 - Format changed Dart files: `dart format <files>`.
 - Production release must use `scripts/deploy_pos_production.sh`; do not bypass
-  it. Local checks and reviews are preflight evidence. The release gate passes
-  only when required GitHub Actions checks succeed on the exact pushed head SHA.
+  it. Complete local verification on the final candidate SHA and again on the
+  clean freshly fetched exact `origin/main` release SHA, verify the remote push,
+  and retain production Auth, migration, login and affected-feature checks.
+  GitHub Actions success is not required by policy. The current script still
+  queries `POS release contract` check-runs; report that executable dependency
+  until an equivalent fail-closed local evidence gate is implemented and verified.
 - Deployment procedure: `docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md`.
 - For a requested Claude Code handoff, write the prompt in English with the goal,
   relevant files, and verification steps. Apply a requested harness when available.
+
+## Local verification and source storage (owner decision 2026-10-24)
+
+GitHub stores commits and pushed source. Run automated verification locally,
+including an isolated local container/VM when the required OS differs. Apply
+`/Users/andreahn/.claude/CLAUDE.md` → “GitHub 저장과 로컬 자동 검증”.
+GitHub Actions success and runner availability are not required evidence.
+Keep all relevant tests, type checks, lint/analysis, builds, security/permission/
+DB isolation, regressions and actual affected-feature checks. Bind commands,
+environment, timestamps, exit codes and complete logs to the final code SHA;
+distinguish candidate validation from a clean freshly fetched exact-main release.
+Verify the remote pushed SHA and retain the official deployment and operational
+checks. A missing/failed/skipped check is not PASS. Report remaining executable
+or remote GitHub-check dependencies; do not bypass gates or provision CI runners.

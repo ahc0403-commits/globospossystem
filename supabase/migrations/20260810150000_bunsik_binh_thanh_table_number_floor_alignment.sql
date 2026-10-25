@@ -11,6 +11,11 @@ DECLARE
   v_floor_2_count integer;
   v_floor_3_count integer;
 BEGIN
+  -- An empty new installation has no table-number cutover subject.
+  -- The collision and exact-result checks below still execute on the set.
+  IF NOT EXISTS (SELECT 1 FROM public.restaurants) THEN
+    RETURN;
+  END IF;
   IF NOT EXISTS (
     SELECT 1
     FROM public.restaurants
@@ -143,6 +148,7 @@ SELECT
     'qr_identity', 'table_id preserved',
     'printer_configuration', 'unchanged'
   )
-FROM floor_table_number_alignment;
+FROM floor_table_number_alignment
+HAVING count(*) > 0;
 
 COMMIT;

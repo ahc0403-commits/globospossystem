@@ -80,7 +80,8 @@ REVOKE ALL ON FUNCTION public.emergency_localize_paperless_orders(jsonb),public.
 
 -- One request/response for bootstrap and revision-based floor invalidation.
 INSERT INTO public.kds_realtime_rollouts(restaurant_id,mode,updated_by,updated_at)
-VALUES('273b057e-3b69-46e3-93c1-6194c2802849','active',NULL,now())
+SELECT id,'active',NULL,now() FROM public.restaurants
+WHERE id='273b057e-3b69-46e3-93c1-6194c2802849'
 ON CONFLICT(restaurant_id) DO UPDATE SET mode='active',updated_by=NULL,updated_at=now();
 INSERT INTO public.audit_logs(actor_id,action,entity_type,entity_id,details)
 VALUES(NULL,'jeongabok_direct_floor_live_sync','restaurants','273b057e-3b69-46e3-93c1-6194c2802849',
@@ -95,7 +96,8 @@ SELECT public.kds_append_change(s.restaurant_id,s.id,gen_random_uuid(),'bootstra
 FROM public.emergency_fulfillment_sessions s
 WHERE s.restaurant_id='273b057e-3b69-46e3-93c1-6194c2802849' AND s.status='active';
 DO $$ BEGIN
- IF NOT EXISTS(SELECT 1 FROM public.kds_realtime_rollouts WHERE restaurant_id='273b057e-3b69-46e3-93c1-6194c2802849' AND mode='active')
+ IF (EXISTS(SELECT 1 FROM public.restaurants WHERE id='273b057e-3b69-46e3-93c1-6194c2802849')
+ AND NOT EXISTS(SELECT 1 FROM public.kds_realtime_rollouts WHERE restaurant_id='273b057e-3b69-46e3-93c1-6194c2802849' AND mode='active'))
  OR EXISTS(SELECT 1 FROM public.emergency_station_assignments WHERE restaurant_id='273b057e-3b69-46e3-93c1-6194c2802849' AND station_type='tray' AND is_active)
  THEN RAISE EXCEPTION 'DIRECT_FLOOR_LIVE_SYNC_VERIFY_FAILED'; END IF;
 END $$;

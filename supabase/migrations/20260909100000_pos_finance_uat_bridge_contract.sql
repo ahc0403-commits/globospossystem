@@ -177,7 +177,7 @@ BEGIN
       v_receipt_columns;
   END IF;
 
-  IF NOT EXISTS (
+  IF EXISTS (SELECT 1 FROM public.restaurants) AND NOT EXISTS (
     SELECT 1
     FROM public.v_office_eligible_stores eligible
     WHERE eligible.store_id =

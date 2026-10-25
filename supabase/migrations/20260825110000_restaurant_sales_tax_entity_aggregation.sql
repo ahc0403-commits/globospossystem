@@ -16,6 +16,8 @@ DECLARE
   v_brand_id uuid;
   v_changed_at timestamptz := clock_timestamp();
 BEGIN
+  -- The historical entity cutover has no subject on a new empty install.
+  IF NOT EXISTS (SELECT 1 FROM public.restaurants) THEN RETURN; END IF;
   SELECT restaurant.tax_entity_id, restaurant.brand_id
   INTO v_previous_entity_id, v_brand_id
   FROM public.restaurants restaurant
@@ -422,7 +424,7 @@ DECLARE
   v_grouped_definition text;
   v_legacy_definition text;
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (SELECT 1 FROM public.restaurants) AND NOT EXISTS (
     SELECT 1
     FROM public.restaurants restaurant
     JOIN public.tax_entity entity
@@ -440,7 +442,7 @@ BEGIN
     RAISE EXCEPTION 'SAMPLE_STORE_LEGAL_ENTITY_VERIFY_FAILED';
   END IF;
 
-  IF 1 <> (
+  IF (CASE WHEN EXISTS (SELECT 1 FROM public.restaurants) THEN 1 ELSE 0 END) <> (
     SELECT count(*)
     FROM public.store_tax_entity_history history
     WHERE history.store_id = v_sample_store_id

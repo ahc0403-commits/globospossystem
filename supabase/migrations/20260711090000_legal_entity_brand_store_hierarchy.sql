@@ -1034,6 +1034,25 @@ $$;
 
 -- Legacy update preserves the store's legal entity. Call v2 to change entity.
 -- p_store_type is retained for API compatibility and is intentionally ignored.
+-- The clean historical chain still has the restaurant composite return type;
+-- CREATE OR REPLACE cannot change it to the existing compatibility contract.
+-- Drop only that obsolete overload, without CASCADE. The canonical grants are
+-- restored below after the replacement is created.
+DO $legacy_return_type$
+DECLARE
+  v_oid oid := to_regprocedure(
+    'public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'
+  );
+BEGIN
+  IF v_oid IS NOT NULL AND (
+    SELECT prorettype <> 'public.stores'::regtype FROM pg_proc WHERE oid = v_oid
+  ) THEN
+    DROP FUNCTION public.admin_update_restaurant(
+      uuid,text,text,text,text,numeric,uuid,text
+    );
+  END IF;
+END;
+$legacy_return_type$;
 CREATE OR REPLACE FUNCTION public.admin_update_restaurant(
   p_store_id uuid,
   p_name text,

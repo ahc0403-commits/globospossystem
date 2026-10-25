@@ -35,10 +35,21 @@ BEGIN
   WHERE r.brand_id = '77000000-0000-0000-0000-000000000001'::uuid
     AND audit.created_at = '2026-05-06 09:00:57.334069+00'::timestamptz;
 
-  IF v_item_count <> 48
-     OR v_product_count <> 48
-     OR v_supplier_count <> 3
-     OR v_audit_count <> 6 THEN
+  IF NOT (
+    (v_item_count = 48 AND v_product_count = 48
+      AND v_supplier_count = 3 AND v_audit_count = 6)
+    OR (
+      -- The historical seed never existed on a fresh installation. Assert its
+      -- complete absence, including the brand, rather than creating dummy seed
+      -- rows or relaxing the original shape check for an existing Photo tenant.
+      v_item_count = 0 AND v_product_count = 0
+      AND v_supplier_count = 0 AND v_audit_count = 0
+      AND NOT EXISTS (SELECT 1 FROM public.brands
+        WHERE id = '77000000-0000-0000-0000-000000000001'::uuid)
+      AND NOT EXISTS (SELECT 1 FROM public.restaurants
+        WHERE brand_id = '77000000-0000-0000-0000-000000000001'::uuid)
+    )
+  ) THEN
     RAISE EXCEPTION
       'PHOTO_OPS_INVENTORY_SEED_MISMATCH items=% products=% suppliers=% audits=%',
       v_item_count,

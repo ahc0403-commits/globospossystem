@@ -18,7 +18,7 @@ SELECT m.id FROM public.menu_items m JOIN beverage_vat_targets t ON t.item_id=m.
 DO $$ BEGIN
  IF (SELECT count(*) FROM beverage_vat_targets t JOIN public.menu_items m ON m.id=t.item_id AND m.restaurant_id=t.store_id
      WHERE m.name_en=t.expected_name AND m.vat_category='food' AND NOT m.is_archived AND NOT m.is_combo
-     AND m.beverage_sugar_tax_class='not_applicable' AND m.sugar_g_per_100ml IS NULL AND m.tax_basis_note IS NULL)<>10 THEN
+     AND m.beverage_sugar_tax_class='not_applicable' AND m.sugar_g_per_100ml IS NULL AND m.tax_basis_note IS NULL)<>(CASE WHEN EXISTS(SELECT 1 FROM public.restaurants) THEN 10 ELSE 0 END) THEN
    RAISE EXCEPTION 'BUNSIK_BEVERAGE_TARGET_DRIFT'; END IF;
  IF EXISTS(SELECT 1 FROM public.orders o JOIN (SELECT DISTINCT store_id FROM beverage_vat_targets) s ON s.store_id=o.restaurant_id
    WHERE o.status NOT IN ('completed','cancelled')) THEN RAISE EXCEPTION 'BUNSIK_BEVERAGE_OPEN_ORDERS'; END IF;
@@ -55,7 +55,7 @@ FROM public.menu_items m JOIN public.bunsik_beverage_vat_20260929_backup b ON b.
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.menu_items m JOIN beverage_vat_targets t ON t.item_id=m.id
     WHERE m.beverage_sugar_tax_class=t.sugar_class AND m.sugar_g_per_100ml IS NULL
-     AND m.effective_vat_rate=CASE WHEN t.sugar_class='gt_5' THEN 10 ELSE 8 END)<>10 THEN
+     AND m.effective_vat_rate=CASE WHEN t.sugar_class='gt_5' THEN 10 ELSE 8 END)<>(CASE WHEN EXISTS(SELECT 1 FROM public.restaurants) THEN 10 ELSE 0 END) THEN
    RAISE EXCEPTION 'BUNSIK_BEVERAGE_POSTCONDITION_FAILED'; END IF;
 END $$;
 COMMIT;

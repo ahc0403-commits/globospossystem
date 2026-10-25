@@ -139,7 +139,7 @@ BEGIN
     RAISE EXCEPTION 'BUNSIK_ENGLISH_SEED_INVALID';
   END IF;
 
-  IF (SELECT count(*) FROM public.restaurants
+  IF EXISTS (SELECT 1 FROM public.restaurants) AND (SELECT count(*) FROM public.restaurants
       WHERE id IN (
         '8bc9eef5-dcd5-46b1-b931-23f77132322c'::uuid,
         '3a268807-771f-4fd4-84fe-e1b0b00de40a'::uuid

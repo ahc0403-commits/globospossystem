@@ -12,6 +12,9 @@ DECLARE
  seller uuid := (input->>'tax_entity_id')::uuid;
  owner_auth_id uuid; owner_count integer; group_row record; result jsonb;
  expected integer := 0; actual integer; before_master text; after_master text;
+ fresh_install boolean := not exists(select 1 from public.restaurants)
+   and not exists(select 1 from public.menu_items) and not exists(select 1 from public.users)
+   and not exists(select 1 from auth.users);
  old_sub text := current_setting('request.jwt.claim.sub',true);
  old_claims text := current_setting('request.jwt.claims',true);
 BEGIN
@@ -24,10 +27,10 @@ BEGIN
  IF now()<'2026-10-12 00:00+07'::timestamptz THEN RAISE EXCEPTION 'INITIAL_MAPPING_PERIOD_NOT_CLOSED'; END IF;
  SELECT count(*),(array_agg(auth_id))[1] INTO owner_count,owner_auth_id FROM public.users
  WHERE role='super_admin' AND is_active AND auth_id IS NOT NULL;
- IF owner_count<>1 THEN RAISE EXCEPTION 'INITIAL_MAPPING_APPROVING_OWNER_AMBIGUOUS'; END IF;
+ IF owner_count<>(CASE WHEN fresh_install THEN 0 ELSE 1 END) THEN RAISE EXCEPTION 'INITIAL_MAPPING_APPROVING_OWNER_AMBIGUOUS'; END IF;
  IF (SELECT count(*) FROM jsonb_array_elements(input->'rows') x JOIN public.menu_items m ON m.id=(x->>'menu_item_id')::uuid
- JOIN public.restaurants r ON r.id=m.restaurant_id WHERE x->>'approval_type'='menu_item' AND r.tax_entity_id=seller)<>73
- OR (SELECT count(*) FROM public.restaurants WHERE tax_entity_id=seller AND name='BunsikClub Binh Thanh')<>1
+ JOIN public.restaurants r ON r.id=m.restaurant_id WHERE x->>'approval_type'='menu_item' AND r.tax_entity_id=seller)<>(CASE WHEN fresh_install THEN 0 ELSE 73 END)
+ OR (SELECT count(*) FROM public.restaurants WHERE tax_entity_id=seller AND name='BunsikClub Binh Thanh')<>(CASE WHEN fresh_install THEN 0 ELSE 1 END)
  THEN RAISE EXCEPTION 'INITIAL_MAPPING_PRODUCTION_SCOPE_DRIFT'; END IF;
  SELECT md5(string_agg(to_jsonb(m)::text,',' ORDER BY id)) INTO before_master FROM public.menu_items m;
  PERFORM set_config('request.jwt.claim.sub',owner_auth_id::text,true);
@@ -53,10 +56,10 @@ BEGIN
  WHERE p.tax_entity_id=seller AND p.mapping_version='AKJ-MANUAL-20261011-v1'
  AND p.effective_from='2026-10-11 00:00+07'::timestamptz AND p.effective_to='2026-10-12 00:00+07'::timestamptz;
  SELECT md5(string_agg(to_jsonb(m)::text,',' ORDER BY id)) INTO after_master FROM public.menu_items m;
- IF expected<>74 OR actual<>expected OR before_master IS DISTINCT FROM after_master
+ IF expected<>(CASE WHEN fresh_install THEN 0 ELSE 74 END) OR actual<>expected OR before_master IS DISTINCT FROM after_master
  THEN RAISE EXCEPTION 'INITIAL_MAPPING_POSTCONDITION_FAILED'; END IF;
  PERFORM set_config('request.jwt.claim.sub',COALESCE(old_sub,''),true);
  PERFORM set_config('request.jwt.claims',COALESCE(old_claims,'{}'),true);
- RAISE NOTICE 'INITIAL_INVOICE_MAPPING_REGISTERED=74 (73 menus + 1 wet tissue; 2026-10-11 only)';
+ RAISE NOTICE 'INITIAL_INVOICE_MAPPING_REGISTERED=% (historical 2026-10-11 subjects only)', actual;
 END $initial$;
 COMMIT;

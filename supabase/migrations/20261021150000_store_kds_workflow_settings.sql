@@ -195,7 +195,8 @@ GRANT EXECUTE ON FUNCTION public.admin_validate_store_opening_config_v3(uuid,jso
 
 DO $$
 BEGIN
- IF NOT public.kds_uses_direct_floor_workflow('273b057e-3b69-46e3-93c1-6194c2802849')
+ IF (EXISTS(SELECT 1 FROM public.restaurants WHERE id='273b057e-3b69-46e3-93c1-6194c2802849')
+ AND NOT public.kds_uses_direct_floor_workflow('273b057e-3b69-46e3-93c1-6194c2802849'))
  OR public.kds_uses_direct_floor_workflow('8bc9eef5-dcd5-46b1-b931-23f77132322c')
  OR public.kds_uses_direct_floor_workflow(NULL)
  OR has_function_privilege('anon','public.admin_apply_store_opening_config_v3(uuid,jsonb,jsonb,text,text)','EXECUTE')

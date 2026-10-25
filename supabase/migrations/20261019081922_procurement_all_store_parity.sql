@@ -15,7 +15,7 @@ BEGIN
       JOIN public.brands b ON b.id = r.brand_id
       JOIN public.procurement_store_policies p ON p.restaurant_id = r.id
       WHERE b.code = 'bunsikclub' AND r.short_code = 'BT' AND r.is_active
-        AND p.enabled AND p.new_requests_enabled AND p.two_stage_required) <> 1 THEN
+        AND p.enabled AND p.new_requests_enabled AND p.two_stage_required) <> (CASE WHEN EXISTS(SELECT 1 FROM public.restaurants) THEN 1 ELSE 0 END) THEN
     RAISE EXCEPTION 'PROCUREMENT_PARITY_REFERENCE_NOT_READY';
   END IF;
 END $$;

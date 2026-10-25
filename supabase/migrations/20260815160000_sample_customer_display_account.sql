@@ -9,6 +9,8 @@ DECLARE
   v_store_count integer;
   v_existing public.store_fixed_account_requirements%ROWTYPE;
 BEGIN
+  -- Per-store provisioning is inapplicable only to a truly empty installation.
+  IF NOT EXISTS (SELECT 1 FROM public.restaurants) THEN RETURN; END IF;
   SELECT count(*), (array_agg(id))[1]
   INTO v_store_count, v_store_id
   FROM public.restaurants
@@ -57,7 +59,8 @@ BEGIN
   WHERE upper(btrim(short_code)) = 'SP'
     AND is_active = true;
 
-  IF v_store_id IS NULL OR NOT EXISTS (
+  IF (v_store_id IS NULL AND EXISTS (SELECT 1 FROM public.restaurants))
+     OR (v_store_id IS NOT NULL AND NOT EXISTS (
     SELECT 1
     FROM public.store_fixed_account_requirements
     WHERE store_id = v_store_id
@@ -66,7 +69,7 @@ BEGIN
       AND role = 'customer_display'
       AND scope = 'store'
       AND is_active = true
-  ) THEN
+  )) THEN
     RAISE EXCEPTION 'SAMPLE_CUSTOMER_DISPLAY_ACCOUNT_VERIFICATION_FAILED';
   END IF;
 END;

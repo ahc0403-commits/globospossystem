@@ -11,7 +11,9 @@ BEGIN
       '123 Test Street, Ho Chi Minh City',
       'globos-test',
       'standard',
-      true
+      -- Historical demonstration data is retained for references, never as an
+      -- operating store. The later production test-entity guard stays strict.
+      false
     );
 
     -- Insert tables (T01-T10)
