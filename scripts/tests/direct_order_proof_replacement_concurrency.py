@@ -1,6 +1,8 @@
 """Real row-lock races and bounded authorization measurements in a local DB."""
 import concurrent.futures
 import json
+import os
+import selectors
 import statistics
 import subprocess
 import sys
@@ -43,19 +45,64 @@ for kind in ['replace', 'approve_first', 'replace_first']:
                      else (approval, replacement) if kind == 'approve_first'
                      else (replacement, approval))
     app = f'proof-race-{kind}'
-    first = (f"SET application_name='{app}'; BEGIN; {first}; SELECT pg_sleep(0.5); COMMIT;")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        a = pool.submit(sql, first)
-        # Wait for the first connection to hold its lock before starting the rival.
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            if checked(f"SELECT count(*) FROM pg_stat_activity WHERE application_name='{app}' AND wait_event='PgSleep'") == '1':
-                break
-            time.sleep(0.025)
-        else:
-            raise AssertionError('First race connection did not acquire the lock')
-        b = pool.submit(sql, second)
-        result_a, result_b = a.result(), b.result()
+    # Keep the first real business transaction open until the rival is
+    # observed waiting for its lock. A short pg_sleep window can finish before
+    # Docker's ownership checks and observer connection start under load.
+    claims = json.dumps({'sub': '00000000-0000-4000-8000-000000000001', 'role': 'authenticated'})
+    first_process = subprocess.Popen(
+        ['docker', 'exec', '-i', container, 'psql', '-X', '-qAt', '-U', 'postgres',
+         '-d', 'codex_direct_photo', '-v', 'ON_ERROR_STOP=1'],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    setup = ("SET request.jwt.claim.sub='00000000-0000-4000-8000-000000000001';"
+             f"SET request.jwt.claims='{claims}';SET application_name='{app}';"
+             f"BEGIN; {first};\n\\echo PROOF_LOCK_HELD\n")
+    first_process.stdin.write(setup.encode())
+    first_process.stdin.flush()
+    prefix = b''
+    try:
+        with selectors.DefaultSelector() as selector:
+            selector.register(first_process.stdout, selectors.EVENT_READ)
+            deadline = time.monotonic() + 15
+            while b'PROOF_LOCK_HELD\n' not in prefix:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    raise AssertionError('First business transaction did not reach its open-lock barrier')
+                chunk = os.read(first_process.stdout.fileno(), 65536)
+                if not chunk:
+                    raise AssertionError('First business transaction exited before its open-lock barrier')
+                prefix += chunk
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            rival = pool.submit(sql, f"SET application_name='{app}-rival'; {second};")
+            locked = False
+            try:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    blocked = checked(
+                        "SELECT count(*) FROM pg_stat_activity rival "
+                        "JOIN pg_stat_activity holder ON holder.pid=ANY(pg_blocking_pids(rival.pid)) "
+                        f"WHERE rival.application_name='{app}-rival' AND holder.application_name='{app}'"
+                    )
+                    if blocked == '1':
+                        locked = True
+                        break
+                    if rival.done():
+                        raise AssertionError('Rival completed before waiting for the first business lock')
+                    time.sleep(0.025)
+                if not locked:
+                    raise AssertionError('Rival did not wait for the first business lock')
+            finally:
+                first_process.stdin.write(('COMMIT;\n\\q\n' if locked else 'ROLLBACK;\n\\q\n').encode())
+                first_process.stdin.close()
+                first_process.stdin = None
+            result_b = rival.result(timeout=30)
+        rest, errors = first_process.communicate(timeout=30)
+        result_a = subprocess.CompletedProcess([], first_process.returncode,
+                                               (prefix + rest).decode(), errors.decode())
+    finally:
+        if first_process.poll() is None:
+            first_process.kill()
+            first_process.wait(timeout=10)
     assert result_a.returncode == 0, result_a.stderr
     expected = 'DIRECT_ORDER_PROOF_NOT_ALLOWED' if kind == 'approve_first' else 'DIRECT_ORDER_PAYMENT_REVIEW_CHANGED'
     assert result_b.returncode != 0 and expected in result_b.stderr, result_b.stderr
