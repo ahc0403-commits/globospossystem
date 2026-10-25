@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path=public,extensions,auth,pg_catalog;
 select plan(15);
-select is((select count(*) from supabase_migrations.schema_migrations),611::bigint,'every source migration is recorded by the real CLI');
+select is((select count(*) from supabase_migrations.schema_migrations),616::bigint,'every source migration is recorded by the real CLI');
 select is((select count(*) from public.restaurants),0::bigint,'no operating restaurant was fabricated for historical data cutovers');
 select is((select count(*) from auth.users),0::bigint,'no operating Auth identity was cloned');
 insert into auth.users(id,email,raw_user_meta_data) values ('eb100000-0000-4000-8000-000000000001','sample.replay@pos-qa.invalid','{}');
