@@ -30,7 +30,7 @@ INSERT INTO lifecycle_release_components VALUES ('20261022143000','inventory_lot
 INSERT INTO lifecycle_release_components VALUES ('20261022144000','inventory_lot_workspace','f02d3de7ea2dfabcb4c58248ff07a1eb3751a071bf2192dad20facb4226c7af5');
 INSERT INTO lifecycle_release_components VALUES ('20261022145000','inventory_lot_boundaries','ddef9b523ad87bdb72195be5a14c5c2be410a1cec4c332eb329df8b7d85fa665');
 INSERT INTO lifecycle_release_components VALUES ('20261022150000','shared_service_area_receivers','d71ab9beec4657d909ce08e7259faaa20c6242e28399ca967fff1fb580886465');
-INSERT INTO lifecycle_release_components VALUES ('20261022160000','store_closure_boundaries','6e12a4d00db2668c7365c36b3693b72ae7f5673ea35ce9f6073090bf2e1818a7');
+INSERT INTO lifecycle_release_components VALUES ('20261022160000','store_closure_boundaries','e9769837f922b29c481be77edce6fe38c066d9bd7e9bde9bef07f791dec5c16e');
 INSERT INTO lifecycle_release_components VALUES ('20261022170000','store_operational_acceptance','7e131b1b24ab8c941e1c6137c931aa50b43b409f55e43524ab75b2c4e3552ed3');
 INSERT INTO lifecycle_release_components VALUES ('20261022180000','procurement_reconciliation_evidence','b9718753dceab787fcb79385c7a5ef1fde94c3cb0fb860af27146cbf7a5d7dcd');
 INSERT INTO lifecycle_release_components VALUES ('20261022181000','store_reopening_preparation','9d1951784cb8f4b8c6f0544eb5b38eb89012b5af830b3cb76a572489558e31a0');
@@ -8518,6 +8518,16 @@ DO $$ DECLARE d text; start_at integer; end_at integer; BEGIN
  IF start_at=0 OR end_at<start_at THEN RAISE EXCEPTION 'STORE_CLOSURE_BATCH_PATCH_MISMATCH'; END IF;
  d:=substring(d FROM 1 FOR start_at-1)||'  v_claims_refreshed:=public.store_refresh_closed_claims_v1(p_store_id);'||substring(d FROM end_at+length('END LOOP;')); EXECUTE d;
 END $$;
+-- Early installations returned the physical restaurants composite. PostgreSQL
+-- cannot replace that return type with the stable stores compatibility row.
+-- Preserve exact existing compatibility definitions and never cascade drops.
+DO $return_contract$
+DECLARE existing oid := to_regprocedure('public.admin_deactivate_restaurant(uuid)');
+BEGIN
+ IF existing IS NOT NULL AND (SELECT prorettype FROM pg_proc WHERE oid=existing)<>'public.stores'::regtype THEN
+  DROP FUNCTION public.admin_deactivate_restaurant(uuid);
+ END IF;
+END $return_contract$;
 CREATE OR REPLACE FUNCTION public.admin_deactivate_restaurant(p_store_id uuid) RETURNS public.stores
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth,pg_catalog AS $$
 DECLARE result stores;
