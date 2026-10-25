@@ -12,8 +12,11 @@ void main() {
     expect(migration, contains("'77000000-0000-0000-0000-000000000001'::uuid"));
     expect(migration, contains("'2026-05-06 09:00:57.334069+00'::timestamptz"));
     expect(migration, contains("'2026-05-06 09:06:00.256853+00'::timestamptz"));
-    expect(migration, contains('v_item_count <> 48'));
-    expect(migration, contains('v_product_count <> 48'));
+    expect(migration, contains('v_item_count = 48 AND v_product_count = 48'));
+    expect(migration, contains('v_supplier_count = 3 AND v_audit_count = 6'));
+    expect(migration, contains('v_item_count = 0 AND v_product_count = 0'));
+    expect(migration, contains('AND NOT EXISTS (SELECT 1 FROM public.brands'));
+    expect(migration, contains('PHOTO_OPS_INVENTORY_SEED_MISMATCH'));
     expect(migration, contains('DELETE FROM public.inventory_products'));
     expect(migration, contains('DELETE FROM public.inventory_items'));
     expect(migration, contains('DELETE FROM public.inventory_suppliers'));
