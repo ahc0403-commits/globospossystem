@@ -508,6 +508,31 @@ void main() {
     },
   );
 
+  test('driver receipt omits an optional empty detail line', () async {
+    final payload = QueuedDeliveryDriverReceipt.fromPayload({});
+    expect(payload.detailAddress, '');
+    final text = String.fromCharCodes(
+      await ReceiptBuilder.buildDeliveryDriverReceipt(
+        restaurantName: 'Test',
+        referenceCode: 'DOPTIONAL',
+        customerName: 'Test',
+        customerPhone: '+84901234567',
+        formattedAddress: '123 Test Street',
+        detailAddress: '   ',
+        items: const [
+          ReceiptItem(name: 'Test', quantity: 1, unitPrice: 100000),
+        ],
+        menuTotal: 100000,
+        serviceChargeTotal: 0,
+        deliveryFeeTotal: 0,
+        finalTotal: 100000,
+        printedAt: DateTime.utc(2026, 10, 23),
+      ),
+    );
+    expect(text, contains('123 Test Street'));
+    expect(text, isNot(contains('Chi tiet:')));
+  });
+
   test('queued delivery driver receipt reads its isolated payload', () {
     final receipt = QueuedDeliveryDriverReceipt.fromPayload({
       'restaurant_name': 'GLOBOS POS',

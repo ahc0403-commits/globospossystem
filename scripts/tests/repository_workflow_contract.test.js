@@ -4,9 +4,10 @@ const path = require('node:path');
 const test = require('node:test');
 
 const root = path.join(__dirname, '../..');
-const workflows = path.join(root, '.github/workflows');
+const workflows = path.join(root, 'docs/pos/local-verification/legacy-github-workflows');
+const active = path.join(root, '.github/workflows');
 
-test('POS release contract runs the complete repository check', () => {
+test('local release recipe preserves complete repository and browser checks', () => {
   const workflow = fs.readFileSync(
     path.join(workflows, 'pos_release_contract.yml'),
     'utf8',
@@ -14,6 +15,10 @@ test('POS release contract runs the complete repository check', () => {
 
   assert.match(workflow, /^name: POS Release Contract$/m);
   assert.match(workflow, /^\s+name: POS release contract$/m);
+  const recipe = JSON.parse(fs.readFileSync(path.join(root, 'scripts/local_verification/recipe.json'), 'utf8'));
+  assert.deepEqual(recipe.steps.find(s => s.id === 'repository').argv, ['bash', 'scripts/check_repo.sh']);
+  assert.deepEqual(recipe.steps.find(s => s.id === 'browser-terminal-authentication').argv, ['flutter', 'test', '--no-pub', '--machine', '--platform', 'chrome', 'test/terminal_auth_browser_test.dart']);
+  assert.deepEqual(fs.readdirSync(active).filter(n => /\.ya?ml$/.test(n)), []);
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /push:[\s\S]*branches: \[main\]/);
   assert.match(workflow, /run: bash scripts\/check_repo\.sh/);
@@ -21,7 +26,7 @@ test('POS release contract runs the complete repository check', () => {
   assert.doesNotMatch(workflow, /Photo Objet|photo_objet/);
 });
 
-test('all active external GitHub Actions are pinned to full commits', () => {
+test('archived external GitHub Actions retain their full commit pins', () => {
   const workflowNames = fs.readdirSync(workflows)
     .filter(name => name.endsWith('.yml'));
   let externalActionCount = 0;
@@ -47,7 +52,7 @@ test('all active external GitHub Actions are pinned to full commits', () => {
     }
   }
 
-  assert.ok(externalActionCount > 0, 'active workflows must use pinned Actions');
+  assert.ok(externalActionCount > 0, 'archived workflows retain pinned Actions');
 });
 
 test('Flutter SDK archives are official and checksum verified', () => {

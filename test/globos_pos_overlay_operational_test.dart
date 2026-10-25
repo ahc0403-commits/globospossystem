@@ -183,7 +183,15 @@ Future<void> _exerciseOverlay(
       await tester.pump();
       expect(find.byKey(const Key('pos_buyer_number_type')), findsOneWidget);
       expect(find.byKey(const Key('pos_buyer_number_value')), findsOneWidget);
-      expect(find.text(l10n.redInvoiceCompanyName), findsOneWidget);
+      final language = Localizations.localeOf(
+        tester.element(_dialog()),
+      ).languageCode;
+      const companyLabels = {
+        'ko': '회사명 / 단체명',
+        'vi': 'Tên đơn vị',
+        'en': 'Company / organization',
+      };
+      expect(find.text(companyLabels[language]!), findsOneWidget);
       expect(find.text(l10n.address), findsOneWidget);
       expect(find.text(l10n.redInvoiceEmailRequiredLabel), findsOneWidget);
       expect(find.byKey(const Key('pos_buyer_phone')), findsOneWidget);

@@ -19,7 +19,7 @@ class DirectOrderRequirement {
     this.itemLabelVi,
     this.printRequestVi,
     this.printReplyVi,
-    this.printScope = 'both',
+    this.printScope = 'cashier',
     this.needsConfirmation = true,
     this.requestTranslations = const {},
     this.replyTranslations = const {},
@@ -68,7 +68,9 @@ class DirectOrderRequirement {
       itemLabelVi: json['item_label_vi'] as String?,
       printRequestVi: json['print_request_vi'] as String?,
       printReplyVi: json['print_reply_vi'] as String?,
-      printScope: json['print_scope'] as String? ?? 'both',
+      printScope:
+          json['print_scope'] as String? ??
+          (json['source_kind'] == 'item' ? 'preparation' : 'cashier'),
       needsConfirmation: json['needs_confirmation'] != false,
       requestTranslations: translations('request_translations'),
       replyTranslations: translations('reply_translations'),
@@ -99,11 +101,8 @@ class DirectOrderRequirementCopy {
   String get replyDue => text('답변 필요', 'Cần trả lời', 'Reply needed');
   String get awaiting =>
       text('고객 확인 대기', 'Chờ khách xác nhận', 'Awaiting customer');
-  String get confirmed => text(
-    '확정 · 영수증 반영',
-    'Đã thống nhất · In trên hóa đơn',
-    'Confirmed · Included on receipt',
-  );
+  String get confirmed =>
+      text('확정된 요청', 'Yêu cầu đã thống nhất', 'Confirmed requests');
   String get reply => text('요청에 답변하기', 'Trả lời yêu cầu', 'Reply to request');
   String get answer => text('캐셔 답변', 'Trả lời của thu ngân', 'Cashier reply');
   String get agree =>
@@ -150,6 +149,11 @@ class DirectOrderRequirementCopy {
   String get send => text('답변 전송', 'Gửi trả lời', 'Send reply');
   String get cancel => text('취소', 'Hủy', 'Cancel');
   String scope(String scope) => switch (scope) {
+    'cashier' => text(
+      '관리자·캐셔 전용',
+      'Chỉ quản lý / Thu ngân',
+      'Admin / Cashier only',
+    ),
     'preparation' => text('주방·포장', 'Bếp / Đóng gói', 'Kitchen / Packing'),
     'delivery' => text('기사·배송', 'Tài xế / Giao hàng', 'Driver / Delivery'),
     _ => text('주방·기사 모두', 'Bếp và tài xế', 'Kitchen and driver'),
@@ -206,6 +210,10 @@ class DirectOrderRequirementCard extends StatelessWidget {
               ],
             ),
             if (q.itemLabelVi != null) Text(q.itemLabelVi!),
+            Text(
+              copy.scope(q.printScope),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
             const SizedBox(height: 8),
             DirectOrderTranslatedText(
               original: q.requestText,
@@ -231,7 +239,7 @@ class DirectOrderRequirementCard extends StatelessWidget {
               ),
               Text(q.followupText ?? q.customerContextText!),
             ],
-            if (cashier && !q.isConfirmed) ...[
+            if (cashier) ...[
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 key: Key('requirement_reply_${q.id}'),
@@ -296,7 +304,7 @@ class _RequirementReplyDialogState
   final _form = GlobalKey<FormState>();
   late final TextEditingController _body, _requestVi, _replyVi;
   bool _needsConfirmation = true;
-  String _scope = 'both';
+  String _scope = 'cashier';
   @override
   void initState() {
     super.initState();
@@ -380,33 +388,11 @@ class _RequirementReplyDialogState
                   onChanged: (value) =>
                       setState(() => _needsConfirmation = value ?? true),
                 ),
-                Text(
-                  copy.printHelp,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  key: const Key('requirement_print_request'),
-                  controller: _requestVi,
-                  minLines: 1,
-                  maxLines: 4,
-                  maxLength: 2000,
-                  validator: (text) => validate(text, print: true),
-                  decoration: InputDecoration(labelText: copy.printRequest),
-                ),
-                TextFormField(
-                  key: const Key('requirement_print_reply'),
-                  controller: _replyVi,
-                  minLines: 2,
-                  maxLines: 5,
-                  maxLength: 2000,
-                  validator: (text) => validate(text, print: true),
-                  decoration: InputDecoration(labelText: copy.printReply),
-                ),
                 DropdownButtonFormField<String>(
+                  key: const Key('requirement_audience'),
                   initialValue: _scope,
                   isExpanded: true,
-                  items: ['both', 'preparation', 'delivery']
+                  items: ['cashier', 'preparation', 'delivery', 'both']
                       .map(
                         (s) => DropdownMenuItem(
                           value: s,
@@ -414,8 +400,33 @@ class _RequirementReplyDialogState
                         ),
                       )
                       .toList(),
-                  onChanged: (s) => _scope = s ?? 'both',
+                  onChanged: (s) => setState(() => _scope = s ?? 'cashier'),
                 ),
+                if (_scope != 'cashier') ...[
+                  Text(
+                    copy.printHelp,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    key: const Key('requirement_print_request'),
+                    controller: _requestVi,
+                    minLines: 1,
+                    maxLines: 4,
+                    maxLength: 2000,
+                    validator: (text) => validate(text, print: true),
+                    decoration: InputDecoration(labelText: copy.printRequest),
+                  ),
+                  TextFormField(
+                    key: const Key('requirement_print_reply'),
+                    controller: _replyVi,
+                    minLines: 2,
+                    maxLines: 5,
+                    maxLength: 2000,
+                    validator: (text) => validate(text, print: true),
+                    decoration: InputDecoration(labelText: copy.printReply),
+                  ),
+                ],
               ],
             ),
           ),

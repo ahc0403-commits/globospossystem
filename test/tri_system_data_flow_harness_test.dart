@@ -8,10 +8,15 @@ String get officeAppRoot =>
     Platform.environment['OFFICE_APP_ROOT'] ??
     '/Users/andreahn/Documents/restaurant_office_app';
 
-const officeContractPaths = <String>[
+String get officeImportPath =>
+    File('$officeAppRoot/supabase/migrations/472_pos_sales_event_import_and_bucket_posting.sql').existsSync()
+    ? 'supabase/migrations/472_pos_sales_event_import_and_bucket_posting.sql'
+    : 'supabase/migrations_legacy/472_pos_sales_event_import_and_bucket_posting.sql';
+
+List<String> get officeContractPaths => <String>[
   'supabase/functions/pos-bridge/index.ts',
   'lib/app/api/pos_data_service.dart',
-  'supabase/migrations/472_pos_sales_event_import_and_bucket_posting.sql',
+  officeImportPath,
   'lib/features/pos_sales/data/pos_sales_repository.dart',
 ];
 
@@ -29,15 +34,7 @@ String readOfficeFile(String path) {
 
 void main() {
   group('historical Deliberry -> POS -> Office data flow harness', () {
-    test('historical records retain Office read fences after vendor retirement', () {
-      if (!officeContractFilesAvailable) {
-        markTestSkipped(
-          'Office app checkout is unavailable; set OFFICE_APP_ROOT to run '
-          'the cross-repository static contract assertions.',
-        );
-        return;
-      }
-
+    test('historical POS records retain Office read fences after vendor retirement', () {
       final posSalesView =
           readRepoFile(
             'supabase/migrations/20260604000000_office_pos_sales_events.sql',
@@ -53,18 +50,6 @@ void main() {
       );
       final legacySettlementFunction = readRepoFile(
         'supabase/functions/generate-settlement/index.ts',
-      );
-      final officeBridge = readOfficeFile(
-        'supabase/functions/pos-bridge/index.ts',
-      );
-      final officePosService = readOfficeFile(
-        'lib/app/api/pos_data_service.dart',
-      );
-      final officeImport = readOfficeFile(
-        'supabase/migrations/472_pos_sales_event_import_and_bucket_posting.sql',
-      );
-      final officeRepository = readOfficeFile(
-        'lib/features/pos_sales/data/pos_sales_repository.dart',
       );
 
       expect(posSalesView, contains("'external_sales'::text as source_table"));
@@ -130,6 +115,29 @@ void main() {
         expect(source, contains('Deno.serve(retiredDeliberryResponse)'));
         expect(source, isNot(contains('.from(')));
       }
+
+    });
+
+    test('optional historical Office import read fences from external checkout', () {
+      if (!officeContractFilesAvailable) {
+        markTestSkipped(
+          'Optional cross-repository static assertions need a separately pinned '
+          'Office checkout; POS assertions run independently in the prior test.',
+        );
+        return;
+      }
+      final officeBridge = readOfficeFile(
+        'supabase/functions/pos-bridge/index.ts',
+      );
+      final officePosService = readOfficeFile(
+        'lib/app/api/pos_data_service.dart',
+      );
+      final officeImport = readOfficeFile(
+        officeImportPath,
+      );
+      final officeRepository = readOfficeFile(
+        'lib/features/pos_sales/data/pos_sales_repository.dart',
+      );
 
       expect(
         officeBridge,

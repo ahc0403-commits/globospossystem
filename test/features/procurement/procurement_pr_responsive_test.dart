@@ -138,6 +138,7 @@ void main() {
               'system': 'pos',
               'subject_id': 'sample-requester',
               'can_create': true,
+              'can_receive': true,
             },
             'request_counts': {'pending': 3, 'approved': 2, 'cancelled': 1},
             'requests': List.generate(
@@ -182,20 +183,25 @@ void main() {
             ),
           );
         }
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const Key('procurement_request_receiving_switch')),
+            matching: find.text(copy('receiving')),
+          ),
+        );
+        await tester.pumpAndSettle();
         if (width < 600) {
           await tester.tap(find.byType(PopupMenuButton<String>));
           await tester.pumpAndSettle();
-          await tester.tap(find.text(copy('receiving')));
+          await tester.tap(find.text(copy('legacyOrders')));
           await tester.pumpAndSettle();
         } else {
-          await tester.tap(find.widgetWithText(TextButton, copy('receiving')));
-          await tester.pumpAndSettle();
           await tester.tap(
             find.widgetWithText(TextButton, copy('legacyOrders')),
           );
           await tester.pumpAndSettle();
-          expect(historical, 1);
         }
+        expect(historical, 1);
         expect(receiving, 1);
         expect(tester.takeException(), isNull);
       });

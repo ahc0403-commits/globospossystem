@@ -1,0 +1,21 @@
+PROOF_RACE=replace PASS receipts=1 financials=1 stale_action_rejected=true
+PROOF_RACE=approve_first PASS receipts=1 financials=1 stale_action_rejected=true
+PROOF_RACE=replace_first PASS receipts=1 financials=1 stale_action_rejected=true
+PROOF_AUTH clients=1 chat_per_order=1 rpc_per_customer=1 p50_ms=58.50 p95_ms=58.50 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=1 chat_per_order=1 rpc_per_customer=1 p50_ms=67.03 p95_ms=67.03 max_response_bytes=47 docker_cli_included=true
+PROOF_AUTH clients=1 chat_per_order=20 rpc_per_customer=1 p50_ms=58.57 p95_ms=58.57 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=1 chat_per_order=20 rpc_per_customer=1 p50_ms=66.33 p95_ms=66.33 max_response_bytes=47 docker_cli_included=true
+PROOF_AUTH clients=1 chat_per_order=100 rpc_per_customer=1 p50_ms=71.86 p95_ms=71.86 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=1 chat_per_order=100 rpc_per_customer=1 p50_ms=55.94 p95_ms=55.94 max_response_bytes=47 docker_cli_included=true
+PROOF_AUTH clients=10 chat_per_order=1 rpc_per_customer=1 p50_ms=89.61 p95_ms=98.39 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=10 chat_per_order=1 rpc_per_customer=1 p50_ms=103.16 p95_ms=109.76 max_response_bytes=47 docker_cli_included=true
+PROOF_AUTH clients=10 chat_per_order=20 rpc_per_customer=1 p50_ms=87.31 p95_ms=93.62 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=10 chat_per_order=20 rpc_per_customer=1 p50_ms=74.44 p95_ms=85.93 max_response_bytes=47 docker_cli_included=true
+PROOF_AUTH clients=10 chat_per_order=100 rpc_per_customer=1 p50_ms=84.91 p95_ms=96.67 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=10 chat_per_order=100 rpc_per_customer=1 p50_ms=102.47 p95_ms=110.53 max_response_bytes=47 docker_cli_included=true
+PROOF_AUTH clients=50 chat_per_order=1 rpc_per_customer=1 p50_ms=313.29 p95_ms=378.16 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=50 chat_per_order=1 rpc_per_customer=1 p50_ms=383.63 p95_ms=484.53 max_response_bytes=47 docker_cli_included=true
+PROOF_AUTH clients=50 chat_per_order=20 rpc_per_customer=1 p50_ms=885.32 p95_ms=1048.88 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=50 chat_per_order=20 rpc_per_customer=1 p50_ms=781.43 p95_ms=873.40 max_response_bytes=47 docker_cli_included=true
+PROOF_AUTH clients=50 chat_per_order=100 rpc_per_customer=1 p50_ms=343.97 p95_ms=417.73 max_response_bytes=52 docker_cli_included=true
+CHAT_CHECK clients=50 chat_per_order=100 rpc_per_customer=1 p50_ms=338.95 p95_ms=383.56 max_response_bytes=47 docker_cli_included=true

@@ -263,6 +263,40 @@ class QrOrderLine {
   };
 }
 
+class QrPaymentSummary {
+  const QrPaymentSummary({
+    required this.totalAmount,
+    required this.paidTotal,
+    required this.remainingDue,
+    required this.calculatedAt,
+  });
+
+  final double totalAmount;
+  final double paidTotal;
+  final double remainingDue;
+  final DateTime calculatedAt;
+
+  static QrPaymentSummary? fromJson(dynamic value) {
+    if (value is! Map || value['currency'] != 'VND') return null;
+    double? money(String key) {
+      final number = double.tryParse('${value[key]}');
+      return number != null && number.isFinite && number >= 0 ? number : null;
+    }
+
+    final total = money('total_amount');
+    final paid = money('paid_total');
+    final due = money('remaining_due');
+    final at = DateTime.tryParse('${value['calculated_at']}');
+    if (total == null || paid == null || due == null || at == null) return null;
+    return QrPaymentSummary(
+      totalAmount: total,
+      paidTotal: paid,
+      remainingDue: due,
+      calculatedAt: at,
+    );
+  }
+}
+
 class QrActiveOrder {
   const QrActiveOrder({
     required this.isActive,
@@ -276,6 +310,7 @@ class QrActiveOrder {
     this.displayVersion = 0,
     this.displayResetAt,
     this.resetDueAt,
+    this.paymentSummary,
   });
 
   final bool isActive;
@@ -289,6 +324,7 @@ class QrActiveOrder {
   final int displayVersion;
   final DateTime? displayResetAt;
   final DateTime? resetDueAt;
+  final QrPaymentSummary? paymentSummary;
 
   bool get isPaperless => fulfillmentMode == 'paperless';
 
@@ -307,6 +343,7 @@ class QrActiveOrder {
         json['display_reset_at']?.toString() ?? '',
       ),
       resetDueAt: DateTime.tryParse(json['reset_due_at']?.toString() ?? ''),
+      paymentSummary: QrPaymentSummary.fromJson(json['payment_summary']),
       items: itemsRaw is List
           ? itemsRaw
                 .whereType<Map>()

@@ -1,0 +1,637 @@
+{
+  "nested_plans": 36,
+  "business_scan_limit": 10000,
+  "large_business_scans": [],
+  "relation_scans": [
+    {
+      "plan": 0,
+      "relation": "users",
+      "node": "Seq Scan",
+      "rows_examined": 2,
+      "loops": 1
+    },
+    {
+      "plan": 1,
+      "relation": "emergency_station_assignments",
+      "node": "Index Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 2,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 120,
+      "loops": 1
+    },
+    {
+      "plan": 2,
+      "relation": "emergency_fulfillment_events",
+      "node": "Index Scan",
+      "rows_examined": 1602,
+      "loops": 1
+    },
+    {
+      "plan": 2,
+      "relation": "emergency_fulfillment_items",
+      "node": "Index Scan",
+      "rows_examined": 480,
+      "loops": 120
+    },
+    {
+      "plan": 2,
+      "relation": "emergency_floor_direct_items",
+      "node": "Seq Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 2,
+      "relation": "emergency_fulfillment_actions",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 2,
+      "relation": "emergency_fulfillment_actions",
+      "node": "Index Only Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 2,
+      "relation": "emergency_fulfillment_items",
+      "node": "Index Scan",
+      "rows_examined": 250,
+      "loops": 50
+    },
+    {
+      "plan": 2,
+      "relation": "order_items",
+      "node": "Index Scan",
+      "rows_examined": 235,
+      "loops": 235
+    },
+    {
+      "plan": 2,
+      "relation": "menu_items",
+      "node": "Index Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 2,
+      "relation": "emergency_floor_direct_items",
+      "node": "Seq Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 3,
+      "relation": "users",
+      "node": "Seq Scan",
+      "rows_examined": 2,
+      "loops": 1
+    },
+    {
+      "plan": 3,
+      "relation": "emergency_station_assignments",
+      "node": "Index Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 4,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 50,
+      "loops": 50
+    },
+    {
+      "plan": 4,
+      "relation": "order_items",
+      "node": "Index Scan",
+      "rows_examined": 250,
+      "loops": 50
+    },
+    {
+      "plan": 4,
+      "relation": "emergency_floor_direct_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 4,
+      "relation": "menu_items",
+      "node": "Seq Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 4,
+      "relation": "menu_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 5,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 50,
+      "loops": 50
+    },
+    {
+      "plan": 5,
+      "relation": "emergency_combo_component_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 5,
+      "relation": "menu_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 6,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 50,
+      "loops": 50
+    },
+    {
+      "plan": 6,
+      "relation": "order_items",
+      "node": "Index Scan",
+      "rows_examined": 250,
+      "loops": 50
+    },
+    {
+      "plan": 6,
+      "relation": "emergency_fulfillment_events",
+      "node": "Index Scan",
+      "rows_examined": 705,
+      "loops": 235
+    },
+    {
+      "plan": 6,
+      "relation": "emergency_fulfillment_events",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 6,
+      "relation": "emergency_fulfillment_events",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 7,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 50,
+      "loops": 50
+    },
+    {
+      "plan": 7,
+      "relation": "order_items",
+      "node": "Index Scan",
+      "rows_examined": 250,
+      "loops": 50
+    },
+    {
+      "plan": 7,
+      "relation": "emergency_fulfillment_items",
+      "node": "Index Scan",
+      "rows_examined": 250,
+      "loops": 50
+    },
+    {
+      "plan": 7,
+      "relation": "emergency_combo_component_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 7,
+      "relation": "emergency_floor_direct_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 7,
+      "relation": "direct_order_financials",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 7,
+      "relation": "direct_order_requests",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 7,
+      "relation": "emergency_floor_ready_lots",
+      "node": "Seq Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 7,
+      "relation": "emergency_tray_ready_lots",
+      "node": "Seq Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 7,
+      "relation": "orders",
+      "node": "Index Scan",
+      "rows_examined": 50,
+      "loops": 50
+    },
+    {
+      "plan": 7,
+      "relation": "direct_order_customer_requirements",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 8,
+      "relation": "users",
+      "node": "Seq Scan",
+      "rows_examined": 2,
+      "loops": 1
+    },
+    {
+      "plan": 9,
+      "relation": "users",
+      "node": "Seq Scan",
+      "rows_examined": 2,
+      "loops": 1
+    },
+    {
+      "plan": 10,
+      "relation": "emergency_station_assignments",
+      "node": "Index Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 11,
+      "relation": "emergency_fulfillment_sessions",
+      "node": "Index Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 12,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 120,
+      "loops": 1
+    },
+    {
+      "plan": 12,
+      "relation": "emergency_fulfillment_actions",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 120
+    },
+    {
+      "plan": 12,
+      "relation": "emergency_fulfillment_actions",
+      "node": "Index Only Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 12,
+      "relation": "emergency_fulfillment_items",
+      "node": "Index Scan",
+      "rows_examined": 480,
+      "loops": 120
+    },
+    {
+      "plan": 12,
+      "relation": "order_items",
+      "node": "Index Scan",
+      "rows_examined": 534,
+      "loops": 534
+    },
+    {
+      "plan": 12,
+      "relation": "menu_items",
+      "node": "Index Scan",
+      "rows_examined": 534,
+      "loops": 534
+    },
+    {
+      "plan": 12,
+      "relation": "emergency_floor_direct_items",
+      "node": "Seq Scan",
+      "rows_examined": 0,
+      "loops": 120
+    },
+    {
+      "plan": 14,
+      "relation": "store_account_onboarding_jobs",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 14,
+      "relation": "store_account_onboarding_jobs",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 14,
+      "relation": "store_service_areas",
+      "node": "Bitmap Heap Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 15,
+      "relation": "users",
+      "node": "Seq Scan",
+      "rows_examined": 2,
+      "loops": 1
+    },
+    {
+      "plan": 16,
+      "relation": "emergency_station_assignments",
+      "node": "Index Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 17,
+      "relation": "emergency_fulfillment_sessions",
+      "node": "Index Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 18,
+      "relation": "kds_realtime_rollouts",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 19,
+      "relation": "kds_store_revisions",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 21,
+      "relation": "store_account_onboarding_jobs",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 21,
+      "relation": "store_account_onboarding_jobs",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 21,
+      "relation": "store_service_areas",
+      "node": "Bitmap Heap Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 22,
+      "relation": "users",
+      "node": "Seq Scan",
+      "rows_examined": 2,
+      "loops": 1
+    },
+    {
+      "plan": 23,
+      "relation": "store_workflow_configs",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 26,
+      "relation": "store_workflow_devices",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 27,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 120,
+      "loops": 120
+    },
+    {
+      "plan": 27,
+      "relation": "order_items",
+      "node": "Index Scan",
+      "rows_examined": 480,
+      "loops": 120
+    },
+    {
+      "plan": 27,
+      "relation": "emergency_floor_direct_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 27,
+      "relation": "menu_items",
+      "node": "Seq Scan",
+      "rows_examined": 1,
+      "loops": 1
+    },
+    {
+      "plan": 27,
+      "relation": "menu_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 28,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 120,
+      "loops": 120
+    },
+    {
+      "plan": 28,
+      "relation": "emergency_combo_component_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 28,
+      "relation": "menu_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 29,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 120,
+      "loops": 120
+    },
+    {
+      "plan": 29,
+      "relation": "order_items",
+      "node": "Index Scan",
+      "rows_examined": 480,
+      "loops": 120
+    },
+    {
+      "plan": 29,
+      "relation": "emergency_fulfillment_events",
+      "node": "Index Scan",
+      "rows_examined": 1602,
+      "loops": 534
+    },
+    {
+      "plan": 29,
+      "relation": "emergency_fulfillment_events",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 29,
+      "relation": "emergency_fulfillment_events",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 30,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 120,
+      "loops": 120
+    },
+    {
+      "plan": 30,
+      "relation": "order_items",
+      "node": "Index Scan",
+      "rows_examined": 480,
+      "loops": 120
+    },
+    {
+      "plan": 30,
+      "relation": "emergency_fulfillment_items",
+      "node": "Index Scan",
+      "rows_examined": 480,
+      "loops": 120
+    },
+    {
+      "plan": 30,
+      "relation": "emergency_combo_component_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 30,
+      "relation": "emergency_floor_direct_items",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 30,
+      "relation": "direct_order_financials",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 30,
+      "relation": "direct_order_requests",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 30,
+      "relation": "emergency_floor_ready_lots",
+      "node": "Seq Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 30,
+      "relation": "emergency_tray_ready_lots",
+      "node": "Seq Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 30,
+      "relation": "orders",
+      "node": "Index Scan",
+      "rows_examined": 120,
+      "loops": 120
+    },
+    {
+      "plan": 30,
+      "relation": "direct_order_customer_requirements",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 31,
+      "relation": "leftover_packaging_requests",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 1
+    },
+    {
+      "plan": 31,
+      "relation": "emergency_order_queue",
+      "node": "Index Scan",
+      "rows_examined": 0,
+      "loops": 0
+    },
+    {
+      "plan": 33,
+      "relation": "restaurant_settings",
+      "node": "Seq Scan",
+      "rows_examined": 1,
+      "loops": 1
+    }
+  ]
+}

@@ -249,10 +249,19 @@ class _EmergencyFulfillmentScreenState
     for (final notice in notices) {
       _pendingAdditionalOrderNotices[notice.orderId] = notice;
     }
-    _additionalOrderAlarmTimer?.cancel();
+    final bounded = ref.read(emergencyFulfillmentProvider).boundedJeongabok;
+    if (bounded) {
+      _flashImmediately();
+      if (_additionalOrderAlarmTimer != null) return;
+    } else {
+      _additionalOrderAlarmTimer?.cancel();
+    }
     _additionalOrderAlarmTimer = Timer(
-      emergencyAdditionalOrderAlarmCoalesceDelay,
+      bounded
+          ? const Duration(milliseconds: 500)
+          : emergencyAdditionalOrderAlarmCoalesceDelay,
       () {
+        _additionalOrderAlarmTimer = null;
         final pending = _pendingAdditionalOrderNotices.values.toList(
           growable: false,
         )..sort((left, right) => left.queueNo.compareTo(right.queueNo));
@@ -273,13 +282,25 @@ class _EmergencyFulfillmentScreenState
         stationType: notice.stationType,
       );
     }
-    _handoffAlarmTimer?.cancel();
-    _handoffAlarmTimer = Timer(emergencyHandoffAlarmCoalesceDelay, () {
-      final pending = _pendingHandoffNotices.values.toList(growable: false)
-        ..sort((left, right) => left.queueNo.compareTo(right.queueNo));
-      _pendingHandoffNotices.clear();
-      _triggerHandoffAlarm(pending);
-    });
+    final bounded = ref.read(emergencyFulfillmentProvider).boundedJeongabok;
+    if (bounded) {
+      _flashImmediately();
+      if (_handoffAlarmTimer != null) return;
+    } else {
+      _handoffAlarmTimer?.cancel();
+    }
+    _handoffAlarmTimer = Timer(
+      bounded
+          ? const Duration(milliseconds: 500)
+          : emergencyHandoffAlarmCoalesceDelay,
+      () {
+        _handoffAlarmTimer = null;
+        final pending = _pendingHandoffNotices.values.toList(growable: false)
+          ..sort((left, right) => left.queueNo.compareTo(right.queueNo));
+        _pendingHandoffNotices.clear();
+        _triggerHandoffAlarm(pending);
+      },
+    );
   }
 
   void _queueFloorDirectBeverageAlarm(
@@ -289,15 +310,33 @@ class _EmergencyFulfillmentScreenState
       0,
       (total, notice) => total + notice.itemCount,
     );
-    _floorDirectBeverageAlarmTimer?.cancel();
+    final bounded = ref.read(emergencyFulfillmentProvider).boundedJeongabok;
+    if (bounded) {
+      _flashImmediately();
+      if (_floorDirectBeverageAlarmTimer != null) return;
+    } else {
+      _floorDirectBeverageAlarmTimer?.cancel();
+    }
     _floorDirectBeverageAlarmTimer = Timer(
-      emergencyFloorDirectBeverageAlarmCoalesceDelay,
+      bounded
+          ? const Duration(milliseconds: 500)
+          : emergencyFloorDirectBeverageAlarmCoalesceDelay,
       () {
+        _floorDirectBeverageAlarmTimer = null;
         final itemCount = _pendingFloorDirectBeverageCount;
         _pendingFloorDirectBeverageCount = 0;
         _triggerFloorDirectBeverageAlarm(itemCount);
       },
     );
+  }
+
+  void _flashImmediately() {
+    if (!mounted) return;
+    setState(() => _flashing = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _flashing = false);
+    });
   }
 
   Future<void> _triggerAlarm(Iterable<String> tableNumbers) async {
@@ -561,9 +600,16 @@ class _EmergencyFulfillmentScreenState
                 onEnableAlarm: state.assigned
                     ? () => _enableAlarm(state)
                     : null,
-                onRefresh: () => ref
-                    .read(emergencyFulfillmentProvider.notifier)
-                    .load(showLoading: false),
+                onRefresh: () async {
+                  final notifier = ref.read(
+                    emergencyFulfillmentProvider.notifier,
+                  );
+                  if (_showRecent && state.usesBoundedHistory) {
+                    await notifier.loadCompletedHistory();
+                  } else {
+                    await notifier.load(showLoading: false);
+                  }
+                },
                 onKitchenChecket:
                     headerStation == 'kitchen' &&
                         state.active &&
@@ -688,7 +734,10 @@ class _EmergencyFulfillmentScreenState
     );
     final recentByOrderId = <String, EmergencyFulfillmentOrder>{
       for (final order in state.completedOrders) order.orderId: order,
-      for (final order in state.orders)
+      for (final order
+          in state.usesBoundedHistory
+              ? const <EmergencyFulfillmentOrder>[]
+              : state.orders)
         if (order.isRecentlyCompleteAt(stationType)) order.orderId: order,
     };
     final recentOrders = recentByOrderId.values.toList(growable: false)
@@ -762,11 +811,80 @@ class _EmergencyFulfillmentScreenState
             activeCount: activeOrders.length,
             recentCount: recentOrders.length,
             copy: copy,
-            onChanged: (showRecent) => setState(() {
-              _showRecent = showRecent;
-              _page = 0;
-            }),
+            onChanged: (showRecent) {
+              setState(() {
+                _showRecent = showRecent;
+                _page = 0;
+              });
+              if (showRecent && state.usesBoundedHistory) {
+                unawaited(
+                  ref
+                      .read(emergencyFulfillmentProvider.notifier)
+                      .loadCompletedHistory(),
+                );
+              }
+            },
           ),
+          if (_showRecent && state.usesBoundedHistory) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                TextButton.icon(
+                  key: const Key('bunsik_history_previous'),
+                  onPressed:
+                      state.completedHistory.loading ||
+                          state.completedHistory.page == 0
+                      ? null
+                      : () {
+                          setState(() => _page = 0);
+                          unawaited(
+                            ref
+                                .read(emergencyFulfillmentProvider.notifier)
+                                .loadCompletedHistory(direction: -1),
+                          );
+                        },
+                  icon: const Icon(Icons.chevron_left),
+                  label: Text(copy.previousPage),
+                ),
+                Text('${state.completedHistory.page + 1}'),
+                TextButton.icon(
+                  key: const Key('bunsik_history_next'),
+                  onPressed:
+                      state.completedHistory.loading ||
+                          !state.completedHistory.hasMore
+                      ? null
+                      : () {
+                          setState(() => _page = 0);
+                          unawaited(
+                            ref
+                                .read(emergencyFulfillmentProvider.notifier)
+                                .loadCompletedHistory(direction: 1),
+                          );
+                        },
+                  icon: const Icon(Icons.chevron_right),
+                  label: Text(copy.nextPage),
+                ),
+                if (state.completedHistory.loading)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                if (state.completedHistory.error != null)
+                  TextButton.icon(
+                    key: const Key('bunsik_history_retry'),
+                    onPressed: () => ref
+                        .read(emergencyFulfillmentProvider.notifier)
+                        .loadCompletedHistory(),
+                    icon: const Icon(Icons.refresh),
+                    label: Text(copy.orderLoadFailed),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
           _EmergencyMenuStatusLegend(stationType: stationType, copy: copy),
           if (state.error != null) ...[
@@ -776,13 +894,27 @@ class _EmergencyFulfillmentScreenState
           const SizedBox(height: 10),
           Expanded(
             child: orders.isEmpty
-                ? _EmergencyLockedState(
-                    icon: _showRecent
-                        ? Icons.history_toggle_off_rounded
-                        : Icons.task_alt_rounded,
-                    title: _showRecent ? copy.noRecent : copy.noOrders,
-                    body: _showRecent ? copy.noRecentBody : copy.noOrdersBody,
-                  )
+                ? _showRecent &&
+                          state.usesBoundedHistory &&
+                          state.completedHistory.loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _showRecent &&
+                            state.usesBoundedHistory &&
+                            state.completedHistory.error != null
+                      ? _EmergencyLockedState(
+                          icon: Icons.sync_problem_rounded,
+                          title: copy.orderLoadFailed,
+                          body: copy.historyLoadFailedBody,
+                        )
+                      : _EmergencyLockedState(
+                          icon: _showRecent
+                              ? Icons.history_toggle_off_rounded
+                              : Icons.task_alt_rounded,
+                          title: _showRecent ? copy.noRecent : copy.noOrders,
+                          body: _showRecent
+                              ? copy.noRecentBody
+                              : copy.noOrdersBody,
+                        )
                 : _EmergencyOrderBoard(
                     orders: orders,
                     stationType: stationType,
@@ -1667,10 +1799,19 @@ class _EmergencyOrderCard extends StatelessWidget {
         stationType == 'tray' &&
         order.oldestTrayReadySequence != null &&
         order.trayFloorPendingItems().isNotEmpty;
-    final cardColor = trayReady && readyPulseOn
+    // Floor-direct drinks are ready when ordered, independently of kitchen
+    // handoff sequences. Make the table visible even when its menu row is
+    // clipped or staff are looking across a busy floor board.
+    final floorReady =
+        stationType == 'floor' &&
+        visibleItems.any(
+          (item) => item.readyFromPreviousStage && !item.completed,
+        );
+    final stationReady = trayReady || floorReady;
+    final cardColor = stationReady && readyPulseOn
         ? PosColors.info.withValues(alpha: 0.18)
         : PosColors.surface;
-    final effectiveBorderTone = trayReady && readyPulseOn
+    final effectiveBorderTone = stationReady && readyPulseOn
         ? PosColors.info
         : borderTone;
     // The header is the station-level clock. Supplemental batches retain
@@ -1723,8 +1864,9 @@ class _EmergencyOrderCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
+                key: ValueKey('emergency_order_card_header_${order.orderId}'),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                color: tone,
+                color: floorReady && readyPulseOn ? PosColors.info : tone,
                 child: Row(
                   children: [
                     Expanded(
@@ -3049,6 +3191,11 @@ class _EmergencyCopy {
   String get alarmOn => _pick('음성 켜짐', 'Đã bật giọng nói', 'Voice on');
   String get pendingSync => _pick('전송 대기', 'Chờ đồng bộ', 'Pending sync');
   String get refresh => _pick('새로고침', 'Làm mới', 'Refresh');
+  String get historyLoadFailedBody => _pick(
+    '새로고침을 눌러 완료 내역을 다시 불러오세요.',
+    'Nhấn Làm mới để tải lại lịch sử hoàn tất.',
+    'Refresh to load completion history again.',
+  );
   String get waiting => _pick('대기', 'Đang chờ', 'Waiting');
   String get recentCompleted =>
       _pick('최근 완료', 'Vừa hoàn tất', 'Recently completed');

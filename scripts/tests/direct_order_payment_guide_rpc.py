@@ -23,9 +23,11 @@ assert ip, 'Disposable PostgreSQL has no bridge address'
 rest_name = container + '-guide-rest'
 subprocess.run(['docker','run','-d','--rm','--name',rest_name,'-p','127.0.0.1::3000','-e',f'PGRST_DB_URI=postgres://postgres@{ip}:5432/codex_direct_photo','-e','PGRST_DB_ANON_ROLE=authenticated','-e','PGRST_DB_SCHEMAS=public','public.ecr.aws/supabase/postgrest:v14.5'],check=True,capture_output=True)
 try:
-    info = json.loads(subprocess.check_output(['docker','inspect',rest_name]))[0]
-    port = info['NetworkSettings']['Ports']['3000/tcp'][0]['HostPort']
-    base = f'http://127.0.0.1:{port}'
+    # Use the client endpoint: local verification may forward an owned fixture
+    # inside its tool namespace rather than use Docker Desktop host loopback.
+    address = subprocess.check_output(['docker','port',rest_name,'3000/tcp'],text=True).strip()
+    assert address.startswith('127.0.0.1:'), 'Expected a loopback-only fixture endpoint'
+    base = f'http://{address}'
     for attempt in range(60):
         try: urllib.request.urlopen(base,timeout=1); break
         except (urllib.error.URLError,ConnectionError): time.sleep(.2)

@@ -147,9 +147,14 @@ requests and higher-priority instructions take precedence.
   it. Complete local verification on the final candidate SHA and again on the
   clean freshly fetched exact `origin/main` release SHA, verify the remote push,
   and retain production Auth, migration, login and affected-feature checks.
-  GitHub Actions success is not required by policy. The current script still
-  queries `POS release contract` check-runs; report that executable dependency
-  until an equivalent fail-closed local evidence gate is implemented and verified.
+  The official preflight directly runs `scripts/pos_local_release_gate.py`
+  with `--kind exact-main`. It never accepts a supplied PASS receipt. The local
+  Linux recipe preserves the full repository, browser authentication and SQL
+  regression checks. See `docs/pos/local-verification/LOCAL_VERIFICATION.md`.
+  Remote branch protection still requiring the Actions-app-bound
+  `POS release contract` is a separate unresolved security-policy dependency;
+  do not change it, publish substitute statuses, force merge or push a PR that
+  starts remote tests without explicit authorization.
 - Deployment procedure: `docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md`.
 - For a requested Claude Code handoff, write the prompt in English with the goal,
   relevant files, and verification steps. Apply a requested harness when available.
@@ -167,3 +172,26 @@ distinguish candidate validation from a clean freshly fetched exact-main release
 Verify the remote pushed SHA and retain the official deployment and operational
 checks. A missing/failed/skipped check is not PASS. Report remaining executable
 or remote GitHub-check dependencies; do not bypass gates or provision CI runners.
+
+## Minimal result-verifier design authorization (2026-10-24)
+
+The owner approved local design/implementation of a minimal GitHub procedure
+that authenticates independent exact-SHA local results. Application tests and
+builds must remain local. The receipt verifier policy is disabled until an
+independently controlled executor and protected workflow boundary are approved.
+No submitting-operator key or self-reported status is equivalent evidence.
+The workflow/event-policy files under docs are proposals only; remote settings,
+push/PR/merge/deployment and actual GitHub execution remain separately gated.
+See `docs/pos/local-verification/INDEPENDENT_RESULT_VERIFICATION_KO.md`.
+
+## Source publication and normal operational adoption authorization (2026-10-24)
+
+The owner subsequently requested commit/push and normal official operational
+adoption. After full local verification of the final actual candidate SHA,
+source publication, PR and normal merge are authorized when they do not start
+GitHub application tests. Remote security settings, required-check relaxation,
+admin bypass and new credentials remain outside that general authorization.
+Keep the unconfigured independent-result verifier disabled; it is not a new
+release prerequisite. If existing branch protection blocks normal merge, report
+the exact unexecuted step and a concrete before/after security-policy decision.
+A tooling-only release does not require an unnecessary application redeploy.

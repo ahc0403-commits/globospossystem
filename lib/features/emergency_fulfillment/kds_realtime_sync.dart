@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -27,6 +28,7 @@ class KdsSyncConfig {
     this.stationType,
     this.floorLabel,
     this.serviceAreaCodes = const [],
+    this.boundedSyncVersion = 0,
   });
 
   const KdsSyncConfig.legacy()
@@ -37,7 +39,14 @@ class KdsSyncConfig {
       sessionId = null,
       stationType = null,
       floorLabel = null,
-      serviceAreaCodes = const [];
+      serviceAreaCodes = const [],
+      boundedSyncVersion = 0;
+
+  final int boundedSyncVersion;
+  bool get boundedJeongabok =>
+      boundedSyncVersion == 3 &&
+      mode == KdsSyncMode.active &&
+      restaurantId == '273b057e-3b69-46e3-93c1-6194c2802849';
 
   final KdsSyncMode mode;
   final int revision;
@@ -53,6 +62,7 @@ class KdsSyncConfig {
 
   bool hasSameSubscriptionAs(KdsSyncConfig other) =>
       mode == other.mode &&
+      boundedSyncVersion == other.boundedSyncVersion &&
       assigned == other.assigned &&
       restaurantId == other.restaurantId &&
       sessionId == other.sessionId &&
@@ -62,6 +72,7 @@ class KdsSyncConfig {
 
   factory KdsSyncConfig.fromJson(Map<String, dynamic> json) => KdsSyncConfig(
     mode: KdsSyncMode.fromValue(json['mode']),
+    boundedSyncVersion: _asInt(json['bounded_sync_version']),
     revision: _asInt(json['revision']),
     assigned: json['assigned'] == true,
     restaurantId: json['restaurant_id']?.toString(),
@@ -232,6 +243,84 @@ class KdsTicketResult {
   }
 }
 
+// One shared lane per authenticated notifier, across foreground, watchdog,
+// catch-up, confirmed-command refreshes and optional history. Retry here only.
+class KdsReadCoordinator {
+  Future<void> _tail = Future.value();
+  Future<T> run<T>(Future<T> Function() read) {
+    final result = _tail.then((_) async {
+      final started = Stopwatch()..start();
+      for (var attempt = 0; ; attempt++) {
+        try {
+          return await read();
+        } catch (error) {
+          final transient =
+              error is http.ClientException ||
+              (error is PostgrestException &&
+                  ([
+                    'PGRST000',
+                    'PGRST001',
+                    'PGRST003',
+                    '53300',
+                    '57P01',
+                    '08006',
+                  ].contains(error.code)));
+          if (!transient ||
+              attempt >= 2 ||
+              started.elapsedMilliseconds >= 13000) {
+            rethrow;
+          }
+          await Future<void>.delayed(
+            Duration(
+              milliseconds: 500 * (1 << attempt) + Random().nextInt(251),
+            ),
+          );
+          if (started.elapsedMilliseconds >= 15000) rethrow;
+        }
+      }
+    });
+    _tail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+}
+
+class KdsTicketsResult {
+  KdsTicketsResult.fromJson(
+    Map<String, dynamic> json,
+    Iterable<String> requested,
+  ) : revision = _asInt(json['revision']),
+      config = KdsSyncConfig.fromJson(_asMap(json['sync'])),
+      tickets = <String, Map<String, dynamic>?>{} {
+    final rows = json['tickets'];
+    if (rows is! List) {
+      throw const FormatException('KDS_BATCH_RESPONSE_INVALID');
+    }
+    final expected = requested.toSet();
+    for (final row in rows) {
+      if (row is! Map || !row.containsKey('ticket')) {
+        throw const FormatException('KDS_BATCH_TOMBSTONE_MISSING');
+      }
+      final id = row['queue_id']?.toString();
+      if (id == null || !expected.contains(id) || tickets.containsKey(id)) {
+        throw const FormatException('KDS_BATCH_SCOPE_INVALID');
+      }
+      final ticket = row['ticket'];
+      if (ticket != null && (ticket is! Map || ticket['queue_id'] != id)) {
+        throw const FormatException('KDS_BATCH_TICKET_INVALID');
+      }
+      tickets[id] = ticket == null
+          ? null
+          : Map<String, dynamic>.from(ticket as Map);
+    }
+    if (tickets.length != expected.length) {
+      throw const FormatException('KDS_BATCH_TOMBSTONE_MISSING');
+    }
+  }
+  final int revision;
+  final Map<String, Map<String, dynamic>?> tickets;
+  final KdsSyncConfig config;
+}
+
 abstract class KdsSyncGateway {
   Future<KdsSyncConfig> loadConfig();
 
@@ -245,19 +334,47 @@ abstract class KdsSyncGateway {
 }
 
 class SupabaseKdsSyncGateway implements KdsSyncGateway {
-  const SupabaseKdsSyncGateway(this.client);
+  const SupabaseKdsSyncGateway(
+    this.client, {
+    this.coordinator,
+    this.boundedJeongabok = false,
+  });
+  final KdsReadCoordinator? coordinator;
+  final bool boundedJeongabok;
+  Future<dynamic> _rpc(String name, {Map<String, dynamic>? params}) =>
+      coordinator == null
+      ? client.rpc(name, params: params)
+      : coordinator!.run(() async => await client.rpc(name, params: params));
+  Future<KdsTicketsResult> loadTickets(List<String> queueIds) async {
+    if (!boundedJeongabok || queueIds.isEmpty || queueIds.length > 50) {
+      throw ArgumentError('KDS_BATCH_BOUND');
+    }
+    return KdsTicketsResult.fromJson(
+      _asMap(
+        await _rpc(
+          'get_jeongabok_kds_tickets_v3',
+          params: {'p_queue_ids': queueIds},
+        ),
+      ),
+      queueIds,
+    );
+  }
 
   final SupabaseClient client;
 
   @override
   Future<KdsSyncConfig> loadConfig() async {
-    final raw = await client.rpc('get_kds_sync_config');
+    final raw = await _rpc('get_kds_sync_config');
     return KdsSyncConfig.fromJson(_asMap(raw));
   }
 
   @override
   Future<KdsBootstrap> loadBootstrap() async {
-    final raw = await client.rpc('get_kds_bootstrap_v2');
+    final raw = await _rpc(
+      boundedJeongabok
+          ? 'get_jeongabok_kds_bootstrap_v3'
+          : 'get_kds_bootstrap_v2',
+    );
     return KdsBootstrap.fromJson(_asMap(raw));
   }
 
@@ -266,7 +383,7 @@ class SupabaseKdsSyncGateway implements KdsSyncGateway {
     int afterRevision, {
     int limit = 100,
   }) async {
-    final raw = await client.rpc(
+    final raw = await _rpc(
       'get_kds_changes_v2',
       params: {'p_after_revision': afterRevision, 'p_limit': limit},
     );
@@ -275,11 +392,18 @@ class SupabaseKdsSyncGateway implements KdsSyncGateway {
 
   @override
   Future<int> loadHighWatermark() async =>
-      _asInt(await client.rpc('get_kds_high_watermark_v2'));
+      _asInt(await _rpc('get_kds_high_watermark_v2'));
 
   @override
   Future<KdsTicketResult> loadTicket(String queueId) async {
-    final raw = await client.rpc(
+    if (boundedJeongabok) {
+      final result = await loadTickets([queueId]);
+      return KdsTicketResult(
+        revision: result.revision,
+        ticket: result.tickets[queueId],
+      );
+    }
+    final raw = await _rpc(
       'get_kds_ticket_v2',
       params: {'p_queue_id': queueId},
     );
@@ -333,6 +457,7 @@ class KdsRealtimeSync {
     required this.onBootstrapRequired,
     required this.onConnected,
     required this.onError,
+    this.onBatch,
     this.revisionStore = const SharedPreferencesKdsRevisionStore(),
     this.watchdogInterval = const Duration(seconds: 30),
     Random? random,
@@ -342,6 +467,7 @@ class KdsRealtimeSync {
   final KdsSyncGateway gateway;
   final KdsSyncConfig config;
   final KdsChangeHandler onChange;
+  final Future<void> Function(List<KdsChangeEnvelope>)? onBatch;
   final KdsAsyncCallback onBootstrapRequired;
   final KdsAsyncCallback onConnected;
   final KdsSyncErrorHandler onError;
@@ -427,7 +553,9 @@ class KdsRealtimeSync {
   void _scheduleWatchdog() {
     if (_disposed) return;
     final baseMs = watchdogInterval.inMilliseconds;
-    final jitterMs = min(5000, max(0, baseMs ~/ 6));
+    final jitterMs = config.boundedJeongabok
+        ? 500
+        : min(5000, max(0, baseMs ~/ 6));
     final offset = jitterMs == 0 ? 0 : _random.nextInt((jitterMs * 2) + 1);
     final delayMs = max(1000, baseMs - jitterMs + offset);
     _watchdog = Timer(Duration(milliseconds: delayMs), () async {
@@ -475,10 +603,19 @@ class KdsRealtimeSync {
             return;
           }
           _validateBatch(batch);
-          for (final change in batch.changes) {
-            if (change.revision <= _cursor) continue;
-            await onChange(change);
+          if (onBatch != null) {
+            await onBatch!(
+              batch.changes
+                  .where((c) => c.revision > _cursor)
+                  .toList(growable: false),
+            );
+          } else {
+            for (final change in batch.changes) {
+              if (change.revision <= _cursor) continue;
+              await onChange(change);
+            }
           }
+          if (_disposed) return;
           _cursor = batch.scannedThroughRevision;
           await revisionStore.write(_cursorKey, _cursor);
           hasMore = batch.hasMore && _cursor < batch.currentRevision;
@@ -486,6 +623,9 @@ class KdsRealtimeSync {
         }
       }
     } catch (error, stack) {
+      // A failed page keeps its cursor; the watchdog owns later recovery.
+      // Broadcasts arriving during a failed read must not start a retry storm.
+      _catchUpRequested = false;
       onError(error, stack);
     } finally {
       _catchingUp = false;

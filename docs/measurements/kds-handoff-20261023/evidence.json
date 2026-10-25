@@ -1,0 +1,1098 @@
+{
+  "audit_date": "2026-10-23",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "completed_history_http_status": [
+    {
+      "n": 540,
+      "station": "BunsikClub:floor:1F",
+      "status": "200"
+    },
+    {
+      "n": 1287,
+      "station": "BunsikClub:floor:1F",
+      "status": "500"
+    },
+    {
+      "n": 1455,
+      "station": "BunsikClub:floor:2F",
+      "status": "200"
+    },
+    {
+      "n": 31,
+      "station": "BunsikClub:floor:2F",
+      "status": "500"
+    },
+    {
+      "n": 1888,
+      "station": "BunsikClub:kitchen",
+      "status": "500"
+    },
+    {
+      "n": 1754,
+      "station": "BunsikClub:tray",
+      "status": "500"
+    }
+  ],
+  "scope": "Read-only investigation; no operational orders, quantities, assignments, rollout flags, or deployments changed.",
+  "project_ref": "ynriuoomotxuwhuxxmhj",
+  "log_window": {
+    "start_utc": "2026-10-22T04:50:00Z",
+    "end_utc": "2026-10-23T04:50:00Z",
+    "start_local": "2026-10-22T11:50:00+07:00",
+    "end_local": "2026-10-23T11:50:00+07:00"
+  },
+  "methodology": {
+    "latency_source": "Supabase unified logs: source=edge_logs; response.origin_time in milliseconds; quantileExact(0.5), quantileExact(0.95). Includes error responses.",
+    "grouping": "request.sb.auth_user mapped in memory to current active POS station assignments. Auth IDs and request details excluded from this artifact.",
+    "limitations": [
+      "Gateway request time is not sender-tap-to-receiver-render time.",
+      "No receiver render/audio acknowledgement telemetry currently collected.",
+      "p95 is descriptive for this window, with small sample sizes called out in report.",
+      "Current deployment metadata does not prove every physical device has refreshed its cached bundle.",
+      "Database plan costs are estimates; the candidate ANALYZE is only a simplified completion-candidate query, not the full RPC or an implemented fix."
+    ]
+  },
+  "production": {
+    "url": "https://globospossystem.vercel.app",
+    "deployment_id": "dpl_3anhYSM6gN1fmj78bcGfgyhJ4w5G",
+    "sha": "98b6cf3bbe38c8734e81c3719222a02018fb4527",
+    "state": "READY",
+    "deployed_at": "2026-10-23T02:28:20.990Z",
+    "local_head": "58e0fa8f"
+  },
+  "store_configuration": [
+    {
+      "id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "name": "BunsikClub Binh Thanh",
+      "sync_mode": "legacy",
+      "kds_workflow": "kitchen_tray_floor",
+      "current_revision": null,
+      "fulfillment_mode": "paperless",
+      "rollout_updated_at": null,
+      "revision_updated_at": null,
+      "floor_direct_beverages_enabled": true
+    },
+    {
+      "id": "273b057e-3b69-46e3-93c1-6194c2802849",
+      "name": "JeonGabok Binh Thanh",
+      "sync_mode": "active",
+      "kds_workflow": "kitchen_floor",
+      "current_revision": 665,
+      "fulfillment_mode": "paperless",
+      "rollout_updated_at": "2026-10-21T05:20:08.043502+00:00",
+      "revision_updated_at": "2026-10-23T04:46:07.218449+00:00",
+      "floor_direct_beverages_enabled": true
+    }
+  ],
+  "active_station_counts": [
+    {
+      "floor_label": "2F",
+      "station_type": "floor",
+      "restaurant_id": "273b057e-3b69-46e3-93c1-6194c2802849",
+      "active_assignments": 1,
+      "service_area_codes": []
+    },
+    {
+      "floor_label": "3F",
+      "station_type": "floor",
+      "restaurant_id": "273b057e-3b69-46e3-93c1-6194c2802849",
+      "active_assignments": 2,
+      "service_area_codes": []
+    },
+    {
+      "floor_label": null,
+      "station_type": "kitchen",
+      "restaurant_id": "273b057e-3b69-46e3-93c1-6194c2802849",
+      "active_assignments": 1,
+      "service_area_codes": []
+    },
+    {
+      "floor_label": "1F",
+      "station_type": "floor",
+      "restaurant_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "active_assignments": 1,
+      "service_area_codes": []
+    },
+    {
+      "floor_label": "2F",
+      "station_type": "floor",
+      "restaurant_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "active_assignments": 1,
+      "service_area_codes": []
+    },
+    {
+      "floor_label": null,
+      "station_type": "kitchen",
+      "restaurant_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "active_assignments": 1,
+      "service_area_codes": []
+    },
+    {
+      "floor_label": null,
+      "station_type": "tray",
+      "restaurant_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c",
+      "active_assignments": 1,
+      "service_area_codes": []
+    }
+  ],
+  "station_rpc_latency": [
+    {
+      "errors": 1,
+      "max_ms": 14031,
+      "mean_ms": 248.8,
+      "n": 1966,
+      "p50_ms": 214,
+      "p95_ms": 433,
+      "rpc": "get_emergency_station_snapshot",
+      "station": "BunsikClub:floor:1F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1762,
+      "mean_ms": 70.8,
+      "n": 1827,
+      "p50_ms": 61,
+      "p95_ms": 110,
+      "rpc": "get_emergency_station_timings",
+      "station": "BunsikClub:floor:1F"
+    },
+    {
+      "errors": 1287,
+      "max_ms": 9311,
+      "mean_ms": 7842.6,
+      "n": 1827,
+      "p50_ms": 8058,
+      "p95_ms": 8109,
+      "rpc": "get_emergency_station_today_completed",
+      "station": "BunsikClub:floor:1F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1540,
+      "mean_ms": 69.3,
+      "n": 1964,
+      "p50_ms": 57,
+      "p95_ms": 106,
+      "rpc": "get_kds_sync_config",
+      "station": "BunsikClub:floor:1F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 688,
+      "mean_ms": 434,
+      "n": 10,
+      "p50_ms": 464,
+      "p95_ms": 688,
+      "rpc": "kds_complete_customer_delivery_batch_v1",
+      "station": "BunsikClub:floor:1F"
+    },
+    {
+      "errors": 1,
+      "max_ms": 1865,
+      "mean_ms": 190.6,
+      "n": 121,
+      "p50_ms": 123,
+      "p95_ms": 333,
+      "rpc": "kds_record_station_progress_v3",
+      "station": "BunsikClub:floor:1F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 523,
+      "mean_ms": 318.3,
+      "n": 3,
+      "p50_ms": 286,
+      "p95_ms": 523,
+      "rpc": "kds_serve_ready_order_v3",
+      "station": "BunsikClub:floor:1F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 4485,
+      "mean_ms": 170.8,
+      "n": 1542,
+      "p50_ms": 141,
+      "p95_ms": 311,
+      "rpc": "get_emergency_station_snapshot",
+      "station": "BunsikClub:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1853,
+      "mean_ms": 65.4,
+      "n": 1485,
+      "p50_ms": 59,
+      "p95_ms": 96,
+      "rpc": "get_emergency_station_timings",
+      "station": "BunsikClub:floor:2F"
+    },
+    {
+      "errors": 31,
+      "max_ms": 9151,
+      "mean_ms": 4951.1,
+      "n": 1486,
+      "p50_ms": 4390,
+      "p95_ms": 7642,
+      "rpc": "get_emergency_station_today_completed",
+      "station": "BunsikClub:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 2814,
+      "mean_ms": 67.7,
+      "n": 1542,
+      "p50_ms": 57,
+      "p95_ms": 95,
+      "rpc": "get_kds_sync_config",
+      "station": "BunsikClub:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 153,
+      "mean_ms": 153,
+      "n": 1,
+      "p50_ms": 153,
+      "p95_ms": 153,
+      "rpc": "kds_complete_customer_delivery_batch_v1",
+      "station": "BunsikClub:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 392,
+      "mean_ms": 144.8,
+      "n": 22,
+      "p50_ms": 154,
+      "p95_ms": 264,
+      "rpc": "kds_record_station_progress_v3",
+      "station": "BunsikClub:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 447,
+      "mean_ms": 199.3,
+      "n": 13,
+      "p50_ms": 179,
+      "p95_ms": 447,
+      "rpc": "kds_serve_ready_order_v3",
+      "station": "BunsikClub:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 14464,
+      "mean_ms": 264.6,
+      "n": 2016,
+      "p50_ms": 242,
+      "p95_ms": 484,
+      "rpc": "get_emergency_station_snapshot",
+      "station": "BunsikClub:kitchen"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1960,
+      "mean_ms": 65.4,
+      "n": 1890,
+      "p50_ms": 59,
+      "p95_ms": 102,
+      "rpc": "get_emergency_station_timings",
+      "station": "BunsikClub:kitchen"
+    },
+    {
+      "errors": 1888,
+      "max_ms": 9452,
+      "mean_ms": 8069.6,
+      "n": 1888,
+      "p50_ms": 8062,
+      "p95_ms": 8104,
+      "rpc": "get_emergency_station_today_completed",
+      "station": "BunsikClub:kitchen"
+    },
+    {
+      "errors": 0,
+      "max_ms": 7271,
+      "mean_ms": 72,
+      "n": 2016,
+      "p50_ms": 57,
+      "p95_ms": 99,
+      "rpc": "get_kds_sync_config",
+      "station": "BunsikClub:kitchen"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1388,
+      "mean_ms": 179,
+      "n": 203,
+      "p50_ms": 146,
+      "p95_ms": 342,
+      "rpc": "kds_record_station_progress_v3",
+      "station": "BunsikClub:kitchen"
+    },
+    {
+      "errors": 1,
+      "max_ms": 8739,
+      "mean_ms": 283.1,
+      "n": 1869,
+      "p50_ms": 257,
+      "p95_ms": 498,
+      "rpc": "get_emergency_station_snapshot",
+      "station": "BunsikClub:tray"
+    },
+    {
+      "errors": 0,
+      "max_ms": 2305,
+      "mean_ms": 70.4,
+      "n": 1755,
+      "p50_ms": 61,
+      "p95_ms": 106,
+      "rpc": "get_emergency_station_timings",
+      "station": "BunsikClub:tray"
+    },
+    {
+      "errors": 1754,
+      "max_ms": 9391,
+      "mean_ms": 8072.4,
+      "n": 1754,
+      "p50_ms": 8063,
+      "p95_ms": 8111,
+      "rpc": "get_emergency_station_today_completed",
+      "station": "BunsikClub:tray"
+    },
+    {
+      "errors": 0,
+      "max_ms": 12204,
+      "mean_ms": 77.7,
+      "n": 1868,
+      "p50_ms": 58,
+      "p95_ms": 100,
+      "rpc": "get_kds_sync_config",
+      "station": "BunsikClub:tray"
+    },
+    {
+      "errors": 0,
+      "max_ms": 422,
+      "mean_ms": 418,
+      "n": 2,
+      "p50_ms": 422,
+      "p95_ms": 422,
+      "rpc": "kds_dispatch_tray_floor_batch_v1",
+      "station": "BunsikClub:tray"
+    },
+    {
+      "errors": 6,
+      "max_ms": 1017,
+      "mean_ms": 158.2,
+      "n": 205,
+      "p50_ms": 125,
+      "p95_ms": 293,
+      "rpc": "kds_record_station_progress_v3",
+      "station": "BunsikClub:tray"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1052,
+      "mean_ms": 533.3,
+      "n": 3,
+      "p50_ms": 275,
+      "p95_ms": 1052,
+      "rpc": "get_kds_bootstrap_v2",
+      "station": "JeonGabok:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 302,
+      "mean_ms": 35.9,
+      "n": 385,
+      "p50_ms": 29,
+      "p95_ms": 79,
+      "rpc": "get_kds_changes_v2",
+      "station": "JeonGabok:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 4892,
+      "mean_ms": 46.4,
+      "n": 1327,
+      "p50_ms": 28,
+      "p95_ms": 83,
+      "rpc": "get_kds_sync_config",
+      "station": "JeonGabok:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1306,
+      "mean_ms": 192.4,
+      "n": 359,
+      "p50_ms": 126,
+      "p95_ms": 700,
+      "rpc": "get_kds_ticket_v2",
+      "station": "JeonGabok:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 107,
+      "mean_ms": 107,
+      "n": 1,
+      "p50_ms": 107,
+      "p95_ms": 107,
+      "rpc": "kds_complete_customer_delivery_batch_v1",
+      "station": "JeonGabok:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 225,
+      "mean_ms": 102.2,
+      "n": 48,
+      "p50_ms": 92,
+      "p95_ms": 209,
+      "rpc": "kds_record_progress_v2",
+      "station": "JeonGabok:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 470,
+      "mean_ms": 131.9,
+      "n": 116,
+      "p50_ms": 100,
+      "p95_ms": 286,
+      "rpc": "kds_record_station_progress_v3",
+      "station": "JeonGabok:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 130,
+      "mean_ms": 130,
+      "n": 1,
+      "p50_ms": 130,
+      "p95_ms": 130,
+      "rpc": "kds_serve_ready_order_v3",
+      "station": "JeonGabok:floor:2F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 158,
+      "mean_ms": 132.5,
+      "n": 2,
+      "p50_ms": 158,
+      "p95_ms": 158,
+      "rpc": "get_kds_bootstrap_v2",
+      "station": "JeonGabok:floor:3F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 104,
+      "mean_ms": 37.2,
+      "n": 59,
+      "p50_ms": 32,
+      "p95_ms": 94,
+      "rpc": "get_kds_changes_v2",
+      "station": "JeonGabok:floor:3F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 176,
+      "mean_ms": 37.9,
+      "n": 145,
+      "p50_ms": 30,
+      "p95_ms": 87,
+      "rpc": "get_kds_sync_config",
+      "station": "JeonGabok:floor:3F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 710,
+      "mean_ms": 258.6,
+      "n": 16,
+      "p50_ms": 173,
+      "p95_ms": 710,
+      "rpc": "get_kds_ticket_v2",
+      "station": "JeonGabok:floor:3F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 214,
+      "mean_ms": 122.4,
+      "n": 5,
+      "p50_ms": 144,
+      "p95_ms": 214,
+      "rpc": "kds_record_progress_v2",
+      "station": "JeonGabok:floor:3F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 198,
+      "mean_ms": 131.3,
+      "n": 6,
+      "p50_ms": 127,
+      "p95_ms": 198,
+      "rpc": "kds_record_station_progress_v3",
+      "station": "JeonGabok:floor:3F"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1969,
+      "mean_ms": 592,
+      "n": 137,
+      "p50_ms": 502,
+      "p95_ms": 1274,
+      "rpc": "get_kds_bootstrap_v2",
+      "station": "JeonGabok:kitchen"
+    },
+    {
+      "errors": 0,
+      "max_ms": 356,
+      "mean_ms": 37.6,
+      "n": 617,
+      "p50_ms": 31,
+      "p95_ms": 81,
+      "rpc": "get_kds_changes_v2",
+      "station": "JeonGabok:kitchen"
+    },
+    {
+      "errors": 0,
+      "max_ms": 5017,
+      "mean_ms": 38.3,
+      "n": 2770,
+      "p50_ms": 27,
+      "p95_ms": 71,
+      "rpc": "get_kds_sync_config",
+      "station": "JeonGabok:kitchen"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1443,
+      "mean_ms": 270.1,
+      "n": 384,
+      "p50_ms": 168,
+      "p95_ms": 931,
+      "rpc": "get_kds_ticket_v2",
+      "station": "JeonGabok:kitchen"
+    },
+    {
+      "errors": 0,
+      "max_ms": 1498,
+      "mean_ms": 266.4,
+      "n": 62,
+      "p50_ms": 214,
+      "p95_ms": 487,
+      "rpc": "kds_complete_kitchen_batch_v1",
+      "station": "JeonGabok:kitchen"
+    },
+    {
+      "errors": 0,
+      "max_ms": 361,
+      "mean_ms": 89,
+      "n": 45,
+      "p50_ms": 64,
+      "p95_ms": 189,
+      "rpc": "kds_record_station_progress_v3",
+      "station": "JeonGabok:kitchen"
+    }
+  ],
+  "postgres_timeout_log_summary": {
+    "message": "canceling statement due to statement timeout",
+    "n": 4950,
+    "scope": "project-wide; not request-by-request correlated to a particular RPC"
+  },
+  "realtime_log_levels": [
+    {
+      "distinct_messages": 43,
+      "level": "info",
+      "n": 153
+    }
+  ],
+  "data_scale": [
+    {
+      "queues_today": 6,
+      "total_queues": 71,
+      "restaurant_id": "273b057e-3b69-46e3-93c1-6194c2802849"
+    },
+    {
+      "queues_today": 3,
+      "total_queues": 4463,
+      "restaurant_id": "8bc9eef5-dcd5-46b1-b931-23f77132322c"
+    }
+  ],
+  "relevant_indexes": [
+    {
+      "indexdef": "CREATE INDEX emergency_actions_queue_station_recent ON public.emergency_fulfillment_actions USING btree (queue_id, station_type, created_at DESC)",
+      "tablename": "emergency_fulfillment_actions"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX emergency_fulfillment_actions_pkey ON public.emergency_fulfillment_actions USING btree (action_id)",
+      "tablename": "emergency_fulfillment_actions"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX emergency_one_revert_per_action ON public.emergency_fulfillment_actions USING btree (original_action_id) WHERE (action_kind = 'revert'::text)",
+      "tablename": "emergency_fulfillment_actions"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_events_action ON public.emergency_fulfillment_events USING btree (action_id) WHERE (action_id IS NOT NULL)",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_events_analytics ON public.emergency_fulfillment_events USING btree (restaurant_id, order_id, stage, created_at) WHERE (delta > 0)",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_events_combo_component_created ON public.emergency_fulfillment_events USING btree (combo_component_item_id, created_at) WHERE (combo_component_item_id IS NOT NULL)",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_events_direct_item_created ON public.emergency_fulfillment_events USING btree (floor_direct_item_id, created_at) WHERE (floor_direct_item_id IS NOT NULL)",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_events_leftover_request_idx ON public.emergency_fulfillment_events USING btree (leftover_packaging_request_id) WHERE (leftover_packaging_request_id IS NOT NULL)",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_events_order_item_stage_created ON public.emergency_fulfillment_events USING btree (order_item_id, stage, created_at) WHERE ((order_item_id IS NOT NULL) AND (delta > 0))",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_events_store_created ON public.emergency_fulfillment_events USING btree (restaurant_id, created_at)",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX emergency_fulfillment_events_event_id_key ON public.emergency_fulfillment_events USING btree (event_id)",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX emergency_fulfillment_events_pkey ON public.emergency_fulfillment_events USING btree (id)",
+      "tablename": "emergency_fulfillment_events"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX emergency_order_queue_pkey ON public.emergency_order_queue USING btree (id)",
+      "tablename": "emergency_order_queue"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX emergency_order_queue_session_id_order_id_key ON public.emergency_order_queue USING btree (session_id, order_id)",
+      "tablename": "emergency_order_queue"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX emergency_order_queue_session_id_queue_no_key ON public.emergency_order_queue USING btree (session_id, queue_no)",
+      "tablename": "emergency_order_queue"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_queue_session_created_queue ON public.emergency_order_queue USING btree (session_id, created_at, queue_no)",
+      "tablename": "emergency_order_queue"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_queue_store_created_order ON public.emergency_order_queue USING btree (restaurant_id, created_at, order_id)",
+      "tablename": "emergency_order_queue"
+    },
+    {
+      "indexdef": "CREATE INDEX emergency_queue_store_session ON public.emergency_order_queue USING btree (restaurant_id, session_id, queue_no)",
+      "tablename": "emergency_order_queue"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX kds_change_log_dedupe_unique ON public.kds_change_log USING btree (restaurant_id, dedupe_key)",
+      "tablename": "kds_change_log"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX kds_change_log_event_unique ON public.kds_change_log USING btree (event_id)",
+      "tablename": "kds_change_log"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX kds_change_log_pkey ON public.kds_change_log USING btree (id)",
+      "tablename": "kds_change_log"
+    },
+    {
+      "indexdef": "CREATE INDEX kds_change_log_queue_revision_idx ON public.kds_change_log USING btree (restaurant_id, queue_id, revision) WHERE (queue_id IS NOT NULL)",
+      "tablename": "kds_change_log"
+    },
+    {
+      "indexdef": "CREATE INDEX kds_change_log_store_created_idx ON public.kds_change_log USING btree (restaurant_id, created_at)",
+      "tablename": "kds_change_log"
+    },
+    {
+      "indexdef": "CREATE INDEX kds_change_log_store_revision_idx ON public.kds_change_log USING btree (restaurant_id, revision)",
+      "tablename": "kds_change_log"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX kds_change_log_store_revision_unique ON public.kds_change_log USING btree (restaurant_id, revision)",
+      "tablename": "kds_change_log"
+    }
+  ],
+  "completed_history_core_existing_explain": [
+    {
+      "QUERY PLAN": [
+        {
+          "Plan": {
+            "Node Type": "Merge Join",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Join Type": "Inner",
+            "Startup Cost": 1355.43,
+            "Total Cost": 6181900.43,
+            "Plan Rows": 4562,
+            "Plan Width": 24,
+            "Inner Unique": true,
+            "Merge Cond": "(q.session_id = s.id)",
+            "Plans": [
+              {
+                "Node Type": "Nested Loop",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Join Type": "Inner",
+                "Startup Cost": 1355.29,
+                "Total Cost": 6181824.46,
+                "Plan Rows": 4562,
+                "Plan Width": 40,
+                "Inner Unique": false,
+                "Plans": [
+                  {
+                    "Node Type": "Index Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Scan Direction": "Forward",
+                    "Index Name": "emergency_order_queue_session_id_order_id_key",
+                    "Relation Name": "emergency_order_queue",
+                    "Alias": "q",
+                    "Startup Cost": 0.28,
+                    "Total Cost": 211.82,
+                    "Plan Rows": 4562,
+                    "Plan Width": 48,
+                    "Filter": "(restaurant_id = '8bc9eef5-dcd5-46b1-b931-23f77132322c'::uuid)"
+                  },
+                  {
+                    "Node Type": "Aggregate",
+                    "Strategy": "Plain",
+                    "Partial Mode": "Simple",
+                    "Parent Relationship": "Inner",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Startup Cost": 1355,
+                    "Total Cost": 1355.01,
+                    "Plan Rows": 1,
+                    "Plan Width": 8,
+                    "Filter": "(max(e.created_at) IS NOT NULL)",
+                    "Plans": [
+                      {
+                        "Node Type": "Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Scan Direction": "Forward",
+                        "Index Name": "emergency_events_store_created",
+                        "Relation Name": "emergency_fulfillment_events",
+                        "Alias": "e",
+                        "Startup Cost": 0.44,
+                        "Total Cost": 1355,
+                        "Plan Rows": 1,
+                        "Plan Width": 8,
+                        "Index Cond": "((created_at >= (date_trunc('day'::text, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'::text)) AT TIME ZONE 'Asia/Ho_Chi_Minh'::text)) AND (created_at < ((date_trunc('day'::text, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'::text)) AT TIME ZONE 'Asia/Ho_Chi_Minh'::text) + '1 day'::interval)))",
+                        "Filter": "((delta > 0) AND (session_id = q.session_id) AND (order_id = q.order_id) AND (stage = 'tray_dispatched'::text))"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "Node Type": "Index Only Scan",
+                "Parent Relationship": "Inner",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Scan Direction": "Forward",
+                "Index Name": "emergency_fulfillment_sessions_pkey",
+                "Relation Name": "emergency_fulfillment_sessions",
+                "Alias": "s",
+                "Startup Cost": 0.15,
+                "Total Cost": 18.15,
+                "Plan Rows": 320,
+                "Plan Width": 16
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "simplified_set_based_completion_candidates_explain_analyze": [
+    {
+      "QUERY PLAN": [
+        {
+          "Plan": {
+            "Node Type": "Nested Loop",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Join Type": "Inner",
+            "Startup Cost": 3.13,
+            "Total Cost": 5.39,
+            "Plan Rows": 1,
+            "Plan Width": 24,
+            "Actual Startup Time": 1.073,
+            "Actual Total Time": 2.679,
+            "Actual Rows": 3,
+            "Actual Loops": 1,
+            "Inner Unique": true,
+            "Shared Hit Blocks": 43,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Sorted",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "InitPlan",
+                "Subplan Name": "CTE completions",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 2.68,
+                "Total Cost": 2.7,
+                "Plan Rows": 1,
+                "Plan Width": 40,
+                "Actual Startup Time": 0.14,
+                "Actual Total Time": 0.151,
+                "Actual Rows": 3,
+                "Actual Loops": 1,
+                "Group Key": [
+                  "emergency_fulfillment_events.session_id",
+                  "emergency_fulfillment_events.order_id"
+                ],
+                "Shared Hit Blocks": 28,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Sort",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Startup Cost": 2.68,
+                    "Total Cost": 2.68,
+                    "Plan Rows": 1,
+                    "Plan Width": 40,
+                    "Actual Startup Time": 0.135,
+                    "Actual Total Time": 0.138,
+                    "Actual Rows": 10,
+                    "Actual Loops": 1,
+                    "Sort Key": [
+                      "emergency_fulfillment_events.session_id",
+                      "emergency_fulfillment_events.order_id"
+                    ],
+                    "Sort Method": "quicksort",
+                    "Sort Space Used": 25,
+                    "Sort Space Type": "Memory",
+                    "Shared Hit Blocks": 28,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0,
+                    "Plans": [
+                      {
+                        "Node Type": "Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Scan Direction": "Forward",
+                        "Index Name": "emergency_events_store_created",
+                        "Relation Name": "emergency_fulfillment_events",
+                        "Alias": "emergency_fulfillment_events",
+                        "Startup Cost": 0.44,
+                        "Total Cost": 2.67,
+                        "Plan Rows": 1,
+                        "Plan Width": 40,
+                        "Actual Startup Time": 0.058,
+                        "Actual Total Time": 0.095,
+                        "Actual Rows": 10,
+                        "Actual Loops": 1,
+                        "Index Cond": "((restaurant_id = '8bc9eef5-dcd5-46b1-b931-23f77132322c'::uuid) AND (created_at >= (date_trunc('day'::text, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'::text)) AT TIME ZONE 'Asia/Ho_Chi_Minh'::text)) AND (created_at < ((date_trunc('day'::text, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh'::text)) AT TIME ZONE 'Asia/Ho_Chi_Minh'::text) + '1 day'::interval)))",
+                        "Rows Removed by Index Recheck": 0,
+                        "Filter": "((delta > 0) AND (stage = 'tray_dispatched'::text))",
+                        "Rows Removed by Filter": 40,
+                        "Shared Hit Blocks": 25,
+                        "Shared Read Blocks": 0,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 0,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "Node Type": "Nested Loop",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Join Type": "Inner",
+                "Startup Cost": 0.28,
+                "Total Cost": 2.53,
+                "Plan Rows": 1,
+                "Plan Width": 56,
+                "Actual Startup Time": 0.183,
+                "Actual Total Time": 1.772,
+                "Actual Rows": 3,
+                "Actual Loops": 1,
+                "Inner Unique": true,
+                "Shared Hit Blocks": 37,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Plans": [
+                  {
+                    "Node Type": "CTE Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "CTE Name": "completions",
+                    "Alias": "c",
+                    "Startup Cost": 0,
+                    "Total Cost": 0.02,
+                    "Plan Rows": 1,
+                    "Plan Width": 40,
+                    "Actual Startup Time": 0.142,
+                    "Actual Total Time": 0.156,
+                    "Actual Rows": 3,
+                    "Actual Loops": 1,
+                    "Shared Hit Blocks": 28,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0
+                  },
+                  {
+                    "Node Type": "Index Scan",
+                    "Parent Relationship": "Inner",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Scan Direction": "Forward",
+                    "Index Name": "emergency_order_queue_session_id_order_id_key",
+                    "Relation Name": "emergency_order_queue",
+                    "Alias": "q",
+                    "Startup Cost": 0.28,
+                    "Total Cost": 2.5,
+                    "Plan Rows": 1,
+                    "Plan Width": 48,
+                    "Actual Startup Time": 0.537,
+                    "Actual Total Time": 0.537,
+                    "Actual Rows": 1,
+                    "Actual Loops": 3,
+                    "Index Cond": "((session_id = c.session_id) AND (order_id = c.order_id))",
+                    "Rows Removed by Index Recheck": 0,
+                    "Filter": "(restaurant_id = '8bc9eef5-dcd5-46b1-b931-23f77132322c'::uuid)",
+                    "Rows Removed by Filter": 0,
+                    "Shared Hit Blocks": 9,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0
+                  }
+                ]
+              },
+              {
+                "Node Type": "Index Only Scan",
+                "Parent Relationship": "Inner",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Scan Direction": "Forward",
+                "Index Name": "emergency_fulfillment_sessions_pkey",
+                "Relation Name": "emergency_fulfillment_sessions",
+                "Alias": "s",
+                "Startup Cost": 0.15,
+                "Total Cost": 0.17,
+                "Plan Rows": 1,
+                "Plan Width": 16,
+                "Actual Startup Time": 0.299,
+                "Actual Total Time": 0.299,
+                "Actual Rows": 1,
+                "Actual Loops": 3,
+                "Index Cond": "(id = q.session_id)",
+                "Rows Removed by Index Recheck": 0,
+                "Heap Fetches": 3,
+                "Shared Hit Blocks": 6,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0
+              }
+            ]
+          },
+          "Planning": {
+            "Shared Hit Blocks": 512,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 9.789,
+          "Triggers": [],
+          "Execution Time": 2.882
+        }
+      ]
+    }
+  ],
+  "effective_database_function_definitions": {
+    "completed_base": "CREATE OR REPLACE FUNCTION public.get_emergency_station_today_completed_base()\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'auth', 'pg_catalog'\nAS $function$\nDECLARE\n  v_user public.users%ROWTYPE;\n  v_assignment public.emergency_station_assignments%ROWTYPE;\n  v_day_start timestamptz;\n  v_day_end timestamptz;\n  v_orders jsonb := '[]'::jsonb;\nBEGIN\n  SELECT * INTO v_user\n  FROM public.users\n  WHERE auth_id = auth.uid() AND is_active = true;\n  IF NOT FOUND THEN RAISE EXCEPTION 'EMERGENCY_USER_REQUIRED'; END IF;\n\n  SELECT * INTO v_assignment\n  FROM public.emergency_station_assignments\n  WHERE user_id = v_user.id\n    AND restaurant_id = v_user.restaurant_id\n    AND is_active = true;\n  IF NOT FOUND THEN RETURN '[]'::jsonb; END IF;\n\n  v_day_start := (\n    (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::timestamp\n    AT TIME ZONE 'Asia/Ho_Chi_Minh'\n  );\n  v_day_end := v_day_start + interval '1 day';\n\n  SELECT COALESCE(\n    jsonb_agg(order_payload ORDER BY completed_at DESC, queue_no DESC),\n    '[]'::jsonb\n  )\n  INTO v_orders\n  FROM (\n    SELECT queue.queue_no, completion.completed_at,\n      jsonb_build_object(\n        'queue_id', queue.id,\n        'order_id', queue.order_id,\n        'queue_no', queue.queue_no,\n        'table_number', queue.table_number,\n        'floor_label', queue.floor_label,\n        'created_at', queue.created_at,\n        'last_action_id', recent.action_id,\n        'last_action_at', completion.completed_at,\n        'items', COALESCE((\n          SELECT jsonb_agg(item_payload ORDER BY created_at, order_item_id, line_key)\n          FROM (\n            SELECT fulfillment.created_at, fulfillment.order_item_id,\n              'base'::text AS line_key,\n              jsonb_build_object(\n                'id', fulfillment.id,\n                'order_item_id', fulfillment.order_item_id,\n                'line_key', 'base',\n                'source_kind', 'order_item',\n                'fulfillment_route', 'kitchen_tray_floor',\n                'name_ko', COALESCE(NULLIF(item.label, ''),\n                  NULLIF(item.display_name, ''), menu.name_ko, menu.name, '메뉴'),\n                'name_vi', COALESCE(NULLIF(menu.name_vi, ''),\n                  NULLIF(item.display_name, ''), menu.name, 'Món'),\n                'name_en', COALESCE(NULLIF(menu.name_en, ''),\n                  NULLIF(item.display_name, ''), menu.name, 'Item'),\n                'combo_components', COALESCE(item.combo_components, '[]'::jsonb),\n                'ordered_quantity', fulfillment.ordered_quantity,\n                'kitchen_done_quantity', fulfillment.kitchen_done_quantity,\n                'tray_received_quantity', fulfillment.tray_received_quantity,\n                'tray_dispatched_quantity', fulfillment.tray_dispatched_quantity,\n                'floor_served_quantity', fulfillment.floor_served_quantity,\n                'needs_review', fulfillment.needs_review\n              ) AS item_payload\n            FROM public.emergency_fulfillment_items fulfillment\n            JOIN public.order_items item ON item.id = fulfillment.order_item_id\n            LEFT JOIN public.menu_items menu ON menu.id = item.menu_item_id\n            WHERE fulfillment.queue_id = queue.id\n              AND fulfillment.is_cancelled = false\n\n            UNION ALL\n\n            SELECT direct.created_at, direct.order_item_id, direct.line_key,\n              jsonb_build_object(\n                'id', direct.id,\n                'order_item_id', direct.order_item_id,\n                'line_key', direct.line_key,\n                'source_kind', direct.source_kind,\n                'fulfillment_route', 'floor_direct',\n                'name_ko', direct.name_ko,\n                'name_vi', direct.name_vi,\n                'name_en', direct.name_en,\n                'combo_components', '[]'::jsonb,\n                'ordered_quantity', direct.ordered_quantity,\n                'kitchen_done_quantity', 0,\n                'tray_received_quantity', 0,\n                'tray_dispatched_quantity', 0,\n                'floor_served_quantity', direct.floor_served_quantity,\n                'needs_review', direct.needs_review\n              ) AS item_payload\n            FROM public.emergency_floor_direct_items direct\n            WHERE direct.queue_id = queue.id\n              AND direct.is_cancelled = false\n          ) completed_items\n        ), '[]'::jsonb)\n      ) AS order_payload\n    FROM public.emergency_order_queue queue\n    JOIN public.emergency_fulfillment_sessions session\n      ON session.id = queue.session_id\n    JOIN LATERAL (\n      SELECT max(event.created_at) AS completed_at\n      FROM public.emergency_fulfillment_events event\n      WHERE event.session_id = queue.session_id\n        AND event.order_id = queue.order_id\n        AND event.created_at >= v_day_start\n        AND event.created_at < v_day_end\n        AND event.delta > 0\n        AND event.stage = CASE v_assignment.station_type\n          WHEN 'kitchen' THEN 'kitchen_done'\n          WHEN 'tray' THEN 'tray_dispatched'\n          ELSE 'floor_served'\n        END\n    ) completion ON completion.completed_at IS NOT NULL\n    LEFT JOIN LATERAL (\n      SELECT action.action_id\n      FROM public.emergency_fulfillment_actions action\n      WHERE action.queue_id = queue.id\n        AND action.station_type = v_assignment.station_type\n        AND action.action_kind = 'complete'\n        AND NOT EXISTS (\n          SELECT 1\n          FROM public.emergency_fulfillment_actions reversal\n          WHERE reversal.original_action_id = action.action_id\n            AND reversal.action_kind = 'revert'\n        )\n      ORDER BY action.created_at DESC, action.action_id DESC\n      LIMIT 1\n    ) recent ON true\n    WHERE queue.restaurant_id = v_assignment.restaurant_id\n      AND (\n        v_assignment.station_type <> 'floor'\n        OR queue.floor_label=ANY(public.store_assignment_area_codes_v1(v_assignment))\n      )\n      AND CASE v_assignment.station_type\n        WHEN 'kitchen' THEN\n          EXISTS (\n            SELECT 1 FROM public.emergency_fulfillment_items item\n            WHERE item.queue_id = queue.id AND item.is_cancelled = false\n          )\n          AND NOT EXISTS (\n            SELECT 1 FROM public.emergency_fulfillment_items item\n            WHERE item.queue_id = queue.id AND item.is_cancelled = false\n              AND item.kitchen_done_quantity < item.ordered_quantity\n          )\n        WHEN 'tray' THEN\n          EXISTS (\n            SELECT 1 FROM public.emergency_fulfillment_items item\n            WHERE item.queue_id = queue.id AND item.is_cancelled = false\n          )\n          AND NOT EXISTS (\n            SELECT 1 FROM public.emergency_fulfillment_items item\n            WHERE item.queue_id = queue.id AND item.is_cancelled = false\n              AND (\n                item.tray_received_quantity < item.ordered_quantity\n                OR item.tray_dispatched_quantity < item.ordered_quantity\n              )\n          )\n        ELSE\n          (\n            EXISTS (\n              SELECT 1 FROM public.emergency_fulfillment_items item\n              WHERE item.queue_id = queue.id AND item.is_cancelled = false\n            )\n            OR EXISTS (\n              SELECT 1 FROM public.emergency_floor_direct_items item\n              WHERE item.queue_id = queue.id AND item.is_cancelled = false\n            )\n          )\n          AND NOT EXISTS (\n            SELECT 1 FROM public.emergency_fulfillment_items item\n            WHERE item.queue_id = queue.id AND item.is_cancelled = false\n              AND item.floor_served_quantity < item.ordered_quantity\n          )\n          AND NOT EXISTS (\n            SELECT 1 FROM public.emergency_floor_direct_items item\n            WHERE item.queue_id = queue.id AND item.is_cancelled = false\n              AND item.floor_served_quantity < item.ordered_quantity\n          )\n      END\n  ) completed_rows;\n\n  RETURN v_orders;\nEND;\n$function$\n",
+    "completed_outer_day_filter": "CREATE OR REPLACE FUNCTION public.get_emergency_station_today_completed_pre_start_ready()\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'auth', 'pg_catalog'\nAS $function$\nDECLARE\n  v_rows jsonb;\n  v_day_start timestamptz;\n  v_day_end timestamptz;\nBEGIN\n  v_day_start := (\n    (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::timestamp\n    AT TIME ZONE 'Asia/Ho_Chi_Minh'\n  );\n  v_day_end := v_day_start + interval '1 day';\n  v_rows := public.get_emergency_station_today_completed_pre_business_day();\n\n  RETURN COALESCE((\n    SELECT jsonb_agg(entry.raw ORDER BY entry.ord)\n    FROM jsonb_array_elements(COALESCE(v_rows, '[]'::jsonb))\n      WITH ORDINALITY entry(raw, ord)\n    WHERE NULLIF(entry.raw->>'created_at', '')::timestamptz >= v_day_start\n      AND NULLIF(entry.raw->>'created_at', '')::timestamptz < v_day_end\n  ), '[]'::jsonb);\nEND;\n$function$\n",
+    "batch_timing_enrichment": "CREATE OR REPLACE FUNCTION public.emergency_add_order_batch_timings(p_orders jsonb)\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_catalog'\nAS $function$\n  SELECT COALESCE(jsonb_agg(\n    order_row.raw || jsonb_build_object(\n      'items', COALESCE((\n        SELECT jsonb_agg(\n          item_row.raw || jsonb_strip_nulls(jsonb_build_object(\n            'batch_received_at', order_item.created_at,\n            'kitchen_first_done_at', event_times.kitchen_first_done_at,\n            'kitchen_last_done_at', event_times.kitchen_last_done_at,\n            'tray_first_dispatched_at', event_times.tray_first_dispatched_at,\n            'tray_last_dispatched_at', event_times.tray_last_dispatched_at,\n            'floor_first_served_at', event_times.floor_first_served_at,\n            'floor_last_served_at', event_times.floor_last_served_at\n          ))\n          ORDER BY item_row.ord\n        )\n        FROM jsonb_array_elements(COALESCE(order_row.raw->'items', '[]'::jsonb))\n          WITH ORDINALITY item_row(raw, ord)\n        LEFT JOIN public.order_items order_item\n          ON order_item.id = CASE\n            WHEN item_row.raw->>'order_item_id' ~*\n              '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'\n            THEN (item_row.raw->>'order_item_id')::uuid\n            ELSE NULL\n          END\n        LEFT JOIN LATERAL (\n          SELECT\n            min(event.created_at) FILTER (\n              WHERE event.stage = 'kitchen_done'\n            ) AS kitchen_first_done_at,\n            max(event.created_at) FILTER (\n              WHERE event.stage = 'kitchen_done'\n            ) AS kitchen_last_done_at,\n            min(event.created_at) FILTER (\n              WHERE (event.stage = 'tray_dispatched' OR (COALESCE(event.restaurant_id = ANY((SELECT public.kds_direct_floor_store_ids())::uuid[]), false) AND event.stage = 'kitchen_done'))\n            ) AS tray_first_dispatched_at,\n            max(event.created_at) FILTER (\n              WHERE (event.stage = 'tray_dispatched' OR (COALESCE(event.restaurant_id = ANY((SELECT public.kds_direct_floor_store_ids())::uuid[]), false) AND event.stage = 'kitchen_done'))\n            ) AS tray_last_dispatched_at,\n            min(event.created_at) FILTER (\n              WHERE event.stage = 'floor_served'\n            ) AS floor_first_served_at,\n            max(event.created_at) FILTER (\n              WHERE event.stage = 'floor_served'\n            ) AS floor_last_served_at\n          FROM public.emergency_fulfillment_events event\n          WHERE event.delta > 0\n            AND (\n              (\n                item_row.raw->>'source_kind' = 'combo_component'\n                AND event.combo_component_item_id = CASE\n                  WHEN item_row.raw->>'id' ~*\n                    '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'\n                  THEN (item_row.raw->>'id')::uuid\n                  ELSE NULL\n                END\n              )\n              OR (\n                item_row.raw->>'fulfillment_route' = 'floor_direct'\n                AND event.floor_direct_item_id = CASE\n                  WHEN item_row.raw->>'id' ~*\n                    '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'\n                  THEN (item_row.raw->>'id')::uuid\n                  ELSE NULL\n                END\n              )\n              OR (\n                COALESCE(item_row.raw->>'source_kind', 'order_item')\n                  <> 'combo_component'\n                AND COALESCE(item_row.raw->>'fulfillment_route',\n                  'kitchen_tray_floor') <> 'floor_direct'\n                AND event.order_item_id = order_item.id\n                AND event.combo_component_item_id IS NULL\n                AND event.floor_direct_item_id IS NULL\n              )\n            )\n        ) event_times ON true\n      ), '[]'::jsonb)\n    )\n    ORDER BY order_row.ord\n  ), '[]'::jsonb)\n  FROM jsonb_array_elements(COALESCE(p_orders, '[]'::jsonb))\n    WITH ORDINALITY order_row(raw, ord);\n$function$\n",
+    "bootstrap": "CREATE OR REPLACE FUNCTION public.get_kds_bootstrap_v2()\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'auth', 'pg_catalog'\nAS $function$\nDECLARE\n  v_config jsonb;\n  v_snapshot jsonb;\n  v_completed jsonb;\n  v_timings jsonb;\n  v_store_id uuid;\n  v_mode text;\nBEGIN\n  v_config := public.get_kds_sync_config();\n  v_snapshot := public.get_emergency_station_snapshot();\n  v_completed := public.get_emergency_station_today_completed();\n  v_timings := public.get_emergency_station_timings();\n  v_store_id := NULLIF(v_config->>'restaurant_id', '')::uuid;\n  IF v_store_id IS NOT NULL THEN\n    v_mode := public.get_store_fulfillment_mode(v_store_id);\n  END IF;\n  IF v_snapshot->'operating_workflow'->>'active_id' IS NOT NULL AND v_snapshot->>'station_type'='kitchen' THEN v_completed:='[]';v_timings:='[]'; END IF;\n  RETURN jsonb_build_object(\n    'sync', v_config,\n    'snapshot', v_snapshot,\n    'completed_orders', COALESCE(v_completed, '[]'::jsonb),\n    'timings', COALESCE(v_timings, '[]'::jsonb),\n    'fulfillment_mode', COALESCE(v_mode, 'paperless')\n  );\nEND;\n$function$\n"
+  },
+  "client_source_contracts": {
+    "handoff_voice_coalescing_ms": 2000,
+    "legacy_refresh_coalescing_ms": 100,
+    "legacy_reconciliation_interval_ms": [
+      25000,
+      35000
+    ],
+    "active_watchdog_interval_ms": [
+      25000,
+      35000
+    ],
+    "delta_default_page_size": 100,
+    "delta_page_limit": 50,
+    "per_change_ticket_fetch": "Sequential await onChange -> _refreshKdsTicket -> get_kds_ticket_v2"
+  }
+}

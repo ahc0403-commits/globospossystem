@@ -1,0 +1,76 @@
+Original check_repo.sh run: Flutter and early SQL stages passed; stopped at duplicate migration version 20261023100000.
+Own new migration renamed to 20261023110000. Original migration-uniqueness stage through the final stage was then resumed with identical script commands.
+CHECK_REPO_REQUIRED_STAGES=62 MISSING_REQUIRED_STAGES=0
+OPTIONAL_CURRENT_PRODUCTION_SCHEMA_UPGRADE=NOT_RUN export_not_supplied
+FULL_STATIC_ANALYSIS=PASS
+FULL_FLUTTER=PASS passed=2541 skipped=97 failed=0
+EDGE_DIRECT_ORDER=PASS passed=29 failed=0
+OWN_DART_FORMAT=PASS files=18 changed=0
+BANK_PRIVATE_NOTE_VISUAL_CHECKS=PASS tests=3 actual_images_opened=true
+RESUMED_SCRIPT_EXIT=0
+JS_WEB_RELEASE_BUILD=PASS
+GIT_WHITESPACE=PASS
+
+Stage coverage:
+PASS flutter_dependencies
+PASS static_analysis
+PASS flutter_tests
+PASS print_station_receipt_only
+PASS store_opening_printer_modes
+PASS store_operating_profiles
+PASS operating_payment_core
+PASS store_account_onboarding
+PASS independent_brand_sql
+PASS deliberry_retirement
+PASS atomic_release_bundle_contract
+PASS pos_receipt_ledger_sql
+PASS migration_version_uniqueness
+PASS attendance_storage_policy
+PASS office_store_batch_sql
+PASS daily_table_operational_reset_sql
+PASS direct_order_translation
+PASS menu_size_prices_sql
+PASS menu_meal_choices_cart_sql
+PASS jeongabok_floor_live_sync_sql
+PASS kds_partial_item_handoff_sql
+PASS jeongabok_qr_full_history_sql
+PASS menu_localization_sql
+PASS bunsik_receipt_ledger_names_sql
+PASS menu_analytics_correction_sql
+PASS admin_menu_item_archive_sql
+PASS kds_tray_floor_partial_batch_sql
+PASS beverage_sugar_vat_sql
+PASS qr_menu_category_auto_sync_sql
+PASS inventory_purchase_orderer_catalog_sql
+PASS inventory_safety_stock_sql
+PASS inventory_workflow_sql
+PASS photo_operations_read_models
+PASS payroll_attendance_sql_api
+PASS financial_inputs_sql_api
+PASS restaurant_report_ready_sql
+PASS corporate_sales_ledger_sql
+PASS receipt_collection_bank_sql
+PASS promotion_sync_sql
+PASS measured_index_sql
+PASS direct_order_edge_contracts
+PASS fixed_procurement_account_authority
+PASS company_tax_lookup
+PASS bounded_data_access_sql_and_dispatch_ownership
+PASS node_contracts
+PASS deploy_shell_syntax
+PASS payment_deposit_release_scope
+PASS deploy_clean_worktree_contract
+PASS deploy_no_smoke_policy_contract
+PASS deliberry_retirement_deploy_contract
+PASS deploy_git_history_contract
+PASS production_migration_gate_contract
+PASS deploy_psql_runner_contract
+PASS production_sql_wrapper_contract
+PASS photo_sales_collection_retirement_contract
+PASS photo_sales_collection_retirement_sql
+PASS photo_manual_import_contract
+PASS order_links_final_amount_and_verified_delivery
+PASS cashier_item_move_and_partial_cancel
+PASS restaurant_vat_integrity
+PASS flutter_web_release_build
+PASS git_whitespace_contract

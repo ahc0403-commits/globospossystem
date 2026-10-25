@@ -5,6 +5,7 @@ import 'package:excel/excel.dart';
 import 'package:archive/archive.dart';
 import 'package:uuid/uuid.dart';
 import 'sales_export_validation.dart';
+import 'misa_description_normalization.dart';
 export 'sales_export_validation.dart';
 
 // MISA's discrepancy warning compares VND amounts after rounding to whole dong.
@@ -90,6 +91,7 @@ bool isMisaLineTotalConsistent(
 List<int> buildMisaPendingInvoiceWorkbook(
   List<Map<String, dynamic>> jobs, {
   String? generationId,
+  List<Map<String, dynamic>>? descriptionNormalizations,
 }) {
   if (jobs.isEmpty) {
     throw const FormatException('MISA_PENDING_EXPORT_EMPTY');
@@ -113,6 +115,7 @@ List<int> buildMisaPendingInvoiceWorkbook(
   final ledger = workbook['POS Ledger'];
   final mapping = workbook['Invoice Mapping'];
   final deliveryRows = <List<CellValue>>[];
+  final descriptions = <Map<String, dynamic>>[];
   mapping.appendRow(
     const [
       'invoice_sequence',
@@ -227,6 +230,16 @@ List<int> buildMisaPendingInvoiceWorkbook(
       final prepared = preparedLines[lineIndex];
       final line = prepared.line;
       final amounts = prepared.amounts;
+      final originalDescription = _firstText([
+        line['invoice_name_vi'],
+        line['display_name'],
+        line['label'],
+        line['ItemName'],
+        isPhoto ? 'Dịch vụ chụp ảnh' : 'Món ăn',
+      ]);
+      final description = isPhoto
+          ? null
+          : normalizeMisaDescription(originalDescription);
       sheet.appendRow([
         TextCellValue((invoiceIndex + 1).toString()),
         if (lineIndex == 0) ...[
@@ -247,15 +260,7 @@ List<int> buildMisaPendingInvoiceWorkbook(
           ),
         ] else
           ...List<CellValue?>.filled(9, null),
-        TextCellValue(
-          _firstText([
-            line['invoice_name_vi'],
-            line['display_name'],
-            line['label'],
-            line['ItemName'],
-            isPhoto ? 'Dịch vụ chụp ảnh' : 'Món ăn',
-          ]),
-        ),
+        TextCellValue(description?.text ?? originalDescription),
         TextCellValue(
           _firstText([line['misa_unit_name'], isPhoto ? 'Lần' : 'Phần']),
         ),
@@ -266,6 +271,20 @@ List<int> buildMisaPendingInvoiceWorkbook(
         DoubleCellValue(amounts.vatAmount),
       ]);
       final rowNumber = sheet.maxRows;
+      if (description?.changed == true) {
+        descriptions.add({
+          'policy': misaDescriptionPolicy,
+          'invoice_sequence': invoiceIndex + 1,
+          'excel_row': rowNumber,
+          'source_system': _text(job['source_system']),
+          'receipt_id': _text(job['receipt_id'] ?? job['id']),
+          'order_item_id': _text(line['order_item_id']),
+          'menu_item_id': _text(line['menu_item_id']),
+          'original_description': originalDescription,
+          'export_description': description!.text,
+          'removed_graphemes': description.removals,
+        });
+      }
       final sourceHash = _firstText([
         job['source_hash'],
         sha256.convert(utf8.encode(jsonEncode(job))).toString(),
@@ -353,6 +372,8 @@ List<int> buildMisaPendingInvoiceWorkbook(
   for (final entry in {
     'format_version': 'pos-sales-xlsx-v4',
     'ledger_version': '3',
+    if (ordered.any((j) => j['source_system'] != 'photo_objet_moers'))
+      'description_normalization_policy': misaDescriptionPolicy,
     'generation_id': generationId ?? const Uuid().v4(),
     'content_sha256': sha256
         .convert(utf8.encode(jsonEncode(ordered)))
@@ -368,6 +389,31 @@ List<int> buildMisaPendingInvoiceWorkbook(
   }.entries) {
     contract.appendRow([TextCellValue(entry.key), TextCellValue(entry.value)]);
   }
+  if (descriptions.isNotEmpty) {
+    const headers = [
+      'policy',
+      'invoice_sequence',
+      'excel_row',
+      'source_system',
+      'receipt_id',
+      'order_item_id',
+      'menu_item_id',
+      'original_description',
+      'export_description',
+      'removed_graphemes',
+    ];
+    final audit = workbook['Description Normalization'];
+    audit.appendRow(headers.map(TextCellValue.new).toList());
+    for (final row in descriptions) {
+      audit.appendRow([
+        for (final key in headers)
+          TextCellValue(
+            key == 'removed_graphemes' ? jsonEncode(row[key]) : '${row[key]}',
+          ),
+      ]);
+    }
+  }
+  descriptionNormalizations?.addAll(descriptions);
   if (deliveryRows.isNotEmpty) {
     final delivery = workbook['Email Delivery'];
     delivery.appendRow(_emailDeliveryHeaders.map(TextCellValue.new).toList());

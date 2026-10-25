@@ -11,7 +11,10 @@ flutter pub get --enforce-lockfile
 printf 'CHECK_REPO_STEP=static_analysis\n'
 dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
-flutter test
+flutter test --machine
+
+printf 'CHECK_REPO_STEP=misa_description_normalization_audit\n'
+python3 test/misa_description_audit_test.py
 
 printf 'CHECK_REPO_STEP=print_station_receipt_only\n'
 bash test/print_station_receipt_only_sql_test.sh
@@ -21,6 +24,9 @@ bash test/store_opening_printer_modes_sql_test.sh
 
 printf 'CHECK_REPO_STEP=store_operating_profiles\n'
 bash scripts/test_store_operating_profiles.sh
+
+printf 'CHECK_REPO_STEP=table_move_qr_payment_summary\n'
+bash test/cashier_item_edit_sql_test.sh
 
 printf 'CHECK_REPO_STEP=operating_payment_core\n'
 bash scripts/test_operating_payment_core.sh
@@ -59,6 +65,8 @@ python3 scripts/build_pos_recipient_release.py --check
 python3 scripts/build_store_lifecycle_release.py --check
 printf 'CHECK_REPO_STEP=pos_receipt_ledger_sql\n'
 bash test/pos_receipt_ledger_sql_test.sh
+printf 'CHECK_REPO_STEP=late_red_invoice_sql\n'
+bash test/late_invoice_sql_test.sh
 printf 'CHECK_REPO_STEP=migration_version_uniqueness\n'
 bash test/migration_version_uniqueness_test.sh
 
@@ -67,6 +75,9 @@ bash scripts/test_attendance_storage_policy.sh
 
 printf 'CHECK_REPO_STEP=office_store_batch_sql\n'
 bash scripts/test_office_store_batch_reads.sh
+
+printf 'CHECK_REPO_STEP=photo_office_operations_sql\n'
+bash test/photo_office_operations_sql_test.sh
 
 printf 'CHECK_REPO_STEP=daily_table_operational_reset_sql\n'
 bash scripts/test_daily_table_operational_reset.sh
@@ -85,6 +96,10 @@ printf 'CHECK_REPO_STEP=jeongabok_floor_live_sync_sql\n'
 bash scripts/test_jeongabok_floor_live_sync.sh
 printf 'CHECK_REPO_STEP=kds_partial_item_handoff_sql\n'
 bash scripts/test_kds_partial_item_handoff.sh
+printf 'CHECK_REPO_STEP=bunsik_kds_bounded_history_sql\n'
+bash scripts/test_bunsik_kds_history.sh
+printf 'CHECK_REPO_STEP=jeongabok_kds_bounded_sync_sql\n'
+bash scripts/test_jeongabok_kds_bounded_sync.sh
 printf 'CHECK_REPO_STEP=jeongabok_qr_full_history_sql\n'
 bash scripts/test_jeongabok_qr_full_history.sh
 
@@ -185,7 +200,7 @@ deno lint supabase/functions/provision-fixed-pos-account/policy.ts supabase/func
 deno check supabase/functions/provision-fixed-pos-account/index.ts
 deno test supabase/functions/provision-fixed-pos-account/policy_test.ts
 printf 'CHECK_REPO_STEP=bounded_data_access_sql_and_dispatch_ownership\n'
-bounded_data_evidence="${TMPDIR:-/tmp}/pos-bounded-check-$$"
+bounded_data_evidence="${POS_VERIFICATION_ARTIFACTS:-${TMPDIR:-/tmp}/pos-bounded-check-$$}"
 python3 scripts/tests/data_access/verify_bounded_reads.py "$bounded_data_evidence/reads"
 python3 scripts/tests/data_access/verify_dispatch_claims.py "$bounded_data_evidence/claims"
 deno check supabase/functions/meinvoice-dispatcher/index.ts \
@@ -245,3 +260,5 @@ flutter build web --release
 printf 'CHECK_REPO_STEP=git_whitespace_contract\n'
 git diff --check
 git show --check --format= HEAD
+
+printf 'CHECK_REPO_COMPLETE\n'

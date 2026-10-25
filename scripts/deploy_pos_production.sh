@@ -11,7 +11,6 @@ readonly POS_VERCEL_PROJECT_ID="prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ"
 readonly POS_VERCEL_ORG_ID="team_4AfACJKDlP09zRqoJKce3Tib"
 readonly POS_GITHUB_ORG="ahc0403-commits"
 readonly POS_GITHUB_REPO="globospossystem"
-readonly POS_REQUIRED_GITHUB_CHECK="POS release contract"
 readonly LIVE_URL="https://globospossystem.vercel.app"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.local}"
 MIGRATION_FILE="${MIGRATION_FILE:-}"
@@ -67,9 +66,9 @@ Options:
                      Requires --migration and all checks; incompatible with
                      remote mode, skip options, and rollback.
   --onboarding-edge-only  Deploy only automatic account provisioning endpoints.
-                     Requires STORE_ONBOARDING_SECRET_ENV_FILE and all source/CI/test gates.
+                     Requires STORE_ONBOARDING_SECRET_ENV_FILE and all source/local/test gates.
   --web-only         Deploy POS web/mobile browser UI; no DB or Edge changes.
-                     Requires every source, CI, Auth, test and login gate.
+                     Requires every source, local verification, Auth, test and login gate.
   --mode MODE        prebuilt (default) or remote.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
@@ -78,7 +77,7 @@ Options:
   --skip-login-smoke Skip post-deploy operational login smoke. Report as blocker-risk.
   --skip-smoke-tests Skip synthetic HTTP and login probes; verify deployment
                      metadata and the remote origin digest instead. All source,
-                     CI, Auth readiness, migration and build gates still apply.
+                     local verification, Auth readiness, migration and build gates still apply.
   --skip-db          Skip Supabase migration work.
   --skip-build       In remote mode, skip the local flutter build precheck.
   --skip-vercel      Skip Vercel deployment.
@@ -183,27 +182,27 @@ enforce_origin_main_ancestry() {
   printf 'Git release verified: HEAD exactly matches origin/main.\n'
 }
 
-enforce_required_github_check() {
+enforce_local_release_contract() {
   production_deploy_path_requested || return 0
-
-  log "Required GitHub Actions release check"
-  need_cmd gh
-
-  local release_sha check_runs
-  release_sha="$(git -C "$ROOT_DIR" rev-parse HEAD)"
-  if ! check_runs="$(
-    gh api \
-      "repos/$POS_GITHUB_ORG/$POS_GITHUB_REPO/commits/$release_sha/check-runs" \
-      --paginate \
-      --jq ".check_runs[] | select(.name == \"$POS_REQUIRED_GITHUB_CHECK\" and .app.slug == \"github-actions\") | [.status, .conclusion, .html_url] | @tsv"
-  )"; then
-    fail "Could not read required GitHub Actions checks for exact main SHA $release_sha."
+  log "Required local release verification"
+  need_cmd python3
+  need_cmd docker
+  [[ -f "$ROOT_DIR/scripts/pos_local_release_gate.py" ]] ||
+    fail "Missing trusted local release verifier."
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '+ python3 -B scripts/pos_local_release_gate.py run --kind exact-main --output <fresh-private-evidence-dir>\n'
+    printf 'Local verification: NOT RUN (dry-run; no PASS evidence).\n'
+    return 0
   fi
-
-  grep -Eq '^completed[[:space:]]+success([[:space:]]|$)' <<< "$check_runs" ||
-    fail "Required GitHub Actions check '$POS_REQUIRED_GITHUB_CHECK' has not succeeded for exact main SHA $release_sha."
-  printf 'GitHub release verified: %s succeeded for %s.\n' \
-    "$POS_REQUIRED_GITHUB_CHECK" "$release_sha"
+  local evidence_parent
+  evidence_parent="$(mktemp -d "${TMPDIR:-/tmp}/pos-release-evidence.XXXXXX")"
+  # Always execute the trusted recipe. No supplied receipt, resume, or skip path.
+  python3 -B "$ROOT_DIR/scripts/pos_local_release_gate.py" run \
+    --kind exact-main --output "$evidence_parent/evidence" ||
+    fail "Required local release verification failed; see $evidence_parent/evidence."
+  enforce_clean_git
+  enforce_origin_main_ancestry
+  printf 'Local release evidence: %s/evidence/receipt.json\n' "$evidence_parent"
 }
 
 run() {
@@ -431,7 +430,7 @@ preflight() {
 
   enforce_clean_git
   enforce_origin_main_ancestry
-  enforce_required_github_check
+  enforce_local_release_contract
 
   [[ -f "$PROJECT_REF_FILE" ]] || fail "Missing project ref file: $PROJECT_REF_FILE"
   local project_ref
