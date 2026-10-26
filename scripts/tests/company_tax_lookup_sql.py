@@ -51,19 +51,73 @@ def main():
           CREATE ROLE anon;
           CREATE ROLE authenticated;
           CREATE ROLE service_role BYPASSRLS;
-          CREATE TABLE restaurants(id uuid PRIMARY KEY, is_active boolean NOT NULL DEFAULT true);
+          CREATE SCHEMA auth;
+          CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
+            $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid; $$;
+          GRANT USAGE ON SCHEMA auth TO authenticated;
+          GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
+          CREATE TABLE restaurants(id uuid PRIMARY KEY, is_active boolean NOT NULL DEFAULT true, name text);
           CREATE TABLE users(id uuid PRIMARY KEY, auth_id uuid UNIQUE, role text, is_active boolean DEFAULT true);
           CREATE TABLE fixture_store_access(auth_id uuid, store_id uuid);
           CREATE FUNCTION user_accessible_stores(p_auth uuid) RETURNS SETOF uuid LANGUAGE sql AS
             $$ SELECT store_id FROM fixture_store_access WHERE auth_id=p_auth; $$;
-          INSERT INTO restaurants VALUES ('{SHOP}',true),('{OTHER}',true);
+          INSERT INTO restaurants(id,is_active) VALUES ('{SHOP}',true),('{OTHER}',true);
+          INSERT INTO restaurants(id,is_active,name) VALUES ('273b057e-3b69-46e3-93c1-6194c2802849',true,'JeonGabok Binh Thanh');
           INSERT INTO users SELECT md5('actor-'||i)::uuid,md5('auth-'||i)::uuid,'cashier',true FROM generate_series(1,100) i;
           INSERT INTO users VALUES ('10000000-0000-0000-0000-000000000001','{AUTH}','cashier',true);
           INSERT INTO fixture_store_access SELECT auth_id,'{SHOP}'::uuid FROM users;
         """)
         sql((ROOT / "supabase/migrations/20261011130000_company_tax_lookup.sql").read_text())
+        sql((ROOT / "supabase/migrations/20261026090000_company_lookup_configuration.sql").read_text())
+
+        def authenticated(query, auth=AUTH):
+            return sql(f"SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','{auth}',false); {query}").splitlines()[-1]
+
+        assert json.loads(authenticated(f"SELECT pos_company_tax_lookup_status('{SHOP}');")) == {
+            "outcome": "disabled", "configured": False, "can_manage": False}
+        assert json.loads(authenticated(f"SELECT pos_company_tax_lookup_status('{OTHER}');"))["outcome"] == "forbidden"
+        assert json.loads(authenticated(f"SELECT pos_company_tax_lookup_status('{SHOP}');", ""))["outcome"] == "forbidden"
+        denied = subprocess.run(["docker", "exec", "-i", DB, "psql", "-X", "-At", "-U", "postgres",
+                                 "-d", "esgoo_test", "-v", "ON_ERROR_STOP=1"], input=f"SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','{AUTH}',false); SELECT pos_set_company_tax_lookup('{SHOP}',true);", text=True, capture_output=True)
+        assert denied.returncode == 3 and "COMPANY_LOOKUP_FORBIDDEN" in denied.stderr
+        sql(f"UPDATE users SET role='super_admin' WHERE auth_id='{AUTH}';")
+        enabled = json.loads(authenticated(f"SELECT pos_set_company_tax_lookup('{SHOP}',true);"))
+        assert enabled == {"outcome": "enabled", "configured": True, "can_manage": True}
+        authenticated(f"SELECT pos_set_company_tax_lookup('{SHOP}',true);")
+        assert sql("SELECT count(*) FROM company_tax_lookup_setting_events;") == "1"
+        assert sql(f"SELECT actor_auth_id='{AUTH}' AND previous_enabled IS NULL AND enabled FROM company_tax_lookup_setting_events;") == "t"
+        authenticated(f"SELECT pos_set_company_tax_lookup('{SHOP}',false);")
+        assert sql("SELECT count(*) FROM company_tax_lookup_setting_events;") == "2"
+        assert json.loads(authenticated(f"SELECT pos_company_tax_lookup_status('{SHOP}');"))["outcome"] == "disabled"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            values = list(pool.map(lambda _: authenticated(f"SELECT pos_set_company_tax_lookup('{SHOP}',true);"), range(8)))
+        assert all(json.loads(value)["outcome"] == "enabled" for value in values)
+        assert sql("SELECT count(*) FROM company_tax_lookup_setting_events;") == "3"
+        for role in ["anon", "authenticated"]:
+            for query in ["SELECT * FROM company_tax_lookup_setting_events;",
+                          f"UPDATE company_tax_lookup_settings SET enabled=true WHERE store_id='{SHOP}';"]:
+                denied = subprocess.run(["docker", "exec", "-i", DB, "psql", "-X", "-At", "-U", "postgres",
+                                         "-d", "esgoo_test", "-v", "ON_ERROR_STOP=1"], input=f"SET ROLE {role}; {query}", text=True, capture_output=True)
+                assert denied.returncode == 3 and "permission denied" in denied.stderr
+        sql(f"UPDATE users SET is_active=false WHERE auth_id='{AUTH}';")
+        assert json.loads(authenticated(f"SELECT pos_company_tax_lookup_status('{SHOP}');"))["outcome"] == "forbidden"
+        denied = subprocess.run(["docker", "exec", "-i", DB, "psql", "-X", "-At", "-U", "postgres",
+                                 "-d", "esgoo_test", "-v", "ON_ERROR_STOP=1"], input=f"SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','{AUTH}',false); SELECT pos_set_company_tax_lookup('{SHOP}',false);", text=True, capture_output=True)
+        assert denied.returncode == 3 and "COMPANY_LOOKUP_FORBIDDEN" in denied.stderr
+        sql(f"UPDATE users SET is_active=true,role='cashier' WHERE auth_id='{AUTH}'; DELETE FROM company_tax_lookup_settings;")
         assert claim()[0] == "disabled"
         sql(f"INSERT INTO company_tax_lookup_settings VALUES ('{SHOP}',true),('{OTHER}',true);")
+        # Operational recovery changes only the named store and is repeatable.
+        recovery = (ROOT / 'scripts/enable_jeongabok_company_lookup.sql').read_text()
+        sql(recovery)
+        sql(recovery)
+        assert sql("SELECT count(*) FROM company_tax_lookup_settings WHERE enabled;") == "3"
+        assert sql(f"SELECT enabled FROM company_tax_lookup_settings WHERE store_id='{SHOP}';") == "t"
+        assert sql(f"SELECT enabled FROM company_tax_lookup_settings WHERE store_id='{OTHER}';") == "t"
+        sql("UPDATE restaurants SET name='different' WHERE id='273b057e-3b69-46e3-93c1-6194c2802849';")
+        rejected = subprocess.run(["docker", "exec", "-i", DB, "psql", "-X", "-At", "-U", "postgres",
+                                  "-d", "esgoo_test", "-v", "ON_ERROR_STOP=1"], input=recovery, text=True, capture_output=True)
+        assert rejected.returncode == 3 and 'JEONGABOK_LOOKUP_TARGET_DRIFT' in rejected.stderr
         assert claim(store=OTHER)[0] == "forbidden"
         sql(f"UPDATE users SET is_active=false WHERE auth_id='{AUTH}';")
         assert claim()[0] == "forbidden"
@@ -110,6 +164,8 @@ def main():
             records.append({"sessions": parallel, "claimed": winners, "limited": values.count("rate_limited"),
                             "slotRows": 2, "elapsedMs": round((time.monotonic()-started)*1000, 2)})
         print(json.dumps({"test": "company_tax_lookup_sql", "permissions": "pass", "quota": "10 per 60s",
+                          "configurationStatusAndAudit": "pass",
+                          "operationalRecoveryIdempotencyAndTargetGuard": "pass",
                           "expiredAndOwnedLease": "pass", "concurrency": records}, indent=2))
     except Exception:
         print(subprocess.check_output(["docker", "logs", "--tail", "35", DB], stderr=subprocess.STDOUT, text=True))

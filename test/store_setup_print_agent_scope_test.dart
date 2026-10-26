@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/core/services/company_tax_lookup_service.dart';
 import 'package:globos_pos_system/core/hardware/print_agent_coordinator.dart';
 import 'package:globos_pos_system/core/hardware/print_agent_coordinator_provider.dart';
 import 'package:globos_pos_system/core/hardware/print_job_agent_service.dart';
@@ -159,6 +160,15 @@ class _Harness {
   late final _Driver driver;
   late final ProviderContainer container;
   final backend = _Backend();
+  final companyLookup = CompanyTaxLookupService(
+    transport: (_, _) async => {'outcome': 'unavailable'},
+    statusTransport: (_) async => {
+      'outcome': 'disabled',
+      'configured': false,
+      'can_manage': true,
+    },
+    sessionScope: () => 'fixture',
+  );
 
   Widget app(String storeId) => UncontrolledProviderScope(
     container: container,
@@ -166,7 +176,10 @@ class _Harness {
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: StoreSetupScreen(storeId: storeId),
+      home: StoreSetupScreen(
+        storeId: storeId,
+        companyLookupService: companyLookup,
+      ),
     ),
   );
 
@@ -190,6 +203,7 @@ class _Harness {
 
   Future<void> close(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
+    companyLookup.dispose();
     container.dispose();
     await tester.pump();
   }

@@ -78,6 +78,10 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
   String? _providedName, _filledName, _attemptedKey;
   late String _lastNumber, _lastName;
   bool _lookingUp = false, _applying = false;
+  bool _checkingStatus = false;
+  CompanyLookupAvailability _availability =
+      CompanyLookupAvailability.unavailable;
+  int _statusRevision = 0;
   int _revision = 0;
 
   @override
@@ -89,8 +93,27 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
 
   void _setService() {
     _service?.removeListener(_sessionChanged);
-    _service = widget.storeId == null ? null : widget.lookupService;
+    _service = widget.storeId == null
+        ? null
+        : widget.lookupService ?? companyTaxLookupService;
     _service?.addListener(_sessionChanged);
+    unawaited(_refreshStatus());
+  }
+
+  Future<void> _refreshStatus() async {
+    final revision = ++_statusRevision;
+    final store = widget.storeId;
+    final service = _service;
+    _availability = CompanyLookupAvailability.unavailable;
+    _checkingStatus =
+        store != null && service != null && service.supportsStatus;
+    if (!_checkingStatus) return;
+    final setting = await service!.status(store!);
+    if (!mounted || revision != _statusRevision) return;
+    setState(() {
+      _availability = setting.availability;
+      _checkingStatus = false;
+    });
   }
 
   void _attach() {
@@ -139,7 +162,10 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
     if (!_applying) _invalidate();
   }
 
-  void _sessionChanged() => _invalidate(restoreName: true);
+  void _sessionChanged() {
+    _invalidate(restoreName: true);
+    unawaited(_refreshStatus());
+  }
 
   void _invalidate({bool restoreName = false}) {
     if (restoreName &&
@@ -167,7 +193,12 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
   Future<void> _lookup({required bool manual}) async {
     final c = widget.controller;
     final store = widget.storeId;
-    if (store == null || _lookingUp || c.type != BuyerNumberType.vnTax) {
+    if (store == null ||
+        _lookingUp ||
+        _checkingStatus ||
+        _availability == CompanyLookupAvailability.disabled ||
+        _availability == CompanyLookupAvailability.forbidden ||
+        c.type != BuyerNumberType.vnTax) {
       return;
     }
     final code = c.fields['buyer_number_value']!.text.trim();
@@ -217,6 +248,12 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
     }
     setState(() {
       _lookupResult = result;
+      if (result.outcome == CompanyLookupOutcome.disabled) {
+        _availability = CompanyLookupAvailability.disabled;
+      }
+      if (result.outcome == CompanyLookupOutcome.forbidden) {
+        _availability = CompanyLookupAvailability.forbidden;
+      }
       _lookingUp = false;
     });
   }
@@ -229,7 +266,18 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
         success &&
         original.trim().isNotEmpty &&
         !companyNamesMatch(original, result!.companyName!);
-    final message = _lookingUp
+    final blocked =
+        _availability == CompanyLookupAvailability.disabled ||
+        _availability == CompanyLookupAvailability.forbidden;
+    final message = _checkingStatus
+        ? copy.checking
+        : blocked
+        ? copy.failure(
+            _availability == CompanyLookupAvailability.disabled
+                ? CompanyLookupOutcome.disabled
+                : CompanyLookupOutcome.forbidden,
+          )
+        : _lookingUp
         ? copy.loading
         : success
         ? original.trim().isEmpty
@@ -247,7 +295,9 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
             key: const Key('pos_company_lookup'),
-            onPressed: _lookingUp ? null : () => _lookup(manual: true),
+            onPressed: _lookingUp || _checkingStatus || blocked
+                ? null
+                : () => _lookup(manual: true),
             icon: _lookingUp
                 ? const SizedBox(
                     width: 16,
@@ -258,6 +308,22 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
             label: Text(copy.lookup),
           ),
         ),
+        Text(copy.nameOnly, key: const Key('pos_company_lookup_scope')),
+        if (blocked)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const Key('pos_company_lookup_refresh'),
+              onPressed: () {
+                setState(() {
+                  _lookupResult = null;
+                  _attemptedKey = null;
+                });
+                unawaited(_refreshStatus());
+              },
+              child: Text(copy.refresh),
+            ),
+          ),
         if (message != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -285,6 +351,7 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
   @override
   void dispose() {
     _revision++;
+    _statusRevision++;
     _detach(widget.controller);
     _service?.removeListener(_sessionChanged);
     super.dispose();

@@ -59,13 +59,46 @@ class CompanyLookupResult {
 typedef CompanyLookupTransport =
     Future<dynamic> Function(String storeId, String taxCode);
 
+enum CompanyLookupAvailability { enabled, disabled, forbidden, unavailable }
+
+class CompanyLookupSetting {
+  const CompanyLookupSetting(
+    this.availability, {
+    this.configured = false,
+    this.canManage = false,
+  });
+  final CompanyLookupAvailability availability;
+  final bool configured, canManage;
+
+  factory CompanyLookupSetting.parse(dynamic raw) {
+    if (raw is! Map) {
+      return const CompanyLookupSetting(CompanyLookupAvailability.unavailable);
+    }
+    final availability = switch (raw['outcome']) {
+      'enabled' => CompanyLookupAvailability.enabled,
+      'disabled' => CompanyLookupAvailability.disabled,
+      'forbidden' => CompanyLookupAvailability.forbidden,
+      _ => CompanyLookupAvailability.unavailable,
+    };
+    return CompanyLookupSetting(
+      availability,
+      configured: raw['configured'] == true,
+      canManage: raw['can_manage'] == true,
+    );
+  }
+}
+
 /// Name-only, bounded session cache. No reads on list rendering or realtime events.
 class CompanyTaxLookupService extends ChangeNotifier {
   CompanyTaxLookupService({
     required CompanyLookupTransport transport,
     required String Function() sessionScope,
+    Future<dynamic> Function(String storeId)? statusTransport,
+    Future<dynamic> Function(String storeId, bool enabled)? settingTransport,
     DateTime Function()? clock,
   }) : _transport = transport,
+       _statusTransport = statusTransport,
+       _settingTransport = settingTransport,
        _scope = sessionScope,
        _clock = clock ?? DateTime.now {
     _lastScope = _scope();
@@ -89,6 +122,14 @@ class CompanyTaxLookupService extends ChangeNotifier {
         }
       },
       sessionScope: () => client.auth.currentSession?.accessToken ?? '',
+      statusTransport: (store) => client.rpc(
+        'pos_company_tax_lookup_status',
+        params: {'p_store_id': store},
+      ),
+      settingTransport: (store, enabled) => client.rpc(
+        'pos_set_company_tax_lookup',
+        params: {'p_store_id': store, 'p_enabled': enabled},
+      ),
     );
     service._authSubscription = client.auth.onAuthStateChange.listen(
       (_) => service.clear(),
@@ -97,22 +138,91 @@ class CompanyTaxLookupService extends ChangeNotifier {
   }
 
   final CompanyLookupTransport _transport;
+  final Future<dynamic> Function(String)? _statusTransport;
+  final Future<dynamic> Function(String, bool)? _settingTransport;
+  final _statusPending = <String, Future<CompanyLookupSetting>>{};
   final String Function() _scope;
   final DateTime Function() _clock;
   StreamSubscription<AuthState>? _authSubscription;
   final _cache = <String, ({DateTime expires, CompanyLookupResult result})>{};
   final _pending = <String, Future<CompanyLookupResult>>{};
   String? _lastScope;
-  int _generation = 0, _active = 0;
+  int _generation = 0, _active = 0, _statusActive = 0;
   bool _disposed = false;
   String get sessionScope => _scope();
+  bool get supportsStatus => _statusTransport != null;
 
   void clear() {
     _generation++;
     _cache.clear();
     _pending.clear();
+    _statusPending.clear();
     _lastScope = _scope();
     if (!_disposed) notifyListeners();
+  }
+
+  /// One read on form/settings entry, shared only while in flight. No polling
+  /// or persistent disabled cache that would hide a later operational recovery.
+  Future<CompanyLookupSetting> status(String storeId) {
+    const unavailable = CompanyLookupSetting(
+      CompanyLookupAvailability.unavailable,
+    );
+    final scope = _scope();
+    if (_lastScope != scope) clear();
+    if (_disposed || storeId.isEmpty || _statusTransport == null) {
+      return Future.value(unavailable);
+    }
+    if (scope.isEmpty) {
+      return Future.value(
+        const CompanyLookupSetting(CompanyLookupAvailability.forbidden),
+      );
+    }
+    final key = '$scope|$storeId';
+    final pending = _statusPending[key];
+    if (pending != null) return pending;
+    if (_statusActive >= 2) return Future.value(unavailable);
+    final generation = _generation;
+    _statusActive++;
+    late final Future<CompanyLookupSetting> request;
+    request = Future.sync(() => _statusTransport(storeId))
+        .timeout(const Duration(seconds: 4))
+        .then(
+          (raw) => !_disposed && generation == _generation && scope == _scope()
+              ? CompanyLookupSetting.parse(raw)
+              : unavailable,
+          onError: (Object _) => unavailable,
+        )
+        .whenComplete(() {
+          _statusActive--;
+          if (identical(_statusPending[key], request)) {
+            _statusPending.remove(key);
+          }
+        });
+    _statusPending[key] = request;
+    return request;
+  }
+
+  Future<CompanyLookupSetting> setEnabled(String storeId, bool enabled) async {
+    final transport = _settingTransport;
+    if (_disposed || transport == null || _scope().isEmpty) {
+      throw StateError('COMPANY_LOOKUP_FORBIDDEN');
+    }
+    final scope = _scope();
+    final result = CompanyLookupSetting.parse(
+      await transport(storeId, enabled).timeout(const Duration(seconds: 8)),
+    );
+    if (_disposed || scope != _scope()) {
+      throw StateError('COMPANY_LOOKUP_SESSION_CHANGED');
+    }
+    if (!result.canManage ||
+        result.availability !=
+            (enabled
+                ? CompanyLookupAvailability.enabled
+                : CompanyLookupAvailability.disabled)) {
+      throw StateError('COMPANY_LOOKUP_SAVE_UNAVAILABLE');
+    }
+    clear();
+    return result;
   }
 
   Future<CompanyLookupResult> lookup({
@@ -178,6 +288,7 @@ class CompanyTaxLookupService extends ChangeNotifier {
     _generation++;
     _cache.clear();
     _pending.clear();
+    _statusPending.clear();
     _authSubscription?.cancel();
     super.dispose();
   }
