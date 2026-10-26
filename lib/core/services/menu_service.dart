@@ -105,6 +105,7 @@ class MenuService {
         )
         .eq('restaurant_id', storeId)
         .eq('is_archived', false)
+        .isFilter('catalog_parent_id', null)
         .order('sort_order', ascending: true)
         .order('id', ascending: true);
     return menuCatalogRows(

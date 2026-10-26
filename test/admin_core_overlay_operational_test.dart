@@ -186,8 +186,8 @@ class _TablesService extends TablesService {
 
 class _MenuNotifier extends MenuNotifier {
   Map<String, dynamic>? lastMenuOptions;
-  _MenuNotifier() : super(_storeId) {
-    state = const MenuState(
+  _MenuNotifier({bool kimchi = false}) : super(_storeId) {
+    state = MenuState(
       categories: AsyncValue.data([
         {
           'id': _categoryId,
@@ -209,7 +209,7 @@ class _MenuNotifier extends MenuNotifier {
           'id': _menuItemId,
           'category_id': _categoryId,
           'name': 'Phở bò đặc biệt',
-          'name_ko': '특선 소고기 쌀국수',
+          'name_ko': kimchi ? '해물 김치찌개 (쌀밥포함)' : '특선 소고기 쌀국수',
           'name_vi': 'Phở bò đặc biệt',
           'name_en': 'Special beef pho',
           'price': 85000,
@@ -1195,6 +1195,47 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'admin_kimchi_consolidation_dialog reviews prices and cancels without changing the menu',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final notifier = _MenuNotifier(kimchi: true);
+      await _pump(
+        tester,
+        child: const MenuTab(),
+        locale: const Locale('ko'),
+        physicalSize: const Size(390, 844),
+        overrides: [
+          adminScopedStoreIdProvider.overrideWithValue(
+            '8bc9eef5-dcd5-46b1-b931-23f77132322c',
+          ),
+          menuProvider.overrideWith((ref, storeId) => notifier),
+        ],
+      );
+      final action = find.byKey(const Key('admin_consolidate_kimchi'));
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      const dialog = Key('admin_kimchi_consolidation_dialog');
+      expect(find.byKey(dialog), findsOneWidget);
+      expect(find.textContaining('59,000 VND'), findsOneWidget);
+      expect(find.textContaining('69,000 VND'), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, dialog);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(dialog),
+          matching: find.widgetWithText(TextButton, '취소'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(dialog), findsNothing);
+      expect(notifier.editItemCalls, 0);
+      expect(notifier.archiveItemCalls, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'all eight menu dialog entrypoints and menu Excel export execute',

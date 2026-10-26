@@ -56,6 +56,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
   bool _isImportFlowActive = false;
   bool _isImporting = false;
   bool _isExporting = false;
+  bool _consolidatingKimchi = false;
   final ImagePicker _imagePicker = ImagePicker();
 
   @override
@@ -159,6 +160,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       onImportFilesDropped: _isImportFlowActive || _isExporting
           ? null
           : (files) => _importDroppedMenuWorkbook(files, storeId, menuNotifier),
+      onConsolidateKimchi:
+          storeId == '8bc9eef5-dcd5-46b1-b931-23f77132322c' &&
+              allItems.any((item) => item['name_ko'] == '해물 김치찌개 (쌀밥포함)')
+          ? () => _consolidateKimchi(storeId, menuNotifier)
+          : null,
       onAddCategory: () => _showAddCategoryDialog(context, menuNotifier),
       onAddItem: selectedCategoryId == null
           ? null
@@ -268,6 +274,80 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     );
   }
 
+  String _kimchiText(String ko, String vi, String en) =>
+      switch (Localizations.localeOf(context).languageCode) {
+        'ko' => ko,
+        'vi' => vi,
+        _ => en,
+      };
+  Future<void> _consolidateKimchi(String storeId, MenuNotifier notifier) async {
+    if (_consolidatingKimchi) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('admin_kimchi_consolidation_dialog'),
+        title: Text(
+          _kimchiText(
+            '김치찌개 통합',
+            'Gộp món canh Kimchi',
+            'Consolidate Kimchi Stew',
+          ),
+        ),
+        content: Text(
+          _kimchiText(
+            '김치찌개 한 메뉴에서 돼지고기·해산물·참치 중 하나를 선택합니다. 돼지고기·참치 59,000 VND, 해산물 69,000 VND와 기존 레시피·세트·판매 이력을 보존합니다.',
+            'Gộp thành một món canh Kimchi, bắt buộc chọn thịt heo, hải sản hoặc cá ngừ. Giữ giá 59.000 VND cho heo/cá ngừ, 69.000 VND cho hải sản, công thức, combo và lịch sử bán hàng.',
+            'One Kimchi Stew menu with a required Pork, Seafood or Tuna choice. Preserve Pork/Tuna at 59,000 VND, Seafood at 69,000 VND, recipes, combos and sales history.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.confirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _consolidatingKimchi = true);
+    try {
+      await supabase
+          .rpc(
+            'admin_consolidate_kimchi_jjigae',
+            params: {'p_store_id': storeId},
+          )
+          .timeout(const Duration(seconds: 30));
+      await notifier.fetchAll();
+      if (mounted) {
+        showSuccessToast(
+          context,
+          _kimchiText(
+            '김치찌개 메뉴를 통합했습니다.',
+            'Đã gộp món canh Kimchi.',
+            'Kimchi Stew consolidated.',
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          _kimchiText(
+            '등록된 가격·레시피·관리자 권한을 확인한 뒤 다시 시도하세요.',
+            'Kiểm tra giá, công thức và quyền quản lý rồi thử lại.',
+            'Check registered prices, recipes and administrator access, then retry.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _consolidatingKimchi = false);
+    }
+  }
+
   Widget _buildMenuCommandHeader({
     required int categoryCount,
     required int itemCount,
@@ -278,6 +358,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     required VoidCallback? onImportExcel,
     required ValueChanged<List<XFile>>? onImportFilesDropped,
     required VoidCallback onAddCategory,
+    VoidCallback? onConsolidateKimchi,
     required VoidCallback? onAddItem,
   }) {
     return ToastWorkSurface(
@@ -339,6 +420,21 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                         'en' => 'Full menu invoice mapping',
                         _ => '전체 메뉴 계산서 매핑',
                       }),
+                    ),
+                  if (onConsolidateKimchi != null)
+                    OutlinedButton.icon(
+                      key: const Key('admin_consolidate_kimchi'),
+                      onPressed: _consolidatingKimchi
+                          ? null
+                          : onConsolidateKimchi,
+                      icon: const Icon(Icons.merge_type),
+                      label: Text(
+                        _kimchiText(
+                          '김치찌개 통합',
+                          'Gộp món canh Kimchi',
+                          'Consolidate Kimchi Stew',
+                        ),
+                      ),
                     ),
                   OutlinedButton.icon(
                     key: const Key('admin_menu_export_excel_action'),

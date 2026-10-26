@@ -17,6 +17,7 @@ import {
   resolveProjectSecretKey,
   SafeHttpError,
   sqlDomainErrorRegistry,
+  staffAttachmentContext,
   validateChatAttachmentBytes,
   validateProofImage,
   validProofObjectPath,
@@ -720,7 +721,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    207,
+    209,
     "registered SQL error count",
   );
   assertEquals(
@@ -1191,5 +1192,52 @@ Deno.test("general customer PDFs have an explicit contract independent of paymen
     normalizeRpcError("DIRECT_ORDER_RECIPIENT_PAYMENT_REQUIRED").status,
     409,
     "recipient guard is recoverable",
+  );
+});
+
+Deno.test("staff images authorize from the bounded current context without fetching chat history", async () => {
+  const calls: unknown[] = [];
+  const value = await staffAttachmentContext(
+    {
+      rpc: (name: string, args: JsonObject) => {
+        calls.push({ name, args });
+        return Promise.resolve({
+          data: { support: { chat_open: true } },
+          error: null,
+        });
+      },
+    },
+    "store",
+    "request",
+  );
+  assertEquals(calls, [{
+    name: "direct_order_staff_attachment_context",
+    args: { p_store_id: "store", p_request_id: "request" },
+  }], "one scoped context call");
+  assertEquals(
+    value,
+    { support: { chat_open: true } },
+    "open chat contract is available",
+  );
+  let rejected = false;
+  try {
+    await staffAttachmentContext(
+      {
+        rpc: () =>
+          Promise.resolve({
+            data: null,
+            error: { message: "DIRECT_ORDER_FORBIDDEN" },
+          }),
+      },
+      "other",
+      "request",
+    );
+  } catch (error) {
+    rejected = error instanceof SafeHttpError;
+  }
+  assertEquals(
+    rejected,
+    true,
+    "role/store denial cannot become an upload permission",
   );
 });

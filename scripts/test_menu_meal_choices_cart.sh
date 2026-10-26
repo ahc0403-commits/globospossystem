@@ -44,3 +44,20 @@ CREATE TABLE public.inventory_items(id uuid PRIMARY KEY,restaurant_id uuid,name 
 SQL
 run_sql < supabase/migrations/20261021180000_registered_menu_choices.sql >/dev/null
 run_sql < test/sql/registered_menu_choice_definition_test.sql
+
+python3 - <<'PYINTAKE' > "$fixture_tmp/choice_validation.sql"
+from pathlib import Path
+source=Path('supabase/migrations/20261021181000_menu_choice_intake.sql').read_text()
+a=source.index('CREATE OR REPLACE FUNCTION "public"."validate_menu_option_batch"')
+b=source.index('CREATE OR REPLACE FUNCTION',a+1)
+print(source[a:b])
+PYINTAKE
+run_sql < "$fixture_tmp/choice_validation.sql" >/dev/null
+run_sql < test/fixtures/menu_catalog_consolidation_predecessor.sql >/dev/null
+python3 - <<'PYCONSOLIDATE' > "$fixture_tmp/consolidation.sql"
+from pathlib import Path
+source=Path('supabase/migrations/20261026120000_direct_order_cashier_kimchi.sql').read_text()
+print('BEGIN;\n'+source.split('-- menu-consolidation-section')[1])
+PYCONSOLIDATE
+run_sql < "$fixture_tmp/consolidation.sql" >/dev/null
+run_sql < test/sql/kimchi_consolidation_test.sql
