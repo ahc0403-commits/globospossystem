@@ -30,7 +30,22 @@ def call(f, previous, path):
     return f"SELECT proof_test.send('{json.dumps(f)}'::jsonb,'{previous}','{path}')"
 
 
-for kind in ['replace', 'approve_first', 'replace_first']:
+def wait_for_lock(app, future, event=None):
+    # Docker CLI/emulation can take longer than the old 0.5-second sleep.
+    # Observe a durable wait that the coordinator explicitly releases instead.
+    deadline = time.monotonic() + 30
+    condition = "wait_event_type='Lock'" if event is None else f"wait_event='{event}'"
+    while time.monotonic() < deadline:
+        if checked(f"SELECT count(*) FROM pg_stat_activity WHERE application_name='{app}' AND {condition}") == '1':
+            return
+        if future.done():
+            result = future.result()
+            raise AssertionError(f'{app} finished before acquiring the expected lock: {result.stderr}')
+        time.sleep(0.025)
+    raise AssertionError(f'{app} did not acquire the expected lock within 30 seconds')
+
+
+for number, kind in enumerate(['replace', 'approve_first', 'replace_first']):
     scope = json.loads(checked(f"SELECT scope FROM proof_test.races WHERE kind='{kind}'"))
     old = scope['proof_id']
     path_a = checked(f"SELECT proof_test.path('{json.dumps(scope)}'::jsonb)")
@@ -43,19 +58,26 @@ for kind in ['replace', 'approve_first', 'replace_first']:
                      else (approval, replacement) if kind == 'approve_first'
                      else (replacement, approval))
     app = f'proof-race-{kind}'
-    first = (f"SET application_name='{app}'; BEGIN; {first}; SELECT pg_sleep(0.5); COMMIT;")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        a = pool.submit(sql, first)
-        # Wait for the first connection to hold its lock before starting the rival.
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            if checked(f"SELECT count(*) FROM pg_stat_activity WHERE application_name='{app}' AND wait_event='PgSleep'") == '1':
-                break
-            time.sleep(0.025)
-        else:
-            raise AssertionError('First race connection did not acquire the lock')
-        b = pool.submit(sql, second)
+    barrier_app, rival_app = app + '-barrier', app + '-rival'
+    barrier_key = 787000 + number
+    first = (f"SET application_name='{app}'; BEGIN; {first}; "
+             f"SELECT pg_advisory_xact_lock({barrier_key}); COMMIT;")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        holder = pool.submit(sql, f"SET application_name='{barrier_app}'; "
+                             f"SELECT pg_advisory_lock({barrier_key}); SELECT pg_sleep(120);")
+        try:
+            wait_for_lock(barrier_app, holder, 'PgSleep')
+            a = pool.submit(sql, first)
+            # The first business mutation holds its real row lock while waiting
+            # on our advisory barrier; the rival must actually block behind it.
+            wait_for_lock(app, a, 'advisory')
+            b = pool.submit(sql, f"SET application_name='{rival_app}'; {second}")
+            wait_for_lock(rival_app, b)
+        finally:
+            # Only the named coordinator connection in this owned fixture DB.
+            checked(f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name='{barrier_app}'")
         result_a, result_b = a.result(), b.result()
+        assert holder.result().returncode != 0, 'The barrier was not explicitly released'
     assert result_a.returncode == 0, result_a.stderr
     expected = 'DIRECT_ORDER_PROOF_NOT_ALLOWED' if kind == 'approve_first' else 'DIRECT_ORDER_PAYMENT_REVIEW_CHANGED'
     assert result_b.returncode != 0 and expected in result_b.stderr, result_b.stderr

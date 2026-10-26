@@ -30,5 +30,6 @@ RUN printf '#!/bin/sh\nexec /opt/chrome-linux64/chrome --no-sandbox --disable-de
     && chown -R ubuntu:ubuntu /opt/flutter /home/ubuntu \
     && chmod -R g+rwX /opt/flutter /home/ubuntu
 USER ubuntu
-RUN git config --global --add safe.directory /opt/flutter && flutter --version
+RUN git config --global --add safe.directory /opt/flutter && flutter --version \
+    && chmod -R g+rwX /opt/flutter /home/ubuntu
 WORKDIR /work
