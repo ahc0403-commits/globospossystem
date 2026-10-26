@@ -411,7 +411,10 @@ void main() {
           find.byKey(const Key('emergency_order_order-partial')),
         );
         await tester.pump();
-        expect(find.text('0 / 1'), findsOneWidget);
+        expect(
+          find.text(station == 'floor' ? '0 / 2' : '0 / 1'),
+          findsOneWidget,
+        );
         await tester.tap(
           find.byKey(const Key('emergency_menu_item_complete_partial-0')),
         );
@@ -606,7 +609,8 @@ void main() {
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     if (Platform.environment['KDS_PARTIAL_SCREENSHOT_DIR'] != null ||
-        Platform.environment['KDS_HISTORY_SCREENSHOT_DIR'] != null) {
+        Platform.environment['KDS_HISTORY_SCREENSHOT_DIR'] != null ||
+        Platform.environment['KDS_FLOOR_ORDER_SCREENSHOT_DIR'] != null) {
       await (FontLoader(
         AppFonts.family,
       )..addFont(rootBundle.load(AppFonts.assetPath))).load();
@@ -1121,6 +1125,174 @@ void main() {
     },
   );
 
+  for (final size in [
+    const Size(390, 844),
+    const Size(1024, 768),
+    const Size(1366, 768),
+  ]) {
+    testWidgets('floor keeps all 1208 quantities before handoff at $size', (
+      tester,
+    ) async {
+      final active = _activeState('floor');
+      EmergencyFulfillmentState snapshot({int handed = 0, int served = 0}) =>
+          active.copyWith(
+            kitchenDirectToFloor: true,
+            orders: [
+              active.orders.single.copyWith(
+                items: [
+                  for (var index = 0; index < 5; index++)
+                    EmergencyFulfillmentItem.fromJson({
+                      'id': 'food-$index',
+                      'order_item_id': 'line-$index',
+                      'name_vi': 'Food $index',
+                      'ordered_quantity': 1,
+                      'workflow_version': 2,
+                      'kitchen_direct_to_floor': true,
+                      'kitchen_done_quantity': index == 0 ? 1 : handed,
+                      'tray_dispatched_quantity': index == 0 ? 1 : handed,
+                      'floor_served_quantity': index == 0 ? 1 : served,
+                    }),
+                ],
+              ),
+            ],
+          );
+      final fixture = _FixtureEmergencyNotifier(snapshot());
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: size,
+        locale: const Locale('ko'),
+      );
+      final total = find.byKey(
+        const Key('emergency_card_total_progress_order-1'),
+      );
+      expect(tester.widget<Text>(total).data, '전체 1/5 · 남음 4 · 서빙 가능 0');
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const Key('emergency_card_progress_food-1')),
+            )
+            .data,
+        '0/1',
+      );
+      final surface = find.byKey(
+        const ValueKey('emergency_order_card_surface_order-1'),
+      );
+      final initialColor = tester.widget<Material>(surface).color;
+      Future<void> capture(String phase) async {
+        final directory =
+            Platform.environment['KDS_FLOOR_ORDER_SCREENSHOT_DIR'];
+        if (directory == null) return;
+        await tester.runAsync(() async {
+          final layer =
+              tester.binding.renderViews.first.debugLayer! as OffsetLayer;
+          final image = await layer.toImage(Offset.zero & size);
+          final png = await image.toByteData(format: ui.ImageByteFormat.png);
+          await Directory(directory).create(recursive: true);
+          await File(
+            '$directory/floor-${size.width.toInt()}-$phase.png',
+          ).writeAsBytes(png!.buffer.asUint8List());
+          image.dispose();
+        });
+      }
+
+      await capture('waiting');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.widget<Material>(surface).color, initialColor);
+      fixture.seed(snapshot(handed: 1));
+      await tester.pump();
+      expect(tester.widget<Text>(total).data, '전체 1/5 · 남음 4 · 서빙 가능 4');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.widget<Material>(surface).color, isNot(initialColor));
+      await capture('ready');
+      fixture.seed(snapshot(handed: 1, served: 1));
+      await tester.pump();
+      // Fully served orders leave the active board; nothing keeps flashing.
+      expect(surface, findsNothing);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(surface, findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('floor announces new and additional food before handoff', (
+    tester,
+  ) async {
+    final active = _activeState('floor');
+    final waiting = active.orders.single.copyWith(
+      items: [
+        active.orders.single.items.single.withStage('tray_dispatched', 0),
+      ],
+    );
+    final empty = active.copyWith(orders: []);
+    final fixture = _FixtureEmergencyNotifier(empty);
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+    final arrived = active.copyWith(orders: [waiting]);
+    fixture.seed(arrived);
+    await tester.pump();
+    Color? background() => tester
+        .widget<Scaffold>(find.byKey(const Key('emergency_fulfillment_screen')))
+        .backgroundColor;
+    expect(background(), const Color(0xFFFFE0B2));
+    expect(waiting.hasActionableQuantity('floor'), isFalse);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(background(), isNot(const Color(0xFFFFE0B2)));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(background(), const Color(0xFFFFE0B2));
+    await tester.pump(const Duration(seconds: 3));
+    fixture.seed(arrived);
+    await tester.pump();
+    expect(background(), isNot(const Color(0xFFFFE0B2)));
+    final extra = waiting.copyWith(
+      items: [
+        ...waiting.items,
+        EmergencyFulfillmentItem.fromJson({
+          'id': 'additional-food',
+          'order_item_id': 'additional-line',
+          'name_vi': 'Additional food',
+          'ordered_quantity': 2,
+        }),
+      ],
+    );
+    fixture.seed(active.copyWith(orders: [extra]));
+    await tester.pump();
+    expect(background(), const Color(0xFFFFE0B2));
+    expect(extra.hasActionableQuantity('floor'), isFalse);
+    expect(
+      emergencyFloorOrderArrivalIds(arrived, arrived.copyWith(orders: [extra])),
+      {'order-1'},
+    );
+    expect(
+      emergencyFloorOrderArrivalIds(
+        arrived,
+        arrived.copyWith(floorLabel: '3F', orders: [extra]),
+      ),
+      isEmpty,
+    );
+    expect(
+      emergencyFloorOrderArrivalIds(
+        arrived,
+        arrived.copyWith(sessionId: 'other', orders: [extra]),
+      ),
+      isEmpty,
+    );
+    expect(
+      emergencyFloorOrderArrivalIds(
+        arrived.copyWith(orders: [], completedOrders: [extra]),
+        arrived.copyWith(orders: [extra]),
+      ),
+      isEmpty,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
+  });
+
   for (final directToFloor in [false, true]) {
     testWidgets(
       'floor beverage whole card pulses until served (direct kitchen: $directToFloor)',
@@ -1349,7 +1521,7 @@ void main() {
     expect(find.byKey(const Key('emergency_order_grid_4_slots')), findsOne);
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
-    expect(find.text('0 / 1'), findsOne);
+    expect(find.text('0 / 2'), findsOne);
     await tester.tap(find.byKey(const Key('emergency_menu_item_item-1')));
     await tester.pumpAndSettle();
     expect(fixture.recordedProgress, [('item-1', 'floor_served', 1)]);

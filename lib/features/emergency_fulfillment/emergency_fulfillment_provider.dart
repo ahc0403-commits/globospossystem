@@ -760,12 +760,9 @@ class EmergencyFulfillmentOrder {
         switch (stationType) {
           'kitchen' => (item.kitchenDoneQuantity, item.requiredQuantity),
           'tray' => (item.trayDispatchedQuantity, item.requiredQuantity),
-          'floor' => (
-            item.floorServedQuantity,
-            item.isFloorDirect
-                ? item.requiredQuantity
-                : item.trayDispatchedQuantity,
-          ),
+          // Order progress includes food still in the kitchen. Readiness and
+          // action limits remain based on the quantity actually handed off.
+          'floor' => (item.floorServedQuantity, item.requiredQuantity),
           _ => (0, item.requiredQuantity),
         };
 
@@ -1868,6 +1865,39 @@ List<EmergencyHandoffNotice> emergencyHandoffNotices(
   }
   notices.sort((left, right) => left.queueNo.compareTo(right.queueNo));
   return notices;
+}
+
+/// New or additional food is visible to its floor before kitchen handoff.
+/// Announce arrival independently of readiness; refreshes and undo operations
+/// must not turn previously known quantities into new orders.
+Set<String> emergencyFloorOrderArrivalIds(
+  EmergencyFulfillmentState previous,
+  EmergencyFulfillmentState next,
+) {
+  if (next.stationType != 'floor' ||
+      previous.stationType != next.stationType ||
+      previous.restaurantId != next.restaurantId ||
+      previous.sessionId != next.sessionId ||
+      previous.floorLabel != next.floorLabel ||
+      !listEquals(previous.servedAreas, next.servedAreas)) {
+    return const {};
+  }
+  final previousQuantities = <String, int>{
+    for (final order in [...previous.completedOrders, ...previous.orders])
+      for (final item in order._operationalItems())
+        if (!item.isFloorDirect) item.id: item.requiredQuantity,
+  };
+  return {
+    for (final order in next.orders)
+      if (!order.isDelivery &&
+          !order.isDirectPickup &&
+          order._operationalItems().any(
+            (item) =>
+                !item.isFloorDirect &&
+                item.requiredQuantity > (previousQuantities[item.id] ?? 0),
+          ))
+        order.orderId,
+  };
 }
 
 enum EmergencyProgressResult { confirmed, queued, rejected }
