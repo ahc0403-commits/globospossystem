@@ -20,7 +20,7 @@ class DirectOrderRequirement {
     this.printRequestVi,
     this.printReplyVi,
     this.printScope = 'cashier',
-    this.needsConfirmation = true,
+    this.needsConfirmation = false,
     this.requestTranslations = const {},
     this.replyTranslations = const {},
   });
@@ -104,6 +104,8 @@ class DirectOrderRequirementCopy {
   String get confirmed =>
       text('확정된 요청', 'Yêu cầu đã thống nhất', 'Confirmed requests');
   String get reply => text('요청에 답변하기', 'Trả lời yêu cầu', 'Reply to request');
+  String get accept => text('요청 수락', 'Chấp nhận yêu cầu', 'Accept request');
+  String get propose => text('변경 제안', 'Đề xuất thay đổi', 'Propose a change');
   String get answer => text('캐셔 답변', 'Trả lời của thu ngân', 'Cashier reply');
   String get agree =>
       text('이 내용으로 확정', 'Đồng ý nội dung này', 'Confirm these details');
@@ -122,9 +124,9 @@ class DirectOrderRequirementCopy {
   String get confirmNeeded =>
       text('고객 확인 필요', 'Cần khách xác nhận', 'Customer confirmation required');
   String get confirmHelp => text(
-    '변경·제약·대안이 있으면 고객의 확인을 받습니다. 해제하면 답변 전송과 함께 확정됩니다.',
-    'Nếu có thay đổi hoặc hạn chế, hãy xin khách xác nhận. Bỏ chọn để thống nhất ngay khi gửi.',
-    'Keep checked for changes, limitations or alternatives. Uncheck to confirm when sending.',
+    '변경·제약·대안이 포함된 제안은 고객이 확인한 뒤 확정됩니다.',
+    'Đề xuất có thay đổi hoặc hạn chế chỉ được chốt sau khi khách xác nhận.',
+    'Changes, limitations or alternatives are finalized after the customer confirms.',
   );
   String get printHelp => text(
     '종이 전표는 베트남어로 출력합니다. 아래 요청·합의 문구를 확인해주세요. 고객은 위 답변에 동의합니다.',
@@ -167,12 +169,13 @@ class DirectOrderRequirementCard extends StatelessWidget {
     required this.cashier,
     this.busy = false,
     this.onReply,
+    this.onAccept,
     this.onConfirm,
     this.onClarify,
   });
   final DirectOrderRequirement requirement;
   final bool cashier, busy;
-  final VoidCallback? onReply, onConfirm, onClarify;
+  final VoidCallback? onReply, onAccept, onConfirm, onClarify;
 
   @override
   Widget build(BuildContext context) {
@@ -241,6 +244,13 @@ class DirectOrderRequirementCard extends StatelessWidget {
             ],
             if (cashier) ...[
               const SizedBox(height: 8),
+              if (!q.isConfirmed && !q.awaitingCustomer && onAccept != null)
+                FilledButton.icon(
+                  key: Key('requirement_accept_${q.id}'),
+                  onPressed: busy ? null : onAccept,
+                  icon: const Icon(Icons.check),
+                  label: Text(copy.accept),
+                ),
               OutlinedButton.icon(
                 key: Key('requirement_reply_${q.id}'),
                 onPressed: busy ? null : onReply,
@@ -303,7 +313,7 @@ class _RequirementReplyDialogState
     extends State<DirectOrderRequirementReplyDialog> {
   final _form = GlobalKey<FormState>();
   late final TextEditingController _body, _requestVi, _replyVi;
-  bool _needsConfirmation = true;
+  bool _needsConfirmation = false;
   String _scope = 'cashier';
   @override
   void initState() {
@@ -325,7 +335,7 @@ class _RequirementReplyDialogState
           draft?.printReplyVi ?? (q.followupText == null ? q.printReplyVi : ''),
     );
     _scope = draft?.printScope ?? q.printScope;
-    _needsConfirmation = draft?.needsConfirmation ?? true;
+    _needsConfirmation = draft?.needsConfirmation ?? false;
   }
 
   @override
@@ -380,14 +390,16 @@ class _RequirementReplyDialogState
                     }
                   },
                 ),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(copy.confirmNeeded),
-                  subtitle: Text(copy.confirmHelp),
-                  value: _needsConfirmation,
-                  onChanged: (value) =>
-                      setState(() => _needsConfirmation = value ?? true),
+                SegmentedButton<bool>(
+                  segments: [
+                    ButtonSegment(value: false, label: Text(copy.accept)),
+                    ButtonSegment(value: true, label: Text(copy.propose)),
+                  ],
+                  selected: {_needsConfirmation},
+                  onSelectionChanged: (values) =>
+                      setState(() => _needsConfirmation = values.single),
                 ),
+                if (_needsConfirmation) Text(copy.confirmHelp),
                 DropdownButtonFormField<String>(
                   key: const Key('requirement_audience'),
                   initialValue: _scope,
@@ -417,15 +429,16 @@ class _RequirementReplyDialogState
                     validator: (text) => validate(text, print: true),
                     decoration: InputDecoration(labelText: copy.printRequest),
                   ),
-                  TextFormField(
-                    key: const Key('requirement_print_reply'),
-                    controller: _replyVi,
-                    minLines: 2,
-                    maxLines: 5,
-                    maxLength: 2000,
-                    validator: (text) => validate(text, print: true),
-                    decoration: InputDecoration(labelText: copy.printReply),
-                  ),
+                  if (_needsConfirmation)
+                    TextFormField(
+                      key: const Key('requirement_print_reply'),
+                      controller: _replyVi,
+                      minLines: 2,
+                      maxLines: 5,
+                      maxLength: 2000,
+                      validator: (text) => validate(text, print: true),
+                      decoration: InputDecoration(labelText: copy.printReply),
+                    ),
                 ],
               ],
             ),
@@ -447,7 +460,9 @@ class _RequirementReplyDialogState
                 _body.text.trim(),
                 _needsConfirmation,
                 _requestVi.text.trim(),
-                _replyVi.text.trim(),
+                _needsConfirmation
+                    ? _replyVi.text.trim()
+                    : _requestVi.text.trim(),
                 _scope,
               ),
             );

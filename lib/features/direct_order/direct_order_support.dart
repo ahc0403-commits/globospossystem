@@ -1532,11 +1532,51 @@ Future<void> openDirectOrderAttachment(
   Future<Map<String, dynamic>> Function() load,
 ) async {
   try {
-    final result = await load();
+    final result = await load().timeout(const Duration(seconds: 15));
     final uri = Uri.tryParse(result['signed_url'].toString());
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    if (uri == null || uri.scheme != 'https' || uri.userInfo.isNotEmpty) {
+      throw const DirectOrderException('DIRECT_ORDER_ATTACHMENT_INVALID');
+    }
+    final mime = result['mime_type']?.toString();
+    final image =
+        mime?.startsWith('image/') == true ||
+        RegExp(r'\.(png|jpe?g|webp)$', caseSensitive: false).hasMatch(uri.path);
+    if (image && context.mounted) {
+      await showDirectOrderDialog<void>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  tooltip: MaterialLocalizations.of(
+                    dialogContext,
+                  ).closeButtonTooltip,
+                  onPressed: () => Navigator.pop(dialogContext),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+              Flexible(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 5,
+                  child: Image.network(
+                    uri.toString(),
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Icon(Icons.broken_image_outlined),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw const DirectOrderException('DIRECT_ORDER_ATTACHMENT_INVALID');
     }
   } catch (_) {

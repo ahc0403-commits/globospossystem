@@ -265,6 +265,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('가능합니다'), findsNothing);
     expect(find.text('어렵습니다'), findsNothing);
+    await tester.tap(find.text('변경 제안'));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('requirement_reply_body')),
       '소스는 별도 포장하고 양파도 빼겠습니다.',

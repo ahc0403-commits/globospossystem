@@ -822,6 +822,8 @@ export const sqlDomainErrorRegistry: Readonly<
   DIRECT_ORDER_FALLBACK_VERIFICATION_FAILED: internalFailure,
   DIRECT_ORDER_QUOTE_CHANGED: conflict("DIRECT_ORDER_QUOTE_CHANGED"),
   DIRECT_ORDER_ADDRESS_ANCHOR_DRIFT: internalFailure,
+  DIRECT_ORDER_ACCEPTANCE_ACL_FAILED: internalFailure,
+  DIRECT_ORDER_PREPARATION_NOTE_DRIFT: internalFailure,
   DIRECT_ORDER_NOTE_AUDIENCE_ANCHOR_DRIFT: internalFailure,
   DIRECT_ORDER_CHAT_AUDIENCE_VERIFICATION_FAILED: internalFailure,
   DIRECT_ORDER_CHAT_RATE_LIMITED: {
@@ -1030,6 +1032,19 @@ function asObject(value: unknown): JsonObject {
     throw new SafeHttpError(503, "DIRECT_ORDER_TEMPORARILY_UNAVAILABLE");
   }
   return value as JsonObject;
+}
+
+export async function staffAttachmentContext(
+  client: unknown,
+  storeId: string,
+  requestId: string,
+): Promise<JsonObject> {
+  return asObject(
+    await rpc(client, "direct_order_staff_attachment_context", {
+      p_store_id: storeId,
+      p_request_id: requestId,
+    }),
+  );
 }
 
 export function validProofObjectPath(path: string): boolean {
@@ -1658,11 +1673,10 @@ function productionDependencies(): DirectOrderDependencies {
           storeId = requiredUuid(body, "store_id");
           const actor = await authenticateStaff(request);
           actorId = actor.actorAuthId;
-          status = asObject(
-            await rpc(actor.actorClient, "direct_order_staff_detail_v3", {
-              p_store_id: storeId,
-              p_request_id: requestId,
-            }),
+          status = await staffAttachmentContext(
+            actor.actorClient,
+            storeId,
+            requestId,
           );
         } else {
           status = asObject(
@@ -1704,7 +1718,11 @@ function productionDependencies(): DirectOrderDependencies {
           if (signed.error || !signed.data?.signedUrl) {
             throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
           }
-          return { signed_url: signed.data.signedUrl, expires_in: 300 };
+          return {
+            signed_url: signed.data.signedUrl,
+            expires_in: 300,
+            mime_type: message.metadata?.mime_type ?? null,
+          };
         }
         if (generalChat && body.charge_id != null) {
           throw new SafeHttpError(400, "DIRECT_ORDER_ATTACHMENT_INVALID");

@@ -808,6 +808,14 @@ class DirectOrderCopy {
       _pick('결제 대기', 'Chờ thanh toán', 'Awaiting payment');
   String get paymentReviewPending =>
       _pick('입금 확인 대기', 'Chờ kiểm tra', 'Awaiting payment review');
+  String get bankAppOpenOnly => _pick('앱 열기', 'Mở ứng dụng', 'Open app');
+  String get bankAppOpenOnlyHelp => _pick(
+    '이 은행은 앱 열기만 지원합니다. QR을 저장한 뒤 은행 앱의 이미지 QR 읽기를 사용하거나 이체 정보를 복사하세요.',
+    'Ngân hàng này chỉ hỗ trợ mở ứng dụng. Lưu QR rồi đọc QR từ ảnh trong ứng dụng, hoặc sao chép thông tin chuyển khoản.',
+    'This bank supports opening the app. Save the QR and use image scanning in your banking app, or copy the transfer details.',
+  );
+  String get savePaymentQr => _pick('QR 저장', 'Lưu QR', 'Save QR');
+  String get sharePaymentQr => _pick('QR 공유', 'Chia sẻ QR', 'Share QR');
   String get amountDetails => _pick('금액 상세', 'Chi tiết giá', 'Amount details');
   String get checkAmount => _pick('확인', 'Xem', 'View');
   String get viewPaymentDetails =>

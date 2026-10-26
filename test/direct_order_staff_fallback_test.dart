@@ -520,6 +520,7 @@ void main() {
       );
       expect(tester.widget<FilledButton>(button).onPressed, isNull);
       await _tap(tester, find.byKey(const Key('requirement_reply_note')));
+      await _tap(tester, find.text('Đề xuất thay đổi'));
       await tester.enterText(
         find.byKey(const Key('requirement_reply_body')),
         'Sẽ để sốt riêng trong hai hộp nhỏ. Bạn đồng ý không?',

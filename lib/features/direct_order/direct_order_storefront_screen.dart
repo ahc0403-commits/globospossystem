@@ -3210,7 +3210,7 @@ class _DirectOrderStorefrontScreenState
               } else if (_canShowPaymentDetails(status)) {
                 _showPaymentDetails(status);
               } else {
-                _showQuoteDetails(status);
+                _showOrderDetails(status);
               }
             },
             style: OutlinedButton.styleFrom(minimumSize: const Size(64, 48)),
@@ -3570,12 +3570,12 @@ class _DirectOrderStorefrontScreenState
                 Expanded(
                   child: OutlinedButton(
                     key: const Key('direct_chat_quote_details'),
-                    onPressed: () => _showQuoteDetails(status),
+                    onPressed: () => _showOrderDetails(status),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 48),
                     ),
                     child: Text(
-                      _copy.amountDetails,
+                      _copy.orderDetails,
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -3709,9 +3709,6 @@ class _DirectOrderStorefrontScreenState
 
   Future<void> _showPaymentDetails(DirectOrderStatus status) =>
       _showQuoteSheet(status, payment: true);
-
-  Future<void> _showQuoteDetails(DirectOrderStatus status) =>
-      _showQuoteSheet(status, payment: false);
 
   Future<void> _showQuoteSheet(
     DirectOrderStatus status, {
@@ -3867,6 +3864,10 @@ class _DirectOrderStorefrontScreenState
                           _storefront!.bank.accountHolder,
                         ),
                         _copyBankLine(_copy.transferReference, reference),
+                        _copyBankLine(
+                          _copy.storePaymentAmount,
+                          amount.round().toString(),
+                        ),
                         if (VietQrBankLink.safeReturnUri(Uri.base, widget.slug)
                             case final uri?)
                           DirectOrderBankHandoff(

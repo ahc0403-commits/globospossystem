@@ -121,11 +121,15 @@ class MenuOptionsEditor extends StatelessWidget {
       title: Text(
         allowSizes
             ? text(
-                '사이즈별 가격·맵기',
-                'Giá theo cỡ · Độ cay',
-                'Size prices & spiciness',
+                '선택 옵션·사이즈·맵기',
+                'Tùy chọn · Cỡ · Độ cay',
+                'Choices, sizes & spiciness',
               )
-            : text('양·맵기', 'Khẩu phần · Độ cay', 'Portion & spiciness'),
+            : text(
+                '선택 옵션·양·맵기',
+                'Tùy chọn · Khẩu phần · Độ cay',
+                'Choices, portion & spiciness',
+              ),
       ),
       children: [
         Column(

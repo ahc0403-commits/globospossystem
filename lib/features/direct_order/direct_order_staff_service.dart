@@ -366,6 +366,26 @@ class DirectOrderStaffService {
     ),
   );
 
+  Future<Map<String, dynamic>> acceptRequirement({
+    required String storeId,
+    required String requestId,
+    required DirectOrderRequirement requirement,
+    required String mutationId,
+  }) async => _map(
+    await supabase
+        .rpc(
+          'direct_order_staff_accept_requirement',
+          params: {
+            'p_store_id': storeId,
+            'p_request_id': requestId,
+            'p_requirement_id': requirement.id,
+            'p_expected_version': requirement.version,
+            'p_mutation_id': mutationId,
+          },
+        )
+        .timeout(const Duration(seconds: 20)),
+  );
+
   String newRequirementMutationId() => const Uuid().v4();
 
   Future<void> reject({
@@ -564,7 +584,8 @@ class DirectOrderStaffService {
           upload['token'] as String,
           bytes,
           FileOptions(contentType: mimeType),
-        );
+        )
+        .timeout(const Duration(seconds: 60));
     await commit();
   }
 
@@ -585,7 +606,7 @@ class DirectOrderStaffService {
         requestId: requestId,
         action: 'staff_chat_attachment_commit',
         payload: payload,
-      );
+      ).timeout(const Duration(seconds: 20));
       return;
     } on DirectOrderException catch (error) {
       if (error.code != 'PROOF_UPLOAD_INCOMPLETE') rethrow;
@@ -595,7 +616,7 @@ class DirectOrderStaffService {
       requestId: requestId,
       action: 'staff_chat_attachment_upload',
       payload: payload,
-    );
+    ).timeout(const Duration(seconds: 20));
     await supabase.storage
         .from('direct-order-chat')
         .uploadBinaryToSignedUrl(
@@ -603,13 +624,14 @@ class DirectOrderStaffService {
           upload['token'] as String,
           bytes,
           FileOptions(contentType: mimeType),
-        );
+        )
+        .timeout(const Duration(seconds: 60));
     await attachmentRequest(
       storeId: storeId,
       requestId: requestId,
       action: 'staff_chat_attachment_commit',
       payload: payload,
-    );
+    ).timeout(const Duration(seconds: 20));
   }
 
   Future<Map<String, dynamic>> approve({
