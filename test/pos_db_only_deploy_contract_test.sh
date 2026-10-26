@@ -62,6 +62,20 @@ chmod +x \
   "$REHEARSAL_REPO/scripts/check_pilot_auth_accounts.sh" \
   "$REHEARSAL_REPO/scripts/smoke_pilot_login.sh"
 
+# Controlled verifier fixture; real recipe/process integrity is tested separately.
+cat >"$REHEARSAL_REPO/scripts/pos_local_release_gate.py" <<'PYGATE'
+import os,sys
+from pathlib import Path
+assert sys.argv[1:4] == ['run','--kind','exact-main']
+assert sys.argv[4] == '--output' and len(sys.argv) == 6
+with open(os.environ['CALL_LOG'],'a') as log:
+    log.write('local-release-verifier run --kind exact-main\n')
+if os.environ.get('FAIL_LOCAL_VERIFIER') == '1':
+    raise SystemExit(42)
+Path(sys.argv[5]).mkdir()
+Path(sys.argv[5],'receipt.json').write_text('controlled test fixture only')
+PYGATE
+
 git init --bare --initial-branch=main "$ORIGIN_REPO" >/dev/null
 git init --initial-branch=main "$REHEARSAL_REPO" >/dev/null
 git -C "$REHEARSAL_REPO" config user.email deploy-test@globos.test
@@ -88,7 +102,8 @@ EOF
 cat >"$FAKE_BIN/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'completed\tsuccess\thttps://github.com/example/checks/1\n'
+printf 'GitHub test lookup must not be invoked\n' >&2
+exit 99
 EOF
 chmod +x "$FAKE_BIN/gh"
 
@@ -218,6 +233,14 @@ EOF
 grep '^psql ' "$CALL_LOG" >"$TMP_DIR/actual-db-sequence.log"
 cmp "$TMP_DIR/expected-db-sequence.log" "$TMP_DIR/actual-db-sequence.log"
 grep -qx 'supabase migration repair 20260717090000 --status applied --yes' "$CALL_LOG"
+
+# Local verification failure must stop before any SQL or migration repair.
+: >"$CALL_LOG"
+export FAIL_LOCAL_VERIFIER=1
+assert_failure 'Required local release verification failed' invoke_db_only "$REHEARSAL_REPO"
+unset FAIL_LOCAL_VERIFIER
+[[ "$(cat "$CALL_LOG")" != *'psql '* ]]
+[[ "$(cat "$CALL_LOG")" != *'migration repair'* ]]
 
 export ENV_FILE="$TMP_DIR/missing-production-env"
 assert_failure 'Missing env file.' invoke_db_only "$REHEARSAL_REPO"

@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Protect other local tasks: fixtures may touch only this run's labeled resources.
+
+This is collision/cleanup protection for reviewed tests, not a Docker sandbox.
+No Docker daemon, credential or runner is created.
+"""
+import json
+import socket
+import ipaddress
+import fcntl
+from pathlib import Path
+import os
+import re
+import subprocess
+import sys
+
+REAL = '/usr/bin/docker'
+LABEL = 'pos.local.verification'
+
+
+def owned(kind, name, run_id):
+    result = subprocess.run([REAL, kind, 'inspect', name], capture_output=True, text=True)
+    if result.returncode:
+        raise ValueError('Fixture resource is missing: ' + name)
+    value = json.loads(result.stdout)[0]
+    labels = value.get('Labels') if kind == 'network' else value.get('Config', {}).get('Labels')
+    if (labels or {}).get(LABEL) != run_id:
+        raise ValueError('Refusing another task resource: ' + name)
+    if kind == 'container':
+        area = Path(os.environ['POS_VERIFICATION_ARTIFACTS'])
+        area.mkdir(parents=True, exist_ok=True)
+        line = json.dumps({'runId':run_id, 'container':name,
+                           'imageId':value['Image'], 'imageRef':value['Config']['Image']}) + '\n'
+        with (area / 'fixture-images.jsonl').open('a') as log:
+            fcntl.flock(log, fcntl.LOCK_EX)
+            log.write(line)
+            log.flush()
+
+
+
+def target(args, value_options):
+    index = 1
+    while index < len(args):
+        value = args[index]
+        if value in value_options:
+            index += 2
+        elif value.startswith('-'):
+            index += 1
+        else:
+            return value
+    raise ValueError('Missing Docker fixture resource')
+
+
+def prepare(args, run_id):
+    if not re.fullmatch(r'[0-9a-f]{32}', run_id):
+        raise ValueError('Missing local verification run namespace')
+    if args[0] == 'run':
+        if '--name' not in args:
+            raise ValueError('Every fixture container must have a name')
+        name = args[args.index('--name') + 1]
+        existing = subprocess.run([REAL, 'container', 'inspect', name], capture_output=True)
+        if existing.returncode == 0:
+            raise ValueError('Fixture name already exists: ' + name)
+        return ['run', '--label', LABEL + '=' + run_id] + args[1:]
+    if args[:2] == ['network', 'create']:
+        return args[:2] + ['--label', LABEL + '=' + run_id] + args[2:]
+    if args[:2] in (['network', 'connect'], ['network', 'disconnect']):
+        if len(args) != 4:
+            raise ValueError('Only explicit owned network/container links are reviewed')
+        owned('network', args[2], run_id)
+        owned('container', args[3], run_id)
+        return args
+    if args[:2] == ['network', 'rm']:
+        for name in args[2:]:
+            owned('network', name, run_id)
+        return args
+    if args[0] == 'exec':
+        owned('container', target(args, {'-e', '--env', '-u', '--user', '-w', '--workdir'}), run_id)
+    elif args[0] in {'logs', 'port', 'inspect'}:
+        owned('container', target(args, {'--tail', '--since', '-f', '--format'}), run_id)
+    elif args[0] == 'rm':
+        for name in args[1:]:
+            if not name.startswith('-'):
+                owned('container', name, run_id)
+    elif args[:2] == ['image', 'inspect']:
+        return args
+    elif args[0] not in {'version', '--version', 'info'}:
+        raise ValueError('Unreviewed Docker operation: ' + args[0])
+    return args
+
+
+
+def execute(args, run_id):
+    tool = os.environ.get('POS_LOCAL_TOOL_CONTAINER', '')
+    if args[0] == 'port':
+        name = args[1]
+        owned('container', name, run_id)
+        if len(args) != 3 or not re.fullmatch(r'[0-9]+/tcp', args[2]):
+            raise ValueError('Only an explicit fixture TCP port can be forwarded')
+        info = json.loads(subprocess.check_output([REAL, 'container', 'inspect', name], text=True))[0]
+        networks = info['NetworkSettings']['Networks']
+        ips = [n['IPAddress'] for n in networks.values() if n.get('IPAddress')]
+        if len(ips) != 1 or not ipaddress.ip_address(ips[0]).is_private:
+            raise ValueError('Expected one private owned fixture network address')
+        listener = socket.socket()
+        listener.bind(('127.0.0.1', 0))
+        listener.listen(64)
+        port = listener.getsockname()[1]
+        subprocess.Popen([sys.executable, str(Path(__file__).with_name('port_proxy.py')),
+                          str(listener.fileno()), ips[0], args[2].split('/')[0]],
+                         pass_fds=(listener.fileno(),), start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        listener.close()
+        print('127.0.0.1:' + str(port), flush=True)
+        return 0
+    if args[:2] == ['network', 'create']:
+        if not tool:
+            raise ValueError('Tool container identity is required for a fixture network')
+        owned('container', tool, run_id)
+        result = subprocess.run([REAL] + args)
+        if result.returncode:
+            return result.returncode
+        network = args[-1]
+        owned('network', network, run_id)
+        return subprocess.call([REAL, 'network', 'connect', network, tool])
+    if args[:2] == ['network', 'rm'] and tool:
+        owned('container', tool, run_id)
+        for network in args[2:]:
+            subprocess.run([REAL, 'network', 'disconnect', '--force', network, tool],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    os.execv(REAL, [REAL] + args)
+
+
+if __name__ == '__main__':
+    try:
+        run_id = os.environ.get('POS_LOCAL_RUN_ID', '')
+        args = prepare(sys.argv[1:], run_id)
+        sys.exit(execute(args, run_id))
+    except (ValueError, KeyError, IndexError) as error:
+        print('LOCAL_FIXTURE_GUARD: ' + str(error), file=sys.stderr)
+        sys.exit(1)

@@ -180,15 +180,17 @@ class DirectOrderStaffService {
     String? fulfillmentType,
     int limit = 100,
   }) async {
-    final raw = await supabase.rpc(
-      'direct_order_staff_list_v5',
-      params: {
-        'p_store_id': storeId,
-        'p_states': states,
-        'p_limit': limit,
-        'p_fulfillment_type': fulfillmentType,
-      },
-    );
+    final raw = await supabase
+        .rpc(
+          'direct_order_staff_list_v5',
+          params: {
+            'p_store_id': storeId,
+            'p_states': states,
+            'p_limit': limit,
+            'p_fulfillment_type': fulfillmentType,
+          },
+        )
+        .timeout(const Duration(seconds: 10));
     return _list(raw);
   }
 
@@ -197,10 +199,12 @@ class DirectOrderStaffService {
     required String requestId,
   }) async {
     return _map(
-      await supabase.rpc(
-        'direct_order_staff_detail_v8',
-        params: {'p_store_id': storeId, 'p_request_id': requestId},
-      ),
+      await supabase
+          .rpc(
+            'direct_order_staff_detail_v8',
+            params: {'p_store_id': storeId, 'p_request_id': requestId},
+          )
+          .timeout(const Duration(seconds: 10)),
     );
   }
 

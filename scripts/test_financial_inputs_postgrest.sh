@@ -81,4 +81,4 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 FINANCIAL_TEST_DB_CONTAINER="$db_name" FINANCIAL_TEST_RPC_URL="http://${rest_address}" \
-  flutter test --no-pub test/financial_inputs_postgrest_test.dart
+  flutter test --no-pub --machine test/financial_inputs_postgrest_test.dart

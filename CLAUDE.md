@@ -144,8 +144,54 @@ requests and higher-priority instructions take precedence.
 - Flutter tests: `flutter test` (or the relevant test files for focused checks).
 - Format changed Dart files: `dart format <files>`.
 - Production release must use `scripts/deploy_pos_production.sh`; do not bypass
-  it. Local checks and reviews are preflight evidence. The release gate passes
-  only when required GitHub Actions checks succeed on the exact pushed head SHA.
+  it. Complete local verification on the final candidate SHA and again on the
+  clean freshly fetched exact `origin/main` release SHA, verify the remote push,
+  and retain production Auth, migration, login and affected-feature checks.
+  The official preflight directly runs `scripts/pos_local_release_gate.py`
+  with `--kind exact-main`. It never accepts a supplied PASS receipt. The local
+  Linux recipe preserves the full repository, browser authentication and SQL
+  regression checks. See `docs/pos/local-verification/LOCAL_VERIFICATION.md`.
+  Remote branch protection still requiring the Actions-app-bound
+  `POS release contract` is a separate unresolved security-policy dependency;
+  do not change it, publish substitute statuses, force merge or push a PR that
+  starts remote tests without explicit authorization.
 - Deployment procedure: `docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md`.
 - For a requested Claude Code handoff, write the prompt in English with the goal,
   relevant files, and verification steps. Apply a requested harness when available.
+
+## Local verification and source storage (owner decision 2026-10-24)
+
+GitHub stores commits and pushed source. Run automated verification locally,
+including an isolated local container/VM when the required OS differs. Apply
+`/Users/andreahn/.claude/CLAUDE.md` → “GitHub 저장과 로컬 자동 검증”.
+GitHub Actions success and runner availability are not required evidence.
+Keep all relevant tests, type checks, lint/analysis, builds, security/permission/
+DB isolation, regressions and actual affected-feature checks. Bind commands,
+environment, timestamps, exit codes and complete logs to the final code SHA;
+distinguish candidate validation from a clean freshly fetched exact-main release.
+Verify the remote pushed SHA and retain the official deployment and operational
+checks. A missing/failed/skipped check is not PASS. Report remaining executable
+or remote GitHub-check dependencies; do not bypass gates or provision CI runners.
+
+## Minimal result-verifier design authorization (2026-10-24)
+
+The owner approved local design/implementation of a minimal GitHub procedure
+that authenticates independent exact-SHA local results. Application tests and
+builds must remain local. The receipt verifier policy is disabled until an
+independently controlled executor and protected workflow boundary are approved.
+No submitting-operator key or self-reported status is equivalent evidence.
+The workflow/event-policy files under docs are proposals only; remote settings,
+push/PR/merge/deployment and actual GitHub execution remain separately gated.
+See `docs/pos/local-verification/INDEPENDENT_RESULT_VERIFICATION_KO.md`.
+
+## Source publication and normal operational adoption authorization (2026-10-24)
+
+The owner subsequently requested commit/push and normal official operational
+adoption. After full local verification of the final actual candidate SHA,
+source publication, PR and normal merge are authorized when they do not start
+GitHub application tests. Remote security settings, required-check relaxation,
+admin bypass and new credentials remain outside that general authorization.
+Keep the unconfigured independent-result verifier disabled; it is not a new
+release prerequisite. If existing branch protection blocks normal merge, report
+the exact unexecuted step and a concrete before/after security-policy decision.
+A tooling-only release does not require an unnecessary application redeploy.

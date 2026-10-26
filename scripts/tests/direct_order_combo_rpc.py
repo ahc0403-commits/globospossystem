@@ -18,7 +18,11 @@ def token(role):
  body=enc({'alg':'HS256','typ':'JWT'})+b'.'+enc({'role':role,'sub':'00000000-0000-4000-8000-000000000001','exp':int(time.time())+3600})
  return (body+b'.'+base64.urlsafe_b64encode(hmac.new(secret.encode(),body,hashlib.sha256).digest()).rstrip(b'=')).decode()
 try:
- info=json.loads(subprocess.check_output(['docker','inspect',rest]))[0]; port=info['NetworkSettings']['Ports']['3000/tcp'][0]['HostPort']; base=f'http://127.0.0.1:{port}'
+ # Resolve the client endpoint so the same fixture works from a local tool
+ # container without assuming Docker Desktop's published host port is local.
+ address=subprocess.check_output(['docker','port',rest,'3000/tcp'],text=True).strip()
+ assert address.startswith('127.0.0.1:'), 'Expected a loopback-only fixture endpoint'
+ base='http://'+address
  for attempt in range(60):
   try: urllib.request.urlopen(base,timeout=1); break
   except urllib.error.URLError: time.sleep(.2)

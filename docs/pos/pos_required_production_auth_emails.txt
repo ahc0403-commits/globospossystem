@@ -14,7 +14,6 @@ bt_tab1@globos.world
 bunsik_bm1@globos.world
 bunsik_sm1@globos.world
 da_ops1@globos.world
-lt_ops1@globos.world
 nz_ops1@globos.world
 photo_bm1@globos.world
 photo_bm2@globos.world

@@ -19,7 +19,7 @@ description: Audit the GLOBOSVN POS architecture, security, RLS, payments, datab
 - Office coupling to `restaurants` and required columns, views, and naming compatibility.
 - Migration lineage, applied-state assumptions, SECURITY DEFINER safety, secrets, cron jobs, and vendor boundaries.
 - Flutter architecture, state ownership, permissions, error handling, and regression coverage.
-- Release proof, cross-platform fixtures, GitHub Actions checks, and exact-head-SHA evidence.
+- Release proof, local cross-platform fixtures, complete local verification logs tied to the final candidate/exact-main SHAs, remote push confirmation, and operational evidence. GitHub Actions success is not required; report remaining executable gates.
 
 ## Validate findings
 

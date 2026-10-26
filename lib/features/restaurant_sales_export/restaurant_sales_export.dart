@@ -397,7 +397,6 @@ RestaurantSalesExport createRestaurantSalesExport(
             'MISSING_BUYER_LEGAL_NAME',
           if (isRedInvoice && buyerAddress.isEmpty) 'MISSING_BUYER_ADDRESS',
           if (isRedInvoice && buyerEmail.isEmpty) 'MISSING_BUYER_EMAIL',
-          if (isRedInvoice && buyerPhone.isEmpty) 'MISSING_BUYER_PHONE',
           if (isRedInvoice &&
               !const {
                 'ready',

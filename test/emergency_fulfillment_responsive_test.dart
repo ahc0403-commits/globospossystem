@@ -31,6 +31,12 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
   final List<String> completedQueues = [];
   final List<(String, String)> revertedActions = [];
   final List<Map<String, int>> kitchenChecketBatches = [];
+  final List<int> historyDirections = [];
+
+  @override
+  Future<void> loadCompletedHistory({int direction = 0}) async {
+    historyDirections.add(direction);
+  }
 
   void seed(EmergencyFulfillmentState value) => state = value;
 
@@ -287,6 +293,109 @@ EmergencyFulfillmentState _partialReadyState(
 );
 
 void main() {
+  testWidgets(
+    'JeonGabok visual is immediate and continuous events keep first 500ms window',
+    (tester) async {
+      final original = _partialReadyState('floor', ready: 0).copyWith(
+        boundedJeongabok: true,
+        restaurantId: '273b057e-3b69-46e3-93c1-6194c2802849',
+      );
+      final fixture = _FixtureEmergencyNotifier(original);
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+      );
+      // Establish baseline after the screen listener starts.
+      fixture.seed(original);
+      await tester.pump();
+      for (var i = 1; i <= 5; i++) {
+        final order = original.orders.single;
+        fixture.seed(
+          original.copyWith(
+            orders: [
+              order.copyWith(
+                items: [order.items.single.withStage('tray_dispatched', i)],
+              ),
+            ],
+          ),
+        );
+        await tester.pump(
+          i == 1 ? Duration.zero : const Duration(milliseconds: 100),
+        );
+        expect(
+          tester
+              .widget<Scaffold>(
+                find.byKey(const Key('emergency_fulfillment_screen')),
+              )
+              .backgroundColor,
+          const Color(0xFFFFE0B2),
+        );
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 2050));
+      expect(
+        tester
+            .widget<Scaffold>(
+              find.byKey(const Key('emergency_fulfillment_screen')),
+            )
+            .backgroundColor,
+        isNot(const Color(0xFFFFE0B2)),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('Bunsik bounded history navigation and retry fit a phone', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(
+      const EmergencyFulfillmentState(
+        assigned: true,
+        assignmentResolved: true,
+        active: true,
+        restaurantId: bunsikKdsStoreId,
+        sessionId: 'fixture-session',
+        stationType: 'floor',
+        floorLabel: '1F',
+        completedHistory: KdsCompletedHistoryStatus(
+          hasMore: true,
+          error: 'KDS_HISTORY_FAILED',
+        ),
+      ),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(360, 740),
+      locale: const Locale('ko'),
+    );
+    await tester.tap(find.textContaining('최근 완료'));
+    await tester.pump();
+    expect(fixture.historyDirections, [0]);
+    expect(find.byKey(const Key('bunsik_history_retry')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('bunsik_history_next')));
+    await tester.pump();
+    expect(fixture.historyDirections.last, 1);
+    expect(tester.takeException(), isNull);
+    final screenshotDir = Platform.environment['KDS_HISTORY_SCREENSHOT_DIR'];
+    if (screenshotDir != null) {
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.runAsync(() async {
+        final layer =
+            tester.binding.renderViews.first.debugLayer! as OffsetLayer;
+        final image = await layer.toImage(const Rect.fromLTWH(0, 0, 360, 740));
+        final png = await image.toByteData(format: ui.ImageByteFormat.png);
+        await Directory(screenshotDir).create(recursive: true);
+        await File(
+          '$screenshotDir/bunsik-history-phone.png',
+        ).writeAsBytes(png!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+  });
+
   for (final station in ['tray', 'floor']) {
     testWidgets(
       '$station partial single handoff returns to board without completing unprepared food',
@@ -496,7 +605,8 @@ void main() {
   }
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
-    if (Platform.environment['KDS_PARTIAL_SCREENSHOT_DIR'] != null) {
+    if (Platform.environment['KDS_PARTIAL_SCREENSHOT_DIR'] != null ||
+        Platform.environment['KDS_HISTORY_SCREENSHOT_DIR'] != null) {
       await (FontLoader(
         AppFonts.family,
       )..addFont(rootBundle.load(AppFonts.assetPath))).load();
@@ -507,6 +617,7 @@ void main() {
     await Supabase.initialize(
       url: 'https://example.supabase.co',
       anonKey: 'test-anon-key',
+      authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
     );
   });
 
@@ -1009,6 +1120,121 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final directToFloor in [false, true]) {
+    testWidgets(
+      'floor beverage whole card pulses until served (direct kitchen: $directToFloor)',
+      (tester) async {
+        EmergencyFulfillmentState snapshot(int served, {int ordered = 2}) {
+          final base = _floorDirectState('floor');
+          return base.copyWith(
+            kitchenDirectToFloor: directToFloor,
+            orders: [
+              base.orders.single.copyWith(
+                items: [
+                  EmergencyFulfillmentItem.fromJson({
+                    'id': 'drink-1',
+                    'order_item_id': 'order-item-drink-1',
+                    'name_vi': 'Coca-Cola',
+                    'ordered_quantity': ordered,
+                    'floor_served_quantity': served,
+                    'fulfillment_route': 'floor_direct',
+                    'workflow_version': 2,
+                    'kitchen_direct_to_floor': directToFloor,
+                  }),
+                  EmergencyFulfillmentItem.fromJson({
+                    'id': 'waiting-food',
+                    'order_item_id': 'waiting-food-line',
+                    'name_vi': 'Meal waiting in kitchen',
+                    'ordered_quantity': 1,
+                    'workflow_version': 2,
+                    'kitchen_direct_to_floor': directToFloor,
+                  }),
+                ],
+              ),
+            ],
+          );
+        }
+
+        final fixture = _FixtureEmergencyNotifier(snapshot(0));
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+        );
+        final surface = find.byKey(
+          const ValueKey('emergency_order_card_surface_order-direct'),
+        );
+        Color? cardColor() => tester.widget<Material>(surface).color;
+        final header = find.byKey(
+          const ValueKey('emergency_order_card_header_order-direct'),
+        );
+        Future<void> capture(String phase) async {
+          final directory = Platform.environment['KDS_BEVERAGE_SCREENSHOT_DIR'];
+          if (directory == null) return;
+          await tester.runAsync(() async {
+            final layer =
+                tester.binding.renderViews.first.debugLayer! as OffsetLayer;
+            final image = await layer.toImage(
+              const Rect.fromLTWH(0, 0, 1024, 768),
+            );
+            final png = await image.toByteData(format: ui.ImageByteFormat.png);
+            await Directory(directory).create(recursive: true);
+            await File(
+              '$directory/floor-$directToFloor-$phase.png',
+            ).writeAsBytes(png!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        final initial = cardColor();
+        final initialHeader = tester.widget<Container>(header).color;
+        await capture('off');
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), isNot(initial));
+        expect(tester.widget<Container>(header).color, isNot(initialHeader));
+        await capture('on');
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), initial);
+
+        // A refresh and partial serving must leave the remainder blinking.
+        fixture.seed(snapshot(1));
+        await tester.pump();
+        final partial = cardColor();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), isNot(partial));
+
+        // Food still in the kitchen must not keep a served drink blinking.
+        fixture.seed(snapshot(2));
+        await tester.pump();
+        final complete = cardColor();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), complete);
+        expect(
+          tester
+              .widget<Container>(
+                find.byKey(const Key('emergency_card_menu_pulse_drink-1')),
+              )
+              .decoration,
+          isA<BoxDecoration>().having(
+            (decoration) => decoration.color,
+            'served drink background',
+            Colors.transparent,
+          ),
+        );
+
+        // Adding drinks to the same open order restarts the alert.
+        fixture.seed(snapshot(2, ordered: 3));
+        await tester.pump();
+        final added = cardColor();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(cardColor(), isNot(added));
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('floor pulses only handed-off food and pending direct drinks', (
     tester,

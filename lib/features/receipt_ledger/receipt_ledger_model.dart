@@ -115,6 +115,7 @@ class ReceiptLedgerEntry {
     required this.printable,
     required this.digitalReceiptReady,
     required this.receivedAmount,
+    this.invoiceState = 'unavailable',
   });
 
   factory ReceiptLedgerEntry.fromJson(Map<String, dynamic> json) {
@@ -177,6 +178,7 @@ class ReceiptLedgerEntry {
       printable: json['printable'] == true,
       digitalReceiptReady: json['digital_receipt_ready'] == true,
       receivedAmount: _double(json['received_amount']),
+      invoiceState: json['invoice_state']?.toString() ?? 'unavailable',
     );
   }
 
@@ -203,6 +205,7 @@ class ReceiptLedgerEntry {
   final bool printable;
   final bool digitalReceiptReady;
   final double receivedAmount;
+  final String invoiceState;
 
   bool get isCombined => combinedPaymentGroupId != null || scope == 'combined';
 }

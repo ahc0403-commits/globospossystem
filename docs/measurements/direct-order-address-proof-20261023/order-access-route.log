@@ -1,0 +1,28 @@
+00:00 +0: loading /Users/andreahn/globos_pos_system/test/direct_order_access_route_test.dart
+00:00 +0: completed delivery keeps excess refund access and polling
+00:00 +1: completed delivery retains recent refund evidence until closed
+00:00 +2: a completed pickup keeps its order and chat until the delivery refund is recorded
+00:00 +3: the same order URL restores the order and chat after closing and clearing browser storage
+
+Warning: A call to tap() with finder "Found 1 widget with icon "IconData(U+F0147)": [
+  Icon(IconData(U+F0147), color: Color(alpha: 1.0000, red: 1.0000, green: 1.0000, blue: 1.0000, colorSpace: ColorSpace.sRGB), dependencies: [Directionality, IconTheme]),
+]" derived an Offset (Offset(764.0, 568.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#878cc relayoutBoundary=up28
+The hit test result at that offset is: HitTestResult(RenderParagraph#aa35c@Offset(740.0, 2.0), RenderPadding#80f4c@Offset(740.0, 16.0), RenderFlex#0eb50@Offset(740.0, 16.0), RenderWrap#33725@Offset(740.0, 16.0), RenderPadding#94274@Offset(764.0, 16.0), RenderPadding#820df@Offset(764.0, 16.0), _RenderInkFeatures#c8ff9@Offset(764.0, 16.0), RenderPhysicalModel#b9642@Offset(764.0, 16.0), RenderPointerListener#2a6b4@Offset(764.0, 16.0), RenderSemanticsGestureHandler#dee4e@Offset(764.0, 16.0), RenderSemanticsAnnotations#a4e73@Offset(764.0, 16.0), RenderPositionedBox#07c0b@Offset(764.0, 16.0), RenderClipRect#f9b19@Offset(764.0, 16.0), RenderOffstage#482b1@Offset(764.0, 16.0), RenderConstrainedBox#14900@Offset(764.0, 16.0), RenderCustomMultiChildLayoutBox#ed77b@Offset(764.0, 568.0), _RenderInkFeatures#7ccad@Offset(764.0, 568.0), RenderPhysicalModel#1a128@Offset(764.0, 568.0), RenderSemanticsAnnotations#9ec6c@Offset(764.0, 568.0), RenderRepaintBoundary#c094f@Offset(764.0, 568.0), RenderIgnorePointer#7a8a7@Offset(764.0, 568.0), RenderAnimatedOpacity#5096b@Offset(764.0, 568.0), RenderAnimatedOpacity#62834@Offset(764.0, 568.0), _RenderColoredBox#a07a7@Offset(764.0, 568.0), RenderAnimatedOpacity#c6d17@Offset(764.0, 568.0), RenderIgnorePointer#1a75a@Offset(764.0, 568.0), RenderAnimatedOpacity#aa50f@Offset(764.0, 568.0), RenderRepaintBoundary#303c4@Offset(764.0, 568.0), RenderSemanticsAnnotations#6e15b@Offset(764.0, 568.0), RenderOffstage#ad29a@Offset(764.0, 568.0), RenderSemanticsAnnotations#dcdbf@Offset(764.0, 568.0), _RenderTheater#b6b7a@Offset(764.0, 568.0), RenderAbsorbPointer#d5f66@Offset(764.0, 568.0), RenderPointerListener#351bd@Offset(764.0, 568.0), RenderCustomPaint#b9d5e@Offset(764.0, 568.0), RenderSemanticsAnnotations#d3cdf@Offset(764.0, 568.0), RenderSemanticsAnnotations#e3a08@Offset(764.0, 568.0), RenderSemanticsAnnotations#3eeb0@Offset(764.0, 568.0), RenderTapRegionSurface#d6b9a@Offset(764.0, 568.0), RenderSemanticsAnnotations#0bd0e@Offset(764.0, 568.0), RenderSemanticsAnnotations#4f70d@Offset(764.0, 568.0), HitTestEntry<HitTestTarget>#64b83(_ReusableRenderView#9e587), HitTestEntry<HitTestTarget>#2147f(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2158:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1942:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1075:7)
+#3      main.<anonymous closure> (file:///Users/andreahn/globos_pos_system/test/direct_order_access_route_test.dart:311:20)
+<asynchronous suspension>
+#4      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#5      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1682:5)
+<asynchronous suspension>
+#6      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+00:00 +4: a closed order URL clears only that order key and offers the menu
+00:01 +5: All tests passed!

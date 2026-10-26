@@ -64,10 +64,12 @@ class BuyerInformationFields extends StatefulWidget {
     required this.controller,
     this.storeId,
     this.lookupService,
+    this.compact = false,
   });
   final BuyerInformationController controller;
   final String? storeId;
   final CompanyTaxLookupService? lookupService;
+  final bool compact;
   @override
   State<BuyerInformationFields> createState() => _BuyerInformationFieldsState();
 }
@@ -371,11 +373,16 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
     }.contains(c.type);
     String label(String key) => switch (key) {
       'buyer_number_value' => copy.label(c.type),
-      'buyer_legal_name' => l10n.redInvoiceCompanyName,
+      'buyer_legal_name' => copy.pick(
+        '회사명 / 단체명',
+        'Tên đơn vị',
+        'Company / organization',
+      ),
       'buyer_full_name' => copy.pick('구매자명', 'Tên người mua', 'Buyer name'),
       'buyer_address' => l10n.address,
       'buyer_email' => l10n.redInvoiceEmailRequiredLabel,
-      'buyer_phone' => l10n.redInvoicePhone,
+      'buyer_phone' =>
+        '${l10n.redInvoicePhone} (${copy.pick('선택', 'tùy chọn', 'optional')})',
       'buyer_email_cc' => copy.pick('참조 이메일', 'Email CC', 'CC email'),
       'buyer_unit_code' => copy.pick('단위코드', 'Mã đơn vị', 'Unit code'),
       'buyer_id' => copy.pick(
@@ -408,7 +415,15 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
           ),
           const SizedBox(height: 12),
           for (final key in buyerInformationKeys)
-            if (key != 'buyer_id' || !personal)
+            if ((key != 'buyer_id' || !personal) &&
+                (!widget.compact ||
+                    {
+                      'buyer_number_value',
+                      personal ? 'buyer_full_name' : 'buyer_legal_name',
+                      'buyer_address',
+                      'buyer_email',
+                      'buyer_phone',
+                    }.contains(key)))
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Column(
@@ -474,7 +489,6 @@ class _BuyerInformationFieldsState extends State<BuyerInformationFields> {
                               personal ? 'buyer_full_name' : 'buyer_legal_name',
                               'buyer_address',
                               'buyer_email',
-                              'buyer_phone',
                             }.contains(key) &&
                             value.isEmpty) {
                           return l10n.redInvoiceRequiredField;

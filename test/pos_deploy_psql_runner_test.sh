@@ -78,7 +78,8 @@ chmod +x "$FAKE_BIN/supabase"
 cat >"$FAKE_BIN/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'completed\tsuccess\thttps://github.com/example/checks/1\n'
+printf 'GitHub test lookup must not be invoked\n' >&2
+exit 99
 EOF
 chmod +x "$FAKE_BIN/gh"
 
@@ -254,10 +255,17 @@ mkdir -p "$WRONG_REPO/scripts" "$WRONG_REPO/supabase/.temp"
 cp "$DEPLOY_SCRIPT" "$WRONG_REPO/scripts/deploy_pos_production.sh"
 mkdir -p "$WRONG_REPO/scripts/lib"
 cp "$ROOT_DIR/scripts/lib/production_migration_gate.sh" "$WRONG_REPO/scripts/lib/"
+# Only the verifier invocation is stubbed to reach the pinned-target assertion.
+cat >"$WRONG_REPO/scripts/pos_local_release_gate.py" <<'PYGATE'
+import sys
+assert sys.argv[1:4] == ['run','--kind','exact-main']
+assert sys.argv[4] == '--output' and len(sys.argv) == 6
+PYGATE
 printf '%s\n' wrongprojectref >"$WRONG_REPO/supabase/.temp/project-ref"
 git -C "$WRONG_REPO" init -q
 git -C "$WRONG_REPO" add -- \
   scripts/deploy_pos_production.sh \
+  scripts/pos_local_release_gate.py \
   scripts/lib/production_migration_gate.sh \
   supabase/.temp/project-ref
 git -C "$WRONG_REPO" \

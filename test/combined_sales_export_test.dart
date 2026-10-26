@@ -7,6 +7,45 @@ import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sa
 
 void main() {
   test(
+    'combined artifact audits only Restaurant Description normalization',
+    () {
+      final restaurant = _restaurantExport(
+        receipt: _restaurantReceipt(invoiceName: 'Mì cay 🌶️'),
+      );
+      final combined = combineSalesExportsByTaxEntity(
+        restaurantExports: [restaurant],
+        photoExports: [_photoExport()],
+      ).single;
+      final artifact = buildCombinedSalesArtifact(
+        combined,
+        batchId: 'emoji-combined',
+      );
+      expect(
+        artifact.manifest['description_normalization_policy'],
+        'misa-description-emoji-v1-unicode18',
+      );
+      final records = artifact.manifest['description_normalizations'] as List;
+      expect(records, hasLength(1));
+      expect(records.single['original_description'], 'Mì cay 🌶️');
+      expect(records.single['export_description'], 'Mì cay ');
+      expect(records.single['menu_item_id'], 'food-sku');
+      expect(
+        restaurant.receipts.single.lineItems.single.invoiceName,
+        'Mì cay 🌶️',
+      );
+      final standalone = Excel.decodeBytes(
+        buildRestaurantSalesWorkbook(restaurant),
+      );
+      final output = Excel.decodeBytes(artifact.bytes);
+      expect(_cell(standalone['Hóa đơn GTGT'].rows[8], 10), 'Mì cay ');
+      expect(_cell(output['Hóa đơn GTGT'].rows[8], 10), 'Mì cay ');
+      expect(_cell(output['Hóa đơn GTGT'].rows[9], 10), 'Dịch vụ chụp ảnh');
+      expect(artifact.manifest['receipt_count'], 2);
+      expect(artifact.manifest['source_gross'], '162000.00');
+    },
+  );
+
+  test(
     'reporting delta contains only frozen members and validates money/store identity',
     () {
       final original = combineSalesExportsByTaxEntity(
@@ -287,6 +326,7 @@ RestaurantSalesReceipt _restaurantReceipt({
   String buyerAddress = '',
   String buyerEmail = '',
   String buyerPhone = '',
+  String invoiceName = 'Food',
 }) => RestaurantSalesReceipt(
   storeId: 'restaurant-store',
   storeName: 'Restaurant A',
@@ -302,7 +342,7 @@ RestaurantSalesReceipt _restaurantReceipt({
   buyerAddress: buyerAddress,
   buyerEmail: buyerEmail,
   buyerPhone: buyerPhone,
-  lineItems: const [
+  lineItems: [
     RestaurantSalesLineItem(
       approval: {
         'invoice_profile_id': 'fixture-profile',
@@ -316,7 +356,7 @@ RestaurantSalesReceipt _restaurantReceipt({
       discountAmount: 0,
       orderItemId: 'food-line',
       menuItemId: 'food-sku',
-      invoiceName: 'Food',
+      invoiceName: invoiceName,
       unitName: 'Phần',
       name: 'Food',
       quantity: 1,

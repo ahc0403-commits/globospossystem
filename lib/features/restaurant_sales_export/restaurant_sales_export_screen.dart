@@ -697,6 +697,7 @@ class _RestaurantSalesExportScreenState
         export: export.restaurant!,
         red: red,
         service: widget.ledgerService,
+        onChanged: () => unawaited(_load()),
       );
     } catch (error) {
       if (mounted) setState(() => _statusMessage = _localizedError(error));
@@ -851,6 +852,7 @@ class _RestaurantSalesExportScreenState
                   export: export.restaurant!,
                   red: false,
                   service: widget.ledgerService,
+                  onChanged: () => unawaited(_load()),
                 ),
         ),
         _metric(
@@ -864,6 +866,7 @@ class _RestaurantSalesExportScreenState
                   export: export.restaurant!,
                   red: true,
                   service: widget.ledgerService,
+                  onChanged: () => unawaited(_load()),
                 ),
         ),
         _metric(

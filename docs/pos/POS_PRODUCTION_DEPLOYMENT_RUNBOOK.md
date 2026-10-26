@@ -1,3 +1,8 @@
+> Local verification transition — 2026-10-24: automated verification runs
+> locally; GitHub stores and reviews source. The official deployer executes a
+> fresh fixed exact-main recipe. Remote protection replacement remains unapproved;
+> local readiness does not authorize merge, protection changes or deployment.
+
 # POS Production Deployment Runbook
 
 Last updated: 2026-07-17
@@ -67,8 +72,8 @@ scripts/deploy_pos_production.sh
 This default path runs:
 
 1. Clean Git worktree and exact freshly fetched `origin/main` SHA preflight.
-2. Successful required GitHub Actions check (`POS release contract`) for that
-   exact SHA.
+2. Direct execution of the fixed local release recipe for that exact SHA,
+   with complete logs, process exit codes, assertion counts and artifact hashes.
 3. Production target preflight.
 4. Required production Auth and test-data hygiene check with
    `scripts/check_pilot_auth_accounts.sh`.
@@ -83,12 +88,29 @@ This default path runs:
 
 Before any production database or Vercel mutation, the script fetches
 `origin/main` into `refs/remotes/origin/main` and requires that freshly fetched
-commit to equal `HEAD`. It then reads GitHub check runs for the same SHA and
-requires the branch-protection check `POS release contract` from GitHub
-Actions to have completed successfully. A feature branch, a stale local
-`origin/main`, a pending check, and a failed or unavailable check all stop
-before DB, Edge Function, or Vercel mutation. There is no provenance or check
-bypass environment variable.
+commit to equal `HEAD`. It then directly executes
+`python3 -B scripts/pos_local_release_gate.py run --kind exact-main` in an
+isolated local Ubuntu 24.04 x86_64 tool container. The verifier clones only
+committed source, passes no production environment or credentials, runs the
+full repository checks, real Chrome terminal-authentication suite and separate
+restaurant-finalization regression, and rechecks source and fresh main before
+returning. A failed, timed-out, skipped mandatory, incomplete or changed-source
+run blocks before any production mutation. A dry run prints the plan and emits
+no PASS claim. Existing skip options cannot skip this local contract.
+
+Receipts contain the candidate/exact-main kind, source SHA/tree/content hashes,
+recipe/runner hashes, exact tool and package versions, UTC times, process codes,
+assertion counts, full-log hashes and web/nested artifact hashes. The official
+deployer always performs a new run; `verify --evidence` is an integrity audit,
+not a signed authorization or a way to supply a PASS file.
+
+**Remote protection remains unresolved.** The current main policy requires
+`POS release contract` from the GitHub Actions app (15368). This local change
+cannot satisfy or silently replace that remote policy. Do not push when it can
+start remote tests, create fake checks, change protection, or bypass merge rules.
+The [local verification contract](local-verification/LOCAL_VERIFICATION.md) and
+[remote protection decision](local-verification/REMOTE_PROTECTION_DECISION_KO.md)
+separate executable local readiness from that explicit approval boundary.
 
 The worktree must be clean by default (`REQUIRE_CLEAN_GIT=1`). The only
 exception is an explicitly non-mutating inspection run:
@@ -200,8 +222,8 @@ scripts/deploy_pos_production.sh \
 
 After the dry-run evidence is reviewed, remove only `--dry-run` and run the
 same command from a clean worktree whose `HEAD` exactly equals the freshly
-fetched `origin/main` SHA and whose required GitHub Actions check succeeded on
-that SHA. Record the operator, Asia/Ho_Chi_Minh timestamp, exact SHA, check-run
+fetched `origin/main` SHA. The official preflight must execute and pass the
+complete local verification recipe again on that SHA. Record the operator, Asia/Ho_Chi_Minh timestamp, exact SHA, check-run
 evidence, pinned project ref, sanitized command, preflight output, apply
 output, migration-history confirmation, and verification output.
 
@@ -310,10 +332,12 @@ $env:SUPABASE_ANON_KEY = '<production anon key>'
 .\scripts\build_windows_print_station.ps1
 ```
 
-Never use `SUPABASE_SERVICE_KEY` or a database password in a client build. For
-the reproducible build, run the `Windows Print Station Build` GitHub Actions
-workflow and use only the artifact whose name contains the reviewed commit
-SHA. After login on the station, open **Print Station**, confirm all five
+Never use `SUPABASE_SERVICE_KEY` or a database password in a client build.
+Run the unchanged native build script on a local Windows x64 machine or local
+Windows VM, keeping full logs, OS/SDK/MSVC versions, UTC times, exit codes, the
+exact source SHA and package SHA-256. Verify `INSTALL.txt` contains that SHA.
+The archived workflow documents the former native scope; it no longer runs
+on GitHub. Linux/macOS checks cannot establish a Windows native PASS. After login on the station, open **Print Station**, confirm all five
 destinations, print one test ticket per destination, then start polling. Do not
 call the station operational until the physical tickets and retry queue have
 been checked on the store network.
