@@ -9,7 +9,34 @@ class VietQrBankLink {
     'bidv': 'BIDV SmartBanking',
     'ocb': 'OCB OMNI',
     'acb': 'ACB ONE',
+    'vcb': 'VCB Digibank',
+    'tcb': 'Techcombank Mobile',
+    'vpb': 'VPBank NEO',
+    'vba': 'Agribank Plus',
+    'tpb': 'TPBank Mobile',
+    'hdb': 'HDBank',
+    'vib-2': 'MyVIB',
+    'shb': 'SHB SAHA',
+    'lpb': 'LPBank',
+    'seab': 'SeAMobile',
+    'scb': 'SCB Mobile Banking',
+    'cake': 'CAKE',
+    'timo': 'Timo',
+    'shbvn': 'Shinhan SOL Việt Nam',
+    'abb': 'ABBank',
+    'pvcb': 'PVConnect',
+    'eib': 'Eximbank EDigi',
+    'wvn': 'Woori WON Vietnam',
+    'cimb': 'OCTO by CIMB Vietnam',
+    'ncb': 'NCB iziMobile',
+    'klb': 'KienlongBank Plus',
+    'bvb': 'BAOVIET Smart',
+    'pbvn': 'PB engage VN',
+    'coopbank': 'Co-opBank Mobile Banking',
+    'sgicb': 'SAIGONBANK Smart Banking',
   };
+
+  static const autofillApps = {'mb', 'icb', 'bidv', 'ocb', 'acb'};
 
   // Recipient bank codes, separate from the app selected by the customer.
   // Official bank directory: https://api.vietqr.io/v2/banks.

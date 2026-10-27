@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/payments/vietqr_bank_link.dart';
 import 'direct_order_copy.dart';
 import 'direct_order_models.dart';
+import 'direct_order_payment_qr_actions.dart';
 
 class DirectOrderBankHandoff extends StatefulWidget {
   const DirectOrderBankHandoff({
@@ -63,11 +64,25 @@ class _DirectOrderBankHandoffState extends State<DirectOrderBankHandoff> {
   Widget build(BuildContext context) {
     final copy = DirectOrderCopy(Localizations.localeOf(context).languageCode);
     if (!VietQrBankLink.recipientCodes.containsKey(widget.bank.bin)) {
-      return Text(copy.bankAppFallback);
+      return Column(
+        children: [
+          DirectOrderPaymentQrActions(
+            bank: widget.bank,
+            amount: widget.amount,
+            reference: widget.reference,
+          ),
+          Text(copy.bankAppFallback),
+        ],
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        DirectOrderPaymentQrActions(
+          bank: widget.bank,
+          amount: widget.amount,
+          reference: widget.reference,
+        ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           key: const Key('direct_bank_app'),
@@ -76,7 +91,14 @@ class _DirectOrderBankHandoffState extends State<DirectOrderBankHandoff> {
           decoration: InputDecoration(labelText: copy.yourBankApp),
           items: [
             for (final app in VietQrBankLink.apps.entries)
-              DropdownMenuItem(value: app.key, child: Text(app.value)),
+              DropdownMenuItem(
+                value: app.key,
+                child: Text(
+                  '${app.value}${VietQrBankLink.autofillApps.contains(app.key) ? '' : ' · ${copy.bankAppOpenOnly}'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
           ],
           onChanged: _busy ? null : (app) => setState(() => _app = app),
         ),
@@ -85,10 +107,18 @@ class _DirectOrderBankHandoffState extends State<DirectOrderBankHandoff> {
           key: const Key('direct_open_bank_app'),
           onPressed: _busy || _app == null ? null : _open,
           icon: const Icon(Icons.open_in_new),
-          label: Text(copy.openBankApp),
+          label: Text(
+            _app != null && !VietQrBankLink.autofillApps.contains(_app)
+                ? copy.bankAppOpenOnly
+                : copy.openBankApp,
+          ),
         ),
         Text(
-          _failed ? copy.bankAppFallback : copy.bankAppHelp,
+          _failed
+              ? copy.bankAppFallback
+              : _app != null && !VietQrBankLink.autofillApps.contains(_app)
+              ? copy.bankAppOpenOnlyHelp
+              : copy.bankAppHelp,
           key: const Key('direct_bank_app_help'),
           style: Theme.of(context).textTheme.bodySmall,
         ),

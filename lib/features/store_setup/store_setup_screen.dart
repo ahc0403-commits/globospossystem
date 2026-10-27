@@ -20,11 +20,18 @@ import 'widgets/store_lifecycle_card.dart';
 import 'widgets/workforce_setup_card.dart';
 import 'widgets/operating_profile_card.dart';
 import '../store_workflow/workflow_setup_card.dart';
+import '../settings/company_lookup_settings_card.dart';
+import '../../core/services/company_tax_lookup_service.dart';
 
 class StoreSetupScreen extends ConsumerStatefulWidget {
-  const StoreSetupScreen({super.key, required this.storeId});
+  const StoreSetupScreen({
+    super.key,
+    required this.storeId,
+    this.companyLookupService,
+  });
 
   final String storeId;
+  final CompanyTaxLookupService? companyLookupService;
 
   @override
   ConsumerState<StoreSetupScreen> createState() => _StoreSetupScreenState();
@@ -244,6 +251,11 @@ class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
                               StoreLifecycleCard(storeId: storeId),
                             if (auth.role == 'super_admin')
                               StoreProcurementSetupCard(storeId: storeId),
+                            if (auth.role == 'super_admin')
+                              CompanyLookupSettingsCard(
+                                storeId: storeId,
+                                service: widget.companyLookupService,
+                              ),
                           ],
                         ),
                       ),

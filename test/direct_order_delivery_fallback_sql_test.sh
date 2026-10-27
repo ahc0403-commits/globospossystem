@@ -609,6 +609,18 @@ if [[ "${DIRECT_ORDER_ADDRESS_PROOF_TEST:-0}" == "1" ]]; then
  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_address_and_proof_replacement_test.sql"
  run_sql "$PHOTO_ROOT/supabase/migrations/20261023121000_direct_order_chat_updates_and_note_audience.sql"
  run_sql "$PHOTO_ROOT/supabase/tests/direct_order_chat_audience_test.sql"
+ if [[ -n "${DIRECT_ORDER_ACCEPTANCE_BASELINE_DUMP:-}" ]]; then
+  docker exec "$PHOTO_CONTAINER" pg_dump -U postgres -d codex_direct_photo > "$DIRECT_ORDER_ACCEPTANCE_BASELINE_DUMP"
+ fi
+ python3 - "$PHOTO_ROOT" > "$PHOTO_TMP/request_acceptance.sql" <<'PYACCEPT'
+from pathlib import Path
+import sys
+source=(Path(sys.argv[1])/'supabase/migrations/20261026120000_direct_order_cashier_kimchi.sql').read_text()
+print(source.split('-- menu-consolidation-section')[0]+'\nCOMMIT;')
+PYACCEPT
+ run_sql "$PHOTO_TMP/request_acceptance.sql"
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_request_acceptance_test.sql"
+ python3 "$PHOTO_ROOT/scripts/tests/direct_order_acceptance_concurrency.py" "$PHOTO_CONTAINER"
  python3 "$PHOTO_ROOT/scripts/tests/direct_order_proof_replacement_concurrency.py" "$PHOTO_CONTAINER"
 fi
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }

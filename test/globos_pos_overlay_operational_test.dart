@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/core/services/company_tax_lookup_service.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/core/ui/toast/toast.dart';
 import 'package:globos_pos_system/features/cashier/discount_modal.dart';
@@ -11,6 +12,11 @@ import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:globos_pos_system/widgets/pin_dialog.dart';
 
 enum _OverlayKind { discount, paymentProof, redInvoice, pin, confirm }
+
+final _lookupService = CompanyTaxLookupService(
+  transport: (_, _) async => {'outcome': 'unavailable'},
+  sessionScope: () => 'overlay-fixture',
+);
 
 class _ViewportLocale {
   const _ViewportLocale(this.size, this.locale);
@@ -59,9 +65,10 @@ class _OverlayHostState extends State<_OverlayHost> {
       ),
       _OverlayKind.redInvoice => await showDialog<Object?>(
         context: context,
-        builder: (_) => const RedInvoiceModal(
+        builder: (_) => RedInvoiceModal(
           orderId: 'overlay-order',
           storeId: 'overlay-store',
+          lookupService: _lookupService,
         ),
       ),
       _OverlayKind.pin => await showPinDialog(context),
@@ -225,6 +232,7 @@ void main() {
     'five operational overlays support localized touch and keyboard workflows',
     (tester) async {
       final semantics = tester.ensureSemantics();
+      addTearDown(_lookupService.dispose);
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 

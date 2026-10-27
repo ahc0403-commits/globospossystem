@@ -33,5 +33,5 @@ USER ubuntu
 # Flutter warming creates new cache files after the earlier permission pass.
 # The verifier runs with the host UID and the shared ubuntu group.
 RUN git config --global --add safe.directory /opt/flutter && flutter --version \
-    && chmod -R g+rwX /opt/flutter
+    && chmod -R g+rwX /opt/flutter /home/ubuntu
 WORKDIR /work

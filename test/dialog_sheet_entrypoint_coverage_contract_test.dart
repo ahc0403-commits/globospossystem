@@ -426,7 +426,7 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/menu_tab.dart',
-    directCalls: 9,
+    directCalls: 10,
     test: 'test/admin_core_overlay_operational_test.dart',
     markers: [
       'admin_menu_add_category_dialog',
@@ -438,6 +438,7 @@ const _coverage = <_OperationalCoverage>[
       'admin_menu_import_preview_dialog',
       'admin_menu_import_validation_dialog',
       'admin_menu_invoice_catalog_action',
+      'admin_kimchi_consolidation_dialog',
     ],
   ),
   _OperationalCoverage(
@@ -610,7 +611,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 196 dialog and sheet entrypoints map to operational tests', () {
+  test('all 197 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -622,10 +623,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 193);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 194);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      196,
+      197,
     );
 
     final inventory = File(

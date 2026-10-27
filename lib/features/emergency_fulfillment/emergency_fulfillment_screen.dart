@@ -100,6 +100,11 @@ class _EmergencyFulfillmentScreenState
       previous ?? const EmergencyFulfillmentState(),
     );
     final newActionable = _actionableOrderIds(next);
+    final floorArrivals = emergencyFloorOrderArrivalIds(
+      previous ?? const EmergencyFulfillmentState(),
+      next,
+    );
+    if (floorArrivals.isNotEmpty) _flashImmediately(pulse: true);
     final additionalOrderNotices = emergencyKitchenAdditionalOrderNotices(
       previous ?? const EmergencyFulfillmentState(),
       next,
@@ -147,6 +152,7 @@ class _EmergencyFulfillmentScreenState
       ...?previous?.completedOrders.map((order) => order.orderId),
     };
     final newOrderIds = newActionable
+        .union(floorArrivals)
         .difference(oldActionable)
         .difference(handoffOrderIds)
         .difference(floorDirectBeverageOrderIds)
@@ -162,7 +168,10 @@ class _EmergencyFulfillmentScreenState
                   ? queueOrder
                   : left.createdAt.compareTo(right.createdAt);
             });
-      _triggerAlarm(newOrders.map((order) => order.tableNumber));
+      _triggerAlarm(
+        newOrders.map((order) => order.tableNumber),
+        pulse: floorArrivals.isNotEmpty,
+      );
     }
     final selectedOrderId = _selectedOrderId;
     if (selectedOrderId != null && !_actionBusy) {
@@ -330,22 +339,30 @@ class _EmergencyFulfillmentScreenState
     );
   }
 
-  void _flashImmediately() {
+  void _flashImmediately({bool pulse = false}) {
     if (!mounted) return;
     setState(() => _flashing = true);
     _flashTimer?.cancel();
+    if (pulse) {
+      _flashTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+        if (timer.tick >= 4 || !mounted) timer.cancel();
+        if (mounted) {
+          setState(() => _flashing = timer.tick < 4 && !_flashing);
+        }
+      });
+      return;
+    }
     _flashTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _flashing = false);
     });
   }
 
-  Future<void> _triggerAlarm(Iterable<String> tableNumbers) async {
+  Future<void> _triggerAlarm(
+    Iterable<String> tableNumbers, {
+    bool pulse = false,
+  }) async {
     if (!mounted) return;
-    setState(() => _flashing = true);
-    _flashTimer?.cancel();
-    _flashTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _flashing = false);
-    });
+    _flashImmediately(pulse: pulse);
     if (_alarmEnabled) {
       for (final tableNumber in tableNumbers) {
         await EmergencyWebBridge.speak(vietnameseNewOrderMessage(tableNumber));
@@ -1777,10 +1794,26 @@ class _EmergencyOrderCard extends StatelessWidget {
       0,
       (total, item) => total + (item.totalQuantity ?? 0),
     );
-    final totalProgress = copy.totalQuantityProgress(
+    final orderProgress = copy.totalQuantityProgress(
       completedQuantity,
       totalQuantity,
     );
+    final readyQuantity = stationType == 'floor'
+        ? order
+              .visibleItemsAt('floor')
+              .fold<int>(
+                0,
+                (total, item) =>
+                    total +
+                    (item.isFloorDirect
+                            ? item.requiredQuantity - item.floorServedQuantity
+                            : item.readyUnservedQuantity)
+                        .clamp(0, item.requiredQuantity),
+              )
+        : 0;
+    final totalProgress = stationType == 'floor'
+        ? '$orderProgress · ${copy.readyQuantity(readyQuantity)}'
+        : orderProgress;
     final stationBatches = order.stationBatchesAt(stationType);
     final supplementalBatches = stationBatches
         .where((batch) => batch.isSupplemental)
@@ -2669,6 +2702,7 @@ class _EmergencyMenuRow extends StatelessWidget {
       _ => (0, item.orderedQuantity),
     };
     final done = item.isDisplayCompletedAt(stationType);
+    final displayLimit = stationType == 'floor' ? item.requiredQuantity : limit;
     final completedLabel = done && !item.isCompletedAt(stationType)
         ? copy.readyPortionCompleted(item.requiredQuantity - value)
         : copy.completed;
@@ -2701,7 +2735,7 @@ class _EmergencyMenuRow extends StatelessWidget {
       button: true,
       enabled: canAdvance || canRevert,
       label:
-          '${displayItem.paperlessName}, $value / $limit, '
+          '${displayItem.paperlessName}, $value / $displayLimit, '
           '${disabledAtStation
               ? copy.floorDirectOnly
               : done
@@ -2788,7 +2822,7 @@ class _EmergencyMenuRow extends StatelessWidget {
               ],
             );
             final progressValue = Text(
-              '$value / $limit',
+              '$value / $displayLimit',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: done
                     ? PosColors.success
@@ -3323,6 +3357,11 @@ class _EmergencyCopy {
           'Food completed by the kitchen and handed off through the tray.',
         );
   String get totalOrders => _pick('총 주문', 'Tổng đơn', 'Total');
+  String readyQuantity(int quantity) => _pick(
+    '서빙 가능 $quantity',
+    'Có thể phục vụ $quantity',
+    'Ready to serve $quantity',
+  );
   String totalQuantityProgress(int completed, int total) {
     final remaining = math.max(0, total - completed);
     return _pick(

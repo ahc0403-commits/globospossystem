@@ -25,6 +25,7 @@ DRY_RUN=0
 SKIP_CHECKS="${SKIP_CHECKS:-0}"
 SKIP_AUTH_CHECK="${SKIP_AUTH_CHECK:-0}"
 SKIP_LOGIN_SMOKE="${SKIP_LOGIN_SMOKE:-0}"
+LOGIN_SMOKE_OPT_OUT=0
 SKIP_SMOKE_TESTS="${SKIP_SMOKE_TESTS:-0}"
 SKIP_DB="${SKIP_DB:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
@@ -68,7 +69,8 @@ Options:
   --onboarding-edge-only  Deploy only automatic account provisioning endpoints.
                      Requires STORE_ONBOARDING_SECRET_ENV_FILE and all source/local/test gates.
   --web-only         Deploy POS web/mobile browser UI; no DB or Edge changes.
-                     Requires every source, local verification, Auth, test and login gate.
+                     Requires source, local verification, Auth and test gates.
+                     Login smoke runs unless explicitly opted out on the CLI.
   --mode MODE        prebuilt (default) or remote.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
@@ -318,6 +320,7 @@ parse_args() {
         ;;
       --skip-login-smoke)
         SKIP_LOGIN_SMOKE=1
+        LOGIN_SMOKE_OPT_OUT=1
         ;;
       --skip-db)
         SKIP_DB=1
@@ -381,8 +384,10 @@ validate_web_only_options() {
     fail "--web-only is incompatible with --rollback-hierarchy."
   [[ "$SKIP_CHECKS" == "0" && -n "$TEST_TARGETS" ]] ||
     fail "--web-only requires static analysis and tests."
-  [[ "$SKIP_AUTH_CHECK" == "0" && "$SKIP_LOGIN_SMOKE" == "0" && "$SKIP_SMOKE_TESTS" == "0" ]] ||
-    fail "--web-only requires Auth readiness and login smoke."
+  [[ "$SKIP_AUTH_CHECK" == "0" && "$SKIP_SMOKE_TESTS" == "0" ]] ||
+    fail "--web-only requires Auth readiness and HTTP smoke."
+  [[ "$SKIP_LOGIN_SMOKE" == "0" || ( "$SKIP_LOGIN_SMOKE" == "1" && "$LOGIN_SMOKE_OPT_OUT" == "1" ) ]] ||
+    fail "--web-only login omission requires explicit --skip-login-smoke."
   [[ "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" && "$SKIP_VERCEL" == "0" ]] ||
     fail "--web-only is incompatible with skip options."
 }

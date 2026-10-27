@@ -25,6 +25,7 @@ import '../../settings/registered_receipt_printer_panel.dart';
 import '../../settings/printer_diagnostic_view.dart';
 import '../../settings/promotion_settings_card.dart';
 import '../../settings/qr_takeout_settings_card.dart';
+import '../../settings/company_lookup_settings_card.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/printer_destinations_provider.dart';
 import '../providers/settings_provider.dart';
@@ -1296,6 +1297,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             PromotionSettingsCard(storeId: storeId),
             const SizedBox(height: 12),
             QrTakeoutSettingsCard(storeId: storeId),
+            const SizedBox(height: 12),
+            CompanyLookupSettingsCard(storeId: storeId),
           ],
         ],
       ),

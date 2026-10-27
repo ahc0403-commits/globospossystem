@@ -676,6 +676,59 @@ class _DirectOrderCashierScreenState
       DirectOrderRequirement.fromRows(_detail?['requirements']);
   bool get _hasPendingRequirements => _requirements.any((q) => !q.isConfirmed);
 
+  Future<void> _acceptRequirement(DirectOrderRequirement requirement) async {
+    final requestId = _selectedId, storeId = _storeId;
+    if (_busy || requestId == null || storeId == null) return;
+    final key = '$requestId/${requirement.id}/accept/${requirement.version}';
+    final mutationId = _requirementMutationIds.putIfAbsent(
+      key,
+      directOrderStaffService.newRequirementMutationId,
+    );
+    setState(() => _busy = true);
+    try {
+      final detail = await directOrderStaffService.acceptRequirement(
+        storeId: storeId,
+        requestId: requestId,
+        requirement: requirement,
+        mutationId: mutationId,
+      );
+      if (!mounted || _selectedId != requestId) return;
+      _refreshRevision += 1;
+      final requirements = DirectOrderRequirement.fromRows(
+        detail['requirements'],
+      );
+      _requirementMutationIds.remove(key);
+      setState(() {
+        _detail = detail;
+        _requests = [
+          for (final row in _requests)
+            if (row['id'] == requestId)
+              {
+                ...row,
+                'request_reply_due': requirements
+                    .where((q) => q.status == 'awaiting_reply')
+                    .length,
+                'request_confirmation_due': requirements
+                    .where((q) => q.awaitingCustomer)
+                    .length,
+              }
+            else
+              row,
+        ];
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_copy.errorMessage(directOrderStaffErrorCode(error))),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _replyRequirement(DirectOrderRequirement requirement) async {
     final requestId = _selectedId;
     final storeId = _storeId;
@@ -2686,6 +2739,7 @@ class _DirectOrderCashierScreenState
                         cashier: true,
                         busy: _busy,
                         onReply: () => _replyRequirement(requirement),
+                        onAccept: () => _acceptRequirement(requirement),
                       ),
                   ],
                 ),

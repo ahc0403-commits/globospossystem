@@ -38,7 +38,7 @@ simulate_release() {
     apply_migration() { record db-apply; }
     local_flutter_build() { record build; }
     deploy_vercel() { record web-deploy; }
-    run_login_smoke() { record login; }
+    run_login_smoke() { if [[ "$SKIP_LOGIN_SMOKE" == 1 ]]; then record login-not-run; else record login; fi; }
     main "$@"
   ' release-test "$RELEASE_TEST_ROOT" "$@"
 }
@@ -82,8 +82,19 @@ for phase in clean fresh-main exact-sha-local auth checks; do
   ! grep -qx web-deploy "$RELEASE_TEST_LOG"
 done
 
+: >"$RELEASE_TEST_LOG"
+simulate_release --web-only --skip-login-smoke --yes >"$RELEASE_TEST_TMP/login-opt-out"
+grep -qx login-not-run "$RELEASE_TEST_LOG"
+! grep -qx login "$RELEASE_TEST_LOG"
+for phase in clean fresh-main exact-sha-local auth checks build web-deploy; do
+  grep -qx "$phase" "$RELEASE_TEST_LOG"
+done
+: >"$RELEASE_TEST_LOG"
+if SKIP_LOGIN_SMOKE=1 simulate_release --web-only --yes >"$RELEASE_TEST_TMP/rejected" 2>&1; then exit 1; fi
+[[ ! -s "$RELEASE_TEST_LOG" ]]
+
 for option in --db-only --skip-checks --no-tests --skip-auth-check \
-  --skip-login-smoke --skip-smoke-tests --skip-db --skip-build --skip-vercel --rollback-hierarchy; do
+  --skip-smoke-tests --skip-db --skip-build --skip-vercel --rollback-hierarchy; do
   : >"$RELEASE_TEST_LOG"
   if simulate_release --web-only "$option" --yes >"$RELEASE_TEST_TMP/rejected" 2>&1; then
     printf 'ERROR: Incompatible option accepted: %s\n' "$option" >&2

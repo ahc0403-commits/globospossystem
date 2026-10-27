@@ -3,6 +3,7 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/company_tax_lookup_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/error_toast.dart';
 import '../red_invoice_intake/red_invoice_intake_service.dart';
@@ -17,10 +18,12 @@ class RedInvoiceModal extends StatefulWidget {
     super.key,
     required this.orderId,
     required this.storeId,
+    this.lookupService,
   });
 
   final String orderId;
   final String storeId;
+  final CompanyTaxLookupService? lookupService;
 
   @override
   State<RedInvoiceModal> createState() => _RedInvoiceModalState();
@@ -289,7 +292,11 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   Widget _buildForm() => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      BuyerInformationFields(controller: _buyer, storeId: widget.storeId),
+      BuyerInformationFields(
+        controller: _buyer,
+        storeId: widget.storeId,
+        lookupService: widget.lookupService,
+      ),
     ],
   );
 

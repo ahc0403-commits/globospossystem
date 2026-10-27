@@ -3,6 +3,44 @@ import 'buyer_number.dart';
 
 class CompanyLookupCopy extends BuyerNumberCopy {
   const CompanyLookupCopy(super.language);
+  String get manualOnly =>
+      pick('수동 입력으로 설정', 'Chọn nhập thủ công', 'Use manual entry');
+  String get checking => pick(
+    '조회 사용 여부를 확인하고 있습니다.',
+    'Đang kiểm tra khả năng tra cứu.',
+    'Checking lookup availability.',
+  );
+  String get refresh => pick(
+    '조회 설정 다시 확인',
+    'Kiểm tra lại cài đặt tra cứu',
+    'Refresh lookup availability',
+  );
+  String get nameOnly => pick(
+    '회사명만 자동 입력합니다. 주소와 연락처는 직접 입력해 주세요.',
+    'Chỉ tự điền tên công ty. Vui lòng nhập địa chỉ và thông tin liên hệ.',
+    'Only the company name is filled automatically. Enter the address and contact details manually.',
+  );
+  String get settingTitle => pick(
+    '사업자번호 회사명 조회',
+    'Tra cứu tên công ty theo mã số thuế',
+    'Company name lookup by tax code',
+  );
+  String get enabled => pick('조회 사용', 'Bật tra cứu', 'Enable lookup');
+  String get missing => pick(
+    '아직 설정하지 않았습니다. 슈퍼 관리자가 사용 여부를 선택해 주세요.',
+    'Chưa thiết lập. Quản trị viên cấp cao cần chọn bật hoặc tắt.',
+    'Not configured. A super administrator must choose whether to enable lookup.',
+  );
+  String get managed => pick(
+    '슈퍼 관리자만 변경할 수 있습니다.',
+    'Chỉ quản trị viên cấp cao có thể thay đổi.',
+    'Only a super administrator can change this setting.',
+  );
+  String get saveFailed => pick(
+    '설정 저장을 확인하지 못했습니다. 다시 확인해 주세요.',
+    'Chưa xác nhận được việc lưu cài đặt. Vui lòng kiểm tra lại.',
+    'Could not confirm the setting was saved. Refresh to check.',
+  );
   String get lookup =>
       pick('회사명 조회', 'Tra cứu tên công ty', 'Look up company name');
   String get loading => pick(
