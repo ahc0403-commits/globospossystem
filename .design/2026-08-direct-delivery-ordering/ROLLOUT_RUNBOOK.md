@@ -1,5 +1,7 @@
 # Direct delivery rollout runbook
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-08-21
 Scope: source-complete feature; production remains disabled
 
@@ -50,7 +52,7 @@ Google Cloud Translation or require a translation credential.
    customer locales. Confirm one Realtime banner/chime, 10-second disconnected
    catch-up, reconnect/app-restart dedupe, storefront OFF silence, and unchanged
    simultaneous bank-transfer alert behavior.
-9. Only after the exact pushed SHA passes required GitHub Actions, enable one storefront. Add its `/order/:slug?source=google_maps` URL to Google Business Profile last.
+9. Only after the exact pushed SHA passes required local verification, enable one storefront. Add its `/order/:slug?source=google_maps` URL to Google Business Profile last.
 10. On two cashier terminals, confirm `OPEN -> CLOSED -> OPEN` convergence.
     While CLOSED, verify that a new customer sees the localized `🙏` apology,
     a stale menu submit creates no request, and an already submitted request can

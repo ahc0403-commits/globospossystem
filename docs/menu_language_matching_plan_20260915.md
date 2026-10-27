@@ -1,5 +1,7 @@
 # 메뉴 언어 매칭 재발 방지 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 > 범위 갱신: 이 문서는 [전체 POS 화면 개선 계획](app_language_quality_plan_20260915.md)의
 > 업무 데이터 트랙 상세다. 전체 작업의 범위와 완료 기준은 상위 계획을 따른다.
 > 메뉴 트랙만 통과해도 전체 개선 완료로 선언할 수 없다.
@@ -238,7 +240,7 @@ DB 검증은 운영 DB 버전을 확인한 뒤 그 버전의 격리 환경에서
   기반 수정의 통과를 전체 개선 완료로 간주하지 않는다.
 - DB 변경은 확장 방식으로 적용하고 preflight·검증·rollback을 준비한다.
   구 앱/신 DB와 새 앱/준비되지 않은 DB의 호환 동작을 테스트한다.
-- 정확한 최종 커밋에서 필수 GitHub 체크 통과 후 저장소의
+- 정확한 최종 커밋에서 필수 로컬 검증 통과 후 저장소의
   `scripts/deploy_pos_production.sh` 경로로 배포한다.
 - 웹 번들, 캐시된 기존 앱, 적용된 DB 함수/마이그레이션 버전을 함께 확인한다.
 - 운영의 기존 주문을 읽기 전용으로 열고 실제 저장된 KO/EN/VI 필드와
@@ -261,7 +263,7 @@ DB 검증은 운영 DB 버전을 확인한 뒤 그 버전의 격리 환경에서
 | 3 | 모든 조회/등록/스냅샷 경로의 계약 수정과 SQL/API 검증 | 2 |
 | 4 | 언어 상태·캐시·실시간 갱신 보강과 동시성 회귀 테스트 | 2, 3 |
 | 5 | 모든 메뉴 표시 지점 적용, 실제 값 비교 및 출력 테스트 | 1–4 |
-| 6 | 정적 검사·오류 주입 검증·필수 CI 체크 | 2–5 |
+| 6 | 정적 검사·오류 주입 검증·필수 로컬 검증 체크 | 2–5 |
 | 7 | 호환성·정확한 커밋의 체크·배포·운영 대조 결과 | 1–6 |
 
 구현은 작고 검토 가능한 변경으로 나누되, 전체 완료 기준을 나누어 낮추지 않는다.

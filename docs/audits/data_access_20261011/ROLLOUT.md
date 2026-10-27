@@ -1,6 +1,8 @@
 # 운영 적용·복구 준비
 
-**이번 작업에서는 실행하지 않았다.** 운영 release는 루트 CLAUDE.md와 [배포 runbook](/Users/andreahn/globos_pos_system/docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md)을 따른다. GitHub Actions의 필수 검사가 정확한 pushed head SHA에서 통과한 뒤 `scripts/deploy_pos_production.sh`를 사용한다. 현재 로컬 PASS는 그 승인을 대신하지 않는다.
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
+**이번 작업에서는 실행하지 않았다.** 운영 release는 루트 CLAUDE.md와 [배포 runbook](/Users/andreahn/globos_pos_system/docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md)을 따른다. 정확한 pushed head SHA에서 필수 로컬 전체 검증과 원격 push 확인을 마친 뒤 `scripts/deploy_pos_production.sh`를 사용한다. 부분 로컬 PASS만으로 전체 최종 SHA 검증·운영 적용 승인·공식 배포·운영 확인까지 완료했다고 보고하지 않는다.
 
 ## 적용 순서
 

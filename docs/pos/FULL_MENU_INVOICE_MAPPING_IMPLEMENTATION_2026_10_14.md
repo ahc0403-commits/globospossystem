@@ -1,5 +1,7 @@
 # Full menu invoice mapping implementation
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 The catalog reads menu masters, including hidden, archived and never-sold menus,
 instead of deriving approval candidates from recent sales. Each keyset page and
 approval RPC accepts at most 100 rows. The client reads pages and writes batches
@@ -51,4 +53,4 @@ display repair, repeated individual-unit edits, 150-row import/round-trip paths,
 aggregate error reporting and all new dialog entrypoints. Synthetic identities
 exist only in the disposable test database. Production data application,
 deployment SHA and actual sales/performance results must be recorded separately
-after the exact-head GitHub gate and official deployment script succeed.
+after the exact-head local verification gate and official deployment script succeed.

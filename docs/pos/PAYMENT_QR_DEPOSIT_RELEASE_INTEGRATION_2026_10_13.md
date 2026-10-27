@@ -1,5 +1,7 @@
 # Payment QR and deposit production integration
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 The owner authorized production release on 2026-10-13. This branch starts from
 exact main `e831ba7d1ec3cf5c3af49963751a77261a3f49f8` in a newly created clean
 worktree. The original working directory remains untouched.
@@ -24,7 +26,7 @@ into the shared tax aggregate without removing the fee exclusion. The two
 corporate SQL modes rehearse both migration orders and repeat the new migration.
 Previously applied migrations and approved mapping rows are not edited.
 
-`--web-only` retains exact-main CI, Auth, analysis, tests, build and login gates;
+`--web-only` retains exact-main local verification, Auth, analysis, tests, build and login gates;
 it rejects skip options, migrations and rollback. The default deployment flow
 including Edge, translation schedule secrets and existing metadata checks is
 unchanged. The wrapper runs the two DB-only gates followed by web/mobile web.

@@ -1,5 +1,7 @@
 # 2026-10-11 통합 운영 배포 계획과 검증
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 사용자가 승인한 배달비 수령 시 기사 직접 결제·채팅 첨부·영수증,
 POS 구매자 정보·영수증 원장, 세금코드 회사명 조회와 프로젝트 지침·W0–W7
 데이터 접근 개선을 최신 main에 통합했다. 기존 작업 폴더의 변경은 복사본으로
@@ -54,7 +56,7 @@ SQL은 한 트랜잭션으로 실행하며 lock timeout 3초, statement timeout 
 
 ## 배포 순서
 
-1. PR과 정확한 main SHA의 필수 GitHub Actions 검사 및 Windows 인쇄 앱 빌드를
+1. PR과 정확한 main SHA의 필수 로컬 자동 검증 검사 및 Windows 인쇄 앱 빌드를
    확인한다. 공유 작업 폴더를 reset/stash하지 않는다.
 2. 운영 계정 자격 증명을 보안 환경 파일에 설정한다. 비밀번호를 로그·문서나
    채팅에 남기지 않는다. Auth readiness와 실제 로그인은 별도로 검증한다.
@@ -82,14 +84,14 @@ scripts/deploy_pos_production.sh --yes --mode prebuilt --skip-db
 ```
 
 기존 [배포 runbook](POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md)의 clean Git,
-새로 fetch한 exact-main SHA, 그 SHA의 필수 CI, 고정 운영 대상과 로그인 검증
+새로 fetch한 exact-main SHA, 그 SHA의 필수 로컬 검증, 고정 운영 대상과 로그인 검증
 조건을 모두 따른다. 생략 옵션으로 우회하지 않는다.
 
 ## 검증 상태 구분
 
 기능·동시성 SQL, 운영 스키마 리허설과 운영 사전 읽기는 통과했다.
 이 문서는 운영 배포 성공을 주장하지 않는다. 전체 저장소 최종 검사,
-정확한 main CI·Windows 빌드, 운영 적용, 웹·로그인·현장 출력은 각각의
+정확한 main SHA의 로컬 전체 검증·Windows 빌드, 운영 적용, 웹·로그인·현장 출력은 각각의
 실행 결과로 별도로 기록한다. 원래 각 구현 보고서는 이전 날짜의 소스 검증
 기록이며 이번 통합 검사의 통과 여부를 대신하지 않는다.
 

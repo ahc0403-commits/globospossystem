@@ -1,5 +1,7 @@
 # Company-name lookup coverage correction — 2026-10-11
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 The SAMPLE store was enabled, but `0318453298` still returned `unavailable`.
 ESGOO returns HTTP 200 with `error: 1` and no company for that code. A successful
 lookup of a different code did not establish coverage for the reported case.
@@ -46,4 +48,4 @@ matching tax code, actual provider, and retrieval time; no address or status.
   These samples measure this path, not p95, total registry coverage, or availability.
 
 Production release and actual SAMPLE form verification are separate evidence and
-must be recorded after the exact-main CI gate and official deployment complete.
+must be recorded after the exact-main local verification gate and official deployment complete.

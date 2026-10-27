@@ -1,5 +1,7 @@
 # Build Tasks: 메뉴별 판매 분석
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: `.design/2026-08-menu-sales-analytics/DESIGN_BRIEF.md`
 Date: 2026-08-13
 
@@ -43,7 +45,7 @@ gate rather than these implementation checkboxes.
 - [ ] **Widget 회귀 테스트 추가**: 핵심 지표, 세 정렬, 상위 10개/전체 보기, hourly toggle, 환불/scope 경고, loading/error/empty/partial 및 phone/tablet/desktop overflow를 검증하고 기존 report contract keys를 보존한다. _Creates menu-analytics widget tests; modifies existing reports contract tests only where the new panel is intentionally embedded._
 - [ ] **성능 기준 확인**: 대표 매장의 오늘/7일/31일/1년 fixture에서 RPC 실행계획과 응답 크기를 기록하고, 목표 응답시간을 넘을 때만 정확한 partial/composite index를 추가한 뒤 재측정한다. _Reuses PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` in non-production validation; modifies only the new additive migration if evidence requires._
 - [ ] **저장소 검증 실행**: 변경 Dart 포맷, localization generation, 관련 SQL/Dart/Widget tests, `flutter analyze`, 전체 `flutter test`, `bash scripts/check_repo.sh`, `git diff --check`를 통과한다. _Reuses project gates; no production apply or deployment in the planning task._
-- [ ] **운영 반영 전 실데이터 대사**: 접근 허용 관리자 계정으로 같은 기간의 대표 주문 10건을 영수증/주문행/메뉴 순위와 대사하고, 분할결제·할인·환불 표시를 확인한다. 별도 배포 요청이 있을 때만 `scripts/deploy_pos_production.sh`를 사용하고 exact pushed head SHA의 GitHub Actions를 확인한다. _Reuses production gates in `CLAUDE.md`; no direct Supabase/Vercel bypass._
+- [ ] **운영 반영 전 실데이터 대사**: 접근 허용 관리자 계정으로 같은 기간의 대표 주문 10건을 영수증/주문행/메뉴 순위와 대사하고, 분할결제·할인·환불 표시를 확인한다. 별도 배포 요청이 있을 때만 `scripts/deploy_pos_production.sh`를 사용하고 exact pushed head SHA의 로컬 전체 검증 증거와 원격 push SHA를 확인한다. _Reuses production gates in `CLAUDE.md`; no direct Supabase/Vercel bypass._
 
 ## Follow-up (별도 승인)
 

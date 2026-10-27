@@ -1,5 +1,7 @@
 2026-10-06 변경: 수령과 검증은 기존 `bt_order`·`sp_order` 한 계정에서 완료한다. 별도 verifier 신규 계정 계획은 폐기한다. 문서의 단계 배정은 같은 입고 계정에 receiver·verifier를 함께 배정하는 의미다. 실제 적용 상태와 계정 발급은 운영 적용 기록으로 확인한다.
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 # 구매 운영 전환·교육·시범 기록 — 2026-10-05
 
 상태: 기존 구매 앱·DB 배포와 Office 구매팀 발급은 완료했다. 통합 입고 변경은 별도 배포·역할 배정이 필요하며 교육·전체 UAT·2주 관찰은 미실행이다. 소스 검증은 [구현 결과](/Users/andreahn/globos_pos_system/docs/implementation/pos_procurement_process_implementation_20261005.md)를 참고한다.
@@ -40,7 +42,7 @@ Office의 현재 빈탄점 법인은 `AKJ` (`10000000-0000-0000-0000-00000000000
 ## 릴리스 기록
 
 1. 검토용 변경을 확인하고 두 DB migration 목록·기존 canonical Finance/HR 선행 버전·생산 migration history를 대조한다.
-2. 정확한 pushed head SHA의 필수 GitHub CI를 통과한다. 로컬 통과만으로 release gate PASS를 기록하지 않는다.
+2. 정확한 pushed head SHA의 필수 로컬 자동 검증을 통과한다. 로컬 통과만으로 release gate PASS를 기록하지 않는다.
 3. Office의 clean exact origin/main, 고정 프로젝트·migration history 조건을 충족하고 운영 배포에 대한 명시 확인을 받는다. POS는 기존 production deploy script를 사용한다.
 4. 호환 migration과 bridge/UI를 적용한다. 새 매장 정책은 아직 활성화하지 않는다.
 5. 아래 UAT를 실제 계정·검증된 매장에서 수행하고 출금/재고/증빙/원장 마감 결과를 확인한다.
@@ -49,7 +51,7 @@ Office의 현재 빈탄점 법인은 `AKJ` (`10000000-0000-0000-0000-00000000000
 | 상태 | SHA/버전·시각 | 실행자·증거 | 결과 |
 |---|---|---|---|
 | 소스 검토 | 로컬 review branch | source manifest·diff | 준비 |
-| 필수 CI | 리뷰 PR head 실행 중 | exact head 완료 결과 필요 | 미완료 |
+| 필수 로컬 검증 | 리뷰 PR head 실행 중 | exact head 완료 결과 필요 | 미완료 |
 | 운영 배포 확인 | 없음 | 사용자 명시 확인 필요 | 미완료 |
 | POS migration | 미적용 | production wrapper evidence 필요 | 미완료 |
 | Office migration | 미적용 | history/고정 project evidence 필요 | 미완료 |
@@ -84,4 +86,4 @@ Office의 현재 빈탄점 법인은 `AKJ` (`10000000-0000-0000-0000-00000000000
 
 POS SAMPLE 매장·기존 역할 접근과 Office SAMPLE 비세무 교육 법인·매장 연결을 확인했다. `sp_purchase1@globos.world`는 실제 발급·로그인·범위 검증을 마쳤다. `sp_pr1` 발급과 `sp_order` 통합 입고 배정·비밀번호 변경, 새 정책·실습은 각각 실제 적용 기록을 따른다.
 
-[샘플 발급·실습 절차](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_sample_training_20261005.md)를 먼저 수행하고 U33·U34 및 적용 가능한 U01–U29를 실제 샘플 계정으로 확인한다. 이후 빈탄점 실사용 UAT·활성화·2주 시범을 진행한다. 필수 CI의 새 head 결과는 외부 최종 검증 기록을 기준으로 한다.
+[샘플 발급·실습 절차](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_sample_training_20261005.md)를 먼저 수행하고 U33·U34 및 적용 가능한 U01–U29를 실제 샘플 계정으로 확인한다. 이후 빈탄점 실사용 UAT·활성화·2주 시범을 진행한다. 필수 로컬 검증의 새 head 결과는 외부 최종 검증 기록을 기준으로 한다.

@@ -1,5 +1,7 @@
 # 매장 생애주기 구현·검증 기록 (2026-10-22)
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 승인된 범위: [단층을 포함한 개선 계획](store_lifecycle_identity_procurement_review_20261021.md)의 단계 0~7. 구현과 운영 적용을 구분한다. 단계별 로컬 검증 결과와 운영에서 추가로 확인할 항목을 분리해 기록한다.
 
 | 단계 | 상태 | 구현·검증 증거 |
@@ -75,7 +77,7 @@ Excel 실측은 5,690영수증/10,340행, 약 3,852ms, 파일 약 3.05MB, 프로
 
 ## 운영 적용 시 확인할 항목
 
-1. 정확한 배포 SHA의 필수 CI와 프로젝트 배포 절차를 거친 후 두 매장의 현재 설정/계정/기존 주문·매출·구매 잔액을 비교한다. 신규 준비/품질/로트 기준은 기존 매장에 일괄 강제하지 않고 실제 승인·실사 후 매장별로 적용한다.
+1. 정확한 배포 SHA의 필수 로컬 검증과 프로젝트 배포 절차를 거친 후 두 매장의 현재 설정/계정/기존 주문·매출·구매 잔액을 비교한다. 신규 준비/품질/로트 기준은 기존 매장에 일괄 강제하지 않고 실제 승인·실사 후 매장별로 적용한다.
 2. 실제 프린터·주방·홀 장치에서 단층/다구역 알림, 부분 인계, 오프라인 재전송과 현재 장치 인수를 확인한다. 기존 두 매장의 저장 층/표시 층·checker 정책은 그대로 검증한다.
 3. 실제 Office 매장 ID/법인 계약과 청구·credit·지급 자료, 공급업체 문서 수신, MISA 외부 신고 접수는 담당 시스템의 실제 증거로 확인한다. 로컬 fixture 성공을 외부 완료로 표시하지 않는다.
 4. 장애 시 새 접수를 중지하고 이미 받은 주문·입고·로트/신고 배치는 해당 버전으로 마무리한다. 거래가 생성된 뒤 새 원장을 삭제하거나 구형 화면으로 무조건 되돌리지 않는다.

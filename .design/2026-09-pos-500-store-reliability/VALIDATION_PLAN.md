@@ -1,5 +1,7 @@
 # 검증·확장 승인 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 기준: [DESIGN_BRIEF.md](DESIGN_BRIEF.md), [TASKS.md](TASKS.md) · 2026-09-19
 
 현재 결과: **NOT RUN**. 이 문서는 시험 설계이며 PASS 보고서가 아니다.
@@ -92,7 +94,7 @@ peak/burst/soak는 별도 결과다. 6시간 peak의 약 1,080만 명령과 30�
 
 ## 6. 배포 단계와 중단 조건
 
-운영 전제: 새 코드/SQL에 대한 별도 실행 요청, clean release checkout, 정확한 SHA 필수 GitHub checks, 검증된 migration preflight/verify/rollback, 복구 준비. `scripts/deploy_pos_production.sh`를 우회하지 않는다.
+운영 전제: 새 코드/SQL에 대한 별도 실행 요청, clean release checkout, 정확한 SHA 필수 로컬 검증, 검증된 migration preflight/verify/rollback, 복구 준비. `scripts/deploy_pos_production.sh`를 우회하지 않는다.
 
 | cohort | 최소 관측 | 다음 단계 조건 |
 | --- | --- | --- |

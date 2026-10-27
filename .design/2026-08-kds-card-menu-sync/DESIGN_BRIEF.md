@@ -1,5 +1,7 @@
 # 설계 브리프: KDS 주문 카드 메뉴·동시 동기화·오늘 완료 이력
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-08-15
 Source: 사용자 요청 및 첨부 화면, 현재 페이퍼리스 KDS/디지털 영수증 구현 조사
 Status: 계획 전용 — 애플리케이션 구현·DB 적용·배포하지 않음
@@ -130,4 +132,4 @@ Status: 계획 전용 — 애플리케이션 구현·DB 적용·배포하지 않
 7. PDF의 시스템 문구, 결제수단, 다국어 메뉴 선택은 항상 베트남어이며 금액/VAT/품목 수량은 기존 snapshot과 동일하다.
 8. 기존 완료/원복, offline outbox, 4/8슬롯, floor-direct 권한, print mode, 결제와 red invoice 회귀 테스트가 유지된다.
 9. 관련 테스트, 전체 `flutter test`, `flutter analyze`, Web build, SQL preflight/verify, `bash scripts/check_repo.sh`, `git diff --check`를 통과한다.
-10. 운영 적용과 배포는 별도 승인 후 `scripts/deploy_pos_production.sh`만 사용하고 exact pushed head SHA의 필수 GitHub Actions가 성공해야 한다.
+10. 운영 적용과 배포는 별도 승인 후 `scripts/deploy_pos_production.sh`만 사용하고 exact pushed head SHA의 필수 로컬 자동 검증이 성공해야 한다.

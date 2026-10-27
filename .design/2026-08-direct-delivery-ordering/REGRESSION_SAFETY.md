@@ -1,5 +1,7 @@
 # Regression Safety Contract: 직접 배달 주문
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-08-21
 Regression budget: **0 observed regressions**
 
@@ -78,7 +80,7 @@ V1 migration과 구현은 다음 객체의 시그니처·본문·trigger 연결�
 5. **Isolation gate**: direct ticket 진행 전후 existing core table diff가 허용된 재무 insert 외 0이다.
 6. **Full regression gate**: 호환성 matrix, 전체 Flutter/SQL/Edge/repository gate가 통과한다.
 7. **Pilot gate**: 한 매장 내부 20건 대사에서 중복·누락·기존 업무 영향이 0이다.
-8. **Production gate**: 별도 승인, exact SHA 배포, GitHub Actions 성공 후 한 매장 flag만 연다.
+8. **Production gate**: 별도 승인, exact SHA 배포, 로컬 자동 검증 성공 후 한 매장 flag만 연다.
 
 ## 즉시 중단 조건
 

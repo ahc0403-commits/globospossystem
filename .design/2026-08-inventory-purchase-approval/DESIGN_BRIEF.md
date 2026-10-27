@@ -1,5 +1,7 @@
 # Design Brief: Inventory Purchase Approval, Receiving Verification, and Dispatch
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-08-27
 Source: User request and the current POS implementation
 
@@ -353,7 +355,7 @@ worker, provider secret, or send button is shipped now.
 8. Pilot Zalo separately behind a feature flag after OA credentials, recipient
    identity, templates, quota, and current API path are approved.
 9. Promote through `scripts/deploy_pos_production.sh`; report PASS only after
-   required GitHub checks succeed on the exact pushed head SHA and production
+   required local verification succeeds on the exact pushed head SHA and production
    operational checks confirm each workflow stage.
 
 ## Acceptance Criteria

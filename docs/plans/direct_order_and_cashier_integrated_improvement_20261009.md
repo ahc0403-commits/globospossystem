@@ -1,5 +1,7 @@
 # 배달·포장 주문과 캐셔 주문 수정 통합 개선계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성·갱신일: 2026-10-09 · Asia/Ho_Chi_Minh
 
 고객 최종금액 확정, 입금 증빙 접수, 주문 전용 임시 링크, 홀 주문 메뉴 이동·일부 수량 취소와 **캐셔 금액 입력 안정화**를 하나의 실행 계획으로 정리한다. 대화에서 수립한 계획과 이후 정책 수정을 모두 반영한다.
@@ -117,7 +119,7 @@ Grab 등 실제 배송비의 변경 전·후 금액, 제공업체, 확인 근거
 
 SQL/Edge/Flutter의 관련 검증과 실제 모바일 브라우저 확인을 수행한다. 필요한 migration·Edge 호환 변경을 먼저 준비하고 클라이언트와 단계적으로 적용한다. UI를 먼저 배포해 없는 서버 계약을 호출하지 않는다.
 
-전체 저장소 검증과 정확한 pushed HEAD의 필수 GitHub Actions를 확인한 뒤 `scripts/deploy_pos_production.sh`를 따른다. 이전 현장 설치·프린터·모바일 확인을 이번 변경의 검증으로 대신하지 않는다. 되돌릴 때도 이미 발급한 주문 링크·확정 견적·입금·취소 이력을 보존하는 호환 경로가 필요하다.
+전체 저장소 검증과 정확한 pushed HEAD의 필수 로컬 자동 검증을 확인한 뒤 `scripts/deploy_pos_production.sh`를 따른다. 이전 현장 설치·프린터·모바일 확인을 이번 변경의 검증으로 대신하지 않는다. 되돌릴 때도 이미 발급한 주문 링크·확정 견적·입금·취소 이력을 보존하는 호환 경로가 필요하다.
 
 ## 통합 구현의 검증 상태
 
@@ -142,7 +144,7 @@ SQL/Edge/Flutter의 관련 검증과 실제 모바일 브라우저 확인을 수
 
 최신 origin/main에서 만든 깨끗한 별도 worktree에 기능 변경만 통합한다. 기존 v1~v5 주문 조회 응답을 보존하고, 확정 금액 정보를 새 status_v6에서만 제공하여 배포 중 기존 고객 화면을 보호한다. 최신 세션 활동 갱신 수정도 유지한다.
 
-전체 저장소 검사와 exact main SHA의 필수 GitHub Actions가 성공한 뒤 공식 배포 스크립트의 DB-only 경로로 신규 migration 세 개를 순서대로 적용한다. 각 적용 전 실제 운영 함수의 선행 정의를 확인하고, 적용 후 권한·RLS·trigger·결제 금융 계산의 보존을 읽기 전용으로 확인한다. 그 다음 Edge와 웹을 배포한다.
+전체 저장소 검사와 exact main SHA의 필수 로컬 자동 검증이 성공한 뒤 공식 배포 스크립트의 DB-only 경로로 신규 migration 세 개를 순서대로 적용한다. 각 적용 전 실제 운영 함수의 선행 정의를 확인하고, 적용 후 권한·RLS·trigger·결제 금융 계산의 보존을 읽기 전용으로 확인한다. 그 다음 Edge와 웹을 배포한다.
 
 사용자 지시에 따라 스모크 테스트를 실행하지 않는다. 공식 --skip-smoke-tests 경로를 사용하여 Edge의 ACTIVE 상태와 허용 origin digest, Vercel production alias의 READY 배포 일치 여부를 확인한다. 테스트 주문·로그인 시도·실제 이체는 운영 검증으로 수행하지 않는다. 원래 작업 사본의 모든 기존 파일 해시와 Git 변경 상태를 대조하여 관련 없는 작업이 보존됐는지 확인한다.
 

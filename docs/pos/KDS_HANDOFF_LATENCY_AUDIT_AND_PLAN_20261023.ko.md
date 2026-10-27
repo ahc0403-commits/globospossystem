@@ -1,5 +1,7 @@
 # 분식클럽·전가복 오더 전달 지연 조사와 개선 계획
 
+> Reconciled 2026-10-27: historical source and operational observations below retain their original SHA/time and have not been revalidated by this transfer. Current verification follows cloud-first `CLAUDE.md` and the full committed candidate/exact-main gate; historical CI or local-only wording is not a current release requirement. No production action is authorized by this document.
+
 작성: 2026-10-23, 베트남 시간(UTC+7). 범위는 현황 확인과 계획 수립이다. 앱·DB·운영 설정을 변경하거나 배포하지 않았다.
 
 ## 판단

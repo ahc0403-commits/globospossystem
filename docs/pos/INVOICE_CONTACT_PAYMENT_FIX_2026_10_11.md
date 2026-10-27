@@ -1,5 +1,7 @@
 # 일반 영수증 연락처·결제 신고 매핑 보완 결과
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 확인일: 2026-10-11. 사용자의 “계획대로 진행해. 배포는 금지” 지시에 따라 **POS·자동화 소스 수정과 로컬 검증을 완료**했다. 운영 DB, 운영 POS, 설치된 자동화 앱에는 이번 변경을 반영하지 않았다. 실제 MISA 가져오기·발행·신고·고객 이메일 발송도 실행하지 않았다.
 
 ## 반영한 변경
@@ -84,4 +86,4 @@ SQL은 연락처 수정·원본 해시 변경·이전 버전 보관·공란 유�
 
 관련 문서: [기존 구현 결과](/Users/andreahn/.codex/worktrees/corporate-sales-release-prep/globos_pos_system/docs/pos/CORPORATE_COLLECTION_SALES_EXPORT_2026_10_11.md) · [이번 보완의 근거가 된 비교 보고서](/Users/andreahn/Documents/Codex/2026-09-12/files-pasted-by-the-user-full-2/outputs/akj-automation/review/2026-10-11/pos-automation-comparison.md)
 
-배포 후보와 원자적 적용 순서는 [배포·필수 CI 준비 기록](POS_CORPORATE_RELEASE_PREPARATION_2026_10_11.md)을 따른다. 이 후보는 기존 14시 마이그레이션 번호 충돌을 피한 새 번호와 단일 트랜잭션 패키지를 사용한다.
+배포 후보와 원자적 적용 순서는 [배포·필수 로컬 검증 준비 기록](POS_CORPORATE_RELEASE_PREPARATION_2026_10_11.md)을 따른다. 이 후보는 기존 14시 마이그레이션 번호 충돌을 피한 새 번호와 단일 트랜잭션 패키지를 사용한다.

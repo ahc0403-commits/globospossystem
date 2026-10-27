@@ -1,5 +1,7 @@
 # POS language audit — 2026-09-15
 
+> 2026-10-24 소유자 정책: 자동 검증은 로컬에서 수행하고 최종 후보·깨끗한 exact-main SHA의 전체 실행 증거와 원격 push를 확인한다. GitHub Actions/runner 성공은 필수 증거가 아니다. 공식 배포·운영 확인은 유지하며 남은 실행 게이트는 우회하지 않는다.
+
 Subsequent scope correction: the [whole-app improvement plan](app_language_quality_plan_20260915.md)
 now requires all active screens, embedded sections, overlays, states, and outputs.
 Inventory detail and audit-trace copy are mandatory completion items in that plan.
@@ -163,7 +165,7 @@ Local results recorded during this audit:
 
 Production release must use `scripts/deploy_pos_production.sh` with
 `supabase/migrations/20260915200000_menu_display_localization.sql` after the
-repository's exact-head GitHub and release gates. No release PASS is claimed.
+repository's complete exact-head local verification, remote push confirmation and official release gates. No release PASS is claimed.
 
 ## Priority follow-up
 

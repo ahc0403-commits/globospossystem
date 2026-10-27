@@ -1,5 +1,7 @@
 # Build Tasks: 직접 배달 기사용 영수증
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: `.design/2026-09-delivery-driver-receipt/DESIGN_BRIEF.md`
 Date: 2026-09-01
 
@@ -82,6 +84,6 @@ Date: 2026-09-01
   신규 운영 체크리스트._
 
 - [ ] **배포 승인 후 production gate 통과**: additive migration 적용 상태와
-  앱 버전을 분리 기록하고, exact pushed head SHA GitHub Actions 성공 후에만
+  앱 버전을 분리 기록하고, exact pushed head SHA 로컬 자동 검증 성공 후에만
   `scripts/deploy_pos_production.sh`로 배포한다. _재사용: CLAUDE.md release
   gate; 별도 승인 필요._

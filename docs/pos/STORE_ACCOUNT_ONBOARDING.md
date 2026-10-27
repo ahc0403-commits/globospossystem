@@ -1,5 +1,7 @@
 # Store abbreviations and automatic accounts
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Master admins set a brand and store abbreviation (2–6 uppercase letters/digits,
 starting with a letter). Existing internal brand codes and store slugs remain
 stable. New store slugs are generated from the registration request UUID.
@@ -83,7 +85,7 @@ outside the affected claim keys is preserved.
 ## Production release
 
 Use only `scripts/deploy_pos_production.sh`, on clean exact origin/main with the
-required successful CI on that SHA. Release phases:
+successful complete local verification on that SHA, with reproducible logs and remote push confirmation. Release phases:
 
 1. `--db-only --migration supabase/migrations/20261015150000_store_account_onboarding.sql`
 2. `--onboarding-edge-only` with `STORE_ONBOARDING_SECRET_ENV_FILE` pointing to a

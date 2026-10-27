@@ -1,5 +1,7 @@
 # 주방·트레이·층별 주문 처리 상세 구현 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-09-16 · 기준: 현재 작업 트리, HEAD `4dfa0d0d` 및 미커밋 변경 포함
 
 상태: **계획 작성 완료. 애플리케이션 구현·테스트 실행·DB 적용·배포는 수행하지 않음.**
@@ -298,7 +300,7 @@ BM 취소 이력(`20260915120000_bm_service_cancellation_history.sql`)은 현재
 | 5 | 카드 색/버튼/층 일괄/점멸/알림 | screen, voice helper, 필요한 l10n | 4/8칸·상세·접근성 검증 통과 |
 | 6 | 캐셔 취소·복원·금액·이력 | cashier_screen, order_service, payment_provider, cancellation/BM SQL | 부분 취소/전달 경쟁·금액 회귀 통과 |
 | 7 | 운영 리포트·호환 회귀·독립 리뷰 | paperless report/provider/dashboard, 기존 tests | 단계 시간 의미 보존, 발견 결함 해결 |
-| 8 | 전체 검증·릴리스 증거 묶음 | check_repo, workflow, release scripts, runbook | exact pushed SHA CI + 운영 적용 절차 준비 |
+| 8 | 전체 검증·릴리스 증거 묶음 | check_repo, workflow, release scripts, runbook | exact pushed SHA local verification + 운영 적용 절차 준비 |
 
 제안 신규 산출물은 다음과 같다.
 
@@ -369,7 +371,7 @@ Flutter 점멸 검증에는 명시적인 `pump(Duration(...))`를 사용한다. 
 
 운영 배포 경로는 `scripts/deploy_pos_production.sh`만 사용한다. 새 migration과 이름이 맞는 preflight/verify/rollback을 제공하고 clean release checkout을 준비한다. 사용자 소유 미커밋 파일을 지우거나 일괄 stash하지 않는다.
 
-현재 필수 GitHub Actions 체크 이름은 **`Photo Objet contract`**이며 실제로 `scripts/check_repo.sh`를 실행한다. 로컬 테스트와 독립 Judge는 사전 증거이고, **정확한 pushed head SHA의 필수 체크가 성공하기 전에는 release gate PASS로 기록하지 않는다.** 실제 배포는 최신 origin/main 일치 등 배포 스크립트의 게이트를 통과해야 한다.
+현재 필수 로컬 자동 검증 체크 이름은 **`Photo Objet contract`**이며 실제로 `scripts/check_repo.sh`를 실행한다. 로컬 테스트와 독립 Judge는 사전 증거이고, **정확한 pushed head SHA의 필수 체크가 성공하기 전에는 release gate PASS로 기록하지 않는다.** 실제 배포는 최신 origin/main 일치 등 배포 스크립트의 게이트를 통과해야 한다.
 
 구현 보고서는 `소스 구현 / migration 적용 / 앱 배포 / 다단말 운영 검증` 네 상태를 분리한다. 계획을 작성했거나 테스트 파일을 만들었다는 이유로 뒤 단계의 완료를 주장하지 않는다.
 

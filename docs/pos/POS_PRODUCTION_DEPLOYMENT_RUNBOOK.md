@@ -335,8 +335,8 @@ $env:SUPABASE_ANON_KEY = '<production anon key>'
 ```
 
 Never use `SUPABASE_SERVICE_KEY` or a database password in a client build.
-Run the unchanged native build script on a local Windows x64 machine or local
-Windows VM, keeping full logs, OS/SDK/MSVC versions, UTC times, exit codes, the
+Run the unchanged native build script on an isolated Windows x64 machine or
+Windows VM (including an authorized cloud VM), keeping full logs, OS/SDK/MSVC versions, UTC times, exit codes, the
 exact source SHA and package SHA-256. Verify `INSTALL.txt` contains that SHA.
 The archived workflow documents the former native scope; it no longer runs
 on GitHub. Linux/macOS checks cannot establish a Windows native PASS. After login on the station, open **Print Station**, confirm all five

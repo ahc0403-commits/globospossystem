@@ -1,5 +1,7 @@
 # 고객 수령 시 기사 직접 결제 전용·배달 운영·채팅 첨부 개선안
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 2026-10-10 · Asia/Ho_Chi_Minh · 상태: 소스 구현·기능 로컬 검증 완료 · 전체 저장소의 기존 검사 불일치 별도 기록 · 운영 DB 미적용/미배포
 
 **신규 배달 주문은 고객이 수령할 때 배달비를 기사에게 직접 결제하는 한 가지 방식만 사용한다.** 매장은 음식·옵션·기존 세금/수수료로 계산한 주문 대금만 받는다. Grab 등 기사 비용을 매장 결제 금액에 넣지 않는다. 배달비 선결제/후결제 선택, 지급 방식 협의·고객 확인 gate, 배달비 포함 결제, 매장 선지급·차액 부담·배달비 추가 수금 기능은 새 흐름에서 제외한다.
@@ -106,4 +108,4 @@
 - 고객↔매장 JPG/JPEG/PNG/WebP/PDF: 결제 전/후 열린 상담, 잘못된 바이트/5 MiB 초과/권한 오류/URL 만료/재시도/응답 유실/주문 전환. 실제 모바일 브라우저와 운영 Storage에서 상대 표시까지 확인.
 - 기존 확정 금액 잠금·원자적 음식 결제·일반 요청사항 확인·증빙/환불 한도·PII 정리·비동기 MISA 보존. 새 정책 주문에서 구 RPC로 배달비 청구/선지급을 시도해 서버 거부 확인.
 
-관련 Flutter/Edge/임시 PostgreSQL 검사와 프로젝트 검사·웹 빌드 결과는 구현 보고서에 기록한다. 운영 배포는 정확한 pushed HEAD의 필수 GitHub Actions와 `scripts/deploy_pos_production.sh` 절차를 따른다. 정책 활성화는 호환 클라이언트·에이전트·실제 수령자 지급 상품 검증과 함께 진행한다. 배포를 되돌려도 새 정책으로 확정된 주문의 지급 방식은 바꾸지 않는다. 현재 소스와 신규 마이그레이션은 구현했으며 운영 DB·배포는 변경하지 않았다.
+관련 Flutter/Edge/임시 PostgreSQL 검사와 프로젝트 검사·웹 빌드 결과는 구현 보고서에 기록한다. 운영 배포는 정확한 pushed HEAD의 필수 로컬 자동 검증과 `scripts/deploy_pos_production.sh` 절차를 따른다. 정책 활성화는 호환 클라이언트·에이전트·실제 수령자 지급 상품 검증과 함께 진행한다. 배포를 되돌려도 새 정책으로 확정된 주문의 지급 방식은 바꾸지 않는다. 현재 소스와 신규 마이그레이션은 구현했으며 운영 DB·배포는 변경하지 않았다.

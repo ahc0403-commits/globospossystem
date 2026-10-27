@@ -1,5 +1,7 @@
 # Remaining scalability execution
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 User authorized items 1–8, including production application, on 2026-09-05.
 Worktree: `codex/scalability-remaining`; base `eed2beb8`, already includes the
 latest main payroll scheduled-hours/holiday fix (`6341b3b3`). Original dirty
@@ -14,7 +16,7 @@ checkout and its untracked migration are preserved.
 | 5. Realtime event-scoped refresh | Implemented | 73 financial API tests, 12 coalescer/realtime/payment tests, 29 display/kitchen contracts passed; final gate pending |
 | 6. Measured indexes | Implemented | Production EXPLAIN captured read-only; isolated before/after and replay/rollback passed |
 | 7. Measurement / isolated scale scenarios | Executed twice | A/B zero errors; initial C 61 failures, repeat C zero errors but p95 4.6–4.8 s; production capacity unverified |
-| 8. Production application | Pending | Exact-main GitHub checks and production wrapper required |
+| 8. Production application | Pending | Exact-main local verification and production wrapper required |
 
 ## Item 1
 
@@ -182,9 +184,9 @@ by the evidence gathered so far.
 
 ## Release gate
 
-All staged source must pass `scripts/check_repo.sh`, then exact pushed-head GitHub
-checks. Merge the complete reviewed stack through PR #456 retargeted to `main`,
-wait for the exact fresh-main Photo Objet check,
+All staged source must pass `scripts/check_repo.sh`, then complete local verification on the exact pushed candidate and clean exact-main
+SHAs, with remote push confirmation. Merge the complete reviewed stack through PR #456 retargeted to `main`,
+retain complete local exact-main verification, excluding the retired Photo automatic collector check,
 and apply each unapplied migration through `scripts/deploy_pos_production.sh` with
 its preflight/verify artifacts. Web release also requires the existing fixed-account
 login smoke and Auth hygiene checks. Source, DB, web, and operational verification

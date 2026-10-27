@@ -1,5 +1,7 @@
 # Build Tasks: 페이퍼리스 음료 층 직접 제공 경로
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: `.design/2026-08-floor-direct-beverage-fulfillment/DESIGN_BRIEF.md`
 Date: 2026-08-12
 
@@ -72,7 +74,7 @@ Date: 2026-08-12
 
 ## 점진 배포
 
-- [ ] **Release A 배포**: clean exact-main, required GitHub check, production migration preflight/rollback readiness를 통과한 DB expand를 기능 OFF로 배포한다. _Reuses: `scripts/deploy_pos_production.sh`; no feature enable._
+- [ ] **Release A 배포**: clean exact-main, required local verification, production migration preflight/rollback readiness를 통과한 DB expand를 기능 OFF로 배포한다. _Reuses: `scripts/deploy_pos_production.sh`; no feature enable._
 - [ ] **Release B 배포**: 새 Flutter 클라이언트와 Edge compatibility를 배포하고 모든 스테이션이 새 SHA를 로드했는지 확인한다. 플래그는 OFF로 유지한다. _Modifies: production web client; reuses exact-SHA release gate._
 - [ ] **매장 메뉴 분류 검수**: drink 후보와 콤보 component를 운영자에게 보여주고 실제 층 직접 제공 메뉴만 승인해 설정한다. _Uses: new admin route UI/report._
 - [ ] **Binh Thanh 파일럿 활성화**: 미완료 paperless 주문 0, 1F/2F 계정 정상, 알람 테스트 성공 후 한 매장만 flag를 켠다. _Depends on: Release A/B and classification review._
@@ -90,9 +92,9 @@ Date: 2026-08-12
 - [ ] **POS 대시보드 반응형·접근성 검증**: 필수 값은 hover 없이 표시하고 KO/VI/EN, 모바일 portrait, 태블릿, desktop, 200% 확대, partial/stale/offline 상태와 CSV export를 검증한다. _Creates: provider/widget/visual/E2E analytics tests._
 - [ ] **Office 집계 계약 추가**: PII와 actor를 제외한 versioned read-only store/day/hour 집계 view를 POS DB에 제공하고 Office 서버만 읽게 한다. 기존 `restaurants`/Office 매출 계약은 변경하지 않는다. _Creates: `v_office_pos_fulfillment_metrics_v1`; reuses established Office read-only view pattern._
 - [ ] **Office 주문 처리 KPI 화면**: `office.globos.vn/kpi`에 매장 비교, 전주·전월 추세, 병목 비중, direct 음료 시간을 표시하고 표본 수·last updated·partial 상태를 함께 제공한다. POS 대시보드 수치와 fixture를 대조한 뒤 연결한다. _Modifies: Office app in a separately approved repository task; depends on stable POS aggregate contract._
-- [ ] **Release C 점진 배포**: 집계 job과 RPC를 먼저 배포해 수치를 shadow 검증하고, POS 단일 매장 화면을 연 뒤 Office를 연결한다. 분석 장애가 주문·결제·paperless action에 영향을 주지 않는지 부하 및 fail-open 검증을 통과한다. _Separate release; reuses exact-main GitHub and production deployment gates._
+- [ ] **Release C 점진 배포**: 집계 job과 RPC를 먼저 배포해 수치를 shadow 검증하고, POS 단일 매장 화면을 연 뒤 Office를 연결한다. 분석 장애가 주문·결제·paperless action에 영향을 주지 않는지 부하 및 fail-open 검증을 통과한다. _Separate release; reuses exact-main local verification and production deployment gates._
 
 ## 최종 리뷰
 
 - [ ] **설계 대조 리뷰**: 모든 완료 조건, 기존 기능 불변식, 콤보 예외, feature flag, rollback 조건을 구현 결과와 대조한다.
-- [ ] **운영 승인**: required GitHub Actions가 exact main SHA에서 성공하고 파일럿 체크리스트가 완료된 경우에만 기능을 ON으로 판정한다.
+- [ ] **운영 승인**: 필수 로컬 검증이 exact main SHA에서 성공하고 파일럿 체크리스트가 완료된 경우에만 기능을 ON으로 판정한다.

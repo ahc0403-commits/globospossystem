@@ -1,5 +1,7 @@
 # 분식클럽 KDS 조회 제한·성능 검증과 적용
 
+> Reconciled 2026-10-27: historical source and operational observations below retain their original SHA/time and have not been revalidated by this transfer. Current verification follows cloud-first `CLAUDE.md` and the full committed candidate/exact-main gate; historical CI or local-only wording is not a current release requirement. No production action is authorized by this document.
+
 2026-10-23, 베트남 시간. 사용자 승인 범위: 분식클럽부터 조회 범위와 동시 요청 제한을 지켜 수정하고 실제 데이터 규모·동시 단말 조건으로 검증한 뒤 적용.
 
 ## 변경
@@ -15,7 +17,7 @@
 
 ## 실제 규모와 격리 시험
 
-운영에서 개인정보 없이 집계한 규모는 과거 큐 4,463건, 최근 7일 628건, 하루 최대 117건이다. 주문당 품목 평균 4.45개·p95 9개·최대 15개, 활성 역할은 주방·트레이·1F·2F의 4개다.
+운영에서 개인정보 없이 집계한 초기 규모는 당일 3건을 포함한 전체 큐 4,463건, 최근 7일 628건, 하루 최대 117건이다. 주문당 품목 평균 4.45개·p95 9개·최대 15개, 활성 역할은 주방·트레이·1F·2F의 4개다.
 
 운영 **스키마·함수·인덱스만** 추출해 격리한 PostgreSQL 17.6에 합성 행을 넣었다. 고객/직원/주문 데이터는 복사하지 않았다. 위 품목 분포와 오늘 120건을 고정하고 과거 큐 4,463→5,000→50,000건으로 늘렸다. 최종 품목 원장은 약 22.3만 행이다. 축소 스키마 SQL 회귀에서는 오늘 300건까지 검증한다.
 
@@ -35,7 +37,7 @@ DB CPU 2개/메모리 2GiB, PostgREST CPU 1개/512MiB, pool 10개다. HTTP로 �
 | 50,000 | 8 | 175 / 280 / 295 | 207 / 401 / 420 | 0 |
 | 50,000 | 40 | 516 / 1673 / 2465 | 555 / 1926 / 2618 | 0 |
 
-실제 구성 4대에서는 이력 p95 65~161ms, 현재 카드 p95 120~149ms다. 8대 이력 p95는 280~467ms이고, 40대 집중 부하에서는 1.67~2.66초다. **40대에서 이력 300ms 목표를 충족한 것으로 판정하지 않는다.** CPU/풀 대기까지 포함된 격리 시험이며 현장 전달 시간이나 운영 처리 용량 보증으로 해석하지 않는다.
+활성 배정 4개로 구성한 4단말 시험에서는 이력 p95 65~161ms, 현재 카드 p95 120~149ms다. 8대 이력 p95는 280~467ms이고, 40대 집중 부하에서는 1.67~2.66초다. **40대에서 이력 300ms 목표를 충족한 것으로 판정하지 않는다.** CPU/풀 대기까지 포함된 격리 시험이며 현장 전달 시간이나 운영 처리 용량 보증으로 해석하지 않는다.
 
 이력 최대 응답은 268,002 bytes(50건), 현재 카드 최대는 586,750 bytes(오늘 120건)였다. Docker 표본 메모리 최고값은 DB 451.4MiB, PostgREST 171.5MiB다. 이는 shared/cache를 포함한 컨테이너 표본이며 Flutter heap 측정이 아니다. Flutter 상태는 50건 페이지 교체/51건 응답 거부를 검사했다.
 
@@ -52,9 +54,28 @@ DB CPU 2개/메모리 2GiB, PostgREST CPU 1개/512MiB, pool 10개다. HTTP로 �
 
 ## 배포와 운영 확인
 
-아래는 배포 후 증거로 갱신한다. 소스/시험 통과를 운영 적용으로 간주하지 않는다.
+운영 적용 완료: 2026-10-23 베트남 시간 14:12 DB 확인, 14:14 웹 production READY. 배포 SHA는 `913a6459d71844abc2ec0d9220556addb2b9cfa4`, [PR #622](https://github.com/ahc0403-commits/globospossystem/pull/622)다. 정확한 main의 [POS release contract](https://github.com/ahc0403-commits/globospossystem/actions/runs/39913471506/job/120281556223)가 성공한 후 공식 DB-only와 web-only를 순차 실행했다. skip 옵션은 사용하지 않았다.
 
 - 배포 전: 정확한 운영 원본 함수 4개 해시와 분식클럽 legacy·paperless·kitchen_tray_floor 설정을 읽기 전용 preflight로 확인한다.
 - 적용: 정확한 main SHA와 GitHub Actions `POS release contract` 성공 후 공식 `scripts/deploy_pos_production.sh`의 DB-only(단일 migration), web-only 순서로 실행한다.
 - 복구: 새 페이지 UI보다 이전 호환 웹 버전을 먼저 배포한 뒤 `scripts/rollback_bunsik_kds_bounded_history.sql`로 기존 읽기 함수를 되돌린다. 수량/주문 데이터 변경은 없다.
 - 남은 현장 확인: 버튼→다른 단말 frame·첫 음성, 실제 스피커, 절전/네트워크 복귀. 이번 시험은 이 값을 측정하지 않았다.
+
+### 적용 후 확인
+
+- migration `20261023060000`의 운영 이력 등록을 확인했다. 기존 읽기 함수 4개의 원본 해시를 보존했으며 분식클럽 workflow·paperless·legacy 기본값, 전가복 active·주방→층 설정이 유지됐다.
+- 운영 데이터를 실제 배정 사용자 문맥으로 읽은 DB 실행 시간(역할별 3회)은 분식클럽 이력 19.634~40.685ms, snapshot 21.995~36.746ms였다. 전가복 4배정과 분식클럽 4배정 모두 기존 snapshot의 주문/수량/포장·header 계약이 일치했다(새 tray 순서 메타데이터 제외).
+- 새 이력 RPC에 비로그인은 HTTP 401, 다른 매장 로그인은 HTTP 400의 권한/범위 거부를 반환했다.
+- 웹 production alias는 `dpl_H6mCnfCBWkGv69phS85LD28qtxzp`, 정확한 SHA `913a6459`, READY다. 공식 배포의 live HTTP 200과 기존 운영 계정 로그인/활성 프로필 조회를 통과했다. DB-only 자체를 로그인 검증으로 계산하지 않았다.
+- 새 50건 페이지 UI는 해당 단말이 새 웹 버전을 읽은 후 사용한다. 현재 열려 있던 구버전 화면도 이미 새 제한 조회를 사용한다. 강제 로그아웃/새로고침은 보내지 않았다.
+
+실제 API 후속 관찰 구간(UTC): 2026-10-23T07:13:00Z ~ 2026-10-23T07:16:40Z. 원래 완료이력 RPC 55건과 snapshot 55건, 총 110건이 모두 HTTP 200이었다. 아래 값은 Supabase origin 시간이며 단말 표시/음성이 아니다. 표본이 작고 혼잡 시간 검증을 대체하지 않는다.
+
+| 담당 | 완료이력 요청 | p50 / p95 (ms) | 오류 |
+|---|---:|---:|---:|
+| floor 1F | 14 | 86 / 108 | 0 |
+| floor 2F | 13 | 78 / 137 | 0 |
+| kitchen | 14 | 104 / 170 | 0 |
+| tray | 14 | 102 / 108 | 0 |
+
+원본 식별자 없는 증거: [production-release.json](../measurements/bunsik-kds-bounded-20261023/production-release.json), [production-http-observation.json](../measurements/bunsik-kds-bounded-20261023/production-http-observation.json). 실제 현장 단말의 표시·가청·절전 복귀와 Flutter heap은 미측정이다.

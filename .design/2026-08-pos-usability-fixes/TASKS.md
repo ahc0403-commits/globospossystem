@@ -1,5 +1,7 @@
 # 구현 계획: 2026-08 POS 사용성 및 운영 개선
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: 2026-08-10 사용자 요구사항
 Date: 2026-08-10
 
@@ -10,7 +12,7 @@ Date: 2026-08-10
 - 고객 결제 화면과 고객용 영수증/프린터 출력은 기존 계약대로 베트남어 전용을 유지한다. POS 화면 언어 변경은 이 계약을 바꾸지 않는다.
 - QR의 `부가세 8% 별도입니다`는 결제 계산 로직을 바꾸지 않는 고정 안내 문구로 취급하고, QR에서 선택한 언어에 맞춰 한국어·베트남어·영어로 표시한다.
 - 관리자 모바일 대응은 정보나 기능을 숨기지 않는다. 좁은 화면에서는 줄바꿈, 세로 배치, 가로 스크롤, 전체 화면 다이얼로그/바텀시트를 사용해 동일 정보를 유지한다.
-- DB 변경은 기존 마이그레이션을 수정하지 않고 새 additive migration, preflight, verify 스크립트로 추가한다. 배포 완료 판정은 `CLAUDE.md`의 정확한 pushed head SHA GitHub Actions 게이트를 따른다.
+- DB 변경은 기존 마이그레이션을 수정하지 않고 새 additive migration, preflight, verify 스크립트로 추가한다. 배포 완료 판정은 `CLAUDE.md`의 정확한 pushed head SHA 로컬 자동 검증 게이트를 따른다.
 - 현재 작업 트리에 존재하는 프린트 계정 관련 미커밋 변경은 사용자 소유 작업으로 보존하고, 구현 시작 시 중복·충돌 여부를 먼저 확인한다.
 - 여섯 요구사항을 한 번에 구현하거나 배포하지 않는다. 각 수직 작업은 별도 변경 묶음으로 완성하고 기존 기능 회귀가 0건임을 확인한 뒤에만 다음 묶음으로 진행한다.
 - 기존 공용 컴포넌트·RPC·테이블의 기본 계약을 직접 바꾸는 대신 새 옵션, 새 helper, 새 additive migration으로 확장한다. 기존 호출자는 명시적으로 전환하기 전까지 동일하게 동작해야 한다.
@@ -93,9 +95,9 @@ Date: 2026-08-10
 
 - [ ] **핵심 사용자 여정 통합 확인**: 한국어 QR 주문 → 베트남어 POS 표시, 완료 주문 검색의 단일 언어 표시, 같은 날 2회 출퇴근, bt_print 로그인 후 자기 매장 프린터 설정/테스트, 8개 메뉴 고객 결제 표시, 휴대폰 관리자 전 탭 탐색을 한 번의 QA 체크리스트로 검증한다. _재사용: 실제 역할별 route와 pilot fixture; 신규: 통합 QA 체크리스트._
 
-- [ ] **프로덕션 릴리스 게이트 통과**: 사용자 소유 dirty 파일을 보존한 상태에서 `bash scripts/check_repo.sh`와 관련 DB-only/production gate를 통과시키고, 승인된 배포 스크립트만 사용한다. 정확한 pushed head SHA의 필수 GitHub Actions 성공 전에는 완료로 보고하지 않는다. _재사용: `scripts/deploy_pos_production.sh`, 기존 production gates; 신규 컴포넌트 없음._
+- [ ] **프로덕션 릴리스 게이트 통과**: 사용자 소유 dirty 파일을 보존한 상태에서 `bash scripts/check_repo.sh`와 관련 DB-only/production gate를 통과시키고, 승인된 배포 스크립트만 사용한다. 정확한 pushed head SHA의 필수 로컬 자동 검증 성공 전에는 완료로 보고하지 않는다. _재사용: `scripts/deploy_pos_production.sh`, 기존 production gates; 신규 컴포넌트 없음._
 
-- [ ] **완료 보고에 검증 증거 첨부**: 기능별로 변경 파일, 재현 테스트, 신규 회귀 테스트, 기존 인접 테스트, 전체 analyze/test/repo check, DB preflight/verify, exact pushed head SHA의 GitHub Actions 결과를 표로 제출한다. 실행하지 못한 항목이 하나라도 있으면 PASS가 아니라 미검증으로 표시한다. _재사용: harness report 형식; 수정/신규 컴포넌트 없음._
+- [ ] **완료 보고에 검증 증거 첨부**: 기능별로 변경 파일, 재현 테스트, 신규 회귀 테스트, 기존 인접 테스트, 전체 analyze/test/repo check, DB preflight/verify, exact pushed head SHA의 로컬 자동 검증 결과를 표로 제출한다. 실행하지 못한 항목이 하나라도 있으면 PASS가 아니라 미검증으로 표시한다. _재사용: harness report 형식; 수정/신규 컴포넌트 없음._
 
 ## 권장 구현 순서
 

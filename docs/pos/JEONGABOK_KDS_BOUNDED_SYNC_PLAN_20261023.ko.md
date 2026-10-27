@@ -1,5 +1,7 @@
 # 전가복 KDS 제한된 일괄 조회·알림 개선안
 
+> Reconciled 2026-10-27: historical source and operational observations below retain their original SHA/time and have not been revalidated by this transfer. Current verification follows cloud-first `CLAUDE.md` and the full committed candidate/exact-main gate; historical CI or local-only wording is not a current release requirement. No production action is authorized by this document.
+
 2026-10-23 베트남 시간. **설계·운영 읽기 점검이며 구현·배포 완료 문서가 아니다.** 사용자의 “전가복에는 왜 적용안하냐”에 대한 후속 구체화다. 분식클럽은 PR #622로 먼저 적용한다.
 
 ## 현재 증거

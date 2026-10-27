@@ -1,5 +1,7 @@
 # Delivery reconciliation, translation and cash closing release preflight
 
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
 The owner authorized production DB, Edge and web deployment on 2026-10-10.
 This candidate was prepared in an isolated managed worktree from
 `91e4c9175a67624d1dd12db16304a52d1f53ffcb` (fresh origin/main). The original
@@ -39,13 +41,13 @@ checkout and its unrelated user changes were preserved.
   final security, architecture and completion-path re-reviews returned no
   remaining confirmed findings.
 - Full `scripts/check_repo.sh` remains in progress at this commit. Its final
-  result and exact-SHA GitHub Actions success are required before production.
+  result and complete exact-SHA local verification logs are required before production.
 
 ## Production gates and secret handling
 
 Run only `scripts/deploy_pos_production.sh`, using a clean checkout whose HEAD
-exactly equals freshly fetched origin/main and whose exact SHA has a successful
-GitHub Actions **POS release contract** check. Apply money migration
+exactly equals freshly fetched origin/main and whose exact SHA has complete successful local verification logs and remote
+push confirmation. Apply money migration
 `20261010010000`, then translation migration `20261010020000`, with their
 read-only preflight and verification SQL. Deploy Edge and web through the same
 release runner.

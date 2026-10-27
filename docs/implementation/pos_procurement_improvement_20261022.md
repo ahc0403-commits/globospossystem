@@ -1,6 +1,10 @@
 # 2026-10-22 POS 구매 업무 개선
 
-상태: 소스 구현·로컬 검증 완료. 2026-10-23 사용자가 기존 ID·권한을 유지한 비밀번호 재발급, POS·Office 커밋·푸시·운영 배포를 명시적으로 승인했다. 이 커밋은 운영 반영 전 소스이며 최종 배포·계정 검증 증거는 별도 릴리스 기록에 남긴다.
+> Reconciled 2026-10-27: historical source and operational observations below retain their original SHA/time and have not been revalidated by this transfer. Current verification follows cloud-first `CLAUDE.md` and the full committed candidate/exact-main gate; historical CI or local-only wording is not a current release requirement. No production action is authorized by this document.
+
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
+상태: 2026-10-23 계정 복구·POS/Office 커밋·푸시·운영 배포·운영 로그인/PR 조회 검증 완료. [최종 운영 반영 기록](/Users/andreahn/globos_pos_system/design_artifacts/pos_improvement_20261022/production_release_20261023.md). 아래는 2026-10-22 구현 당시의 기록이며 당시 남은 절차는 위 최종 기록으로 완료를 확인한다.
 
 ## 확인한 장애와 운영 상태
 
@@ -42,12 +46,12 @@
 
 ## 운영 반영 전 남은 단계
 
-1. 코드 검토·관련 검증을 완료하고 각 앱의 정식 release 절차와 정확한 main SHA의 CI 게이트를 통과한다.
+1. 코드 검토·관련 검증을 완료하고 각 앱의 정식 release 절차와 정확한 main SHA의 로컬 전체 검증 게이트·원격 push 확인를 통과한다.
 2. Office의 기존 `manage-office-account` 비밀번호 재발급 경로로 구매계정의 기존 Auth ID와 5개 매장 구매 권한을 유지한다. 임시 비밀번호는 보안 경로로 전달하고 기존 최초 변경 절차를 따른다.
-3. 2026-10-23 사용자 승인에 따라 두 앱의 정식 운영 배포 경로를 실행한다. 실제 구매 승인, 발주, 공급업체 전송, 입고 재고 반영은 테스트 목적으로 실행하지 않는다.
+3. 사용자 확인 후 두 앱의 승인된 운영 배포 경로를 실행한다. 실제 구매 승인, 발주, 공급업체 전송, 입고 재고 반영은 테스트 목적으로 실행하지 않는다.
 4. 재발급 후 실제 구매계정 로그인과 첨부 PR 3건의 승인 버튼·연결 PO·입고 표시를 다시 확인한다. 소스 및 분리 DB 검증을 운영 검증으로 표시하지 않는다.
 
-Office `AGENTS.md`의 운영 변경 명시 승인 요구는 2026-10-23 사용자 요청으로 충족됐다. 최신 main 분리 작업 사본에서 관련 변경만 커밋하며 운영 배포 게이트를 유지한다.
+Office `AGENTS.md`는 운영 변경에 대해 “Changes to production environments, including deployments and database mutations, require ... explicit confirmation.”을 요구한다. 이번 구현 요청만으로 운영 배포·비밀번호 재발급을 실행하지 않았다.
 
 ## 검토용 결과물
 

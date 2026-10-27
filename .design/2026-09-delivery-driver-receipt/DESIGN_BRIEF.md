@@ -1,5 +1,7 @@
 # 설계 브리프: 직접 배달 기사용 영수증
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-09-01
 Source: 사용자 요구사항과 현재 직접 배달·영수증·프린트 큐 계약 조사
 Status: 소스 구현·로컬 검증 완료 — migration 적용·배포·실프린터 검수 미실행
@@ -143,5 +145,5 @@ copy type으로 격리한다.
 5. 매장·역할 경계와 PII redaction 계약 테스트가 통과한다.
 6. 기존 고객 영수증, 직접 주문, 출력 라우팅 회귀 테스트와 전체 repository
    검증이 통과한다.
-7. production 반영은 exact pushed SHA의 GitHub Actions 성공과 별도 배포
+7. production 반영은 exact pushed SHA의 로컬 자동 검증 성공과 별도 배포
    승인 뒤에만 수행한다.

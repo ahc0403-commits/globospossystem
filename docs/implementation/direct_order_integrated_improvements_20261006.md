@@ -1,5 +1,7 @@
 # 직접 주문 고객 화면·입금 캡처·전체 포장 출력 개선 기록
 
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
 작성일: 2026-10-06, Asia/Ho_Chi_Minh.
 
 배달·방문포장 주문의 세 가지 개선을 소스에 구현했다. 사용자가 확인한 누락 경로는 **Windows Print Station 자동 출력**이며, 추가 지시에 따라 고객 영수증뿐 아니라 **전체 출력폼**에 인원·일회용품 수량을 전달하고 표시하도록 보완했다.
@@ -44,13 +46,13 @@ tracked/untracked 수정은 옮기거나 초기화하지 않고 이번 변경만
 - 운영 SQL 검증은 기존 실제 주문, 배포된 함수와 임시 테이블을 사용한다. 고객 주문,
   결제, 실제 print queue에는 테스트 데이터를 생성하지 않는다.
 - 공식 `scripts/deploy_pos_production.sh`와 정확한 pushed main SHA의 필수 CI를 사용한다.
-  Windows 패키지도 같은 SHA의 GitHub Actions artifact로 제공한다.
+  Windows 패키지도 같은 SHA를 로컬 Windows x64 또는 로컬 VM에서 정식 스크립트로 빌드하고 로그·환경·패키지 해시를 제공한다. Mac 웹 빌드로 네이티브 검증을 대신하지 않는다.
 
 ## 검증 상태
 
 최신 main에서 관련 기능·전체 저장소·SQL·Edge·Windows 빌드 및 운영 검증을 진행한다.
 원래 작업 디렉터리의 기존 실패 2건과 감사 probe는 최신 main에 함께 가져오지 않았다.
-새 release 결과를 해당 SHA의 CI·공식 배포 로그·운영 검증·artifact hash로 기록한다.
+새 release 결과를 해당 SHA의 로컬 전체 검증·공식 배포 로그·운영 검증·artifact hash로 기록한다.
 실제 Windows 현장 설치와 물리 프린터 출력은 원격 확인 증거가 없으면 확인 완료로 표시하지 않는다.
 
 최종 사양: [통합 계획](../plans/direct_order_integrated_customer_and_packing_improvement_20261006.md),

@@ -4,13 +4,14 @@
   "schema_source": "public,pos_invoice_private schema-only export from pinned POS production",
   "migration_sha256": "c9c0171c76ca781499c02ec61702657fae04b0ce6efde998e8779927c75e87df",
   "production_shape": {
-    "historical_queues_initial": 4463,
     "max_daily_queues_last_7_days": 117,
     "seven_day_queues": 628,
     "mean_lines": 4.45,
     "p95_lines": 9,
     "max_lines": 15,
-    "active_kds_roles": 4
+    "active_kds_roles": 4,
+    "initial_total_queues": 4463,
+    "initial_count_includes_today": true
   },
   "functional_full_schema_parity": "PASS before and after rollback/reapply",
   "http_errors": 0,
@@ -20,6 +21,7 @@
   "limitations": [
     "Synthetic rows matched real aggregate shape; actual production schema/indexes, isolated Docker resources, loopback HTTP.",
     "No physical terminal, store Wi-Fi, Flutter heap, button-to-frame or physical audio timing.",
-    "40-terminal artificial saturation p95 exceeds the 300ms history target; Bunsik actual 4-role target meets it."
+    "40-terminal artificial saturation p95 exceeds the 300ms history target; Bunsik actual 4-role target meets it.",
+    "Reconciliation provenance: main named 4463 historical_queues_initial; the restored dated narrative explicitly includes 3 current-day queues in this total. Retain the more precise total label; the synthetic HTTP fixture separately uses 4463 historical rows. These are not the same population."
   ]
 }

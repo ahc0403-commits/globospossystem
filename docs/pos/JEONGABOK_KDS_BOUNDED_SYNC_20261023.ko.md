@@ -1,6 +1,10 @@
 # 전가복 KDS 조회·알림 개선 검증
 
-2026-10-23 베트남 시간. 이 문서는 구현과 배포 전 검증 기록이다. 운영 적용은 아래 배포 증거를 별도로 확인한다.
+> Reconciled 2026-10-27: historical source and operational observations below retain their original SHA/time and have not been revalidated by this transfer. Current verification follows cloud-first `CLAUDE.md` and the full committed candidate/exact-main gate; historical CI or local-only wording is not a current release requirement. No production action is authorized by this document.
+
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
+2026-10-23 베트남 시간. 운영 DB와 웹 적용을 완료했다. 소스·부하 검증·운영 적용·현장 실측은 구분하며, 현장 frame/가청 시간은 미측정이다.
 
 전가복의 active revision/Broadcast를 유지하면서 일반 invalidation을 제어 이벤트 경계 안에서 중복 제거한다. 고유 주문 100개는 delta 1회와 ticket batch 2회로 읽는다. 클라이언트 배치 50개, 서버 입력 상한 100개(중복 제거 전), 이력 페이지 50개/서버 100개이며 단말의 foreground·복구·완료 후 조회·이력이 하나의 읽기 lane을 공유한다. SQL은 요청한 큐/주문을 먼저 제한하고 품목·이벤트·ready lot·포장 관계를 각각 집계한다. 단건 RPC 반복이나 배치 실패 후 단건 fan-out은 없다.
 
@@ -44,10 +48,37 @@ HTTP delta fixture는 빈 로그의 복구 응답을 시험했다. 100개 변경
 - `test/emergency_fulfillment_responsive_test.dart`: 즉시 시각 알림과 최초 500ms window, 기존 화면/부분 전달/음료/콤보 계약. 관련 Flutter 테스트 총 98개 통과.
 - `scripts/test_jeongabok_kds_bounded_sync.sh`: SQL 범위·권한·현재 단건 카드와 동등성(전체 schema 실행), 불변 메뉴 선택·부분 수량·ready sequence·취소·픽업/배달·직접 음료·종료 세션, rollback/reapply.
 - `scripts/measure_jeongabok_kds_sync.sh <schema-only.sql> <output-dir>`: 전체 운영 schema에서 위 부하와 nested 실행 계획·응답 크기·메모리 재현.
-- 전체 저장소 검사와 exact-main 필수 GitHub Actions 성공 후 `scripts/deploy_pos_production.sh`의 DB-only 단일 migration과 web-only를 순차 실행한다.
+- 전체 저장소 검사와 exact-main 필수 로컬 자동 검증 성공 후 `scripts/deploy_pos_production.sh`의 DB-only 단일 migration과 web-only를 순차 실행한다.
 
 원본 수치는 [측정 디렉터리](../measurements/jeongabok-kds-20261023/)에 보존했다. 버튼→상대 단말 frame p95 1.5초, 데이터→시각 p95 100ms, 실제 첫 가청 시간·물리 단말 현재 접속 수는 계측하지 않았다. 집중 부하 40대의 위 수치를 이 목표의 달성 증거로 사용하지 않는다.
 
 ## 운영 적용 증거
 
-배포 전. migration `20261023080000_jeongabok_kds_bounded_sync.sql`과 새 웹의 공식 배포 및 운영 읽기 확인 결과를 별도 기록한다.
+- PR [#623](https://github.com/ahc0403-commits/globospossystem/pull/623)을 병합한 정확한 main은 `943f2640297d87b7b1579ef119905a5ed6466855`다.
+- 최종 소스 `1863cd21`의 [PR CI](https://github.com/ahc0403-commits/globospossystem/actions/runs/39922278570)와 병합 main의 [배포 CI](https://github.com/ahc0403-commits/globospossystem/actions/runs/39925274906)가 모두 성공했다. 로컬 전체 검사도 최종 소스에서 exit 0이다(Flutter 2,544 passed/98 skipped, 관련 98 passed, 별도 Chrome 단말 인증 3 passed).
+- 공식 `scripts/deploy_pos_production.sh`의 DB-only dry-run → 실제 단일 migration `20261023080000` 적용 → 이력 presence 확인을 순차 실행했다. 운영 읽기 확인 시각은 15:57:35다.
+- 같은 공식 스크립트의 web-only dry-run → 실제 배포를 실행했다. skip 옵션 없이 운영 Auth/test-data hygiene, 정적 분석·관련 테스트, Vercel build/deploy, 운영 URL HTTP 200, 기존 승인 캐셔 계정 로그인·프로필 조회가 통과했다. 해당 로그인 smoke는 전가복 비밀번호를 사용한 검사가 아니다.
+- Vercel production `dpl_A48yV8fV1yLzBxr3Pqiz6ov5EwVo`가 `READY`이며 운영 alias `globospossystem.vercel.app`와 metadata SHA가 위 main에 일치한다. 웹 배포 완료는 약 15:59다.
+- 전가복 4개 활성 배정의 Auth 연결·확정 상태·매장 claim은 각각 4/4였고 활성 tray 배정은 0이다. 계정을 생성/초기화/재활성화하지 않았다.
+- 분식클럽 4개 활성 배정의 sync config는 기존 함수와 동일했다. 기존 `get_kds_bootstrap_v2`, `get_kds_ticket_v2`, `get_emergency_station_snapshot` 본문 해시도 변경되지 않았다.
+
+### 실제 운영 데이터의 읽기 대조
+
+15:57:35에 한 read-only repeatable-read snapshot에서 기존 bootstrap과 새 bootstrap을 배정별로 순서대로 실행했다. 카드의 수량·불변 메뉴 선택·포장·상태와 snapshot header가 4/4 일치했다. 새 카드에 함께 반환되는 station timer와 추가 호환 tray-ready metadata만 비교 시 정규화했다. 입력/출력 전체 이름이나 사용자 ID는 증거 파일에 저장하지 않았다.
+
+| 실제 배정 | 현재 카드 | 기존 DB 시간 | 새 DB 시간 | 기존 / 새 응답 bytes |
+|---|---:|---:|---:|---:|
+| 저장 2F | 17 | 354.193ms | 45.044ms | 128,226 / 65,716 |
+| 저장 3F A | 0 | 30.489ms | 9.942ms | 979 / 979 |
+| 저장 3F B | 0 | 28.666ms | 9.902ms | 979 / 979 |
+| 주방 | 20 | 319.601ms | 33.818ms | 139,430 / 71,990 |
+
+각 배정의 **단일 DB 표본**이며 기존 함수를 먼저 실행했다. HTTP·네트워크·frame·가청 시간을 포함하지 않고 p95나 혼잡 시간 보증도 아니다. 완료 이력을 필수 응답에서 분리한 bytes 차이는 의도된 변경이다. 카드와 이력 데이터를 누락시켜 얻은 동일 범위 속도 비교로 해석하지 않는다. 완료 이력은 별도의 제한된 페이지에서 조회한다.
+
+배포 전 13:58~14:58의 실제 HTTP 로그에서는 저장 2F 단건 조회 18건 p95 807ms, 주방 16건 p95 919ms였고 오류는 0이었다. 서로 다른 날짜/부하·계층의 위 DB 표본과 직접 비율 비교하지 않는다.
+
+운영 증거는 [production-release.json](../measurements/jeongabok-kds-20261023/production-release.json)에 보존했다. 새 batch/500ms/5초 동작은 전가복 단말이 새 웹 번들을 읽은 후 사용한다. 기존에 열려 있는 전가복 단말은 새로고침이 필요하다. 물리 단말의 버튼→표시와 가청 시간은 별도 현장 계측 대상이다.
+
+### 배포 후 실제 HTTP 관찰의 한계
+
+15:57:30~16:02:00의 전가복 실제 클라이언트 로그에서는 설정 조회만 저장 2F 10건·주방 19건을 관찰했다. 오류 0건, origin p95는 각각 27ms/57ms다. 새 ticket batch/bootstrap/history RPC 호출은 **0건**이므로 신규 클라이언트의 실사용 HTTP p95 개선을 검증했다고 말할 수 없다. 이는 짧은 관찰 구간이며, 기존 전가복 단말에서 새 웹 번들을 새로고침하고 현장 표시·가청 확인을 이어가야 한다. 서버·웹 배포 완료와 현장 활성화 확인을 구분한다.

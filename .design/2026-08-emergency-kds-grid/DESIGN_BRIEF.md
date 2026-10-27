@@ -1,5 +1,7 @@
 # 설계 브리프: 비상 대응 KDS 고정 분할 보드
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-08-11
 Source: 사용자 제공 KDS 참고 이미지 2장과 현재 비상 대응 구현
 Status: 계획 전용 — 구현·DB 적용·배포하지 않음
@@ -98,4 +100,4 @@ Status: 계획 전용 — 구현·DB 적용·배포하지 않음
 - 중복 탭, 재전송, 두 장치 동시 완료가 수량을 중복 반영하지 않는다.
 - KO/VI/EN, 100%/130%/200% 글자 크기, 세로/가로 회전에서 overflow와 잘린 동작 버튼이 없다.
 - 비상 모드 OFF의 출력·결제·기존 주문 흐름은 변경되지 않는다.
-- 로컬 검증과 정확한 pushed head SHA의 필수 GitHub Actions가 모두 성공하기 전에는 release gate를 PASS로 보고하지 않는다.
+- 정확한 pushed head SHA의 필수 로컬 전체 검증이 성공하기 전에는 release gate를 PASS로 보고하지 않는다.

@@ -1,5 +1,7 @@
 # 배달·포장 주문 및 캐셔 주문 수정 구현 기록
 
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
 2026-10-09 · Asia/Ho_Chi_Minh
 
 이 문서는 원래 사용자 작업 사본에서 수행한 구현 단계 기록이다. 이후 배포는 별도의 깨끗한 최신 main 작업 사본에서 검증하고 운영 반영 기록으로 구분한다.
@@ -71,4 +73,4 @@ SQL은 삭제 가능한 Docker PostgreSQL에서 실행했다. MISA intake는 기
 | 운영 Edge·클라이언트 배포 | 미실행 |
 | 실제 모바일·이체·Windows 출력 확인 | 미실행 |
 
-배포할 때 선행 migration과 신규 세 migration을 먼저 통합 검증하고 DB → Edge → 클라이언트 순으로 적용해야 한다. 정확한 pushed HEAD의 필수 GitHub Actions 성공과 `scripts/deploy_pos_production.sh`의 gate가 필요하다. 기존 불일치를 무시해 release PASS로 보고하지 않는다. 이미 발급된 주문 링크·확정 견적·입금·취소 원장을 삭제하는 롤백은 사용하지 않는다.
+배포할 때 선행 migration과 신규 세 migration을 먼저 통합 검증하고 DB → Edge → 클라이언트 순으로 적용해야 한다. 정확한 pushed HEAD의 필수 로컬 전체 검증 성공과 `scripts/deploy_pos_production.sh`의 gate가 필요하다. 기존 불일치를 무시해 release PASS로 보고하지 않는다. 이미 발급된 주문 링크·확정 견적·입금·취소 원장을 삭제하는 롤백은 사용하지 않는다.

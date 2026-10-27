@@ -1,5 +1,7 @@
 # Scalability plan — phase 2: stop unchanged promotion writes
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 This additive migration starts from phase 1C, draft PR #452, at
 `a5fdc39149e0ea93e6c9472ef613c15f6ec32e89`. Work is isolated from the original
 workspace's uncommitted files. It replaces only `sync_active_order_promotion`;
@@ -120,11 +122,11 @@ The harness is included in `scripts/check_repo.sh` and therefore GitHub CI.
   The ordinary Flutter run's 50 skips include the SQL/API groups subsequently
   executed by their harnesses. Existing optional Wasm dry-run/font warnings
   remain; the standard web build succeeded.
-- Exact-head GitHub checks: required; consult the stacked draft PR.
+- Exact-head local verification: required; consult the stacked draft PR.
 - Migration applied to production: no.
 - Production deployed / operationally verified: no / no.
 
-After review and exact-head CI, an authorized release must use the production
+After review and exact-head local verification, an authorized release must use the production
 wrapper, the matching preflight/verify scripts, and earlier phase prerequisites.
 No bulk business-data rewrite is required. On a pilot store, check an unchanged
 refresh, campaign save/disable, start/end boundary, item edit, manual discount,

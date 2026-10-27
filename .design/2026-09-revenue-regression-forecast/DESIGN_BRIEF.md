@@ -1,5 +1,7 @@
 # 범용 매출 예측·개선 제안: 제품 전체 완성 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 - 갱신일: 2026-09-16
 - 계획 버전: v3 — 계산·UI·모바일·언어·접근성·운영 출시 통합
 - 상태: **1차 소스 구현 완료 / 자동 검증 진행 / 실기기 미검증 / DB 미적용 / 미배포**
@@ -203,7 +205,7 @@ Photo 운영 화면에서도 동일한 공유 예측 화면으로 진입할 수 
    실기기 터치·키보드·화면낭독기로 핵심 여정을 완료하며 실제 보고서가 회귀하지 않는다.
 10. 구현 시 관련 계산·SQL/RLS·widget·export 검증과 repository preflight를 완료한다.
     배포는 별도 승인 후 scripts/deploy_pos_production.sh 및 exact pushed head SHA의
-    필수 GitHub Actions를 통과해야 한다. 소스 구현·DB 적용·배포·운영 검증을 각각 기록한다.
+    필수 로컬 자동 검증을 통과해야 한다. 소스 구현·DB 적용·배포·운영 검증을 각각 기록한다.
 11. 제품 완료 계약의 상태/권한/파일/성능/접근성 행렬에 증거가 있고, 언어·모바일
     실패를 후속 정리로 넘기지 않는다. 미검증 환경은 완료가 아니라 NOT RUN/BLOCKED다.
 12. 세 언어 도움말과 운영 담당자의 입력·오류 복구 안내가 준비되고, 승인된 공개 후
@@ -235,7 +237,7 @@ Photo는 실제 기기 수·가동시간과 수동 신고 완전성을 확인한
 | 성능 | 웹 UI 비차단, 계산 취소, 큰 기간/여러 층 | 지정 환경 p50/p95·메모리 측정 |
 | 보안 | 화면·route·RPC·export 권한, 캐시/로그 보호 | 역할/매장별 접근 tests |
 | 파일·지원 | 실제/예측 분리, 모바일 저장, 세 언어 도움말 | 실제 파일 열기·운영자 UAT |
-| 배포·인계 | migration 호환, exact SHA CI, 공식 배포·복구 | 단계별 증거와 운영 확인 |
+| 배포·인계 | migration 호환, exact SHA local verification, 공식 배포·복구 | 단계별 증거와 운영 확인 |
 
 구현은 TASKS의 순서로 진행하되 UI·언어·모바일을 처음부터 각 작업에 포함한다.
 마지막에 한 번 점검하는 항목으로 미루지 않는다. 세부 상호작용/시험/성능 예산은

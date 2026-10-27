@@ -1,0 +1,16 @@
+[
+  {
+    "action": "updates",
+    "http": 400,
+    "body": {
+      "error": "INVALID_ACTION"
+    }
+  },
+  {
+    "action": "proof_upload_url_v3",
+    "http": 400,
+    "body": {
+      "error": "INVALID_ACTION"
+    }
+  }
+]

@@ -1,5 +1,7 @@
 # 신규 매장 개점 구조 진단과 POS 재편 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-10-21 · 대상: 분식클럽, 전가복 및 이후 신규 매장
 
 검토 기준: `e22f9d3e89672e36bbad6c30db303c60bb6a8f26` / `codex/cleanup-existing-workspace-20261021`
@@ -265,7 +267,7 @@ KDS의 묶음 표시·수량 선택도 별도로 이행한다. 현재 `menuOptio
 
 새 핵심 SQL은 현재 함수 정의를 명시적으로 제공한다. 과거 migration의 문자열 치환을 무조건 삭제하거나 기존 함수를 이름만 바꾸어 재사용하지 않는다. 모든 migration을 순서대로 재생한 DB에서 최종 함수와 권한을 검증한다.
 
-배포가 요청되는 구현 단계에서는 `scripts/check_repo.sh`의 관련 검사와 전체 gate를 거친다. 운영 배포는 `scripts/deploy_pos_production.sh` 및 배포 runbook을 사용하고, 정확한 pushed head SHA의 필수 GitHub Actions 성공과 배포 후 확인을 구분해서 기록한다.
+배포가 요청되는 구현 단계에서는 `scripts/check_repo.sh`의 관련 검사와 전체 gate를 거친다. 운영 배포는 `scripts/deploy_pos_production.sh` 및 배포 runbook을 사용하고, 정확한 pushed head SHA의 필수 로컬 자동 검증 성공과 배포 후 확인을 구분해서 기록한다.
 
 ## 9. 회귀검증과 성능 기준
 

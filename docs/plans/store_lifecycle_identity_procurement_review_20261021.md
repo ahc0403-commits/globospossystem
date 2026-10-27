@@ -1,5 +1,7 @@
 # 신규 매장 식별·신고·구매·품질 구조 재검토 및 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-10-21 · 검토 기준: `49ffc0ff6b380e8fb009c42ee5cdff757958e97a`
 
 보완일: 2026-10-22 · 단층 매장의 층 정보 선택 사항, 홀/구역 중심 배정, 필요한 계정만 생성하는 기준을 명시했다.
@@ -232,7 +234,7 @@ flowchart LR
 
 사용할 기존 검사: `test/store_account_onboarding_sql_test.sh`, `test/store_onboarding_widget_test.dart`, `scripts/test_store_operating_upgrade.sh`, `test/corporate_sales_export_sql_test.sh`, `test/einvoice_misa_workbook_test.dart`, `test/daily_sales_report_service_test.dart`, `test/all_store_sales_reporting_test.dart`, `scripts/test_procurement_v2.sh`, `scripts/test_bunsik_inventory_stocktake.sh`, `scripts/test_inventory_safety_stock.sh`. 새 계약은 문자열 존재 검사 외에 실제 SQL 상태 전이·동시 트랜잭션·위젯·파일 재읽기 검사를 추가한다.
 
-배포 단계에는 `bash scripts/check_repo.sh`, 정확한 pushed SHA의 필수 CI, `scripts/deploy_pos_production.sh`를 적용한다. fixture 성공, 현재 schema 업그레이드, 빈 DB 전체 migration 재생, 운영 적용, 현장 확인은 서로 다른 증거로 기록한다.
+배포 단계에는 `bash scripts/check_repo.sh`, 정확한 pushed SHA의 필수 로컬 검증, `scripts/deploy_pos_production.sh`를 적용한다. fixture 성공, 현재 schema 업그레이드, 빈 DB 전체 migration 재생, 운영 적용, 현장 확인은 서로 다른 증거로 기록한다.
 
 ## 8. 데이터 접근·성능 계획
 

@@ -1,5 +1,7 @@
 # Independent brand registration
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Super Admin can register a brand without a store or legal entity, then link
 existing legal entities and immediately select the brand when adding a store.
 Registration never creates a store, Office record, accounting account or tax
@@ -104,7 +106,7 @@ Production migration companions are
 `scripts/preflight_independent_brand_registration.sql` and
 `scripts/verify_independent_brand_registration.sql`. The isolated SQL runner
 executes both. Release this feature through the official **DB-only** migration
-mode followed by **web-only** mode, with successful required GitHub Actions on
+mode followed by **web-only** mode, with successful required local verification on
 the exact freshly fetched main SHA for both phases. No Edge Function change is
 needed. Keep operational verification and deployment evidence separate from
 these source-level results.

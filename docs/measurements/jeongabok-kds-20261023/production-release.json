@@ -1,0 +1,297 @@
+{
+  "release_sha": "943f2640297d87b7b1579ef119905a5ed6466855",
+  "pr": 623,
+  "pr_ci": {
+    "sha": "1863cd21ab62e92813a1908335b668553bc84e8c",
+    "pr": 623,
+    "run": 39922278570,
+    "job": 120310107133,
+    "status": "success",
+    "local": {
+      "focused_flutter_passed": 98,
+      "full_flutter_passed": 2544,
+      "full_flutter_skipped": 98,
+      "check_repo": "exit 0",
+      "browser_auth_passed": 3
+    }
+  },
+  "main_ci": {
+    "sha": "943f2640297d87b7b1579ef119905a5ed6466855",
+    "run": 39925274906,
+    "job": 120319999832,
+    "status": "success"
+  },
+  "db": {
+    "migration": "20261023080000",
+    "official_db_only_exit": 0,
+    "operational_verification": [
+      {
+        "verified_vietnam": "2026-10-23 15:57:35.588625",
+        "samples": [
+          {
+            "actor": 1,
+            "parity": "pass",
+            "station": "floor",
+            "stored_floor": "2F",
+            "current_cards": 17,
+            "legacy_bootstrap_bytes": 128226,
+            "legacy_bootstrap_db_ms": 354.193,
+            "bounded_bootstrap_bytes": 65716,
+            "bounded_bootstrap_db_ms": 45.044
+          },
+          {
+            "actor": 2,
+            "parity": "pass",
+            "station": "floor",
+            "stored_floor": "3F",
+            "current_cards": 0,
+            "legacy_bootstrap_bytes": 979,
+            "legacy_bootstrap_db_ms": 30.489,
+            "bounded_bootstrap_bytes": 979,
+            "bounded_bootstrap_db_ms": 9.942
+          },
+          {
+            "actor": 3,
+            "parity": "pass",
+            "station": "floor",
+            "stored_floor": "3F",
+            "current_cards": 0,
+            "legacy_bootstrap_bytes": 979,
+            "legacy_bootstrap_db_ms": 28.666,
+            "bounded_bootstrap_bytes": 979,
+            "bounded_bootstrap_db_ms": 9.902
+          },
+          {
+            "actor": 4,
+            "parity": "pass",
+            "station": "kitchen",
+            "stored_floor": null,
+            "current_cards": 20,
+            "legacy_bootstrap_bytes": 139430,
+            "legacy_bootstrap_db_ms": 319.601,
+            "bounded_bootstrap_bytes": 71990,
+            "bounded_bootstrap_db_ms": 33.818
+          }
+        ],
+        "migration_version": "20261023080000"
+      }
+    ]
+  },
+  "other_stores": [
+    {
+      "verified_vietnam": "2026-10-23 15:59:58.527435",
+      "unchanged_bunsik_assignments": 4,
+      "existing_readers": [
+        {
+          "function": "public.get_kds_bootstrap_v2()",
+          "unchanged": true
+        },
+        {
+          "function": "public.get_kds_ticket_v2(uuid)",
+          "unchanged": true
+        },
+        {
+          "function": "public.get_emergency_station_snapshot()",
+          "unchanged": true
+        }
+      ]
+    }
+  ],
+  "jeongabok_auth_readiness": [
+    {
+      "active_assignments": 4,
+      "auth_profiles_present": 4,
+      "auth_confirmed": 4,
+      "auth_store_scope_present": 4,
+      "active_tray_assignments": 0
+    }
+  ],
+  "web": {
+    "official_web_only_exit": 0,
+    "live_http": 200,
+    "approved_existing_operational_cashier_login_and_profile": "PASS",
+    "jeongabok_password_login": "not exercised; profile/Auth confirmation/store claims verified read-only",
+    "deployment": {
+      "id": "dpl_A48yV8fV1yLzBxr3Pqiz6ov5EwVo",
+      "readyState": "READY",
+      "target": "production",
+      "url": "globospossystem-g6g4x8c6n-andres-projects-c63d3b09.vercel.app",
+      "sha": "943f2640297d87b7b1579ef119905a5ed6466855",
+      "aliases": [
+        "globospossystem.vercel.app",
+        "globospossystem-andres-projects-c63d3b09.vercel.app"
+      ],
+      "createdAt": 1792745974699,
+      "ready": 1792745977738
+    }
+  },
+  "before_http": {
+    "window_start": "2026-10-23T06:58:00Z",
+    "window_end": "2026-10-23T07:58:00Z",
+    "rows": [
+      {
+        "actor": 1,
+        "errors": 0,
+        "max_ms": 63,
+        "p50_ms": 32,
+        "p95_ms": 48,
+        "path": "/rest/v1/rpc/get_kds_changes_v2",
+        "requests": 22,
+        "station": "floor",
+        "stored_floor": "2F"
+      },
+      {
+        "actor": 1,
+        "errors": 0,
+        "max_ms": 376,
+        "p50_ms": 28,
+        "p95_ms": 141,
+        "path": "/rest/v1/rpc/get_kds_sync_config",
+        "requests": 119,
+        "station": "floor",
+        "stored_floor": "2F"
+      },
+      {
+        "actor": 1,
+        "errors": 0,
+        "max_ms": 807,
+        "p50_ms": 73,
+        "p95_ms": 807,
+        "path": "/rest/v1/rpc/get_kds_ticket_v2",
+        "requests": 18,
+        "station": "floor",
+        "stored_floor": "2F"
+      },
+      {
+        "actor": 4,
+        "errors": 0,
+        "max_ms": 847,
+        "p50_ms": 393,
+        "p95_ms": 847,
+        "path": "/rest/v1/rpc/get_kds_bootstrap_v2",
+        "requests": 4,
+        "station": "kitchen",
+        "stored_floor": null
+      },
+      {
+        "actor": 4,
+        "errors": 0,
+        "max_ms": 278,
+        "p50_ms": 26,
+        "p95_ms": 239,
+        "path": "/rest/v1/rpc/get_kds_changes_v2",
+        "requests": 29,
+        "station": "kitchen",
+        "stored_floor": null
+      },
+      {
+        "actor": 4,
+        "errors": 0,
+        "max_ms": 669,
+        "p50_ms": 28,
+        "p95_ms": 173,
+        "path": "/rest/v1/rpc/get_kds_sync_config",
+        "requests": 242,
+        "station": "kitchen",
+        "stored_floor": null
+      },
+      {
+        "actor": 4,
+        "errors": 0,
+        "max_ms": 919,
+        "p50_ms": 81,
+        "p95_ms": 919,
+        "path": "/rest/v1/rpc/get_kds_ticket_v2",
+        "requests": 16,
+        "station": "kitchen",
+        "stored_floor": null
+      }
+    ]
+  },
+  "before_db": [
+    {
+      "captured_vietnam": "2026-10-23 14:57:09.981544",
+      "legacy_bootstrap_single_db_samples": [
+        {
+          "actor": 1,
+          "bytes": 115839,
+          "db_ms": 717.345,
+          "station": "floor",
+          "stored_floor": "2F",
+          "current_cards": 16,
+          "completed_cards": 15
+        },
+        {
+          "actor": 2,
+          "bytes": 952,
+          "db_ms": 31.095,
+          "station": "floor",
+          "stored_floor": "3F",
+          "current_cards": 0,
+          "completed_cards": 0
+        },
+        {
+          "actor": 3,
+          "bytes": 952,
+          "db_ms": 27.675,
+          "station": "floor",
+          "stored_floor": "3F",
+          "current_cards": 0,
+          "completed_cards": 0
+        },
+        {
+          "actor": 4,
+          "bytes": 125816,
+          "db_ms": 311.592,
+          "station": "kitchen",
+          "stored_floor": null,
+          "current_cards": 18,
+          "completed_cards": 17
+        }
+      ]
+    }
+  ],
+  "limits": {
+    "batch": 50,
+    "server_batch_input_cap": 100,
+    "history_page": 50,
+    "max_read_requests_per_device": 1
+  },
+  "unmeasured": [
+    "physical button to remote frame",
+    "physical first audible speech",
+    "Flutter heap",
+    "online physical terminal census"
+  ],
+  "post_deploy_http": {
+    "window_start": "2026-10-23T08:57:30Z",
+    "window_end": "2026-10-23T09:02:00Z",
+    "rows": [
+      {
+        "actor": 1,
+        "errors": 0,
+        "max_ms": 27,
+        "p50_ms": 22,
+        "p95_ms": 27,
+        "path": "/rest/v1/rpc/get_kds_sync_config",
+        "requests": 10,
+        "station": "floor",
+        "stored_floor": "2F"
+      },
+      {
+        "actor": 4,
+        "errors": 0,
+        "max_ms": 57,
+        "p50_ms": 18,
+        "p95_ms": 57,
+        "path": "/rest/v1/rpc/get_kds_sync_config",
+        "requests": 19,
+        "station": "kitchen",
+        "stored_floor": null
+      }
+    ],
+    "new_jeongabok_rpc_requests": 0,
+    "note": "Short observation including old cached clients. No RPC-level p95 improvement claim without new-client samples."
+  },
+  "client_activation": "New RPC calls were not observed in the short window. Existing JeonGabok tabs must reload the new web bundle; physical frame/audio validation remains unmeasured."
+}

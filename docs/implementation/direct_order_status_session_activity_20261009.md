@@ -1,5 +1,7 @@
 # 포장·배달 금액 확인 후 주문 현황 조회 실패 수정
 
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
 2026-10-09 · Asia/Ho_Chi_Minh
 
 ## 원인과 운영 확인
@@ -38,6 +40,6 @@ volatility 외 모든 필드가 동일한지 확인한다. 주문·결제·재�
 ## 운영 반영
 
 이 문서 작성 시점은 소스 수정·로컬 검증 상태이며 운영 적용 전이다.
-정확한 pushed SHA의 필수 GitHub Actions를 확인하고, main 통합 후
+정확한 pushed SHA의 필수 로컬 전체 검증 증거와 원격 push를 확인하고, main 통합 후
 `scripts/deploy_pos_production.sh --db-only --migration supabase/migrations/20261009010000_direct_order_status_session_activity.sql`
 의 gate를 통해 적용한다. 웹·Edge 재배포는 필요하지 않다.

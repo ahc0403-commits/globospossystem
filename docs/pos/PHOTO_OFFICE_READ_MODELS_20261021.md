@@ -1,5 +1,7 @@
 # Office Photo read models
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Migration `20261021020000_office_photo_operations_read_models.sql` adds three service-only, read-only RPCs for the Office `pos-bridge`:
 
 - `office_photo_inventory_page`: current active POS inventory, 100-item UUID cursor page, original quantity/unit/update time; no Office stock import or addition.
@@ -12,4 +14,4 @@ Public/anon/authenticated execution is revoked. Office authenticates the employe
 
 Run `bash scripts/test_photo_operations_read_models.sh` for an isolated, Unix-socket-only PostgreSQL fixture. It verifies aggregate fanout, mixed scopes, masks, exact payroll periods, latest attendance, bounds, and ACLs. It reports response sizes/times for 6 and 50 stores. These measurements are synthetic, not production/load evidence. The script is included in `scripts/check_repo.sh`.
 
-Release through `scripts/deploy_pos_production.sh --db-only --migration supabase/migrations/20261021020000_office_photo_operations_read_models.sql`, after exact pushed-main required CI and the production target/history gates. Companion Office UI/bridge and Office contract/inventory RPC changes are in the Office repository. No business data or login permissions are mutated by this migration.
+Release through `scripts/deploy_pos_production.sh --db-only --migration supabase/migrations/20261021020000_office_photo_operations_read_models.sql`, after complete local verification for the exact pushed-main SHA with full logs and remote push confirmation and the production target/history gates. Companion Office UI/bridge and Office contract/inventory RPC changes are in the Office repository. No business data or login permissions are mutated by this migration.

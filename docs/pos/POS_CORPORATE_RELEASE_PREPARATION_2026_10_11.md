@@ -1,6 +1,8 @@
-# 법인 계좌·매출신고·MISA 배포 및 필수 CI 준비
+# 법인 계좌·매출신고·MISA 배포 및 필수 로컬 검증 준비
 
-작성일: 2026-10-11. 준비 범위는 검토 가능한 소스, 원자적 SQL 패키지, 필수 CI다. **배포 금지 지시가 유효하다.** 운영 DB 쓰기, Edge/Web 배포, main 병합, 설치 자동화 앱 갱신, 신고·발행·고객 발송은 실행하지 않는다.
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
+작성일: 2026-10-11. 준비 범위는 검토 가능한 소스, 원자적 SQL 패키지, 필수 로컬 검증이다. **배포 금지 지시가 유효하다.** 운영 DB 쓰기, Edge/Web 배포, main 병합, 설치 자동화 앱 갱신, 신고·발행·고객 발송은 실행하지 않는다.
 
 ## 격리한 후보
 
@@ -20,9 +22,9 @@
 
 운영 프로젝트 `ynriuoomotxuwhuxxmhj`에서 실제 선행 함수의 anchor, 새 스키마 미적용, AKJ 법인 1개를 **READ ONLY 트랜잭션**으로 확인해 `CORPORATE_RELEASE_PREFLIGHT=PASS`를 받았다. 고객 데이터나 자격 증명을 출력하지 않았다. 미래 배포 시 동일 검사를 다시 실행해야 한다. 이 결과는 SQL을 적용한 증거가 아니다.
 
-## 필수 CI
+## 필수 로컬 검증
 
-GitHub main 보호 규칙은 `POS release contract`, strict=true다. `.github/workflows/pos_release_contract.yml`은 PR 후보의 정확한 SHA에서 `bash scripts/check_repo.sh`를 실행한다. 검증에는 전체 Flutter 분석·테스트·Web 빌드, 기존 SQL/Edge/배포 게이트 회귀와 아래 신규 계약을 포함한다.
+작성 당시 GitHub main 보호 규칙은 `POS release contract`, strict=true로 확인됐다. 현재 원격 보호 규칙은 별도 읽기 전용 재조회가 필요하며, 남은 원격 설정 의존성으로 관리한다. `.github/workflows/pos_release_contract.yml`은 PR 후보의 정확한 SHA에서 `bash scripts/check_repo.sh`를 실행한다. 검증에는 전체 Flutter 분석·테스트·Web 빌드, 기존 SQL/Edge/배포 게이트 회귀와 아래 신규 계약을 포함한다.
 
 - 구성 SQL과 원자적 패키지 각각의 실제 적용 시험.
 - 마지막 단계 강제 실패 후 전체 스키마와 선행 함수가 복원되는 롤백 시험.
@@ -30,9 +32,9 @@ GitHub main 보호 규칙은 `POS release contract`, strict=true다. `.github/wo
 - 9품목/10개, 406,000 공급가액·33,560 VAT·439,560 VND 총액·CK·콜라 10%·환타 8%.
 - Photo 수동 등록·서비스 단위, 실제 현금 부분만 다음날 입금액에 합산, tenant 권한과 100건 페이지 계약.
 
-기존 고정 해시 테스트는 이번 계좌 코드와 새 번역 키만 갱신하고 나머지 고정 파일을 보존한다. 변경된 내보내기 테스트는 품목별 금액 보존, 불일치 원장 차단, 별도 POS Ledger를 확인한다. 모든 기존 테스트와 CI 게이트를 유지한다.
+기존 고정 해시 테스트는 이번 계좌 코드와 새 번역 키만 갱신하고 나머지 고정 파일을 보존한다. 변경된 내보내기 테스트는 품목별 금액 보존, 불일치 원장 차단, 별도 POS Ledger를 확인한다. 모든 기존 테스트와 검증 항목을 로컬에서 유지한다. 현재 실행 스크립트의 GitHub 조회 게이트는 동등한 로컬 증거 검증기 구현 전까지 우회하지 않는다.
 
-필수 CI의 최종 성공 여부와 후보 SHA는 PR checks가 기준이다. **PR CI 성공만으로 운영 배포 게이트를 통과했다고 선언하지 않는다.** 미래 배포는 병합 후 freshly fetched origin/main과 같은 깨끗한 HEAD, 그 main SHA의 성공한 필수 CI를 다시 요구한다.
+필수 검증의 성공 여부는 최종 후보 SHA에 묶인 전체 로컬 실행 로그가 기준이다. **후보의 로컬 검증만으로 운영 배포까지 완료했다고 선언하지 않는다.** 미래 배포는 병합 후 freshly fetched origin/main과 같은 깨끗한 HEAD와 그 main SHA의 전체 로컬 검증 증거, 원격 push 확인, 공식 배포·운영 검증을 요구한다.
 
 `vercel.json`의 `git.deploymentEnabled=false`로 후보 push/PR의 Git 자동 배포를 차단했다. 공식 CLI 배포 경로는 보존한다. GitHub workflow들은 검증/빌드만 수행하며 Web/DB 배포 작업이 없다. [Vercel 공식 Git 설정 문서](https://vercel.com/docs/project-configuration/git-configuration)
 
@@ -44,7 +46,7 @@ GitHub main 보호 규칙은 `POS release contract`, strict=true다. `.github/wo
 
 ## 미래 배포 순서 — 이번에는 실행 금지
 
-1. 별도 운영 배포 허가를 받은 뒤 검토·main 병합과 해당 main SHA의 필수 CI 성공을 확인한다.
+1. 별도 운영 배포 허가를 받은 뒤 검토·main 병합과 해당 main SHA의 필수 로컬 검증 성공을 확인한다.
 2. 깨끗한 exact-main 작업 폴더에서 공식 배포 스크립트의 인증·환경·Supabase 대상·MISA/직접 주문 비밀정보·기존 게이트를 통과한다. 검사를 생략하지 않는다.
 3. 공식 명령은 `bash scripts/deploy_pos_production.sh --migration scripts/releases/20261011204000_corporate_sales_invoice_contacts_release.sql --yes`다. 이 명령은 이번 준비에서 실행하지 않았다. 기존 스크립트 순서에 따라 호환 Edge 배포 후 사전검사/원자적 DB 적용, Web 배포, 로그인 검증을 수행한다.
 4. 성공 후 정확한 SHA·SQL 패키지 해시·운영 이력 번호·배포 URL·검증 결과를 기록한다. 운영 MISA 조회·가져오기 검증과 실제 발행/발송은 각 허가 범위에 맞춰 분리한다.

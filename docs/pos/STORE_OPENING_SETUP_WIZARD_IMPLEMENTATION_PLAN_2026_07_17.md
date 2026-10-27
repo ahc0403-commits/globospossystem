@@ -1,5 +1,7 @@
 # Store Opening Setup Wizard Implementation Plan
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 - Status: Proposed for implementation
 - Target opening date: 2026-08-06
 - Plan date: 2026-07-17
@@ -45,8 +47,8 @@ The implementation must preserve the following constraints:
    routing configuration.
 8. Re-running the wizard with the same data is idempotent.
 9. The wizard does not automatically delete tables or historical data.
-10. Production release PASS requires the exact pushed SHA to pass GitHub
-    Actions.
+10. Production verification requires complete local evidence for the exact pushed
+    candidate and clean exact-main SHAs, plus official deployment/operational checks.
 
 ## 3. Think_A pressure-test
 
@@ -801,7 +803,7 @@ Tasks:
 
 - run full local regression;
 - push a review branch and open PR;
-- require exact-head GitHub Actions checks;
+- require complete exact-head local verification logs;
 - merge only after green checks;
 - require exact-main-SHA Windows artifact and release proof;
 - deploy DB migration through the production gates with rollback ready;
@@ -822,7 +824,7 @@ Exit gate:
 | 2026-07-22 to 2026-07-25 | Wizard UI, bulk tables, template, localization |
 | 2026-07-26 to 2026-07-28 | App-root print agent and monitoring integration |
 | 2026-07-29 to 2026-07-31 | Test orchestration, full regression, review fixes |
-| 2026-08-01 | Exact-SHA CI and guarded production deployment |
+| 2026-08-01 | Exact-SHA local verification and guarded production deployment |
 | 2026-08-02 to 2026-08-03 | Actual Windows PC and four-printer rehearsal |
 | 2026-08-04 | Code, DB, and artifact freeze |
 | 2026-08-05 | On-site installation and contingency checks |
@@ -842,7 +844,7 @@ Exit gate:
 - Printer or agent failure never blocks orders or payments.
 - Five destination test jobs complete and are physically confirmed.
 - EN/KO/VI UI and error paths are complete.
-- Full regression and exact-SHA GitHub checks pass.
+- Full regression and exact-SHA local verification pass.
 - Production DB migration has preflight, verification, and rollback evidence.
 - Actual store-LAN hardware rehearsal passes before the 2026-08-04 freeze.
 
@@ -879,7 +881,7 @@ Exit gate:
 - [ ] Add EN/KO/VI localization.
 - [ ] Add Flutter/unit/contract tests.
 - [ ] Run full regression and web release build.
-- [ ] Obtain exact-head PR checks.
+- [ ] Obtain complete local verification logs for the exact final candidate SHA.
 - [ ] Obtain exact-main-SHA Windows artifact and release proof.
 - [ ] Deploy DB through production gates with rollback ready.
 - [ ] Complete actual Windows/four-printer rehearsal.

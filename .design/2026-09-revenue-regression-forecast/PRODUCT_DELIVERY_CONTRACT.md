@@ -1,5 +1,7 @@
 # 제품 완성 계약: UI·모바일·언어·접근성·운영 출시
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 - 설계 v3 / 2026-09-16
 - 대상: 기간 기반 매출 예측과 레스토랑 개선 제안의 전체 사용자 경험.
 - 상태: 1차 소스 구현과 자동 검증은 진행했다. 실기기 시험·현장 번역 검수·DB 적용·배포는 아직 하지 않았다.
@@ -388,7 +390,7 @@ golden은 대표 폭·세 언어·긴 문구·오류/권한 상태, 실기기는
 | G1 기능 | 개발 | 모든 필수 UI/데이터/계산 연결, stub/no-op 없음 |
 | G2 품질 | QA·번역 검수·접근성 검토 | 계산+제품 행렬, 세 언어/실기기 증거 |
 | G3 운영 수용 | 권한 있는 매장 담당 | 레스토랑·Photo 대조, 입력/오류 대응 가능 |
-| G4 배포 전 | 개발·릴리스 담당 | analyze/tests/check_repo, migration/RLS, exact SHA 필수 CI |
+| G4 배포 전 | 개발·릴리스 담당 | analyze/tests/check_repo, migration/RLS, exact SHA 필수 로컬 검증 |
 | G5 배포 | 승인된 릴리스 담당 | 정식 배포 스크립트·버전·DB 적용 증거 |
 | G6 운영 검증 | QA·매장 담당 | 실제 진입/언어/파일 smoke, 관찰 기록·복구 가능 |
 
@@ -399,7 +401,7 @@ golden은 대표 폭·세 언어·긴 문구·오류/권한 상태, 실기기는
 - 테스트 전용 환경에서 migration 적용과 이전 앱/새 앱 호환을 검증한다.
   schema 누락/버전 불일치는 번역된 안전 상태로 처리하고 기존 보고서를 깨지 않는다.
 - 운영 DB 적용·공개는 별도 승인 후 수행한다. scripts/deploy_pos_production.sh와
-  exact pushed SHA의 GitHub Actions 성공이 release gate다.
+  exact pushed SHA의 로컬 자동 검증 성공이 release gate다.
 - 단계적 공개/비활성화 방법을 검증한다. 접근 준비가 안 된 매장은 설정/근거 안내만 표시한다.
 - 배포 후 레스토랑/Photo와 모바일/데스크톱에서 smoke를 수행하고 초기 1영업일의
   오류·지연·파일 실패를 확인할 운영 담당/기록을 정한다. 실제 모니터링 예약은 지금 만들지 않는다.

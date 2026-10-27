@@ -1,5 +1,7 @@
 # 설계 브리프: 포스 프린트/페이퍼리스 운영 모드와 고객 영수증
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-08-11
 Source: 사용자 요구와 현재 결제·출력·고객표시·KDS·레드인보이스 구현 감사
 Status: 계획 전용 — 애플리케이션 구현·DB 적용·배포하지 않음
@@ -377,7 +379,7 @@ snapshot에는 매장명·주소·사업자 정보, 영수증 번호, 테이블,
 - rollback은 현재 설정만 print로 전환하되 이미 생성된 paperless 주문은 KDS에서 drain한다.
 - schema/table drop이나 기존 RPC 제거는 별도 릴리스 전 수행하지 않는다.
 
-운영 DB 적용과 배포는 별도 승인 후 `scripts/deploy_pos_production.sh`만 사용하고, exact pushed head SHA의 필수 GitHub Actions 성공 전에는 release gate를 PASS로 보고하지 않는다.
+운영 DB 적용과 배포는 별도 승인 후 `scripts/deploy_pos_production.sh`만 사용하고, exact pushed head SHA의 필수 로컬 자동 검증 성공 전에는 release gate를 PASS로 보고하지 않는다.
 
 ## 17. 테스트 매트릭스
 

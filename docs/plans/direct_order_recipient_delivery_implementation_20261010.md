@@ -1,5 +1,7 @@
 # 배달비 수령자 직접 결제 · 배차 · 채팅 첨부 구현 보고서
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 > 이 문서는 당시 소스 검증 기록이다. 최신 main 통합·운영 적용 절차와 API 버전은 [통합 배포 문서](../pos/POS_RECIPIENT_TAX_BOUNDED_RELEASE_20261011.md)를 참조한다.
 2026-10-10 · Asia/Ho_Chi_Minh · 로컬 소스 구현/검증 · 운영 DB 미적용 · 미배포
 
@@ -94,7 +96,7 @@ flutter test --no-pub test/direct_order_staff_fallback_test.dart test/direct_ord
 - 호환 POS 클라이언트·프린터 에이전트와 세 마이그레이션·Edge 배포 순서 확인. 구 에이전트는 version 2 작업을 가져오지 못하므로 업데이트 전에는 해당 작업이 대기한다.
 - 모바일 양방향 사진/PDF에서 운영 인증·Storage·CORS·상대 열기 확인. 이전 실환경 장애 원인이 이번 소스 검사만으로 확정되지는 않는다.
 - 80mm 실제 프린터에서 베트남어 안내·기사 수금 문구·줄바꿈/잘림 확인. PDF/ESC-POS byte 검사는 실물 인쇄 검사를 대신하지 않는다.
-- 전체 저장소의 남은 검사 실패를 확인하고 정확한 pushed HEAD의 필수 GitHub Actions가 성공한 뒤 [생산 배포 스크립트](/Users/andreahn/globos_pos_system/scripts/deploy_pos_production.sh) 사용. 이번 요청에서는 commit/push/운영 배포를 수행하지 않았다.
+- 전체 저장소의 남은 검사 실패를 확인하고 정확한 pushed HEAD의 필수 로컬 자동 검증이 성공한 뒤 [생산 배포 스크립트](/Users/andreahn/globos_pos_system/scripts/deploy_pos_production.sh) 사용. 이번 요청에서는 commit/push/운영 배포를 수행하지 않았다.
 
 사용자 소유의 기존 수정/미추적 파일은 보존했다. 기존 확정/결제 주문의 지급 방식이나 발행된 금융 이력을 새 정책으로 덮어쓰지 않았다.
 

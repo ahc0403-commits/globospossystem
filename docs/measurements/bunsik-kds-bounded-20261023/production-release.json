@@ -1,0 +1,318 @@
+{
+  "verified_at": "2026-10-23T07:12:39.270441+00:00",
+  "operator": "Codex maintenance; explicitly authorized by owner in this chat",
+  "scope": "BunsikClub bounded reads and web UI; no order quantities or operational settings changed",
+  "source_sha": "913a6459d71844abc2ec0d9220556addb2b9cfa4",
+  "pull_request": "https://github.com/ahc0403-commits/globospossystem/pull/622",
+  "required_exact_main_ci": {
+    "name": "POS release contract",
+    "conclusion": "success",
+    "url": "https://github.com/ahc0403-commits/globospossystem/actions/runs/39913471506/job/120281556223"
+  },
+  "official_deployment": {
+    "script": "scripts/deploy_pos_production.sh",
+    "database_mode": "--db-only --migration supabase/migrations/20261023060000_bunsik_kds_bounded_history.sql",
+    "database_exit": 0,
+    "web_mode": "--web-only",
+    "web_exit": 0,
+    "skip_flags_used": false,
+    "auth_readiness": "PASS",
+    "live_http_status": 200,
+    "fixed_operational_login_and_profile": "PASS",
+    "unrelated_edge_functions_deployed": false
+  },
+  "web": {
+    "source_sha": "913a6459d71844abc2ec0d9220556addb2b9cfa4",
+    "project_id": "prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ",
+    "production_alias": "https://globospossystem.vercel.app",
+    "deployment_id": "dpl_H6mCnfCBWkGv69phS85LD28qtxzp",
+    "deployment_url": "https://globospossystem-qzgeyhu41-andres-projects-c63d3b09.vercel.app",
+    "ready_state": "READY",
+    "target": "production",
+    "created_at": "2026-10-23T07:14:06.684Z",
+    "ready_at": "2026-10-23T07:14:09.297Z"
+  },
+  "production_database_read": {
+    "reads": [
+      {
+        "store": "JeonGabok",
+        "history": [],
+        "station": "floor",
+        "snapshot": [
+          {
+            "ms": 220.066,
+            "rows": 13,
+            "bytes": 47648
+          }
+        ],
+        "stored_floor": "2F",
+        "header_parity": true,
+        "orders_parity": true
+      },
+      {
+        "store": "JeonGabok",
+        "history": [],
+        "station": "floor",
+        "snapshot": [
+          {
+            "ms": 9.874,
+            "rows": 0,
+            "bytes": 573
+          }
+        ],
+        "stored_floor": "3F",
+        "header_parity": true,
+        "orders_parity": true
+      },
+      {
+        "store": "JeonGabok",
+        "history": [],
+        "station": "floor",
+        "snapshot": [
+          {
+            "ms": 13.642,
+            "rows": 0,
+            "bytes": 573
+          }
+        ],
+        "stored_floor": "3F",
+        "header_parity": true,
+        "orders_parity": true
+      },
+      {
+        "store": "JeonGabok",
+        "history": [],
+        "station": "kitchen",
+        "snapshot": [
+          {
+            "ms": 86.442,
+            "rows": 15,
+            "bytes": 52436
+          }
+        ],
+        "stored_floor": null,
+        "header_parity": true,
+        "orders_parity": true
+      },
+      {
+        "store": "BunsikClub",
+        "history": [
+          {
+            "ms": 36.435,
+            "rows": 6,
+            "bytes": 33766
+          },
+          {
+            "ms": 25.032,
+            "rows": 6,
+            "bytes": 33766
+          },
+          {
+            "ms": 24.949,
+            "rows": 6,
+            "bytes": 33766
+          }
+        ],
+        "station": "floor",
+        "snapshot": [
+          {
+            "ms": 36.746,
+            "rows": 6,
+            "bytes": 34070
+          },
+          {
+            "ms": 27.054,
+            "rows": 6,
+            "bytes": 34070
+          },
+          {
+            "ms": 26.314,
+            "rows": 6,
+            "bytes": 34070
+          }
+        ],
+        "stored_floor": "1F",
+        "header_parity": true,
+        "orders_parity": true
+      },
+      {
+        "store": "BunsikClub",
+        "history": [
+          {
+            "ms": 22.448,
+            "rows": 2,
+            "bytes": 9548
+          },
+          {
+            "ms": 19.634,
+            "rows": 2,
+            "bytes": 9548
+          },
+          {
+            "ms": 22.129,
+            "rows": 2,
+            "bytes": 9548
+          }
+        ],
+        "station": "floor",
+        "snapshot": [
+          {
+            "ms": 25.465,
+            "rows": 11,
+            "bytes": 32311
+          },
+          {
+            "ms": 22.844,
+            "rows": 11,
+            "bytes": 32311
+          },
+          {
+            "ms": 21.995,
+            "rows": 11,
+            "bytes": 32311
+          }
+        ],
+        "stored_floor": "2F",
+        "header_parity": true,
+        "orders_parity": true
+      },
+      {
+        "store": "BunsikClub",
+        "history": [
+          {
+            "ms": 40.685,
+            "rows": 15,
+            "bytes": 70277
+          },
+          {
+            "ms": 39.061,
+            "rows": 15,
+            "bytes": 70277
+          },
+          {
+            "ms": 39.332,
+            "rows": 15,
+            "bytes": 70277
+          }
+        ],
+        "station": "kitchen",
+        "snapshot": [
+          {
+            "ms": 34.791,
+            "rows": 20,
+            "bytes": 82410
+          },
+          {
+            "ms": 34.843,
+            "rows": 20,
+            "bytes": 82410
+          },
+          {
+            "ms": 34.549,
+            "rows": 20,
+            "bytes": 82410
+          }
+        ],
+        "stored_floor": null,
+        "header_parity": true,
+        "orders_parity": true
+      },
+      {
+        "store": "BunsikClub",
+        "history": [
+          {
+            "ms": 39.958,
+            "rows": 15,
+            "bytes": 70277
+          },
+          {
+            "ms": 39.259,
+            "rows": 15,
+            "bytes": 70277
+          },
+          {
+            "ms": 39.083,
+            "rows": 15,
+            "bytes": 70277
+          }
+        ],
+        "station": "tray",
+        "snapshot": [
+          {
+            "ms": 35.01,
+            "rows": 20,
+            "bytes": 82407
+          },
+          {
+            "ms": 34.895,
+            "rows": 20,
+            "bytes": 82407
+          },
+          {
+            "ms": 35.216,
+            "rows": 20,
+            "bytes": 82407
+          }
+        ],
+        "stored_floor": null,
+        "header_parity": true,
+        "orders_parity": true
+      }
+    ],
+    "rollouts": [
+      {
+        "mode": "active",
+        "store": "JeonGabok"
+      }
+    ],
+    "checked_at": "2026-10-23T07:12:39.270441+00:00",
+    "measurement": "DB execution, authenticated assigned-user context; no HTTP/render/audio timing",
+    "store_settings": [
+      {
+        "store": "BunsikClub",
+        "kds_workflow": "kitchen_tray_floor",
+        "fulfillment_mode": "paperless"
+      },
+      {
+        "store": "JeonGabok",
+        "kds_workflow": "kitchen_floor",
+        "fulfillment_mode": "paperless"
+      }
+    ],
+    "migration_present": true,
+    "predecessor_hashes": {
+      "get_emergency_station_snapshot_pre_bunsik()": "93d26203a4c0b05535f97a8a3ed3866d",
+      "get_emergency_station_today_completed_pre_bunsik()": "7248859a6a9d78b97bfa306ed2f7f63f",
+      "emergency_add_order_batch_timings_pre_bunsik(jsonb)": "e3b69e94e37a881f5e09c24b613707c3",
+      "get_emergency_station_today_completed_base_pre_bunsik()": "767d04eb959d8d54a9fd2abb58c091a9"
+    }
+  },
+  "http_scope": {
+    "rpc_visible": true,
+    "scope_probes": {
+      "anonymous": {
+        "http_status": 401,
+        "expected_scope_rejection": true
+      },
+      "other_store_authenticated": {
+        "http_status": 400,
+        "expected_scope_rejection": true
+      }
+    },
+    "measurement": "Read-only HTTP privilege/scope rejection, not a Bunsik terminal timing test"
+  },
+  "limitations": [
+    "DB per-role timings contain three Bunsik samples each; these are not HTTP p95 or handoff render/audio times.",
+    "Physical speakers, store Wi-Fi, screen/frame latency and count of currently online physical devices were not measured.",
+    "The concurrency load used four synthetic terminals matching the four active Bunsik assignments, plus 8/40 expansion; no production orders were created for testing."
+  ],
+  "post_release_http_observation": {
+    "window": {
+      "start": "2026-10-23T07:13:00Z",
+      "end": "2026-10-23T07:16:40Z"
+    },
+    "total_requests": 110,
+    "errors": 0,
+    "artifact": "production-http-observation.json"
+  }
+}

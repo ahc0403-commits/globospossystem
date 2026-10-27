@@ -1,5 +1,7 @@
 # Direct Order 배달 개선 구현 결과 — 2026-10-05
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 아래 검증·미배포 상태는 최초 구현 시점의 기록이다. 현재 릴리스는 최신 main의 기본 방문 포장·11:00–22:00 접수 시간·유료 포장 KDS 흐름을 보존하며, 신규 마이그레이션을 20261005070000/20261005080000으로 분리했다. 실제 운영 적용은 후속 배포 보고서로 확인한다.
 
 
@@ -65,7 +67,7 @@
 
 배포 순서: 기존 고객 사진 확인 migration을 포함한 선행 migration 확인 → 신규 additive migration 적용 → 새 Edge actions 배포 → 새 Flutter 앱 배포 → 매장 시나리오 확인.
 
-운영 release는 정확히 push한 head SHA에서 필수 GitHub Actions 성공을 확인하고 `scripts/deploy_pos_production.sh`로 진행한다. 이번 로컬 검증을 운영 release gate 통과로 보고하지 않는다. 기존 사용자 수정/미추적 파일을 보존하며 이 작업에서 commit/push/운영 배포를 실행하지 않았다.
+운영 release는 정확히 push한 head SHA에서 필수 로컬 자동 검증 성공을 확인하고 `scripts/deploy_pos_production.sh`로 진행한다. 이번 부분 검증만으로 최종 SHA의 전체 로컬 검증·원격 push·공식 배포·운영 확인까지 통과했다고 보고하지 않는다. 기존 사용자 수정/미추적 파일을 보존하며 이 작업에서 commit/push/운영 배포를 실행하지 않았다.
 
 ## Harness 판정
 

@@ -1,5 +1,7 @@
 # POS QR·익일 입금 구분 배포 명령
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 2026-10-12 / Asia/Ho_Chi_Minh. **명령 준비만 완료했으며 운영 배포·DB 적용은 실행하지 않았다.**
 
 모바일은 모바일 브라우저 화면이다. POS 웹 배포 한 번으로 데스크톱과 모바일 화면에 함께 반영된다.
@@ -35,7 +37,7 @@ bash scripts/release_payment_qr_deposit.sh --sha "$POS_RELEASE_SHA" --dry-run
 bash scripts/release_payment_qr_deposit.sh --sha "$POS_RELEASE_SHA" --execute
 ```
 
-래퍼의 기본값은 dry-run이다. 깨끗하지 않은 체크아웃 또는 승인 SHA 불일치 시 중단한다. 각 공식 단계에서도 새로 가져온 origin/main과 필수 CI를 검사한다. 전체 Flutter 테스트와 공식 배포 검사를 생략하지 않는다.
+래퍼의 기본값은 dry-run이다. 깨끗하지 않은 체크아웃 또는 승인 SHA 불일치 시 중단한다. 각 공식 단계에서도 새로 가져온 origin/main과 필수 로컬 검증을 검사한다. 전체 Flutter 테스트와 공식 배포 검사를 생략하지 않는다.
 
 ## 중간 실패 후 재개
 

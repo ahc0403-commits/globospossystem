@@ -1,5 +1,7 @@
 # 직접 배달 주문 출시 보강 상세 계획
 
+> 2026-10-24 소유자 정책: 자동 검증은 로컬에서 수행하고 최종 후보·깨끗한 exact-main SHA의 전체 실행 증거와 원격 push를 확인한다. GitHub Actions/runner 성공은 필수 증거가 아니다. 공식 배포·운영 확인은 유지하며 남은 실행 게이트는 우회하지 않는다.
+
 기준 문서: `.design/2026-08-direct-delivery-ordering/DESIGN_BRIEF.md`
 안전 계약: `.design/2026-08-direct-delivery-ordering/REGRESSION_SAFETY.md`
 작성일: 2026-08-21
@@ -503,8 +505,8 @@ H5 통과 기준:
   PII 보존, Google 예산, support 담당자와 emergency-stop 담당자를
   확정한다. _생성: 승인 evidence; 재사용: settings accounting gate;
   수정: 고객 데이터 없음._
-- [ ] **exact-SHA GitHub check와 guarded deployment**: 별도 배포 요청이
-  있을 때만 review된 SHA를 push하고 필수 GitHub check 성공 후
+- [ ] **exact-SHA 로컬 전체 검증과 guarded deployment**: 별도 배포 요청이
+  있을 때만 review된 SHA를 push하고 필수 로컬 전체 검증 성공과 원격 push 확인 후
   `scripts/deploy_pos_production.sh`을 사용한다. _재사용: production
   gate; 수정: 명시적 승인 후 production만._
 - [ ] **Google 링크 비공개 상태로 1개 매장 20건 pilot**: 주소 두 경로,

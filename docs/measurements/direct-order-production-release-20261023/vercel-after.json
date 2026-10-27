@@ -1,0 +1,17 @@
+{
+  "id": "dpl_5EvFqaL9jhEpKag7bbJ1TPdbYugv",
+  "url": "globospossystem-ef5zxy4qs-andres-projects-c63d3b09.vercel.app",
+  "state": "READY",
+  "target": "production",
+  "project": {
+    "id": "prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ",
+    "name": "globospossystem",
+    "framework": null
+  },
+  "meta": {
+    "githubCommitRef": "main",
+    "githubCommitSha": "c853fbbab7c6fa46b66512c6dd78da27edc4ff5e"
+  },
+  "createdAt": 1792759542535,
+  "ready": 1792759545769
+}

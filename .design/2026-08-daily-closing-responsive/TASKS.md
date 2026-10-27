@@ -1,5 +1,7 @@
 # Build Tasks: 모바일·태블릿 일일 마감 전용 화면
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: `.design/2026-08-daily-closing-responsive/DESIGN_BRIEF.md`
 Date: 2026-08-13
 
@@ -31,7 +33,7 @@ Date: 2026-08-13
 - [ ] **반응형 Widget 회귀 테스트 추가**: 390×844/768×1024/1024×768에서는 launcher만 표시되고 탭 후 전용 화면이 열리는지, 1440×900에서는 기존 inline 표가 유지되는지, 뒤로가기와 overflow 부재를 검증한다. _Creates focused reports daily-closing responsive tests; reuses existing test device-size conventions._
 - [ ] **상태·action 테스트 보강**: loading/error/empty/open/closed 기록, 긴 값, 처리 중 중복 탭, cash dialog Phone/Tablet 레이아웃과 기존 row action key 계약을 테스트한다. _Modifies existing daily-closing contract tests only where the presentation boundary intentionally changes; preserves service/model tests._
 - [ ] **저장소 검증 실행**: 변경 Dart 파일 포맷, `flutter analyze`, 관련 Widget/contract tests, 전체 `flutter test`, `bash scripts/check_repo.sh`, `git diff --check`를 통과한다. _Reuses project gates; no DB apply and no deployment in this planning task._
-- [ ] **운영 배포 전 실데이터 점검**: 로그인된 관리자 계정으로 실제 Phone과 Tablet 세로/가로에서 최근 기록, 미마감일 action, 현금 시재 키보드, 복귀 동작을 확인한다. 이후 별도 배포 요청이 있을 때만 `scripts/deploy_pos_production.sh`를 사용하고 exact pushed head SHA의 GitHub Actions를 확인한다. _Reuses production gate in `CLAUDE.md`; no direct Vercel bypass._
+- [ ] **운영 배포 전 실데이터 점검**: 로그인된 관리자 계정으로 실제 Phone과 Tablet 세로/가로에서 최근 기록, 미마감일 action, 현금 시재 키보드, 복귀 동작을 확인한다. 이후 별도 배포 요청이 있을 때만 `scripts/deploy_pos_production.sh`를 사용하고 exact pushed head SHA의 로컬 전체 검증 증거와 원격 push SHA를 확인한다. _Reuses production gate in `CLAUDE.md`; no direct Vercel bypass._
 
 ## Review
 
