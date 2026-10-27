@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:globos_pos_system/features/procurement/procurement_workspace.dart';
@@ -506,7 +507,7 @@ void main() {
           await tester.pumpAndSettle();
           expect(calls, isEmpty);
           await tester.enterText(
-            find.widgetWithText(TextFormField, 'Reason'),
+            find.widgetWithText(TextFormField, 'Return reason'),
             'Check quantity',
           );
           await tester.tap(find.text('OK'));
@@ -520,6 +521,50 @@ void main() {
         }
       },
     );
+  }
+  for (final action in ['return_request', 'cancel_request']) {
+    testWidgets('Korean $action asks for the correct reason', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final data = workspace();
+      data['requests'] = [
+        {
+          'id': 'pr-reason',
+          'request_no': 'PR-REASON',
+          'status': 'submitted',
+          'reason': 'SAMPLE',
+          'row_version': 2,
+          'allowed_actions': [action],
+        },
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ko'),
+          supportedLocales: const [Locale('ko'), Locale('en'), Locale('vi')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ProcurementWorkspacePage(
+            load: () async => data,
+            execute: (a, b, c, d, e) async => {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('PR-REASON · 매장 검토 대기'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(
+          OutlinedButton,
+          action == 'cancel_request' ? '요청 취소' : '반려',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(
+          TextFormField,
+          action == 'cancel_request' ? '취소 사유' : '반려 사유',
+        ),
+        findsOneWidget,
+      );
+    });
   }
   testWidgets(
     'draft deletion confirmation refreshes active list and selected detail',

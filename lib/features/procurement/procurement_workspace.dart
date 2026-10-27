@@ -857,7 +857,9 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
     }
     if (action == 'return_request' || action == 'cancel_request') {
       final value = await _fields(label(action), {
-        'reason': t('반려 사유', 'Reason', 'Lý do'),
+        'reason': action == 'cancel_request'
+            ? t('취소 사유', 'Cancellation reason', 'Lý do hủy')
+            : t('반려 사유', 'Return reason', 'Lý do trả lại'),
       });
       if (value != null) await _execute(action, request, value);
       return;
