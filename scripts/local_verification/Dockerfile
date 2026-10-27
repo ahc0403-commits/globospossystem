@@ -30,6 +30,6 @@ RUN --mount=type=secret,id=host_ca_bundle,mode=0444 \
     && chmod 755 /usr/local/bin/pos-test-chrome \
     && chown -R ubuntu:ubuntu /opt/flutter /home/ubuntu \
     && chmod -R g+rwX /opt/flutter /home/ubuntu \
-    && su -p -s /bin/sh ubuntu -c 'git config --global --add safe.directory /opt/flutter && flutter --version && chmod -R g+rwX /opt/flutter /home/ubuntu'
+    && su -p -s /bin/sh ubuntu -c 'export PATH=/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin; git config --global --add safe.directory /opt/flutter && flutter --version && chmod -R g+rwX /opt/flutter /home/ubuntu'
 USER ubuntu
 WORKDIR /work
