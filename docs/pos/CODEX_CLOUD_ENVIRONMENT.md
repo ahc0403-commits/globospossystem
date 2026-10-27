@@ -17,9 +17,10 @@ it with partial tests or an untrusted supplied PASS receipt. See
 When the managed environment supplies `CODEX_PROXY_CERT`, the verifier requires
 that single public certificate to be present in the existing host CA bundle. It
 records both hashes and passes the host bundle to networked image-build steps as
-a BuildKit secret and to the runtime container as a read-only mount. It neither
-stores the bundle in image layers nor disables TLS or hostname verification. If
-the platform CA or bundle is unavailable or untrusted, verification fails closed.
+a BuildKit secret and to the runtime container as read-only mounts. The runtime
+container updates its disposable system trust store for Dart; no certificate is
+added to the saved image. TLS and hostname verification remain enabled. If the
+platform CA or bundle is unavailable or untrusted, verification fails closed.
 
 For a clean committed candidate checkout, execute:
 

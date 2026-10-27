@@ -84,7 +84,7 @@ def proxy_trust(proxy_cert, host_bundle):
     host_roots = re.findall(pattern, bundle, re.S)
     require(any(ssl.PEM_cert_to_DER_cert(item) == root_der for item in host_roots),
             'Proxy CA is not in the existing host trust bundle')
-    return {'bundle': str(bundle_path.resolve()),
+    return {'bundle': str(bundle_path.resolve()), 'certificate': str(certificate_path.resolve()),
             'proxyCaSha256': hashlib.sha256(root_der).hexdigest(),
             'hostBundleSha256': sha256(bundle_path)}
 
@@ -262,9 +262,14 @@ def run(directory, kind, root=ROOT):
                     ]
             if trust:
                 docker_run += ['--mount', 'type=bind,src=' + trust['bundle'] + ',dst=/run/pos-host-ca.pem,readonly']
+                docker_run += ['--mount', 'type=bind,src=' + trust['certificate'] +
+                               ',dst=/usr/local/share/ca-certificates/pos-platform-proxy.crt,readonly']
                 for variable in ('SSL_CERT_FILE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO',
                                  'REQUESTS_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS'):
                     docker_run += ['--env', variable + '=/run/pos-host-ca.pem']
+            runtime_trust = ('update-ca-certificates >/dev/null; '
+                             'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt '
+                             '/usr/local/share/ca-certificates/pos-platform-proxy.crt >/dev/null; ')
             checked(docker_run + [
                      '--env', 'POS_LOCAL_RUN_ID=' + run_id,
                      '--env', 'POS_LOCAL_TOOL_CONTAINER=' + name,
@@ -272,6 +277,7 @@ def run(directory, kind, root=ROOT):
                      '--env', 'PATH=' + str(snapshot / 'scripts/local_verification') + ':' +
                        '/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin',
                      '--workdir', str(snapshot), '--entrypoint', '/bin/bash', image_id, '-c',
+                     'set -e; ' + (runtime_trust if trust else '') +
                      f'getent passwd {uid} >/dev/null || useradd --uid {uid} --gid 1000 --home-dir /home/ubuntu --no-create-home posverify; chown -R {uid}:1000 /home/ubuntu; exec sleep infinity'])
             container_created = True
             execute = ['docker', 'exec', '--user', str(uid) + ':1000', name]

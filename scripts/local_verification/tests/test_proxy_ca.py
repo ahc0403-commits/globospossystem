@@ -36,6 +36,7 @@ class ProxyCATest(unittest.TestCase):
         self.assertEqual(info['proxyCaSha256'], hashlib.sha256(b'platform-ca').hexdigest())
         self.assertEqual(info['hostBundleSha256'], hashlib.sha256(self.bundle.read_bytes()).hexdigest())
         self.assertEqual(info['bundle'], str(self.bundle.resolve()))
+        self.assertEqual(info['certificate'], str(self.ca.resolve()))
 
     def test_untrusted_or_missing_ca_fails_closed(self):
         self.bundle.write_text(pem(b'other-ca'))
