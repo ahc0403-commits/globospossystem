@@ -1,11 +1,12 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(6);
+select plan(7);
 select has_view('public', 'v_office_inventory_evidence_objects', 'batched evidence view exists');
 select ok(has_table_privilege('service_role', 'public.v_office_inventory_evidence_objects', 'SELECT'), 'service role can read');
 select ok(not has_table_privilege('anon', 'public.v_office_inventory_evidence_objects', 'SELECT'), 'anonymous users cannot read');
 select ok(not has_table_privilege('authenticated', 'public.v_office_inventory_evidence_objects', 'SELECT'), 'ordinary users cannot read');
 select ok((select 'security_invoker=true'=any(reloptions) from pg_class where oid='public.v_office_inventory_evidence_objects'::regclass), 'view runs with caller permissions');
 select ok(position('storage.objects' in pg_get_viewdef('public.v_office_inventory_evidence_objects'::regclass)) > 0, 'evidence comes from actual Storage registry');
+select ok(position('procurement_document_exports' in pg_get_viewdef('public.v_office_inventory_evidence_objects'::regclass)) > 0, 'policy-3 supplier exports are included');
 select * from finish();
 rollback;
