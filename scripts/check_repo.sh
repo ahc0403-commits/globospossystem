@@ -6,6 +6,9 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 cd "$REPO_ROOT"
 
+printf 'CHECK_REPO_STEP=exact_main_verifier_contract\n'
+python3 scripts/tests/test_cloud_release_verification.py
+
 printf 'CHECK_REPO_STEP=flutter_dependencies\n'
 flutter pub get --enforce-lockfile
 printf 'CHECK_REPO_STEP=static_analysis\n'

@@ -1,9 +1,18 @@
 # CLAUDE.md — GLOBOSVN POS System
 
-Read `/Users/andreahn/.claude/CLAUDE.md` first and apply its shared rules,
-including N+1 prevention and performance verification. This file adds
-project-specific rules under platform instruction precedence; explicit user
-requests and higher-priority instructions take precedence.
+When available, read `/Users/andreahn/.claude/CLAUDE.md` first and apply its
+shared rules. In cloud environments the Mac-specific file may not exist: report
+its absence and use these portable project instructions. The owner's cloud
+verification policy below supersedes local-only execution requirements for this
+project. Platform instructions and explicit user requests take precedence.
+
+Preserve user changes and secrets. Prevent N+1 database and API access: use
+bounded, set-based or batched reads and writes, appropriate indexes and plans,
+and tenant-aware caching where applicable. For data-processing changes, specify
+scale and concurrency assumptions and measure relevant calls, rows, response
+size, latency or memory; distinguish estimates from measurements and report
+unverified items. Run only the relevant checks and distinguish implementation,
+verification, deployment and operational evidence.
 
 ## Project and sources
 
@@ -144,8 +153,33 @@ requests and higher-priority instructions take precedence.
 - Flutter tests: `flutter test` (or the relevant test files for focused checks).
 - Format changed Dart files: `dart format <files>`.
 - Production release must use `scripts/deploy_pos_production.sh`; do not bypass
-  it. Local checks and reviews are preflight evidence. The release gate passes
-  only when required GitHub Actions checks succeed on the exact pushed head SHA.
+  it. Complete verification on the final candidate SHA and again on the
+  clean freshly fetched exact `origin/main` release SHA, verify the remote push,
+  and retain production Auth, migration, login and affected-feature checks.
+  GitHub Actions success is not required by policy. The current script still
+  queries `POS release contract` check-runs; report that executable dependency
+  until an equivalent fail-closed SHA-bound evidence gate is implemented and verified.
 - Deployment procedure: `docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md`.
 - For a requested Claude Code handoff, write the prompt in English with the goal,
   relevant files, and verification steps. Apply a requested harness when available.
+
+## Cloud verification and source storage (owner decision 2026-10-27)
+
+GitHub stores commits and pushed source. Codex Cloud is an authorized primary
+environment for development, automated verification and release preparation;
+local execution is not required. Use an appropriately isolated cloud environment,
+container, VM or device matching the check's OS and hardware requirements.
+Use separate test fixtures and databases, not production data. GitHub Actions
+success and runner availability are not required evidence by policy.
+Keep all relevant tests, type checks, lint/analysis, builds, security/permission/
+DB isolation, regressions and actual affected-feature checks. Bind commands,
+OS/architecture, tool and lockfile versions, start/end timestamps and timezone,
+exit codes, run/pass/fail/skip counts, complete sanitized logs and artifact paths
+and hashes to the final code SHA. Repeat affected checks after source changes;
+distinguish candidate validation from a clean freshly fetched exact-main release.
+Verify the remote pushed SHA and retain the official deployment and operational
+checks. If a required OS, device, service, or check is unavailable, record it as
+unverified, not PASS; do not substitute an unrelated check. Protect credentials
+and production access, granting only what an approved task needs. A missing,
+failed or skipped check is not PASS. Report remaining executable or remote
+GitHub-check dependencies; do not bypass gates or provision CI runners.

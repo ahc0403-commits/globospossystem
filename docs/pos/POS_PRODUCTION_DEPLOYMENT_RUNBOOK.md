@@ -1,6 +1,14 @@
 # POS Production Deployment Runbook
 
-Last updated: 2026-07-17
+> Owner policy update — 2026-10-27: GitHub is for commit/push storage;
+> automated verification may run in Codex Cloud under root `CLAUDE.md`.
+> Keep complete final-SHA logs, remote
+> push confirmation, clean exact-main, official deployment and operational checks.
+> Past CI results below remain historical facts. Current executable GitHub gates
+> remain reported dependencies until equivalent gates are implemented and verified;
+> do not skip them or create runners to satisfy this documentation change.
+
+Last policy update: 2026-10-27
 
 ## Required scope for the next combined release (2026-10-13)
 
@@ -67,8 +75,9 @@ scripts/deploy_pos_production.sh
 This default path runs:
 
 1. Clean Git worktree and exact freshly fetched `origin/main` SHA preflight.
-2. Successful required GitHub Actions check (`POS release contract`) for that
-   exact SHA.
+2. Complete verification and reproducible logs for that exact SHA.
+   Implementation dependency: the current script still requires the GitHub
+   `POS release contract` check; it has not yet been converted to cloud evidence.
 3. Production target preflight.
 4. Required production Auth and test-data hygiene check with
    `scripts/check_pilot_auth_accounts.sh`.
@@ -83,12 +92,13 @@ This default path runs:
 
 Before any production database or Vercel mutation, the script fetches
 `origin/main` into `refs/remotes/origin/main` and requires that freshly fetched
-commit to equal `HEAD`. It then reads GitHub check runs for the same SHA and
-requires the branch-protection check `POS release contract` from GitHub
-Actions to have completed successfully. A feature branch, a stale local
-`origin/main`, a pending check, and a failed or unavailable check all stop
-before DB, Edge Function, or Vercel mutation. There is no provenance or check
-bypass environment variable.
+commit to equal `HEAD`. The current implementation then reads GitHub check
+runs for that SHA and requires `POS release contract` from GitHub Actions.
+This remains an executable dependency, not the owner’s verification policy.
+Replace it only with an equivalent fail-closed evidence validator in a
+separately reviewed implementation change; do not disable it or use skip flags.
+Candidate-only or partial tests do not prove an exact-main release. See
+`docs/pos/CODEX_CLOUD_ENVIRONMENT.md` for the candidate verifier and its limits.
 
 The worktree must be clean by default (`REQUIRE_CLEAN_GIT=1`). The only
 exception is an explicitly non-mutating inspection run:
@@ -200,9 +210,9 @@ scripts/deploy_pos_production.sh \
 
 After the dry-run evidence is reviewed, remove only `--dry-run` and run the
 same command from a clean worktree whose `HEAD` exactly equals the freshly
-fetched `origin/main` SHA and whose required GitHub Actions check succeeded on
-that SHA. Record the operator, Asia/Ho_Chi_Minh timestamp, exact SHA, check-run
-evidence, pinned project ref, sanitized command, preflight output, apply
+fetched `origin/main` SHA and whose required verification succeeded on
+that SHA. Record the operator, Asia/Ho_Chi_Minh timestamp, exact SHA,
+verification environment/commands/exit codes/log hashes, pinned project ref, sanitized command, preflight output, apply
 output, migration-history confirmation, and verification output.
 
 Before either command, link that clean exact-main worktree to production with
@@ -311,9 +321,11 @@ $env:SUPABASE_ANON_KEY = '<production anon key>'
 ```
 
 Never use `SUPABASE_SERVICE_KEY` or a database password in a client build. For
-the reproducible build, run the `Windows Print Station Build` GitHub Actions
-workflow and use only the artifact whose name contains the reviewed commit
-SHA. After login on the station, open **Print Station**, confirm all five
+the reproducible build, run `scripts/build_windows_print_station.ps1` on a
+Windows x64 machine or VM with the pinned toolchain. Record
+the reviewed commit SHA, environment, build log and package hash. The existing
+`Windows Print Station Build` workflow is a migration dependency, not required
+verification evidence. A Mac web build does not verify the native package. After login on the station, open **Print Station**, confirm all five
 destinations, print one test ticket per destination, then start polling. Do not
 call the station operational until the physical tickets and retry queue have
 been checked on the store network.
