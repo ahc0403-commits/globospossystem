@@ -30,7 +30,10 @@ Path(sys.argv[1]).write_text(out)
 PY
 docker run --detach --rm --name "$late_db" --env POSTGRES_PASSWORD=fixture-only --env POSTGRES_DB=late_invoice postgres:17-alpine -c track_functions=all >/dev/null
 for attempt in {1..60}; do
- if docker exec "$late_db" pg_isready -U postgres -d late_invoice >/dev/null 2>&1; then break; fi
+ # The image briefly starts a temporary server during initialization. Wait for
+ # that server to stop and the final server to become ready before running SQL.
+ if docker logs "$late_db" 2>&1 | grep -Fq 'PostgreSQL init process complete; ready for start up.' &&
+    docker exec "$late_db" pg_isready -U postgres -d late_invoice >/dev/null 2>&1; then break; fi
  if [[ "$attempt" == 60 ]]; then exit 1; fi
  sleep 1
 done
