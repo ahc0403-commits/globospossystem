@@ -1,7 +1,7 @@
-> Local verification transition — 2026-10-24: automated verification runs
-> locally; GitHub stores and reviews source. The official deployer executes a
+> Cloud verification update — 2026-10-27: automated verification may run in
+> Codex Cloud; GitHub stores and reviews source. The official deployer executes a
 > fresh fixed exact-main recipe. Remote protection replacement remains unapproved;
-> local readiness does not authorize merge, protection changes or deployment.
+> verification readiness does not authorize protection changes or deployment.
 
 # POS Production Deployment Runbook
 
@@ -72,7 +72,7 @@ scripts/deploy_pos_production.sh
 This default path runs:
 
 1. Clean Git worktree and exact freshly fetched `origin/main` SHA preflight.
-2. Direct execution of the fixed local release recipe for that exact SHA,
+2. Direct execution of the fixed release recipe for that exact SHA,
    with complete logs, process exit codes, assertion counts and artifact hashes.
 3. Production target preflight.
 4. Required production Auth and test-data hygiene check with
@@ -90,13 +90,15 @@ Before any production database or Vercel mutation, the script fetches
 `origin/main` into `refs/remotes/origin/main` and requires that freshly fetched
 commit to equal `HEAD`. It then directly executes
 `python3 -B scripts/pos_local_release_gate.py run --kind exact-main` in an
-isolated local Ubuntu 24.04 x86_64 tool container. The verifier clones only
+isolated Ubuntu 24.04 x86_64 tool container. The verifier clones only
 committed source, passes no production environment or credentials, runs the
 full repository checks, real Chrome terminal-authentication suite and separate
 restaurant-finalization regression, and rechecks source and fresh main before
 returning. A failed, timed-out, skipped mandatory, incomplete or changed-source
 run blocks before any production mutation. A dry run prints the plan and emits
-no PASS claim. Existing skip options cannot skip this local contract.
+no PASS claim. Existing skip options cannot skip this contract. A Codex Cloud
+Docker environment must pass the same complete recipe; merely publishing the
+environment does not establish a passing run.
 
 Receipts contain the candidate/exact-main kind, source SHA/tree/content hashes,
 recipe/runner hashes, exact tool and package versions, UTC times, process codes,
