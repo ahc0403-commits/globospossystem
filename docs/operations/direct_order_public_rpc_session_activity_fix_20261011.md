@@ -1,5 +1,7 @@
 # 배달 주문 페이지 초기 로딩 오류 수정
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 ## 원인과 변경
 
 빈탄점 운영 고객 페이지의 메뉴 조회는 성공하지만 주문 목록 조회는 HTTP 503으로
@@ -46,7 +48,7 @@ flutter test test/direct_order_customer_payment_status_test.dart \
 DB만 변경하므로 정식 `scripts/deploy_pos_production.sh --db-only --migration`
 경로를 사용한다. 기존 운영 이력의 `20261011140000`은 다른 배포
 `pos_recipient_buyer_lookup_bounded_release`에 이미 사용되어 새 번호
-`20261011183000`을 사용한다. PR의 필수 CI 통과와 병합 뒤 정확한 main SHA의
+`20261011183000`을 사용한다. PR의 필수 로컬 검증 통과와 병합 뒤 정확한 main SHA의
 `POS release contract` 성공을 확인한 다음, 깨끗한 작업 사본에서 dry-run과
 운영 적용을 실행한다. 기존 웹·Edge Function 버전은 그대로 사용한다.
 

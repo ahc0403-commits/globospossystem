@@ -1,5 +1,7 @@
 # Build Tasks: Inventory Purchase Approval and Receiving Verification
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: `.design/2026-08-inventory-purchase-approval/DESIGN_BRIEF.md`
 Date: 2026-08-27
 
@@ -236,7 +238,7 @@ deployed to production.
   document generation, email configuration, and pilot-account readiness; run
   format, targeted Flutter/SQL/Edge tests, `flutter analyze`, `flutter test`, and
   `bash scripts/check_repo.sh`, then deploy only through
-  `scripts/deploy_pos_production.sh` and require GitHub checks on the exact
+  `scripts/deploy_pos_production.sh` and require local verification on the exact
   pushed SHA. _Modifies: production gate scripts/tests/workflows only as needed;
   reuses: repository production-gate support. Depends on: all release slices._
 

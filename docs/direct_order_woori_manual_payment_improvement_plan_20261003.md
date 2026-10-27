@@ -1,5 +1,7 @@
 # 고객 송금 사진 확인·배달 주문 승인 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-10-03, 베트남 시간. 상태: 코드 구현·로컬 검증 완료. 신규 migration은 운영에 적용하지 않았고 앱 배포·실주문 승인은 실행하지 않았다.
 
 ## 1. 확정한 운영 흐름과 원인
@@ -121,7 +123,7 @@
 
 조사 중 관련 Flutter 테스트 4개 파일, **22건 통과**를 확인했지만 수정 전 계약을 확인한 결과였다. 기존 pilot safety 테스트가 SePay 연결 필수를 정상 전제로 검사하므로 이번 장애를 탐지하지 못했다. 해당 전제를 최신 사진 확인 승인 계약으로 갱신했다.
 
-구현 단계에서는 독립 테스트 DB의 승인·경합 테스트, Flutter 분석과 관련 테스트, `scripts/check_repo.sh`를 실행한다. `CLAUDE.md`에 따라 정확히 push된 head SHA의 필수 GitHub Actions 성공을 확인하고 `scripts/deploy_pos_production.sh`를 사용한다.
+구현 단계에서는 독립 테스트 DB의 승인·경합 테스트, Flutter 분석과 관련 테스트, `scripts/check_repo.sh`를 실행한다. `CLAUDE.md`에 따라 정확히 push된 head SHA의 필수 로컬 자동 검증 성공을 확인하고 `scripts/deploy_pos_production.sh`를 사용한다.
 
 완료는 소스 구현, migration 적용, 앱 배포, 실제 직원 사진 확인 승인 및 주방 노출을 각각 확인한 뒤 판정한다.
 
@@ -154,7 +156,7 @@
 
 - 범위가 제한된 `rollback_direct_order_customer_photo_approval.sql`을 준비했다. 공통 승인 함수의 사진 조건·감사 상세만 복원하며 결제 데이터와 다른 기능은 유지한다. 격리 DB에서 복원 전후 정의 해시를 대조한다.
 - `smoke_direct_order_customer_photo_approval.sql`은 실주문 데이터를 참고해 합성 주문을 만들고 실제 직원 권한의 승인 RPC·멱등 재시도·주방 권한의 티켓 조회를 검사한 다음 모두 롤백한다. 원주문을 대신 승인하지 않는다.
-- 운영 반영은 PR 및 main의 정확한 SHA CI 통과 후 `scripts/deploy_pos_production.sh`로 새 migration 한 건과 앱을 배포한다. 기존 고정 POS 계정 로그인 검사도 수행한다.
+- 운영 반영은 최종 후보 및 깨끗한 main의 정확한 SHA에서 로컬 전체 검증·원격 push 확인 후 `scripts/deploy_pos_production.sh`로 새 migration 한 건과 앱을 배포한다. 기존 고정 POS 계정 로그인 검사도 수행한다.
 
 격리 작업트리의 전체 `scripts/check_repo.sh`가 통과했다. 최신 main 기준 Flutter 1,680건 통과·환경 조건에 따른 94건 건너뜀, 정적 분석·SQL/API·Edge·Node·웹 릴리스 빌드가 포함된다. 마지막 운영 smoke 추가 후 동일 SQL runner를 다시 통과해 권한별 승인·주방 조회 및 시험 데이터 전체 롤백을 확인했다.
 

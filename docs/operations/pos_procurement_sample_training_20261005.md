@@ -1,5 +1,7 @@
 # SAMPLE 구매 연습 계정·실행 절차 — 2026-10-05
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 사용자 요청: 빈탄점과 동일 역할의 공용 ID를 샘플 매장에도 발급하여 구매 과정을 연습한다. 개인별 ID·HR 연결·부재 대리자를 요구하지 않는다. **기존 구매 앱·DB와 Office SAMPLE 연결·구매팀 발급은 완료했다. PR 계정 발급과 통합 입고 변경의 실제 적용·정책 활성화·연습은 운영 기록에서 별도로 확인한다.**
 
 ## 계정
@@ -21,7 +23,7 @@
 - POS 비세무 샘플 법인: `8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1`, `PENDING_SAMPLE_STORE_TAX_PROFILE`.
 - Office SAMPLE 연결과 비세무 교육 법인 `BUNSIK_SAMPLE_TRAINING`은 생성되어 두 DB의 매장 범위를 확인했다. Office 법인 ID는 `8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1`이다.
 
-1. 기존 두 PR을 검토·병합하고 정확한 운영 main CI·migration history·고정 프로젝트·배포 확인 조건을 충족한다. 기존 구매 migration 13개/POS·12개/Office와 호환 앱/bridge를 적용한다.
+1. 기존 두 PR을 검토·병합하고 정확한 운영 main SHA의 전체 로컬 검증·원격 push·migration history·고정 프로젝트·배포 확인 조건을 충족한다. 기존 구매 migration 13개/POS·12개/Office와 호환 앱/bridge를 적용한다.
 2. 승인된 Office DB 절차에서 [고정 샘플 연결 설정 SQL](/Users/andreahn/Documents/procurement-release-20261005/office/scripts/operations/configure_procurement_sample_scope.sql)을 실행한다. 거래·Auth·구매 권한을 자동 생성하지 않는다. 다른 매장 연결·법인 식별자·비활성 매장과 충돌하면 전체 트랜잭션을 취소하며 기존 행을 덮어쓰지 않는다.
 3. 실제 POS Super Admin으로 `admin_prepare_procurement_store_account`와 native `provision-fixed-pos-account`를 사용해 `sp_pr1`을 발급한다. Office 실제 master로 `manage-office-account`를 호출해 샘플 매장 범위 `purchase_store`·`office_staff` 계정 `sp_purchase1@globos.world`를 발급한다. 정확한 입력은 [발급 명세의 training_stores](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_account_manifest_20261005.json)에 있다.
 4. 최초 PR 계정을 발급하고 기존 `sp_order`의 초기 비밀번호를 소유자가 지정한 값으로 설정한다. 정상 로그인·최초 비밀번호 변경 절차·샘플 매장 접근을 확인한다. 별도 `sp_verify1`은 발급하지 않는다. 통합 입고 권한 배정과 실제 검수·확정을 확인한다. 임시 비밀번호는 보안 입력으로 전달하고 문서·로그에 저장하지 않는다. Auth ID는 실제 발급 결과에서 기록한다.

@@ -1,5 +1,7 @@
 # Scalability plan — phase 3: KDS and customer-display polling
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 This phase starts from phase 2, draft PR #453, at
 `4a4ddccfe111d837c142aac530bc051adb39b0d4`. Implementation is isolated from the
 original workspace's uncommitted files. It changes client read scheduling and
@@ -116,11 +118,11 @@ remain required gates.
   The ordinary Flutter run's 50 skips include the SQL/API groups subsequently
   executed by their harnesses. Existing optional Wasm dry-run/font warnings
   remain; the standard web build succeeded.
-- Exact-head GitHub checks: required; consult the stacked draft PR.
+- Exact-head local verification: required; attach complete logs to the final SHA and repeat for the clean exact-main release source.
 - New database migration: none; earlier stack prerequisites still apply.
 - Production deployed / operationally verified: no / no.
 
-After review and exact-head CI, an authorized release must use the existing
+After review and exact-head local verification, an authorized release must use the existing
 production wrapper. On a pilot store, verify normal new orders, partial/full
 handoffs, payment-display updates, receipt expiry, reconnect catch-up, silent
 event loss, slow/error responses, and closing/reopening the screen. Compare

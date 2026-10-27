@@ -1,5 +1,7 @@
 # 법인 수금 계좌·다음날 입금액·MISA 원장 연결 구현
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-10-11. 사용자의 통합 수정 계획과 실행 지시를 반영한 **소스 구현 및 로컬 검증 보고서**다. 운영 DB 마이그레이션, 운영 배포, 실제 계산서 발행·정정은 수행하지 않았다.
 
 후속 비교에서 발견된 일반 영수증 연락처와 추가 결제 방식은 [보완 결과](/Users/andreahn/.codex/worktrees/corporate-sales-release-prep/globos_pos_system/docs/pos/INVOICE_CONTACT_PAYMENT_FIX_2026_10_11.md)에 구현·검증했다. 후속 마이그레이션 `20261011203000_invoice_contacts_payment_methods.sql`도 운영 미적용이며 사용자의 배포 금지를 유지한다. 아래 검증 수치는 최초 구현 시점의 기록이다.
@@ -82,14 +84,14 @@ SQL 페이지 검증은 영수증 205건·주문 품목 1,845행을 생성해 10
 
 ## 운영 반영 순서와 남은 조건
 
-1. 기존 변경을 보존한 검토 가능한 커밋을 구성하고 해당 pushed SHA의 필수 GitHub Actions 검증을 통과한다. 작업 시작 당시 이미 다수의 미커밋 사용자 변경이 있었으며 이를 임의로 commit/push하지 않았다.
+1. 기존 변경을 보존한 검토 가능한 커밋을 구성하고 해당 pushed SHA의 필수 로컬 자동 검증을 통과한다. 작업 시작 당시 이미 다수의 미커밋 사용자 변경이 있었으며 이를 임의로 commit/push하지 않았다.
 2. 계좌 → 계산서 원장 계약 → 매출 요약/페이지 순서로 세 마이그레이션을 운영 절차에 따라 적용한다. 실제 선행 함수의 anchor가 다르면 마이그레이션은 중단된다.
 3. `scripts/deploy_pos_production.sh`로 POS와 변경된 dispatcher를 정식 반영하고 연결된 자동화 소스 버전을 함께 검증한다. 설치 앱의 배포는 기존 자동화 배포 절차를 따른다.
 4. 회계 담당자가 실제 SKU 명칭·판매 단위와 적용일을 승인한다. 과거 미발행 거래는 해당 거래일을 포함하는 첫 승인 이력이 필요하다. 실제 원장/영수증 수치와 비교한 뒤 화면에서 미발행 작업을 명시적으로 재검증한다.
 5. 운영 화면에서 법인 계좌·새 QR·수동 Photo 등록·현금 마감·다음날 입금액, 선택 법인의 Excel/원장 명세를 확인한다. 실제 MISA 가져오기/미리보기와 과거 작업 재개는 읽기 검증을 먼저 완료한다. 기발행 원본은 보존하고 필요한 정정은 별도 절차로 처리한다.
 
-프로젝트 `CLAUDE.md`의 릴리스 조건: “The release gate passes only when required GitHub Actions checks succeed on the exact pushed head SHA.” 로컬 검증은 이 조건을 대신하지 않는다. 현재 보고서의 완료 범위는 소스 구현과 위 로컬 검증이다.
+2026-10-24 소유자 정책에 따라 릴리스 검증은 최종 후보와 깨끗한 exact-main SHA에서 수행한 전체 로컬 증거를 기준으로 한다. GitHub Actions 성공은 필수 증거가 아니다. 현재 보고서의 과거 완료 범위는 소스 구현과 당시의 로컬 검증이며, 원격 push·공식 배포·운영 확인까지 완료했다는 뜻은 아니다.
 
 관련 계획: [POS 수정 계획](/Users/andreahn/Documents/Codex/2026-09-12/files-pasted-by-the-user-full-2/outputs/akj-automation/reports/01-pos-improvement-plan-2026-10-11.md) · [자동화 수정 계획](/Users/andreahn/Documents/Codex/2026-09-12/files-pasted-by-the-user-full-2/outputs/akj-automation/reports/02-automation-improvement-plan-2026-10-11.md) · [기발행 정정 절차](/Users/andreahn/Documents/Codex/2026-09-12/files-pasted-by-the-user-full-2/outputs/akj-automation/reports/03-issued-invoice-correction-procedure-2026-10-11.md)
 
-배포 후보와 원자적 적용 순서는 [배포·필수 CI 준비 기록](POS_CORPORATE_RELEASE_PREPARATION_2026_10_11.md)을 따른다. 이 후보는 기존 14시 마이그레이션 번호 충돌을 피한 새 번호와 단일 트랜잭션 패키지를 사용한다.
+배포 후보와 원자적 적용 순서는 [배포·필수 로컬 검증 준비 기록](POS_CORPORATE_RELEASE_PREPARATION_2026_10_11.md)을 따른다. 이 후보는 기존 14시 마이그레이션 번호 충돌을 피한 새 번호와 단일 트랜잭션 패키지를 사용한다.

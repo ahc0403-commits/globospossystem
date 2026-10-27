@@ -1,5 +1,7 @@
 # 음료 당류 VAT 구현 기록
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-09-29. 최초 구현 기준: `cc4de81a` + 기존 작업 변경 사항.
 배포 준비: 별도 worktree에서 최신 main `c2633f01`에 음료 VAT 변경만 이식했다. 기존 작업 폴더는 보존했다.
 
@@ -73,7 +75,7 @@
 
 ## 적용 순서와 복원
 
-1. 기존 작업 변경을 보존하면서 배포할 소스를 확정하고, 정확히 pushed head SHA의 필수 GitHub Actions `POS release contract` 성공을 확인한다.
+1. 기존 작업 변경을 보존하면서 배포할 소스를 확정하고, 정확히 pushed head SHA의 `bash scripts/check_repo.sh`와 실제 Chrome 인증 검증 성공을 확인한다.
 2. 공식 `scripts/deploy_pos_production.sh`로 `20260929010000_beverage_sugar_vat.sql`과 앱을 배포한다. 주문 유입을 멈춘 전환 시점에 기존 클라이언트 세션을 갱신한다.
 3. 대상 매장 미완료 POS 주문이 없고 기존 직접 주문의 세율 스냅샷이 유효한 것을 확인한 후 같은 스크립트의 `--db-only --migration supabase/migrations/20260929020000_bunsik_beverage_vat.sql` 경로로 상품별 분류를 적용한다.
 4. 적용 후 verify SQL, 매장별 세율, 새 주문의 8%/10% 혼합 결제, 콤보, 자동 할인, 영수증과 MISA 증빙을 확인한다.

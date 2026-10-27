@@ -1,11 +1,13 @@
 # Store Opening Setup Production Runbook
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 This runbook records the remaining exact-SHA production and physical evidence.
 It must not be marked complete from local tests or simulated printer data.
 
 ## Release gates
 
-1. Merge the reviewed PR only after the required GitHub checks pass on its
+1. Merge the reviewed PR only after the required local verification passes on its
    exact head SHA.
 2. Confirm the merge is on `origin/main` and the worktree is clean.
 3. Build and download the Windows artifact whose name contains the exact main
@@ -61,7 +63,7 @@ readiness are N/A, and this database release is not POS login-ready evidence.
 - Sanitized DB-only apply command/output reference:
 - Migration history before/after reference:
 - Preflight/apply/verification output reference:
-- GitHub exact-head checks URL:
+- Local exact-head verification log path/hash, environment and command:
 - Windows artifact name:
 - Windows ZIP SHA-256:
 

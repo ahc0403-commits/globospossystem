@@ -1,5 +1,7 @@
 # SePay payment alert runtime
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 This path is limited to SePay Test Mode until the device checks below pass. MSB
 account linking, bank authentication, OTP, and Live webhook activation are not
 part of this change.
@@ -50,7 +52,7 @@ BankTransferNotificationService.
 
 ## Test Mode release gate
 
-1. Deploy only from a clean, exact `main` SHA after the required GitHub Actions
+1. Deploy only from a clean, exact `main` SHA after the required local verification
    check succeeds, using `scripts/deploy_pos_production.sh`.
 2. Confirm the cashier banner no longer reports that locked-device
    notification setup is missing.

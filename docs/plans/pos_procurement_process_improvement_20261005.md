@@ -1,5 +1,7 @@
 # POS 발주·구매 전체 프로세스 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-10-05 · 시간 기준: Asia/Ho_Chi_Minh  
 상태: 설계·실행 계획 수립 완료 / 소스 구현·로컬 검증 완료 / 생산 적용·현장 시범 미완료
 
@@ -521,7 +523,7 @@ POS가 PR·PO·견적·할당·입고·재고·실물 반품의 원본을 소유
 
 POS SQL은 `scripts/test_procurement_v2.sh`의 격리된 로컬 DB 테스트를 확장하고, 요청 화면·문서·권한별 작업은 Flutter 테스트와 역할별 UAT로 검증한다. Office는 bridge actor/command, Invoice/AP, 보충 제안의 기존 테스트와 회사 다국어 검사·wrapper를 사용한다. 전체 변경의 검사는 각 저장소 CLAUDE.md에 맞춰 수행한다.
 
-계획 검토, 로컬 검사, migration 적용, 배포, 현장 확인을 별도로 기록한다. 실제 릴리스에서는 두 저장소의 호환 코드·migration을 준비하고 **정확한 pushed head SHA의 GitHub Actions 필수 검사가 성공한 뒤** release gate를 통과한 것으로 판정한다. POS 배포는 `scripts/deploy_pos_production.sh`, Office는 해당 저장소의 정해진 production 절차와 확인 요건을 따른다. 독립 Judge가 필요한 릴리스 단계에서는 사전 점검 자료로 사용한다.
+계획 검토, 로컬 검사, migration 적용, 배포, 현장 확인을 별도로 기록한다. 실제 릴리스에서는 두 저장소의 호환 코드·migration을 준비하고 **정확한 pushed head SHA의 필수 로컬 자동 검증이 성공한 뒤** release gate를 통과한 것으로 판정한다. POS 배포는 `scripts/deploy_pos_production.sh`, Office는 해당 저장소의 정해진 production 절차와 확인 요건을 따른다. 독립 Judge가 필요한 릴리스 단계에서는 사전 점검 자료로 사용한다.
 
 기존 정책과 데이터를 읽을 수 있는 서버·앱을 먼저 배포하고 매장별 새 정책을 활성화한다. 과거 건의 승인·재고 상태를 전체 일괄 전환하지 않는다. 초기 시범 성공 후 매장을 점진 확대한다.
 

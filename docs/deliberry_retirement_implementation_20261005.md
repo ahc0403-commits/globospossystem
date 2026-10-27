@@ -1,5 +1,7 @@
 # Deliberry 사용 종료 구현
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성: 2026-10-05. 아래 상태 표는 최초 구현 검증 시점의 기록이다. 이후 운영 릴리스 증거는 별도 배포 보고서로 관리한다. 사용자의 “삭제하든지 닫던지 해라. 안쓴다.” 결정에 따라 신규 처리를 닫고 과거 기록은 보존한다.
 
 | 상태 | 결과 |
@@ -58,6 +60,6 @@ bash test/pos_deploy_clean_worktree_checks_test.sh
 
 현재 checkout에는 사용자 소유의 여러 미커밋/미추적 작업이 함께 있다. [CLAUDE.md](/Users/andreahn/globos_pos_system/CLAUDE.md)의 clean release checkout 및 정확한 pushed HEAD의 `POS release contract` 조건을 충족하지 않았으므로 운영 배포를 실행하지 않았다.
 
-릴리스 시 변경 범위와 선행 migration을 확정하고 정확한 SHA의 필수 CI를 통과한 뒤 `scripts/deploy_pos_production.sh`로 네 endpoint, `--migration supabase/migrations/20261005050000_deliberry_retirement.sql`, 앱을 반영한다. 스크립트가 preflight와 `verify_deliberry_retirement.sql`을 실행하고, 네 endpoint가 HTTP 410인지 확인한다. 이후 운영 원장 보존, 대상 cron 해제, 메뉴 제거를 확인해야 운영 종료 완료로 판정한다.
+릴리스 시 변경 범위와 선행 migration을 확정하고 정확한 SHA의 필수 로컬 검증을 통과한 뒤 `scripts/deploy_pos_production.sh`로 네 endpoint, `--migration supabase/migrations/20261005050000_deliberry_retirement.sql`, 앱을 반영한다. 스크립트가 preflight와 `verify_deliberry_retirement.sql`을 실행하고, 네 endpoint가 HTTP 410인지 확인한다. 이후 운영 원장 보존, 대상 cron 해제, 메뉴 제거를 확인해야 운영 종료 완료로 판정한다.
 
 종료 결정에 역행하는 자동 재활성화 rollback은 제공하지 않는다. 재개하려면 새 명시적 사용자 결정과 별도 migration이 필요하다. 예기치 않은 영향은 과거 기록을 보존하는 수정 migration으로 해결한다.

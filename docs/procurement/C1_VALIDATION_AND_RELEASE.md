@@ -2,7 +2,7 @@
 
 Development validation covers POS PR/revision/approval/PO/receiving and Office scope/line-matching/proposal contracts in disposable databases and local Flutter/Deno tests. New contract CI jobs are included. No production migration, deployment, supplier message, purchase or payment was executed.
 
-Apply additive POS migrations in filename order, then Office migrations. Deploy the Office bridge, then Office/POS clients through each established release script. Check required CI on the exact pushed head. Enable one mapped BUNSIK CLUB store only after staging checks and business configuration of amount/price/quantity thresholds, inventory freshness, suppliers/units, cold-chain practices and replenishment policies. The scheduled proposal environment flag and item policies default off.
+Apply additive POS migrations in filename order, then Office migrations. Deploy the Office bridge, then Office/POS clients through each established release script. Run the complete required local verification on the exact pushed candidate and clean exact-main release SHAs; record commands, environment, timestamps, exit codes and full logs, and confirm the remote push. Enable one mapped BUNSIK CLUB store only after staging checks and business configuration of amount/price/quantity thresholds, inventory freshness, suppliers/units, cold-chain practices and replenishment policies. The scheduled proposal environment flag and item policies default off.
 
 Before enabling: exercise real scoped Office/POS users, missing migration UI, purchase request edits and cross-store rejection, comparison quotes and separate senior approval, multi-supplier issuance, supplier-confirmed terms, partial/excess/failed QC with photo and expiry/temperature evidence, signed URL access, invoice line matching and evidence/Finance gates, physical returns/credit adjustments, interrupted proposal confirmation/retry, and a stale-stock schedule. Validate existing live workflow regressions in the full deployed schema; local fixtures alone are not an operational PASS.
 
@@ -11,3 +11,17 @@ Legacy orders retain their original workflow. Missing historical conversion/VAT 
 The original project contains pre-existing uncommitted work. Only the procurement diff from the isolated baseline is eligible for application; do not publish or merge the captured baseline as an unrelated release.
 
 Accounting uses a refreshed, versioned POS snapshot with a ten-minute freshness limit. The two independent databases do not provide a distributed payment lock. A return after invoice approval must follow the existing Finance credit/adjustment workflow; this feature does not rewrite approved invoices or execute payments. First-purchase items require comparison quotes even when a supplier master price already exists.
+
+## Local verification and source storage (owner decision 2026-10-24)
+
+GitHub stores commits and pushed source. Run automated verification locally,
+including an isolated local container/VM when the required OS differs. Apply
+`/Users/andreahn/.claude/CLAUDE.md` → “GitHub 저장과 로컬 자동 검증”.
+GitHub Actions success and runner availability are not required evidence.
+Keep all relevant tests, type checks, lint/analysis, builds, security/permission/
+DB isolation, regressions and actual affected-feature checks. Bind commands,
+environment, timestamps, exit codes and complete logs to the final code SHA;
+distinguish candidate validation from a clean freshly fetched exact-main release.
+Verify the remote pushed SHA and retain the official deployment and operational
+checks. A missing/failed/skipped check is not PASS. Report remaining executable
+or remote GitHub-check dependencies; do not bypass gates or provision CI runners.

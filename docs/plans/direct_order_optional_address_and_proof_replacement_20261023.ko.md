@@ -1,5 +1,7 @@
 # 고객 주문 5개 항목 원인 분석 및 개선 계획
 
+> Reconciled 2026-10-27: historical source and operational observations below retain their original SHA/time and have not been revalidated by this transfer. Current verification follows cloud-first `CLAUDE.md` and the full committed candidate/exact-main gate; historical CI or local-only wording is not a current release requirement. No production action is authorized by this document.
+
 후속 구현·검증은 [구현 및 검증 보고서](../measurements/direct-order-address-proof-20261023/implementation-verification.ko.md)에 기록한다. 아래 최초 분석은 수정 전 상태의 증거이며 운영 배포 완료를 뜻하지 않는다.
 
 작성일: 2026-10-23, 베트남 시간. 범위: 고객 배달 주문의 상세주소 검증, 이체 증빙 재전송 및 담당자 확인.

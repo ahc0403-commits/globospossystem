@@ -1,5 +1,7 @@
 # 외부 주문 상태·결제 안내·결제 화면·이미지 재인증 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-09-10
 추가 반영: 주문별 상태 표시, 복수 주문 조회·접수, Grab 배송 확인 후 Cashier 수동 주문 완료.
 대상: Direct Order 고객 웹 화면 및 Cashier 외부 주문 화면
@@ -240,7 +242,7 @@
 
 수동 완료 권한 변경은 새 Cashier 완료 화면을 사용할 수 있는지 확인한 뒤 활성화해 주방에서도 Cashier에서도 완료할 수 없는 배포 공백을 막는다. 이미 여러 미결제 주문이 만들어진 뒤에는 기존 ‘세션당 한 건’ unique index를 무조건 재생성할 수 없으므로, 복수 주문 중단 시 신규 접수를 제어하고 기존 주문을 보존하는 복구 절차를 마련한다.
 
-릴리스 시 `CLAUDE.md`의 정확히 push된 head SHA에 대한 필수 GitHub Actions 성공과 `scripts/deploy_pos_production.sh` 절차를 따른다. 소스 구현, migration 적용, Edge/Web/native 배포, 실제 운영 검증을 각각 기록한다. 파일럿에서는 두 Cashier·고객 휴대폰으로 복수 주문의 금액 안내·재제출·입금 승인·Grab 배송 확인·Cashier 수동 완료·주문별 완료 표시까지 확인한다. MISA 및 출력 실패가 결제를 중복 처리하지 않는 기존 계약도 유지한다.
+릴리스 시 `CLAUDE.md`의 정확히 push된 head SHA에 대한 필수 로컬 자동 검증 성공과 `scripts/deploy_pos_production.sh` 절차를 따른다. 소스 구현, migration 적용, Edge/Web/native 배포, 실제 운영 검증을 각각 기록한다. 파일럿에서는 두 Cashier·고객 휴대폰으로 복수 주문의 금액 안내·재제출·입금 승인·Grab 배송 확인·Cashier 수동 완료·주문별 완료 표시까지 확인한다. MISA 및 출력 실패가 결제를 중복 처리하지 않는 기존 계약도 유지한다.
 
 ## 11. 소스 근거
 

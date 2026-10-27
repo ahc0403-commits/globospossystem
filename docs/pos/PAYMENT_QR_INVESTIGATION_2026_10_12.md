@@ -1,5 +1,7 @@
 # 고객 입금 QR 변경 조사와 인쇄 경로 보완
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 2026-10-12 / Asia/Ho_Chi_Minh. 사용자의 첨부 QR은 MSB, BIN `970426`, 계좌 `80002014298`, 수취인 `AKJ INTERNATIONAL CO., LTD`다. 이미지의 QR을 실제 디코딩해 계좌를 확인했다.
 
 ## 운영에서 확인한 사실
@@ -30,4 +32,4 @@
 
   `00020101021138550010A000000727012500069704260111800020142980208QRIBFTTA53037045802VN63044E6F`
 
-**이번 보완은 로컬 소스와 검증까지다. 신규 운영 마이그레이션·commit/push·웹 배포·Windows 패키지 교체를 수행하지 않았다.** 전체 릴리스 CI나 물리 프린터/현장 단말 검증도 이번 조사에서 완료한 것으로 표시하지 않는다. 실제 운영 반영에는 정식 배포 스크립트와 정확한 pushed SHA의 필수 CI, 수정된 native print station 교체가 필요하다.
+**이번 보완은 로컬 소스와 검증까지다. 신규 운영 마이그레이션·commit/push·웹 배포·Windows 패키지 교체를 수행하지 않았다.** 전체 릴리스 CI나 물리 프린터/현장 단말 검증도 이번 조사에서 완료한 것으로 표시하지 않는다. 실제 운영 반영에는 정식 배포 스크립트와 정확한 pushed SHA의 필수 로컬 전체 검증, 수정된 native print station 교체가 필요하다.

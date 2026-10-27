@@ -1,5 +1,7 @@
 # 실행 체크리스트: 500개 매장 안정성
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 기준: [DESIGN_BRIEF.md](DESIGN_BRIEF.md) · 2026-09-19
 
 `brief-to-tasks` 방식으로 각 항목을 재사용/수정/신규 대상과 검증 가능한 완료 조건으로 나눴다. 전 항목 미실행 상태다. 여러 PR이 필요한 큰 항목은 역할/화면별 동일 계약의 세션 크기 작업으로 분할하며 검증 없는 기반 작업만 별도로 완료 처리하지 않는다. 담당 표기는 역할이며 실제 담당자는 T01에서 지정한다.
@@ -56,7 +58,7 @@
 - [ ] **T30 장애·복구·구버전 혼합 시험** — QA/운영. _재사용: T28/runbook; 신규: fault matrix._ WS만 차단/HTTP만 지연/DB restart/재접속 폭주/인증 회전/slow consumer/서버 restore/client rollback을 주입한다. **완료:** 데이터 대사 0차이, bounded fallback, 탐지·복구 시간 통과; 불가 항목은 미통과로 표시. _의존: T17, T21, T25~T29._
 - [ ] **T31 재발 방지 CI와 지원 버전 정책** — QA/release. _수정: check_repo/기존 테스트/배포 계약; 신규: 새 deterministic regression._ idle poll, read-side write, RLS/금전/대기열/cursor 회귀를 필수화한다. **완료:** 의도적 결함 주입 시 게이트 실패, 구버전/캐시·service-worker 혼합 시험, 미전송 queue 보존하는 업그레이드 정책. _의존: T05~T25._
 - [ ] **T32 운영 경보·당직·확장 중단 정책 인수** — 운영. _재사용: T08; 신규: runbook/on-call/월 SLO 보고._ 실패·지연·outbox·quota·결제 미확인 경보를 시험한다. **완료:** 시험 경보→인지→진단→완화→대사 기록, 책임자 지정, 오류 예산 소진 시 기능/확장 동결. _의존: T08, T26, T27, T30._
-- [ ] **T33 정확한 SHA release preflight** — release 책임자. _재사용: check_repo/flutter/독립 Judge/deploy_pos_production.sh; 신규: 증거 묶음._ 관련 사용자 변경과 분리한 clean release를 준비한다. **완료:** 정확한 pushed/main SHA의 GitHub 필수 checks PASS, migration preflight/verify/rollback 검증, 운영 적용에 대한 별도 요청 확인. _의존: T29~T32._
+- [ ] **T33 정확한 SHA release preflight** — release 책임자. _재사용: check_repo/flutter/독립 Judge/deploy_pos_production.sh; 신규: 증거 묶음._ 관련 사용자 변경과 분리한 clean release를 준비한다. **완료:** 정확한 pushed/main SHA의 필수 로컬 검증 PASS, migration preflight/verify/rollback 검증, 운영 적용에 대한 별도 요청 확인. _의존: T29~T32._
 - [ ] **T34 매장별 단계 전개** — release/매장 운영. _재사용: rollout flag; 신규: cohort 인수 기록._ 1→5→20→50→100→250→500, 각 관측기간을 지킨다. **완료:** 단계별 성능·업무·금전·권한·quota PASS와 rollback 준비; 실제 없는 매장은 staging 인증으로 명시. _의존: T33._
 - [ ] **T35 500매장 최종 인증·정기 재검증 인수** — 기술 책임자/운영/업무 담당. _재사용: 모든 검증 산출물; 신규: 서명된 capacity certificate._ source/DB/client/운영을 각각 승인하고 비용·장비·지원 한계·다음 증설 지점을 확정한다. **완료:** 미해결 CRITICAL/HIGH 0, 500매장 관측 또는 실제 운영 검증 미완료 표시, 부하/복구/권한 재검증 주기 운영 인수. _의존: T34._
 

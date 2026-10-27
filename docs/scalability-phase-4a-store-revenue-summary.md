@@ -1,5 +1,7 @@
 # Scalability plan — phase 4A: aggregate multi-store reports
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 This independently reviewable phase starts from phase 3, draft PR #454, at
 `d18a28e91498e87f306598c9862093e518a461bd`. It replaces the transaction-reading
 path in `SuperAdminNotifier.loadAllReports` with one scoped aggregate RPC.
@@ -98,7 +100,7 @@ assertions, 22 Deno tests, 60 Node tests, dependency audit, secret scan,
 deployment/SQL shell fixtures and the web release build. The ordinary Flutter
 run's 75 skips include SQL/API cases executed by their subsequent harnesses.
 Existing optional Wasm dry-run/font warnings remain; the standard web build passed.
-Required exact-head GitHub checks: consult the stacked draft PR.
+Required exact-head local verification: consult the stacked draft PR.
 
 ## Remaining risks, measurement and next actions
 
@@ -129,7 +131,7 @@ There are no realtime connection/message changes in this phase.
 - Production client deployed / operationally verified: no / no.
 
 Apply `20260905040000_store_revenue_summary.sql` with its companion preflight and
-verification before releasing this client, after review and exact-head CI, using
+verification before releasing this client, after review and exact-head local verification, using
 the existing authorized production wrapper and earlier stack prerequisites.
 For a pilot, compare each store and global totals for a closed period containing
 split payments, delivery, Photo Objet service amounts and a zero-activity store.

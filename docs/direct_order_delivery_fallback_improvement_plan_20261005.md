@@ -1,5 +1,7 @@
 # 배달 주문 인원·접수 중지·배달 앱 변경·방문 포장 전환 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-10-05, 베트남 시간.
 
 상태: 현재 작업 디렉터리의 소스와 migration 순서를 조사하고 관련 Flutter 테스트 19건을 실행했다. 이 문서는 개선 계획이며 기능 구현, 운영 DB 조회·migration 적용, 앱 배포는 수행하지 않았다. 기존 수정 파일과 사용자 소유 untracked 파일은 유지했다.
@@ -170,7 +172,7 @@ API 배포 주의:
 | 인원·링크·포장 흐름 KO/VI/EN 및 모바일/태블릿 | 의미 일치, 넘침 없음, 버튼 동작 확인. |
 | 정상 POS·QR 포장·KDS·결제·현금마감·Deliberry | 기존 동작 유지, Direct Order 변경이 기존 영역을 우회하거나 중복 기록하지 않음. |
 
-구현 후 검증: 관련 Flutter 동작 테스트와 분석, Deno Edge 테스트, 독립 테스트 DB의 유효 migration 적용·SQL 상태/환불/경합 테스트, `bash scripts/check_repo.sh`. 운영 배포는 정확히 push한 head SHA의 필수 GitHub Actions 성공을 확인하고 `scripts/deploy_pos_production.sh`로 진행한다. 소스 구현, migration 적용, 앱 배포, 매장 실제 업무 확인을 각각 기록한다.
+구현 후 검증: 관련 Flutter 동작 테스트와 분석, Deno Edge 테스트, 독립 테스트 DB의 유효 migration 적용·SQL 상태/환불/경합 테스트, `bash scripts/check_repo.sh`. 운영 배포는 정확히 push한 head SHA의 필수 로컬 자동 검증 성공을 확인하고 `scripts/deploy_pos_production.sh`로 진행한다. 소스 구현, migration 적용, 앱 배포, 매장 실제 업무 확인을 각각 기록한다.
 
 ## 8. 이번 조사에서 실행한 검증
 

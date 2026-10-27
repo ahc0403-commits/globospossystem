@@ -1,5 +1,7 @@
 # Procurement store policy parity — 2026-10-19
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Release scope: database configuration only. JeonGabok Binh Thanh has no procurement
 policy, while the two BunsikClub stores have an enabled policy-3 purchasing flow.
 The migration aligns every active store with an active ordering-account requirement
@@ -24,7 +26,7 @@ PR/PO activity. It is idempotent and does not rewrite historical documents.
 
 Apply only through `scripts/deploy_pos_production.sh --db-only --migration
 supabase/migrations/20261019081922_procurement_all_store_parity.sql` on clean,
-exact-main source after the required CI check succeeds for that SHA. Do not use
+exact-main source after complete local verification succeeds for that SHA with full logs and remote push confirmation. Do not use
 `supabase db push` or direct production SQL mutation. Run the companion verification,
 read actual scoped catalog/workspace responses, and perform the existing fixed-account
 login smoke. A DB-only release is separate from a frontend deployment.
@@ -39,5 +41,5 @@ leave the preceding configuration intact.
 The last known production frontend before this release is deployment
 `dpl_29VfEgMDTCShDkz85x4yfLpFyHwu`, source SHA
 `1420cc1285ce2a233d93a9c254fc183bf1ce57b4`. DB-only does not replace it.
-Record actual release SHA, CI result, migration-history evidence and operational
+Record actual release SHA, local verification environment/commands/timestamps/exit codes/log hashes, migration-history evidence and operational
 verification separately after execution; preparation is not deployment proof.

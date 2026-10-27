@@ -1,5 +1,7 @@
 # 전가복 주방 → 층 직접 전달
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 사용자 승인: 2026-10-20, 구현·검증·운영 배포 및 checker ID 정리.
 
 ## 운영 계약
@@ -31,7 +33,7 @@ SQL 검사: 층 3개 분리, 부분/일괄 조리, 별도 고객 전달, 멱등 
 
 ## 배포와 복구
 
-정확한 main SHA의 GitHub `POS release contract` 성공을 확인하고 `scripts/deploy_pos_production.sh --migration supabase/migrations/20261020090000_jeongabok_kitchen_floor.sql`로 배포한다. 전·후 다른 매장 계정·배정·설정·진행 수량의 해시를 비교한다. 운영 검증은 읽기와 실제 기존 계정 로그인으로 수행한다.
+정확한 main SHA의 필수 로컬 전체 검증 성공을 확인하고 `scripts/deploy_pos_production.sh --migration supabase/migrations/20261020090000_jeongabok_kitchen_floor.sql`로 배포한다. 전·후 다른 매장 계정·배정·설정·진행 수량의 해시를 비교한다. 운영 검증은 읽기와 실제 기존 계정 로그인으로 수행한다.
 
 직접 전달 주문이 시작된 뒤 서버를 이전 checker 수량 의미로 단순 되돌리거나 폐기 계정을 재활성화하지 않는다. 장애 시 주문 접수를 일시 중단하고 진행 수량을 보존하여 전가복 분기를 수정하는 별도 migration을 적용한다. 전가복 설정이 없는 이전 앱도 서버의 직접 전달 처리를 사용하지만 새 앱으로 갱신해야 올바른 문구/원복 버튼을 표시한다.
 
@@ -49,7 +51,7 @@ SQL 검사: 층 3개 분리, 부분/일괄 조리, 별도 고객 전달, 멱등 
 
 ## 통합 배포 순서와 복구
 
-이번 릴리스에는 서로 다른 운영 게이트를 가진 migration 두 개가 필요하다. 공식 스크립트의 단일 migration 제한을 유지하고 두 번 실행한다. 메뉴 migration은 계정 변경 없이 호환 스키마/RPC를 먼저 제공한다. 다음 전가복 migration은 미전달 주문/포장이 없는지를 다시 확인하고 계정과 전달 방식을 원자 전환한다. 마지막 실행에서 Edge·앱 배포와 운영 로그인까지 완료한다. Git 자동 배포는 `vercel.json`에서 비활성화되어 있다. 정확한 main SHA와 필수 CI 성공 조건은 매 실행에 적용한다.
+이번 릴리스에는 서로 다른 운영 게이트를 가진 migration 두 개가 필요하다. 공식 스크립트의 단일 migration 제한을 유지하고 두 번 실행한다. 메뉴 migration은 계정 변경 없이 호환 스키마/RPC를 먼저 제공한다. 다음 전가복 migration은 미전달 주문/포장이 없는지를 다시 확인하고 계정과 전달 방식을 원자 전환한다. 마지막 실행에서 Edge·앱 배포와 운영 로그인까지 완료한다. Git 자동 배포는 `vercel.json`에서 비활성화되어 있다. 정확한 main SHA와 필수 로컬 검증 성공 조건은 매 실행에 적용한다.
 
 ```sh
 # ENV_FILE은 비밀 파일 경로. 문서/로그에 내용을 복사하지 않는다.
@@ -77,4 +79,4 @@ ENV_FILE=<secure-env> CONFIRM_PRODUCTION_DEPLOY=DEPLOY_GLOBOS_PROD \
 
 ## 검증·배포 결과
 
-전체 저장소 검사, 정확한 main SHA의 GitHub CI 및 공식 배포 결과는 이 변경의 PR과 작업 배포 증거에 기록한다. 운영 반영 여부를 위의 로컬 검증만으로 판단하지 않는다.
+전체 저장소 검사, 정확한 main SHA의 로컬 전체 검증 및 공식 배포 결과는 이 변경의 PR과 작업 배포 증거에 기록한다. 운영 반영 여부를 위의 로컬 검증만으로 판단하지 않는다.

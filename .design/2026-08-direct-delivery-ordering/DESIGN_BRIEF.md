@@ -1,5 +1,7 @@
 # 설계 브리프: 구글맵 유입형 직접 배달 주문
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-08-21
 Source: 사용자 요구사항과 현재 QR 주문·캐셔·KDS·결제·SePay·리포트 계약 재점검
 Status: 소스·결합형 migration·테스트 구현 완료 — production 반영·외부 링크·storefront 활성화는 미실행
@@ -301,7 +303,7 @@ Status: 소스·결합형 migration·테스트 구현 완료 — production 반�
 - 열린 요청은 운영자가 거절·만료·정리할 수 있고 새 승인은 정책에 따라 차단할 수 있다.
 - pilot 중 문제가 생기면 Google 주문 링크 제거와 storefront flag off로 유입을 중단한다.
 - additive 데이터와 audit는 보존한다. 기존 DB 객체를 downgrade하거나 삭제하는 rollback은 하지 않는다.
-- production은 별도 요청이 있을 때만 `scripts/deploy_pos_production.sh`와 exact pushed SHA GitHub Actions 성공 후 진행한다.
+- production은 별도 요청이 있을 때만 `scripts/deploy_pos_production.sh`와 exact pushed SHA 로컬 자동 검증 성공 후 진행한다.
 
 ## V1 범위 제외
 

@@ -1,5 +1,7 @@
 # Build Tasks: KDS 주문 카드 메뉴·동시 동기화·오늘 완료 이력
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: `.design/2026-08-kds-card-menu-sync/DESIGN_BRIEF.md`
 Date: 2026-08-15
 
@@ -53,7 +55,7 @@ Date: 2026-08-15
 
 - [ ] **다중 계정 동기화 E2E 검증**: 같은 주문을 kitchen, tray, 1F/2F 브라우저에 동시에 열어 최초 동시 노출, kitchen→tray→floor 색상/권한 전이, 직접 제공 음료, 콤보, 원복, 추가 주문, offline 복구, 오늘 완료 이력을 확인한다. _Modifies/creates focused multi-account integration smoke tests; reuses fixed station accounts and current Realtime/polling setup._
 
-- [ ] **저장소 및 프로덕션 게이트 실행**: 변경 Dart format, 관련 테스트, `flutter analyze`, 전체 `flutter test`, SQL preflight/verify, Flutter Web build, `bash scripts/check_repo.sh`, `git diff --check`를 통과한다. 운영 DB 적용/배포는 별도 승인 후 `scripts/deploy_pos_production.sh`만 사용하고 exact pushed head SHA의 필수 GitHub Actions 성공을 확인한다. _Reuses: project production gates; creates no runtime component._
+- [ ] **저장소 및 프로덕션 게이트 실행**: 변경 Dart format, 관련 테스트, `flutter analyze`, 전체 `flutter test`, SQL preflight/verify, Flutter Web build, `bash scripts/check_repo.sh`, `git diff --check`를 통과한다. 운영 DB 적용/배포는 별도 승인 후 `scripts/deploy_pos_production.sh`만 사용하고 exact pushed head SHA의 필수 로컬 자동 검증 성공을 확인한다. _Reuses: project production gates; creates no runtime component._
 
 ## 권장 구현 순서
 

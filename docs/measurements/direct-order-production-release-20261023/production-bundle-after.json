@@ -1,0 +1,14 @@
+{
+  "release_sha": "c853fbbab7c6fa46b66512c6dd78da27edc4ff5e",
+  "bundle_sha256": "6314382bbfa0114716439bd7fa4a5f3ebbcaea9226bbb5b69cd743b4be5ccd20",
+  "matches_official_build": true,
+  "bytes": 10899052,
+  "feature_markers": {
+    "dl.vietqr.io": true,
+    "proof_upload_url_v3": true,
+    "proof_commit_v3": true
+  },
+  "supabase_origins": [
+    "https://ynriuoomotxuwhuxxmhj.supabase.co"
+  ]
+}

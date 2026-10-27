@@ -1,5 +1,7 @@
 # Build Tasks: 비상 대응 KDS 고정 분할 보드
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: `.design/2026-08-emergency-kds-grid/DESIGN_BRIEF.md`
 Date: 2026-08-11
 
@@ -31,7 +33,7 @@ Date: 2026-08-11
 - [ ] **Widget 회귀 테스트 확장**: 4/8슬롯, 5번째/9번째 페이지 이동, 카드→상세→뒤로가기, 전체 메뉴 표시, 완료/원복 payload, 처리 중 중복 탭 방지, 신규 Snapshot 중 선택 보존을 테스트한다. _Modifies: `test/emergency_fulfillment_responsive_test.dart`; creates focused board interaction tests if the file becomes too large._
 - [ ] **SQL 동시성·감사 테스트 추가**: 주문 전체 완료, 추가 주문 delta, 같은 action 재전송, 두 장치 동시 완료, 허용 원복, downstream 진행 후 원복 거절, 다른 매장/층 접근 거절, 이벤트 action grouping을 실제 Postgres에서 검증한다. _Creates preflight/verify/rollback SQL fixtures; no production apply._
 - [ ] **다중 계정 E2E 갱신**: Super Admin 활성화 → 키친 주문 완료 → 트레이 주문 완료 → 배정 층 주문 완료 → 캐셔 미제공 해제와 역방향 원복 거절을 실제 역할 계정 흐름으로 검증한다. _Modifies multi-account emergency slice; preserves current role route isolation._
-- [ ] **저장소 및 릴리스 게이트 실행**: 변경 Dart 포맷, `flutter analyze`, 관련 테스트, 전체 `flutter test`, SQL 검증, Flutter Web build, `bash scripts/check_repo.sh`, `git diff --check`를 통과한다. 운영 DB 적용과 배포는 별도 승인 후 `scripts/deploy_pos_production.sh`만 사용하고, exact pushed head SHA의 필수 GitHub Actions 성공을 확인한다. _Reuses project production gates; no direct deployment._
+- [ ] **저장소 및 릴리스 게이트 실행**: 변경 Dart 포맷, `flutter analyze`, 관련 테스트, 전체 `flutter test`, SQL 검증, Flutter Web build, `bash scripts/check_repo.sh`, `git diff --check`를 통과한다. 운영 DB 적용과 배포는 별도 승인 후 `scripts/deploy_pos_production.sh`만 사용하고, exact pushed head SHA의 필수 로컬 자동 검증 성공을 확인한다. _Reuses project production gates; no direct deployment._
 
 ## Review
 

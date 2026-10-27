@@ -1,0 +1,19 @@
+{
+  "project_ref": "ynriuoomotxuwhuxxmhj",
+  "vercel_project": "globospossystem",
+  "before_deployment_id": "dpl_A48yV8fV1yLzBxr3Pqiz6ov5EwVo",
+  "before_main_sha": "943f2640297d87b7b1579ef119905a5ed6466855",
+  "before_bundle_sha256": "5404dcd4260ebab74c9afcb1881b1530ac1fb5a5a91c615f08f3f94bc3486c24",
+  "before_edge_version": 52,
+  "legacy_whole_order_both_notes": 15,
+  "pr": "https://github.com/ahc0403-commits/globospossystem/pull/625",
+  "pr_head_sha": "e6afc951fe505cb5acc4a7af81436bcc78b98e38",
+  "new_migration_versions": [
+    "20261023120000",
+    "20261023121000"
+  ],
+  "isolated_flutter_tests_passed": 191,
+  "isolated_analysis": "no issues",
+  "isolated_sql_integration": "PASS",
+  "production_anchors": "11/11 PASS"
+}

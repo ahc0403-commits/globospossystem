@@ -1,5 +1,7 @@
 # Build Tasks: 포스 프린트/페이퍼리스 운영 모드와 고객 영수증
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Generated from: `.design/2026-08-pos-print-paperless-receipts/DESIGN_BRIEF.md`
 Date: 2026-08-11
 
@@ -75,7 +77,7 @@ Date: 2026-08-11
 - [ ] **실제 Postgres migration rehearsal**: 먼저 원격 migration history와 현재 uncommitted KDS/VAT/USB migration의 적용 여부를 대조해 새 timestamp 충돌을 막는다. 그 다음 빈 DB와 production-like snapshot에서 preflight→migration→verify→rollback rehearsal을 수행하고 기존 function signature, RLS/grant, views, Office coupling을 비교한다. _Reuses production-gate SQL conventions; creates isolated fixtures only; never edits an applied migration. Done: expand와 rollback 모두 데이터 손실 없이 반복 가능._
 - [ ] **다중 장치 E2E 슬라이스**: 관리자 모드 전환 → 주문/추가 주문 → 키친 Tablet 8 → 트레이 Phone 4 → 층별 Tablet/Phone → 캐셔 결제 → 고객표시 QR → 공개 영수증/PDF → 선택 종이 출력 → 결제 이력 재표시를 서로 다른 계정으로 수행한다. print mode 동일 시나리오도 병행한다. _Modifies/creates focused integration harness; reuses existing role accounts. Done: 누락·중복·타 매장 노출 0건._
 - [ ] **전체 저장소 게이트**: 변경 Dart 포맷, `flutter analyze`, 관련 테스트, 전체 `flutter test`, Web release build, SQL 검증, 보안/Node 계약, `bash scripts/check_repo.sh`, `git diff --check`를 통과한다. _Reuses project gates. Done: 로컬 PASS와 정확한 결과 로그가 있으며 운영 적용은 아직 하지 않음._
-- [ ] **Shadow 배포 슬라이스**: feature flag OFF로 schema/app을 배포해 기존 출력은 유지하고 digital receipt/예상 라우팅만 shadow 생성·대조한다. exact pushed head SHA GitHub checks를 확인한다. _Modifies runtime flags only after explicit deployment approval. Done: 최소 한 영업 주기의 금액/라우팅 mismatch 0건._
+- [ ] **Shadow 배포 슬라이스**: feature flag OFF로 schema/app을 배포해 기존 출력은 유지하고 digital receipt/예상 라우팅만 shadow 생성·대조한다. exact pushed head SHA 로컬 검증을 확인한다. _Modifies runtime flags only after explicit deployment approval. Done: 최소 한 영업 주기의 금액/라우팅 mismatch 0건._
 - [ ] **파일럿 매장 활성화 슬라이스**: 한 매장 한 교대에서 paperless를 opt-in하고 직원 체크리스트, KDS heartbeat, QR/종이 fallback, 모드 복귀와 drain을 실측한다. _Uses existing mode toggle and runbook; no global default change. Done: 운영 누락/중복 0, 영수증 제공 100%, 담당자 승인._
 - [ ] **점진 확대와 롤백 보존 슬라이스**: 매장별 승인 단위로 확대하고 즉시 `pos_print` 전환, 기존 paperless 주문 drain, 공개 영수증 유지가 가능한지 확인한다. 기존 schema/RPC 제거는 별도 승인 릴리스로 미룬다. _Reuses flags and compatibility layer. Done: 롤백 연습 성공 및 Critical/High 0건._
 

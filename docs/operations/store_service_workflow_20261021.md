@@ -1,5 +1,7 @@
 # 매장별 음식 제공 동선과 현금 입금 QR 수정
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 분식클럽은 주방 → 트레이 → 층, 전가복 빈탄점은 주방 → 층이 기본이다.
 개점 설정의 프린터/운영 설정 단계에서 음식 제공 동선을 별도로 저장한다.
 `paperless`/`pos_print` 선택과 음식 제공 동선은 독립된 설정이다.
@@ -28,7 +30,7 @@
 격리된 작은 설정 fixture 기준이며 운영 부하 측정값은 아님).
 
 소스 구현 및 로컬 검증 기록이다. 운영 반영 여부는 공식 배포 스크립트와
-동일 main SHA의 필수 GitHub 검사 결과로 별도 확인한다.
+동일 main SHA의 필수 로컬 검사 결과로 별도 확인한다.
 
 후속 검증에서 이벤트 트리거가 동선 설정을 항목마다 재조회하는 경로를 발견해,
 이미 읽은 큐·변경 이벤트의 동선 스냅샷을 전파하도록 보완했다.

@@ -1,5 +1,7 @@
 # Persistent POS sessions and unified requester receiving
 
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
 Owner authorization: 2026-10-20, retain login until explicit logout on every
 surface and let the existing PR account receive, confirm and post stock.
 
@@ -77,6 +79,6 @@ so the receiving stages do not disappear on a later account synchronization.
   write RPC. Client network latency and application memory are not measured.
 
 Deployment must use the official production script, an exact current-main SHA,
-and a successful GitHub Actions `POS release contract` check for that SHA.
+and successful complete local verification logs for that SHA and remote push confirmation.
 Production mutation and the live deployment are verified separately after
 release; test fixtures never create operational orders or inventory movements.

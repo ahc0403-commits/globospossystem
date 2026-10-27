@@ -1,5 +1,7 @@
 # 매장 운영 구조 이행 기록
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 기준 커밋: `e22f9d3e89672e36bbad6c30db303c60bb6a8f26`
 
 계획: [구조 진단·재검증 보고서](store_opening_architecture_review_20261021.md).
@@ -160,7 +162,7 @@
   `/tmp/globos-operating-final-widget.log`, `/tmp/globos-operating-final-analyze.log`.
 - 최종 UI 문구를 포함한 release web build도 재통과했다. 로그: `/tmp/globos-operating-final-build.log`.
 - 구현 커밋을 원격으로 push하거나 PR/배포/운영 migration을 실행하지 않았다. 로컬 회귀검증은
-  실제 태블릿·프린터·현장 네트워크 검증 및 정확한 배포 SHA의 CI 성공을 대신하지 않는다.
+  실제 태블릿·프린터·현장 네트워크 검증 및 정확한 배포 SHA의 로컬 전체 검증 성공을 대신하지 않는다.
 
 ## 후속 구현: 일반 옵션·다중 주방·게시 및 전환
 
@@ -294,6 +296,6 @@
 
 소스 구현·로컬 회귀검증과 운영 적용을 구분한다. 운영 DB migration, 원격 push/PR,
 배포, 실제 분식클럽·전가복 태블릿·프린터·현장 네트워크 시험은 실행하지 않았다.
-배포를 진행할 때는 정확한 배포 SHA의 필수 CI와 `scripts/deploy_pos_production.sh` 절차를 따르고,
+배포를 진행할 때는 정확한 배포 SHA의 필수 로컬 검증과 `scripts/deploy_pos_production.sh` 절차를 따르고,
 기존 데이터 대사·실 장치 확인·주문/인계 정리 이후 매장별로 전환한다.
 과거 모든 migration을 빈 DB에서 재생하는 것은 현재 스키마 업그레이드 검사와 별도다.

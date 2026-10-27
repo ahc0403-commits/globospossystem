@@ -1,5 +1,7 @@
 # Scalability plan — phase 1A: complete payroll attendance
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 ## Scope and status
 
 This is the first isolated implementation of the September 2026 improvement
@@ -16,7 +18,7 @@ uncommitted changes are excluded.
 | Isolated PostgreSQL/PostgREST verification | 19 tests passed |
 | Failed/stale-refresh UI verification | Passed: cached export is cleared, retry recalculates, and invalidated requests cannot export |
 | Local full repository checks | Passed: `bash scripts/check_repo.sh`, including web release build |
-| Required GitHub Actions | Consult the exact-head PR check; local results do not close the release gate |
+| Required local verification | Re-run the complete gate on the final candidate and clean exact-main SHAs; preserve reproducible logs and remote push confirmation |
 | Production migration applied | No |
 | Production client deployed | No |
 | Production operational verification | No |
@@ -98,7 +100,7 @@ on server aggregation or a different snapshot scheme.
 
 ## Rollout and rollback
 
-1. Complete repository checks and required GitHub Actions on the exact pushed SHA.
+1. Complete repository checks and required local verification on the exact pushed SHA.
 2. Use the repository production release wrapper and its required review gates.
    Apply `20260905010000_payroll_complete_attendance.sql` before the new client;
    its companion preflight and verification scripts are provided.

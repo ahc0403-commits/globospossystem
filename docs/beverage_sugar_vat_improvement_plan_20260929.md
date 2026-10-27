@@ -1,5 +1,7 @@
 # 음료 표시 당류별 VAT 설정 및 분식클럽 메뉴 조정 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성일: 2026-09-29 (Asia/Ho_Chi_Minh)
 
 상태: 2026-09-29 소스 구현 및 격리 DB 검증 완료. 운영 DB는 읽기 전용으로 확인했으며 migration 적용과 운영 배포는 미실행이다.
@@ -153,7 +155,7 @@ Excel 신규 등록·수정·전체 교체·내보내기 경로에 동일 필드
 2. **서버와 앱 구현**: 신규 migration, 공통 VAT 결정, 주문 스냅샷, 결제/할인 계산, 관리자 UI, Excel 및 주문 채널을 연결한다.
 3. **기존 메뉴 조정 준비**: 목표 5개 상품을 매장 ID + 메뉴 ID로 고정한 변경 전후 목록과 복원 데이터를 만든다.
 4. **통합 검증**: 아래 시나리오로 프런트엔드·SQL·증빙의 금액을 대조한다.
-5. **배포·전환**: 필수 GitHub Actions 통과 후 공식 배포 스크립트로 적용한다. 대상 진행 주문이 없는 시점에 5개 상품 분류를 활성화하고 POS를 새로고침한다.
+5. **배포·전환**: 필수 로컬 자동 검증 통과 후 공식 배포 스크립트로 적용한다. 대상 진행 주문이 없는 시점에 5개 상품 분류를 활성화하고 POS를 새로고침한다.
 6. **운영 확인**: 매장별 세율 재조회, 8%/10% 혼합 결제, 영수증, MISA 전송 결과를 확인한다.
 
 기존 분식클럽 seed에는 매장 ID 두 개가 있으므로 두 매장을 초기 확인 대상으로 삼는다.
@@ -192,11 +194,11 @@ Excel 신규 등록·수정·전체 교체·내보내기 경로에 동일 필드
 - 기존 `payment_total_calculator_test.dart` 확장 및 SQL과 동일한 금액 fixture 비교.
 - SQL 권한, 세율 제약, 주문 스냅샷, 할인/서비스차지, 분할 결제 및 동시성 테스트.
 - QR·직접 주문·고객 디스플레이·영수증·MISA 혼합 VAT 통합 검증.
-- Dart format/analyze, 관련 테스트, `scripts/check_repo.sh`와 필수 CI 검증.
+- Dart format/analyze, 관련 테스트, `scripts/check_repo.sh`와 필수 로컬 검증.
 - 운영용 preflight / verify / rollback SQL 및 변경 전후 대상 메뉴 목록.
 
 배포는 `scripts/deploy_pos_production.sh`를 사용한다.
-정확히 배포할 pushed head SHA의 필수 GitHub Actions 성공을 확인하기 전에는 release gate PASS로 보고하지 않는다.
+정확히 배포할 pushed head SHA의 필수 로컬 자동 검증 성공을 확인하기 전에는 release gate PASS로 보고하지 않는다.
 복원 시 신규 세율로 이미 완료된 주문·증빙은 보존하며, 이후 주문에 대한 설정과 코드 복구를 구분한다.
 최종 보고에서 ‘소스 구현 / DB 적용 / 운영 배포 / 운영 검증’을 각각 명시한다.
 관련 현재 시스템 문서도 실제 구현에 맞춰 갱신한다.

@@ -1,5 +1,7 @@
 # 면·밥 선택, 편집 장바구니와 전가복 층 실시간 전달
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 사용자 승인: 2026-10-21 구현·테스트 후 커밋·푸시·운영 배포. 전가복은 트레이를 쓰지 않는다.
 
 ## 동작
@@ -29,7 +31,7 @@
 
 ## 운영 반영 순서
 
-두 변경은 독립적인 메뉴 호환 스키마와 매장 KDS 활성화이므로 공식 스크립트의 단일 migration 제한을 유지하여 DB-only를 두 번 실행한 뒤 web-only를 실행한다. 매 실행은 깨끗한 exact main과 동일 SHA CI 성공을 요구한다.
+두 변경은 독립적인 메뉴 호환 스키마와 매장 KDS 활성화이므로 공식 스크립트의 단일 migration 제한을 유지하여 DB-only를 두 번 실행한 뒤 web-only를 실행한다. 매 실행은 깨끗한 exact main과 동일 SHA의 필수 로컬 전체 검증 성공을 요구한다.
 
 1. `20261021090000_menu_meal_choices_cart.sql` — 관리자 옵션과 서버 스냅샷.
 2. `20261021100000_jeongabok_floor_live_sync.sql` — 해당 매장 실시간 갱신 활성화.

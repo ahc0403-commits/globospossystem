@@ -1,5 +1,7 @@
 # 배달 입금 차액·자동 번역·기사 현금 지급 구현 기록
 
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
 2026-10-10 · Asia/Ho_Chi_Minh
 
 이 문서는 최초 구현과 키 등록 시점의 기록이다. 이후 운영 배포 준비에서 선행 스키마 호환성, 완료 주문 환불 접근, 번역 큐와 검증을 보완했다. 아래 최초 검사 결과와 미배포 상태는 당시 기록이며, 최종 릴리스 상태는 별도 배포 증거에서 확인한다.
@@ -75,4 +77,4 @@
 | 운영 Edge·웹 배포 | 미실행 |
 | 실제 번역·은행·기사·마감 현장 확인 | 미실행 |
 
-운영 적용 시 선행 migration과 새 두 migration을 검증하고 DB → Edge → 클라이언트 순으로 적용해야 한다. 등록된 Edge secret를 함수가 읽는지와 번역 cron 실행을 확인해야 한다. 정확한 pushed HEAD의 필수 GitHub Actions 및 `scripts/deploy_pos_production.sh` gate가 필요하며 현재 전체 실패를 release PASS로 취급하지 않는다. 이미 생성된 입금·환불·현금 원장 삭제를 롤백 수단으로 사용하지 않는다.
+운영 적용 시 선행 migration과 새 두 migration을 검증하고 DB → Edge → 클라이언트 순으로 적용해야 한다. 등록된 Edge secret를 함수가 읽는지와 번역 cron 실행을 확인해야 한다. 정확한 pushed HEAD의 필수 로컬 전체 검증 및 `scripts/deploy_pos_production.sh` gate가 필요하며 현재 전체 실패를 release PASS로 취급하지 않는다. 이미 생성된 입금·환불·현금 원장 삭제를 롤백 수단으로 사용하지 않는다.

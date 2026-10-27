@@ -1,0 +1,20 @@
+{
+  "completed_at": "2026-10-23T19:53:25+07:00",
+  "ready_at": "2026-10-23T19:45:45+07:00",
+  "main_sha": "c853fbbab7c6fa46b66512c6dd78da27edc4ff5e",
+  "deployment_id": "dpl_5EvFqaL9jhEpKag7bbJ1TPdbYugv",
+  "edge_version": 54,
+  "migrations": [
+    "20261023120000",
+    "20261023121000"
+  ],
+  "ci_run": 39951639305,
+  "database_contract": "PASS",
+  "live_api_checks": 4,
+  "bundle_hash_matches": true,
+  "login_smoke": "PASS",
+  "private_notes": 15,
+  "preserved_item_notes": 10,
+  "kds_station_views_checked": 2,
+  "actual_business_test_orders_created": 0
+}

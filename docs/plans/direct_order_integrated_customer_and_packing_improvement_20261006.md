@@ -1,5 +1,7 @@
 # 배달 주문 고객 화면·입금 캡처·포장 영수증 통합 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성·통합일: 2026-10-06, Asia/Ho_Chi_Minh.
 
 상태: **소스 구현 완료 / 최신 main 통합·운영 release 진행 중**. 다음 세 계획의 요구사항·구현 순서·검증·배포 기준을 이 문서로 통합한다. 기존 문서는 조사 이력으로 보존하며 각각 따로 실행하지 않는다.
@@ -176,7 +178,7 @@ Storage 전송 응답이 불확실하면 같은 경로의 접수를 먼저 확�
 | W04 | 전송 서비스·Edge 재시도 보완 | 동일 경로 commit 복구, 일시 Storage 오류 분리, 성공과 상태 갱신 실패 구분. W03에서 표현할 결과를 제공한다. |
 | W05 | 포장 조회·영수증 전달·표시 보완 | W01 결과에 따라 필요한 helper/trigger를 추가하고 C의 큐·직접 출력·PDF·인계전표를 맞춘다. payment 본문은 보존한다. |
 | W06 | 통합 행동·회귀 검증과 사양 갱신 | 아래 고객→직원→종이 시나리오, 필요한 SQL·Edge·Dart 검증과 기존 UI/API/locale 문서를 같은 변경에서 완료한다. |
-| W07 | CI·배포·Print Station 설치·현장 확인 | 정확한 release SHA의 필수 CI/Windows build, 공식 배포, 현장 프로그램 업데이트와 실제 3세트 종이 확인을 기록한다. |
+| W07 | CI·배포·Print Station 설치·현장 확인 | 정확한 release SHA의 필수 로컬 검증/Windows build, 공식 배포, 현장 프로그램 업데이트와 실제 3세트 종이 확인을 기록한다. |
 
 W01의 현장 증거가 아직 없더라도 확정된 카테고리·캡처 UI 구현은 준비할 수 있다. 특정 출력 원인 해결과 물리 출력 확인 없이 전체 개선을 완료로 판정하지 않는다. 같은 파일의 변경과 fixture·번역·테스트는 한 통합 변경으로 검토해 중복 작업을 줄인다.
 
@@ -215,12 +217,12 @@ W01의 현장 증거가 아직 없더라도 확정된 카테고리·캡처 UI �
 
 SQL은 실제 승인→enqueue→trigger→payload 경로, 동일 경로 commit, 단건 조회 권한과 최신 재출력을 검증한다. migration 전후 `process_payment` 정의와 결제·재고·티켓 횟수 보존을 확인한다. Edge는 일시 오류에 `remove()`를 호출하지 않는 검증과 실제 invalid image 검증을 포함한다. 운영 DB에는 실패 주입을 하지 않는다.
 
-독립 리뷰·로컬 검증은 사전 증거다. 정확히 배포할 SHA의 필수 GitHub Actions와 Windows Print Station build 성공을 확인하고 `scripts/deploy_pos_production.sh`로 운영 반영한다. 필요한 DB helper/snapshot migration은 소비하는 앱보다 먼저 적용하고, 일시 오류 분리 Edge와 웹·호환되는 native package를 반영한다. Windows 패키지 빌드 성공과 현장 설치 완료를 구분한다. 기존 매장 IP/USB·destination 설정을 유지한다.
+독립 리뷰·로컬 검증은 사전 증거다. 정확히 배포할 SHA의 필수 로컬 자동 검증과 Windows Print Station build 성공을 확인하고 `scripts/deploy_pos_production.sh`로 운영 반영한다. 필요한 DB helper/snapshot migration은 소비하는 앱보다 먼저 적용하고, 일시 오류 분리 Edge와 웹·호환되는 native package를 반영한다. Windows 패키지 빌드 성공과 현장 설치 완료를 구분한다. 기존 매장 IP/USB·destination 설정을 유지한다.
 
 | 보고 상태 | 필요한 증거 |
 |---|---|
 | 소스 구현 완료 | 세 기능 코드·사양과 관련 로컬 검증 |
-| DB/Edge/웹 반영 완료 | 유효 migration·배포 대상 SHA·필수 CI·공식 배포 기록 |
+| DB/Edge/웹 반영 완료 | 유효 migration·배포 대상 SHA·필수 로컬 검증·공식 배포 기록 |
 | 출력 프로그램 반영 완료 | 동일 release에 해당하는 현장 Print Station 설치본 확인 |
 | 운영 검증 완료 | 실제 카테고리/직접 캡처·재시도 흐름과 종이의 3세트 표시 확인 |
 

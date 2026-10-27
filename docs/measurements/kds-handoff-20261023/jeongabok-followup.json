@@ -1,0 +1,42 @@
+{
+  "bootstrap_probe": {
+    "at": "2026-10-23T06:46:38.573144+00:00",
+    "elapsed_ms": 331.675,
+    "measurement": "one read-only DB bootstrap execution; transport/render/audio excluded",
+    "payload_bytes": 97303,
+    "snapshot_orders": 13,
+    "completed_orders": 12,
+    "historical_queues": 80
+  },
+  "aggregate_shape": {
+    "at": "2026-10-23T06:47:57.099445+00:00",
+    "max_lines": 22,
+    "p95_lines": 9,
+    "mean_lines": 4.09,
+    "queue_count": 80,
+    "active_roles": [
+      {
+        "floor_label": "2F",
+        "station_type": "floor"
+      },
+      {
+        "floor_label": "3F",
+        "station_type": "floor"
+      },
+      {
+        "floor_label": "3F",
+        "station_type": "floor"
+      },
+      {
+        "floor_label": null,
+        "station_type": "kitchen"
+      }
+    ],
+    "max_daily_7d": 38,
+    "today_queues": 15
+  },
+  "limitations": [
+    "Single DB bootstrap execution; HTTP p95 and device handoff not measured.",
+    "Active assignments do not establish online physical terminal count."
+  ]
+}

@@ -1,5 +1,7 @@
 # 신규 주문 시스템 파일럿 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 작성: 2026-09-08 · 기준: `origin/main` 67c08526에서 분리한 배포 작업본
 
 이 문서는 사용자 파일럿 보고와 현재 소스·SQL·기존 설계를 대조한 개선 계획과 구현 결과다. 운영 DB, 배포 버전, 실제 입금, 실물 프린터는 이번 작업에서 확인하지 않았다. 소스 구현 / migration 적용 / 배포 / 매장 검증을 별도로 판정한다.
@@ -171,7 +173,7 @@ P0/P1은 위 표의 필수 완료 기준을 충족하기 전 일반 운영 확�
 
 기술 검증은 기존 직접 주문 Flutter/Edge/SQL 테스트를 확장해 실제 동작·상태 전이·DB 불변성을 검증한다. 문자열 존재 테스트만으로 완료 처리하지 않는다. `flutter analyze`, 관련 Flutter/SQL/Edge 테스트와 `bash scripts/check_repo.sh`를 실행한다. 기존 작업 문서에 기록된 frozen-hash 실패는 이번에 재실행한 결과가 아니므로, 실제 실행 시 현재 원인과 범위를 다시 확인하고 기대값만 바꿔 통과시키지 않는다.
 
-릴리스는 사용자 변경을 보존한 검증 가능한 변경 묶음으로 만들고, **정확히 push된 head SHA의 필수 GitHub Actions 성공** 후 `scripts/deploy_pos_production.sh`를 따른다. source·migration·Edge/Web/native 배포·운영 검증을 각각 기록한다. 은행 실거래 테스트는 선택 공급자의 테스트 환경 및 기존 runtime gate를 먼저 충족한 뒤 별도 운영 절차로 수행한다.
+릴리스는 사용자 변경을 보존한 검증 가능한 변경 묶음으로 만들고, **정확히 push된 head SHA의 필수 로컬 자동 검증 성공** 후 `scripts/deploy_pos_production.sh`를 따른다. source·migration·Edge/Web/native 배포·운영 검증을 각각 기록한다. 은행 실거래 테스트는 선택 공급자의 테스트 환경 및 기존 runtime gate를 먼저 충족한 뒤 별도 운영 절차로 수행한다.
 
 운영 중 재발 시 신규 직접 주문 접수를 닫고 기존 주문·입금·출력 기록을 보존한다. 미입금 승인, 잘못된 주문 매칭, 과거 금액 변경, 필수 Bill 출력 실패, Reload 없는 재주문 실패 중 하나라도 남으면 일반 운영 확대를 보류한다. 금액·결제 변경을 되돌릴 때도 확정 거래 원장은 삭제하지 않는다.
 

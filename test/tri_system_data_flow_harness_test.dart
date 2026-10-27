@@ -9,7 +9,9 @@ String get officeAppRoot =>
     '/Users/andreahn/Documents/restaurant_office_app';
 
 String get officeImportPath =>
-    File('$officeAppRoot/supabase/migrations/472_pos_sales_event_import_and_bucket_posting.sql').existsSync()
+    File(
+      '$officeAppRoot/supabase/migrations/472_pos_sales_event_import_and_bucket_posting.sql',
+    ).existsSync()
     ? 'supabase/migrations/472_pos_sales_event_import_and_bucket_posting.sql'
     : 'supabase/migrations_legacy/472_pos_sales_event_import_and_bucket_posting.sql';
 
@@ -19,10 +21,6 @@ List<String> get officeContractPaths => <String>[
   officeImportPath,
   'lib/features/pos_sales/data/pos_sales_repository.dart',
 ];
-
-bool get officeContractFilesAvailable => officeContractPaths.every(
-  (path) => File('$officeAppRoot/$path').existsSync(),
-);
 
 String readOfficeFile(String path) {
   final file = File('$officeAppRoot/$path');
@@ -34,158 +32,181 @@ String readOfficeFile(String path) {
 
 void main() {
   group('historical Deliberry -> POS -> Office data flow harness', () {
-    test('historical POS records retain Office read fences after vendor retirement', () {
-      final posSalesView =
-          readRepoFile(
-            'supabase/migrations/20260604000000_office_pos_sales_events.sql',
-          ) +
-          readRepoFile(
-            'supabase/migrations/20260604001000_pos_payment_refund_void_adjustments.sql',
-          ) +
-          readRepoFile(
-            'supabase/migrations/20260609000000_office_pos_sales_photo_objet_events.sql',
-          );
-      final deliberrySettlementFunction = readRepoFile(
-        'supabase/functions/generate_delivery_settlement/index.ts',
-      );
-      final legacySettlementFunction = readRepoFile(
-        'supabase/functions/generate-settlement/index.ts',
-      );
-
-      expect(posSalesView, contains("'external_sales'::text as source_table"));
-      expect(
-        posSalesView,
-        contains("'payment_adjustments'::text as source_table"),
-      );
-      expect(posSalesView, contains("('payment_adjustment:' || pa.id::text)"));
-      expect(posSalesView, contains('pa.adjustment_type as event_type'));
-      expect(posSalesView, contains('(-pa.amount)::numeric(15,2)'));
-      expect(posSalesView, contains('record_payment_adjustment'));
-      expect(posSalesView, contains('PAYMENT_ADJUSTMENTS_IMMUTABLE'));
-      expect(posSalesView, contains("('external_sale:' || es.id::text)"));
-      expect(
-        posSalesView,
-        contains("'photo_objet_sales'::text as source_table"),
-      );
-      expect(
-        posSalesView,
-        contains("('photo_objet_sales:' || po.id::text || ':sale')"),
-      );
-      expect(
-        posSalesView,
-        contains("('photo_objet_sales:' || po.id::text || ':service')"),
-      );
-      expect(
-        posSalesView,
-        contains('coalesce(po.gross_sales, 0)::numeric(15,2)'),
-      );
-      expect(
-        posSalesView,
-        contains('coalesce(po.service_amount, 0)::numeric(15,2)'),
-      );
-      expect(posSalesView, contains("'pay'::text as payment_bucket"));
-      expect(
-        posSalesView,
-        contains("when es.order_status = 'cancelled' then 0"),
-      );
-      expect(
-        posSalesView,
-        contains("when es.order_status in ('refunded', 'partially_refunded')"),
-      );
-      expect(
-        posSalesView,
-        contains('grant select on public.v_office_pos_sales_events'),
-      );
-      expect(
-        posSalesView,
-        contains('grant select on public.v_office_pos_sales_bucket_summary'),
-      );
-      expect(posSalesView, contains('to authenticated, service_role'));
-      expect(
-        posSalesView,
-        contains('sum(transaction_count)::integer as transaction_count'),
-      );
-      expect(posSalesView, contains('count(*)::integer as event_count'));
-
-      // Existing sales remain readable by Office; generation is retired.
-      for (final source in [
-        deliberrySettlementFunction,
-        legacySettlementFunction,
-      ]) {
-        expect(source, contains('Deno.serve(retiredDeliberryResponse)'));
-        expect(source, isNot(contains('.from(')));
-      }
-
-    });
-
-    test('optional historical Office import read fences from external checkout', () {
-      if (!officeContractFilesAvailable) {
-        markTestSkipped(
-          'Optional cross-repository static assertions need a separately pinned '
-          'Office checkout; POS assertions run independently in the prior test.',
+    test(
+      'historical POS records retain Office read fences after vendor retirement',
+      () {
+        final posSalesView =
+            readRepoFile(
+              'supabase/migrations/20260604000000_office_pos_sales_events.sql',
+            ) +
+            readRepoFile(
+              'supabase/migrations/20260604001000_pos_payment_refund_void_adjustments.sql',
+            ) +
+            readRepoFile(
+              'supabase/migrations/20260609000000_office_pos_sales_photo_objet_events.sql',
+            );
+        final deliberrySettlementFunction = readRepoFile(
+          'supabase/functions/generate_delivery_settlement/index.ts',
         );
-        return;
-      }
-      final officeBridge = readOfficeFile(
-        'supabase/functions/pos-bridge/index.ts',
-      );
-      final officePosService = readOfficeFile(
-        'lib/app/api/pos_data_service.dart',
-      );
-      final officeImport = readOfficeFile(
-        officeImportPath,
-      );
-      final officeRepository = readOfficeFile(
-        'lib/features/pos_sales/data/pos_sales_repository.dart',
-      );
+        final legacySettlementFunction = readRepoFile(
+          'supabase/functions/generate-settlement/index.ts',
+        );
 
-      expect(
-        officeBridge,
-        contains('case "pos_sales_events_for_reconciliation"'),
-      );
-      expect(
-        officeBridge,
-        contains('await fetchPosRows("v_office_pos_sales_events"'),
-      );
-      expect(officeBridge, contains('case "pos_sales_bucket_summary"'));
-      expect(
-        officeBridge,
-        contains('await fetchPosRows("v_office_pos_sales_bucket_summary"'),
-      );
-      expect(officeBridge, contains('pos_store_id: posStoreId'));
-      expect(officeBridge, contains('store_id: scope.officeStoreId'));
-      expect(officeBridge, contains('brand_id: scope.brandId'));
+        expect(
+          posSalesView,
+          contains("'external_sales'::text as source_table"),
+        );
+        expect(
+          posSalesView,
+          contains("'payment_adjustments'::text as source_table"),
+        );
+        expect(
+          posSalesView,
+          contains("('payment_adjustment:' || pa.id::text)"),
+        );
+        expect(posSalesView, contains('pa.adjustment_type as event_type'));
+        expect(posSalesView, contains('(-pa.amount)::numeric(15,2)'));
+        expect(posSalesView, contains('record_payment_adjustment'));
+        expect(posSalesView, contains('PAYMENT_ADJUSTMENTS_IMMUTABLE'));
+        expect(posSalesView, contains("('external_sale:' || es.id::text)"));
+        expect(
+          posSalesView,
+          contains("'photo_objet_sales'::text as source_table"),
+        );
+        expect(
+          posSalesView,
+          contains("('photo_objet_sales:' || po.id::text || ':sale')"),
+        );
+        expect(
+          posSalesView,
+          contains("('photo_objet_sales:' || po.id::text || ':service')"),
+        );
+        expect(
+          posSalesView,
+          contains('coalesce(po.gross_sales, 0)::numeric(15,2)'),
+        );
+        expect(
+          posSalesView,
+          contains('coalesce(po.service_amount, 0)::numeric(15,2)'),
+        );
+        expect(posSalesView, contains("'pay'::text as payment_bucket"));
+        expect(
+          posSalesView,
+          contains("when es.order_status = 'cancelled' then 0"),
+        );
+        expect(
+          posSalesView,
+          contains(
+            "when es.order_status in ('refunded', 'partially_refunded')",
+          ),
+        );
+        expect(
+          posSalesView,
+          contains('grant select on public.v_office_pos_sales_events'),
+        );
+        expect(
+          posSalesView,
+          contains('grant select on public.v_office_pos_sales_bucket_summary'),
+        );
+        expect(posSalesView, contains('to authenticated, service_role'));
+        expect(
+          posSalesView,
+          contains('sum(transaction_count)::integer as transaction_count'),
+        );
+        expect(posSalesView, contains('count(*)::integer as event_count'));
 
-      expect(
-        officePosService,
-        contains("'pos_sales_events_for_reconciliation'"),
-      );
-      expect(officePosService, contains("'daily_sales_bucket_summary'"));
-      expect(officeRepository, contains("'import_pos_sales_events'"));
-      expect(officeRepository, contains("'post_pos_sales_source_v2'"));
+        // Existing sales remain readable by Office; generation is retired.
+        for (final source in [
+          deliberrySettlementFunction,
+          legacySettlementFunction,
+        ]) {
+          expect(source, contains('Deno.serve(retiredDeliberryResponse)'));
+          expect(source, isNot(contains('.from(')));
+        }
+      },
+    );
 
-      expect(
-        officeImport,
-        contains('constraint pos_sales_events_event_key_unique'),
-      );
-      expect(
-        officeImport,
-        contains('constraint pos_sales_events_amount_source_check'),
-      );
-      expect(
-        officeImport,
-        contains('accounting.prevent_pos_sales_events_mutation()'),
-      );
-      expect(officeImport, contains('POS_SALES_EVENTS_SCOPE_MISMATCH'));
-      expect(
-        officeImport,
-        contains("event_type in ('sale', 'refund', 'void')"),
-      );
-      expect(
-        officeImport,
-        contains("source_table in ('daily_sales', 'daily_sales_adjustment')"),
-      );
-    });
+    test(
+      'optional historical Office import read fences from external checkout',
+      () {
+        if (!Directory(officeAppRoot).existsSync() &&
+            !Platform.environment.containsKey('OFFICE_APP_ROOT')) {
+          markTestSkipped(
+            'Optional cross-repository static assertions need a separately pinned '
+            'Office checkout; POS assertions run independently in the prior test.',
+          );
+          return;
+        }
+        for (final path in officeContractPaths) {
+          expect(
+            File('$officeAppRoot/$path').existsSync(),
+            isTrue,
+            reason: 'Office checkout is incomplete: $path',
+          );
+        }
+        final officeBridge = readOfficeFile(
+          'supabase/functions/pos-bridge/index.ts',
+        );
+        final officePosService = readOfficeFile(
+          'lib/app/api/pos_data_service.dart',
+        );
+        final officeImport = readOfficeFile(officeImportPath);
+        final officeRepository = readOfficeFile(
+          'lib/features/pos_sales/data/pos_sales_repository.dart',
+        );
+
+        expect(
+          officeBridge,
+          contains('case "pos_sales_events_for_reconciliation"'),
+        );
+        expect(
+          officeBridge,
+          contains('await fetchPosRows("v_office_pos_sales_events"'),
+        );
+        expect(officeBridge, contains('case "pos_sales_bucket_summary"'));
+        expect(
+          officeBridge,
+          contains('await fetchPosRows("v_office_pos_sales_bucket_summary"'),
+        );
+        expect(officeBridge, contains('pos_store_id: posStoreId'));
+        expect(officeBridge, contains('store_id: scope.officeStoreId'));
+        expect(officeBridge, contains('brand_id: scope.brandId'));
+
+        expect(
+          officePosService,
+          contains("'pos_sales_events_for_reconciliation'"),
+        );
+        expect(officePosService, contains("'daily_sales_bucket_summary'"));
+        expect(officeRepository, contains("'import_pos_sales_events'"));
+        expect(officeRepository, contains("'post_pos_sales_source_v2'"));
+        expect(officeImport, contains('accounting.post_pos_sales_source_v2('));
+        expect(officeRepository, contains("'post_output_vat_invoice'"));
+        expect(officeRepository, contains("schema: 'accounting'"));
+        expect(officeRepository, contains("'p_store_id': storeId"));
+
+        expect(
+          officeImport,
+          contains('constraint pos_sales_events_event_key_unique'),
+        );
+        expect(
+          officeImport,
+          contains('constraint pos_sales_events_amount_source_check'),
+        );
+        expect(
+          officeImport,
+          contains('accounting.prevent_pos_sales_events_mutation()'),
+        );
+        expect(officeImport, contains('POS_SALES_EVENTS_SCOPE_MISMATCH'));
+        expect(
+          officeImport,
+          contains("event_type in ('sale', 'refund', 'void')"),
+        );
+        expect(
+          officeImport,
+          contains("source_table in ('daily_sales', 'daily_sales_adjustment')"),
+        );
+      },
+    );
 
     test('synthetic Deliberry facts survive POS bridge and Office import', () {
       final fixture = _TriSystemFixture();

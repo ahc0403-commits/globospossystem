@@ -1,5 +1,7 @@
 # KDS 실시간 동기화 및 100개 매장 확장 작업 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 기준 문서: `DESIGN_BRIEF.md`
 
 각 작업은 독립적으로 검증 가능한 수직 단위다. 체크는 코드 작성이 아니라 명시된 완료 조건과 테스트를 모두 통과했을 때만 한다.
@@ -410,7 +412,7 @@
 
 - [ ] `CLAUDE.md`가 요구하는 formatter, analyzer, unit/widget/integration test를 실행한다.
 - [ ] production DB migration과 앱 배포를 지정 스크립트로만 수행한다.
-- [ ] 배포 대상 Git SHA와 GitHub Actions 성공 SHA가 정확히 일치하는지 확인한다.
+- [ ] 배포 대상 Git SHA와 로컬 전체 검증 증거의 SHA가 정확히 일치하는지 확인한다.
 - [ ] 관련 없는 사용자 변경과 미추적 파일이 포함되지 않았는지 최종 확인한다.
 
 완료 조건:

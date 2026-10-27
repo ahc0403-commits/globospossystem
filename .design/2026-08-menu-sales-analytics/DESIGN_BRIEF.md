@@ -1,5 +1,7 @@
 # 설계 브리프: 메뉴별 판매 분석
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 Date: 2026-08-13
 Source: 사용자 요청과 현재 `ReportsTab`/`ReportNotifier`/Supabase 판매 계약 점검
 Status: 로컬 구현·검증 완료 — 운영 DB 반영 및 배포는 하지 않음
@@ -162,4 +164,4 @@ RPC는 `SECURITY DEFINER`와 고정 `search_path`를 사용하되, 호출자가 
 - 권한 없는 매장은 RPC가 실패하고, 허용된 store admin/brand admin/super admin 범위만 조회된다.
 - KO/VI/EN, loading/error/empty/partial, phone/tablet/desktop, 큰 글자에서 정보 유실·overflow·색상만의 의미 전달이 없다.
 - SQL 계약 테스트, Flutter unit/widget tests, `flutter analyze`, 전체 `flutter test`, `bash scripts/check_repo.sh`, `git diff --check`가 통과한다.
-- 운영 반영은 별도 요청에서만 `scripts/deploy_pos_production.sh`를 사용하며 exact pushed head SHA의 필수 GitHub Actions 성공 전에는 release gate PASS로 보고하지 않는다.
+- 운영 반영은 별도 요청에서만 `scripts/deploy_pos_production.sh`를 사용하며 exact pushed head SHA의 필수 로컬 자동 검증 성공 전에는 release gate PASS로 보고하지 않는다.

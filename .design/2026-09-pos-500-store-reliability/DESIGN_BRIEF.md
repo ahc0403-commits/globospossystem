@@ -1,5 +1,7 @@
 # 500개 매장 POS 안정성·성능 개선 계획
 
+> 2026-10-24 소유자 정책: 자동 검증은 로컬에서 수행하고 최종 후보·깨끗한 exact-main SHA의 전체 실행 증거와 원격 push를 확인한다. GitHub Actions/runner 성공은 필수 증거가 아니다. 공식 배포·운영 확인은 유지하며 남은 실행 게이트는 우회하지 않는다.
+
 작성일: 2026-09-19 · 상태: **계획만 수립, 구현·운영 변경·용량 인증 미실시**
 
 검토 기준: HEAD `cc4de81adb8870fd479cb12edd773cda635a01cd`와 현재 작업 트리. 기존 사용자 수정 및 미추적 파일은 보존한다. 실행 체크리스트는 [TASKS.md](TASKS.md), 시험·배포 승인 기준은 [VALIDATION_PLAN.md](VALIDATION_PLAN.md)를 따른다.
@@ -198,7 +200,7 @@ delta 복구 보존기간의 시작 목표는 7일. 그보다 오래 끊긴 단�
 
 rollback은 매장별 flag/직전 검증 client 및 호환 read RPC로 수행한다. additive migration을 우선하며 이미 확정된 주문·원장·change log를 삭제하지 않는다. **검증된 느린 fallback**만 허용: single-flight+후속 1회, jitter, 최소 10~30초 재조회/실패 backoff, history on-demand, 서버 전역 예산. 이는 비상 저하 모드이며 1초 반영 SLO를 만족한다고 표시하지 않는다. v2/legacy 혼합 상태를 실제로 시험한다.
 
-운영 배포는 `scripts/deploy_pos_production.sh`와 정확한 pushed/main SHA의 GitHub 필수 check를 통과해야 한다. DB 변경마다 preflight/verify/rollback/migration history 증거를 남긴다. dirty 사용자 작업과 섞인 release는 금지한다. 독립 Judge/local PASS만으로 운영 release PASS라 하지 않는다.
+운영 배포는 `scripts/deploy_pos_production.sh`와 정확한 pushed/main SHA의 필수 로컬 전체 검증과 원격 push 확인을 통과해야 한다. DB 변경마다 preflight/verify/rollback/migration history 증거를 남긴다. dirty 사용자 작업과 섞인 release는 금지한다. 독립 Judge/local PASS만으로 운영 release PASS라 하지 않는다.
 
 일정은 두 경로로 관리한다: 긴급 안정화는 우선 실행 가능한 작은 PR 단위, 500매장 인증은 안전성·복구·관측기간을 생략하지 않는 별도 경로다. 초기 인력 가정은 Flutter 1, DB/API 1, QA/성능 1, 운영/release 담당이며 단계 0 후 작업별 견적을 확정한다. 참고 범위는 cloud 경로 구현·검증 6~10주와 cohort 관측기간; 로컬 coordinator/cell이 필요하면 별도 추가 일정이다. 일정 때문에 미통과 게이트를 삭제하지 않는다.
 

@@ -1,5 +1,7 @@
 # 데이터 접근·갱신 성능 개선계획 — 2026-10-10
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 상태: **W0–W7 구현과 격리 환경의 전후 실측 완료(2026-10-11). 운영 적용 전.**
 
 실행 결과: [구현·실측 보고서](/Users/andreahn/globos_pos_system/docs/audits/data_access_20261011/REPORT.md), [원시 표본·재현](/Users/andreahn/globos_pos_system/docs/audits/data_access_20261011/README.md), [운영 적용·복구 준비](/Users/andreahn/globos_pos_system/docs/audits/data_access_20261011/ROLLOUT.md). 대표 POS 기기, cold disk cache, 전체 앱 동시 사용자 부하와 운영 vendor/DB 측정은 아래 계획의 후속 릴리스 검증으로 남는다.
@@ -143,7 +145,7 @@ Windows polling 전환 migration과 실제 사용 provider를 확인한 뒤 불�
 3. 실제 호출자부터 RPC 내부까지 검증한다. 예를 들어 단건 batch API가 있어도 UI가 기존 전체 조회를 계속 쓰면 완료가 아니다.
 4. 대표 기기/통합 환경의 지연 분포와 메모리 peak를 비교한다. 정확한 합계나 전체 export 때문에 필요한 작업은 범위와 비용을 명시하고, 실행계획·실측 없이 인덱스나 캐시를 무조건 늘리지 않는다.
 5. 신규 RPC·응답 버전은 기존 앱 호환 기간과 rollback을 갖춘다. 전역 캐시 무효화 대신 영향 범위별 revision/invalidation을 적용한다.
-6. 릴리스 시 관련 테스트·`scripts/check_repo.sh`, DB preflight/검증/rollback 절차를 수행하고, 정확한 pushed SHA의 필수 GitHub Actions 성공을 확인한다. production은 `scripts/deploy_pos_production.sh` 절차를 따른다.
+6. 릴리스 시 관련 테스트·`scripts/check_repo.sh`, DB preflight/검증/rollback 절차를 수행하고, 정확한 pushed SHA의 필수 로컬 자동 검증 성공을 확인한다. production은 `scripts/deploy_pos_production.sh` 절차를 따른다.
 
 ## 2026-10-11 실행 결과
 

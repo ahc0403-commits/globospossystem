@@ -1,5 +1,7 @@
 # 배달비 포함 1회 결제·매장 차액 부담·채팅 첨부 통합 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 > **대체됨:** 사용자는 매장의 배달비 수금·선지급·차액 부담을 제외하고 고객 수령 시 기사 직접 결제만 사용하기로 변경했다. 현재 기준은 [기사 직접 결제 전용 개선안](/Users/andreahn/globos_pos_system/docs/plans/direct_order_customer_pays_driver_only_improvement_20261010.md)이다. 양방향 첨부 개선은 새 계획에도 포함하며 아래 금융 흐름은 구현 기준으로 사용하지 않는다.
 
 2026-10-10 · Asia/Ho_Chi_Minh · 상태: 전체 계획 재수립 및 최종 금액 확정 전 고객 협의 보완 완료, 이번 계획의 기능 구현·운영 반영 전
@@ -169,7 +171,7 @@
 
 검증 명령은 관련 Flutter 테스트, `deno test --config supabase/functions/direct-order-public/deno.json supabase/functions/direct-order-public/index_test.ts`, `bash test/direct_order_integrated_sql_test.sh`를 우선 확장하고, 구현 완료 후 `flutter analyze`, `flutter test`, `bash scripts/check_repo.sh`, 웹 release build를 실행한다. 필요한 정적 검사/format과 migration 적용 전후 `process_payment` 계약 동일성도 확인한다.
 
-DB/API는 기존 클라이언트와 호환되게 준비한다. 신규 migration과 Edge를 먼저 반영하고 정책 지원이 확인된 클라이언트를 적용한다. 구 클라이언트가 새 주문의 고객 확정 배송비를 실비 후청구로 바꾸려 해도 서버가 차단해야 한다. 신규 정책 활성화는 서버와 UI가 준비된 뒤 수행한다. 배포는 정확한 pushed HEAD의 필수 GitHub Actions 성공 후 `scripts/deploy_pos_production.sh`를 사용한다. 로컬 부분 통과나 과거 검사로 release gate PASS를 대신하지 않는다.
+DB/API는 기존 클라이언트와 호환되게 준비한다. 신규 migration과 Edge를 먼저 반영하고 정책 지원이 확인된 클라이언트를 적용한다. 구 클라이언트가 새 주문의 고객 확정 배송비를 실비 후청구로 바꾸려 해도 서버가 차단해야 한다. 신규 정책 활성화는 서버와 UI가 준비된 뒤 수행한다. 배포는 정확한 pushed HEAD의 필수 로컬 자동 검증 성공 후 `scripts/deploy_pos_production.sh`를 사용한다. 로컬 부분 통과나 과거 검사로 release gate PASS를 대신하지 않는다.
 
 운영에서 테스트 주문으로 포함 결제 1회, 실비 증가/감소, 기사 지급, 마감과 고객↔매장 첨부를 확인한 뒤 운영 검증 완료로 판단한다. 되돌릴 때 새 주문의 진입만 닫고 이미 결제한 고정 배송비 주문은 같은 정책으로 완료할 수 있게 한다. 기존 견적·수금·원장·첨부/증빙·감사 이력을 삭제하는 롤백은 사용하지 않는다.
 

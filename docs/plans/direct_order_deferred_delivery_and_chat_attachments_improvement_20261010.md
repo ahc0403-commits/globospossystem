@@ -1,5 +1,7 @@
 # 배달비 후청구·양방향 채팅 첨부 개선 계획
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 2026-10-10 · Asia/Ho_Chi_Minh · 상태: 조사와 계획 수립 완료, 이번 작업의 기능 구현·운영 반영 미실행
 
 **최신 계획으로 대체됨:** [배달비 포함 1회 결제·매장 차액 부담·채팅 첨부 통합 계획](/Users/andreahn/globos_pos_system/docs/plans/direct_order_single_payment_delivery_and_chat_attachments_plan_20261010.md)을 따른다. 아래의 후청구 기본 흐름과 후청구용 OS 푸시 제안은 적용하지 않는다. 이 문서는 초기 조사·검증 기록으로 보존한다.
@@ -116,7 +118,7 @@
 - 정산 미완료 시 인계 차단, 조리/포장은 진행 가능, 고객 기사 직접 지급과 기존 확정 주문 호환.
 - 목록 N건/첨부 A건/환불 결제 C건의 호출 수·SQL 내부 실행계획과 invoice batch 동작.
 
-이번 변경에 맞는 SQL/Edge/Flutter 회귀를 추가하고 기존 관련 검사를 다시 실행한다. 구현 후에는 `flutter analyze`, `flutter test`, `bash scripts/check_repo.sh` 및 release build를 수행한다. 운영 반영 시에는 정확한 pushed HEAD의 필수 GitHub Actions 성공과 `scripts/deploy_pos_production.sh`를 따른다. 과거 검사나 로컬 부분 통과를 운영 gate PASS로 대신하지 않는다. 기존 전체 검사 불일치는 현재 상태에서 다시 확인한다.
+이번 변경에 맞는 SQL/Edge/Flutter 회귀를 추가하고 기존 관련 검사를 다시 실행한다. 구현 후에는 `flutter analyze`, `flutter test`, `bash scripts/check_repo.sh` 및 release build를 수행한다. 운영 반영 시에는 정확한 pushed HEAD의 필수 로컬 자동 검증 성공과 `scripts/deploy_pos_production.sh`를 따른다. 과거 검사나 로컬 부분 통과를 운영 gate PASS로 대신하지 않는다. 기존 전체 검사 불일치는 현재 상태에서 다시 확인한다.
 
 새 DB/API 계약은 기존 클라이언트와 호환되게 준비하고 서버를 먼저 적용한다. 새 API가 없을 때 버튼이 실패하는 UI 선배포를 피한다. 운영에서 두 기능을 같은 주문으로 확인한 후 완료로 판단한다. 되돌릴 때도 이미 받은 돈·기사 지급·견적·첨부/증빙 기록을 삭제하지 않고 새 진입점만 닫을 수 있어야 한다.
 

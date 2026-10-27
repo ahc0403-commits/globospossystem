@@ -1,5 +1,7 @@
 # POS·Office 구매 프로세스 구현 결과 — 2026-10-05
 
+> 2026-10-24 소유자 정책: 앞으로의 자동 검증은 최종 후보·깨끗한 exact-main SHA에 묶인 전체 로컬 증거를 사용한다. GitHub는 commit/push 보관 용도이며 Actions/runner 성공은 필수 증거가 아니다. 기존 공식 배포·운영 검증은 유지하고 실행 스크립트·원격 보호 규칙의 남은 의존성은 우회하지 않는다. 아래 과거 실행 사실은 당시 이력이다.
+
 [전체 개선 계획](/Users/andreahn/globos_pos_system/docs/plans/pos_procurement_process_improvement_20261005.md)의 개발 범위를 POS와 Office에 구현했다. 핵심 PR·승인·입고 흐름에 비재고/자산 회계 인식, 회사 선급금 충당, 직원 대납 보전, 취소 환불, 공용/개인 역할 계정 배정·운영 지표를 연결했다. **소스 구현·로컬 검증 완료와 생산 적용·현장 운영 완료는 별개다.** 실제 담당자 배정, 운영 릴리스, 교육과 최소 2주 시범 운영은 아직 완료하지 않았다.
 
 ## 1. 현재 상태
@@ -112,7 +114,7 @@ Office 구매 migration `20261005020000`~`20261005029000` 및 `20261005032000`/`
 
 POS의 11개 외부 read-only post-apply 검증 SQL과 두 개 embedded 검증을 준비했고 각 migration 직후 격리 DB에서 실행했다. 배포 스크립트의 convention gate를 우회하지 않는다. 인덱스/조회 migration은 하나의 원자적 transaction으로 묶었다.
 
-두 DB migration을 버전순으로 준비하고 기존 기능을 유지한 채 bridge/UI를 릴리스한 후 검증된 매장만 새 정책을 활성화한다. 매장·역할·실제 계정·마스터 확인 → 정확한 head SHA의 필수 CI → 운영 배포 승인 → migration/앱 적용 → 역할별 UAT → 교육·최소 2주 시범 → 확대로 진행한다. 배포 후 현장 확인 전에는 완료 상태를 올리지 않는다.
+두 DB migration을 버전순으로 준비하고 기존 기능을 유지한 채 bridge/UI를 릴리스한 후 검증된 매장만 새 정책을 활성화한다. 매장·역할·실제 계정·마스터 확인 → 정확한 head SHA의 로컬 전체 검증·원격 push → 운영 배포 승인 → migration/앱 적용 → 역할별 UAT → 교육·최소 2주 시범 → 확대로 진행한다. 배포 후 현장 확인 전에는 완료 상태를 올리지 않는다.
 
 [운영 SOP](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_sop_20261005.md), [전환·시범 기록](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_rollout_20261005.md), [UAT 기록표](/Users/andreahn/globos_pos_system/docs/operations/pos_procurement_uat_20261005.csv)를 준비했다. 빈탄점·SM/BM 기존 ID·신규 세 역할 ID·공용 사용·대리자 없음 조건을 사용자 답변대로 반영했다. 신규 Auth 계정/roster는 아직 운영에 저장하지 않았다. 비밀정보 없는 native 발급 명세를 준비했다.
 

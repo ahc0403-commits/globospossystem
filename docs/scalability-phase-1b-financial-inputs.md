@@ -1,5 +1,7 @@
 # Scalability plan — phase 1B: complete financial inputs
 
+> Current owner policy (2026-10-27): automated verification runs in Codex Cloud or a suitable isolated cloud executor under root `CLAUDE.md`. Preserve complete final-SHA evidence, exact-main, official deployment and operational gates. Historical results below do not certify this candidate.
+
 ## Scope and release state
 
 This change continues [phase 1A](scalability-phase-1-payroll.md) from
@@ -16,7 +18,7 @@ It does not claim to complete every report/export in the application.
 | Source implemented | This branch; additive read RPC and three consumers |
 | Local SQL/API verification | 27 new tests and 19 phase-1A tests passed against disposable PostgreSQL/PostgREST |
 | Full repository verification | Passed: `bash scripts/check_repo.sh`, including release web build |
-| Required GitHub Actions | Must pass on the exact pushed head; consult the PR |
+| Required local verification | Must pass on the final pushed candidate and clean exact-main SHA; attach full reproducible logs |
 | Production migration applied | No |
 | Production client deployed | No |
 | Production operational verification | No |
@@ -138,7 +140,7 @@ screens, devices and order activity. Capacity and cost are **measurement require
 ## Rollout, rollback and next step
 
 1. Review this stacked diff and its prerequisite PR #450; pass repository and
-   exact-head GitHub checks before using the production release wrapper.
+   exact-head local verification before using the production release wrapper.
 2. Apply `20260905020000_complete_financial_inputs.sql` before its consumers.
    Companion preflight/verification files use the release gate's naming scheme.
    A missing RPC must show a load error; do not deploy a truncated-read fallback.
