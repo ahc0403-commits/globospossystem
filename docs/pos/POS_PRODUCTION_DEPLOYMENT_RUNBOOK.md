@@ -106,10 +106,10 @@ assertion counts, full-log hashes and web/nested artifact hashes. The official
 deployer always performs a new run; `verify --evidence` is an integrity audit,
 not a signed authorization or a way to supply a PASS file.
 
-**Remote protection remains unresolved.** The current main policy requires
-`POS release contract` from the GitHub Actions app (15368). This local change
-cannot satisfy or silently replace that remote policy. Do not push when it can
-start remote tests, create fake checks, change protection, or bypass merge rules.
+**Check remote protection at release time.** On 2026-10-27 the GitHub branch
+protection API reported no required status checks and required pull-request
+reviews; the branch-rules API returned no rulesets. Those settings may change.
+Do not create fake checks, change protection, or bypass merge rules.
 The [local verification contract](local-verification/LOCAL_VERIFICATION.md) and
 [remote protection decision](local-verification/REMOTE_PROTECTION_DECISION_KO.md)
 separate executable local readiness from that explicit approval boundary.

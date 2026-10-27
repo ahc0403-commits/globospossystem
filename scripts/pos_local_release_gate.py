@@ -11,9 +11,11 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shlex
 import shutil
 import signal
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -62,6 +64,29 @@ def recipe(root):
 def contract_hash(root):
     return hashlib.sha256(json.dumps({p: sha256(root / p) for p in CONTRACT},
                                      sort_keys=True).encode()).hexdigest()
+
+
+def proxy_trust(proxy_cert, host_bundle):
+    """Use only a public platform CA already present in the host trust bundle."""
+    if not proxy_cert:
+        return None
+    certificate_path, bundle_path = Path(proxy_cert), Path(host_bundle)
+    require(certificate_path.is_file() and bundle_path.is_file(), 'Proxy CA or host trust bundle missing')
+    certificate = certificate_path.read_text()
+    require('PRIVATE KEY' not in certificate, 'Proxy CA must not contain a private key')
+    pattern = r'-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----'
+    parts = re.findall(pattern, certificate, re.S)
+    require(len(parts) == 1 and not re.sub(pattern, '', certificate, flags=re.S).strip(),
+            'Expected exactly one public proxy CA certificate')
+    root_der = ssl.PEM_cert_to_DER_cert(parts[0])
+    bundle = bundle_path.read_text()
+    require('PRIVATE KEY' not in bundle, 'Host trust bundle must not contain a private key')
+    host_roots = re.findall(pattern, bundle, re.S)
+    require(any(ssl.PEM_cert_to_DER_cert(item) == root_der for item in host_roots),
+            'Proxy CA is not in the existing host trust bundle')
+    return {'bundle': str(bundle_path.resolve()),
+            'proxyCaSha256': hashlib.sha256(root_der).hexdigest(),
+            'hostBundleSha256': sha256(bundle_path)}
 
 
 def exact_main(root):
@@ -210,9 +235,15 @@ def run(directory, kind, root=ROOT):
     try:
         endpoint = checked(['docker', 'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])
         require(not os.environ.get('DOCKER_HOST') and endpoint.startswith('unix://'), 'Only an existing local Docker engine is allowed')
-        value['imageBuild'] = recorded(directory, 'image-build', ['docker', 'build', '--platform', 'linux/amd64',
-            '--iidfile', str(directory / 'image.id'), '-f', str(root / CONTRACT[1]),
-            str(root / 'scripts/local_verification')], 2400)
+        trust = proxy_trust(os.environ.get('CODEX_PROXY_CERT'), '/etc/ssl/certs/ca-certificates.crt')
+        if trust:
+            value['environment']['proxyTrust'] = {k: trust[k] for k in ('proxyCaSha256', 'hostBundleSha256')}
+        build = ['docker', 'build', '--platform', 'linux/amd64']
+        if trust:
+            build += ['--secret', 'id=host_ca_bundle,src=' + trust['bundle']]
+        build += ['--iidfile', str(directory / 'image.id'), '-f', str(root / CONTRACT[1]),
+                  str(root / 'scripts/local_verification')]
+        value['imageBuild'] = recorded(directory, 'image-build', build, 2400)
         require(value['imageBuild']['exitCode'] == 0, 'Local environment build failed')
         image_id = (directory / 'image.id').read_text().strip()
         image = json.loads(checked(['docker', 'image', 'inspect', image_id]))[0]
@@ -223,11 +254,18 @@ def run(directory, kind, root=ROOT):
             checked(['git', 'checkout', '--quiet', '--detach', before['sha']], snapshot)
             require(source(snapshot) == before, 'Snapshot differs from committed source')
             uid = os.getuid()
-            checked(['docker', 'run', '-d', '--name', name, '--label', 'pos.local.verification=' + run_id, '--group-add', '0',
+            docker_run = ['docker', 'run', '-d', '--name', name, '--label', 'pos.local.verification=' + run_id, '--group-add', '0',
                      '--user', 'root', '--shm-size', '1g',
                      '-v', '/var/run/docker.sock:/var/run/docker.sock',
                      '-v', str(snapshot) + ':' + str(snapshot),
                      '-v', str(directory) + ':' + str(directory),
+                    ]
+            if trust:
+                docker_run += ['--mount', 'type=bind,src=' + trust['bundle'] + ',dst=/run/pos-host-ca.pem,readonly']
+                for variable in ('SSL_CERT_FILE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO',
+                                 'REQUESTS_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS'):
+                    docker_run += ['--env', variable + '=/run/pos-host-ca.pem']
+            checked(docker_run + [
                      '--env', 'POS_LOCAL_RUN_ID=' + run_id,
                      '--env', 'POS_LOCAL_TOOL_CONTAINER=' + name,
                      '--env', 'POS_VERIFICATION_ARTIFACTS=' + str(directory / 'nested'),
