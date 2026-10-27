@@ -22,6 +22,45 @@ container updates its disposable system trust store for Dart; no certificate is
 added to the saved image. TLS and hostname verification remain enabled. If the
 platform CA or bundle is unavailable or untrusted, verification fails closed.
 
+## Larger isolated cloud verifier
+
+If the managed Codex Docker daemon cannot fit the pinned fixture images, run
+the same committed gate in a dedicated cloud Linux VM instead. A disposable
+Vercel Sandbox with 4 vCPUs, 8 GiB memory, 64 GB ephemeral disk, an x86-64
+image and an `overlay2` Docker daemon was used for this project. Confirm actual
+free space, execution time, account usage and image/runtime support on each run;
+the size is not a guarantee that future builds will fit. This is a separate
+verification executor, not a production deployment or a replacement for Codex
+Cloud's project workspace.
+
+Install Docker Engine and its Buildx plugin from the VM's trusted package
+source. The verifier must run as a non-root UID with permission to use the
+VM's private Docker socket; fixture containers must also be able to access that
+socket as the same UID/GID. Limit any socket permission change to the disposable
+VM and never expose the socket on a network port. Verify the image build and a
+container with the recipe's CPU and memory limits before starting the gate.
+
+On a fresh, dedicated Vercel Sandbox, cgroup v2 controllers may not initially
+be delegated because the sandbox's own processes occupy the root cgroup. Before
+starting Docker, an administrator can move only this disposable sandbox's
+processes to a dedicated child cgroup, then delegate `cpu`, `memory`, `pids`,
+`io` and `cpuset` to children. Verify that the root cgroup has no processes,
+the required controllers are enabled, and a Docker build followed by a
+resource-limited container both succeed. Do not apply this to a shared host,
+move other workloads, remove resource limits, or silently ignore an error.
+If the platform does not permit safe delegation, use another compatible
+isolated VM and report this executor as unavailable.
+
+Where the platform intercepts HTTPS, pass its single public CA through
+`CODEX_PROXY_CERT` only after checking that it is present in the host trust
+bundle. For Vercel Sandbox, the documented certificate location is
+`/etc/pki/ca-trust/source/anchors/vercel-proxy-ca.pem`; confirm it and the host
+bundle at runtime. Never disable certificate or hostname checks. Use no
+production credentials or published ports. Before the ephemeral VM expires,
+preserve the complete SHA-bound receipt, logs and build artifacts outside the
+VM and verify their hashes; stop only resources created for this run. Account
+credits and usage-based charges apply according to the selected cloud service.
+
 For a clean committed candidate checkout, execute:
 
 ```bash
