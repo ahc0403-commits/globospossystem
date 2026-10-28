@@ -181,3 +181,8 @@ run_sql "$INVENTORY_ROOT/supabase/tests/unified_requester_receiving.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/migrations/20261023090000_procurement_buyer_approval_readiness.sql" >/dev/null
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_buyer_readiness.test.sql"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_buyer_readiness_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
+
+run_sql "$INVENTORY_ROOT/supabase/migrations/20261028053422_procurement_manager_adjustment.sql" >/dev/null
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_manager_adjustment.test.sql"
+run_sql "$INVENTORY_ROOT/supabase/tests/procurement_approval_history.test.sql"
+python3 "$INVENTORY_ROOT/scripts/tests/procurement_adjustment_concurrency.py" "$INVENTORY_PORT"

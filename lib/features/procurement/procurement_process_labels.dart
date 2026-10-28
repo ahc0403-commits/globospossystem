@@ -262,7 +262,7 @@ String procurementProcessLabel(String key, String languageCode) {
     ],
     "brand_review": ["브랜드 검토 대기", "Brand review", "Chờ thương hiệu duyệt"],
     "brand_approve": ["브랜드 동의", "Brand agreement", "Thương hiệu đồng ý"],
-    "adjust_request": ["수량 조정", "Adjust quantities", "Điều chỉnh số lượng"],
+    "adjust_request": ["조정", "Adjust", "Điều chỉnh"],
     "cancel_request": ["요청 취소", "Cancel request", "Hủy yêu cầu"],
     "category": ["구매 유형", "Purchase category", "Loại mua hàng"],
     "channel": ["구매 채널", "Purchase channel", "Kênh mua hàng"],
