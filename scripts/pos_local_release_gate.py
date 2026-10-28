@@ -15,12 +15,14 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import ssl
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
+from urllib.parse import urlsplit
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'local_verification'))
@@ -89,6 +91,45 @@ def proxy_trust(proxy_cert, host_bundle):
             'hostBundleSha256': sha256(bundle_path)}
 
 
+def proxy_environment(environment):
+    """Forward only the host's credential-free managed network route."""
+    names = []
+    for name in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy',
+                 'NO_PROXY', 'no_proxy'):
+        value = environment.get(name)
+        if not value:
+            continue
+        require(not any(ord(c) < 32 for c in value), 'Invalid proxy environment')
+        if name.lower() != 'no_proxy':
+            parsed = urlsplit(value)
+            require(parsed.scheme in {'http', 'https'} and parsed.hostname
+                    and parsed.username is None and parsed.password is None
+                    and not parsed.query and not parsed.fragment,
+                    'Only credential-free HTTP proxy settings may enter verification')
+        names.append(name)
+    return names
+
+
+def proxy_host_arguments(environment):
+    """Project the existing host DNS answer for its managed proxy into Docker.
+
+    Nested bridge DNS can answer from a different network. This preserves the
+    configured proxy URL/port and the host's current route; it does not resolve
+    target services directly or add another proxy/fallback.
+    """
+    names = proxy_environment(environment)
+    hosts = sorted({urlsplit(environment[name]).hostname for name in names
+                    if name.lower() != 'no_proxy'})
+    arguments = []
+    for host in hosts:
+        answers = sorted({item[4][0] for item in socket.getaddrinfo(
+            host, None, socket.AF_INET, socket.SOCK_STREAM)})
+        require(answers, 'Managed proxy has no host DNS answer')
+        for address in answers:
+            arguments += ['--add-host', host + ':' + address]
+    return arguments
+
+
 def exact_main(root):
     remote = checked(['git', 'remote', 'get-url', 'origin'], root)
     require(remote in {'https://github.com/ahc0403-commits/globospossystem.git',
@@ -105,11 +146,11 @@ def write_receipt(directory, receipt):
     temp.replace(directory / 'receipt.json')
 
 
-def recorded(directory, name, argv, timeout, cwd=ROOT):
+def recorded(directory, name, argv, timeout, cwd=ROOT, env=None):
     path = directory / (name + '.log')
     start, monotonic = now(), time.monotonic()
     with path.open('wb') as log:
-        process = subprocess.Popen(argv, cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
+        process = subprocess.Popen(argv, cwd=cwd, stdout=log, stderr=subprocess.STDOUT, env=env,
                                    start_new_session=True)
         try:
             code = process.wait(timeout=timeout)
@@ -238,12 +279,24 @@ def run(directory, kind, root=ROOT):
         trust = proxy_trust(os.environ.get('CODEX_PROXY_CERT'), '/etc/ssl/certs/ca-certificates.crt')
         if trust:
             value['environment']['proxyTrust'] = {k: trust[k] for k in ('proxyCaSha256', 'hostBundleSha256')}
-        build = ['docker', 'build', '--platform', 'linux/amd64']
+        proxy_names = proxy_environment(os.environ)
+        value['environment']['managedProxyVariables'] = proxy_names
+        proxy_hosts = proxy_host_arguments(os.environ)
+        value['environment']['managedProxyHostArguments'] = proxy_hosts
+        build = ['docker', 'build', '--platform', 'linux/amd64'] + proxy_hosts
+        for variable in proxy_names:
+            build += ['--build-arg', variable]
         if trust:
             build += ['--secret', 'id=host_ca_bundle,src=' + trust['bundle']]
         build += ['--iidfile', str(directory / 'image.id'), '-f', str(root / CONTRACT[1]),
                   str(root / 'scripts/local_verification')]
-        value['imageBuild'] = recorded(directory, 'image-build', build, 2400)
+        # Buildx state must be writable without changing HOME, Docker contexts,
+        # registry credentials, or system configuration in managed cloud hosts.
+        buildx = directory / 'buildx-state'
+        buildx.mkdir(mode=0o700)
+        build_environment = dict(os.environ, BUILDX_CONFIG=str(buildx))
+        value['imageBuild'] = recorded(directory, 'image-build', build, 2400,
+                                       env=build_environment)
         require(value['imageBuild']['exitCode'] == 0, 'Local environment build failed')
         image_id = (directory / 'image.id').read_text().strip()
         image = json.loads(checked(['docker', 'image', 'inspect', image_id]))[0]
@@ -260,6 +313,9 @@ def run(directory, kind, root=ROOT):
                      '-v', str(snapshot) + ':' + str(snapshot),
                      '-v', str(directory) + ':' + str(directory),
                     ]
+            docker_run += proxy_hosts
+            for variable in proxy_names:
+                docker_run += ['--env', variable]
             if trust:
                 docker_run += ['--mount', 'type=bind,src=' + trust['bundle'] + ',dst=/run/pos-host-ca.pem,readonly']
                 docker_run += ['--mount', 'type=bind,src=' + trust['certificate'] +
@@ -267,6 +323,7 @@ def run(directory, kind, root=ROOT):
                 for variable in ('SSL_CERT_FILE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO',
                                  'REQUESTS_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS'):
                     docker_run += ['--env', variable + '=/run/pos-host-ca.pem']
+                docker_run += ['--env', 'DENO_TLS_CA_STORE=system']
             runtime_trust = ('update-ca-certificates >/dev/null; '
                              'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt '
                              '/usr/local/share/ca-certificates/pos-platform-proxy.crt >/dev/null; ')

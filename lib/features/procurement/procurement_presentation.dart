@@ -1,6 +1,37 @@
 import 'package:intl/intl.dart';
 import '../../core/utils/time_utils.dart';
 
+/// PR-only display aliases approved in the 2026-10-27 source attachment.
+/// Keep the registered store and immutable requesting actor unchanged.
+Map<String, String> procurementRequestHeader(Map<String, dynamic> data) {
+  final storeId = data['restaurant_id'] ?? data['store_id'];
+  final actor = data['created_actor'] as Map?;
+  final department = data['request_department_name']?.toString().trim();
+  final result = <String, String>{
+    'store_name': data['store_name']?.toString() ?? '—',
+    'requester_label': 'requester',
+    'requester_value': department != null && department.isNotEmpty
+        ? department
+        : (actor?['display_name'] ?? actor?['role'])?.toString() ?? '—',
+  };
+  if (storeId == '8bc9eef5-dcd5-46b1-b931-23f77132322c') {
+    result.addAll({
+      'store_name': 'BUNSIKCLUB',
+      'store_address': '69/1A2 Nguyễn Gia Trí, phường Thạnh Mỹ Tây',
+      'requester_label': 'requestDepartment',
+    });
+  } else if (storeId == '273b057e-3b69-46e3-93c1-6194c2802849') {
+    result.addAll({
+      'store_name': 'JEONGABOK (TOÀN GIA PHÚC)',
+      'store_address': '29A Nguyễn Gia Trí, phường Thạnh Mỹ Tây',
+    });
+  }
+  if (department != null && department.isNotEmpty) {
+    result['requester_label'] = 'requestDepartment';
+  }
+  return result;
+}
+
 String procurementDate(dynamic value, {bool includeTime = false}) {
   final text = value?.toString() ?? '';
   if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) return text;

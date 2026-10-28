@@ -83,6 +83,18 @@ read_required_emails() {
 }
 
 verify_project_ref() {
+  if [[ "${POS_SUPABASE_BACKEND:-cli}" == "mcp" ]]; then
+    [[ "$EXPECTED_PROJECT_REF" == "ynriuoomotxuwhuxxmhj" ]] || fail "Cloud target is not pinned POS production."
+    [[ -n "${POS_CLOUD_BRIDGE_DIR:-}" ]] || fail "Missing live cloud execution directory."
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/bridge.py" project \
+      --directory "$POS_CLOUD_BRIDGE_DIR" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+if d.get("id")!="ynriuoomotxuwhuxxmhj" or d.get("status")!="ACTIVE_HEALTHY":
+    raise SystemExit("Pinned production project is unavailable.")
+print("Supabase MCP project: ynriuoomotxuwhuxxmhj")'
+    return
+  fi
   [[ -f "$PROJECT_REF_FILE" ]] || fail "Missing project ref file: $PROJECT_REF_FILE"
   local project_ref
   project_ref="$(tr -d '\r\n' < "$PROJECT_REF_FILE")"
@@ -91,13 +103,24 @@ verify_project_ref() {
     fail "Linked Supabase project is not production ($EXPECTED_PROJECT_REF)."
 }
 
+query_json() {
+  if [[ "${POS_SUPABASE_BACKEND:-cli}" == "mcp" ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/bridge.py" query \
+      --directory "$POS_CLOUD_BRIDGE_DIR" --file "$1"
+  else
+    supabase db query --linked -f "$1" -o json
+  fi
+}
+
 check_production_hygiene() {
   if [[ "$DRY_RUN" == "1" ]]; then
     printf 'Production test-data hygiene check dry-run: reserved .test identities and test-marker stores are forbidden.\n'
     return 0
   fi
 
-  command -v supabase >/dev/null 2>&1 || fail "Missing required command: supabase"
+  if [[ "${POS_SUPABASE_BACKEND:-cli}" != "mcp" ]]; then
+    command -v supabase >/dev/null 2>&1 || fail "Missing required command: supabase"
+  fi
   command -v python3 >/dev/null 2>&1 || fail "Missing required command: python3"
 
   local hygiene_query_file
@@ -134,7 +157,7 @@ select
 SQL
 
   local query_output
-  if ! query_output="$(supabase db query --linked -f "$hygiene_query_file" -o json)"; then
+  if ! query_output="$(query_json "$hygiene_query_file")"; then
     rm -f "$hygiene_query_file"
     fail "Could not verify production test-data hygiene."
   fi
@@ -384,12 +407,14 @@ check_accounts() {
     return 0
   fi
 
-  command -v supabase >/dev/null 2>&1 || fail "Missing required command: supabase"
+  if [[ "${POS_SUPABASE_BACKEND:-cli}" != "mcp" ]]; then
+    command -v supabase >/dev/null 2>&1 || fail "Missing required command: supabase"
+  fi
   build_query_file
   trap 'rm -f "${QUERY_FILE:-}"' EXIT
 
   local query_output
-  query_output="$(supabase db query --linked -f "$QUERY_FILE" -o json)"
+  query_output="$(query_json "$QUERY_FILE")"
 
   local rows_tsv
   rows_tsv="$(parse_rows "$query_output")"

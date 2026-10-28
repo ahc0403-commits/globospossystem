@@ -182,7 +182,31 @@ run_sql "$INVENTORY_ROOT/supabase/migrations/20261023090000_procurement_buyer_ap
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_buyer_readiness.test.sql"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_buyer_readiness_performance.py" "$INVENTORY_PORT" "$INVENTORY_ROOT"
 
-run_sql "$INVENTORY_ROOT/supabase/migrations/20261028053422_procurement_manager_adjustment.sql" >/dev/null
+if [[ "${POS_TEST_CLOUD_MIGRATION:-0}" == "1" ]]; then
+  # Only this disposable trust-auth fixture gets a postgres login. Exercise the
+  # exact cloud transaction against the full real procurement foundation.
+  psql -X -h 127.0.0.1 -p "$INVENTORY_PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='postgres') THEN
+   CREATE ROLE postgres SUPERUSER LOGIN;
+ END IF;
+END $$;
+CREATE SCHEMA supabase_migrations;
+CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY,name text,statements text[]);
+SQL
+  python3 -B - "$INVENTORY_ROOT" "$INVENTORY_TMP/cloud-adjustment.sql" <<'PY'
+import pathlib,subprocess,sys
+root=pathlib.Path(sys.argv[1]);sys.path.insert(0,str(root/'scripts/cloud_deployment'))
+import migration
+sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
+value=migration.prepare(root/'supabase/migrations/20261028053422_procurement_manager_adjustment.sql',sha,root)
+pathlib.Path(sys.argv[2]).write_text(value['query'])
+PY
+  psql -X -h 127.0.0.1 -p "$INVENTORY_PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 \
+    -f "$INVENTORY_TMP/cloud-adjustment.sql" >/dev/null
+else
+  run_sql "$INVENTORY_ROOT/supabase/migrations/20261028053422_procurement_manager_adjustment.sql" >/dev/null
+fi
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_manager_adjustment.test.sql"
 run_sql "$INVENTORY_ROOT/supabase/tests/procurement_approval_history.test.sql"
 python3 "$INVENTORY_ROOT/scripts/tests/procurement_adjustment_concurrency.py" "$INVENTORY_PORT"

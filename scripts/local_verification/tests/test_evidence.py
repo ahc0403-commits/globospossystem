@@ -168,6 +168,7 @@ class IntegrityTests(unittest.TestCase):
         outputs = {'unittest':'Ran 12 tests in 0.1s\n\nOK\n', 'flutter':suite(),
             'command':'Actual isolated SQL assertions completed\n',
             'deno':'ok | 4 passed | 0 failed (20ms)\n',
+            'node':'# tests 1\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n',
             'repository':''.join('CHECK_REPO_STEP='+x+'\n' for x in markers)+suite()*3+summaries()+'CHECK_REPO_COMPLETE\n'}
         for step in self.recipe['steps']:
             log = self.directory / (step['id'] + '.log'); log.write_text(outputs[step['format']])
@@ -246,6 +247,30 @@ class IntegrityTests(unittest.TestCase):
         (p/'source').write_text('committed\n'); (p/'untracked').write_text('new source')
         with self.assertRaises(InvalidEvidence): gate.source(p)
         self.assertEqual(baseline['inputHashes'].keys(), {'source'})
+
+
+class ManagedProxyTests(unittest.TestCase):
+    def test_only_the_configured_proxy_gets_the_existing_host_dns_answer(self):
+        environment = {'HTTPS_PROXY': 'http://proxy:8080', 'http_proxy': 'http://proxy:8080',
+                       'NO_PROXY': 'localhost,127.0.0.1'}
+        answers = [(2, 1, 6, '', ('192.0.2.10', 0))]
+        with patch.object(gate.socket, 'getaddrinfo', return_value=answers) as resolve:
+            self.assertEqual(gate.proxy_host_arguments(environment), ['--add-host', 'proxy:192.0.2.10'])
+        resolve.assert_called_once_with('proxy', None, gate.socket.AF_INET, gate.socket.SOCK_STREAM)
+        with patch.object(gate.socket, 'getaddrinfo') as resolve:
+            self.assertEqual(gate.proxy_host_arguments({}), [])
+        resolve.assert_not_called()
+
+    def test_only_network_settings_enter_the_verification_container(self):
+        environment = {'HTTPS_PROXY': 'http://proxy:8080', 'NO_PROXY': 'localhost,127.0.0.1',
+                       'SUPABASE_ACCESS_TOKEN': 'private', 'FIXED_SMOKE_PASSWORD': 'private'}
+        self.assertEqual(gate.proxy_environment(environment), ['HTTPS_PROXY', 'NO_PROXY'])
+
+    def test_credentials_and_unexpected_routes_fail_before_container_creation(self):
+        for proxy in ['http://user:password@proxy:8080', 'socks5://proxy:8080',
+                      'http://proxy:8080?token=private', 'http://proxy:8080\nother']:
+            with self.subTest(proxy=proxy), self.assertRaises(InvalidEvidence):
+                gate.proxy_environment({'HTTPS_PROXY': proxy})
 
 
 class FixtureOwnershipTests(unittest.TestCase):

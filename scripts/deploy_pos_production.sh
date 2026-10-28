@@ -36,6 +36,8 @@ DB_ONLY=0
 WEB_ONLY=0
 ONBOARDING_EDGE_ONLY=0
 MIGRATION_OPTION_SET=0
+POS_SUPABASE_BACKEND="${POS_SUPABASE_BACKEND:-cli}"
+LOCAL_RELEASE_EVIDENCE=""
 
 # shellcheck source=scripts/lib/production_migration_gate.sh
 source "$ROOT_DIR/scripts/lib/production_migration_gate.sh"
@@ -72,6 +74,7 @@ Options:
                      Requires source, local verification, Auth and test gates.
                      Login smoke runs unless explicitly opted out on the CLI.
   --mode MODE        prebuilt (default) or remote.
+  --supabase-backend MODE  cli (default), or live MCP for DB-only/web-only cloud releases.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
   --skip-checks      Skip dart analyze and flutter tests.
@@ -202,6 +205,7 @@ enforce_local_release_contract() {
   python3 -B "$ROOT_DIR/scripts/pos_local_release_gate.py" run \
     --kind exact-main --output "$evidence_parent/evidence" ||
     fail "Required local release verification failed; see $evidence_parent/evidence."
+  LOCAL_RELEASE_EVIDENCE="$evidence_parent/evidence"
   enforce_clean_git
   enforce_origin_main_ancestry
   printf 'Local release evidence: %s/evidence/receipt.json\n' "$evidence_parent"
@@ -244,6 +248,11 @@ load_env() {
     return 0
   fi
 
+  if [[ "$POS_SUPABASE_BACKEND" == "mcp" ]]; then
+    # The existing Vercel CLI can provide production frontend configuration via
+    # `vercel env run`. Management credentials never become shell variables.
+    return 0
+  fi
   fail "Missing env file. Expected $ENV_FILE or $ROOT_DIR/.env"
 }
 
@@ -300,6 +309,10 @@ parse_args() {
         DEPLOY_MODE="${1:-}"
         [[ -n "$DEPLOY_MODE" ]] || fail "--mode requires a value"
         ;;
+      --supabase-backend)
+        shift
+        POS_SUPABASE_BACKEND="${1:-}"
+        ;;
       --test)
         shift
         [[ -n "${1:-}" ]] || fail "--test requires a file"
@@ -351,7 +364,59 @@ parse_args() {
     shift
   done
   [[ "$SKIP_SMOKE_TESTS" == "0" || "$SKIP_SMOKE_TESTS" == "1" ]] || fail "SKIP_SMOKE_TESTS must be 0 or 1."
+  [[ "$POS_SUPABASE_BACKEND" == "cli" || "$POS_SUPABASE_BACKEND" == "mcp" ]] || fail "Unknown Supabase backend."
   if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then SKIP_LOGIN_SMOKE=1; fi
+}
+
+validate_cloud_options() {
+  [[ "$POS_SUPABASE_BACKEND" == "mcp" ]] || return 0
+  [[ "$DB_ONLY" == "1" || "$WEB_ONLY" == "1" ]] ||
+    fail "MCP release requires reviewed --db-only or --web-only scope; Edge secret operations are unavailable."
+  [[ "$SKIP_CHECKS" == "0" && "$SKIP_AUTH_CHECK" == "0" && "$SKIP_LOGIN_SMOKE" == "0" &&
+     "$SKIP_SMOKE_TESTS" == "0" && "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" &&
+     "$SKIP_VERCEL" == "0" && -n "$TEST_TARGETS" && "$DEPLOY_MODE" == "prebuilt" ]] ||
+    fail "Cloud releases require all applicable gates and prebuilt deployment."
+}
+
+cloud_cleanup() {
+  local status=$?
+  if [[ -n "${POS_CLOUD_BRIDGE_DIR:-}" ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/sdk.py" close --directory "$POS_CLOUD_BRIDGE_DIR" || status=1
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/bridge.py" close --directory "$POS_CLOUD_BRIDGE_DIR" >/dev/null || status=1
+  fi
+  exit "$status"
+}
+
+initialize_cloud_execution() {
+  [[ "$POS_SUPABASE_BACKEND" == "mcp" ]] || return 0
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf 'Cloud execution: NOT RUN (dry-run; no imported PASS).\n'
+    return
+  fi
+  local parent phase
+  parent="$(mktemp -d "${TMPDIR:-/tmp}/pos-cloud-release.XXXXXX")"
+  phase=web-only; [[ "$DB_ONLY" == "1" ]] && phase=db-only
+  export POS_CLOUD_BRIDGE_DIR="$parent/execution"
+  python3 -B "$ROOT_DIR/scripts/cloud_deployment/bridge.py" init \
+    --directory "$POS_CLOUD_BRIDGE_DIR" --phase "$phase"
+  trap cloud_cleanup EXIT
+  printf 'POS_CLOUD_DIRECTORY=%s\n' "$POS_CLOUD_BRIDGE_DIR"
+  python3 -B "$ROOT_DIR/scripts/cloud_deployment/bridge.py" project \
+    --directory "$POS_CLOUD_BRIDGE_DIR" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+if d.get("id")!="ynriuoomotxuwhuxxmhj" or d.get("status")!="ACTIVE_HEALTHY":
+    raise SystemExit("Pinned production MCP project is unavailable")'
+  python3 -B "$ROOT_DIR/scripts/cloud_deployment/sdk.py" init \
+    --directory "$POS_CLOUD_BRIDGE_DIR" --evidence "$LOCAL_RELEASE_EVIDENCE"
+  if [[ "$DB_ONLY" != "1" ]]; then
+    export POS_CLOUD_VERCEL_BIN="${POS_CLOUD_VERCEL_BIN:-$(command -v vercel)}"
+    [[ "$POS_CLOUD_VERCEL_BIN" = /* && -x "$POS_CLOUD_VERCEL_BIN" &&
+       "$POS_CLOUD_VERCEL_BIN" != "$ROOT_DIR/scripts/cloud_deployment/bin/vercel" ]] ||
+      fail "Existing official Vercel CLI path is required."
+  fi
+  export PATH="$ROOT_DIR/scripts/cloud_deployment/bin:$PATH"
+  export POS_SUPABASE_BACKEND
 }
 
 validate_db_only_options() {
@@ -428,6 +493,10 @@ PYSECRET
 preflight() {
   log "Preflight"
   reject_target_overrides
+  if [[ "$POS_SUPABASE_BACKEND" == "mcp" && "$WEB_ONLY" == "1" && "$DRY_RUN" != "1" ]]; then
+    [[ -n "${FIXED_SMOKE_ACCOUNT_CODE:-}" && -n "${FIXED_SMOKE_PASSWORD:-}" ]] ||
+      fail "Cloud web release requires securely supplied fixed-account login smoke credentials before production work."
+  fi
   need_cmd git
   if [[ "$SKIP_SMOKE_TESTS" == "1" ]]; then need_cmd python3; fi
   [[ "$DEPLOY_MODE" == "prebuilt" || "$DEPLOY_MODE" == "remote" ]] ||
@@ -437,12 +506,16 @@ preflight() {
   enforce_origin_main_ancestry
   enforce_local_release_contract
 
+  initialize_cloud_execution
+
+  if [[ "$POS_SUPABASE_BACKEND" == "cli" ]]; then
   [[ -f "$PROJECT_REF_FILE" ]] || fail "Missing project ref file: $PROJECT_REF_FILE"
   local project_ref
   project_ref="$(tr -d '\r\n' < "$PROJECT_REF_FILE")"
   printf 'Supabase linked project: %s\n' "$project_ref"
   [[ "$project_ref" == "$POS_PROJECT_REF" ]] ||
     fail "Linked Supabase project is not POS production ($POS_PROJECT_REF)."
+  fi
 
   if [[ "$DB_ONLY" != "1" ]]; then
     [[ -f "$ROOT_DIR/.vercel/project.json" ]] ||
@@ -456,13 +529,13 @@ preflight() {
     printf 'Vercel project: %s\n' "$POS_VERCEL_PROJECT"
   fi
 
-  if [[ "$SKIP_CHECKS" != "1" ]]; then
+  if [[ "$SKIP_CHECKS" != "1" && "$POS_SUPABASE_BACKEND" == "cli" ]]; then
     need_cmd dart
     need_cmd flutter
     need_cmd deno
   fi
   if [[ "$DB_ONLY" != "1" ]]; then
-    need_cmd supabase
+    [[ "$POS_SUPABASE_BACKEND" == "mcp" ]] || need_cmd supabase
     [[ -f "$ROOT_DIR/supabase/functions/create_staff_user/index.ts" ]] ||
       fail "Missing create_staff_user Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/provision-fixed-pos-account/index.ts" ]] ||
@@ -499,8 +572,10 @@ preflight() {
       fail "Missing fixed POS account smoke script: $FIXED_ACCOUNT_SMOKE_SCRIPT"
   fi
   if [[ "$SKIP_DB" != "1" && ( -n "$MIGRATION_FILE" || "$ROLLBACK_HIERARCHY" == "1" ) ]]; then
+    if [[ "$POS_SUPABASE_BACKEND" == "cli" ]]; then
     need_cmd supabase
     need_cmd psql
+    fi
   fi
   if [[ "$DB_ONLY" != "1" && "$DEPLOY_MODE" == "remote" && "$SKIP_BUILD" != "1" ]]; then
     need_cmd flutter
@@ -555,6 +630,13 @@ run_checks() {
   if [[ "$SKIP_CHECKS" == "1" ]]; then
     log "Checks skipped"
     return 0
+  fi
+
+  if [[ "$POS_SUPABASE_BACKEND" == "mcp" ]]; then
+    export TEST_TARGETS
+    run python3 -B "$ROOT_DIR/scripts/cloud_deployment/sdk.py" checks \
+      --directory "${POS_CLOUD_BRIDGE_DIR:-<not-run>}"
+    return
   fi
 
   [[ -f "$ROOT_DIR/pubspec.lock" ]] ||
@@ -1252,6 +1334,8 @@ run_db_only_flow() {
 
 main() {
   parse_args "$@"
+  readonly POS_SUPABASE_BACKEND
+  validate_cloud_options
   readonly WEB_ONLY
   validate_web_only_options
   validate_db_only_options

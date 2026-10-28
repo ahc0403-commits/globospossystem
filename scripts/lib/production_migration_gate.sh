@@ -57,6 +57,13 @@ apply_migration_by_convention() {
 
   resolve_production_migration_gate "$migration_path" "$scripts_dir" || return 1
 
+  if [[ "${POS_SUPABASE_BACKEND:-cli}" == "mcp" ]]; then
+    log "Atomic MCP migration with original source version and verified history"
+    run python3 -B "$ROOT_DIR/scripts/cloud_deployment/migration.py" \
+      --directory "${POS_CLOUD_BRIDGE_DIR:-<not-run>}" --migration "$migration_path"
+    return
+  fi
+
   if [[ -f "$PRODUCTION_MIGRATION_ROLLBACK" ]]; then
     log "Migration rollback readiness"
     printf 'Rollback ready (not executed): %s\n' "$PRODUCTION_MIGRATION_ROLLBACK"
