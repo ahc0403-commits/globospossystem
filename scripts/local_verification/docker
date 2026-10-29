@@ -13,7 +13,7 @@ import os
 import re
 import subprocess
 import sys
-from fixture_image import policy, policy_for_ref, verified_fixture_id
+from fixture_image import policy, policy_for_ref, verified_fixture_id, temporary_volume_options, validate_temporary_storage
 
 def real_docker():
     # The Ubuntu tool image uses /usr/bin; the managed host uses /usr/local/bin.
@@ -46,7 +46,8 @@ def owned(kind, name, run_id):
             fixed = policy_for_ref(requested)
             if value['Image'] != fixed['derivedImageId']:
                 raise ValueError('Fixture source/image identity mismatch')
-            record.update(requestedImageRef=requested, representation=fixed['representation'])
+            record.update(requestedImageRef=requested, representation=fixed['representation'],
+                          temporaryVolumeMounts=validate_temporary_storage(value, fixed))
         line = json.dumps(record) + '\n'
         with (area / 'fixture-images.jsonl').open('a') as log:
             fcntl.flock(log, fcntl.LOCK_EX)
@@ -102,6 +103,13 @@ def prepare(args, run_id):
             verified_fixture_id(projected, [REAL])
             result[result.index(requested)] = projected
             result[1:1] = ['--label', 'pos.local.fixture.source=' + requested]
+            fixed = policy_for_ref(requested)
+            mounts = temporary_volume_options(fixed)
+            if mounts and any(a.startswith('-v') or a in ('--volume','--mount','--tmpfs') or
+                              a.startswith(('--volume=','--mount=','--tmpfs=')) for a in args[1:]):
+                raise ValueError('Unexpected explicit mount on temporary database fixture')
+            for path, options in mounts.items():
+                result[1:1] = ['--tmpfs', path + ':' + options]
         return result
     if args[:2] == ['network', 'create']:
         return args[:2] + ['--label', LABEL + '=' + run_id] + args[2:]

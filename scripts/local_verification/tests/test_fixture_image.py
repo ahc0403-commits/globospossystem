@@ -154,5 +154,34 @@ class FixtureImageTests(unittest.TestCase):
             self.assertEqual(result['minimumAvailableBytes'],40)
             self.assertEqual(result['maximumUsedBytes'],260)
 
+    def test_only_new_stock_fixture_data_uses_reviewed_temporary_storage(self):
+        for fixed in image.policies():
+            options = image.temporary_volume_options(fixed)
+            if fixed['requestedRef'].startswith('postgres:'):
+                self.assertEqual(options, {'/var/lib/postgresql/data':'rw,size=1073741824'})
+                good = {'HostConfig':{'Tmpfs':options},'Mounts':[]}
+                self.assertEqual(image.validate_temporary_storage(good,fixed), options)
+                for changed in [{}, {'HostConfig':{'Tmpfs':{'/var/lib/postgresql/data':'rw,size=1'}}},
+                                {'HostConfig':{'Tmpfs':options},'Mounts':[{'Destination':'/var/lib/postgresql/data','Type':'volume'}]}]:
+                    with self.assertRaises(ValueError):image.validate_temporary_storage(changed,fixed)
+            else:
+                self.assertEqual(options,{})
+        for path,size in [('/',1073741824),('/var/lib/postgresql/data',1)]:
+            fixed=copy.deepcopy(self.fixed);fixed['temporaryVolumes']={path:size}
+            with self.assertRaises(ValueError):image.temporary_volume_options(fixed)
+
+    def test_temporary_database_mount_is_explicit_and_cannot_cover_a_supplied_mount(self):
+        fixed=image.policy_for_ref('postgres:17.6')
+        mapping={fixed['requestedRef']:fixed['derivedImageId']}
+        with patch.dict(os.environ,{'POS_FIXTURE_IMAGE_MAP':json.dumps(mapping)}), \
+             patch.object(wrapper.subprocess,'run') as execute, \
+             patch.object(wrapper,'verified_fixture_id'):
+            execute.return_value.returncode=1
+            result=wrapper.prepare(['run','--name','owned','postgres:17.6'],'f'*32)
+            self.assertIn('/var/lib/postgresql/data:rw,size=1073741824',result)
+            for flag in ['--mount','--volume','-v','--tmpfs','--mount=existing','--volume=existing','-vexisting','--tmpfs=existing']:
+                with self.subTest(flag=flag), self.assertRaises(ValueError):
+                    wrapper.prepare(['run','--name','owned',flag,'existing','postgres:17.6'],'f'*32)
+
 
 if __name__=='__main__':unittest.main()

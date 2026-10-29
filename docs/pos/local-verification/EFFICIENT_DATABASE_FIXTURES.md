@@ -49,6 +49,20 @@ Only redundant public layered image caches may be removed after the equivalent
 distinct runtime is verified and no container references the original image;
 database volumes and all source/evidence remain protected.
 
+The first complete candidate passed, but its stock containers left 29 anonymous
+data volumes (about 1.8 GiB) after forced disposable-container teardown. Existing
+volumes are preserved. New projected stock fixtures use an explicit 1 GiB
+Docker tmpfs at their declared `/var/lib/postgresql/data` mount, which avoids
+creating further persistent anonymous volumes. Supabase's image declares no
+such volume and retains its original writable-layer storage. No existing volume
+is mounted, moved or deleted. The original PostgreSQL fsync/WAL/commit settings,
+roles, SQL assertions and multi-session transaction tests remain. This fixture
+does not claim production disk-I/O or power-loss durability measurements;
+latencies are measurements of this explicitly recorded disposable environment.
+The wrapper verifies the actual temporary mount in container inspection and
+the receipt verifier rejects missing or different storage evidence. Explicit
+caller-supplied mounts cannot be covered by the temporary-data mapping.
+
 The checksum-verified official `crane` export reads the pinned registry source.
 Docker's supported image-load API receives a standard archive containing that
 tar. The original config object is retained, including ENV, ENTRYPOINT, CMD,

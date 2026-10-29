@@ -227,6 +227,23 @@ class IntegrityTests(unittest.TestCase):
         self.value['environment']['additionalFixtureProjections'] = proofs[1:]
         self.value['additionalFixturePreparations'] = [copy.deepcopy(self.value['imageBuild']) for _ in proofs[1:]]
         self.verify()
+        stock = fixed[1]
+        self.value['environment']['fixtureImages'] = [{'Id':stock['derivedImageId'],'Os':'linux',
+            'Architecture':'amd64','RepoDigests':[], 'rootfsLayers':['sha256:'+stock['rootfsArchiveSha256']],
+            'runtimeConfigSha256':stock['runtimeConfigSha256']}]
+        observed = {'runId':'c'*32,'imageId':stock['derivedImageId'],
+            'requestedImageRef':stock['requestedRef'],'representation':stock['representation'],
+            'temporaryVolumeMounts':gate.temporary_volume_options(stock)}
+        log = self.directory/'nested/fixture-images.jsonl'
+        log.write_text(json.dumps(observed)+'\n')
+        self.verify()
+        changed=copy.deepcopy(observed);changed['temporaryVolumeMounts']={}
+        log.write_text(json.dumps(changed)+'\n')
+        with self.assertRaises(InvalidEvidence):self.verify()
+        changed=copy.deepcopy(observed);changed.pop('requestedImageRef')
+        log.write_text(json.dumps(changed)+'\n')
+        with self.assertRaises(InvalidEvidence):self.verify()
+        log.write_text(json.dumps(observed)+'\n')
         saved = copy.deepcopy(self.value)
         for change in ['missing','duplicate','switched-version','stale','preparation-failed','preparation-missing']:
             value = copy.deepcopy(saved)

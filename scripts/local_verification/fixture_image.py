@@ -115,6 +115,25 @@ def verified_fixture_id(image_id, docker):
     return validate_image(image, fixed)
 
 
+def temporary_volume_options(fixed):
+    volumes = fixed.get('temporaryVolumes', {})
+    require(isinstance(volumes, dict), 'Invalid temporary fixture volumes')
+    for path, size in volumes.items():
+        require(path == '/var/lib/postgresql/data' and size == 1073741824,
+                'Unreviewed temporary database mount')
+    return {path: 'rw,size=' + str(size) for path, size in volumes.items()}
+
+
+def validate_temporary_storage(container, fixed):
+    expected = temporary_volume_options(fixed)
+    actual = container.get('HostConfig', {}).get('Tmpfs') or {}
+    require(all(actual.get(path) == options for path, options in expected.items()),
+            'Temporary fixture database storage differs')
+    require(not any(m.get('Destination') in expected and m.get('Type') != 'tmpfs'
+                    for m in container.get('Mounts', [])), 'Persistent fixture volume mounted unexpectedly')
+    return expected
+
+
 class DiskMonitor:
     """Record the observed shared filesystem peak without inspecting private paths."""
     def __init__(self, directory):

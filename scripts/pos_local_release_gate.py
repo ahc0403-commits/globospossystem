@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'local_verification'))
 from evidence import InvalidEvidence, evidence_file, parse_counts, require, sha256
-from fixture_image import DiskMonitor, policy as fixture_policy, policies as fixture_policies, validate_image, verify_proof
+from fixture_image import DiskMonitor, policy as fixture_policy, policies as fixture_policies, validate_image, verify_proof, temporary_volume_options
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ['scripts/local_verification/recipe.json',
@@ -261,13 +261,15 @@ def verify(directory, root=ROOT, kind=None, run_id=None):
                     image.get('runtimeConfigSha256') == fixed['runtimeConfigSha256'],
                     'Derived fixture filesystem/config evidence differs')
     for fixture in fixtures:
-        if fixture.get('requestedImageRef'):
+        if fixture['imageId'] in by_id or fixture.get('requestedImageRef'):
             require(fixture['imageId'] in by_id and fixture['imageId'] in proven,
                     'Unproven fixture mapping')
             fixed = by_id[fixture['imageId']]
-            require(fixture['requestedImageRef'] == fixed['requestedRef'] and
+            require(fixture.get('requestedImageRef') == fixed['requestedRef'] and
                     fixture['imageId'] == fixed['derivedImageId'] and
-                    fixture.get('representation') == fixed['representation'], 'Fixture mapping differs')
+                    fixture.get('representation') == fixed['representation'] and
+                    fixture.get('temporaryVolumeMounts') == temporary_volume_options(fixed),
+                    'Fixture mapping/storage differs')
     usage = value['filesystemUsage']
     disk_log = evidence_file(directory, usage['log'])
     require(sha256(disk_log) == usage['logSha256'], 'Disk sampling evidence changed')
