@@ -13,8 +13,18 @@ import os
 import re
 import subprocess
 import sys
+from fixture_image import policy, verified_fixture_id
 
-REAL = '/usr/bin/docker'
+def real_docker():
+    # The Ubuntu tool image uses /usr/bin; the managed host uses /usr/local/bin.
+    # Use fixed system locations, never PATH (which contains this wrapper).
+    for path in ('/usr/bin/docker', '/usr/local/bin/docker'):
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    raise ValueError('System Docker client is missing')
+
+
+REAL = real_docker()
 LABEL = 'pos.local.verification'
 
 
@@ -29,8 +39,15 @@ def owned(kind, name, run_id):
     if kind == 'container':
         area = Path(os.environ['POS_VERIFICATION_ARTIFACTS'])
         area.mkdir(parents=True, exist_ok=True)
-        line = json.dumps({'runId':run_id, 'container':name,
-                           'imageId':value['Image'], 'imageRef':value['Config']['Image']}) + '\n'
+        record = {'runId':run_id, 'container':name,
+                  'imageId':value['Image'], 'imageRef':value['Config']['Image']}
+        requested = (labels or {}).get('pos.local.fixture.source')
+        if requested:
+            fixed = policy()
+            if requested != fixed['requestedRef'] or value['Image'] != fixed['derivedImageId']:
+                raise ValueError('Fixture source/image identity mismatch')
+            record.update(requestedImageRef=requested, representation=fixed['representation'])
+        line = json.dumps(record) + '\n'
         with (area / 'fixture-images.jsonl').open('a') as log:
             fcntl.flock(log, fcntl.LOCK_EX)
             log.write(line)
@@ -61,7 +78,16 @@ def prepare(args, run_id):
         existing = subprocess.run([REAL, 'container', 'inspect', name], capture_output=True)
         if existing.returncode == 0:
             raise ValueError('Fixture name already exists: ' + name)
-        return ['run', '--label', LABEL + '=' + run_id] + args[1:]
+        result = ['run', '--label', LABEL + '=' + run_id] + args[1:]
+        projected = os.environ.get('POS_POSTGRES_FIXTURE_IMAGE')
+        requested = policy()['requestedRef']
+        if projected and requested in args:
+            if args.count(requested) != 1:
+                raise ValueError('Ambiguous fixture source reference')
+            verified_fixture_id(projected, [REAL])
+            result[result.index(requested)] = projected
+            result[1:1] = ['--label', 'pos.local.fixture.source=' + requested]
+        return result
     if args[:2] == ['network', 'create']:
         return args[:2] + ['--label', LABEL + '=' + run_id] + args[2:]
     if args[:2] in (['network', 'connect'], ['network', 'disconnect']):

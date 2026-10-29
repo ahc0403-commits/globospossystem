@@ -27,13 +27,16 @@ from urllib.parse import urlsplit
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'local_verification'))
 from evidence import InvalidEvidence, evidence_file, parse_counts, require, sha256
+from fixture_image import DiskMonitor, policy as fixture_policy, validate_image, verify_proof
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ['scripts/local_verification/recipe.json',
             'scripts/local_verification/Dockerfile',
             'scripts/local_verification/evidence.py',
             'scripts/local_verification/docker', 'scripts/local_verification/port_proxy.py',
-            'scripts/pos_local_release_gate.py']
+            'scripts/pos_local_release_gate.py',
+            'scripts/local_verification/fixture_image.py',
+            'scripts/local_verification/fixture_postgres_policy.json']
 
 
 def now():
@@ -204,7 +207,12 @@ def verify(directory, root=ROOT, kind=None, run_id=None):
     age = dt.datetime.now(dt.timezone.utc) - end
     require(start.tzinfo and end.tzinfo and dt.timedelta() <= age <= dt.timedelta(hours=6)
             and end >= start, 'Stale/invalid evidence timestamps')
-    for auxiliary in [value['imageBuild'], value['toolProbe']]:
+    auxiliaries = [value['imageBuild'], value['toolProbe']]
+    projection = value['environment'].get('fixtureProjection')
+    if projection:
+        verify_proof(projection, value['runId'], value['sourceBefore']['sha'])
+        auxiliaries.append(value['fixturePreparation'])
+    for auxiliary in auxiliaries:
         require(auxiliary['exitCode'] == 0, 'Environment bootstrap/probe failed')
         log = evidence_file(directory, auxiliary['log'])
         require(sha256(log) == auxiliary['logSha256'], 'Environment log changed')
@@ -232,6 +240,29 @@ def verify(directory, root=ROOT, kind=None, run_id=None):
     require({x['imageId'] for x in fixtures} == {x['Id'] for x in value['environment']['fixtureImages']},
             'Missing DB/fixture image identities')
     require(all(x['Os'] == 'linux' for x in value['environment']['fixtureImages']), 'Wrong fixture OS')
+    fixed = fixture_policy()
+    for image in value['environment']['fixtureImages']:
+        if image['Id'] == fixed['derivedImageId']:
+            require(projection is not None, 'Derived fixture provenance missing')
+            require(image.get('rootfsLayers') == ['sha256:' + fixed['rootfsArchiveSha256']] and
+                    image.get('runtimeConfigSha256') == fixed['runtimeConfigSha256'],
+                    'Derived fixture filesystem/config evidence differs')
+    for fixture in fixtures:
+        if fixture.get('requestedImageRef'):
+            require(projection is not None and fixture['requestedImageRef'] == fixed['requestedRef'] and
+                    fixture['imageId'] == fixed['derivedImageId'] and
+                    fixture.get('representation') == fixed['representation'], 'Fixture mapping differs')
+    usage = value['filesystemUsage']
+    disk_log = evidence_file(directory, usage['log'])
+    require(sha256(disk_log) == usage['logSha256'], 'Disk sampling evidence changed')
+    disk = json.loads(disk_log.read_text())
+    require(disk['samplingIntervalSeconds'] == 1 and len(disk['samples']) >= 2,
+            'Disk sampling evidence missing')
+    require(disk['minimumAvailableBytes'] == min(x['availableBytes'] for x in disk['samples']) and
+            disk['maximumUsedBytes'] == max(x['usedBytes'] for x in disk['samples']) and
+            disk['minimumAvailableBytes'] >= 0, 'False disk peak summary')
+    require(all(start <= dt.datetime.fromisoformat(x['at']) <= end for x in disk['samples']),
+            'Disk samples outside invocation')
     require(value.get('artifacts'), 'Missing build artifacts')
     names = set()
     for artifact in value['artifacts']:
@@ -273,9 +304,29 @@ def run(directory, kind, root=ROOT):
     write_receipt(directory, value)
     name = 'pos-local-verify-' + run_id
     container_created = False
+    disk_monitor = DiskMonitor(directory).start()
+    def finish_disk():
+        area = directory / 'nested'
+        area.mkdir(exist_ok=True)
+        path = area / 'filesystem-usage.json'
+        path.write_text(json.dumps(disk_monitor.stop(), indent=2) + '\n')
+        value['filesystemUsage'] = {'log': str(path.relative_to(directory)), 'logSha256': sha256(path)}
     try:
         endpoint = checked(['docker', 'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])
         require(not os.environ.get('DOCKER_HOST') and endpoint.startswith('unix://'), 'Only an existing local Docker engine is allowed')
+        engine = checked(['docker', 'info', '--format', '{{.Driver}} {{.OSType}} {{.Architecture}}']).split()
+        value['environment']['engineStorageDriver'] = engine[0]
+        projection = None
+        if engine[0] == 'vfs' and engine[1:] in (['linux', 'x86_64'], ['linux', 'amd64']):
+            path = directory / 'nested/fixture-projection.json'
+            value['fixturePreparation'] = recorded(directory, 'fixture-preparation',
+                [sys.executable, '-B', str(root / 'scripts/local_verification/fixture_image.py'),
+                 '--output', str(path), '--run-id', run_id, '--source-sha', before['sha'],
+                 '--docker-endpoint', endpoint], 1200)
+            require(value['fixturePreparation']['exitCode'] == 0, 'Verified fixture preparation failed')
+            projection = json.loads(path.read_text())
+            verify_proof(projection, run_id, before['sha'])
+            value['environment']['fixtureProjection'] = projection
         trust = proxy_trust(os.environ.get('CODEX_PROXY_CERT'), '/etc/ssl/certs/ca-certificates.crt')
         if trust:
             value['environment']['proxyTrust'] = {k: trust[k] for k in ('proxyCaSha256', 'hostBundleSha256')}
@@ -314,6 +365,8 @@ def run(directory, kind, root=ROOT):
                      '-v', str(directory) + ':' + str(directory),
                     ]
             docker_run += proxy_hosts
+            if projection:
+                docker_run += ['--env', 'POS_POSTGRES_FIXTURE_IMAGE=' + projection['derivedImageId']]
             for variable in proxy_names:
                 docker_run += ['--env', variable]
             if trust:
@@ -361,7 +414,13 @@ def run(directory, kind, root=ROOT):
             images = json.loads(checked(['docker', 'image', 'inspect'] + image_ids))
             value['environment']['fixtureImages'] = [
                 {k: x[k] for k in ['Id', 'Os', 'Architecture', 'RepoDigests']} for x in images]
+            for info, image_value in zip(value['environment']['fixtureImages'], images):
+                if projection and info['Id'] == projection['derivedImageId']:
+                    validate_image(image_value)
+                    info.update(rootfsLayers=image_value['RootFS']['Layers'],
+                                runtimeConfigSha256=projection['runtimeConfigSha256'])
             shutil.copytree(snapshot / 'build/web', directory / 'artifacts/web')
+            finish_disk()
             value['artifacts'] = [{'path': str(f.relative_to(directory)), 'sha256': sha256(f), 'bytes': f.stat().st_size}
                                   for area in ['artifacts', 'nested']
                                   for f in sorted((directory / area).rglob('*')) if f.is_file()]
@@ -375,11 +434,13 @@ def run(directory, kind, root=ROOT):
         print('POS_LOCAL_VERIFICATION_PASS ' + before['sha'] + ' ' + str(directory / 'receipt.json'))
         return 0
     except (InvalidEvidence, subprocess.CalledProcessError, OSError, ValueError, KeyError, KeyboardInterrupt) as error:
+        finish_disk()
         value.update({'finishedAt': now(), 'completed': False, 'status': 'FAIL', 'failure': str(error)})
         write_receipt(directory, value)
         print('POS_LOCAL_VERIFICATION_BLOCKED: ' + str(error), file=sys.stderr)
         return 1
     finally:
+        disk_monitor.stop()
         if container_created:
             subprocess.run(['docker', 'rm', '-f', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         cleanup_fixtures(run_id)

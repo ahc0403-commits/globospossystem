@@ -182,6 +182,11 @@ class IntegrityTests(unittest.TestCase):
         for name in ['index.html','main.dart.js','flutter_bootstrap.js','photo_import_worker.js']:
             f = self.directory / 'artifacts/web' / name; f.parent.mkdir(parents=True,exist_ok=True); f.write_text('fixture artifact\n')
             self.value['artifacts'].append({'path':str(f.relative_to(self.directory)), 'bytes':f.stat().st_size,'sha256':sha256(f)})
+        disk = nested/'filesystem-usage.json'
+        disk.write_text(json.dumps({'samplingIntervalSeconds':1,'minimumAvailableBytes':100,
+            'maximumUsedBytes':200,'samples':[{'at':self.value['startedAt'],'availableBytes':100,'usedBytes':200},
+            {'at':self.value['finishedAt'],'availableBytes':150,'usedBytes':150}]}))
+        self.value['filesystemUsage'] = {'log':str(disk.relative_to(self.directory)), 'logSha256':sha256(disk)}
 
     def tearDown(self):
         self.temp.cleanup()
@@ -195,6 +200,15 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(self.verify()['sourceBefore'], self.source)
         with self.assertRaises(InvalidEvidence): self.verify(kind='exact-main')
         with self.assertRaises(InvalidEvidence): self.verify(run_id='different invocation')
+
+    def test_changed_disk_log_and_unproven_derived_fixture_fail(self):
+        self.value['filesystemUsage']['logSha256'] = '0'*64
+        with self.assertRaises(InvalidEvidence): self.verify()
+        self.value['filesystemUsage']['logSha256'] = sha256(self.directory/'nested/filesystem-usage.json')
+        self.value['environment']['fixtureImages'][0]['Id'] = gate.fixture_policy()['derivedImageId']
+        (self.directory/'nested/fixture-images.jsonl').write_text(json.dumps({
+            'runId':'c'*32,'imageId':gate.fixture_policy()['derivedImageId']})+'\n')
+        with self.assertRaises(InvalidEvidence): self.verify()
 
     def test_failed_interrupted_missing_reordered_changed_steps_block(self):
         for change in ['failed','partial','missing','reorder','command','executed-command','count','sha','recipe','time']:
