@@ -2907,6 +2907,47 @@ class _HourlyRevenueSection extends StatelessWidget {
       0,
       (m, h) => h.amount > m ? h.amount : m,
     );
+    final baseStyle = DefaultTextStyle.of(context).style;
+    final hourStyle = baseStyle.merge(
+      AppFonts.system(
+        color: AppColors.textSecondary,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final amountStyle = baseStyle.merge(
+      AppFonts.system(
+        color: AppColors.textPrimary,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final hourLabels = [
+      for (final h in hours) '${h.hour.toString().padLeft(2, '0')}:00',
+    ];
+    final amountLabels = [
+      for (final h in hours) _formatVnd(currency, h.amount),
+    ];
+    double labelWidth(String label, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.localeOf(context),
+      )..layout();
+      final width = painter.width.ceilToDouble() + 1;
+      painter.dispose();
+      return width;
+    }
+
+    final hourWidth = hourLabels.fold<double>(36, (width, label) {
+      final measured = labelWidth(label, hourStyle);
+      return measured > width ? measured : width;
+    });
+    final amountWidth = amountLabels.fold<double>(104, (width, label) {
+      final measured = labelWidth(label, amountStyle);
+      return measured > width ? measured : width;
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2926,67 +2967,87 @@ class _HourlyRevenueSection extends StatelessWidget {
             color: AppColors.surface1,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Column(
-            children: hours.map((h) {
-              final barFraction = maxAmount > 0 ? (h.amount / maxAmount) : 0.0;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 36,
-                      child: Text(
-                        '${h.hour.toString().padLeft(2, '0')}:00',
-                        style: AppFonts.system(
-                          color: AppColors.textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return Stack(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final inline =
+                  constraints.maxWidth >= hourWidth + amountWidth + 16 + 80;
+              return Column(
+                children: [
+                  for (var index = 0; index < hours.length; index++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Builder(
+                        builder: (context) {
+                          final barFraction = maxAmount > 0
+                              ? hours[index].amount / maxAmount
+                              : 0.0;
+                          final hour = Text(
+                            hourLabels[index],
+                            style: hourStyle,
+                          );
+                          final amount = Text(
+                            amountLabels[index],
+                            style: amountStyle,
+                            textAlign: TextAlign.right,
+                          );
+                          final bar = LayoutBuilder(
+                            builder: (context, barConstraints) => Stack(
+                              children: [
+                                Container(
+                                  height: 18,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surface2,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                Container(
+                                  height: 18,
+                                  width: barConstraints.maxWidth * barFraction,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.amber500,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (inline) {
+                            return Row(
+                              children: [
+                                SizedBox(width: hourWidth, child: hour),
+                                const SizedBox(width: 8),
+                                Expanded(child: bar),
+                                const SizedBox(width: 8),
+                                SizedBox(width: amountWidth, child: amount),
+                              ],
+                            );
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Container(
-                                height: 18,
-                                decoration: BoxDecoration(
-                                  color: AppColors.surface2,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                              Container(
-                                height: 18,
-                                width: constraints.maxWidth * barFraction,
-                                decoration: BoxDecoration(
-                                  color: AppColors.amber500,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
+                              if (constraints.maxWidth >=
+                                  hourWidth + amountWidth + 8)
+                                Row(
+                                  children: [
+                                    hour,
+                                    const SizedBox(width: 8),
+                                    Expanded(child: amount),
+                                  ],
+                                )
+                              else ...[
+                                hour,
+                                amount,
+                              ],
+                              const SizedBox(height: 6),
+                              bar,
                             ],
                           );
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 104,
-                      child: Text(
-                        _formatVnd(currency, h.amount),
-                        style: AppFonts.system(
-                          color: AppColors.textPrimary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                  ],
-                ),
+                ],
               );
-            }).toList(),
+            },
           ),
         ),
       ],

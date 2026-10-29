@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
@@ -48,6 +49,29 @@ void main() {
               size,
             );
             expect(tester.takeException(), isNull);
+            for (final label in [
+              '10:00',
+              '12:00',
+              '100.000 VND',
+              '200.000 VND',
+            ]) {
+              final paragraph = tester.renderObject<RenderParagraph>(
+                find.text(label),
+              );
+              final painter = TextPainter(
+                text: paragraph.text,
+                textDirection: paragraph.textDirection,
+                textScaler: paragraph.textScaler,
+                locale: paragraph.locale,
+              )..layout(maxWidth: paragraph.size.width);
+              expect(
+                painter.computeLineMetrics(),
+                hasLength(1),
+                reason:
+                    'Hourly time and amount labels must remain intact: $label',
+              );
+              painter.dispose();
+            }
             final launchers = [
               'paperless_operations_launcher',
               'menu_sales_analytics_launcher',
