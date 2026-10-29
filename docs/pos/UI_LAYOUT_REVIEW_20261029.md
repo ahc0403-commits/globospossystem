@@ -30,6 +30,8 @@ authenticated rendering of every route.
    cannot consume the work area. Confirmation dialogs retain their result and
    callbacks while growing their action label at large text and scrolling above
    the keyboard.
+   Supporting dense metrics use a smaller width budget than full amount cards
+   and hug their content, keeping count summaries compact without hiding values.
 4. Render the actual menu-sales, operational-performance and revenue-analysis
    widgets with isolated data. Separate chart canvas height from translated
    captions; reserve scaled axis-label space. Keep menu sorting, groups, date

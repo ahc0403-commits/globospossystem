@@ -40,6 +40,57 @@ void main() {
       AppFonts.family,
     )..addFont(rootBundle.load(AppFonts.assetPath))).load();
   });
+  testWidgets('five dense metrics stay compact within their width budget', (
+    tester,
+  ) async {
+    setViewport(tester, const Size(1024, 768));
+    for (final width in [920.0, 640.0]) {
+      await tester.pumpWidget(
+        localizedSurface(
+          Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: width,
+                child: const ToastMetricStrip(
+                  dense: true,
+                  maxColumns: 5,
+                  metrics: [
+                    ToastMetric(label: 'Total', value: '12'),
+                    ToastMetric(label: 'Occupied', value: '5'),
+                    ToastMetric(label: 'Reserved', value: '2'),
+                    ToastMetric(label: 'Available', value: '5'),
+                    ToastMetric(label: 'Queued amount', value: '₫125.000'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          'en',
+          1,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final cells = find.byWidgetPredicate(
+        (w) => w is Container && w.constraints?.minHeight == 26,
+      );
+      expect(cells, findsNWidgets(5));
+      final rowTops = cells
+          .evaluate()
+          .map(
+            (e) => tester.getTopLeft(find.byElementPredicate((x) => x == e)).dy,
+          )
+          .toSet();
+      expect(rowTops, hasLength(width == 920 ? 1 : 2));
+      expect(
+        tester.getSize(find.byType(ToastMetricStrip)).height,
+        lessThan(width == 920 ? 50 : 80),
+      );
+      final amount = tester.widget<Text>(find.text('₫125.000'));
+      expect(amount.overflow, isNot(TextOverflow.ellipsis));
+      expect(tester.takeException(), isNull);
+    }
+  });
   testWidgets('capped desktop form keeps its primary action in the viewport', (
     tester,
   ) async {

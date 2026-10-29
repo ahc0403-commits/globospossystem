@@ -108,10 +108,7 @@ class PosLayoutSpec {
     );
     final limit = math.max(
       1,
-      math.min(
-        itemCount,
-        math.min(widthBudget, isMedium ? math.min(2, maxColumns) : maxColumns),
-      ),
+      math.min(itemCount, math.min(widthBudget, maxColumns)),
     );
     return (itemCount / (itemCount / limit).ceil()).ceil();
   }

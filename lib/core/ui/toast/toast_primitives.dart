@@ -248,6 +248,7 @@ class ToastMetricStrip extends StatelessWidget {
         final columns = layout.balancedColumns(
           itemCount: metrics.length,
           maxColumns: maxColumns,
+          minimumItemWidth: dense ? 160 : 240,
           spacing: 8,
         );
         final gap = compactPhone ? 6.0 : 8.0;
@@ -271,6 +272,7 @@ class ToastMetricStrip extends StatelessWidget {
                   vertical: compactPhone ? 5 : 6,
                 ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
                 IntrinsicHeight(

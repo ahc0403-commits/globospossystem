@@ -1513,6 +1513,7 @@ class ToastMetricItemStrip extends StatelessWidget {
               ? ToastColorTokens.border.withValues(alpha: 0.58)
               : ToastColorTokens.border,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
                 Row(
