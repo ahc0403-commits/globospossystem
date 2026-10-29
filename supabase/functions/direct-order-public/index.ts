@@ -40,6 +40,8 @@ export const directOrderActionRegistry = Object.freeze(
     submit: { actor: "public", rateLimit: 60 },
     submit_v2: { actor: "public", rateLimit: 60 },
     submit_v3: { actor: "public", rateLimit: 60 },
+    amendment_context: { actor: "public", rateLimit: 60 },
+    amend: { actor: "public", rateLimit: 30 },
     status_v8: { actor: "public", rateLimit: 60 },
     status_v9: { actor: "public", rateLimit: 60 },
     status_v10: { actor: "public", rateLimit: 60 },
@@ -549,6 +551,18 @@ const internalFailure: SqlErrorContract = {
 export const sqlDomainErrorRegistry: Readonly<
   Record<string, SqlErrorContract>
 > = Object.freeze({
+  DIRECT_ORDER_AMENDMENT_STALE: conflict("DIRECT_ORDER_AMENDMENT_STALE"),
+  DIRECT_ORDER_AMENDMENT_NOT_ALLOWED: conflict(
+    "DIRECT_ORDER_AMENDMENT_NOT_ALLOWED",
+  ),
+  DIRECT_ORDER_AMENDMENT_RETRY_CHANGED: conflict(
+    "DIRECT_ORDER_AMENDMENT_RETRY_CHANGED",
+  ),
+  DIRECT_ORDER_AMENDMENT_INPUT_INVALID: invalidRequest(
+    "DIRECT_ORDER_AMENDMENT_INPUT_INVALID",
+  ),
+  AMENDMENT_PERMISSIONS_INVALID: internalFailure,
+  DIRECT_ORDER_AMENDMENT_BATCH_DRIFT: internalFailure,
   DIRECT_ORDER_NATIVE_PICKUP_QUOTE_PREDECESSOR_DRIFT: internalFailure,
   DIRECT_ORDER_DOCUMENT_TOO_LARGE: invalidRequest(
     "DIRECT_ORDER_DOCUMENT_TOO_LARGE",
@@ -1207,6 +1221,8 @@ export async function resolveOrderScopedRequest(
     "message",
     "decide_pickup",
     "cancel",
+    "amendment_context",
+    "amend",
     "charge_consent",
     "proof_upload_url",
     "proof_upload_url_v2",
@@ -1609,6 +1625,28 @@ function productionDependencies(): DirectOrderDependencies {
           },
         );
       }
+      case "amendment_context":
+      case "amend": {
+        const args: JsonObject = {
+          p_session_id: requiredUuid(body, "session_id"),
+          p_secret_hash: await hashSecret(
+            requiredString(body, "secret", 128, secretPattern),
+          ),
+          p_request_id: requiredUuid(body, "request_id"),
+        };
+        if (action === "amend") {
+          args.p_operation_id = requiredUuid(body, "operation_id");
+          args.p_token = requiredString(body, "token", 32, /^[a-f0-9]{32}$/);
+          args.p_payload = asObject(body.payload);
+        }
+        return await rpc(
+          service,
+          action === "amend"
+            ? "direct_order_public_amend"
+            : "direct_order_public_amendment_context",
+          args,
+        );
+      }
       case "decide_requirement": {
         return await rpc(service, "direct_order_public_decide_requirement", {
           ...directOrderRequirementDecisionArgs(body),
@@ -1706,6 +1744,9 @@ function productionDependencies(): DirectOrderDependencies {
             .maybeSingle();
           if (error || !message?.attachment_storage_path) {
             throw new SafeHttpError(404, "PROOF_NOT_FOUND");
+          }
+          if (!staff && message.metadata?.voided_by_amendment === true) {
+            throw new SafeHttpError(409, "DIRECT_ORDER_QUOTE_CHANGED");
           }
           const bucket =
             message.metadata?.attachment_bucket === "direct-order-chat"

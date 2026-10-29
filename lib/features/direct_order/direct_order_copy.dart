@@ -325,7 +325,42 @@ class DirectOrderCopy {
     'Khi quá tải, hãy tạm ngưng đơn mới. Không thể tắt trang khi có đơn đang xử lý.',
     'Use intake pause when busy. The page cannot be disabled while orders are in progress.',
   );
+  String get invalidatedGuide => _pick(
+    '주문 변경으로 무효화된 이전 안내입니다.',
+    'Hướng dẫn cũ đã vô hiệu do đơn thay đổi.',
+    'This previous guide was invalidated by an order change.',
+  );
+  String get orderAmended =>
+      _pick('메뉴 변경됨', 'Món đã thay đổi', 'Items changed');
+  String get editOrder => _pick(
+    '메뉴 추가·수량 변경',
+    'Thêm món · Đổi số lượng',
+    'Add items · Change quantities',
+  );
+  String get submitChanges =>
+      _pick('변경 내용 제출', 'Gửi thay đổi', 'Submit changes');
+  String get amendmentNotice => _pick(
+    '같은 주문에 변경 내용을 반영합니다. 수량 0은 메뉴 삭제이며 모든 메뉴를 삭제하면 주문이 취소됩니다. 세트 수량 변경 시 기존 음료 선택 순서를 유지·반복합니다. 변경 금액은 매장에서 다시 확정합니다.',
+    'Thay đổi được lưu vào đơn hiện tại. Số lượng 0 xóa món; xóa tất cả sẽ hủy đơn. Đổi số lượng combo giữ/lặp lại thứ tự đồ uống đã chọn. Cửa hàng xác nhận lại tổng tiền.',
+    'Changes apply to this order. Quantity 0 removes an item; removing all items cancels the order. Combo quantity changes keep/repeat the saved drink selection order. The store reconfirms the total.',
+  );
   String errorMessage(String code) => switch (code) {
+    'DIRECT_ORDER_AMENDMENT_STALE' => _pick(
+      '주문이 변경되었습니다. 최신 주문을 확인하고 다시 시도하세요.',
+      'Đơn đã thay đổi. Kiểm tra và thử lại.',
+      'The order changed. Refresh and try again.',
+    ),
+    'DIRECT_ORDER_AMENDMENT_NOT_ALLOWED' => _pick(
+      '현재 주문 상태에서는 메뉴를 변경할 수 없습니다.',
+      'Không thể đổi món ở trạng thái này.',
+      'Items cannot be changed in this order state.',
+    ),
+    'DIRECT_ORDER_AMENDMENT_RETRY_CHANGED' => _pick(
+      '이전 변경의 처리 결과를 먼저 확인해야 합니다. 같은 내용으로 다시 제출하세요.',
+      'Gửi lại cùng thay đổi để kiểm tra kết quả trước.',
+      'Retry the same changes to resolve the previous submission first.',
+    ),
+
     'DIRECT_ORDER_PROOF_TIMEOUT' => _pick(
       '사진 전송 결과를 아직 확인하지 못했습니다. 다시 시도하면 같은 사진의 전송 결과를 먼저 확인합니다.',
       'Chưa xác nhận được kết quả gửi ảnh. Thử lại để kiểm tra ảnh đã gửi trước.',
@@ -1541,6 +1576,7 @@ class DirectOrderCopy {
     'Hủy · Từ chối · Hết hạn',
     'Cancelled · Rejected · Expired',
   );
+  String get activeOrders => _pick('처리 중', 'Đang xử lý', 'In progress');
   String get advancedStatuses =>
       _pick('상세 상태', 'Trạng thái chi tiết', 'Detailed statuses');
   String stageLabel(DirectOrderStage stage) => switch (stage) {

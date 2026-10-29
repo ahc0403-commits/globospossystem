@@ -7,9 +7,11 @@ The default CLI path remains available unchanged.
 
 The cloud backend supports the existing `--db-only --migration FILE` and
 `--web-only` phases with all applicable checks enabled. It rejects combined
-Edge/secret releases and skip flags. An unchanged Edge source tree must be
+unplanned Edge/secret releases and skip flags, apart from an explicit owner-approved
+`--web-only --skip-login-smoke` waiver. An unchanged Edge source tree must be
 compared with the verified deployed source; changing Edge code requires its
-own supported release path and validation. Neither a successful read nor an
+own supported release path and validation. The committed coordinated plan below
+provides that path for the reviewed direct-order update. Neither a successful read nor an
 existing deployment establishes validation of newly changed Edge code.
 
 ## Execution and evidence
@@ -77,13 +79,23 @@ available there. Preserve the pinned `.vercel/project.json`; remove inherited
 the existing entrypoint deliberately forbids target overrides. Do not alter
 the stored project or production environment settings.
 
-A cloud web release requires `FIXED_SMOKE_ACCOUNT_CODE` and
+A cloud web release normally requires `FIXED_SMOKE_ACCOUNT_CODE` and
 `FIXED_SMOKE_PASSWORD` to be securely supplied before production work. Do not
 retrieve/reset passwords or generate a privileged replacement login. The
 existing actual fixed-account login smoke runs after deployment. Production
 Auth readiness, HTTP checks, actual affected-feature verification and source
 identity remain distinct requirements. DB-only readiness is explicitly N/A
 for login and cannot be reported as login-ready.
+
+For the 2026-10-29 coordinated POS release the owner explicitly requested
+deployment without the blocked login smoke. Use `--web-only --skip-login-smoke`
+for that web phase only. This records `LOGIN_SMOKE=NOT_RUN_OWNER_WAIVER`, never
+PASS. It requires no dummy credentials, new account, password reset or token.
+The default still requires the real login inputs. Fresh exact-main, Auth
+readiness, migration/hash/history/transaction, Edge source comparison, HTTP
+checks and rollback conditions remain required. `--skip-smoke-tests` and every
+other gate omission remain rejected. Real assigned-account and Office buyer
+visibility checks remain unverified until separately performed.
 
 ## Managed network and SDK isolation
 
@@ -97,3 +109,53 @@ store. TLS verification and network policy are preserved.
 The SDK receives frontend build configuration only. CLI tokens and fixed-account
 passwords stay outside it. Containers and fixture cleanup verify the recorded
 image, ID and run ownership; they cannot clean another task's resources.
+
+## Coordinated attendance / order release (2026-10-29)
+
+Use the sole entrypoint with `--supabase-backend mcp --cloud-release-plan
+scripts/cloud_deployment/plans/20261029_attendance_orders.json
+--skip-login-smoke --yes`. This scope is incompatible with the other release
+modes. It still executes a fresh exact-main full recipe and production Auth,
+locked SDK analysis/tests, Firebase names, existing Edge origin/retirement and
+unauthorized dispatcher checks. All non-login skip flags remain rejected.
+
+The committed plan binds exact paths and SHA256 values for purchasing adjustment,
+order amendments and attendance recovery, in that order, then the exact
+`direct-order-public` index/import map, followed by prebuilt web. Before the
+first write, the adapter verifies that all source versions are absent and the
+current ACTIVE Edge source equals the recorded predecessor. Each migration
+retains the existing atomic/source-version/history/hash checks. Any failure stops
+before subsequent stages. A concurrent Edge version/source change also stops
+before replacement. The mutation transport accepts only exact prepared planned
+SQL and the exact planned Edge payload. Existing `verify_jwt=false` is verified
+before and after, never newly disabled. Other handlers and secret settings are
+not redeployed or configured. The handler's environment input names must match
+its predecessor; actual OPTIONS initialization/CORS and dispatcher checks remain
+required. This is scoped readiness, not a claim to have inventoried every Edge
+secret through an unavailable secrets API.
+
+The remote deployed index is compared byte-for-byte by SHA256 after replacement.
+The exact import-map upload bytes are bound to the request; if the remote tool
+omits that file from the returned bundle, independent import-map readback is
+explicitly unverified. The release receipt records this distinction. Remote
+migration history retains both original source rows and Supabase transport rows.
+The web remains PENDING until the official deployer completes build/deploy/HTTP.
+A successful DB/Edge result alone is not a completed release.
+
+Rollback readiness is the verified prior web deployment and the saved predecessor
+Edge source. Both new migrations add functions/schema and retain old contracts;
+do not drop amendment history or modify real attendance/orders to roll back UI.
+An error after any write requires reading actual remote versions/source first,
+then a reviewed forward fix or restoration of the previous web/Edge. Never retry
+an uncertain mutation or blindly rerun a plan with an already-applied version.
+No automatic destructive DB rollback is authorized.
+
+The attached source archive SHA256 is
+`829dccf3c1ca8dfeae37f29818941ebb5425584c13fd0f6ec2e955b3e8116ce4`;
+its implementation patch SHA256 is
+`f9af4176d9ccedb222178c33114a8458e31403e7a1452f0df64f7c6136c49ebd`.
+Historical attached test results are provenance, not final-candidate PASS evidence.
+Photo store manager PIN setup remains a separate settings-screen action. No PIN
+is generated, exposed, reset or bypassed; inactive stores are not reactivated.
+Production attendance/order writes are not test fixtures. Assigned-account login
+and actual manual attendance submission remain unverified under the owner waiver.

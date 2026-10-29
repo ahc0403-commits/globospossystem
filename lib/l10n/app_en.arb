@@ -4419,5 +4419,8 @@
         "type": "int"
       }
     }
-  }
+  },
+  "attendanceStaffLoadFailed": "Could not load the staff list. Please retry.",
+  "attendanceNoActiveStaff": "No active staff. Check staff registration and the selected store.",
+  "attendancePayrollPinLoadFailed": "Payroll is locked because its PIN status could not be checked. Attendance review and manual entry remain available."
 }

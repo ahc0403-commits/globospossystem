@@ -623,5 +623,16 @@ PYACCEPT
  python3 "$PHOTO_ROOT/scripts/tests/direct_order_acceptance_concurrency.py" "$PHOTO_CONTAINER"
  python3 "$PHOTO_ROOT/scripts/tests/direct_order_proof_replacement_concurrency.py" "$PHOTO_CONTAINER"
 fi
+if [[ "${DIRECT_ORDER_AMENDMENTS_TEST:-0}" == "1" ]]; then
+ if [[ -n "${DIRECT_ORDER_AMENDMENTS_BASELINE_DUMP:-}" ]]; then
+  docker exec "$PHOTO_CONTAINER" pg_dump -U postgres -d codex_direct_photo > "$DIRECT_ORDER_AMENDMENTS_BASELINE_DUMP"
+ fi
+ # Production removed this legacy constraint in the menu-choice intake migration.
+ docker exec "$PHOTO_CONTAINER" psql -U postgres -d codex_direct_photo -c 'ALTER TABLE direct_order_request_items DROP CONSTRAINT IF EXISTS direct_order_request_items_request_id_menu_item_id_key' >/dev/null
+ python3 -B "$PHOTO_ROOT/scripts/cloud_deployment/fixture_sql.py" supabase/migrations/20261029081324_direct_order_amendments.sql > "$PHOTO_TMP/cloud-amendments.sql"
+ run_sql "$PHOTO_TMP/cloud-amendments.sql"
+ run_sql "$PHOTO_ROOT/supabase/tests/direct_order_amendments_test.sql"
+ python3 "$PHOTO_ROOT/scripts/tests/direct_order_amendment_concurrency.py" "$PHOTO_CONTAINER"
+fi
 [[ "$PHOTO_PAYMENT_HASH" == "$PHOTO_PAYMENT_HASH_AFTER" ]] || { printf 'PAYMENT_ANCHOR_CHANGED\n'; exit 1; }
 printf 'DIRECT_ORDER_DELIVERY_FALLBACK_SQL_TEST=PASS\n'

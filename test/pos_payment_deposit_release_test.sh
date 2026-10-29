@@ -89,6 +89,73 @@ grep -qx login-not-run "$RELEASE_TEST_LOG"
 for phase in clean fresh-main exact-sha-local auth checks build web-deploy; do
   grep -qx "$phase" "$RELEASE_TEST_LOG"
 done
+
+# The cloud path honors only an explicit owner waiver of assigned-account
+# login. Every other release gate and the HTTP path remain enabled.
+: >"$RELEASE_TEST_LOG"
+simulate_release --supabase-backend mcp --web-only --skip-login-smoke --yes \
+  >"$RELEASE_TEST_TMP/cloud-login-opt-out"
+grep -qx login-not-run "$RELEASE_TEST_LOG"
+for phase in clean fresh-main exact-sha-local auth checks build web-deploy; do
+  grep -qx "$phase" "$RELEASE_TEST_LOG"
+done
+! grep -Eq '^(edge-deploy|db-apply|login)$' "$RELEASE_TEST_LOG"
+for phase in clean fresh-main exact-sha-local auth checks build; do
+  : >"$RELEASE_TEST_LOG"
+  if RELEASE_TEST_FAIL_PHASE="$phase" simulate_release --supabase-backend mcp \
+    --web-only --skip-login-smoke --yes >"$RELEASE_TEST_TMP/rejected" 2>&1; then
+    printf 'ERROR: Cloud waiver ignored failed gate: %s\n' "$phase" >&2
+    exit 1
+  fi
+  ! grep -qx web-deploy "$RELEASE_TEST_LOG"
+done
+: >"$RELEASE_TEST_LOG"
+if SKIP_LOGIN_SMOKE=1 simulate_release --supabase-backend mcp --web-only --yes \
+  >"$RELEASE_TEST_TMP/rejected" 2>&1; then exit 1; fi
+[[ ! -s "$RELEASE_TEST_LOG" ]]
+: >"$RELEASE_TEST_LOG"
+if simulate_release --supabase-backend mcp --db-only --skip-login-smoke \
+  --migration supabase/migrations/20261028053422_procurement_manager_adjustment.sql \
+  --yes >"$RELEASE_TEST_TMP/rejected" 2>&1; then exit 1; fi
+[[ ! -s "$RELEASE_TEST_LOG" ]]
+for option in --skip-checks --no-tests --skip-auth-check --skip-smoke-tests \
+  --skip-db --skip-build --skip-vercel; do
+  : >"$RELEASE_TEST_LOG"
+  if simulate_release --supabase-backend mcp --web-only --skip-login-smoke \
+    "$option" --yes >"$RELEASE_TEST_TMP/rejected" 2>&1; then
+    printf 'ERROR: Cloud waiver skipped another gate: %s\n' "$option" >&2
+    exit 1
+  fi
+  [[ ! -s "$RELEASE_TEST_LOG" ]]
+done
+
+check_cloud_login_precondition() {
+  env -u FIXED_SMOKE_ACCOUNT_CODE -u FIXED_SMOKE_PASSWORD bash -c '
+    source "$1/scripts/deploy_pos_production.sh"; shift
+    parse_args --supabase-backend mcp --web-only "$@"
+    validate_cloud_options; validate_web_only_options
+    reject_target_overrides() { :; }
+    need_cmd() { printf "LOGIN_PRECONDITION_PASSED\n"; exit 42; }
+    preflight
+  ' cloud-login-precondition "$RELEASE_TEST_ROOT" "$@"
+}
+if check_cloud_login_precondition >"$RELEASE_TEST_TMP/required-login" 2>&1; then exit 1; fi
+grep -Fq 'securely supplied fixed-account login smoke credentials' "$RELEASE_TEST_TMP/required-login"
+! grep -q LOGIN_PRECONDITION_PASSED "$RELEASE_TEST_TMP/required-login"
+waiver_status=0
+check_cloud_login_precondition --skip-login-smoke \
+  >"$RELEASE_TEST_TMP/waived-login" 2>&1 || waiver_status=$?
+[[ "$waiver_status" == 42 ]]
+grep -q LOGIN_PRECONDITION_PASSED "$RELEASE_TEST_TMP/waived-login"
+env -u FIXED_SMOKE_ACCOUNT_CODE -u FIXED_SMOKE_PASSWORD bash -c '
+  source "$1/scripts/deploy_pos_production.sh"
+  parse_args --supabase-backend mcp --web-only --skip-login-smoke
+  validate_cloud_options; validate_web_only_options
+  run_login_smoke
+' cloud-login-evidence "$RELEASE_TEST_ROOT" >"$RELEASE_TEST_TMP/login-evidence" 2>&1
+grep -Fq 'LOGIN_SMOKE=NOT_RUN_OWNER_WAIVER' "$RELEASE_TEST_TMP/login-evidence"
+! grep -qx 'PASS' "$RELEASE_TEST_TMP/login-evidence"
+
 : >"$RELEASE_TEST_LOG"
 if SKIP_LOGIN_SMOKE=1 simulate_release --web-only --yes >"$RELEASE_TEST_TMP/rejected" 2>&1; then exit 1; fi
 [[ ! -s "$RELEASE_TEST_LOG" ]]

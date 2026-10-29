@@ -4418,5 +4418,8 @@
         "type": "int"
       }
     }
-  }
+  },
+  "attendanceStaffLoadFailed": "Không tải được danh sách nhân viên. Vui lòng thử lại.",
+  "attendanceNoActiveStaff": "Không có nhân viên đang làm việc. Kiểm tra đăng ký nhân viên và cửa hàng đã chọn.",
+  "attendancePayrollPinLoadFailed": "Bảng lương đã khóa do không kiểm tra được mã PIN. Vẫn có thể xem và thêm chấm công."
 }

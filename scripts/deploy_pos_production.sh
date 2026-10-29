@@ -38,6 +38,7 @@ ONBOARDING_EDGE_ONLY=0
 MIGRATION_OPTION_SET=0
 POS_SUPABASE_BACKEND="${POS_SUPABASE_BACKEND:-cli}"
 LOCAL_RELEASE_EVIDENCE=""
+CLOUD_RELEASE_PLAN=""
 
 # shellcheck source=scripts/lib/production_migration_gate.sh
 source "$ROOT_DIR/scripts/lib/production_migration_gate.sh"
@@ -73,6 +74,8 @@ Options:
   --web-only         Deploy POS web/mobile browser UI; no DB or Edge changes.
                      Requires source, local verification, Auth and test gates.
                      Login smoke runs unless explicitly opted out on the CLI.
+  --cloud-release-plan FILE  Committed MCP plan: ordered migrations, reviewed
+                     direct-order-public Edge update, then prebuilt POS web.
   --mode MODE        prebuilt (default) or remote.
   --supabase-backend MODE  cli (default), or live MCP for DB-only/web-only cloud releases.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
@@ -304,6 +307,11 @@ parse_args() {
       --web-only)
         WEB_ONLY=1
         ;;
+      --cloud-release-plan)
+        shift
+        CLOUD_RELEASE_PLAN="${1:-}"
+        [[ -n "$CLOUD_RELEASE_PLAN" ]] || fail "--cloud-release-plan requires a file"
+        ;;
       --mode)
         shift
         DEPLOY_MODE="${1:-}"
@@ -370,12 +378,21 @@ parse_args() {
 
 validate_cloud_options() {
   [[ "$POS_SUPABASE_BACKEND" == "mcp" ]] || return 0
-  [[ "$DB_ONLY" == "1" || "$WEB_ONLY" == "1" ]] ||
+  [[ "$DB_ONLY" == "1" || "$WEB_ONLY" == "1" || -n "$CLOUD_RELEASE_PLAN" ]] ||
     fail "MCP release requires reviewed --db-only or --web-only scope; Edge secret operations are unavailable."
-  [[ "$SKIP_CHECKS" == "0" && "$SKIP_AUTH_CHECK" == "0" && "$SKIP_LOGIN_SMOKE" == "0" &&
+  [[ "$SKIP_CHECKS" == "0" && "$SKIP_AUTH_CHECK" == "0" &&
      "$SKIP_SMOKE_TESTS" == "0" && "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" &&
      "$SKIP_VERCEL" == "0" && -n "$TEST_TARGETS" && "$DEPLOY_MODE" == "prebuilt" ]] ||
     fail "Cloud releases require all applicable gates and prebuilt deployment."
+  [[ "$SKIP_LOGIN_SMOKE" == "0" ||
+     ( ( "$WEB_ONLY" == "1" || -n "$CLOUD_RELEASE_PLAN" ) && "$SKIP_LOGIN_SMOKE" == "1" && "$LOGIN_SMOKE_OPT_OUT" == "1" ) ]] ||
+    fail "Cloud login smoke omission requires explicit --web-only --skip-login-smoke."
+  if [[ -n "$CLOUD_RELEASE_PLAN" ]]; then
+    [[ "$DB_ONLY" == "0" && "$WEB_ONLY" == "0" && "$ONBOARDING_EDGE_ONLY" == "0" &&
+       "$ROLLBACK_HIERARCHY" == "0" && "$MIGRATION_OPTION_SET" == "0" && -z "$MIGRATION_FILE" ]] ||
+      fail "Coordinated plan cannot be combined with other release scopes."
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/release.py" validate --plan "$CLOUD_RELEASE_PLAN"
+  fi
 }
 
 cloud_cleanup() {
@@ -396,9 +413,14 @@ initialize_cloud_execution() {
   local parent phase
   parent="$(mktemp -d "${TMPDIR:-/tmp}/pos-cloud-release.XXXXXX")"
   phase=web-only; [[ "$DB_ONLY" == "1" ]] && phase=db-only
+  [[ -z "$CLOUD_RELEASE_PLAN" ]] || phase=coordinated
   export POS_CLOUD_BRIDGE_DIR="$parent/execution"
   python3 -B "$ROOT_DIR/scripts/cloud_deployment/bridge.py" init \
     --directory "$POS_CLOUD_BRIDGE_DIR" --phase "$phase"
+  if [[ -n "$CLOUD_RELEASE_PLAN" ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/release.py" bind \
+      --plan "$CLOUD_RELEASE_PLAN" --directory "$POS_CLOUD_BRIDGE_DIR"
+  fi
   trap cloud_cleanup EXIT
   printf 'POS_CLOUD_DIRECTORY=%s\n' "$POS_CLOUD_BRIDGE_DIR"
   python3 -B "$ROOT_DIR/scripts/cloud_deployment/bridge.py" project \
@@ -493,7 +515,8 @@ PYSECRET
 preflight() {
   log "Preflight"
   reject_target_overrides
-  if [[ "$POS_SUPABASE_BACKEND" == "mcp" && "$WEB_ONLY" == "1" && "$DRY_RUN" != "1" ]]; then
+  if [[ "$POS_SUPABASE_BACKEND" == "mcp" && "$DB_ONLY" == "0" &&
+        "$SKIP_LOGIN_SMOKE" != "1" && "$DRY_RUN" != "1" ]]; then
     [[ -n "${FIXED_SMOKE_ACCOUNT_CODE:-}" && -n "${FIXED_SMOKE_PASSWORD:-}" ]] ||
       fail "Cloud web release requires securely supplied fixed-account login smoke credentials before production work."
   fi
@@ -1296,6 +1319,9 @@ run_login_smoke() {
   fi
   if [[ "$SKIP_LOGIN_SMOKE" == "1" ]]; then
     log "Fixed POS account login smoke skipped"
+    if [[ "$LOGIN_SMOKE_OPT_OUT" == "1" ]]; then
+      printf 'LOGIN_SMOKE=NOT_RUN_OWNER_WAIVER (--skip-login-smoke); no login PASS or login-ready claim.\n'
+    fi
     warn "Do not report this deploy as login-ready until a fixed-account login smoke passes."
     return 0
   fi
@@ -1335,8 +1361,11 @@ run_db_only_flow() {
 main() {
   parse_args "$@"
   readonly POS_SUPABASE_BACKEND
+  [[ -z "$CLOUD_RELEASE_PLAN" || "$POS_SUPABASE_BACKEND" == "mcp" ]] ||
+    fail "--cloud-release-plan requires --supabase-backend mcp."
   validate_cloud_options
   readonly WEB_ONLY
+  readonly CLOUD_RELEASE_PLAN
   validate_web_only_options
   validate_db_only_options
   validate_onboarding_edge_only_options
@@ -1368,6 +1397,15 @@ main() {
     printf 'POS Edge functions: N/A (not deployed).\n'
     printf 'Database migration: N/A (already gated in separate DB-only phases).\n'
     printf 'Mobile web uses the same POS web release; native installation is separate.\n'
+  elif [[ -n "$CLOUD_RELEASE_PLAN" ]]; then
+    log "Coordinated MCP release: migrations -> direct-order-public -> web"
+    verify_deliberry_retirement_readiness
+    verify_remote_allowed_origin
+    verify_emergency_dispatcher_readiness
+    verify_direct_order_dispatcher_readiness
+    run python3 -B "$ROOT_DIR/scripts/cloud_deployment/release.py" apply \
+      --directory "${POS_CLOUD_BRIDGE_DIR:-<not-run>}" --plan "$CLOUD_RELEASE_PLAN"
+    verify_remote_allowed_origin
   else
     verify_sepay_alert_secrets
     run python3 "$ROOT_DIR/scripts/sync_direct_order_translation_schedule_secret.py"

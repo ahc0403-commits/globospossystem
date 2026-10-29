@@ -75,7 +75,7 @@ class _DirectOrderCashierScreenState
       DirectOrderDeliveryPaymentMode.customerDirect;
   String? _selectedId;
   String? _error;
-  String? _stateFilter;
+  String? _stateFilter = 'customer_active';
   String? _fulfillmentFilter;
   bool _loading = true;
   bool _busy = false;
@@ -136,7 +136,11 @@ class _DirectOrderCashierScreenState
     try {
       final rows = await directOrderStaffService.listRequests(
         storeId: storeId,
-        states: _stateFilter == null ? null : [_stateFilter!],
+        states: _stateFilter == 'customer_active'
+            ? ['customer_pending', 'customer_paid']
+            : _stateFilter == null
+            ? null
+            : [_stateFilter!],
         fulfillmentType: _fulfillmentFilter,
       );
       Map<String, dynamic>? detail;
@@ -658,6 +662,7 @@ class _DirectOrderCashierScreenState
             ? DirectOrderDeliveryPaymentMode.storePrepaid
             : _deliveryPaymentMode,
         note: _quoteNoteController.text.trim(),
+        expectedToken: _detail?['edit_token'] as String?,
       );
       if (mounted && _detail != null) {
         setState(() {
@@ -699,7 +704,11 @@ class _DirectOrderCashierScreenState
       );
       _requirementMutationIds.remove(key);
       setState(() {
-        _detail = detail;
+        _detail = {
+          ...detail,
+          if (!detail.containsKey('edit_token'))
+            'edit_token': _detail?['edit_token'],
+        };
         _requests = [
           for (final row in _requests)
             if (row['id'] == requestId)
@@ -778,7 +787,11 @@ class _DirectOrderCashierScreenState
         detail['requirements'],
       );
       setState(() {
-        _detail = detail;
+        _detail = {
+          ...detail,
+          if (!detail.containsKey('edit_token'))
+            'edit_token': _detail?['edit_token'],
+        };
         _requests = [
           for (final row in _requests)
             if (row['id'] == requestId)
@@ -1225,6 +1238,29 @@ class _DirectOrderCashierScreenState
     );
   }
 
+  String _amendmentDescription(Map<String, dynamic> event) {
+    final before = (event['before_items'] as List).cast<Map>();
+    final after = (event['after_items'] as List).cast<Map>();
+    final lines = <String>[];
+    for (final old in before) {
+      final next = after.where((row) => row['id'] == old['id']);
+      final quantity = next.isEmpty ? 0 : next.first['quantity'];
+      if (quantity != old['quantity']) {
+        lines.add(
+          '${old['name_${Localizations.localeOf(context).languageCode}'] ?? old['name_vi']}: ${old['quantity']} → $quantity',
+        );
+      }
+    }
+    for (final row in after) {
+      if (!before.any((old) => old['id'] == row['id'])) {
+        lines.add(
+          '${row['name_${Localizations.localeOf(context).languageCode}'] ?? row['name_vi']}: +${row['quantity']}',
+        );
+      }
+    }
+    return lines.join('\n');
+  }
+
   String _workLabel(Map<String, dynamic> row) {
     if (row['state'] == 'awaiting_quote') return _copy.quoteNeeded;
     if (row['state'] != 'approved') {
@@ -1232,7 +1268,7 @@ class _DirectOrderCashierScreenState
     }
     final status = row['fulfillment_status']?.toString();
     if (status == 'completed') {
-      return _copy.customerProgressLabel('customer_completed');
+      return _copy.fulfillmentCompleted;
     }
     if (status == 'cancelled') return _copy.stateLabel('cancelled');
     if (status == 'dispatched') return _copy.driverHandoffNotice;
@@ -1737,12 +1773,15 @@ class _DirectOrderCashierScreenState
 
   Widget _buildQueue() {
     const filters = <String?>[
+      'customer_active',
       null,
       'customer_pending',
       'customer_paid',
       'customer_completed',
     ];
-    String filterLabel(String? state) => state == null
+    String filterLabel(String? state) => state == 'customer_active'
+        ? _copy.activeOrders
+        : state == null
         ? _copy.all
         : _copy.stageLabel(
             DirectOrderStage.values.firstWhere(
@@ -1878,7 +1917,7 @@ class _DirectOrderCashierScreenState
                     ],
                   ),
                   subtitle: Text(
-                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_workLabel(row)}\n${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${supportNumber(row['request_reply_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).replyDue} ${row['request_reply_due']}' : ''}${supportNumber(row['request_confirmation_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).awaiting} ${row['request_confirmation_due']}' : ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}${supportNumber(row['overpayment_due']) > 0 ? ' · ${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).text('surplus')}: ${_vnd(row['overpayment_due'])}' : ''}',
+                    '${row['fulfillment_type'] == 'pickup' ? _copy.pickup : _copy.delivery} · ${_copy.stageLabel(directOrderStage(requestState, row['fulfillment_status']?.toString()))} · ${_workLabel(row)}\n${row['amended_at'] != null ? '${_copy.orderAmended} · ' : ''}${row['customer_name'] ?? ''} · ${row['district'] ?? ''}${supportNumber(row['request_reply_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).replyDue} ${row['request_reply_due']}' : ''}${supportNumber(row['request_confirmation_due']) > 0 ? ' · ${DirectOrderRequirementCopy(Localizations.localeOf(context).languageCode).awaiting} ${row['request_confirmation_due']}' : ''}${row['refund_pending'] == true ? ' · ${_copy.refundPending}' : ''}${supportNumber(row['overpayment_due']) > 0 ? ' · ${DirectOrderSupportCopy(Localizations.localeOf(context).languageCode).text('surplus')}: ${_vnd(row['overpayment_due'])}' : ''}',
                   ),
                   trailing: row['final_total'] == null
                       ? null
@@ -1959,6 +1998,22 @@ class _DirectOrderCashierScreenState
           ],
         ),
         const SizedBox(height: 12),
+        if ((_detail?['amendments'] as List?)?.isNotEmpty == true)
+          ExpansionTile(
+            key: const Key('direct_staff_amendments'),
+            title: Text(_copy.orderAmended),
+            children: [
+              for (final event in (_detail!['amendments'] as List))
+                ListTile(
+                  title: Text('${event['created_at']}'),
+                  subtitle: Text(
+                    _amendmentDescription(
+                      Map<String, dynamic>.from(event as Map),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         _buildPaymentTools(request),
         const SizedBox(height: 12),
         _Section(

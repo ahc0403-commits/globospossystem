@@ -620,6 +620,26 @@ class _PinService extends PinService {
   }
 }
 
+class _UnavailablePayrollPinService extends _PinService {
+  @override
+  Future<bool> hasPayrollPin(String storeId) async =>
+      throw StateError('PIN unavailable');
+}
+
+class _RetryAttendanceService extends _AttendanceService {
+  int directoryCalls = 0;
+  @override
+  Future<List<Map<String, dynamic>>> fetchStaffList(
+    String storeId, {
+    String? employeeId,
+  }) async {
+    if (++directoryCalls == 1) {
+      throw StateError('private view permission denied');
+    }
+    return super.fetchStaffList(storeId, employeeId: employeeId);
+  }
+}
+
 class _UnlockedPayrollPinService extends _PinService {
   @override
   Future<bool> hasPayrollPin(String storeId) async => false;
@@ -1892,6 +1912,90 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'Attendance keeps logs and manual entry usable when payroll PIN status fails',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final attendance = _AttendanceService();
+      await _pump(
+        tester,
+        child: AttendanceTab(
+          attendanceServiceOverride: attendance,
+          pinServiceOverride: _UnavailablePayrollPinService(),
+        ),
+        overrides: const [],
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Nguyễn Minh Anh'), findsWidgets);
+      final action = find.byKey(const Key('attendance_manual_entry_action'));
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('attendance_manual_entry_dialog')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Attendance directory failure does not hide logs and entry retries the directory',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final attendance = _RetryAttendanceService();
+      await _pump(
+        tester,
+        child: AttendanceTab(
+          attendanceServiceOverride: attendance,
+          pinServiceOverride: _PinService(),
+        ),
+        overrides: const [],
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Nguyễn Minh Anh'), findsWidgets);
+      expect(attendance.directoryCalls, 1);
+      final action = find.byKey(const Key('attendance_manual_entry_action'));
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      expect(attendance.directoryCalls, 2);
+      expect(
+        find.byKey(const Key('attendance_manual_entry_dialog')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('Attendance manual entry is available to the Photo master', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(
+      tester,
+      authState: _authState.copyWith(role: 'photo_objet_master'),
+      child: AttendanceTab(
+        attendanceServiceOverride: _AttendanceService(),
+        pinServiceOverride: _PinService(),
+      ),
+      overrides: const [],
+    );
+    await tester.pumpAndSettle();
+    final action = find.byKey(const Key('attendance_manual_entry_action'));
+    await tester.ensureVisible(action);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('attendance_manual_entry_dialog')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Attendance payroll unlock dialog executes with store logs', (
     tester,

@@ -70,6 +70,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   List<Map<String, dynamic>> _selectedEmployeeMonthLogs = const [];
   List<StaffPayroll> _payrolls = const [];
   StaffPayroll? _selectedEmployeePayroll;
+  bool _isStaffLoading = false;
+  String? _staffError;
+  String? _pinError;
   bool _isLogsLoading = false;
   bool _isDailyLogsLoading = false;
   bool _isEmployeeMonthLoading = false;
@@ -146,48 +149,66 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
 
   Future<void> _initialize(String storeId) async {
     setState(() {
-      _isLogsLoading = true;
-      _isDailyLogsLoading = true;
-      _logsError = null;
-      _dailyLogsError = null;
+      _staffList = const [];
+      _logs = const [];
+      _dailyLogs = const [];
+      _staffError = null;
+      _pinError = null;
       _selectedAttendanceUserId = null;
       _selectedEmployeeMonthLogs = const [];
+      _hasPayrollPin = null;
+      _payrollUnlocked = false;
       _clearSelectedEmployeePayroll();
       _clearPayrollPreview();
     });
+    await Future.wait([
+      _reloadStaff(storeId),
+      _reloadLogs(storeId),
+      _reloadDailyLogs(storeId, _attendanceDate),
+      _loadPayrollPinStatus(storeId),
+    ]);
+  }
 
+  Future<void> _reloadStaff(String storeId) async {
+    setState(() {
+      _isStaffLoading = true;
+      _staffError = null;
+    });
     try {
       final staff = await _attendanceService.fetchStaffList(storeId);
-      final logs = await _attendanceService.fetchLogs(
-        storeId: storeId,
-        from: _logFrom,
-        to: _logTo,
-        limit: attendanceManagementRecordLimit,
-      );
-      final dailyLogs = await _attendanceService.fetchLogs(
-        storeId: storeId,
-        from: _attendanceDate,
-        to: _attendanceDate.add(const Duration(days: 1)),
-        limit: attendanceManagementRecordLimit,
-      );
-      final hasPayrollPin = await _pinService.hasPayrollPin(storeId);
-
-      if (!mounted) return;
+      if (!mounted || _initializedRestaurantId != storeId) return;
       setState(() {
         _staffList = staff;
-        _logs = logs;
-        _dailyLogs = dailyLogs;
-        _isLogsLoading = false;
-        _isDailyLogsLoading = false;
-        _hasPayrollPin = hasPayrollPin;
-        _payrollUnlocked = !hasPayrollPin;
+        _isStaffLoading = false;
       });
-    } catch (e) {
-      if (!mounted) return;
+    } catch (error) {
+      if (!mounted || _initializedRestaurantId != storeId) return;
       setState(() {
-        _isLogsLoading = false;
-        _isDailyLogsLoading = false;
-        _logsError = _mapAttendanceError(e, context.l10n.attendanceLoadFailed);
+        _isStaffLoading = false;
+        _staffError = _mapAttendanceError(
+          error,
+          context.l10n.attendanceStaffLoadFailed,
+        );
+      });
+    }
+  }
+
+  Future<void> _loadPayrollPinStatus(String storeId) async {
+    try {
+      final hasPin = await _pinService.hasPayrollPin(storeId);
+      if (!mounted || _initializedRestaurantId != storeId) return;
+      setState(() {
+        _hasPayrollPin = hasPin;
+        _payrollUnlocked = !hasPin;
+        _pinError = null;
+      });
+    } catch (_) {
+      if (!mounted || _initializedRestaurantId != storeId) return;
+      // An unavailable PIN check must never unlock payroll or hide attendance.
+      setState(() {
+        _hasPayrollPin = true;
+        _payrollUnlocked = false;
+        _pinError = context.l10n.attendancePayrollPinLoadFailed;
       });
     }
   }
@@ -205,14 +226,14 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         to: _logTo,
         limit: attendanceManagementRecordLimit,
       );
-      if (!mounted) return;
+      if (!mounted || _initializedRestaurantId != storeId) return;
       setState(() {
         _logs = logs;
         _isLogsLoading = false;
         _clearPayrollPreview();
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || _initializedRestaurantId != storeId) return;
       setState(() {
         _isLogsLoading = false;
         _logsError = _mapAttendanceError(
@@ -252,7 +273,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         to: day.add(const Duration(days: 1)),
         limit: attendanceManagementRecordLimit,
       );
-      if (!mounted || _attendanceDate != day) return;
+      if (!mounted ||
+          _initializedRestaurantId != storeId ||
+          _attendanceDate != day) {
+        return;
+      }
       setState(() {
         _dailyLogs = logs;
         _isDailyLogsLoading = false;
@@ -261,7 +286,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         await _selectAttendanceEmployee(storeId, selectedEmployeeId);
       }
     } catch (error) {
-      if (!mounted || _attendanceDate != day) return;
+      if (!mounted ||
+          _initializedRestaurantId != storeId ||
+          _attendanceDate != day) {
+        return;
+      }
       setState(() {
         _isDailyLogsLoading = false;
         _dailyLogsError = _mapAttendanceError(
@@ -453,7 +482,18 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   }
 
   Future<void> _showManualAttendanceDialog(String storeId) async {
-    if (_staffList.isEmpty || _isManualAttendanceSaving) return;
+    if (_isManualAttendanceSaving || _isStaffLoading) return;
+    if (_staffList.isEmpty) {
+      await _reloadStaff(storeId);
+      if (!mounted || _initializedRestaurantId != storeId) return;
+      if (_staffList.isEmpty) {
+        showErrorToast(
+          context,
+          _staffError ?? context.l10n.attendanceNoActiveStaff,
+        );
+        return;
+      }
+    }
     final now = TimeUtils.nowVietnam();
     var selectedEmployeeId =
         _staffList.any(
@@ -809,7 +849,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   String _mapAttendanceError(Object error, String fallback) {
     final message = error is PostgrestException ? error.message : '$error';
 
-    if (message.contains('ATTENDANCE_STAFF_DIRECTORY_FORBIDDEN') ||
+    if (message.contains('FINANCIAL_INPUT_FORBIDDEN') ||
+        message.contains('ATTENDANCE_VIEW_FORBIDDEN') ||
+        message.contains('ATTENDANCE_STAFF_DIRECTORY_FORBIDDEN') ||
         message.contains('ATTENDANCE_LOG_VIEW_FORBIDDEN')) {
       return context.l10n.attendanceNoViewPermission;
     }
@@ -1405,6 +1447,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       'store_admin',
       'brand_admin',
       'super_admin',
+      'photo_objet_master',
     }.contains(auth.role);
 
     if (storeId != null && _initializedRestaurantId != storeId) {
@@ -1414,7 +1457,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
 
     final filteredLogs = _dailyLogs;
     final filteredPayrolls = _payrolls;
-    final payrollRequiresUnlock = _hasPayrollPin == true && !_payrollUnlocked;
+    final payrollRequiresUnlock = _hasPayrollPin != false && !_payrollUnlocked;
     final attendanceRows = _buildAttendanceRows(filteredLogs, const []);
     final selectedAttendanceRow = _resolveSelectedAttendanceRow(attendanceRows);
     final today = TimeUtils.nowVietnam();
@@ -1489,7 +1532,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           if (canManageAttendance)
             OutlinedButton.icon(
               key: const Key('attendance_manual_entry_action'),
-              onPressed: storeId == null || _isManualAttendanceSaving
+              onPressed:
+                  storeId == null ||
+                      _isManualAttendanceSaving ||
+                      _isStaffLoading
                   ? null
                   : () => _showManualAttendanceDialog(storeId),
               icon: const Icon(Icons.more_time_rounded, size: 18),
@@ -1648,6 +1694,22 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           padding: pageLayout.pagePadding,
           children: [
             attendanceHeader,
+            if (_staffError != null) ...[
+              PosExceptionAlert(label: _staffError!, color: PosColors.danger),
+              TextButton(
+                onPressed: storeId == null ? null : () => _reloadStaff(storeId),
+                child: Text(context.l10n.retry),
+              ),
+            ],
+            if (_pinError != null) ...[
+              PosExceptionAlert(label: _pinError!, color: PosColors.warning),
+              TextButton(
+                onPressed: storeId == null
+                    ? null
+                    : () => _loadPayrollPinStatus(storeId),
+                child: Text(context.l10n.retry),
+              ),
+            ],
             if (_logsError != null) ...[
               const SizedBox(height: 12),
               PosExceptionAlert(label: _logsError!, color: PosColors.danger),
@@ -1689,6 +1751,22 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             attendanceHeader,
+            if (_staffError != null) ...[
+              PosExceptionAlert(label: _staffError!, color: PosColors.danger),
+              TextButton(
+                onPressed: storeId == null ? null : () => _reloadStaff(storeId),
+                child: Text(context.l10n.retry),
+              ),
+            ],
+            if (_pinError != null) ...[
+              PosExceptionAlert(label: _pinError!, color: PosColors.warning),
+              TextButton(
+                onPressed: storeId == null
+                    ? null
+                    : () => _loadPayrollPinStatus(storeId),
+                child: Text(context.l10n.retry),
+              ),
+            ],
             if (_logsError != null) ...[
               const SizedBox(height: 12),
               PosExceptionAlert(label: _logsError!, color: PosColors.danger),

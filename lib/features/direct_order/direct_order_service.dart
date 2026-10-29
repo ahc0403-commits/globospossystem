@@ -822,6 +822,78 @@ class DirectOrderService {
     }),
   );
 
+  Future<Map<String, dynamic>> amendmentContext({
+    required DirectOrderSession session,
+    required String requestId,
+  }) async {
+    final preferences = await SharedPreferences.getInstance();
+    final cached = preferences.getString(
+      'direct_order_pending_amendment_$requestId',
+    );
+    if (cached != null) {
+      final pending = jsonDecode(cached) as Map;
+      final input = jsonDecode(pending['input'] as String) as Map;
+      await amend(
+        session: session,
+        requestId: requestId,
+        token: input['token'] as String,
+        payload: Map<String, dynamic>.from(input['payload'] as Map),
+      );
+    }
+    return _invoke({
+      'action': 'amendment_context',
+      ...session.credentials,
+      'request_id': requestId,
+    });
+  }
+
+  Future<Map<String, dynamic>> amend({
+    required DirectOrderSession session,
+    required String requestId,
+    required String token,
+    required Map<String, dynamic> payload,
+  }) async {
+    final preferences = await SharedPreferences.getInstance();
+    final key = 'direct_order_pending_amendment_$requestId';
+    final input = jsonEncode({'token': token, 'payload': payload});
+    final cached = preferences.getString(key);
+    final pending = cached == null
+        ? {'operation_id': const Uuid().v4(), 'input': input}
+        : Map<String, dynamic>.from(jsonDecode(cached) as Map);
+    if (pending['input'] != input) {
+      throw const DirectOrderException('DIRECT_ORDER_AMENDMENT_RETRY_CHANGED');
+    }
+    if (!await preferences.setString(key, jsonEncode(pending))) {
+      throw const DirectOrderException('DIRECT_ORDER_RETRY_STATE_FAILED');
+    }
+    late Map<String, dynamic> result;
+    try {
+      result = await _invoke({
+        'action': 'amend',
+        ...session.credentials,
+        'request_id': requestId,
+        'operation_id': pending['operation_id'],
+        'token': token,
+        'payload': payload,
+      });
+    } on DirectOrderException catch (error) {
+      if (const {
+        'DIRECT_ORDER_AMENDMENT_STALE',
+        'DIRECT_ORDER_AMENDMENT_NOT_ALLOWED',
+        'DIRECT_ORDER_AMENDMENT_INPUT_INVALID',
+        'DIRECT_ORDER_MENU_CHANGED',
+        'DIRECT_ORDER_COMBO_UNAVAILABLE',
+        'DIRECT_ORDER_QUANTITY_LIMIT',
+        'DIRECT_ORDER_BELOW_MINIMUM',
+      }.contains(error.code)) {
+        await preferences.remove(key);
+      }
+      rethrow;
+    }
+    await preferences.remove(key);
+    return result;
+  }
+
   Future<void> cancelRequest({
     required String slug,
     required DirectOrderSession session,

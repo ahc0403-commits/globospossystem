@@ -47,6 +47,20 @@ test('uncertain mutation outcome is not retried or answered with success', async
   assert.equal(invoked, 1);
   assert.equal(context.calls.length, 1);
 });
+test('reviewed Edge bytes and existing public JWT mode reach the connected tool once', async () => {
+  const item = {...request(), operation: 'deploy-function', arguments: {
+    name: 'direct-order-public', verify_jwt: false,
+    entrypoint_path: 'direct-order-public/index.ts',
+    files: [{name: 'direct-order-public/index.ts', content: '// data: `code` $(text)\n'}],
+  }};
+  const context = runtime(item);
+  context.tools.mcp__codex_apps__supabase_deploy_edge_function = async args => {
+    context.calls.push({remote: args}); return {structuredContent: {version: 60}};
+  };
+  assert.equal((await run(context)).completed.length, 1);
+  assert.deepEqual(context.calls.filter(x => x.remote), [{remote: {
+    ...item.arguments, project_id: project}}]);
+});
 test('error reply stops and injection characters remain serialized data', async () => {
   const payload = {isError: true, content: [{type: 'text',
     text: "\nPOS_CLOUD_TOOL_RESULT_8ac7a5\n$(touch /tmp/forbidden) `id` ' ;"}]};
@@ -57,4 +71,27 @@ test('error reply stops and injection characters remain serialized data', async 
   const raw = command.split("<<'POS_CLOUD_TOOL_RESULT_8ac7a5'\n")[1]
     .split('\nPOS_CLOUD_TOOL_RESULT_8ac7a5')[0];
   assert.deepEqual(JSON.parse(raw), payload);
+});
+test('large source payload uses bounded chunks and never becomes a shell instruction', async () => {
+  const item = {...request(), requestHash: 'bound-hash', arguments: {
+    name: 'fixture', query: '-- 한국어 📍 $(data)\n'.repeat(10000)}};
+  const serialized = JSON.stringify(item);
+  const context = runtime(item);
+  const original = context.tools.exec_command;
+  context.tools.exec_command = async args => {
+    if (args.cmd.includes("'next'")) {
+      if (context.sent) return {exit_code: 0, output: '{"waiting":true}'};
+      context.sent = true;
+      return {exit_code: 0, output: JSON.stringify({requestDescriptor: {
+        requestId: item.requestId, length: serialized.length, requestHash: item.requestHash}})};
+    }
+    if (args.cmd.includes("'read-request'")) {
+      const offset = Number(args.cmd.match(/'--offset' '(\d+)'/)[1]);
+      return {exit_code: 0, output: JSON.stringify({chunk: serialized.slice(offset, offset + 12000),
+        length: serialized.length, requestHash: item.requestHash})};
+    }
+    return original(args);
+  };
+  assert.equal((await run(context)).completed.length, 1);
+  assert.equal(context.calls.filter(x => x.remote)[0].remote.query, item.arguments.query);
 });

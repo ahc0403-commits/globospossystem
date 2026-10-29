@@ -21,9 +21,27 @@ module.exports = async function driveCloudRelease({ tools, root, directory, maxR
   };
   const completed = [];
   for (let index = 0; index < maxRequests; index++) {
-    const next = await invoke(["next"]);
+    const next = await invoke(["next", "--metadata-only"]);
     if (next.closed || next.waiting) return {closed: !!next.closed, waiting: !!next.waiting, completed};
-    const request = next.request;
+    let request = next.request;
+    if (next.requestDescriptor) {
+      const descriptor = next.requestDescriptor;
+      if (!/^[a-f0-9]{32}$/.test(descriptor.requestId) ||
+          !Number.isInteger(descriptor.length) || descriptor.length <= 0 || descriptor.length > 8 * 1024 * 1024) {
+        throw new Error("Invalid cloud request descriptor");
+      }
+      let serialized = "";
+      while (serialized.length < descriptor.length) {
+        const part = await invoke(["read-request", "--request-id", descriptor.requestId,
+          "--offset", String(serialized.length), "--length", "12000"]);
+        if (part.length !== descriptor.length || part.requestHash !== descriptor.requestHash ||
+            typeof part.chunk !== "string" || !part.chunk.length) throw new Error("Cloud request changed during transfer");
+        serialized += part.chunk;
+      }
+      request = JSON.parse(serialized);
+      if (serialized.length !== descriptor.length || request.requestId !== descriptor.requestId ||
+          request.requestHash !== descriptor.requestHash) throw new Error("Cloud request transfer mismatch");
+    }
     if (request.project !== "ynriuoomotxuwhuxxmhj" || !methods[request.operation]) {
       throw new Error("Unrecognized cloud operation or project");
     }

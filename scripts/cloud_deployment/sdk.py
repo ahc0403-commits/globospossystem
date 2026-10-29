@@ -37,16 +37,28 @@ def initialize(directory, evidence):
                '--env', 'POS_VERIFICATION_ARTIFACTS=' + str(directory / 'fixtures'),
                '--env', 'PATH=' + str(ROOT / 'scripts/local_verification') +
                ':/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin']
+    # Reuse only mappings validated by this invocation's exact-main receipt.
+    # The post-gate SQL checks must use the same pinned one-layer fixtures,
+    # not request mutable upstream tags on a VFS engine.
+    projection = receipt['environment'].get('fixtureProjection')
+    if projection:
+        projections = [projection, *receipt['environment'].get('additionalFixtureProjections', [])]
+        command += ['--env', 'POS_FIXTURE_IMAGE_MAP=' + json.dumps(
+            {p['requestedRef']: p['derivedImageId'] for p in projections}, separators=(',', ':'))]
     for variable in gate.proxy_environment(os.environ):
         command += ['--env', variable]
     command += gate.proxy_host_arguments(os.environ)
     trust = gate.proxy_trust(os.environ.get('CODEX_PROXY_CERT'), '/etc/ssl/certs/ca-certificates.crt')
     setup = ''
     if trust:
+        command += ['--mount', 'type=bind,src=' + trust['bundle'] + ',dst=/run/pos-host-ca.pem,readonly']
         command += ['--mount', 'type=bind,src=' + trust['certificate'] +
                     ',dst=/usr/local/share/ca-certificates/pos-platform-proxy.crt,readonly']
         setup = 'update-ca-certificates >/dev/null; '
         command += ['--env', 'DENO_TLS_CA_STORE=system']
+        for variable in ('SSL_CERT_FILE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO',
+                         'REQUESTS_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS'):
+            command += ['--env', variable + '=/run/pos-host-ca.pem']
     command += ['--entrypoint', '/bin/bash', image, '-c',
                 'set -e; ' + setup + 'touch /tmp/pos-cloud-tools-ready; exec sleep infinity']
     identifier = checked(command)

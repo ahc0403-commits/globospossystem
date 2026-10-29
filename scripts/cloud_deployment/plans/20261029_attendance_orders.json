@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "project": "ynriuoomotxuwhuxxmhj",
+  "migrations": [
+    {
+      "path": "supabase/migrations/20261028053422_procurement_manager_adjustment.sql",
+      "sha256": "01e3c7dd3e61f550af299e7b412a56d32bbcfc3adb11bdf6d87c51b1f039216d"
+    },
+    {
+      "path": "supabase/migrations/20261029081324_direct_order_amendments.sql",
+      "sha256": "9533ad9491ce65baa3fbfea8c74c8a4a5a4dd9719e998fff27ae4909616743a5"
+    },
+    {
+      "path": "supabase/migrations/20261029084212_attendance_staff_input_recovery.sql",
+      "sha256": "2a79484f8bc4feacc3f27f53b9fed5b9355cf0fe9f7fec17bad12ff3ba6189dc"
+    }
+  ],
+  "edge": {
+    "name": "direct-order-public",
+    "verify_jwt": false,
+    "beforeIndexSha256": "57e4166360a5155c5f7a83982d98a40d43e8d80c7ded15f1e182c1fa90931ac6",
+    "files": [
+      {
+        "path": "supabase/functions/direct-order-public/index.ts",
+        "sha256": "77c2915178c8dab332825e60ebd3525b8f69c6d6b21012722fea670bb8b6bc58"
+      },
+      {
+        "path": "supabase/functions/direct-order-public/deno.json",
+        "sha256": "e25d642ae6664c59bf11cea4e1eda8e61cefff19636c26dc2c8c62e51c916b5d"
+      }
+    ]
+  },
+  "web": true,
+  "rollback": "Keep additive DB history; revert web and direct-order-public to verified prior source. No destructive DB rollback or production test records."
+}

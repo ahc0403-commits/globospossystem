@@ -140,6 +140,9 @@ bash scripts/test_photo_operations_read_models.sh
 printf 'CHECK_REPO_STEP=payroll_attendance_sql_api\n'
 bash scripts/test_payroll_attendance_postgrest.sh
 
+printf 'CHECK_REPO_STEP=attendance_staff_input_recovery\n'
+bash scripts/test_attendance_staff_input_recovery.sh
+
 printf 'CHECK_REPO_STEP=financial_inputs_sql_api\n'
 bash scripts/test_financial_inputs_postgrest.sh
 
@@ -247,7 +250,7 @@ printf 'CHECK_REPO_STEP=photo_manual_import_contract\n'
 bash test/photo_sales_manual_import_sql_test.sh
 
 printf 'CHECK_REPO_STEP=order_links_final_amount_and_verified_delivery\n'
-bash test/direct_order_integrated_sql_test.sh
+bash test/direct_order_amendments_sql_test.sh
 printf 'CHECK_REPO_STEP=cashier_item_move_and_partial_cancel\n'
 bash test/cashier_item_edit_sql_test.sh
 
