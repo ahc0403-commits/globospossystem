@@ -40,6 +40,42 @@ void main() {
       AppFonts.family,
     )..addFont(rootBundle.load(AppFonts.assetPath))).load();
   });
+  testWidgets('tight row keeps default action bounded and operable', (
+    tester,
+  ) async {
+    setViewport(tester, const Size(390, 844));
+    var taps = 0;
+    const label = 'SAMPLE · Long operational action in a narrow row';
+    await tester.pumpWidget(
+      localizedSurface(
+        Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 100,
+              height: 48,
+              child: PosActionButton(
+                label: label,
+                tone: PosActionTone.primary,
+                onPressed: () => taps++,
+              ),
+            ),
+          ),
+        ),
+        'en',
+        2,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final text = tester.widget<Text>(find.text(label));
+    expect(text.maxLines, 1);
+    expect(text.overflow, TextOverflow.ellipsis);
+    expect(text.softWrap, isFalse);
+    expect(tester.getSize(find.byType(PosActionButton)), const Size(100, 48));
+    await tester.tap(find.byType(PosActionButton));
+    expect(taps, 1);
+    expect(tester.takeException(), isNull);
+  });
   for (final language in ['ko', 'en', 'vi']) {
     final title = switch (language) {
       'ko' => 'SAMPLE · 긴 매장 이름 · 운영성과 및 메뉴별 판매현황',

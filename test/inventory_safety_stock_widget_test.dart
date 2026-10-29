@@ -193,6 +193,7 @@ void main() {
   Future<void> open(WidgetTester tester) async {
     final edit = find.byIcon(Icons.edit_outlined).first;
     await tester.ensureVisible(edit);
+    await tester.pumpAndSettle();
     await tester.tap(edit);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('inventory_product_dialog')), findsOneWidget);

@@ -545,14 +545,17 @@ class ToastResponsiveBody extends StatelessWidget {
               constraints.maxHeight - insets.vertical,
             );
             final resolvedWidth = math.min(maxWidth, availableWidth);
+            final scaledMinHeight =
+                minHeight *
+                math.max(1, MediaQuery.textScalerOf(context).scale(1));
             final narrowLayout =
-                constraints.maxWidth < _toastSingleScrollOwnerBreakpoint;
+                resolvedWidth < _toastSingleScrollOwnerBreakpoint;
             final preferredHeight = narrowLayout && !fitToViewportWhenNarrow
                 ? math.max(
-                    math.max(availableHeight, minHeight),
+                    math.max(availableHeight, scaledMinHeight),
                     _toastCompactPageMinHeight,
                   )
-                : math.max(availableHeight, minHeight);
+                : math.max(availableHeight, scaledMinHeight);
             final useSingleScrollOwner =
                 fitToViewportWhenNarrow && narrowLayout;
             final effectiveHeight = useSingleScrollOwner
