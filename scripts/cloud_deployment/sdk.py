@@ -37,6 +37,14 @@ def initialize(directory, evidence):
                '--env', 'POS_VERIFICATION_ARTIFACTS=' + str(directory / 'fixtures'),
                '--env', 'PATH=' + str(ROOT / 'scripts/local_verification') +
                ':/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin']
+    # Reuse only mappings validated by this invocation's exact-main receipt.
+    # The post-gate SQL checks must use the same pinned one-layer fixtures,
+    # not request mutable upstream tags on a VFS engine.
+    projection = receipt['environment'].get('fixtureProjection')
+    if projection:
+        projections = [projection, *receipt['environment'].get('additionalFixtureProjections', [])]
+        command += ['--env', 'POS_FIXTURE_IMAGE_MAP=' + json.dumps(
+            {p['requestedRef']: p['derivedImageId'] for p in projections}, separators=(',', ':'))]
     for variable in gate.proxy_environment(os.environ):
         command += ['--env', variable]
     command += gate.proxy_host_arguments(os.environ)
