@@ -210,6 +210,35 @@ class IntegrityTests(unittest.TestCase):
             'runId':'c'*32,'imageId':gate.fixture_policy()['derivedImageId']})+'\n')
         with self.assertRaises(InvalidEvidence): self.verify()
 
+    def test_vfs_requires_every_distinct_image_proof_and_preparation(self):
+        self.value['environment']['engineStorageDriver'] = 'vfs'
+        with self.assertRaises(InvalidEvidence): self.verify()
+        fixed = gate.fixture_policies()
+        proofs = []
+        for policy in fixed:
+            p = {k:policy[k] for k in ('representation','requestedRef','sourceRef','sourceManifestDigest',
+                'sourceConfigDigest','sourceRootfsInventorySha256','rootfsArchiveSha256',
+                'runtimeConfigSha256','derivedImageId','os','architecture')}
+            p.update(schemaVersion=1,runId='c'*32,sourceSha='a'*40,
+                     rootfsLayers=['sha256:'+policy['rootfsArchiveSha256']])
+            proofs.append(p)
+        self.value['environment']['fixtureProjection'] = proofs[0]
+        self.value['fixturePreparation'] = copy.deepcopy(self.value['imageBuild'])
+        self.value['environment']['additionalFixtureProjections'] = proofs[1:]
+        self.value['additionalFixturePreparations'] = [copy.deepcopy(self.value['imageBuild']) for _ in proofs[1:]]
+        self.verify()
+        saved = copy.deepcopy(self.value)
+        for change in ['missing','duplicate','switched-version','stale','preparation-failed','preparation-missing']:
+            value = copy.deepcopy(saved)
+            if change == 'missing': value['environment']['additionalFixtureProjections'].pop()
+            elif change == 'duplicate': value['environment']['additionalFixtureProjections'][1] = proofs[1]
+            elif change == 'switched-version': value['environment']['additionalFixtureProjections'][0]['derivedImageId'] = fixed[2]['derivedImageId']
+            elif change == 'stale': value['environment']['additionalFixtureProjections'][0]['sourceSha'] = 'd'*40
+            elif change == 'preparation-failed': value['additionalFixturePreparations'][0]['exitCode'] = 1
+            elif change == 'preparation-missing': value['additionalFixturePreparations'].pop()
+            with self.subTest(change=change), self.assertRaises((InvalidEvidence,ValueError)):
+                self.verify(value)
+
     def test_failed_interrupted_missing_reordered_changed_steps_block(self):
         for change in ['failed','partial','missing','reorder','command','executed-command','count','sha','recipe','time']:
             v = copy.deepcopy(self.value)
@@ -288,6 +317,11 @@ class ManagedProxyTests(unittest.TestCase):
 
 
 class FixtureOwnershipTests(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict(os.environ, {'POS_FIXTURE_IMAGE_MAP':'{}', 'POS_POSTGRES_FIXTURE_IMAGE':''})
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def test_every_created_fixture_is_labelled(self):
         with patch.object(fixture_docker.subprocess, 'run') as execute:
             execute.return_value.returncode = 1

@@ -104,9 +104,9 @@ digests and OS/architecture are recorded in addition to the tool image; Linux
 DB images may be native arm64 on an Apple host and are not mislabeled x64.
 
 Linux amd64 VFS engines use the explicitly verified, single-layer representation
-of the same pinned Supabase filesystem. Source/config/rootfs/derived image
-digests and run/SHA-bound provenance are validated, with no change to SQL/API
-coverage or the other PostgreSQL versions. See
+of each separately pinned Supabase/stock PostgreSQL filesystem. Source/config/
+rootfs/derived image digests and run/SHA-bound provenance are validated for every
+mapped version, with no change to SQL/API coverage or version diversity. See
 [Efficient database fixtures](EFFICIENT_DATABASE_FIXTURES.md). The runner also
 retains one-second disk samples and the observed peak for the full invocation.
 

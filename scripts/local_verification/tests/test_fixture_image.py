@@ -23,6 +23,9 @@ loader.exec_module(wrapper)
 
 class FixtureImageTests(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ, {'POS_FIXTURE_IMAGE_MAP':'{}', 'POS_POSTGRES_FIXTURE_IMAGE':''})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.fixed = image.policy()
         self.config = {'Env':['PATH=/bin'], 'Entrypoint':['entry'], 'Cmd':['postgres'],
             'User':'fixture', 'WorkingDir':'/', 'ArgsEscaped':True,
@@ -99,6 +102,45 @@ class FixtureImageTests(unittest.TestCase):
              patch.object(wrapper,'verified_fixture_id',side_effect=ValueError('wrong image')):
             execute.return_value.returncode=1
             with self.assertRaises(ValueError):wrapper.prepare(['run','--name','owned',self.fixed['requestedRef']],'f'*32)
+
+    def test_stock_versions_have_distinct_preserved_identities(self):
+        fixed = image.policies()
+        self.assertEqual(len(fixed), 4)
+        self.assertEqual(len({p['sourceConfigDigest'] for p in fixed}), 4)
+        self.assertEqual(len({p['derivedImageId'] for p in fixed}), 4)
+        projections = {p['requestedRef']:p['derivedImageId'] for p in fixed}
+        with patch.dict(os.environ, {'POS_FIXTURE_IMAGE_MAP':json.dumps(projections),
+                                    'POS_POSTGRES_FIXTURE_IMAGE':''}), \
+             patch.object(wrapper.subprocess,'run') as execute, \
+             patch.object(wrapper,'verified_fixture_id') as validate:
+            execute.return_value.returncode = 1
+            for policy in fixed:
+                result = wrapper.prepare(['run','--name','owned',policy['requestedRef']], 'f'*32)
+                self.assertIn(policy['derivedImageId'], result)
+                self.assertIn('pos.local.fixture.source='+policy['requestedRef'], result)
+                validate.assert_called_with(policy['derivedImageId'], [wrapper.REAL])
+            reference = 'public.ecr.aws/supabase/postgrest:v14.5'
+            self.assertIn(reference, wrapper.prepare(['run','--name','owned',reference], 'f'*32))
+
+    def test_map_cannot_cross_versions_inject_unknown_or_ambiguous_sources(self):
+        policies = image.policies()
+        a, b = policies[:2]
+        mappings = [{a['requestedRef']:b['derivedImageId']}, {'unreviewed:latest':a['derivedImageId']}, []]
+        for mapping in mappings:
+            with self.subTest(mapping=mapping), \
+                 patch.dict(os.environ, {'POS_FIXTURE_IMAGE_MAP':json.dumps(mapping),
+                                         'POS_POSTGRES_FIXTURE_IMAGE':''}), \
+                 patch.object(wrapper.subprocess,'run') as execute:
+                execute.return_value.returncode = 1
+                with self.assertRaises(ValueError):
+                    wrapper.prepare(['run','--name','owned',a['requestedRef']], 'f'*32)
+        mapping = {p['requestedRef']:p['derivedImageId'] for p in policies}
+        with patch.dict(os.environ, {'POS_FIXTURE_IMAGE_MAP':json.dumps(mapping),
+                                    'POS_POSTGRES_FIXTURE_IMAGE':''}), \
+             patch.object(wrapper.subprocess,'run') as execute:
+            execute.return_value.returncode = 1
+            with self.assertRaises(ValueError):
+                wrapper.prepare(['run','--name','owned',a['requestedRef'],b['requestedRef']], 'f'*32)
 
     def test_disk_peak_is_observed_and_stop_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:

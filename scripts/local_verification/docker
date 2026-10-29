@@ -13,7 +13,7 @@ import os
 import re
 import subprocess
 import sys
-from fixture_image import policy, verified_fixture_id
+from fixture_image import policy, policy_for_ref, verified_fixture_id
 
 def real_docker():
     # The Ubuntu tool image uses /usr/bin; the managed host uses /usr/local/bin.
@@ -43,8 +43,8 @@ def owned(kind, name, run_id):
                   'imageId':value['Image'], 'imageRef':value['Config']['Image']}
         requested = (labels or {}).get('pos.local.fixture.source')
         if requested:
-            fixed = policy()
-            if requested != fixed['requestedRef'] or value['Image'] != fixed['derivedImageId']:
+            fixed = policy_for_ref(requested)
+            if value['Image'] != fixed['derivedImageId']:
                 raise ValueError('Fixture source/image identity mismatch')
             record.update(requestedImageRef=requested, representation=fixed['representation'])
         line = json.dumps(record) + '\n'
@@ -79,9 +79,24 @@ def prepare(args, run_id):
         if existing.returncode == 0:
             raise ValueError('Fixture name already exists: ' + name)
         result = ['run', '--label', LABEL + '=' + run_id] + args[1:]
-        projected = os.environ.get('POS_POSTGRES_FIXTURE_IMAGE')
-        requested = policy()['requestedRef']
-        if projected and requested in args:
+        projections = json.loads(os.environ.get('POS_FIXTURE_IMAGE_MAP', '{}'))
+        if not isinstance(projections, dict):
+            raise ValueError('Invalid fixture image map')
+        legacy = os.environ.get('POS_POSTGRES_FIXTURE_IMAGE')
+        if legacy:
+            if policy()['requestedRef'] in projections and projections[policy()['requestedRef']] != legacy:
+                raise ValueError('Conflicting fixture image override')
+            projections[policy()['requestedRef']] = legacy
+        for requested, projected in projections.items():
+            fixed = policy_for_ref(requested)
+            if projected != fixed['derivedImageId']:
+                raise ValueError('Fixture image/source override differs')
+        matches = [requested for requested in projections if requested in args]
+        if len(matches) > 1:
+            raise ValueError('Ambiguous fixture source references')
+        if matches:
+            requested = matches[0]
+            projected = projections[requested]
             if args.count(requested) != 1:
                 raise ValueError('Ambiguous fixture source reference')
             verified_fixture_id(projected, [REAL])

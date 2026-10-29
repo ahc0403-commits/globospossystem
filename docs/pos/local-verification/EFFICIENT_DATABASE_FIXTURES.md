@@ -17,9 +17,10 @@ evidence. It does not mandate a particular DB image representation. The Ubuntu
 On an existing Linux amd64 VFS engine, the runner prepares a separate,
 single-layer image from the **entire pinned upstream filesystem**. It never
 pulls the original 29 layers into VFS first, changes the daemon, or replaces the
-upstream tag. The test Docker wrapper maps only the exact Supabase reference;
-PG15, native SDK PG16, other PG17 fixtures and PostgREST v14.5 retain their
-existing paths and versions.
+upstream tag. The test Docker wrapper maps four individually audited references:
+Supabase PG17.6.1.104, stock PG15, stock PG17.6 and stock PG17 Alpine. Each keeps
+its own complete upstream filesystem and configuration; versions are never
+merged. Native SDK PG16 and PostgREST v14.5 retain their existing paths.
 
 Policy: `scripts/local_verification/fixture_postgres_policy.json`.
 
@@ -36,6 +37,17 @@ xattrs (including capabilities) all matched. Its canonical inventory hash is
 `49fecb08d7738bf420663f0d5269d7f976901e7de2e98a677cb7067f4a8a722a`.
 The export tar is 1,259,289,600 bytes. Fixed tar and image digests make subsequent
 cache reuse an immutable artifact check, not acceptance of a prior test PASS.
+
+The first candidate using only the Supabase projection reached the stock
+`postgres:17.6` company-tax fixture, where another VFS layer expansion exhausted
+disk. Its FAIL is retained; it is not release evidence. The policy therefore
+also records separate immutable source/config/rootfs/derived identities for
+each stock fixture in `additionalImages`. The independent source/export node
+comparisons cover 9,438 PG15 nodes, 9,557 PG17.6 nodes and 3,891 Alpine nodes.
+Every source runtime-config key and archive node matched before adoption.
+Only redundant public layered image caches may be removed after the equivalent
+distinct runtime is verified and no container references the original image;
+database volumes and all source/evidence remain protected.
 
 The checksum-verified official `crane` export reads the pinned registry source.
 Docker's supported image-load API receives a standard archive containing that
@@ -84,7 +96,8 @@ Windows exclusions remain unverified native checks, never Linux passes.
 Each invocation writes run/SHA-bound fixture provenance and records actual
 used image IDs, requested source references and physical representation. The
 verifier rejects missing/stale/substituted provenance or altered rootfs/config
-evidence. One-second filesystem samples record the **observed** disk peak and
+evidence, including cross-version substitutions and missing preparation logs.
+One-second filesystem samples record the **observed** disk peak and
 sampling interval; they do not promise an unsampled instantaneous maximum.
 
 The official production entry point, Auth readiness, migration version/hash/
@@ -93,7 +106,7 @@ affected-feature checks are unchanged. Production data is never used as a
 fixture. A login failure is a separate operational blocker.
 
 Rollback the representation change through its code commit if necessary.
-The upstream reference and all existing DB/volume data remain untouched.
+The upstream registry references and all existing DB/volume data remain untouched.
 Do not change the storage driver, flatten operating data, publish a registry
 image, or delete source/evidence to apply this procedure.
 

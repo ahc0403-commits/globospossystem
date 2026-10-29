@@ -26,6 +26,17 @@ def policy():
     return json.loads(POLICY_PATH.read_text())
 
 
+def policies():
+    fixed = policy()
+    return [fixed] + fixed.get('additionalImages', [])
+
+
+def policy_for_ref(requested):
+    matches = [fixed for fixed in policies() if fixed['requestedRef'] == requested]
+    require(len(matches) == 1, 'Unreviewed or ambiguous fixture source reference')
+    return matches[0]
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
 
@@ -96,8 +107,9 @@ def inspect_image(docker, image_id):
 
 
 def verified_fixture_id(image_id, docker):
-    fixed = policy()
-    require(image_id == fixed['derivedImageId'], 'Unexpected fixture override')
+    matches = [fixed for fixed in policies() if fixed['derivedImageId'] == image_id]
+    require(len(matches) == 1, 'Unexpected fixture override')
+    fixed = matches[0]
     image = inspect_image(docker, image_id)
     require(image is not None, 'Verified fixture image is missing')
     return validate_image(image, fixed)
@@ -190,14 +202,14 @@ def load_projection(docker, rootfs, config, fixed):
             process.wait(timeout=10)
 
 
-def prepare(output, run_id, source_sha, endpoint, rebuild=False):
+def prepare(output, run_id, source_sha, endpoint, rebuild=False, requested=None):
     require(endpoint.startswith('unix:///'), 'Only the verified local Docker socket is permitted')
     require(len(run_id) == 32 and all(c in '0123456789abcdef' for c in run_id), 'Invalid fixture run ID')
     require(len(source_sha) == 40 and all(c in '0123456789abcdef' for c in source_sha), 'Invalid source SHA')
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     require(not output.exists(), 'Preserve existing fixture provenance; use a fresh output')
-    fixed, docker = policy(), ['docker', '--host=' + endpoint]
+    fixed, docker = policy_for_ref(requested) if requested else policy(), ['docker', '--host=' + endpoint]
     monitor = DiskMonitor(output.parent).start()
     value = {key: fixed[key] for key in ('representation', 'requestedRef', 'sourceRef',
              'sourceManifestDigest', 'sourceConfigDigest', 'sourceRootfsInventorySha256',
@@ -249,5 +261,6 @@ if __name__ == '__main__':
     parser.add_argument('--source-sha', required=True)
     parser.add_argument('--docker-endpoint', required=True)
     parser.add_argument('--rebuild-proof', action='store_true')
+    parser.add_argument('--requested-ref')
     args = parser.parse_args()
-    prepare(args.output, args.run_id, args.source_sha, args.docker_endpoint, args.rebuild_proof)
+    prepare(args.output, args.run_id, args.source_sha, args.docker_endpoint, args.rebuild_proof, args.requested_ref)
