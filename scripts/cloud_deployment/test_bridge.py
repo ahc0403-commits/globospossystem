@@ -147,6 +147,23 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(bridge.CloudError):
             bridge.normalize_result({'structuredContent': {'id': 'another'}}, 'project')
 
+    def test_large_unicode_request_chunks_are_bound_and_reassembled_as_data(self):
+        item = {'requestId': 'a' * 32, 'runId': bridge.session(self.directory)[1]['runId'],
+                'sourceSha': 'a' * 40, 'project': bridge.PROJECT,
+                'arguments': {'source': '한국어 📍 `code` $(data)\n' * 10000}}
+        item['requestHash'] = bridge.digest(bridge.canonical(item))
+        bridge.write_new(self.directory / ('a' * 32 + '.request.json'), item)
+        bridge.write_new(self.directory / ('a' * 32 + '.claimed.json'), {})
+        wire = bridge.wire_request(item)
+        parts = [bridge.request_chunk(self.directory, 'a' * 32, n, 12000)['chunk']
+                 for n in range(0, len(wire), 12000)]
+        self.assertEqual(json.loads(''.join(parts)), item)
+        self.assertTrue(''.join(parts).isascii())
+        item['arguments']['source'] += 'tamper'
+        (self.directory / ('a' * 32 + '.request.json')).write_text(json.dumps(item))
+        with self.assertRaises(bridge.CloudError):
+            bridge.request_chunk(self.directory, 'a' * 32, 0, 12000)
+
 
 if __name__ == '__main__':
     unittest.main()

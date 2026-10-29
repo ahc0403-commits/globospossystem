@@ -39,6 +39,7 @@ class _Staff extends DirectOrderStaffService {
   DirectOrderRequirementReply? requirementReply;
   String? bankReference;
   int? sentTicketVersion;
+  List<String>? lastStates;
 
   @override
   Future<List<Map<String, dynamic>>> listRequests({
@@ -46,14 +47,17 @@ class _Staff extends DirectOrderStaffService {
     List<String>? states,
     String? fulfillmentType,
     int limit = 100,
-  }) async => [
-    {
-      'id': 'request',
-      'state': state,
-      'reference_code': 'D12345678',
-      'fulfillment_status': ticketStatus,
-    },
-  ];
+  }) async {
+    lastStates = states;
+    return [
+      {
+        'id': 'request',
+        'state': state,
+        'reference_code': 'D12345678',
+        'fulfillment_status': ticketStatus,
+      },
+    ];
+  }
 
   @override
   Future<Map<String, dynamic>> requestDetail({
@@ -403,6 +407,35 @@ Future<void> _enterDialog(
 }
 
 void main() {
+  testWidgets('completed order uses a localized status in the queue', (
+    tester,
+  ) async {
+    final service = _Staff()..ticketStatus = 'completed';
+    await _pump(tester, service, language: 'ko');
+    expect(find.textContaining('customer_completed'), findsNothing);
+    expect(
+      find.textContaining(DirectOrderCopy('ko').fulfillmentCompleted),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('queue defaults to active orders and allows all and exceptions', (
+    tester,
+  ) async {
+    final service = _Staff();
+    final copy = DirectOrderCopy('en');
+    await _pump(tester, service);
+    expect(service.lastStates, ['customer_pending', 'customer_paid']);
+    await tester.tap(find.widgetWithText(ChoiceChip, copy.all).last);
+    await tester.pumpAndSettle();
+    expect(service.lastStates, isNull);
+    await tester.tap(find.byKey(const Key('direct_staff_advanced_statuses')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, copy.exceptionOrders));
+    await tester.pumpAndSettle();
+    expect(service.lastStates, ['customer_exception']);
+  });
+
   testWidgets(
     'recipient policy books after cooking and holds handoff until packed',
     (tester) async {

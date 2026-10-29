@@ -81,6 +81,115 @@ class _DirectOrderStorefrontScreenState
   Timer? _cartSaveTimer;
   Future<void> _cartWrite = Future.value();
   bool _draftSubmitted = false;
+  Map<String, dynamic>? _amendment;
+  final _existingQuantities = <String, int>{};
+  List<Map<String, dynamic>> get _existingLines =>
+      ((_amendment?['items'] as List?) ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
+  Future<void> _beginAmendment() async {
+    final status = _status, session = _session;
+    if (status == null || session == null || _submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final context = await widget.service.amendmentContext(
+        session: session,
+        requestId: status.requestId,
+      );
+      if (!mounted) return;
+      _cartSaveTimer?.cancel();
+      setState(() {
+        _amendment = context;
+        _existingQuantities.clear();
+        for (final row in _existingLines) {
+          _existingQuantities[row['id'] as String] = (row['quantity'] as num)
+              .toInt();
+        }
+        _cart.clear();
+        _cartOptionKeys.clear();
+        _itemNotes.clear();
+        _comboDrinkChoices.clear();
+        _view = _CustomerView.menu;
+      });
+      setState(() => _submitting = false);
+      await _showCart();
+    } catch (error) {
+      _showError(error);
+      await _refreshStatus();
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _submitAmendment() async {
+    final amendment = _amendment, session = _session;
+    if (amendment == null || session == null || _submitting) return;
+    final confirmed = await showDirectOrderDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(_copy.submitChanges),
+        content: Text(_copy.amendmentNotice),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(_copy.close),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(_copy.submitChanges),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _submitting = true);
+    try {
+      await widget.service.amend(
+        session: session,
+        requestId: amendment['request_id'] as String,
+        token: amendment['token'] as String,
+        payload: {
+          'existing': [
+            for (final row in _existingLines)
+              {
+                'id': row['id'],
+                'quantity': _existingQuantities[row['id']] ?? row['quantity'],
+              },
+          ],
+          'additions': [
+            for (final entry in _cart.entries)
+              if (entry.value > 0)
+                {
+                  'menu_item_id': menuChoiceBaseId(entry.key),
+                  'quantity': entry.value,
+                  'note': _itemNotes[entry.key],
+                  if (_cartOptionKeys.containsKey(entry.key))
+                    'menu_option_key': _cartOptionKeys[entry.key],
+                  if (_comboDrinkChoices.containsKey(entry.key))
+                    'combo_drink_choices': _comboDrinkChoices[entry.key],
+                },
+          ],
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _amendment = null;
+        _existingQuantities.clear();
+        _cart.clear();
+        _cartOptionKeys.clear();
+        _itemNotes.clear();
+        _comboDrinkChoices.clear();
+        _view = _CustomerView.status;
+      });
+      await _refreshStatus();
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   final _cart = <String, int>{};
   final _itemNotes = <String, String>{};
   final _cartOptionKeys = <String, String>{};
@@ -629,12 +738,14 @@ class _DirectOrderStorefrontScreenState
   }
 
   void _scheduleCartSave() {
+    if (_amendment != null) return;
     if (_loading || _draftSubmitted) return;
     _cartSaveTimer?.cancel();
     _cartSaveTimer = Timer(const Duration(milliseconds: 250), _persistCart);
   }
 
   void _persistCart() {
+    if (_amendment != null) return;
     if (_loading || _draftSubmitted) return;
     final slug = widget.slug;
     final draft = DirectOrderCartDraft(
@@ -727,12 +838,22 @@ class _DirectOrderStorefrontScreenState
     return base == null ||
         !menuChoiceKeyMatches(_cartOptionKeys[id], base.menuOptionKey);
   });
-  double get _cartSubtotal => _cartMenuItems.fold(
-    0,
-    (sum, item) => sum + item.price * (_cart[item.id] ?? 0),
-  );
+  double get _cartSubtotal =>
+      _existingLines.fold<double>(
+        0,
+        (sum, row) =>
+            sum +
+            (row['unit_price'] as num).toDouble() *
+                (_existingQuantities[row['id']] ?? 0),
+      ) +
+      _cartMenuItems.fold(
+        0,
+        (sum, item) => sum + item.price * (_cart[item.id] ?? 0),
+      );
 
-  int get _cartCount => _cart.values.fold(0, (sum, value) => sum + value);
+  int get _cartCount =>
+      _cart.values.fold(0, (sum, value) => sum + value) +
+      _existingQuantities.values.fold(0, (sum, value) => sum + value);
 
   Future<void> _editItemRequest(DirectOrderMenuItem item) async {
     var draft = _itemNotes[item.id] ?? '';
@@ -833,9 +954,59 @@ class _DirectOrderStorefrontScreenState
                   Expanded(
                     child: ListView.separated(
                       padding: const EdgeInsets.all(16),
-                      itemCount: items.length + unavailable.length,
+                      itemCount:
+                          items.length +
+                          unavailable.length +
+                          (_amendment == null ? 0 : 1),
                       separatorBuilder: (_, __) => const Divider(height: 24),
                       itemBuilder: (context, index) {
+                        if (_amendment != null && index == 0) {
+                          return Column(
+                            children: [
+                              Text(_copy.amendmentNotice),
+                              for (final row in _existingLines)
+                                ListTile(
+                                  key: Key('direct_existing_${row['id']}'),
+                                  title: Text(
+                                    row['name_$_languageCode'] as String? ??
+                                        row['name_vi'] as String? ??
+                                        '',
+                                  ),
+                                  subtitle: Text(
+                                    '${_money.format((row['unit_price'] as num).toDouble())} × ${_existingQuantities[row['id']]}',
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.remove),
+                                        onPressed: () => refreshSheet(() {
+                                          final id = row['id'] as String;
+                                          _existingQuantities[id] =
+                                              ((_existingQuantities[id] ?? 0) -
+                                                      1)
+                                                  .clamp(0, 50);
+                                          setState(() {});
+                                        }),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.add),
+                                        onPressed: () => refreshSheet(() {
+                                          final id = row['id'] as String;
+                                          _existingQuantities[id] =
+                                              ((_existingQuantities[id] ?? 0) +
+                                                      1)
+                                                  .clamp(0, 50);
+                                          setState(() {});
+                                        }),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          );
+                        }
+                        if (_amendment != null) index -= 1;
                         if (index >= items.length) {
                           final id = unavailable[index - items.length];
                           return ListTile(
@@ -967,12 +1138,16 @@ class _DirectOrderStorefrontScreenState
                         const SizedBox(height: 16),
                         FilledButton.icon(
                           key: const Key('direct_cart_address'),
-                          onPressed: items.isEmpty
+                          onPressed: items.isEmpty && _amendment == null
                               ? null
                               : () => Navigator.pop(context, true),
                           icon: const Icon(Icons.arrow_forward_rounded),
                           label: Text(
-                            _isPickup ? _copy.contact : _copy.address,
+                            _amendment != null
+                                ? _copy.submitChanges
+                                : _isPickup
+                                ? _copy.contact
+                                : _copy.address,
                           ),
                         ),
                       ],
@@ -986,6 +1161,10 @@ class _DirectOrderStorefrontScreenState
       ),
     );
     if (mounted && openAddress == true) {
+      if (_amendment != null) {
+        await _submitAmendment();
+        return;
+      }
       await _selectView(_CustomerView.address);
     }
   }
@@ -1005,6 +1184,7 @@ class _DirectOrderStorefrontScreenState
   }
 
   Future<void> _submit() async {
+    if (_amendment != null) return _submitAmendment();
     if (_cart.isEmpty) {
       _snack(_copy.cartEmpty);
       setState(() => _view = _CustomerView.menu);
@@ -1377,6 +1557,14 @@ class _DirectOrderStorefrontScreenState
   }
 
   Future<void> _selectOrder(String requestId) async {
+    if (_amendment != null) {
+      _amendment = null;
+      _existingQuantities.clear();
+      _cart.clear();
+      _cartOptionKeys.clear();
+      _itemNotes.clear();
+      _comboDrinkChoices.clear();
+    }
     final session = _session;
     if (session == null) return;
     final revision = ++_statusMutationRevision;
@@ -1464,7 +1652,7 @@ class _DirectOrderStorefrontScreenState
                   child: FilledButton.icon(
                     onPressed: () => Navigator.pop(context, ''),
                     icon: const Icon(Icons.add_shopping_cart_outlined),
-                    label: Text(_copy.addOrder),
+                    label: Text(_copy.startNewOrder),
                   ),
                 ),
               ),
@@ -2007,6 +2195,8 @@ class _DirectOrderStorefrontScreenState
   }
 
   Future<void> _startNewOrder() async {
+    _amendment = null;
+    _existingQuantities.clear();
     if (_session?.orderScoped == true) {
       _session = await widget.service.ensureSession(
         slug: widget.slug,
@@ -2313,7 +2503,7 @@ class _DirectOrderStorefrontScreenState
                 ),
               ],
               selected: {_fulfillmentType},
-              onSelectionChanged: _submitting
+              onSelectionChanged: _submitting || _amendment != null
                   ? null
                   : (values) {
                       setState(() => _fulfillmentType = values.single);
@@ -2365,7 +2555,7 @@ class _DirectOrderStorefrontScreenState
             ],
           ],
         ),
-        if (_cart.isNotEmpty)
+        if (_cart.isNotEmpty || _amendment != null)
           Positioned(
             left: 12,
             right: 12,
@@ -2374,9 +2564,15 @@ class _DirectOrderStorefrontScreenState
               leading:
                   '${_isPickup ? _copy.pickup : _copy.delivery} · ${_copy.viewCart} · $_cartCount',
               amount: _money.format(_cartSubtotal),
-              label: _isPickup ? _copy.contact : _copy.address,
+              label: _amendment != null
+                  ? _copy.submitChanges
+                  : _isPickup
+                  ? _copy.contact
+                  : _copy.address,
               onViewCart: _showCart,
-              onPressed: () => _selectView(_CustomerView.address),
+              onPressed: _amendment != null
+                  ? _showCart
+                  : () => _selectView(_CustomerView.address),
             ),
           ),
       ],
@@ -3408,11 +3604,23 @@ class _DirectOrderStorefrontScreenState
             Wrap(
               spacing: 8,
               children: [
-                TextButton.icon(
-                  onPressed: _startNewOrder,
-                  icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
-                  label: Text(_copy.addOrder),
-                ),
+                if (const {'awaiting_quote', 'quoted'}.contains(status.state))
+                  TextButton.icon(
+                    key: const Key('direct_amend_order'),
+                    onPressed: _submitting ? null : _beginAmendment,
+                    icon: const Icon(Icons.edit_note),
+                    label: Text(_copy.editOrder),
+                  ),
+                if (status.isTerminal &&
+                    !_orders.any((order) => !order.isTerminal))
+                  TextButton.icon(
+                    onPressed: _startNewOrder,
+                    icon: const Icon(
+                      Icons.add_shopping_cart_outlined,
+                      size: 18,
+                    ),
+                    label: Text(_copy.startNewOrder),
+                  ),
                 TextButton.icon(
                   onPressed: _showOrders,
                   icon: const Icon(Icons.receipt_long_outlined, size: 18),
@@ -4415,6 +4623,8 @@ class _DirectOrderStorefrontScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (message.metadata['voided_by_amendment'] == true)
+                  Text(_copy.invalidatedGuide),
                 if (message.metadata['request_text'] is String) ...[
                   Text(
                     '↳ ${message.metadata['request_text']}',
@@ -4456,7 +4666,10 @@ class _DirectOrderStorefrontScreenState
     );
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: message.hasAttachment && _session != null
+      child:
+          message.hasAttachment &&
+              _session != null &&
+              message.metadata['voided_by_amendment'] != true
           ? InkWell(
               onTap: () => openDirectOrderAttachment(
                 context,

@@ -965,6 +965,9 @@ class DirectOrderStatus {
   final DirectOrderCustomerDetails? customer;
   final Map<String, dynamic> support;
   final List<DirectOrderRequirement> requirements;
+  bool get isTerminal =>
+      const {'completed', 'cancelled'}.contains(fulfillmentStatus) ||
+      const {'rejected', 'cancelled', 'expired'}.contains(state);
   bool get hasDriverHandoff =>
       delivery?.provider != null ||
       delivery?.trackingUrl != null ||

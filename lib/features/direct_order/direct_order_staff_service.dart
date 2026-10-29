@@ -182,7 +182,7 @@ class DirectOrderStaffService {
   }) async {
     final raw = await supabase
         .rpc(
-          'direct_order_staff_list_v5',
+          'direct_order_staff_list_v6',
           params: {
             'p_store_id': storeId,
             'p_states': states,
@@ -201,7 +201,7 @@ class DirectOrderStaffService {
     return _map(
       await supabase
           .rpc(
-            'direct_order_staff_detail_v8',
+            'direct_order_staff_detail_v9',
             params: {'p_store_id': storeId, 'p_request_id': requestId},
           )
           .timeout(const Duration(seconds: 10)),
@@ -253,12 +253,14 @@ class DirectOrderStaffService {
     required double deliveryFee,
     required DirectOrderDeliveryPaymentMode deliveryPaymentMode,
     String? note,
+    String? expectedToken,
   }) async {
     return _map(
       await supabase.rpc(
-        'direct_order_staff_quote_with_payment_mode',
+        'direct_order_staff_quote_current',
         params: {
           'p_store_id': storeId,
+          'p_expected_token': expectedToken,
           'p_request_id': requestId,
           'p_delivery_fee_total': deliveryFee,
           'p_cashier_note': note,

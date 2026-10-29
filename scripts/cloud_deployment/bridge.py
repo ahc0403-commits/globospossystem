@@ -44,6 +44,12 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
 
 
+def wire_request(value):
+    # ASCII framing gives Python and JavaScript identical character offsets,
+    # including source files containing supplementary Unicode characters.
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False)
+
+
 def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
@@ -102,7 +108,7 @@ def session(directory):
     require(value['project'] == PROJECT and value['sourceSha'] == source_sha(),
             'Cloud source SHA or pinned project changed')
     require(value['schemaVersion'] == 1, 'Unsupported cloud protocol')
-    if value['phase'] in {'db-only', 'web-only'}:
+    if value['phase'] in {'db-only', 'web-only', 'coordinated'}:
         require(not subprocess.check_output(
             ['git', 'status', '--porcelain', '--untracked-files=all'], cwd=ROOT, text=True).strip(),
             'Release source changed after verification')
@@ -177,8 +183,12 @@ def request(directory, operation, arguments, timeout=180):
         require(operation in {'project', 'query', 'migrations', 'functions', 'function'},
                 'Diagnostic execution cannot apply a migration or deploy a function')
     if operation in {'apply', 'deploy-function'} and manifest['phase'] != 'fixture':
-        require(operation == 'apply' and manifest['phase'] == 'db-only',
-                'Mutation is outside the reviewed release phase')
+        if manifest['phase'] == 'coordinated':
+            from release import authorize_mutation
+            authorize_mutation(directory, manifest, operation, arguments)
+        else:
+            require(operation == 'apply' and manifest['phase'] == 'db-only',
+                    'Mutation is outside the reviewed release phase')
     if operation == 'query':
         require(not re.search(r'\b(decrypted_secret|encrypted_password|refresh_token|access_token)\b',
                               arguments['query'], re.I), 'Credential extraction is forbidden')
@@ -263,18 +273,44 @@ def reply(directory, request_id, raw):
     return {'requestId': request_id, 'ok': result['ok']}
 
 
+def request_chunk(directory, request_id, offset, length):
+    directory, manifest = session(directory)
+    require(re.fullmatch(r'[a-f0-9]{32}', request_id) and offset >= 0
+            and 0 < length <= 12000, 'Invalid request chunk bounds')
+    require((directory / (request_id + '.claimed.json')).is_file(), 'Request has not been claimed')
+    path = directory / (request_id + '.request.json')
+    require(not path.is_symlink(), 'Invalid request file')
+    item = decode(path.read_text())
+    original = dict(item); expected = original.pop('requestHash')
+    require(item['runId'] == manifest['runId'] and item['sourceSha'] == manifest['sourceSha']
+            and item['project'] == PROJECT and digest(canonical(original)) == expected,
+            'Chunked request changed')
+    text = wire_request(item)
+    require(offset < len(text), 'Request chunk offset exceeds length')
+    return {'chunk': text[offset:offset + length], 'length': len(text), 'requestHash': expected}
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['init', 'next', 'reply', 'close', 'project', 'query', 'migrations'])
+    parser.add_argument('command', choices=['init', 'next', 'read-request', 'reply', 'close', 'project', 'query', 'migrations'])
     parser.add_argument('--directory', required=True)
     parser.add_argument('--phase', default='production')
     parser.add_argument('--request-id')
+    parser.add_argument('--metadata-only', action='store_true')
+    parser.add_argument('--offset', type=int, default=0)
+    parser.add_argument('--length', type=int, default=12000)
     parser.add_argument('--file')
     args = parser.parse_args()
     if args.command == 'init':
         result = initialize(args.directory, args.phase)
     elif args.command == 'next':
         result = next_request(args.directory)
+        if args.metadata_only and 'request' in result:
+            item = result['request']
+            result = {'requestDescriptor': {'requestId': item['requestId'],
+                      'length': len(wire_request(item)), 'requestHash': item['requestHash']}}
+    elif args.command == 'read-request':
+        result = request_chunk(args.directory, args.request_id, args.offset, args.length)
     elif args.command == 'reply':
         result = reply(args.directory, args.request_id, decode(sys.stdin.read()))
     elif args.command == 'close':

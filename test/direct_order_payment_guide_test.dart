@@ -126,6 +126,7 @@ class _Staff extends DirectOrderStaffService {
     required double deliveryFee,
     required DirectOrderDeliveryPaymentMode deliveryPaymentMode,
     String? note,
+    String? expectedToken,
   }) async {
     quoteCalls++;
     expect(deliveryFee, 0);

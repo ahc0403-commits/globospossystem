@@ -547,6 +547,8 @@ Deno.test("action registry is exact and dispatches all supported boundaries", as
       "submit",
       "submit_v2",
       "submit_v3",
+      "amendment_context",
+      "amend",
       "status_v8",
       "status_v9",
       "status_v10",
@@ -721,7 +723,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    209,
+    215,
     "registered SQL error count",
   );
   assertEquals(
@@ -745,6 +747,10 @@ Deno.test("SQL errors use an explicit registry and unknown errors are sanitized"
       ["DIRECT_ORDER_LINK_RETRY_CHANGED", 409],
       ["DIRECT_ORDER_PAYMENT_DOCUMENT_NOT_ALLOWED", 409],
       ["DIRECT_ORDER_DOCUMENT_TOO_LARGE", 400],
+      ["DIRECT_ORDER_AMENDMENT_STALE", 409],
+      ["DIRECT_ORDER_AMENDMENT_NOT_ALLOWED", 409],
+      ["DIRECT_ORDER_AMENDMENT_RETRY_CHANGED", 409],
+      ["DIRECT_ORDER_AMENDMENT_INPUT_INVALID", 400],
     ] as const
   ) {
     const result = normalizeRpcError(code);
@@ -1067,6 +1073,8 @@ Deno.test("order links exchange credentials internally and reject broader access
   for (
     const [action, body] of [
       ["status_v3", { ...input, request_id: other }],
+      ["amend", { ...input, request_id: other }],
+      ["amendment_context", { ...input, request_id: other }],
       ["submit_v3", input],
       ["staff_attachment_url", input],
       ["issue_order_access", input],
@@ -1082,7 +1090,14 @@ Deno.test("order links exchange credentials internally and reject broader access
     }
   }
   assertEquals(calls.length, 2, "forbidden actions never call backend");
-  for (const action of ["status_v9", "decide_requirement"]) {
+  for (
+    const action of [
+      "status_v9",
+      "decide_requirement",
+      "amend",
+      "amendment_context",
+    ]
+  ) {
     const scoped = await resolveOrderScopedRequest(client, action, input);
     assertEquals(scoped.requestId, order, "new actions retain order scope");
   }

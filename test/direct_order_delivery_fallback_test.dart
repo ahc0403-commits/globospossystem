@@ -125,6 +125,42 @@ class _Service extends DirectOrderService {
   }
 }
 
+class _AmendmentService extends _Service {
+  _AmendmentService() {
+    state = 'awaiting_quote';
+  }
+  Map<String, dynamic>? submitted;
+  @override
+  Future<Map<String, dynamic>> amendmentContext({
+    required DirectOrderSession session,
+    required String requestId,
+  }) async => {
+    'request_id': requestId,
+    'token': 'fixture-token',
+    'items': [
+      {
+        'id': 'saved-line',
+        'quantity': 1,
+        'unit_price': 100000,
+        'name_en': 'Saved item',
+        'name_vi': 'Saved item',
+      },
+    ],
+  };
+  @override
+  Future<Map<String, dynamic>> amend({
+    required DirectOrderSession session,
+    required String requestId,
+    required String token,
+    required Map<String, dynamic> payload,
+  }) async {
+    expect(requestId, 'same-order');
+    expect(token, 'fixture-token');
+    submitted = payload;
+    return {'request_id': requestId, 'state': 'awaiting_quote'};
+  }
+}
+
 Widget _app(_Service service, String language) => ProviderScope(
   child: MaterialApp(
     locale: Locale(language),
@@ -279,6 +315,38 @@ void main() {
 
   for (final language in ['ko', 'vi', 'en']) {
     testWidgets(
+      'existing quantities change only after explicit amendment submission',
+      (tester) async {
+        final service = _AmendmentService();
+        final copy = DirectOrderCopy('en');
+        await tester.pumpWidget(_app(service, 'en'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('direct_amend_order')));
+        await tester.pumpAndSettle();
+        expect(service.submitted, isNull);
+        final row = find.byKey(const Key('direct_existing_saved-line'));
+        await tester.tap(
+          find.descendant(of: row, matching: find.byIcon(Icons.add)),
+        );
+        await tester.pumpAndSettle();
+        expect(service.submitted, isNull);
+        await tester.tap(find.byKey(const Key('direct_cart_address')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, copy.submitChanges));
+        await tester.pumpAndSettle();
+        expect(service.submitted?['existing'], [
+          {'id': 'saved-line', 'quantity': 2},
+        ]);
+        expect(service.submitted?['additions'], isEmpty);
+        expect(
+          find.byKey(const Key('direct_order_status_title')),
+          findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets(
       'pickup consent preserves the order and shows packing and refund in $language',
       (tester) async {
         final service = _Service();
@@ -382,14 +450,17 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets(
-    'CLOSED blocks an existing customer adding another order and lets them return',
+    'CLOSED blocks a new order and lets the customer return to the existing order',
     (tester) async {
       final service = _Service();
       final copy = DirectOrderCopy('en');
       await tester.pumpWidget(_app(service, 'en'));
       await tester.pumpAndSettle();
       service.paused = true;
-      final add = find.text(copy.addOrder);
+      expect(find.text(copy.addOrder), findsNothing);
+      await tester.tap(find.text(copy.myOrders));
+      await tester.pumpAndSettle();
+      final add = find.text(copy.startNewOrder);
       await tester.ensureVisible(add);
       await tester.pumpAndSettle();
       await tester.tap(add);

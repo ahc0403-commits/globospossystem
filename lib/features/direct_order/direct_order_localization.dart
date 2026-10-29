@@ -49,6 +49,7 @@ String localizedDirectOrderMessage({
     'DIRECT_ORDER_PICKUP_READY' => copy.pickupReadyNotice,
     'DIRECT_ORDER_REJECTED_BY_STORE' => copy.rejectedByStore,
     'DIRECT_ORDER_CANCELLED_BY_CUSTOMER' => copy.cancelled,
+    'DIRECT_ORDER_AMENDED' => copy.orderAmended,
     null || '' => copy.systemUpdate,
     _ => body,
   };

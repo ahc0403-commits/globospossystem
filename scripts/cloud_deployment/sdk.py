@@ -51,10 +51,14 @@ def initialize(directory, evidence):
     trust = gate.proxy_trust(os.environ.get('CODEX_PROXY_CERT'), '/etc/ssl/certs/ca-certificates.crt')
     setup = ''
     if trust:
+        command += ['--mount', 'type=bind,src=' + trust['bundle'] + ',dst=/run/pos-host-ca.pem,readonly']
         command += ['--mount', 'type=bind,src=' + trust['certificate'] +
                     ',dst=/usr/local/share/ca-certificates/pos-platform-proxy.crt,readonly']
         setup = 'update-ca-certificates >/dev/null; '
         command += ['--env', 'DENO_TLS_CA_STORE=system']
+        for variable in ('SSL_CERT_FILE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO',
+                         'REQUESTS_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS'):
+            command += ['--env', variable + '=/run/pos-host-ca.pem']
     command += ['--entrypoint', '/bin/bash', image, '-c',
                 'set -e; ' + setup + 'touch /tmp/pos-cloud-tools-ready; exec sleep infinity']
     identifier = checked(command)

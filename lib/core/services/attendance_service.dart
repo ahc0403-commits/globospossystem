@@ -308,7 +308,7 @@ class AttendanceService implements PayrollDataSource {
     if (limit < 1) {
       throw ArgumentError.value(limit, 'limit', 'must be at least 1');
     }
-    final result = await supabase.rpc(
+    final result = await (_client ?? supabase).rpc(
       'get_employee_attendance_logs',
       params: {
         'p_store_id': storeId,
@@ -332,7 +332,7 @@ class AttendanceService implements PayrollDataSource {
     required String reason,
     required String managerPin,
   }) async {
-    final result = await supabase.rpc(
+    final result = await (_client ?? supabase).rpc(
       'admin_record_employee_attendance',
       params: {
         'p_store_id': storeId,

@@ -47,6 +47,16 @@ class DeployerContractTests(unittest.TestCase):
         self.assertNotEqual(failed.returncode, 0)
         self.assertIn('VERCEL_PROJECT_ID is forbidden', failed.stderr)
 
+    def test_coordinated_scope_honors_only_explicit_login_waiver(self):
+        args = '--supabase-backend mcp --cloud-release-plan scripts/cloud_deployment/plans/20261029_attendance_orders.json'
+        good = self.shell('parse_args ' + args + ' --skip-login-smoke; validate_cloud_options')
+        self.assertEqual(good.returncode, 0, good.stderr)
+        for flag in ['--skip-checks', '--skip-auth-check', '--skip-smoke-tests',
+                     '--skip-db', '--skip-build', '--skip-vercel', '--db-only',
+                     '--web-only', '--onboarding-edge-only', '--mode remote']:
+            failed = self.shell('parse_args ' + args + ' --skip-login-smoke ' + flag + '; validate_cloud_options')
+            self.assertNotEqual(failed.returncode, 0, flag)
+
 
 if __name__ == '__main__':
     unittest.main()
