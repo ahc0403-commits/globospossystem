@@ -25,8 +25,9 @@ authenticated rendering of every route.
 3. Apply the same content-width and large-text policy to the shared topbar and
    secondary metric strip. Preserve complete monetary values. Keep wide tables'
    horizontal scrolling local. Expanded workspaces choose their scroll policy
-   from the padded content width and scale their minimum work-area budget with
-   text size, so a growing header cannot consume the work area. Confirmation dialogs retain their result and
+   from the padded available pane width (not an optional form-width cap) and
+   scale their minimum work-area budget with text size, so a growing header
+   cannot consume the work area. Confirmation dialogs retain their result and
    callbacks while growing their action label at large text and scrolling above
    the keyboard.
 4. Render the actual menu-sales, operational-performance and revenue-analysis

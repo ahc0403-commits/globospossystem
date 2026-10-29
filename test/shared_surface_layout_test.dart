@@ -40,6 +40,50 @@ void main() {
       AppFonts.family,
     )..addFont(rootBundle.load(AppFonts.assetPath))).load();
   });
+  testWidgets('capped desktop form keeps its primary action in the viewport', (
+    tester,
+  ) async {
+    setViewport(tester, const Size(1280, 900));
+    var taps = 0;
+    await tester.pumpWidget(
+      localizedSurface(
+        Scaffold(
+          body: ToastResponsiveBody(
+            maxWidth: 720,
+            padding: EdgeInsets.zero,
+            child: Center(
+              child: SizedBox(
+                height: 400,
+                child: Column(
+                  children: [
+                    const Expanded(
+                      child: Text('SAMPLE · centered desktop form'),
+                    ),
+                    SizedBox(
+                      height: 72,
+                      child: FilledButton(
+                        key: const Key('capped_form_primary'),
+                        onPressed: () => taps++,
+                        child: const Text('SAMPLE · primary action'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        'en',
+        1,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final action = find.byKey(const Key('capped_form_primary'));
+    expect(tester.getRect(action).bottom, lessThanOrEqualTo(900));
+    await tester.tap(action);
+    expect(taps, 1);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('tight row keeps default action bounded and operable', (
     tester,
   ) async {
