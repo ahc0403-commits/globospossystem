@@ -248,7 +248,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       );
     }
 
-    Widget compactReportBody() {
+    Widget compactReportBody({required bool wide}) {
       if (reportState.isLoading) {
         return SizedBox(
           height: 320,
@@ -293,6 +293,22 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       }
 
       if (!hasOperationalData) {
+        if (wide) {
+          return SizedBox(
+            height: 620,
+            child: _ReportsEmptyWorkspace(
+              onReloadToday: storeId == null
+                  ? null
+                  : () {
+                      final now = TimeUtils.toVietnam(DateTime.now());
+                      applyQuickRange(
+                        DateTime(now.year, now.month, now.day),
+                        now,
+                      );
+                    },
+            ),
+          );
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -324,32 +340,56 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         );
       }
 
+      final hourly = PosDataPanel(
+        title: l10n.reportsHourlyOrderFocus,
+        subtitle: l10n.reportsHourlyOrderFocusSubtitle,
+        child: _ReportsHourlyOverview(summary: summary, currency: currency),
+      );
+      final issues = ReportsIssuePanel(
+        summary: summary,
+        startDate: reportState.startDate,
+        endDate: reportState.endDate,
+        onMissingProofPressed: () => _showReportIssueDetails(
+          summary: summary,
+          kind: _ReportIssueKind.missingProof,
+          startDate: reportState.startDate,
+          endDate: reportState.endDate,
+        ),
+        onEinvoicePressed: () => _showReportIssueDetails(
+          summary: summary,
+          kind: _ReportIssueKind.einvoice,
+          startDate: reportState.startDate,
+          endDate: reportState.endDate,
+        ),
+      );
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PosDataPanel(
-            title: l10n.reportsHourlyOrderFocus,
-            subtitle: l10n.reportsHourlyOrderFocusSubtitle,
-            child: _ReportsHourlyOverview(summary: summary, currency: currency),
-          ),
-          const SizedBox(height: 12),
-          ReportsIssuePanel(
-            summary: summary,
-            startDate: reportState.startDate,
-            endDate: reportState.endDate,
-            onMissingProofPressed: () => _showReportIssueDetails(
-              summary: summary,
-              kind: _ReportIssueKind.missingProof,
-              startDate: reportState.startDate,
-              endDate: reportState.endDate,
-            ),
-            onEinvoicePressed: () => _showReportIssueDetails(
-              summary: summary,
-              kind: _ReportIssueKind.einvoice,
-              startDate: reportState.startDate,
-              endDate: reportState.endDate,
-            ),
-          ),
+          if (wide)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 7, child: hourly),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      issues,
+                      const SizedBox(height: 12),
+                      quickRangesCard(),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            hourly,
+            const SizedBox(height: 12),
+            issues,
+          ],
           const SizedBox(height: 12),
           PosDataPanel(
             title: l10n.reportsPaymentMethod,
@@ -360,405 +400,98 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               scrollable: false,
             ),
           ),
-          const SizedBox(height: 12),
-          quickRangesCard(),
+          if (!wide) ...[const SizedBox(height: 12), quickRangesCard()],
           const SizedBox(height: 12),
           PosDataPanel(
             title: l10n.reportsDailySalesTitle,
             subtitle: l10n.reportsDailySalesSubtitle,
             child: _DailyTable(summary: summary, currency: currency),
           ),
+          if (wide && storeId != null) ...[
+            const SizedBox(height: 12),
+            DailyClosingSection(storeId: storeId),
+          ],
         ],
       );
     }
 
-    final pageLayout = PosLayoutSpec.fromMediaQuery(context);
-    if (pageLayout.prefersSingleColumn) {
-      return Scaffold(
-        key: const Key('reports_root'),
-        backgroundColor: AppColors.surface0,
-        body: ToastResponsiveScrollBody(
-          key: const Key('reports_compact_scroll'),
-          maxWidth: 1460,
-          padding: pageLayout.densePagePadding,
-          children: [
-            if (canViewBmHistory) ...[
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  key: const Key('bm_menu_exception_history_entry'),
-                  onPressed: () => _openBmMenuExceptionHistory(
-                    storeId: storeId,
-                    reportState: reportState,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pageLayout = PosLayoutSpec.from(context, constraints);
+        final stacked = pageLayout.prefersSingleColumn;
+        final header = stacked
+            ? compactHeader
+            : _buildReportsCommandHeader(
+                storeId: storeId,
+                reportState: reportState,
+                reportNotifier: reportNotifier,
+                onApplyDateRange: applyReportRange,
+                summary: summary,
+                currency: currency,
+                dateFormat: dateFormat,
+                menuSalesAnalytics: menuSalesAnalytics,
+              );
+        final analyses = storeId == null || menuSalesParams == null
+            ? null
+            : ReportAnalysisLaunchers(
+                storeId: storeId,
+                startDate: reportState.startDate,
+                endDate: reportState.endDate,
+                menuSalesParams: menuSalesParams,
+                storeName: selectedStoreName,
+                forecastBusinessType: forecastBusinessType,
+                showRevenueForecast: canAccessRevenueForecast,
+                canSaveForecastProfile: canAccessRevenueForecast,
+              );
+        return Scaffold(
+          key: const Key('reports_root'),
+          backgroundColor: AppColors.surface0,
+          body: ToastResponsiveScrollBody(
+            key: const Key('reports_compact_scroll'),
+            maxWidth: 1460,
+            padding: pageLayout.densePagePadding,
+            children: [
+              if (stacked && canViewBmHistory) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    key: const Key('bm_menu_exception_history_entry'),
+                    onPressed: () => _openBmMenuExceptionHistory(
+                      storeId: storeId,
+                      reportState: reportState,
+                    ),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                    icon: const Icon(Icons.manage_search_outlined, size: 20),
+                    label: Text(_bmMenuHistoryEntryLabel(context)),
                   ),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                  ),
-                  icon: const Icon(Icons.manage_search_outlined, size: 20),
-                  label: Text(_bmMenuHistoryEntryLabel(context)),
                 ),
-              ),
+                const SizedBox(height: 8),
+              ],
+              if (stacked && analyses != null) ...[
+                analyses,
+                const SizedBox(height: 8),
+              ],
+              header,
               const SizedBox(height: 8),
+              if (!stacked && analyses != null) ...[
+                analyses,
+                const SizedBox(height: 8),
+              ],
+              if (!stacked && !hasOperationalData && storeId != null) ...[
+                DailyClosingSection(storeId: storeId),
+                const SizedBox(height: 8),
+              ],
+              compactReportBody(wide: !stacked),
+              if (stacked && storeId != null) ...[
+                const SizedBox(height: 8),
+                DailyClosingLauncher(storeId: storeId),
+              ],
             ],
-            if (storeId != null && menuSalesParams != null) ...[
-              ReportAnalysisLaunchers(
-                storeId: storeId,
-                startDate: reportState.startDate,
-                endDate: reportState.endDate,
-                menuSalesParams: menuSalesParams,
-                storeName: selectedStoreName,
-                forecastBusinessType: forecastBusinessType,
-                showRevenueForecast: canAccessRevenueForecast,
-                canSaveForecastProfile: canAccessRevenueForecast,
-              ),
-              const SizedBox(height: 8),
-            ],
-            compactHeader,
-            const SizedBox(height: 8),
-            compactReportBody(),
-            if (storeId != null) ...[
-              const SizedBox(height: 8),
-              DailyClosingLauncher(storeId: storeId),
-            ],
-          ],
-        ),
-      );
-    }
-
-    return Scaffold(
-      key: const Key('reports_root'),
-      backgroundColor: AppColors.surface0,
-      body: ToastResponsiveBody(
-        maxWidth: 1460,
-        padding: pageLayout.densePagePadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildReportsCommandHeader(
-              storeId: storeId,
-              reportState: reportState,
-              reportNotifier: reportNotifier,
-              onApplyDateRange: applyReportRange,
-              summary: summary,
-              currency: currency,
-              dateFormat: dateFormat,
-              menuSalesAnalytics: menuSalesAnalytics,
-            ),
-            const SizedBox(height: 8),
-            if (storeId != null && menuSalesParams != null) ...[
-              ReportAnalysisLaunchers(
-                storeId: storeId,
-                startDate: reportState.startDate,
-                endDate: reportState.endDate,
-                menuSalesParams: menuSalesParams,
-                storeName: selectedStoreName,
-                forecastBusinessType: forecastBusinessType,
-                showRevenueForecast: canAccessRevenueForecast,
-                canSaveForecastProfile: canAccessRevenueForecast,
-              ),
-              const SizedBox(height: 8),
-            ],
-            if (!hasOperationalData && storeId != null) ...[
-              DailyClosingSection(storeId: storeId),
-              const SizedBox(height: 8),
-            ],
-            Expanded(
-              child: reportState.isLoading
-                  ? ToastOperationalLoadingState(
-                      label: PosLoadingCopy.loadingReport(context.l10n),
-                    )
-                  : reportState.error != null
-                  ? ListView(
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      children: [
-                        SizedBox(
-                          height: 240,
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  reportState.error!,
-                                  style: AppFonts.system(
-                                    color: AppColors.statusCancelled,
-                                    fontSize: 14,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 12),
-                                ElevatedButton(
-                                  onPressed: storeId == null
-                                      ? null
-                                      : () =>
-                                            reportNotifier.loadReport(storeId),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.amber500,
-                                    foregroundColor: AppColors.surface0,
-                                  ),
-                                  child: Text(l10n.retry),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : (hasOperationalData
-                        ? LayoutBuilder(
-                            builder: (context, reportConstraints) {
-                              final operationalReportHeight =
-                                  reportConstraints.maxWidth < 1080
-                                  ? 520.0 +
-                                        12.0 +
-                                        520.0 +
-                                        12.0 +
-                                        320.0 +
-                                        12.0 +
-                                        240.0 +
-                                        260.0
-                                  : 520.0 + 12.0 + 320.0 + 12.0 + 240.0 + 260.0;
-                              final compactReportHeight =
-                                  operationalReportHeight;
-                              final content = Column(
-                                children: [
-                                  Expanded(
-                                    child: PosSplitContent(
-                                      primary: PosDataPanel(
-                                        title: l10n.reportsHourlyOrderFocus,
-                                        subtitle: l10n
-                                            .reportsHourlyOrderFocusSubtitle,
-                                        child: _ReportsHourlyOverview(
-                                          summary: summary,
-                                          currency: currency,
-                                        ),
-                                      ),
-                                      secondary: Column(
-                                        children: [
-                                          Expanded(
-                                            child: ReportsIssuePanel(
-                                              summary: summary,
-                                              startDate: reportState.startDate,
-                                              endDate: reportState.endDate,
-                                              onMissingProofPressed: () =>
-                                                  _showReportIssueDetails(
-                                                    summary: summary,
-                                                    kind: _ReportIssueKind
-                                                        .missingProof,
-                                                    startDate:
-                                                        reportState.startDate,
-                                                    endDate:
-                                                        reportState.endDate,
-                                                  ),
-                                              onEinvoicePressed: () =>
-                                                  _showReportIssueDetails(
-                                                    summary: summary,
-                                                    kind: _ReportIssueKind
-                                                        .einvoice,
-                                                    startDate:
-                                                        reportState.startDate,
-                                                    endDate:
-                                                        reportState.endDate,
-                                                  ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          PosActionCard(
-                                            title: l10n.reportsQuickRanges,
-                                            subtitle:
-                                                l10n.reportsQuickRangesSubtitle,
-                                            action: storeId == null
-                                                ? null
-                                                : PosSecondaryButton(
-                                                    label: l10n.refresh,
-                                                    icon: Icons.refresh_rounded,
-                                                    onPressed: refreshReports,
-                                                  ),
-                                            child: Wrap(
-                                              spacing: 8,
-                                              runSpacing: 8,
-                                              children: [
-                                                _quickRangeChip(
-                                                  l10n.today,
-                                                  onTap: storeId == null
-                                                      ? null
-                                                      : () {
-                                                          final now =
-                                                              TimeUtils.toVietnam(
-                                                                DateTime.now(),
-                                                              );
-                                                          final start =
-                                                              DateTime(
-                                                                now.year,
-                                                                now.month,
-                                                                now.day,
-                                                              );
-                                                          setState(() {
-                                                            _pendingStart =
-                                                                start;
-                                                            _pendingEnd = now;
-                                                          });
-                                                          applyReportRange(
-                                                            start,
-                                                            now,
-                                                          );
-                                                        },
-                                                ),
-                                                _quickRangeChip(
-                                                  l10n.thisWeek,
-                                                  onTap: storeId == null
-                                                      ? null
-                                                      : () {
-                                                          final now =
-                                                              TimeUtils.toVietnam(
-                                                                DateTime.now(),
-                                                              );
-                                                          final weekdayOffset =
-                                                              now.weekday - 1;
-                                                          final start =
-                                                              DateTime(
-                                                                now.year,
-                                                                now.month,
-                                                                now.day,
-                                                              ).subtract(
-                                                                Duration(
-                                                                  days:
-                                                                      weekdayOffset,
-                                                                ),
-                                                              );
-                                                          setState(() {
-                                                            _pendingStart =
-                                                                start;
-                                                            _pendingEnd = now;
-                                                          });
-                                                          applyReportRange(
-                                                            start,
-                                                            now,
-                                                          );
-                                                        },
-                                                ),
-                                                _quickRangeChip(
-                                                  l10n.thisMonth,
-                                                  onTap: storeId == null
-                                                      ? null
-                                                      : () {
-                                                          final now =
-                                                              TimeUtils.toVietnam(
-                                                                DateTime.now(),
-                                                              );
-                                                          final start =
-                                                              DateTime(
-                                                                now.year,
-                                                                now.month,
-                                                                1,
-                                                              );
-                                                          setState(() {
-                                                            _pendingStart =
-                                                                start;
-                                                            _pendingEnd = now;
-                                                          });
-                                                          applyReportRange(
-                                                            start,
-                                                            now,
-                                                          );
-                                                        },
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      spacing: 12,
-                                      compactSecondaryHeight: 520,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  SizedBox(
-                                    height: 320,
-                                    child: PosDataPanel(
-                                      title: context.l10n.reportsPaymentMethod,
-                                      subtitle: context
-                                          .l10n
-                                          .reportsNoPaymentMethodDataSubtitle,
-                                      child: _ReportsBreakdownPanel(
-                                        summary: summary,
-                                        currency: currency,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  SizedBox(
-                                    height: 240,
-                                    child: PosDataPanel(
-                                      title:
-                                          context.l10n.reportsDailySalesTitle,
-                                      subtitle: context
-                                          .l10n
-                                          .reportsDailySalesSubtitle,
-                                      child: _DailyTable(
-                                        summary: summary,
-                                        currency: currency,
-                                      ),
-                                    ),
-                                  ),
-                                  if (storeId != null) ...[
-                                    const SizedBox(height: 12),
-                                    DailyClosingSection(storeId: storeId),
-                                  ],
-                                ],
-                              );
-
-                              if (reportConstraints.maxWidth < 1080 ||
-                                  reportConstraints.maxHeight <
-                                      compactReportHeight) {
-                                return ListView(
-                                  key: const Key('reports_compact_scroll'),
-                                  keyboardDismissBehavior:
-                                      ScrollViewKeyboardDismissBehavior.onDrag,
-                                  children: [
-                                    SizedBox(
-                                      height: compactReportHeight,
-                                      child: content,
-                                    ),
-                                  ],
-                                );
-                              }
-
-                              return content;
-                            },
-                          )
-                        : ListView(
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            children: [
-                              SizedBox(
-                                height: 620,
-                                child: _ReportsEmptyWorkspace(
-                                  onReloadToday: storeId == null
-                                      ? null
-                                      : () {
-                                          final now = TimeUtils.toVietnam(
-                                            DateTime.now(),
-                                          );
-                                          final start = DateTime(
-                                            now.year,
-                                            now.month,
-                                            now.day,
-                                          );
-                                          setState(() {
-                                            _pendingStart = start;
-                                            _pendingEnd = now;
-                                          });
-                                          applyReportRange(start, now);
-                                        },
-                                ),
-                              ),
-                            ],
-                          )),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -886,9 +619,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(flex: 2, child: title),
+                  title,
                   const SizedBox(width: 10),
-                  Expanded(flex: 6, child: metrics),
+                  Expanded(child: metrics),
                   const SizedBox(width: 10),
                   badge,
                 ],
@@ -1869,8 +1602,8 @@ class ReportAnalysisLaunchers extends StatelessWidget {
     return LayoutBuilder(
       key: const Key('report_analysis_launchers'),
       builder: (context, constraints) {
-        final stacked = constraints.maxWidth < 560;
-        final compact = !stacked && constraints.maxWidth < 760;
+        final layout = PosLayoutSpec.from(context, constraints);
+        final compact = !layout.prefersStackedControls && layout.isMedium;
         final cards = [
           _ReportAnalysisLauncherCard(
             key: const Key('paperless_operations_launcher'),
@@ -1900,28 +1633,7 @@ class ReportAnalysisLaunchers extends StatelessWidget {
             onTap: () => _openSalesRevenue(context),
           ),
         ];
-        if (stacked) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              cards[0],
-              const SizedBox(height: 8),
-              cards[1],
-              const SizedBox(height: 8),
-              cards[2],
-            ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: cards[0]),
-            const SizedBox(width: 8),
-            Expanded(child: cards[1]),
-            const SizedBox(width: 8),
-            Expanded(child: cards[2]),
-          ],
-        );
+        return PosEqualHeightRows(spacing: 8, children: cards);
       },
     );
   }
@@ -1985,16 +1697,12 @@ class _ReportAnalysisLauncherCard extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text(
                             title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(fontWeight: FontWeight.w900),
                           ),
                           const SizedBox(height: 6),
                           Text(
                             range,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: PosColors.textSecondary,
@@ -2027,8 +1735,6 @@ class _ReportAnalysisLauncherCard extends StatelessWidget {
                                 const SizedBox(height: 3),
                                 Text(
                                   subtitle,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
                                         color: PosColors.textSecondary,
@@ -2412,30 +2118,22 @@ class _ReportsHourlyOverview extends StatelessWidget {
         );
         return Column(
           children: [
-            Row(
+            PosEqualHeightRows(
               children: [
-                Expanded(
-                  child: _ReportsInlineMetric(
-                    label: context.l10n.reportsDineInRevenue,
-                    value: _formatVnd(currency, summary.dineInRevenue),
-                    tone: PosColors.textPrimary,
-                  ),
+                _ReportsInlineMetric(
+                  label: context.l10n.reportsDineInRevenue,
+                  value: _formatVnd(currency, summary.dineInRevenue),
+                  tone: PosColors.textPrimary,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _ReportsInlineMetric(
-                    label: context.l10n.reportsDeliveryRevenue,
-                    value: _formatVnd(currency, summary.deliveryRevenue),
-                    tone: PosColors.accent,
-                  ),
+                _ReportsInlineMetric(
+                  label: context.l10n.reportsDeliveryRevenue,
+                  value: _formatVnd(currency, summary.deliveryRevenue),
+                  tone: PosColors.accent,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _ReportsInlineMetric(
-                    label: context.l10n.reportsServiceExpenses,
-                    value: _formatVnd(currency, summary.serviceTotal),
-                    tone: PosColors.textSecondary,
-                  ),
+                _ReportsInlineMetric(
+                  label: context.l10n.reportsServiceExpenses,
+                  value: _formatVnd(currency, summary.serviceTotal),
+                  tone: PosColors.textSecondary,
                 ),
               ],
             ),
@@ -2479,6 +2177,7 @@ class _ReportsInlineMetric extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+          const Spacer(),
           Text(
             value,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -2520,22 +2219,17 @@ class _ReportsBreakdownPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
+        PosEqualHeightRows(
           children: [
-            Expanded(
-              child: _ReportsInlineMetric(
-                label: context.l10n.dineIn,
-                value: _formatVnd(currency, summary.dineInRevenue),
-                tone: PosColors.textPrimary,
-              ),
+            _ReportsInlineMetric(
+              label: context.l10n.dineIn,
+              value: _formatVnd(currency, summary.dineInRevenue),
+              tone: PosColors.textPrimary,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ReportsInlineMetric(
-                label: context.l10n.delivery,
-                value: _formatVnd(currency, summary.deliveryRevenue),
-                tone: PosColors.accent,
-              ),
+            _ReportsInlineMetric(
+              label: context.l10n.delivery,
+              value: _formatVnd(currency, summary.deliveryRevenue),
+              tone: PosColors.accent,
             ),
           ],
         ),
@@ -2626,17 +2320,23 @@ class _ReportsSectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const Spacer(),
-        if (action != null) action!,
-      ],
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          if (action != null) action!,
+        ],
+      ),
     );
   }
 }

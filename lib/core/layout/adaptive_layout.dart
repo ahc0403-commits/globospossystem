@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'platform_info.dart';
 
@@ -92,6 +93,29 @@ class PosLayoutSpec {
       (availableWidth < PosBreakpoints.wide &&
           availableHeight < PosBreakpoints.compact);
 
+  /// Keep semantic rows balanced (four items become 4 or 2+2, never 3+1).
+  /// Content width and the existing large-text policy own the decision.
+  int balancedColumns({
+    required int itemCount,
+    int maxColumns = 4,
+    double minimumItemWidth = 240,
+    double spacing = 12,
+  }) {
+    if (itemCount <= 1 || isCompact || usesLargeText) return 1;
+    final widthBudget = math.max(
+      1,
+      ((availableWidth + spacing) / (minimumItemWidth + spacing)).floor(),
+    );
+    final limit = math.max(
+      1,
+      math.min(
+        itemCount,
+        math.min(widthBudget, isMedium ? math.min(2, maxColumns) : maxColumns),
+      ),
+    );
+    return (itemCount / (itemCount / limit).ceil()).ceil();
+  }
+
   EdgeInsets get pagePadding => switch (windowClass) {
     PosWindowClass.compact => const EdgeInsets.all(12),
     PosWindowClass.medium => const EdgeInsets.all(16),
@@ -103,6 +127,55 @@ class PosLayoutSpec {
     PosWindowClass.medium || PosWindowClass.wide => const EdgeInsets.all(12),
     PosWindowClass.large => const EdgeInsets.all(16),
   };
+}
+
+/// Small semantic card groups grow with their content and share each row's height.
+/// Children must support intrinsic sizing; scrolling panels own their own viewport.
+class PosEqualHeightRows extends StatelessWidget {
+  const PosEqualHeightRows({
+    super.key,
+    required this.children,
+    this.maxColumns = 3,
+    this.spacing = 12,
+  });
+  final List<Widget> children;
+  final int maxColumns;
+  final double spacing;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (children.isEmpty) return const SizedBox.shrink();
+      final columns = PosLayoutSpec.from(context, constraints).balancedColumns(
+        itemCount: children.length,
+        maxColumns: maxColumns,
+        spacing: spacing,
+      );
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var start = 0; start < children.length; start += columns) ...[
+            if (start > 0) SizedBox(height: spacing),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var column = 0; column < columns; column++) ...[
+                    if (column > 0) SizedBox(width: spacing),
+                    Expanded(
+                      child: start + column < children.length
+                          ? children[start + column]
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      );
+    },
+  );
 }
 
 /// RULES.md: 레이아웃 분기는 core/layout/에서만 처리

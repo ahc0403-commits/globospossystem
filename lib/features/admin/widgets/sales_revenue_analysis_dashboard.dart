@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/ui/app_fonts.dart';
+import '../../../core/layout/adaptive_layout.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../report/report_provider.dart';
@@ -188,42 +189,26 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
           key: const Key('sales_hourly_bar_panel'),
           title: copy.hourlyTitle,
           subtitle: copy.hourlySubtitle,
-          child: _HourlyRevenueBarChart(rows: hourly, currency: currency),
+          child: SizedBox(
+            height: 240,
+            child: _HourlyRevenueBarChart(rows: hourly, currency: currency),
+          ),
         );
 
-        if (constraints.maxWidth < 900) {
-          final textScale = MediaQuery.textScalerOf(context).scale(1);
-          final dailyHeight = constraints.maxWidth < 520
-              ? textScale > 1.5
-                    ? 850.0
-                    : 600.0
-              : 520.0;
+        final hourlyCanvas = hourlyPanel;
+        if (PosLayoutSpec.from(context, constraints).prefersSingleColumn) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: dailyHeight, child: dailyPanel),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: constraints.maxWidth < 520
-                    ? textScale > 1.5
-                          ? 420
-                          : 340
-                    : 380,
-                child: hourlyPanel,
-              ),
-            ],
+            children: [dailyPanel, const SizedBox(height: 12), hourlyCanvas],
           );
         }
-        return SizedBox(
-          height: 540,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: dailyPanel),
-              const SizedBox(width: 12),
-              Expanded(child: hourlyPanel),
-            ],
-          ),
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: dailyPanel),
+            const SizedBox(width: 12),
+            Expanded(child: hourlyCanvas),
+          ],
         );
       },
     );
@@ -544,7 +529,9 @@ class _DailyRevenueLineChart extends StatelessWidget {
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 54,
+                        reservedSize: MediaQuery.textScalerOf(
+                          context,
+                        ).scale(54),
                         interval: interval,
                         getTitlesWidget: (value, meta) {
                           if (value >= meta.max) return const SizedBox.shrink();
@@ -566,7 +553,9 @@ class _DailyRevenueLineChart extends StatelessWidget {
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 34,
+                        reservedSize: MediaQuery.textScalerOf(
+                          context,
+                        ).scale(34),
                         getTitlesWidget: (value, meta) {
                           final index = value.toInt();
                           if (index < 0 ||
@@ -734,35 +723,21 @@ class _DailyRevenuePanelContent extends StatelessWidget {
             trendLabel: trendLabel,
           ),
         );
-        if (constraints.maxWidth < 520) {
-          final metricHeight = MediaQuery.textScalerOf(context).scale(1) > 1.5
-              ? 180.0
-              : 150.0;
-          return Column(
-            children: [
-              Expanded(child: revenueChart),
-              const SizedBox(height: 8),
-              SizedBox(height: metricHeight, child: teamChart),
-              const SizedBox(height: 8),
-              SizedBox(height: metricHeight, child: averageChart),
-            ],
-          );
-        }
-        return Column(
-          children: [
-            Expanded(child: revenueChart),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 168,
-              child: Row(
+        final secondary =
+            PosLayoutSpec.from(context, constraints).prefersSingleColumn
+            ? Column(
+                children: [teamChart, const SizedBox(height: 8), averageChart],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: teamChart),
                   const SizedBox(width: 8),
                   Expanded(child: averageChart),
                 ],
-              ),
-            ),
-          ],
+              );
+        return Column(
+          children: [revenueChart, const SizedBox(height: 8), secondary],
         );
       },
     );
@@ -848,7 +823,7 @@ class _DailyMetricSurface extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 4),
-          Expanded(child: child),
+          SizedBox(height: comparisonLabel == null ? 130 : 200, child: child),
         ],
       ),
     );
@@ -922,7 +897,7 @@ class _DailyMetricLineChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 42,
+              reservedSize: MediaQuery.textScalerOf(context).scale(42),
               interval: interval,
               getTitlesWidget: (value, meta) {
                 if (value >= meta.max) return const SizedBox.shrink();
@@ -944,7 +919,7 @@ class _DailyMetricLineChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 24,
+              reservedSize: MediaQuery.textScalerOf(context).scale(24),
               getTitlesWidget: (value, meta) {
                 final index = value.toInt();
                 if (index < 0 ||
@@ -1051,7 +1026,7 @@ class _HourlyRevenueBarChart extends StatelessWidget {
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 54,
+                reservedSize: MediaQuery.textScalerOf(context).scale(54),
                 interval: interval,
                 getTitlesWidget: (value, meta) {
                   if (value >= meta.max) return const SizedBox.shrink();
@@ -1073,7 +1048,7 @@ class _HourlyRevenueBarChart extends StatelessWidget {
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 30,
+                reservedSize: MediaQuery.textScalerOf(context).scale(30),
                 interval: 1,
                 getTitlesWidget: (value, meta) {
                   final hour = value.toInt();
