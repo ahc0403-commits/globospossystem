@@ -54,6 +54,7 @@ void main() {
                 width: width,
                 child: const ToastMetricStrip(
                   dense: true,
+                  minimumItemWidth: 160,
                   maxColumns: 5,
                   metrics: [
                     ToastMetric(label: 'Total', value: '12'),

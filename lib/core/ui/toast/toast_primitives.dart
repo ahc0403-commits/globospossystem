@@ -209,10 +209,15 @@ class ToastMetricStrip extends StatelessWidget {
     required this.metrics,
     this.maxColumns = 4,
     this.dense = false,
+    this.minimumItemWidth = 240,
   });
   final List<ToastMetric> metrics;
   final int maxColumns;
   final bool dense;
+
+  /// Monetary summaries keep room for complete values; count strips can opt
+  /// into a smaller budget without changing the large-text stacking policy.
+  final double minimumItemWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +253,7 @@ class ToastMetricStrip extends StatelessWidget {
         final columns = layout.balancedColumns(
           itemCount: metrics.length,
           maxColumns: maxColumns,
-          minimumItemWidth: dense ? 160 : 240,
+          minimumItemWidth: minimumItemWidth,
           spacing: 8,
         );
         final gap = compactPhone ? 6.0 : 8.0;
