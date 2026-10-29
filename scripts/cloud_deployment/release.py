@@ -23,6 +23,7 @@ MIGRATIONS = (
 )
 EDGE = 'direct-order-public'
 FILES = (f'supabase/functions/{EDGE}/index.ts', f'supabase/functions/{EDGE}/deno.json')
+MIGRATION_SOURCE_SHA = '5e6b7452ef348dfd466e9570a918f3ac70ea28db'
 
 
 def sha_file(path):
@@ -39,9 +40,12 @@ def load_plan(path, root=ROOT):
             and path.is_file() and not path.is_symlink(), 'Plan must be in the source plans directory')
     from bridge import decode
     plan = decode(path.read_text())
-    require(set(plan) == {'schemaVersion', 'project', 'migrations', 'edge', 'web', 'rollback'}
+    require(set(plan) == {'schemaVersion', 'project', 'migrationSourceSha', 'migrations', 'edge', 'web', 'rollback'}
             and plan['schemaVersion'] == 1 and plan['project'] == PROJECT and plan['web'] is True
             and isinstance(plan['rollback'], str) and plan['rollback'], 'Invalid coordinated release plan')
+    require(plan['migrationSourceSha'] == MIGRATION_SOURCE_SHA, 'Migration intent SHA changed')
+    subprocess.run(['git', 'merge-base', '--is-ancestor', MIGRATION_SOURCE_SHA, 'HEAD'],
+                   cwd=root, check=True, stdout=subprocess.DEVNULL)
     require([r['path'] for r in plan['migrations']] == list(MIGRATIONS),
             'Plan must retain the three reviewed migrations in order')
     edge = plan['edge']
@@ -55,7 +59,11 @@ def load_plan(path, root=ROOT):
                 and target.resolve().is_relative_to(root.resolve())
                 and sha_file(target) == row['sha256'], 'Plan source hash/path mismatch')
     for row in plan['migrations']:
-        migration.prepare(root / row['path'], '0' * 40, root)
+        prepared = migration.prepare(root / row['path'], MIGRATION_SOURCE_SHA, root)
+        for name, expected in prepared['inputHashes'].items():
+            original = subprocess.check_output(['git', 'show', MIGRATION_SOURCE_SHA + ':' + name], cwd=root)
+            require(hashlib.sha256(original).hexdigest() == expected,
+                    'Migration SQL/dependencies differ from the original approved intent')
     return path, plan
 
 
@@ -87,7 +95,7 @@ def bound_plan(directory, manifest):
 def authorize_mutation(directory, manifest, operation, arguments):
     plan = bound_plan(directory, manifest)
     if operation == 'apply':
-        expected = [migration.prepare(ROOT / r['path'], manifest['sourceSha']) for r in plan['migrations']]
+        expected = [migration.prepare(ROOT / r['path'], plan['migrationSourceSha']) for r in plan['migrations']]
         require(any(arguments == {'name': p['transportName'], 'query': p['query']} for p in expected),
                 'Mutation is not an exact planned migration')
     else:
@@ -123,10 +131,28 @@ def apply(directory, path):
     require(env_names(old) == env_names(new), 'Changed Edge environment contract requires separate review')
     write_new(directory / 'edge-before.json', before)
     versions = request(directory, 'migrations', {})['migrations']
-    planned = {Path(r['path']).name.split('_', 1)[0] for r in plan['migrations']}
-    require(not any(r['version'] in planned for r in versions), 'A planned migration already exists; inspect before rerun')
+    results = []
+    missing_seen = False
+    # Validate the whole existing prefix before any new write. An existing
+    # version is reusable only with exact original SQL/metadata AND the original
+    # transport statement hash. Absence alone never proves a prior success.
     for row in plan['migrations']:
-        migration.apply(directory, ROOT / row['path'])
+        prepared = migration.prepare(ROOT / row['path'], plan['migrationSourceSha'])
+        if any(r['version'] == prepared['version'] for r in versions):
+            require(not missing_seen, 'Applied migrations are not an ordered prefix')
+            verified = migration.verify_applied(directory, prepared, versions)
+            results.append({**verified, 'status': 'ALREADY_APPLIED_VERIFIED_NOT_REEXECUTED'})
+        else:
+            require(not any(r.get('name') == prepared['transportName'] for r in versions),
+                    'Transport exists without original source version')
+            missing_seen = True
+            results.append({'version': prepared['version'], 'status': 'PENDING'})
+    for row, result in zip(plan['migrations'], results):
+        if result['status'] == 'PENDING':
+            migration.apply(directory, ROOT / row['path'], source_sha=plan['migrationSourceSha'])
+            result['status'] = 'APPLIED_AND_VERIFIED'
+        else:
+            print('POS_CLOUD_MIGRATION=' + result['version'] + ' ALREADY_APPLIED_VERIFIED_NOT_REEXECUTED', flush=True)
     # Detect concurrent Edge replacement before writing; never blindly overwrite.
     current = edge_state(directory, plan['edge']['beforeIndexSha256'])
     require(current['version'] == before['version'], 'Concurrent Edge deployment; stop before replacement')
@@ -140,7 +166,8 @@ def apply(directory, path):
         require(len(maps) == 1 and digest(maps[0]['content']) == plan['edge']['files'][1]['sha256'],
                 'Deployed import map changed')
     write_new(directory / 'coordinated-result.json', {
-        'sourceSha': manifest['sourceSha'], 'migrations': plan['migrations'],
+        'sourceSha': manifest['sourceSha'], 'migrationSourceSha': plan['migrationSourceSha'],
+        'migrations': plan['migrations'], 'migrationResults': results,
         'edge': {'name': EDGE, 'beforeVersion': before['version'], 'version': after['version'],
                  'indexSha256': plan['edge']['files'][0]['sha256'], 'verify_jwt': False,
                  'importMapReturnedAndCompared': bool(maps)}, 'web': 'PENDING',

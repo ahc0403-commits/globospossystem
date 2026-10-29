@@ -207,6 +207,18 @@ def request(directory, operation, arguments, timeout=180):
     deadline = time.monotonic() + timeout
     while not response_path.exists():
         if time.monotonic() >= deadline:
+            if operation in {'apply', 'deploy-function'} and (directory / (request_id + '.claimed.json')).exists():
+                # The connected tool may be awaiting a user's approval. Once a
+                # mutation is claimed it can still execute: keep its official
+                # owner alive until the actual result, rather than closing the
+                # release underneath a late approval. Never invoke it again.
+                waiting = directory / (request_id + '.awaiting-result.json')
+                if not waiting.exists():
+                    write_new(waiting, {'recordedAt': now(), 'operation': operation,
+                              'status': 'CLAIMED_WAITING_FOR_ACTUAL_TOOL_RESULT'})
+                    print('POS_CLOUD_AWAITING_TOOL_RESULT=' + request_id, file=sys.stderr, flush=True)
+                time.sleep(0.1)
+                continue
             status = 'uncertain' if (directory / (request_id + '.claimed.json')).exists() else 'cancelled'
             write_new(directory / (request_id + '.' + status + '.json'), {'recordedAt': now()})
             raise CloudError('Cloud operation timed out; determine remote state before retrying a mutation')
@@ -268,6 +280,20 @@ def reply(directory, request_id, raw):
     except (CloudError, ValueError, KeyError, TypeError) as error:
         # Do not persist raw error output: upstream messages can include secrets.
         result.update(ok=False, error=str(error), resultHash=digest('error'))
+        if isinstance(raw, dict) and raw.get('isError'):
+            blocks = raw.get('content')
+            blocks = blocks if isinstance(blocks, list) else []
+            text = '\n'.join(c['text'] for c in blocks
+                             if isinstance(c, dict) and c.get('type') == 'text'
+                             and isinstance(c.get('text'), str))[:65536]
+            decision = 'NOT_REPORTED'
+            if re.search(r'\buser\s+(?:denied|declined|rejected)\s+(?:(?:the|this)\s+)?(?:tool\s+)?(?:call|request|operation|action)\b', text, re.I):
+                decision = 'USER_DENIED'
+            elif re.search(r'\bautomatic\s+approval\s+review\s+(?:rejected|denied)\b', text, re.I):
+                decision = 'AUTO_REVIEW_DENIED'
+            elif re.search(r'\b(?:tool\s+)?approval\s+(?:request\s+)?(?:expired|timed out)\b', text, re.I):
+                decision = 'APPROVAL_EXPIRED'
+            result['approvalDecision'] = decision
     result['completedAt'] = now()
     write_new(directory / (request_id + '.response.json'), result)
     return {'requestId': request_id, 'ok': result['ok']}

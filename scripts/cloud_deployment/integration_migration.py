@@ -9,6 +9,7 @@ import socket
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import migration
 
@@ -101,6 +102,27 @@ class AtomicMigrationTests(unittest.TestCase):
         self.assertIn('POS_PSQL_ROLE_ACTIVATION_FAILED', failed.stderr)
         self.assertEqual(self.sql("SELECT to_regclass('public.cloud_fixture') IS NULL").stdout.strip(), 't')
         self.assertEqual(self.sql('SELECT count(*) FROM supabase_migrations.schema_migrations').stdout.strip(), '0')
+
+    def test_recovery_checks_real_original_and_transport_bytes_without_reapplying(self):
+        prepared = self.prepare('CREATE TABLE public.cloud_fixture(value text);')
+        self.sql(prepared['query'])
+        self.sql('INSERT INTO supabase_migrations.schema_migrations(version,name,statements) VALUES('
+                 + migration.literal('20261029112749') + ',' + migration.literal(prepared['transportName'])
+                 + ',ARRAY[' + migration.literal(prepared['query']) + ']);')
+        versions = json.loads(self.sql('SELECT json_agg(t) FROM (SELECT version,name FROM '
+                                       'supabase_migrations.schema_migrations) t').stdout)
+        def local_read(directory, operation, arguments):
+            self.assertEqual(operation, 'query')
+            rows = self.sql('SELECT json_agg(t) FROM (' + arguments['query'] + ') t').stdout
+            return {'rows': json.loads(rows)}
+        with patch.object(migration, 'request', side_effect=local_read):
+            self.assertTrue(migration.verify_applied('/local-fixture', prepared, versions)['historyVerified'])
+            self.sql("UPDATE supabase_migrations.schema_migrations SET statements=ARRAY['SELECT 1'] "
+                     "WHERE version='20261029112749'")
+            with self.assertRaises(migration.CloudError):
+                migration.verify_applied('/local-fixture', prepared, versions)
+        # Recovery verified existing history; no CREATE or schema replay ran.
+        self.assertEqual(self.sql('SELECT count(*) FROM public.cloud_fixture').stdout.strip(), '0')
 
 
 if __name__ == '__main__':
