@@ -122,8 +122,10 @@ unauthorized dispatcher checks. All non-login skip flags remain rejected.
 The committed plan binds exact paths and SHA256 values for purchasing adjustment,
 order amendments and attendance recovery, in that order, then the exact
 `direct-order-public` index/import map, followed by prebuilt web. Before the
-first write, the adapter verifies that all source versions are absent and the
-current ACTIVE Edge source equals the recorded predecessor. Each migration
+first write, the adapter verifies that existing versions form an ordered prefix
+with exact source bytes, dependency metadata and transport statement hashes. Only
+that verified prefix is retained without reexecution; missing versions remain
+pending. The current ACTIVE Edge source must equal the recorded predecessor. Each migration
 retains the existing atomic/source-version/history/hash checks. Any failure stops
 before subsequent stages. A concurrent Edge version/source change also stops
 before replacement. The mutation transport accepts only exact prepared planned
@@ -159,3 +161,36 @@ Photo store manager PIN setup remains a separate settings-screen action. No PIN
 is generated, exposed, reset or bypassed; inactive stores are not reactivated.
 Production attendance/order writes are not test fixtures. Assigned-account login
 and actual manual attendance submission remain unverified under the owner waiver.
+
+## Recovery after an interrupted tool approval
+
+The first purchasing migration was durably applied in release source
+`5e6b7452ef348dfd466e9570a918f3ac70ea28db`; its original version and transport
+`20261029112749` are retained. The later order migration request expired before
+the tool error returned. No order, attendance, Edge or web application was
+confirmed by that invocation. Inspect actual current history/source before
+another request; a timeout is neither success nor proof of user denial.
+
+The plan now freezes `migrationSourceSha` to that original SQL intent. Every SQL
+input and companion must match that ancestor commit. This preserves the exact
+original query, including source provenance metadata, even when the recovery
+adapter has a newer verified release SHA. The order query is 37,156 bytes with
+SHA256 `2b60c9139e8569e9e695683eec63e4966f531a73ef2be8f278b2b542c66197c6`.
+The release SHA and original migration-intent SHA remain distinct in evidence.
+Changed SQL or dependencies require a new reviewed plan; an old approval cannot
+be repurposed. Reused original/transport history must match exact SQL hashes,
+metadata, names, versions and statement counts. A missing/duplicated/tampered
+row or an applied nonprefix version stops before any new mutation. Reuse is
+reported as `ALREADY_APPLIED_VERIFIED_NOT_REEXECUTED`, never a newly applied PASS.
+
+Unclaimed requests still expire. Once a mutation is claimed by the connected
+tool, its official owner remains alive until the actual tool result, including
+while user approval is pending. The bridge records `awaiting-result` after the
+queue deadline; it never approves, resubmits or replaces the tool request.
+Explicit user denial or tool error stops the release. A later attempt requires
+reconciliation and the appropriate approval, not an automatic retry. Safe error
+classification distinguishes explicit user/automatic-review denial and approval
+expiry when those are actually reported; it stores no raw private error text.
+A fresh official invocation still runs a new exact-main gate. The preserved
+prior receipt is not accepted as a substitute. Candidate and exact-main checks
+are repeated for a changed recovery adapter before production execution.

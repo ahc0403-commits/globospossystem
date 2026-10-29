@@ -107,6 +107,25 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(bridge.next_request(self.directory), {'waiting': True})
         self.assertEqual(len(list(self.directory.glob('*.cancelled.json'))), 1)
 
+    def test_claimed_mutation_owner_survives_approval_wait_past_queue_deadline(self):
+        result = []
+        thread = threading.Thread(target=lambda: result.append(
+            bridge.request(self.directory, 'apply', {'name': 'fixture', 'query': 'select 1'}, timeout=.3)))
+        thread.start()
+        for _ in range(100):
+            if list(self.directory.glob('*.request.json')):
+                break
+            time.sleep(.005)
+        item = bridge.next_request(self.directory)['request']
+        time.sleep(.4)
+        self.assertTrue(thread.is_alive(), 'Late approval must not execute after the official owner timed out')
+        self.assertEqual(len(list(self.directory.glob('*.awaiting-result.json'))), 1)
+        self.assertFalse(list(self.directory.glob('*.uncertain.json')))
+        bridge.reply(self.directory, item['requestId'], {'structuredContent': {'success': True}})
+        thread.join(timeout=3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(result, [{'success': True}])
+
     def test_diagnostic_session_cannot_enqueue_mutations(self):
         path = self.directory / 'session.json'
         value = json.loads(path.read_text()); value['phase'] = 'diagnostic'
@@ -114,6 +133,28 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(bridge.CloudError):
             bridge.request(self.directory, 'apply', {'name': 'fixture', 'query': 'select 1'}, timeout=0)
         self.assertEqual(list(self.directory.glob('*.request.json')), [])
+
+    def test_error_classification_keeps_expiry_and_denial_distinct_without_raw_details(self):
+        rid = 'e' * 32
+        item = {'requestId': rid, 'runId': bridge.session(self.directory)[1]['runId'],
+                'sourceSha': 'a' * 40, 'project': bridge.PROJECT, 'requestHash': 'hash',
+                'operation': 'apply', 'tool': bridge.TOOLS['apply']}
+        bridge.write_new(self.directory / (rid + '.request.json'), item)
+        for message, expected in [('User denied the tool request; private text omitted', 'USER_DENIED'),
+                                  ('Automatic approval review rejected this operation', 'AUTO_REVIEW_DENIED'),
+                                  ('Tool approval request expired', 'APPROVAL_EXPIRED'),
+                                  ('permission denied for view fixture', 'NOT_REPORTED')]:
+            result = bridge.reply(self.directory, rid, {'isError': True, 'content': [{'type': 'text', 'text': message}]})
+            self.assertFalse(result['ok'])
+            path = self.directory / (rid + '.response.json')
+            data = json.loads(path.read_text())
+            self.assertEqual(data['approvalDecision'], expected)
+            self.assertNotIn(message, path.read_text())
+            path.unlink()
+        for raw in [None, [], {'isError': True, 'content': None},
+                    {'isError': True, 'content': [{'type': 'text', 'text': 123}]}]:
+            self.assertFalse(bridge.reply(self.directory, rid, raw)['ok'])
+            (self.directory / (rid + '.response.json')).unlink()
 
     def test_atomic_messages_do_not_replace_an_existing_reply(self):
         path = self.directory / 'message.json'

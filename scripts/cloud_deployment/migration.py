@@ -93,30 +93,47 @@ END $pos_cloud_atomic_migration$;
             'query': query, 'queryHash': digest(query)}
 
 
-def apply(directory, path):
-    _, manifest = session(directory)
-    prepared = prepare(path, manifest['sourceSha'])
+def verify_applied(directory, prepared, versions):
+    version = prepared['version']
+    require(sum(row['version'] == version for row in versions) == 1, 'Source version is missing or duplicated')
+    transports = [row for row in versions if row.get('name') == prepared['transportName']]
+    require(len(transports) == 1, 'Missing or ambiguous Supabase transport migration')
+    rows = request(directory, 'query', {'query':
+        'SELECT version,name,encode(sha256(convert_to(statements[1],\'UTF8\')),\'hex\') AS source_hash,'
+        'statements[2] AS source_metadata,cardinality(statements) AS statement_count '
+        'FROM supabase_migrations.schema_migrations WHERE version IN ('
+        + literal(version) + ',' + literal(transports[0]['version']) + ')'})['rows']
+    original = [r for r in rows if r['version'] == version]
+    transport = [r for r in rows if r['version'] == transports[0]['version']]
+    require(len(original) == 1 and original[0]['source_hash'] == prepared['sourceHash']
+            and original[0]['source_metadata'] == prepared['metadata'] and original[0]['name'] == prepared['slug']
+            and original[0]['statement_count'] == 2,
+            'Persisted source bytes, dependency hashes or release SHA differ')
+    require(len(transport) == 1 and transport[0]['name'] == prepared['transportName']
+            and transport[0]['source_hash'] == prepared['queryHash'] and transport[0]['statement_count'] == 1,
+            'Persisted transport statement does not match exact original query')
+    return {'version': version, 'sourceHash': prepared['sourceHash'],
+                     'queryHash': prepared['queryHash'], 'transportVersion': transports[0]['version'],
+                     'inputHashes': prepared['inputHashes'], 'atomic': True, 'historyVerified': True}
+
+
+def apply(directory, path, source_sha=None):
+    directory, manifest = session(directory)
+    selected = source_sha or manifest['sourceSha']
+    if selected != manifest['sourceSha']:
+        from release import bound_plan
+        require(manifest['phase'] == 'coordinated'
+                and selected == bound_plan(directory, manifest)['migrationSourceSha'], 'Unbound migration intent SHA')
+    prepared = prepare(path, selected)
     version = prepared['version']
     before = request(directory, 'migrations', {})['migrations']
     require(not any(row['version'] == version for row in before), 'Source migration is already applied')
+    require(not any(row.get('name') == prepared['transportName'] for row in before), 'Transport migration replay')
     print('POS_CLOUD_MIGRATION_SOURCE=' + version + ' sha256=' + prepared['sourceHash'], flush=True)
     request(directory, 'apply', {'name': prepared['transportName'], 'query': prepared['query']})
     # Never equate a success banner with durable source/history verification.
     after = request(directory, 'migrations', {})['migrations']
-    require(sum(row['version'] == version for row in after) == 1, 'Source version is missing or duplicated')
-    transports = [row for row in after if row.get('name') == prepared['transportName']]
-    require(len(transports) == 1, 'Missing or ambiguous Supabase transport migration')
-    require(not any(row.get('name') == prepared['transportName'] for row in before), 'Transport migration replay')
-    rows = request(directory, 'query', {'query':
-        'SELECT version,name,encode(sha256(convert_to(statements[1],\'UTF8\')),\'hex\') AS source_hash,'
-        'statements[2] AS source_metadata FROM supabase_migrations.schema_migrations WHERE version='
-        + literal(version)})['rows']
-    require(len(rows) == 1 and rows[0]['source_hash'] == prepared['sourceHash']
-            and rows[0]['source_metadata'] == prepared['metadata'] and rows[0]['name'] == prepared['slug'],
-            'Persisted source bytes, dependency hashes or release SHA differ')
-    print(canonical({'version': version, 'sourceHash': prepared['sourceHash'],
-                     'queryHash': prepared['queryHash'], 'transportVersion': transports[0]['version'],
-                     'inputHashes': prepared['inputHashes'], 'atomic': True, 'historyVerified': True}))
+    print(canonical(verify_applied(directory, prepared, after)))
 
 
 if __name__ == '__main__':

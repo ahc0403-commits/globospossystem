@@ -31,5 +31,6 @@
     ]
   },
   "web": true,
-  "rollback": "Keep additive DB history; revert web and direct-order-public to verified prior source. No destructive DB rollback or production test records."
+  "rollback": "Keep additive DB history; revert web and direct-order-public to verified prior source. No destructive DB rollback or production test records.",
+  "migrationSourceSha": "5e6b7452ef348dfd466e9570a918f3ac70ea28db"
 }
