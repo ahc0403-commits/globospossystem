@@ -175,13 +175,14 @@ class _DetailLoader {
 }
 
 Widget _app({
+  Locale locale = const Locale('ko'),
   TextScaler? textScaler,
   DateTime? startDate,
   DateTime? endDate,
   PaperlessOperationsLoader? loader,
   PaperlessMenuTimingDetailLoader? detailLoader,
 }) => MaterialApp(
-  locale: const Locale('ko'),
+  locale: locale,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   theme: AppTheme.build(),
@@ -207,13 +208,34 @@ Widget _app({
 );
 
 void main() {
+  for (final locale in const [Locale('ko'), Locale('en'), Locale('vi')]) {
+    for (final width in [390.0, 768.0, 1440.0]) {
+      testWidgets(
+        'paperless_operations_dashboard_test real viewport ${locale.languageCode} $width 200%',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          await tester.pumpWidget(
+            _app(locale: locale, textScaler: TextScaler.linear(2)),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('shows rankings, category averages, and menu stage averages', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
@@ -262,8 +284,10 @@ void main() {
   testWidgets('desktop places fastest and slowest rankings side by side', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1440, 1100));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(1440, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
@@ -305,8 +329,10 @@ void main() {
   });
 
   testWidgets('menu card opens physical-floor timing details', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1000, 1000));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(1000, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final detailLoader = _DetailLoader();
     await tester.pumpWidget(_app(detailLoader: detailLoader.load));
     await tester.pumpAndSettle();
@@ -346,8 +372,10 @@ void main() {
   testWidgets('phone layout remains readable at 200 percent text scale', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_app(textScaler: TextScaler.linear(2)));
     await tester.pumpAndSettle();
 
@@ -373,8 +401,10 @@ void main() {
   });
 
   testWidgets('refresh reloads the operations report', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     var loadCount = 0;
     await tester.pumpWidget(
       _app(
@@ -396,8 +426,10 @@ void main() {
   testWidgets('single date selection applies the chosen day and reloads', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(900, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(900, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     var loadCount = 0;
     await tester.pumpWidget(
       _app(
@@ -426,8 +458,10 @@ void main() {
   testWidgets('date range selection applies both dates and reloads', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(900, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(900, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     var loadCount = 0;
     await tester.pumpWidget(
       _app(

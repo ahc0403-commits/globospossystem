@@ -168,6 +168,7 @@ class IntegrityTests(unittest.TestCase):
         outputs = {'unittest':'Ran 12 tests in 0.1s\n\nOK\n', 'flutter':suite(),
             'command':'Actual isolated SQL assertions completed\n',
             'deno':'ok | 4 passed | 0 failed (20ms)\n',
+            'node':'# tests 1\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n',
             'repository':''.join('CHECK_REPO_STEP='+x+'\n' for x in markers)+suite()*3+summaries()+'CHECK_REPO_COMPLETE\n'}
         for step in self.recipe['steps']:
             log = self.directory / (step['id'] + '.log'); log.write_text(outputs[step['format']])
@@ -181,6 +182,11 @@ class IntegrityTests(unittest.TestCase):
         for name in ['index.html','main.dart.js','flutter_bootstrap.js','photo_import_worker.js']:
             f = self.directory / 'artifacts/web' / name; f.parent.mkdir(parents=True,exist_ok=True); f.write_text('fixture artifact\n')
             self.value['artifacts'].append({'path':str(f.relative_to(self.directory)), 'bytes':f.stat().st_size,'sha256':sha256(f)})
+        disk = nested/'filesystem-usage.json'
+        disk.write_text(json.dumps({'samplingIntervalSeconds':1,'minimumAvailableBytes':100,
+            'maximumUsedBytes':200,'samples':[{'at':self.value['startedAt'],'availableBytes':100,'usedBytes':200},
+            {'at':self.value['finishedAt'],'availableBytes':150,'usedBytes':150}]}))
+        self.value['filesystemUsage'] = {'log':str(disk.relative_to(self.directory)), 'logSha256':sha256(disk)}
 
     def tearDown(self):
         self.temp.cleanup()
@@ -194,6 +200,61 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(self.verify()['sourceBefore'], self.source)
         with self.assertRaises(InvalidEvidence): self.verify(kind='exact-main')
         with self.assertRaises(InvalidEvidence): self.verify(run_id='different invocation')
+
+    def test_changed_disk_log_and_unproven_derived_fixture_fail(self):
+        self.value['filesystemUsage']['logSha256'] = '0'*64
+        with self.assertRaises(InvalidEvidence): self.verify()
+        self.value['filesystemUsage']['logSha256'] = sha256(self.directory/'nested/filesystem-usage.json')
+        self.value['environment']['fixtureImages'][0]['Id'] = gate.fixture_policy()['derivedImageId']
+        (self.directory/'nested/fixture-images.jsonl').write_text(json.dumps({
+            'runId':'c'*32,'imageId':gate.fixture_policy()['derivedImageId']})+'\n')
+        with self.assertRaises(InvalidEvidence): self.verify()
+
+    def test_vfs_requires_every_distinct_image_proof_and_preparation(self):
+        self.value['environment']['engineStorageDriver'] = 'vfs'
+        with self.assertRaises(InvalidEvidence): self.verify()
+        fixed = gate.fixture_policies()
+        proofs = []
+        for policy in fixed:
+            p = {k:policy[k] for k in ('representation','requestedRef','sourceRef','sourceManifestDigest',
+                'sourceConfigDigest','sourceRootfsInventorySha256','rootfsArchiveSha256',
+                'runtimeConfigSha256','derivedImageId','os','architecture')}
+            p.update(schemaVersion=1,runId='c'*32,sourceSha='a'*40,
+                     rootfsLayers=['sha256:'+policy['rootfsArchiveSha256']])
+            proofs.append(p)
+        self.value['environment']['fixtureProjection'] = proofs[0]
+        self.value['fixturePreparation'] = copy.deepcopy(self.value['imageBuild'])
+        self.value['environment']['additionalFixtureProjections'] = proofs[1:]
+        self.value['additionalFixturePreparations'] = [copy.deepcopy(self.value['imageBuild']) for _ in proofs[1:]]
+        self.verify()
+        stock = fixed[1]
+        self.value['environment']['fixtureImages'] = [{'Id':stock['derivedImageId'],'Os':'linux',
+            'Architecture':'amd64','RepoDigests':[], 'rootfsLayers':['sha256:'+stock['rootfsArchiveSha256']],
+            'runtimeConfigSha256':stock['runtimeConfigSha256']}]
+        observed = {'runId':'c'*32,'imageId':stock['derivedImageId'],
+            'requestedImageRef':stock['requestedRef'],'representation':stock['representation'],
+            'temporaryVolumeMounts':gate.temporary_volume_options(stock)}
+        log = self.directory/'nested/fixture-images.jsonl'
+        log.write_text(json.dumps(observed)+'\n')
+        self.verify()
+        changed=copy.deepcopy(observed);changed['temporaryVolumeMounts']={}
+        log.write_text(json.dumps(changed)+'\n')
+        with self.assertRaises(InvalidEvidence):self.verify()
+        changed=copy.deepcopy(observed);changed.pop('requestedImageRef')
+        log.write_text(json.dumps(changed)+'\n')
+        with self.assertRaises(InvalidEvidence):self.verify()
+        log.write_text(json.dumps(observed)+'\n')
+        saved = copy.deepcopy(self.value)
+        for change in ['missing','duplicate','switched-version','stale','preparation-failed','preparation-missing']:
+            value = copy.deepcopy(saved)
+            if change == 'missing': value['environment']['additionalFixtureProjections'].pop()
+            elif change == 'duplicate': value['environment']['additionalFixtureProjections'][1] = proofs[1]
+            elif change == 'switched-version': value['environment']['additionalFixtureProjections'][0]['derivedImageId'] = fixed[2]['derivedImageId']
+            elif change == 'stale': value['environment']['additionalFixtureProjections'][0]['sourceSha'] = 'd'*40
+            elif change == 'preparation-failed': value['additionalFixturePreparations'][0]['exitCode'] = 1
+            elif change == 'preparation-missing': value['additionalFixturePreparations'].pop()
+            with self.subTest(change=change), self.assertRaises((InvalidEvidence,ValueError)):
+                self.verify(value)
 
     def test_failed_interrupted_missing_reordered_changed_steps_block(self):
         for change in ['failed','partial','missing','reorder','command','executed-command','count','sha','recipe','time']:
@@ -248,7 +309,36 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(baseline['inputHashes'].keys(), {'source'})
 
 
+class ManagedProxyTests(unittest.TestCase):
+    def test_only_the_configured_proxy_gets_the_existing_host_dns_answer(self):
+        environment = {'HTTPS_PROXY': 'http://proxy:8080', 'http_proxy': 'http://proxy:8080',
+                       'NO_PROXY': 'localhost,127.0.0.1'}
+        answers = [(2, 1, 6, '', ('192.0.2.10', 0))]
+        with patch.object(gate.socket, 'getaddrinfo', return_value=answers) as resolve:
+            self.assertEqual(gate.proxy_host_arguments(environment), ['--add-host', 'proxy:192.0.2.10'])
+        resolve.assert_called_once_with('proxy', None, gate.socket.AF_INET, gate.socket.SOCK_STREAM)
+        with patch.object(gate.socket, 'getaddrinfo') as resolve:
+            self.assertEqual(gate.proxy_host_arguments({}), [])
+        resolve.assert_not_called()
+
+    def test_only_network_settings_enter_the_verification_container(self):
+        environment = {'HTTPS_PROXY': 'http://proxy:8080', 'NO_PROXY': 'localhost,127.0.0.1',
+                       'SUPABASE_ACCESS_TOKEN': 'private', 'FIXED_SMOKE_PASSWORD': 'private'}
+        self.assertEqual(gate.proxy_environment(environment), ['HTTPS_PROXY', 'NO_PROXY'])
+
+    def test_credentials_and_unexpected_routes_fail_before_container_creation(self):
+        for proxy in ['http://user:password@proxy:8080', 'socks5://proxy:8080',
+                      'http://proxy:8080?token=private', 'http://proxy:8080\nother']:
+            with self.subTest(proxy=proxy), self.assertRaises(InvalidEvidence):
+                gate.proxy_environment({'HTTPS_PROXY': proxy})
+
+
 class FixtureOwnershipTests(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict(os.environ, {'POS_FIXTURE_IMAGE_MAP':'{}', 'POS_POSTGRES_FIXTURE_IMAGE':''})
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def test_every_created_fixture_is_labelled(self):
         with patch.object(fixture_docker.subprocess, 'run') as execute:
             execute.return_value.returncode = 1

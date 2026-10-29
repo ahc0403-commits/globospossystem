@@ -151,12 +151,33 @@ Widget _launcherApp() {
 }
 
 void main() {
+  for (final locale in const [Locale('ko'), Locale('en'), Locale('vi')]) {
+    for (final width in [390.0, 768.0, 1440.0]) {
+      testWidgets(
+        'menu_sales_analytics_widget_test real viewport ${locale.languageCode} $width 200%',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          await tester.pumpWidget(
+            _app(locale: locale, textScaler: TextScaler.linear(2)),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   TestWidgetsFlutterBinding.ensureInitialized();
   testWidgets('ranking filters drinks without losing top food and combo', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1024, 768));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
@@ -164,7 +185,10 @@ void main() {
     expect(find.byKey(const Key('menu_sales_top_drink')), findsOneWidget);
     expect(find.byKey(const Key('menu_sales_top_combo')), findsOneWidget);
     final ranking = find.byKey(const Key('menu_sales_ranking'));
-    await tester.tap(find.descendant(of: ranking, matching: find.text('음료')));
+    final drinkFilter = find.descendant(of: ranking, matching: find.text('음료'));
+    await tester.ensureVisible(drinkFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(drinkFilter);
     await tester.pumpAndSettle();
     expect(
       find.descendant(of: ranking, matching: find.text('메뉴 3')),
@@ -181,8 +205,10 @@ void main() {
     testWidgets('rankings and chart labels use $code menu data', (
       tester,
     ) async {
-      await tester.binding.setSurfaceSize(const Size(1024, 768));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(1024, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(_app(locale: Locale(code)));
       await tester.pumpAndSettle();
       expect(
@@ -201,8 +227,10 @@ void main() {
     Size(1440, 900),
   ]) {
     testWidgets('menu sales analytics is readable at $size', (tester) async {
-      await tester.binding.setSurfaceSize(size);
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(_app());
       await tester.pumpAndSettle();
 
@@ -225,8 +253,8 @@ void main() {
         final totalRevenue = tester.getRect(
           find.byKey(const Key('menu_sales_total_revenue')),
         );
-        expect((topMenu.top - totalRevenue.top).abs(), lessThan(1));
-        expect(totalRevenue.left, greaterThan(topMenu.left));
+        expect((topMenu.left - totalRevenue.left).abs(), lessThan(1));
+        expect(totalRevenue.top, greaterThanOrEqualTo(topMenu.bottom));
       }
       expect(tester.takeException(), isNull);
     });
@@ -235,8 +263,10 @@ void main() {
   testWidgets('ranking supports sales sorting and expanding all menus', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
@@ -256,8 +286,10 @@ void main() {
   testWidgets('phone period filter keeps the date readable above actions', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       _app(
         params: MenuSalesAnalyticsParams(
@@ -285,8 +317,10 @@ void main() {
   testWidgets('menu scope reloads all, regular, and combo statistics', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final requestedScopes = <MenuSalesScope>[];
     await tester.pumpWidget(
       ProviderScope(
@@ -388,8 +422,10 @@ void main() {
   testWidgets('date filters reload a single day and a selected range', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(900, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(900, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final requestedParams = <MenuSalesAnalyticsParams>[];
     await tester.pumpWidget(
       _app(
@@ -442,13 +478,16 @@ void main() {
   testWidgets('bounded desktop panel and 200% phone text do not overflow', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1440, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_app(boundedDesktopPanel: true));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 
-    await tester.binding.setSurfaceSize(const Size(390, 844));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
     await tester.pumpWidget(_app(textScaler: TextScaler.linear(2)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('menu_sales_ranking')), findsOneWidget);
@@ -458,8 +497,10 @@ void main() {
   testWidgets('empty and error states stay inside the menu panel', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final empty = MenuSalesAnalytics.fromJson({
       'summary': const {
         'order_count': 0,
@@ -485,8 +526,10 @@ void main() {
   });
 
   testWidgets('analysis launchers open all dedicated screens', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(900, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(900, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_launcherApp());
 
     await tester.tap(find.byKey(const Key('menu_sales_analytics_launcher')));
@@ -534,8 +577,10 @@ void main() {
   testWidgets('all report analysis launchers are readable on phone', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_launcherApp());
     await tester.pump();
 

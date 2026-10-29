@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../i18n/locale_extensions.dart';
+import '../../layout/adaptive_layout.dart';
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
 import 'toast_vocabulary.dart';
@@ -208,10 +209,15 @@ class ToastMetricStrip extends StatelessWidget {
     required this.metrics,
     this.maxColumns = 4,
     this.dense = false,
+    this.minimumItemWidth = 240,
   });
   final List<ToastMetric> metrics;
   final int maxColumns;
   final bool dense;
+
+  /// Monetary summaries keep room for complete values; count strips can opt
+  /// into a smaller budget without changing the large-text stacking policy.
+  final double minimumItemWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -233,7 +239,7 @@ class ToastMetricStrip extends StatelessWidget {
                 for (var index = 0; index < metrics.length; index++) ...[
                   SizedBox(
                     width: tileWidth,
-                    child: _tile(metrics[index], compactPhone: false),
+                    child: _tile(context, metrics[index], compactPhone: false),
                   ),
                   if (index != metrics.length - 1) const SizedBox(width: 8),
                 ],
@@ -242,14 +248,14 @@ class ToastMetricStrip extends StatelessWidget {
           );
         }
 
-        final compactPhone = constraints.maxWidth < 420;
-        final columns = compactPhone
-            ? 1
-            : _metricColumnsForWidth(
-                constraints.maxWidth,
-                metrics.length,
-                maxColumns,
-              );
+        final layout = PosLayoutSpec.from(context, constraints);
+        final compactPhone = layout.isCompact || layout.usesLargeText;
+        final columns = layout.balancedColumns(
+          itemCount: metrics.length,
+          maxColumns: maxColumns,
+          minimumItemWidth: minimumItemWidth,
+          spacing: 8,
+        );
         final gap = compactPhone ? 6.0 : 8.0;
         final rows = <List<ToastMetric>>[];
         for (var index = 0; index < metrics.length; index += columns) {
@@ -271,26 +277,31 @@ class ToastMetricStrip extends StatelessWidget {
                   vertical: compactPhone ? 5 : 6,
                 ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
-                Row(
-                  children: [
-                    for (
-                      var columnIndex = 0;
-                      columnIndex < columns;
-                      columnIndex++
-                    ) ...[
-                      Expanded(
-                        child: columnIndex < rows[rowIndex].length
-                            ? _tile(
-                                rows[rowIndex][columnIndex],
-                                compactPhone: compactPhone,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                      if (columnIndex != columns - 1) SizedBox(width: gap),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (
+                        var columnIndex = 0;
+                        columnIndex < columns;
+                        columnIndex++
+                      ) ...[
+                        Expanded(
+                          child: columnIndex < rows[rowIndex].length
+                              ? _tile(
+                                  context,
+                                  rows[rowIndex][columnIndex],
+                                  compactPhone: compactPhone,
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        if (columnIndex != columns - 1) SizedBox(width: gap),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
                 if (rowIndex != rows.length - 1) SizedBox(height: gap),
               ],
@@ -301,9 +312,30 @@ class ToastMetricStrip extends StatelessWidget {
     );
   }
 
-  Widget _tile(ToastMetric m, {required bool compactPhone}) {
+  Widget _tile(
+    BuildContext context,
+    ToastMetric m, {
+    required bool compactPhone,
+  }) {
     final tone = m.tone;
     if (dense) {
+      final label = Text(
+        m.label,
+        style: AppFonts.system(
+          color: AppColors.textSecondary,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+      final amount = Text(
+        m.value,
+        style: AppFonts.system(
+          color: tone ?? AppColors.textPrimary,
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          height: 1.2,
+        ),
+      );
       return Container(
         constraints: const BoxConstraints(minHeight: 26),
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -312,39 +344,19 @@ class ToastMetricStrip extends StatelessWidget {
           borderRadius: AppRadius.md,
           border: Border.all(color: AppColors.surface3),
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                m.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppFonts.system(
-                  color: AppColors.textSecondary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
+        child: compactPhone
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [label, const SizedBox(height: 4), amount],
+              )
+            : Row(
+                children: [
+                  Expanded(child: label),
+                  const SizedBox(width: 6),
+                  Flexible(child: amount),
+                ],
               ),
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: Text(
-                  m.value,
-                  maxLines: 1,
-                  style: AppFonts.system(
-                    color: tone ?? AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       );
     }
     return Container(
@@ -374,17 +386,13 @@ class ToastMetricStrip extends StatelessWidget {
             SizedBox(height: compactPhone ? 6 : 8),
             Align(
               alignment: Alignment.centerLeft,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  m.value,
-                  maxLines: 1,
-                  style: AppFonts.system(
-                    color: tone ?? AppColors.textPrimary,
-                    fontSize: compactPhone ? 20 : 22,
-                    fontWeight: FontWeight.w800,
-                    height: 1.05,
-                  ),
+              child: Text(
+                m.value,
+                style: AppFonts.system(
+                  color: tone ?? AppColors.textPrimary,
+                  fontSize: compactPhone ? 20 : 22,
+                  fontWeight: FontWeight.w800,
+                  height: 1.05,
                 ),
               ),
             ),
@@ -516,22 +524,6 @@ class ToastSelectedContextHeader extends StatelessWidget {
   }
 }
 
-int _metricColumnsForWidth(double width, int itemCount, int maxColumns) {
-  if (itemCount <= 1) {
-    return 1;
-  }
-  if (width < 420) {
-    return 1;
-  }
-  if (width < 760) {
-    return math.min(2, itemCount);
-  }
-  if (width < 1080) {
-    return math.min(3, itemCount);
-  }
-  return math.min(maxColumns, itemCount);
-}
-
 // =============================================================================
 // ToastIssueActionSection — first detail block: issue + recovery action.
 // =============================================================================
@@ -599,6 +591,7 @@ class PosActionButton extends StatelessWidget {
     this.loading = false,
     this.loadingLabel,
     this.compact = false,
+    this.wrapLabel = false,
   });
 
   final String label;
@@ -622,6 +615,10 @@ class PosActionButton extends StatelessWidget {
   /// shrinks the typographic weight one notch. Icon and spinner alignment
   /// are preserved. Default callers see no change.
   final bool compact;
+
+  /// For content-sized actions such as large-text dialog confirmations.
+  /// The caller must allow the button to grow vertically.
+  final bool wrapLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -657,9 +654,9 @@ class PosActionButton extends StatelessWidget {
             : double.infinity;
         final labelWidget = Text(
           labelText,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
+          maxLines: wrapLabel ? null : 1,
+          overflow: wrapLabel ? null : TextOverflow.ellipsis,
+          softWrap: wrapLabel,
           style: AppFonts.system(
             color: fg,
             fontSize: compact ? 12 : 13,
@@ -1127,6 +1124,49 @@ class ToastDenseDataTable extends StatelessWidget {
 class ToastConfirmDialog {
   ToastConfirmDialog._();
 
+  static Widget _confirmAction(
+    BuildContext context,
+    String label,
+    PosActionTone tone,
+  ) {
+    final largeText =
+        MediaQuery.textScalerOf(context).scale(1) >=
+        PosBreakpoints.largeTextScale;
+    final width = largeText
+        ? math.min(
+            360.0,
+            math.max(140.0, MediaQuery.sizeOf(context).width - 128),
+          )
+        : 140.0;
+    var height = 48.0;
+    if (largeText) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: DefaultTextStyle.of(context).style.merge(
+            AppFonts.system(fontSize: 13, fontWeight: FontWeight.w800),
+          ),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.localeOf(context),
+      )..layout(maxWidth: width - 30);
+      height = math.max(height, painter.height.ceilToDouble() + 22);
+      painter.dispose();
+    }
+    return SizedBox(
+      width: width,
+      height: height,
+      child: PosActionButton(
+        key: const Key('toast_confirm_dialog_confirm'),
+        label: label,
+        tone: tone,
+        wrapLabel: largeText,
+        onPressed: () => Navigator.pop(context, true),
+      ),
+    );
+  }
+
   /// Shows a confirmation dialog and resolves to `true` if confirmed,
   /// `false` if cancelled, `null` if dismissed (escape / outside tap).
   ///
@@ -1151,6 +1191,7 @@ class ToastConfirmDialog {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: PosColors.surface,
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1184,16 +1225,7 @@ class ToastConfirmDialog {
               style: AppFonts.system(color: PosColors.textSecondary),
             ),
           ),
-          SizedBox(
-            width: 140,
-            height: 48,
-            child: PosActionButton(
-              key: const Key('toast_confirm_dialog_confirm'),
-              label: confirmLabel,
-              tone: tone,
-              onPressed: () => Navigator.pop(ctx, true),
-            ),
-          ),
+          _confirmAction(ctx, confirmLabel, tone),
         ],
       ),
     );
@@ -1228,6 +1260,7 @@ class ToastConfirmDialog {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: AppColors.surface1,
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1256,16 +1289,7 @@ class ToastConfirmDialog {
               style: AppFonts.system(color: AppColors.textSecondary),
             ),
           ),
-          SizedBox(
-            width: 140,
-            height: 48,
-            child: PosActionButton(
-              key: const Key('toast_confirm_dialog_confirm'),
-              label: confirmLabel,
-              tone: tone,
-              onPressed: () => Navigator.pop(ctx, true),
-            ),
-          ),
+          _confirmAction(ctx, confirmLabel, tone),
         ],
       ),
     );

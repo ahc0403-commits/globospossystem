@@ -40,6 +40,54 @@
       "timeoutSeconds": 120
     },
     {
+      "id": "cloud-transport-contract",
+      "argv": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/cloud_deployment",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "format": "unittest",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "cloud-authenticated-driver-contract",
+      "argv": [
+        "node",
+        "--test",
+        "scripts/cloud_deployment/test_driver.cjs"
+      ],
+      "format": "node",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "cloud-migration-atomicity",
+      "argv": [
+        "python3",
+        "-B",
+        "scripts/cloud_deployment/integration_migration.py"
+      ],
+      "format": "unittest",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "cloud-procurement-migration",
+      "argv": [
+        "env",
+        "POS_TEST_CLOUD_MIGRATION=1",
+        "bash",
+        "scripts/test_procurement_v2.sh"
+      ],
+      "format": "command",
+      "timeoutSeconds": 600
+    },
+    {
       "id": "repository",
       "argv": [
         "bash",

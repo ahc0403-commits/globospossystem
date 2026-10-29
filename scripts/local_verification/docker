@@ -13,8 +13,18 @@ import os
 import re
 import subprocess
 import sys
+from fixture_image import policy, policy_for_ref, verified_fixture_id, temporary_volume_options, validate_temporary_storage
 
-REAL = '/usr/bin/docker'
+def real_docker():
+    # The Ubuntu tool image uses /usr/bin; the managed host uses /usr/local/bin.
+    # Use fixed system locations, never PATH (which contains this wrapper).
+    for path in ('/usr/bin/docker', '/usr/local/bin/docker'):
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    raise ValueError('System Docker client is missing')
+
+
+REAL = real_docker()
 LABEL = 'pos.local.verification'
 
 
@@ -29,8 +39,16 @@ def owned(kind, name, run_id):
     if kind == 'container':
         area = Path(os.environ['POS_VERIFICATION_ARTIFACTS'])
         area.mkdir(parents=True, exist_ok=True)
-        line = json.dumps({'runId':run_id, 'container':name,
-                           'imageId':value['Image'], 'imageRef':value['Config']['Image']}) + '\n'
+        record = {'runId':run_id, 'container':name,
+                  'imageId':value['Image'], 'imageRef':value['Config']['Image']}
+        requested = (labels or {}).get('pos.local.fixture.source')
+        if requested:
+            fixed = policy_for_ref(requested)
+            if value['Image'] != fixed['derivedImageId']:
+                raise ValueError('Fixture source/image identity mismatch')
+            record.update(requestedImageRef=requested, representation=fixed['representation'],
+                          temporaryVolumeMounts=validate_temporary_storage(value, fixed))
+        line = json.dumps(record) + '\n'
         with (area / 'fixture-images.jsonl').open('a') as log:
             fcntl.flock(log, fcntl.LOCK_EX)
             log.write(line)
@@ -61,7 +79,38 @@ def prepare(args, run_id):
         existing = subprocess.run([REAL, 'container', 'inspect', name], capture_output=True)
         if existing.returncode == 0:
             raise ValueError('Fixture name already exists: ' + name)
-        return ['run', '--label', LABEL + '=' + run_id] + args[1:]
+        result = ['run', '--label', LABEL + '=' + run_id] + args[1:]
+        projections = json.loads(os.environ.get('POS_FIXTURE_IMAGE_MAP', '{}'))
+        if not isinstance(projections, dict):
+            raise ValueError('Invalid fixture image map')
+        legacy = os.environ.get('POS_POSTGRES_FIXTURE_IMAGE')
+        if legacy:
+            if policy()['requestedRef'] in projections and projections[policy()['requestedRef']] != legacy:
+                raise ValueError('Conflicting fixture image override')
+            projections[policy()['requestedRef']] = legacy
+        for requested, projected in projections.items():
+            fixed = policy_for_ref(requested)
+            if projected != fixed['derivedImageId']:
+                raise ValueError('Fixture image/source override differs')
+        matches = [requested for requested in projections if requested in args]
+        if len(matches) > 1:
+            raise ValueError('Ambiguous fixture source references')
+        if matches:
+            requested = matches[0]
+            projected = projections[requested]
+            if args.count(requested) != 1:
+                raise ValueError('Ambiguous fixture source reference')
+            verified_fixture_id(projected, [REAL])
+            result[result.index(requested)] = projected
+            result[1:1] = ['--label', 'pos.local.fixture.source=' + requested]
+            fixed = policy_for_ref(requested)
+            mounts = temporary_volume_options(fixed)
+            if mounts and any(a.startswith('-v') or a in ('--volume','--mount','--tmpfs') or
+                              a.startswith(('--volume=','--mount=','--tmpfs=')) for a in args[1:]):
+                raise ValueError('Unexpected explicit mount on temporary database fixture')
+            for path, options in mounts.items():
+                result[1:1] = ['--tmpfs', path + ':' + options]
+        return result
     if args[:2] == ['network', 'create']:
         return args[:2] + ['--label', LABEL + '=' + run_id] + args[2:]
     if args[:2] in (['network', 'connect'], ['network', 'disconnect']):

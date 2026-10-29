@@ -236,9 +236,8 @@ void main() {
     expect(primitives, contains('final boundedLabel'));
     expect(primitives, contains('final labelMaxWidth'));
     expect(primitives, contains('ConstrainedBox('));
-    expect(primitives, contains('maxLines: 1'));
-    expect(primitives, contains('overflow: TextOverflow.ellipsis'));
-    expect(primitives, contains('softWrap: false'));
+    // Default truncation and the explicit large-text confirmation variant are
+    // rendered and tapped in shared_surface_layout_test.dart.
   });
 
   test('topbar navigation clamps trailing controls to available width', () {

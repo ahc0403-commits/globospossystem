@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: "${POS_CLOUD_VERCEL_BIN:?Missing existing official Vercel CLI path}"
+args=()
+if [[ -n "${POS_VERCEL_GLOBAL_CONFIG:-}" ]]; then
+  args=(--global-config "$POS_VERCEL_GLOBAL_CONFIG")
+fi
+exec "$POS_CLOUD_VERCEL_BIN" "${args[@]}" "$@"

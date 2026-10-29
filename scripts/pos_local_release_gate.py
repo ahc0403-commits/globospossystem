@@ -15,23 +15,28 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import ssl
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
+from urllib.parse import urlsplit
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'local_verification'))
 from evidence import InvalidEvidence, evidence_file, parse_counts, require, sha256
+from fixture_image import DiskMonitor, policy as fixture_policy, policies as fixture_policies, validate_image, verify_proof, temporary_volume_options
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ['scripts/local_verification/recipe.json',
             'scripts/local_verification/Dockerfile',
             'scripts/local_verification/evidence.py',
             'scripts/local_verification/docker', 'scripts/local_verification/port_proxy.py',
-            'scripts/pos_local_release_gate.py']
+            'scripts/pos_local_release_gate.py',
+            'scripts/local_verification/fixture_image.py',
+            'scripts/local_verification/fixture_postgres_policy.json']
 
 
 def now():
@@ -89,6 +94,45 @@ def proxy_trust(proxy_cert, host_bundle):
             'hostBundleSha256': sha256(bundle_path)}
 
 
+def proxy_environment(environment):
+    """Forward only the host's credential-free managed network route."""
+    names = []
+    for name in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy',
+                 'NO_PROXY', 'no_proxy'):
+        value = environment.get(name)
+        if not value:
+            continue
+        require(not any(ord(c) < 32 for c in value), 'Invalid proxy environment')
+        if name.lower() != 'no_proxy':
+            parsed = urlsplit(value)
+            require(parsed.scheme in {'http', 'https'} and parsed.hostname
+                    and parsed.username is None and parsed.password is None
+                    and not parsed.query and not parsed.fragment,
+                    'Only credential-free HTTP proxy settings may enter verification')
+        names.append(name)
+    return names
+
+
+def proxy_host_arguments(environment):
+    """Project the existing host DNS answer for its managed proxy into Docker.
+
+    Nested bridge DNS can answer from a different network. This preserves the
+    configured proxy URL/port and the host's current route; it does not resolve
+    target services directly or add another proxy/fallback.
+    """
+    names = proxy_environment(environment)
+    hosts = sorted({urlsplit(environment[name]).hostname for name in names
+                    if name.lower() != 'no_proxy'})
+    arguments = []
+    for host in hosts:
+        answers = sorted({item[4][0] for item in socket.getaddrinfo(
+            host, None, socket.AF_INET, socket.SOCK_STREAM)})
+        require(answers, 'Managed proxy has no host DNS answer')
+        for address in answers:
+            arguments += ['--add-host', host + ':' + address]
+    return arguments
+
+
 def exact_main(root):
     remote = checked(['git', 'remote', 'get-url', 'origin'], root)
     require(remote in {'https://github.com/ahc0403-commits/globospossystem.git',
@@ -105,11 +149,11 @@ def write_receipt(directory, receipt):
     temp.replace(directory / 'receipt.json')
 
 
-def recorded(directory, name, argv, timeout, cwd=ROOT):
+def recorded(directory, name, argv, timeout, cwd=ROOT, env=None):
     path = directory / (name + '.log')
     start, monotonic = now(), time.monotonic()
     with path.open('wb') as log:
-        process = subprocess.Popen(argv, cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
+        process = subprocess.Popen(argv, cwd=cwd, stdout=log, stderr=subprocess.STDOUT, env=env,
                                    start_new_session=True)
         try:
             code = process.wait(timeout=timeout)
@@ -163,7 +207,23 @@ def verify(directory, root=ROOT, kind=None, run_id=None):
     age = dt.datetime.now(dt.timezone.utc) - end
     require(start.tzinfo and end.tzinfo and dt.timedelta() <= age <= dt.timedelta(hours=6)
             and end >= start, 'Stale/invalid evidence timestamps')
-    for auxiliary in [value['imageBuild'], value['toolProbe']]:
+    auxiliaries = [value['imageBuild'], value['toolProbe']]
+    projection = value['environment'].get('fixtureProjection')
+    projections = ([projection] if projection else []) + value['environment'].get('additionalFixtureProjections', [])
+    if projection:
+        verify_proof(projection, value['runId'], value['sourceBefore']['sha'])
+        auxiliaries.append(value['fixturePreparation'])
+    additions = value['environment'].get('additionalFixtureProjections', [])
+    preparations = value.get('additionalFixturePreparations', [])
+    require(len(additions) == len(preparations), 'Missing fixture preparation records')
+    if value['environment'].get('engineStorageDriver') == 'vfs':
+        require({x['requestedRef'] for x in projections} == {x['requestedRef'] for x in fixture_policies()}
+                and len(projections) == len(fixture_policies()), 'Missing/duplicate VFS fixture projections')
+    for proof, fixed in zip(additions, fixture_policies()[1:]):
+        verify_proof(proof, value['runId'], value['sourceBefore']['sha'], fixed)
+    require(len(additions) <= len(fixture_policies()) - 1, 'Unreviewed fixture projections')
+    auxiliaries.extend(preparations)
+    for auxiliary in auxiliaries:
         require(auxiliary['exitCode'] == 0, 'Environment bootstrap/probe failed')
         log = evidence_file(directory, auxiliary['log'])
         require(sha256(log) == auxiliary['logSha256'], 'Environment log changed')
@@ -191,6 +251,36 @@ def verify(directory, root=ROOT, kind=None, run_id=None):
     require({x['imageId'] for x in fixtures} == {x['Id'] for x in value['environment']['fixtureImages']},
             'Missing DB/fixture image identities')
     require(all(x['Os'] == 'linux' for x in value['environment']['fixtureImages']), 'Wrong fixture OS')
+    by_id = {x['derivedImageId']: x for x in fixture_policies()}
+    proven = {x['derivedImageId'] for x in projections}
+    for image in value['environment']['fixtureImages']:
+        if image['Id'] in by_id:
+            fixed = by_id[image['Id']]
+            require(image['Id'] in proven, 'Derived fixture provenance missing')
+            require(image.get('rootfsLayers') == ['sha256:' + fixed['rootfsArchiveSha256']] and
+                    image.get('runtimeConfigSha256') == fixed['runtimeConfigSha256'],
+                    'Derived fixture filesystem/config evidence differs')
+    for fixture in fixtures:
+        if fixture['imageId'] in by_id or fixture.get('requestedImageRef'):
+            require(fixture['imageId'] in by_id and fixture['imageId'] in proven,
+                    'Unproven fixture mapping')
+            fixed = by_id[fixture['imageId']]
+            require(fixture.get('requestedImageRef') == fixed['requestedRef'] and
+                    fixture['imageId'] == fixed['derivedImageId'] and
+                    fixture.get('representation') == fixed['representation'] and
+                    fixture.get('temporaryVolumeMounts') == temporary_volume_options(fixed),
+                    'Fixture mapping/storage differs')
+    usage = value['filesystemUsage']
+    disk_log = evidence_file(directory, usage['log'])
+    require(sha256(disk_log) == usage['logSha256'], 'Disk sampling evidence changed')
+    disk = json.loads(disk_log.read_text())
+    require(disk['samplingIntervalSeconds'] == 1 and len(disk['samples']) >= 2,
+            'Disk sampling evidence missing')
+    require(disk['minimumAvailableBytes'] == min(x['availableBytes'] for x in disk['samples']) and
+            disk['maximumUsedBytes'] == max(x['usedBytes'] for x in disk['samples']) and
+            disk['minimumAvailableBytes'] >= 0, 'False disk peak summary')
+    require(all(start <= dt.datetime.fromisoformat(x['at']) <= end for x in disk['samples']),
+            'Disk samples outside invocation')
     require(value.get('artifacts'), 'Missing build artifacts')
     names = set()
     for artifact in value['artifacts']:
@@ -232,18 +322,66 @@ def run(directory, kind, root=ROOT):
     write_receipt(directory, value)
     name = 'pos-local-verify-' + run_id
     container_created = False
+    disk_monitor = DiskMonitor(directory).start()
+    def finish_disk():
+        area = directory / 'nested'
+        area.mkdir(exist_ok=True)
+        path = area / 'filesystem-usage.json'
+        path.write_text(json.dumps(disk_monitor.stop(), indent=2) + '\n')
+        value['filesystemUsage'] = {'log': str(path.relative_to(directory)), 'logSha256': sha256(path)}
     try:
         endpoint = checked(['docker', 'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])
         require(not os.environ.get('DOCKER_HOST') and endpoint.startswith('unix://'), 'Only an existing local Docker engine is allowed')
+        engine = checked(['docker', 'info', '--format', '{{.Driver}} {{.OSType}} {{.Architecture}}']).split()
+        value['environment']['engineStorageDriver'] = engine[0]
+        projection = None
+        projections = []
+        if engine[0] == 'vfs' and engine[1:] in (['linux', 'x86_64'], ['linux', 'amd64']):
+            path = directory / 'nested/fixture-projection.json'
+            value['fixturePreparation'] = recorded(directory, 'fixture-preparation',
+                [sys.executable, '-B', str(root / 'scripts/local_verification/fixture_image.py'),
+                 '--output', str(path), '--run-id', run_id, '--source-sha', before['sha'],
+                 '--docker-endpoint', endpoint], 1200)
+            require(value['fixturePreparation']['exitCode'] == 0, 'Verified fixture preparation failed')
+            projection = json.loads(path.read_text())
+            verify_proof(projection, run_id, before['sha'])
+            value['environment']['fixtureProjection'] = projection
+            projections.append(projection)
+            value['additionalFixturePreparations'] = []
+            value['environment']['additionalFixtureProjections'] = []
+            for index, fixed in enumerate(fixture_policies()[1:], 1):
+                path = directory / ('nested/fixture-projection-' + str(index) + '.json')
+                preparation = recorded(directory, 'fixture-preparation-' + str(index),
+                    [sys.executable, '-B', str(root / 'scripts/local_verification/fixture_image.py'),
+                     '--output', str(path), '--run-id', run_id, '--source-sha', before['sha'],
+                     '--docker-endpoint', endpoint, '--requested-ref', fixed['requestedRef']], 1200)
+                value['additionalFixturePreparations'].append(preparation)
+                require(preparation['exitCode'] == 0, 'Additional verified fixture preparation failed')
+                proof = json.loads(path.read_text())
+                verify_proof(proof, run_id, before['sha'], fixed)
+                value['environment']['additionalFixtureProjections'].append(proof)
+                projections.append(proof)
         trust = proxy_trust(os.environ.get('CODEX_PROXY_CERT'), '/etc/ssl/certs/ca-certificates.crt')
         if trust:
             value['environment']['proxyTrust'] = {k: trust[k] for k in ('proxyCaSha256', 'hostBundleSha256')}
-        build = ['docker', 'build', '--platform', 'linux/amd64']
+        proxy_names = proxy_environment(os.environ)
+        value['environment']['managedProxyVariables'] = proxy_names
+        proxy_hosts = proxy_host_arguments(os.environ)
+        value['environment']['managedProxyHostArguments'] = proxy_hosts
+        build = ['docker', 'build', '--platform', 'linux/amd64'] + proxy_hosts
+        for variable in proxy_names:
+            build += ['--build-arg', variable]
         if trust:
             build += ['--secret', 'id=host_ca_bundle,src=' + trust['bundle']]
         build += ['--iidfile', str(directory / 'image.id'), '-f', str(root / CONTRACT[1]),
                   str(root / 'scripts/local_verification')]
-        value['imageBuild'] = recorded(directory, 'image-build', build, 2400)
+        # Buildx state must be writable without changing HOME, Docker contexts,
+        # registry credentials, or system configuration in managed cloud hosts.
+        buildx = directory / 'buildx-state'
+        buildx.mkdir(mode=0o700)
+        build_environment = dict(os.environ, BUILDX_CONFIG=str(buildx))
+        value['imageBuild'] = recorded(directory, 'image-build', build, 2400,
+                                       env=build_environment)
         require(value['imageBuild']['exitCode'] == 0, 'Local environment build failed')
         image_id = (directory / 'image.id').read_text().strip()
         image = json.loads(checked(['docker', 'image', 'inspect', image_id]))[0]
@@ -260,6 +398,12 @@ def run(directory, kind, root=ROOT):
                      '-v', str(snapshot) + ':' + str(snapshot),
                      '-v', str(directory) + ':' + str(directory),
                     ]
+            docker_run += proxy_hosts
+            if projection:
+                docker_run += ['--env', 'POS_FIXTURE_IMAGE_MAP=' + json.dumps(
+                    {p['requestedRef']:p['derivedImageId'] for p in projections}, separators=(',', ':'))]
+            for variable in proxy_names:
+                docker_run += ['--env', variable]
             if trust:
                 docker_run += ['--mount', 'type=bind,src=' + trust['bundle'] + ',dst=/run/pos-host-ca.pem,readonly']
                 docker_run += ['--mount', 'type=bind,src=' + trust['certificate'] +
@@ -267,6 +411,7 @@ def run(directory, kind, root=ROOT):
                 for variable in ('SSL_CERT_FILE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO',
                                  'REQUESTS_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS'):
                     docker_run += ['--env', variable + '=/run/pos-host-ca.pem']
+                docker_run += ['--env', 'DENO_TLS_CA_STORE=system']
             runtime_trust = ('update-ca-certificates >/dev/null; '
                              'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt '
                              '/usr/local/share/ca-certificates/pos-platform-proxy.crt >/dev/null; ')
@@ -304,7 +449,15 @@ def run(directory, kind, root=ROOT):
             images = json.loads(checked(['docker', 'image', 'inspect'] + image_ids))
             value['environment']['fixtureImages'] = [
                 {k: x[k] for k in ['Id', 'Os', 'Architecture', 'RepoDigests']} for x in images]
+            for info, image_value in zip(value['environment']['fixtureImages'], images):
+                matched = next((p for p in projections if p['derivedImageId'] == info['Id']), None)
+                if matched:
+                    fixed = next(p for p in fixture_policies() if p['derivedImageId'] == info['Id'])
+                    validate_image(image_value, fixed)
+                    info.update(rootfsLayers=image_value['RootFS']['Layers'],
+                                runtimeConfigSha256=matched['runtimeConfigSha256'])
             shutil.copytree(snapshot / 'build/web', directory / 'artifacts/web')
+            finish_disk()
             value['artifacts'] = [{'path': str(f.relative_to(directory)), 'sha256': sha256(f), 'bytes': f.stat().st_size}
                                   for area in ['artifacts', 'nested']
                                   for f in sorted((directory / area).rglob('*')) if f.is_file()]
@@ -319,13 +472,22 @@ def run(directory, kind, root=ROOT):
         return 0
     except (InvalidEvidence, subprocess.CalledProcessError, OSError, ValueError, KeyError, KeyboardInterrupt) as error:
         value.update({'finishedAt': now(), 'completed': False, 'status': 'FAIL', 'failure': str(error)})
-        write_receipt(directory, value)
         print('POS_LOCAL_VERIFICATION_BLOCKED: ' + str(error), file=sys.stderr)
         return 1
     finally:
+        disk_monitor.stop()
         if container_created:
             subprocess.run(['docker', 'rm', '-f', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         cleanup_fixtures(run_id)
+        if value['status'] == 'FAIL':
+            # ENOSPC may prevent a receipt write while the disposable SDK layer
+            # exists. Persist FAIL after this invocation's normal cleanup;
+            # never leave a misleading RUNNING receipt when space is recovered.
+            try:
+                finish_disk()
+                write_receipt(directory, value)
+            except OSError as error:
+                print('POS_FAILURE_RECEIPT_NOT_SAVED: ' + str(error), file=sys.stderr)
 
 
 def main():

@@ -118,6 +118,8 @@ def parse_counts(step, output, root):
         return deno_counts(output)
     if step['format'] == 'flutter':
         return flutter_counts(output)
+    if step['format'] == 'node':
+        return node_counts(output)
     if step['format'] == 'repository':
         source = (Path(root) / 'scripts/check_repo.sh').read_text()
         expected = re.findall(r"printf 'CHECK_REPO_STEP=([a-z0-9_]+)\\n'", source)

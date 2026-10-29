@@ -43,31 +43,67 @@ class FinancialAmountCards extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final layout = PosLayoutSpec.from(context, constraints);
-      final columns = math.min(
-        math.max(cards.length, 1),
-        layout.isCompact || layout.usesLargeText
-            ? 1
-            : math.min(maxColumns, layout.isMedium ? 2 : maxColumns),
+      if (cards.isEmpty) return const SizedBox.shrink();
+      final columns = layout.balancedColumns(
+        itemCount: cards.length,
+        maxColumns: maxColumns,
       );
-      final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          for (final card in cards)
-            SizedBox(
-              width: width,
-              child: _AmountCard(card: card),
+      final width = (layout.availableWidth - (columns - 1) * 12) / columns;
+      final titleStyle = Theme.of(
+        context,
+      ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700);
+      final rows = <Widget>[];
+      for (var start = 0; start < cards.length; start += columns) {
+        final row = cards.sublist(
+          start,
+          math.min(start + columns, cards.length),
+        );
+        var titleHeight = 0.0;
+        for (final card in row) {
+          final painter = TextPainter(
+            text: TextSpan(text: card.title, style: titleStyle),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            locale: Localizations.localeOf(context),
+          )..layout(maxWidth: math.max(0, width - 32));
+          titleHeight = math.max(titleHeight, painter.height);
+          painter.dispose();
+        }
+        if (rows.isNotEmpty) rows.add(const SizedBox(height: 12));
+        rows.add(
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var column = 0; column < columns; column++) ...[
+                  if (column > 0) const SizedBox(width: 12),
+                  Expanded(
+                    child: column < row.length
+                        ? _AmountCard(
+                            card: row[column],
+                            titleHeight: titleHeight,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
             ),
-        ],
+          ),
+        );
+      }
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [...rows],
       );
     },
   );
 }
 
 class _AmountCard extends StatelessWidget {
-  const _AmountCard({required this.card});
+  const _AmountCard({required this.card, required this.titleHeight});
   final FinancialAmountCardData card;
+  final double titleHeight;
   @override
   Widget build(BuildContext context) {
     final content = Container(
@@ -83,25 +119,24 @@ class _AmountCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            card.title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
+          SizedBox(
+            height: titleHeight,
             child: Text(
-              card.amount == null
-                  ? '—'
-                  : '${NumberFormat('#,##0', 'vi_VN').format(card.amount)} VND',
-              key: ValueKey('${card.id}_amount'),
+              card.title,
               style: Theme.of(
                 context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            card.amount == null
+                ? '—'
+                : '${NumberFormat('#,##0', 'vi_VN').format(card.amount)} VND',
+            key: ValueKey('${card.id}_amount'),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
           if (card.status != null) ...[
             const SizedBox(height: 8),
@@ -124,6 +159,7 @@ class _AmountCard extends StatelessWidget {
               '${bank.label} · ${bank.accountNumber}\n${bank.accountHolder}',
             ),
           ],
+          const Spacer(),
           if (card.actionLabel != null && card.onAction != null)
             Align(
               alignment: Alignment.centerLeft,

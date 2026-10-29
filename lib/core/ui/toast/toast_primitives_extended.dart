@@ -545,14 +545,17 @@ class ToastResponsiveBody extends StatelessWidget {
               constraints.maxHeight - insets.vertical,
             );
             final resolvedWidth = math.min(maxWidth, availableWidth);
+            final scaledMinHeight =
+                minHeight *
+                math.max(1, MediaQuery.textScalerOf(context).scale(1));
             final narrowLayout =
-                constraints.maxWidth < _toastSingleScrollOwnerBreakpoint;
+                availableWidth < _toastSingleScrollOwnerBreakpoint;
             final preferredHeight = narrowLayout && !fitToViewportWhenNarrow
                 ? math.max(
-                    math.max(availableHeight, minHeight),
+                    math.max(availableHeight, scaledMinHeight),
                     _toastCompactPageMinHeight,
                   )
-                : math.max(availableHeight, minHeight);
+                : math.max(availableHeight, scaledMinHeight);
             final useSingleScrollOwner =
                 fitToViewportWhenNarrow && narrowLayout;
             final effectiveHeight = useSingleScrollOwner
@@ -659,9 +662,18 @@ class ToastTopbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final titleWidget = Text(
+      title,
+      style: AppFonts.system(
+        color: ToastColorTokens.textPrimary,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+      ),
+    );
     return Container(
-      height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      constraints: BoxConstraints(minHeight: height),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       decoration: BoxDecoration(
         color: ToastColorTokens.topbarSurface,
         border: Border(
@@ -670,36 +682,54 @@ class ToastTopbar extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
-        children: [
-          if (leading != null) ...[
-            leading!,
-            const SizedBox(width: AppSpacing.sm),
-          ],
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppFonts.system(
-                color: ToastColorTokens.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                height: 1.2,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final layout = PosLayoutSpec.from(context, constraints);
+          final heading = Row(
+            children: [
+              if (leading != null) ...[
+                leading!,
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(child: titleWidget),
+            ],
+          );
+          if (layout.prefersStackedControls) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                heading,
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(spacing: 8, runSpacing: 8, children: actions),
+                ],
+                if (trailing != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Align(alignment: Alignment.centerRight, child: trailing!),
+                ],
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: heading),
+              ...actions.expand(
+                (action) => [const SizedBox(width: AppSpacing.sm), action],
               ),
-            ),
-          ),
-          ...actions.expand(
-            (action) => [const SizedBox(width: AppSpacing.sm), action],
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: AppSpacing.md),
-            Flexible(
-              fit: FlexFit.loose,
-              child: Align(alignment: Alignment.centerRight, child: trailing!),
-            ),
-          ],
-        ],
+              if (trailing != null) ...[
+                const SizedBox(width: AppSpacing.md),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: trailing!,
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -1459,10 +1489,11 @@ class ToastMetricItemStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = _metricItemColumnsForWidth(
-          constraints.maxWidth,
-          items.length,
-        );
+        if (items.isEmpty) return const SizedBox.shrink();
+        final columns = PosLayoutSpec.from(
+          context,
+          constraints,
+        ).balancedColumns(itemCount: items.length, minimumItemWidth: 240);
         final rows = <List<ToastMetricItem>>[];
         for (var index = 0; index < items.length; index += columns) {
           rows.add(
@@ -1482,6 +1513,7 @@ class ToastMetricItemStrip extends StatelessWidget {
               ? ToastColorTokens.border.withValues(alpha: 0.58)
               : ToastColorTokens.border,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
                 Row(
@@ -1525,22 +1557,6 @@ class ToastMetricItemStrip extends StatelessWidget {
       },
     );
   }
-}
-
-int _metricItemColumnsForWidth(double width, int itemCount) {
-  if (itemCount <= 1) {
-    return 1;
-  }
-  if (width < 420) {
-    return 1;
-  }
-  if (width < 760) {
-    return math.min(2, itemCount);
-  }
-  if (width < 1080) {
-    return math.min(3, itemCount);
-  }
-  return math.min(4, itemCount);
 }
 
 /// Wave 1.6 caller-supplied item for [ToastSidebarPanel].
@@ -1828,8 +1844,6 @@ class _ToastMetricCell extends StatelessWidget {
               Expanded(
                 child: Text(
                   item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: AppFonts.system(
                     color: ToastColorTokens.textMuted,
                     fontSize: compact ? 9.8 : 10.8,
@@ -1844,8 +1858,6 @@ class _ToastMetricCell extends StatelessWidget {
           SizedBox(height: compact ? 3 : 5),
           Text(
             item.value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: AppFonts.system(
               color: valueColor,
               fontSize: compact ? 12.5 : 16,

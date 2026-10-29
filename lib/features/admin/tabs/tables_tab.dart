@@ -726,6 +726,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               final metrics = ToastMetricStrip(
                 key: const Key('admin_tables_command_metrics'),
                 dense: true,
+                minimumItemWidth: 160,
                 maxColumns: 5,
                 metrics: [
                   ToastMetric(

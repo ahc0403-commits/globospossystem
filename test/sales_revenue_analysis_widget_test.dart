@@ -38,6 +38,7 @@ ReportSummary _summary({List<DailyRevenue>? dailyBreakdown}) {
 }
 
 Widget _app({
+  Locale locale = const Locale('ko'),
   required ValueChanged<int> onQuickRangeSelected,
   TextScaler? textScaler,
   ReportSummary? summary,
@@ -49,7 +50,7 @@ Widget _app({
   bool trendLoadFailed = false,
 }) {
   return MaterialApp(
-    locale: const Locale('ko'),
+    locale: locale,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     builder: textScaler == null
@@ -83,14 +84,39 @@ Widget _app({
 }
 
 void main() {
+  for (final locale in const [Locale('ko'), Locale('en'), Locale('vi')]) {
+    for (final width in [390.0, 768.0, 1440.0]) {
+      testWidgets(
+        'sales_revenue_analysis_widget_test real viewport ${locale.languageCode} $width 200%',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          await tester.pumpWidget(
+            _app(
+              locale: locale,
+              textScaler: TextScaler.linear(2),
+              onQuickRangeSelected: (_) {},
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   for (final size in const [Size(390, 844), Size(1200, 900)]) {
     testWidgets('sales analysis renders responsive charts at $size', (
       tester,
     ) async {
-      await tester.binding.setSurfaceSize(size);
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(_app(onQuickRangeSelected: (_) {}));
       await tester.pumpAndSettle();
 
@@ -152,8 +178,10 @@ void main() {
     tester,
   ) async {
     var selectedDays = 0;
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       _app(onQuickRangeSelected: (days) => selectedDays = days),
     );
@@ -175,8 +203,10 @@ void main() {
   testWidgets('phone period and charts remain readable at 200 percent text', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       _app(onQuickRangeSelected: (_) {}, textScaler: TextScaler.linear(2)),
     );
@@ -210,8 +240,10 @@ void main() {
           teamCount: index + 1,
         ),
     ];
-    await tester.binding.setSurfaceSize(const Size(1200, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       _app(
         onQuickRangeSelected: (_) {},
@@ -248,8 +280,10 @@ void main() {
           teamCount: index == 6 ? 0 : index + 1,
         ),
     ];
-    await tester.binding.setSurfaceSize(const Size(1200, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       _app(
         onQuickRangeSelected: (_) {},
@@ -295,8 +329,10 @@ void main() {
             ),
         ];
         final visible = all.sublist(days - 1);
-        await tester.binding.setSurfaceSize(const Size(1200, 900));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
+        tester.view.physicalSize = const Size(1200, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
         await tester.pumpWidget(
           _app(
             onQuickRangeSelected: (_) {},
@@ -329,8 +365,10 @@ void main() {
   testWidgets(
     'draft dates do not relabel or expand the applied revenue series',
     (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(
         _app(
           onQuickRangeSelected: (_) {},
@@ -356,8 +394,10 @@ void main() {
   testWidgets(
     'failed history keeps revenue and never invents preceding zeroes',
     (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(
         _app(
           onQuickRangeSelected: (_) {},
@@ -393,8 +433,10 @@ void main() {
     'a high preceding average stays inside the chart after sales fall',
     (tester) async {
       final start = DateTime(2026, 1, 1);
-      await tester.binding.setSurfaceSize(const Size(1200, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(
         _app(
           onQuickRangeSelected: (_) {},

@@ -196,6 +196,75 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets(
+    'manager opens adjustment from selected PR and cancels without a command',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      var writes = 0;
+      final request = <String, dynamic>{
+        'id': 'manager-review',
+        'request_no': 'PR-MANAGER-REVIEW',
+        'status': 'submitted',
+        'row_version': 2,
+        'allowed_actions': ['adjust_request'],
+        'lines': [
+          {
+            'id': 'line-original',
+            'product_id': 'original',
+            'product_name': 'Registered material',
+            'requested_quantity': 10,
+            'requested_unit': 'g',
+          },
+        ],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProcurementWorkspacePage(
+            approvalView: true,
+            load: () async => workspace(),
+            loadPage: (query) async => {
+              ...workspace(),
+              'adjustment_additions_version': 1,
+              'requests': [request],
+              if (query['request_id'] != null) 'request_detail': request,
+            },
+            execute: (a, b, c, d, e) async {
+              writes++;
+              return {};
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('PR-MANAGER-REVIEW').first);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Adjust'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Adjust'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('procurement_adjustment_save')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('procurement_adjustment_add')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('procurement_adjustment_save')),
+        findsNothing,
+      );
+      expect(writes, 0);
+      expect(request['row_version'], 2);
+      expect((request['lines'] as List).single['requested_quantity'], 10);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('disabled store cannot create requests', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(

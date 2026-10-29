@@ -1,4 +1,5 @@
 import 'procurement_request_card.dart';
+import 'procurement_adjustment_dialog.dart';
 import 'procurement_stock_dialog.dart';
 import 'procurement_product_picker.dart';
 import 'procurement_metrics.dart';
@@ -803,30 +804,28 @@ class _ProcurementWorkspacePageState extends State<ProcurementWorkspacePage> {
       return;
     }
     if (action == 'adjust_request') {
-      final lines = rows(request['lines']);
-      final value = await _fields(
-        copy('adjust_request'),
-        {
-          'reason': copy('reason'),
-          for (final l in lines)
-            l['id'].toString(): '${l['product_name']} · ${l['requested_unit']}',
-        },
-        initial: {
-          for (final l in lines)
-            l['id'].toString(): l['requested_quantity'].toString(),
-        },
-      );
-      if (value != null) {
-        await _execute(action, request, {
-          'reason': value['reason'],
-          'lines': [
-            for (final l in lines)
-              {
-                'request_line_id': l['id'],
-                'quantity': value[l['id'].toString()],
-              },
-          ],
-        });
+      _editing = true;
+      try {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => ProcurementAdjustmentDialog(
+            lines: rows(request['lines']),
+            products: rows(_data['products']),
+            allowAdditions: _data['adjustment_additions_version'] == 1,
+            loadCatalog: widget.loadPage,
+            saveAdjustment: (payload) async =>
+                await _execute(action, request, payload)
+                ? null
+                : (_error ?? copy('saveFailed')),
+            needsConfirmation: () => _pending != null,
+            retrySavedAdjustment: () async =>
+                await _retry() ? null : (_error ?? copy('saveFailed')),
+          ),
+        );
+      } finally {
+        _editing = false;
+        if (_refreshQueued && mounted) _refresh();
       }
       return;
     }

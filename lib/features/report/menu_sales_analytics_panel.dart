@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/layout/adaptive_layout.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import 'menu_sales_analytics.dart';
@@ -231,16 +232,17 @@ class _MenuSalesAnalyticsPanelState
     final summary = analytics.summary;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 950;
-        final phone = constraints.maxWidth < 600;
-        final textScale = MediaQuery.textScalerOf(context).scale(1);
-        final metricColumns = textScale > 1.5
-            ? 1
-            : phone
-            ? 2
-            : constraints.maxWidth < 900
-            ? 3
-            : ((constraints.maxWidth + 8) / 190).floor().clamp(4, 7);
+        final layout = PosLayoutSpec.from(context, constraints);
+        final wide = !layout.prefersSingleColumn;
+        final phone = layout.prefersStackedControls;
+        final metricColumns = layout.balancedColumns(
+          itemCount: switch (_scope) {
+            MenuSalesScope.all => 9,
+            MenuSalesScope.regular => 7,
+            MenuSalesScope.combo => 5,
+          },
+          spacing: 8,
+        );
         final metricWidth =
             (constraints.maxWidth - (metricColumns - 1) * 8) / metricColumns;
         final ranking = _MenuSalesRanking(
@@ -275,9 +277,9 @@ class _MenuSalesAnalyticsPanelState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Wrap(
+            PosEqualHeightRows(
+              maxColumns: 4,
               spacing: 8,
-              runSpacing: 8,
               children: [
                 _MenuSalesMetricCard(
                   key: const Key('menu_sales_top_menu'),
@@ -707,8 +709,6 @@ class _MenuSalesMetricCard extends StatelessWidget {
           children: [
             Text(
               label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
               style: Theme.of(
                 context,
               ).textTheme.labelMedium?.copyWith(color: PosColors.textSecondary),
@@ -716,8 +716,6 @@ class _MenuSalesMetricCard extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               value,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: tone,
                 fontWeight: FontWeight.w800,
@@ -726,8 +724,6 @@ class _MenuSalesMetricCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               detail,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),

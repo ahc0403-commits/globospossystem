@@ -15,6 +15,7 @@ Future<Uint8List> buildProcurementDocumentPdf(
   final data = Map<String, dynamic>.from(document['data'] as Map);
   final supplier =
       document['kind'] == 'po' && document['audience'] == 'supplier';
+  final requestHeader = supplier ? null : procurementRequestHeader(data);
   if (document['kind'] == 'po' && !supplier) {
     throw StateError('PROCUREMENT_INTERNAL_RENDERER_REQUIRED');
   }
@@ -141,7 +142,7 @@ Future<Uint8List> buildProcurementDocumentPdf(
   final ink = PdfColor.fromHex('#172B3B');
   final pale = PdfColor.fromHex('#EFF4F7');
   final blue = PdfColor.fromHex('#246596');
-  pw.Widget info(String label, dynamic value) => pw.Padding(
+  pw.Widget info(String label, dynamic value, {String? detail}) => pw.Padding(
     padding: const pw.EdgeInsets.all(8),
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -152,6 +153,10 @@ Future<Uint8List> buildProcurementDocumentPdf(
         ),
         pw.SizedBox(height: 3),
         pw.Text(text(value), style: const pw.TextStyle(fontSize: 10)),
+        if (detail != null && detail.isNotEmpty) ...[
+          pw.SizedBox(height: 3),
+          pw.Text(detail, style: const pw.TextStyle(fontSize: 9)),
+        ],
       ],
     ),
   );
@@ -226,7 +231,11 @@ Future<Uint8List> buildProcurementDocumentPdf(
             children: [
               pw.TableRow(
                 children: [
-                  info(copy('store'), data['store_name']),
+                  info(
+                    copy('store'),
+                    requestHeader?['store_name'] ?? data['store_name'],
+                    detail: requestHeader?['store_address'],
+                  ),
                   info(
                     copy('requestDate'),
                     procurementDate(
@@ -243,9 +252,8 @@ Future<Uint8List> buildProcurementDocumentPdf(
                 pw.TableRow(
                   children: [
                     info(
-                      copy('requester'),
-                      (data['created_actor'] as Map?)?['display_name'] ??
-                          (data['created_actor'] as Map?)?['role'],
+                      copy(requestHeader?['requester_label'] ?? 'requester'),
+                      requestHeader?['requester_value'],
                     ),
                     info(
                       copy('category'),

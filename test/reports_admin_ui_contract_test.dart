@@ -32,13 +32,7 @@ void main() {
       expect(source, contains("Key('daily_closing_open_screen')"));
       expect(source, contains('DailyClosingScreen(storeId: storeId)'));
       expect(source, contains('DailyClosingPresentation.cards'));
-      expect(source, contains('compactReportHeight'));
-      expect(source, contains('maxColumns: 4'));
       expect(source, contains('ReportAnalysisLaunchers('));
-      expect(
-        source.indexOf('ReportAnalysisLaunchers('),
-        lessThan(source.indexOf('compactHeader,')),
-      );
       expect(source, contains("Key('paperless_operations_launcher')"));
       expect(source, contains("Key('menu_sales_analytics_launcher')"));
       expect(source, contains("Key('sales_revenue_analytics_launcher')"));
@@ -47,13 +41,9 @@ void main() {
       expect(source, contains('SalesRevenueAnalyticsScreen('));
       expect(source, isNot(contains('MenuSalesAnalyticsPanel(')));
       expect(source, isNot(contains('PaperlessOperationsDashboard(')));
-      expect(source, contains('operationalReportHeight'));
-      expect(source, contains('520.0 + 12.0 + 320.0 + 12.0 + 240.0 + 260.0'));
-      expect(source, contains('height: 240'));
-      expect(source, contains('reportConstraints.maxWidth < 1080'));
-      expect(source, contains('compactSecondaryHeight: 520'));
-      expect(source, contains('keyboardDismissBehavior:'));
-      expect(source, contains('ScrollViewKeyboardDismissBehavior.onDrag'));
+      // reports_full_layout_test.dart exercises geometry and issue interaction
+      // without prescribing fixed heights for growing translated content.
+      expect(source, contains('ToastResponsiveScrollBody('));
     },
   );
 

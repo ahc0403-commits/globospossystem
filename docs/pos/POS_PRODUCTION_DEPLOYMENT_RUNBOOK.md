@@ -5,6 +5,10 @@
 
 # POS Production Deployment Runbook
 
+For the existing connected Supabase MCP and authenticated Vercel CLI in Codex
+Cloud, follow [Cloud release execution](CLOUD_DEPLOYMENT.md). It preserves this
+entrypoint, final candidate/fresh exact-main verification and operational gates.
+
 Last updated: 2026-07-17
 
 ## Required scope for the next combined release (2026-10-13)

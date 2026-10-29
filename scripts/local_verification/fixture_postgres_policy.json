@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "representation": "verified-single-layer-rootfs-v1",
+  "requestedRef": "public.ecr.aws/supabase/postgres:17.6.1.104",
+  "sourceRef": "public.ecr.aws/supabase/postgres:17.6.1.104@sha256:3b8aa41d85a00ae6fe8ad8199645e3c5951ce456f659bf07569dab7830fd03af",
+  "sourceManifestDigest": "sha256:3b8aa41d85a00ae6fe8ad8199645e3c5951ce456f659bf07569dab7830fd03af",
+  "sourceConfigDigest": "sha256:d469ea2b78bc7dfabf656ef6a46752569bda59b73d37612bcddaad4fc313b7ce",
+  "sourceRootfsInventorySha256": "49fecb08d7738bf420663f0d5269d7f976901e7de2e98a677cb7067f4a8a722a",
+  "sourceRootfsEntries": 33551,
+  "rootfsArchiveSha256": "64ec26992718471c847f51a2e076ffb42f8fb6bbdde917789a0aed8330b8f0b6",
+  "rootfsArchiveBytes": 1259289600,
+  "runtimeConfigSha256": "4c0d6dbd90da963482e4c892af132ee5d5abb14b2814c5c34d67ef84dfa72142",
+  "runtimeConfigKeys": [
+    "ExposedPorts",
+    "Env",
+    "Entrypoint",
+    "Cmd",
+    "WorkingDir",
+    "StopSignal",
+    "ArgsEscaped",
+    "Healthcheck",
+    "OnBuild"
+  ],
+  "derivedImageId": "sha256:c82818a0208bea6901f27021fb40da83cca609170b77258fca2b71559db49af9",
+  "cacheTag": "pos-verified-fixture/postgres:17.6.1.104-rootfs-3b8aa41d85a0-v1",
+  "os": "linux",
+  "architecture": "amd64",
+  "crane": {
+    "version": "v0.22.1",
+    "archiveUrl": "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz",
+    "archiveSha256": "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0",
+    "binarySha256": "8e75c326adb43b053cfd78b9b987663f8f4fe4557f4d3915905643f25c730992"
+  },
+  "additionalImages": [
+    {
+      "schemaVersion": 1,
+      "representation": "verified-single-layer-rootfs-v1",
+      "requestedRef": "postgres:15",
+      "sourceRef": "postgres:15@sha256:7da5d534f1ffcdb2f69efa6e466a7a29ff89eefd611c7b50c4d69aa77fd4a822",
+      "sourceManifestDigest": "sha256:7da5d534f1ffcdb2f69efa6e466a7a29ff89eefd611c7b50c4d69aa77fd4a822",
+      "sourceConfigDigest": "sha256:245fc027b7f3755bbd21b4375c2a0ebc7fa5d16c4573da497be9850a823973c8",
+      "sourceRootfsInventorySha256": "8f672d479eecab2b72b9803672a911fa2ea5bb709d098dc6c4b237cac3464c54",
+      "sourceRootfsEntries": 9438,
+      "rootfsArchiveSha256": "f7cd166d22c1f64b799a88e46cfa6926a0d2623951abd0a86d2d3e15650982e8",
+      "rootfsArchiveBytes": 445667328,
+      "runtimeConfigSha256": "b8b250dab8f26ec5f716f355dc65f1950fed51b8b0dc9746cfe0b040bd369b62",
+      "runtimeConfigKeys": [
+        "Cmd",
+        "Entrypoint",
+        "Env",
+        "ExposedPorts",
+        "StopSignal",
+        "Volumes"
+      ],
+      "derivedImageId": "sha256:48bb81808976a179dee14960c604e1a69e72b50f0e3925f12188078b79c9eb15",
+      "cacheTag": "pos-verified-fixture/postgres:15-rootfs-7da5d534f1ff-v1",
+      "os": "linux",
+      "architecture": "amd64",
+      "crane": {
+        "version": "v0.22.1",
+        "archiveUrl": "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz",
+        "archiveSha256": "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0",
+        "binarySha256": "8e75c326adb43b053cfd78b9b987663f8f4fe4557f4d3915905643f25c730992"
+      },
+      "temporaryVolumes": {
+        "/var/lib/postgresql/data": 1073741824
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "representation": "verified-single-layer-rootfs-v1",
+      "requestedRef": "postgres:17.6",
+      "sourceRef": "postgres:17.6@sha256:b86568d3e0fe1dfaeff52714f9da36f206a30e4c49131b82bf96982d78627409",
+      "sourceManifestDigest": "sha256:b86568d3e0fe1dfaeff52714f9da36f206a30e4c49131b82bf96982d78627409",
+      "sourceConfigDigest": "sha256:50903ccdcab597707a1f61c7ae016a06b0b548da53a6f7ad716d56b072bedba0",
+      "sourceRootfsInventorySha256": "957961239b6878b722201cf208dfc30d040df94881c3d0d648d69a2a3c0e3538",
+      "sourceRootfsEntries": 9557,
+      "rootfsArchiveSha256": "9dc231fb2b6fb50c6b810b042a044098a5a2e0bf1662741507d6a46502e70b4a",
+      "rootfsArchiveBytes": 454088704,
+      "runtimeConfigSha256": "efaa970eb281621c4403ce4b77e5b6aca92a17f6304404fe95116744e7e6987e",
+      "runtimeConfigKeys": [
+        "Cmd",
+        "Entrypoint",
+        "Env",
+        "ExposedPorts",
+        "StopSignal",
+        "Volumes"
+      ],
+      "derivedImageId": "sha256:0db4c150c04776d6c032b782f65530ca9236f7f0b0306af47093622fe825f9ad",
+      "cacheTag": "pos-verified-fixture/postgres:17.6-rootfs-b86568d3e0fe-v1",
+      "os": "linux",
+      "architecture": "amd64",
+      "crane": {
+        "version": "v0.22.1",
+        "archiveUrl": "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz",
+        "archiveSha256": "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0",
+        "binarySha256": "8e75c326adb43b053cfd78b9b987663f8f4fe4557f4d3915905643f25c730992"
+      },
+      "temporaryVolumes": {
+        "/var/lib/postgresql/data": 1073741824
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "representation": "verified-single-layer-rootfs-v1",
+      "requestedRef": "postgres:17-alpine",
+      "sourceRef": "postgres:17-alpine@sha256:e4cb93687b062cd25a0e8f672d85a7708235009d70d31f8a7698d9370092a9c4",
+      "sourceManifestDigest": "sha256:e4cb93687b062cd25a0e8f672d85a7708235009d70d31f8a7698d9370092a9c4",
+      "sourceConfigDigest": "sha256:ab20e934b27ba3ff927c1b4c9ff8cf6c32f315f743efe68dd3441182a87fb085",
+      "sourceRootfsInventorySha256": "cb4e20fe64c9f5a9e510288aaf797efe510ca8e50ae42f392dc3b04adacec27e",
+      "sourceRootfsEntries": 3891,
+      "rootfsArchiveSha256": "4048e9ea99fd9fb0d9e1fa0ef92a742a53f6ea46fc1e1787fe6a0e224f939df5",
+      "rootfsArchiveBytes": 299679744,
+      "runtimeConfigSha256": "83664aa2eb9474f984605d1873031822f514ef36ca8e25c4808e9e6df457d05b",
+      "runtimeConfigKeys": [
+        "Cmd",
+        "Entrypoint",
+        "Env",
+        "ExposedPorts",
+        "StopSignal",
+        "Volumes",
+        "WorkingDir"
+      ],
+      "derivedImageId": "sha256:2c5393cd6be3e64f191126fa05123709f7637ae9c45b6f5f0b7289cd0309b53d",
+      "cacheTag": "pos-verified-fixture/postgres:17-alpine-rootfs-e4cb93687b06-v1",
+      "os": "linux",
+      "architecture": "amd64",
+      "crane": {
+        "version": "v0.22.1",
+        "archiveUrl": "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz",
+        "archiveSha256": "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0",
+        "binarySha256": "8e75c326adb43b053cfd78b9b987663f8f4fe4557f4d3915905643f25c730992"
+      },
+      "temporaryVolumes": {
+        "/var/lib/postgresql/data": 1073741824
+      }
+    }
+  ]
+}
