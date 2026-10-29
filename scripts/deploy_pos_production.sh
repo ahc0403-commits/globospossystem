@@ -372,10 +372,13 @@ validate_cloud_options() {
   [[ "$POS_SUPABASE_BACKEND" == "mcp" ]] || return 0
   [[ "$DB_ONLY" == "1" || "$WEB_ONLY" == "1" ]] ||
     fail "MCP release requires reviewed --db-only or --web-only scope; Edge secret operations are unavailable."
-  [[ "$SKIP_CHECKS" == "0" && "$SKIP_AUTH_CHECK" == "0" && "$SKIP_LOGIN_SMOKE" == "0" &&
+  [[ "$SKIP_CHECKS" == "0" && "$SKIP_AUTH_CHECK" == "0" &&
      "$SKIP_SMOKE_TESTS" == "0" && "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" &&
      "$SKIP_VERCEL" == "0" && -n "$TEST_TARGETS" && "$DEPLOY_MODE" == "prebuilt" ]] ||
     fail "Cloud releases require all applicable gates and prebuilt deployment."
+  [[ "$SKIP_LOGIN_SMOKE" == "0" ||
+     ( "$WEB_ONLY" == "1" && "$SKIP_LOGIN_SMOKE" == "1" && "$LOGIN_SMOKE_OPT_OUT" == "1" ) ]] ||
+    fail "Cloud login smoke omission requires explicit --web-only --skip-login-smoke."
 }
 
 cloud_cleanup() {
@@ -493,7 +496,8 @@ PYSECRET
 preflight() {
   log "Preflight"
   reject_target_overrides
-  if [[ "$POS_SUPABASE_BACKEND" == "mcp" && "$WEB_ONLY" == "1" && "$DRY_RUN" != "1" ]]; then
+  if [[ "$POS_SUPABASE_BACKEND" == "mcp" && "$WEB_ONLY" == "1" &&
+        "$SKIP_LOGIN_SMOKE" != "1" && "$DRY_RUN" != "1" ]]; then
     [[ -n "${FIXED_SMOKE_ACCOUNT_CODE:-}" && -n "${FIXED_SMOKE_PASSWORD:-}" ]] ||
       fail "Cloud web release requires securely supplied fixed-account login smoke credentials before production work."
   fi
@@ -1296,6 +1300,9 @@ run_login_smoke() {
   fi
   if [[ "$SKIP_LOGIN_SMOKE" == "1" ]]; then
     log "Fixed POS account login smoke skipped"
+    if [[ "$LOGIN_SMOKE_OPT_OUT" == "1" ]]; then
+      printf 'LOGIN_SMOKE=NOT_RUN_OWNER_WAIVER (--skip-login-smoke); no login PASS or login-ready claim.\n'
+    fi
     warn "Do not report this deploy as login-ready until a fixed-account login smoke passes."
     return 0
   fi

@@ -7,7 +7,8 @@ The default CLI path remains available unchanged.
 
 The cloud backend supports the existing `--db-only --migration FILE` and
 `--web-only` phases with all applicable checks enabled. It rejects combined
-Edge/secret releases and skip flags. An unchanged Edge source tree must be
+Edge/secret releases and skip flags, apart from an explicit owner-approved
+`--web-only --skip-login-smoke` waiver. An unchanged Edge source tree must be
 compared with the verified deployed source; changing Edge code requires its
 own supported release path and validation. Neither a successful read nor an
 existing deployment establishes validation of newly changed Edge code.
@@ -77,13 +78,23 @@ available there. Preserve the pinned `.vercel/project.json`; remove inherited
 the existing entrypoint deliberately forbids target overrides. Do not alter
 the stored project or production environment settings.
 
-A cloud web release requires `FIXED_SMOKE_ACCOUNT_CODE` and
+A cloud web release normally requires `FIXED_SMOKE_ACCOUNT_CODE` and
 `FIXED_SMOKE_PASSWORD` to be securely supplied before production work. Do not
 retrieve/reset passwords or generate a privileged replacement login. The
 existing actual fixed-account login smoke runs after deployment. Production
 Auth readiness, HTTP checks, actual affected-feature verification and source
 identity remain distinct requirements. DB-only readiness is explicitly N/A
 for login and cannot be reported as login-ready.
+
+For the 2026-10-29 coordinated POS release the owner explicitly requested
+deployment without the blocked login smoke. Use `--web-only --skip-login-smoke`
+for that web phase only. This records `LOGIN_SMOKE=NOT_RUN_OWNER_WAIVER`, never
+PASS. It requires no dummy credentials, new account, password reset or token.
+The default still requires the real login inputs. Fresh exact-main, Auth
+readiness, migration/hash/history/transaction, Edge source comparison, HTTP
+checks and rollback conditions remain required. `--skip-smoke-tests` and every
+other gate omission remain rejected. Real assigned-account and Office buyer
+visibility checks remain unverified until separately performed.
 
 ## Managed network and SDK isolation
 
