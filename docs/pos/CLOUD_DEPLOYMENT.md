@@ -224,3 +224,19 @@ expiry when those are actually reported; it stores no raw private error text.
 A fresh official invocation still runs a new exact-main gate. The preserved
 prior receipt is not accepted as a substitute. Candidate and exact-main checks
 are repeated for a changed recovery adapter before production execution.
+
+## Explicit owner instruction to stop repeated verification
+
+`--owner-verified-candidate DIR` is an explicit exception for an owner who requests
+immediate deployment without repeating an already completed full run. The default
+path still runs fresh exact-main verification. The exception validates every log,
+artifact and input in the original complete candidate receipt at its actual Git
+commit, then compares every current application, SQL, build and recipe input.
+Only the narrowly listed release-support files may differ. Any other change
+rejects reuse. Candidate evidence remains attributed to its original SHA.
+
+The new release records `NOT_RUN_OWNER_WAIVER`, never a fabricated exact-main PASS.
+Repeated local analysis/tests/compile and their SDK container are omitted; clean
+fresh exact-main checks, production Auth, atomic DB/history/configuration guards,
+the actual provider build, live source/JavaScript proof and HTTP checks remain.
+The login waiver is separate. Retain earlier failures and report them separately.

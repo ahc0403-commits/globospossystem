@@ -40,6 +40,8 @@ POS_SUPABASE_BACKEND="${POS_SUPABASE_BACKEND:-cli}"
 POS_VERCEL_BACKEND="${POS_VERCEL_BACKEND:-cli}"
 LOCAL_RELEASE_EVIDENCE=""
 CLOUD_RELEASE_PLAN=""
+OWNER_VERIFIED_CANDIDATE=""
+OWNER_REPEAT_WAIVER=0
 
 # shellcheck source=scripts/lib/production_migration_gate.sh
 source "$ROOT_DIR/scripts/lib/production_migration_gate.sh"
@@ -80,6 +82,8 @@ Options:
   --mode MODE        prebuilt (default) or remote.
   --supabase-backend MODE  cli (default), or live MCP for DB-only/web-only cloud releases.
   --vercel-backend MODE    cli (default), or MCP with --web-only --mode remote.
+  --owner-verified-candidate DIR  Explicit owner waiver of repeated local checks;
+                     validates a complete candidate receipt and identical app inputs.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
   --skip-checks      Skip dart analyze and flutter tests.
@@ -206,6 +210,14 @@ enforce_local_release_contract() {
   fi
   local evidence_parent
   evidence_parent="$(mktemp -d "${TMPDIR:-/tmp}/pos-release-evidence.XXXXXX")"
+  if [[ -n "$OWNER_VERIFIED_CANDIDATE" ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/reuse_candidate.py" \
+      --evidence "$OWNER_VERIFIED_CANDIDATE" --record "$evidence_parent/owner-waiver.json"
+    OWNER_REPEAT_WAIVER=1
+    LOCAL_RELEASE_EVIDENCE="$OWNER_VERIFIED_CANDIDATE"
+    printf 'REPEATED_LOCAL_VERIFICATION=NOT_RUN_OWNER_WAIVER; record=%s/owner-waiver.json\n' "$evidence_parent"
+    return
+  fi
   # Always execute the trusted recipe. No supplied receipt, resume, or skip path.
   python3 -B "$ROOT_DIR/scripts/pos_local_release_gate.py" run \
     --kind exact-main --output "$evidence_parent/evidence" ||
@@ -294,6 +306,11 @@ confirm_production() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --owner-verified-candidate)
+        shift
+        OWNER_VERIFIED_CANDIDATE="${1:-}"
+        [[ -n "$OWNER_VERIFIED_CANDIDATE" ]] || fail "--owner-verified-candidate requires a directory"
+        ;;
       --migration)
         shift
         MIGRATION_FILE="${1:-}"
@@ -383,6 +400,11 @@ parse_args() {
 }
 
 validate_cloud_options() {
+  if [[ -n "$OWNER_VERIFIED_CANDIDATE" ]]; then
+    [[ "$POS_SUPABASE_BACKEND" == "mcp" && ( "$DB_ONLY" == "1" ||
+       ( "$WEB_ONLY" == "1" && "$POS_VERCEL_BACKEND" == "mcp" && "$DEPLOY_MODE" == "remote" ) ) ]] ||
+      fail "Owner reuse requires MCP DB-only or provider-built MCP web-only scope."
+  fi
   [[ "$POS_VERCEL_BACKEND" == "cli" || "$POS_VERCEL_BACKEND" == "mcp" ]] || fail "Unknown Vercel backend."
   if [[ "$POS_VERCEL_BACKEND" == "mcp" ]]; then
     [[ "$POS_SUPABASE_BACKEND" == "mcp" && "$WEB_ONLY" == "1" && "$DB_ONLY" == "0" &&
@@ -442,8 +464,10 @@ import json,sys
 d=json.load(sys.stdin)
 if d.get("id")!="ynriuoomotxuwhuxxmhj" or d.get("status")!="ACTIVE_HEALTHY":
     raise SystemExit("Pinned production MCP project is unavailable")'
-  python3 -B "$ROOT_DIR/scripts/cloud_deployment/sdk.py" init \
-    --directory "$POS_CLOUD_BRIDGE_DIR" --evidence "$LOCAL_RELEASE_EVIDENCE"
+  if [[ "$OWNER_REPEAT_WAIVER" == "0" ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/sdk.py" init \
+      --directory "$POS_CLOUD_BRIDGE_DIR" --evidence "$LOCAL_RELEASE_EVIDENCE"
+  fi
   if [[ "$DB_ONLY" != "1" && "$POS_VERCEL_BACKEND" == "cli" ]]; then
     export POS_CLOUD_VERCEL_BIN="${POS_CLOUD_VERCEL_BIN:-$(command -v vercel)}"
     [[ "$POS_CLOUD_VERCEL_BIN" = /* && -x "$POS_CLOUD_VERCEL_BIN" &&
@@ -670,6 +694,10 @@ run_auth_check() {
 }
 
 run_checks() {
+  if [[ "$OWNER_REPEAT_WAIVER" == "1" ]]; then
+    printf 'REPEATED_ANALYSIS_AND_TESTS=NOT_RUN_OWNER_WAIVER; verified candidate app inputs retained.\n'
+    return 0
+  fi
   if [[ "$SKIP_CHECKS" == "1" ]]; then
     log "Checks skipped"
     return 0
@@ -1056,6 +1084,10 @@ ensure_flutter_env() {
 }
 
 local_flutter_build() {
+  if [[ "$OWNER_REPEAT_WAIVER" == "1" ]]; then
+    printf 'REPEATED_LOCAL_BUILD=NOT_RUN_OWNER_WAIVER; actual provider build remains required.\n'
+    return 0
+  fi
   if [[ "$DEPLOY_MODE" != "remote" || "$SKIP_BUILD" == "1" ]]; then
     return 0
   fi
