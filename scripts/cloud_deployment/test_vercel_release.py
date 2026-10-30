@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+import urllib.error
+from unittest.mock import MagicMock, patch
 
 import bridge
 import vercel_release as release
@@ -86,6 +87,23 @@ class VercelReleaseTests(unittest.TestCase):
                        {'SUPABASE_ANON_KEY': 'sb_secret_fixture'},
                        {'FIREBASE_MESSAGING_SENDER_ID': '999'}, {'FIREBASE_WEB_VAPID_KEY': 'not-a-point'}]:
             with self.assertRaises(ValueError): web_build.check_public_config({**env, **change})
+
+    def test_actual_public_client_probe_rejects_disabled_keys_without_emitting_them(self):
+        env = {'SUPABASE_URL': 'https://' + bridge.PROJECT + '.supabase.co',
+               'SUPABASE_ANON_KEY': 'public-fixture'}
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.read.return_value = b'{"external": {}}'
+        with patch.object(web_build.urllib.request, 'urlopen', return_value=response) as fetch:
+            web_build.verify_public_client(env)
+            request = fetch.call_args.args[0]
+            self.assertEqual(request.full_url, env['SUPABASE_URL'] + '/auth/v1/settings')
+            self.assertEqual(request.get_header('Apikey'), 'public-fixture')
+        denied = urllib.error.HTTPError('https://fixture', 401, 'disabled', {}, None)
+        with patch.object(web_build.urllib.request, 'urlopen', side_effect=denied):
+            with self.assertRaisesRegex(ValueError, '^Production public client authentication probe failed$'):
+                web_build.verify_public_client(env)
 
 
 if __name__ == '__main__': unittest.main()

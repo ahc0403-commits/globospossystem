@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import urllib.error
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_NAMES = ('SUPABASE_URL', 'SUPABASE_ANON_KEY', 'FIREBASE_API_KEY',
@@ -58,12 +60,26 @@ def source_sha(env):
     return sha
 
 
+def verify_public_client(env):
+    """Validate the provider's actual public key without exposing its value."""
+    request = urllib.request.Request(
+        env['SUPABASE_URL'].rstrip('/') + '/auth/v1/settings',
+        headers={'apikey': env['SUPABASE_ANON_KEY']})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if response.status != 200 or not isinstance(json.load(response), dict):
+                raise ValueError('Production public client authentication probe failed')
+    except (urllib.error.URLError, ValueError, OSError):
+        raise ValueError('Production public client authentication probe failed') from None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('action', choices=['check', 'write'])
     parser.add_argument('--flutter-bin', required=True)
     args = parser.parse_args()
     check_public_config(os.environ)
+    verify_public_client(os.environ)
     sha = source_sha(os.environ)
     version = json.loads(subprocess.check_output([args.flutter_bin, '--version', '--machine'], text=True, cwd=ROOT))
     if version.get('frameworkVersion') != '3.41.6' or version.get('dartSdkVersion') != '3.11.4':
