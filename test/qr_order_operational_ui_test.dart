@@ -172,6 +172,115 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets(
+    'changed discount quantity keeps cart for explicit price review',
+    (tester) async {
+      var reads = 0;
+      final submissions = <QrOrderLine>[];
+      QrOrderMenu menu(int remaining) => QrOrderMenu(
+        storeName: 'JeonGabok',
+        tableNumber: '1',
+        floorLabel: '1F',
+        categories: const [QrMenuCategory(id: 'discount', name: 'Discount')],
+        items: [
+          QrMenuItem(
+            id: 'food',
+            categoryId: 'discount',
+            name: 'Noodles',
+            price: remaining > 0 ? 50000 : 100000,
+            originalPrice: 100000,
+            discountPercent: remaining > 0 ? 50 : 0,
+            discountRemaining: remaining,
+            discountQuantityMenuId: 'food',
+          ),
+        ],
+      );
+      await _pumpQr(
+        tester,
+        service: _service(
+          fetch: (_) async => menu(reads++ == 0 ? 1 : 0),
+          place: (_, items, __, ___) async {
+            submissions.add(items.single);
+            if (submissions.length == 1) {
+              throw StateError('QR_DISCOUNT_QUANTITY_CHANGED');
+            }
+            return _result;
+          },
+        ),
+      );
+      await tester.tap(find.byKey(const Key('qr_add_food')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_add_food')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_open_review')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+      await tester.pumpAndSettle();
+      expect(submissions, hasLength(1));
+      expect(find.text('Số suất ưu đãi đã thay đổi'), findsOneWidget);
+      expect(find.text('Hết suất ưu đãi · Giá thường'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('qr_open_review')));
+      await tester.pumpAndSettle();
+      expect(find.text('Ưu đãi 0 · Giá thường 2'), findsOneWidget);
+      expect(find.text('200.000 VND'), findsWidgets);
+      await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+      await tester.pumpAndSettle();
+      expect(submissions.last.quantity, 2);
+      expect(submissions.last.expectedDiscountQuantity, 0);
+      _expectNoLayoutFailure(tester);
+    },
+  );
+
+  testWidgets(
+    'limited discount shows remaining count and reviews mixed prices',
+    (tester) async {
+      List<QrOrderLine>? submitted;
+      const menu = QrOrderMenu(
+        storeName: 'JeonGabok',
+        tableNumber: '1',
+        floorLabel: '1F',
+        categories: [QrMenuCategory(id: 'discount', name: 'Existing discount')],
+        items: [
+          QrMenuItem(
+            id: 'food',
+            categoryId: 'discount',
+            name: 'Noodles',
+            price: 50000,
+            originalPrice: 100000,
+            discountPercent: 50,
+            discountRemaining: 1,
+            discountQuantityMenuId: 'food',
+          ),
+        ],
+      );
+      await _pumpQr(
+        tester,
+        service: _service(
+          fetch: (_) async => menu,
+          place: (_, items, __, ___) async {
+            submitted = items;
+            return _result;
+          },
+        ),
+      );
+      expect(find.text('Còn 1 suất ưu đãi'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('qr_add_food')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_add_food')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('qr_open_review')));
+      await tester.pumpAndSettle();
+      expect(find.text('Ưu đãi 1 · Giá thường 1'), findsOneWidget);
+      expect(find.text('150.000 VND'), findsWidgets);
+      await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+      await tester.pumpAndSettle();
+      expect(submitted!.single.quantity, 2);
+      expect(submitted!.single.expectedDiscountQuantity, 1);
+      expect(submitted!.single.expectedDiscountPercent, 50);
+      _expectNoLayoutFailure(tester);
+    },
+  );
+
   testWidgets('QR sends real menu ID with distinct registered selections', (
     tester,
   ) async {

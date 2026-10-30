@@ -37,6 +37,7 @@ single=single.replace('v_assignment.floor_label <> v_queue.floor_label',
 print(single)
 print(fn('20261021130000_jeongabok_explicit_floor_handoff','kds_record_direct_preparation_v1'))
 print(fn('20261020090000_jeongabok_kitchen_floor','kds_record_direct_kitchen_v1'))
+print(fn('20260920100000_kds_subsecond_set_based_delivery','kds_complete_kitchen_batch_v1'))
 print(fn('20261021191000_multi_kitchen_progress','kds_apply_station_progress_batch_v1'))
 bulk=fn('20260916190000_kds_start_ready_serve_workflow','kds_serve_ready_order_v3')
 bulk=bulk.replace('v_queue.floor_label <> v_assignment.floor_label',
@@ -51,6 +52,7 @@ run_sql < test/sql/kds_partial_item_handoff_before.sql
 run_sql < supabase/migrations/20261022210000_kds_partial_item_handoff.sql >/dev/null
 run_sql < scripts/verify_kds_partial_item_handoff.sql >/dev/null
 run_sql < supabase/tests/kds_partial_item_handoff_test.sql
+run_sql < supabase/tests/kds_explicit_kitchen_check_test.sql
 python3 scripts/tests/kds_partial_item_handoff_concurrency.py "$fixture"
 run_sql < scripts/rollback_kds_partial_item_handoff.sql >/dev/null
 run_sql < test/sql/kds_partial_item_handoff_before.sql

@@ -14,6 +14,8 @@ CREATE TABLE emergency_station_assignments(id uuid PRIMARY KEY,user_id uuid,rest
  station_type text,floor_label text,service_area_codes text[] DEFAULT '{}',is_active boolean DEFAULT true);
 CREATE TABLE emergency_fulfillment_sessions(id uuid PRIMARY KEY,restaurant_id uuid,status text);
 CREATE TABLE orders(id uuid PRIMARY KEY,sales_channel text);
+CREATE TABLE menu_items(id uuid PRIMARY KEY,name text,name_ko text,name_vi text,paperless_name_vi text,name_en text);
+CREATE TABLE order_items(id uuid PRIMARY KEY,menu_item_id uuid,label text,display_name text);
 CREATE TABLE emergency_order_queue(id uuid PRIMARY KEY,session_id uuid,restaurant_id uuid,order_id uuid,
  floor_label text,workflow_version int DEFAULT 2,kitchen_direct_to_floor boolean DEFAULT false,
  created_at timestamptz DEFAULT now(),queue_no int DEFAULT 1);
@@ -27,11 +29,15 @@ CREATE TABLE emergency_fulfillment_items(id uuid PRIMARY KEY,restaurant_id uuid,
  AND kitchen_done_quantity<=kitchen_started_quantity AND kitchen_started_quantity+excused_quantity<=ordered_quantity));
 CREATE INDEX ON emergency_fulfillment_items(queue_id);
 CREATE TABLE emergency_combo_component_items(LIKE emergency_fulfillment_items INCLUDING ALL);
+ALTER TABLE emergency_combo_component_items ADD COLUMN name_ko text DEFAULT 'fixture component',
+ ADD COLUMN name_vi text DEFAULT 'fixture component',ADD COLUMN name_en text DEFAULT 'fixture component';
 CREATE INDEX ON emergency_combo_component_items(session_id,order_item_id);
 CREATE TABLE emergency_floor_direct_items(id uuid PRIMARY KEY,queue_id uuid,floor_served_quantity int DEFAULT 0);
 CREATE TABLE emergency_fulfillment_actions(action_id uuid PRIMARY KEY,session_id uuid,restaurant_id uuid,
  queue_id uuid,order_id uuid,station_type text,floor_label text,action_kind text,stage text,
  original_action_id uuid,actor_user_id uuid,created_at timestamptz DEFAULT now());
+CREATE TABLE emergency_kitchen_batch_actions(request_id uuid PRIMARY KEY,restaurant_id uuid,
+ allocation_hash text,response jsonb,created_by uuid,created_at timestamptz DEFAULT now());
 CREATE TABLE emergency_fulfillment_events(event_id uuid PRIMARY KEY,session_id uuid,restaurant_id uuid,
  order_id uuid,order_item_id uuid,combo_component_item_id uuid,stage text,delta int,
  actor_user_id uuid,details jsonb,action_id uuid);
@@ -92,6 +98,8 @@ DECLARE store uuid:=CASE WHEN direct THEN '273b057e-3b69-46e3-93c1-6194c2802849'
  sess uuid:=CASE WHEN direct THEN test_uuid(200) ELSE test_uuid(100) END;
 BEGIN
  INSERT INTO orders VALUES(test_uuid(n+10000),'dine_in');
+ INSERT INTO menu_items VALUES(test_uuid(n+40000),'fixture menu '||n,'fixture menu '||n,'fixture menu '||n,'fixture menu '||n,'fixture menu '||n);
+ INSERT INTO order_items VALUES(test_uuid(n+30000),test_uuid(n+40000),'fixture menu '||n,'fixture menu '||n);
  INSERT INTO emergency_order_queue(id,session_id,restaurant_id,order_id,floor_label,kitchen_direct_to_floor)
  VALUES(test_uuid(n+20000),sess,store,test_uuid(n+10000),floor,direct);
  INSERT INTO emergency_fulfillment_items(id,restaurant_id,session_id,queue_id,order_id,order_item_id,

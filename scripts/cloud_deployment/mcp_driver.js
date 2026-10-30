@@ -18,6 +18,9 @@ module.exports = async function driveCloudRelease({ tools, root, directory, maxR
     functions: "mcp__codex_apps__supabase_list_edge_functions",
     function: "mcp__codex_apps__supabase_get_edge_function",
     "deploy-function": "mcp__codex_apps__supabase_deploy_edge_function",
+    "vercel-context": "mcp__codex_apps__vercel_get_git_deployment_context",
+    "vercel-inspect": "mcp__codex_apps__vercel_get_deployment",
+    "vercel-deploy": "mcp__codex_apps__vercel_create_deployment",
   };
   const completed = [];
   for (let index = 0; index < maxRequests; index++) {
@@ -45,9 +48,17 @@ module.exports = async function driveCloudRelease({ tools, root, directory, maxR
     if (request.project !== "ynriuoomotxuwhuxxmhj" || !methods[request.operation]) {
       throw new Error("Unrecognized cloud operation or project");
     }
-    const args = request.operation === "project"
+    const args = request.operation.startsWith("vercel-") ? {...request.arguments} : request.operation === "project"
       ? {id: request.project}
       : {...request.arguments, project_id: request.project};
+    if (request.operation !== "vercel-context" && request.operation.startsWith("vercel-") &&
+        args.teamId !== "team_4AfACJKDlP09zRqoJKce3Tib") throw new Error("Unrecognized Vercel team");
+    if (request.operation === "vercel-deploy" &&
+        (args.requestBody?.project !== "prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ" ||
+         args.requestBody?.target !== "production" || args.requestBody?.gitSource?.sha !== request.sourceSha ||
+         args.requestBody?.gitSource?.ref !== request.sourceSha || args.requestBody?.withLatestCommit !== false)) {
+      throw new Error("Unbound Vercel deployment");
+    }
     // A mutation is invoked once. A thrown/uncertain result leaves the claim in
     // place; the operator must inspect remote state rather than repeat it.
     const result = await tools[methods[request.operation]](args);

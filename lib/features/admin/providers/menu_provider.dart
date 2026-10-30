@@ -57,6 +57,12 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
 
     final message = error.message;
+    if (message.contains('MENU_DISCOUNT_QUANTITY_CHANGED')) {
+      return 'The remaining discount quantity changed. Reopen the menu and try again.';
+    }
+    if (message.contains('MENU_DISCOUNT_QUANTITY_INVALID')) {
+      return 'Enter a whole discount quantity of zero or more.';
+    }
     if (message.contains('ADMIN_MUTATION_FORBIDDEN')) {
       return 'No permission to change menus.';
     }
@@ -114,6 +120,30 @@ class MenuNotifier extends StateNotifier<MenuState> {
 
   Future<void> fetchAll() async {
     await Future.wait([fetchCategories(), fetchItems()]);
+  }
+
+  Future<bool> setDiscountQuantity({
+    required String itemId,
+    required int? remaining,
+    required int? expectedRemaining,
+  }) async {
+    try {
+      await _service.setDiscountQuantity(
+        storeId: storeId,
+        itemId: itemId,
+        remaining: remaining,
+        expectedRemaining: expectedRemaining,
+      );
+      await fetchItems();
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error) {
+      await fetchItems();
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to save discount quantity.'),
+      );
+      return false;
+    }
   }
 
   Future<void> fetchCategories() async {

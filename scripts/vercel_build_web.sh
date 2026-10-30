@@ -16,6 +16,7 @@ if [[ -z "$FLUTTER_BIN" ]]; then
   fi
 fi
 
+python3 scripts/write_pos_web_build_manifest.py check --flutter-bin "$FLUTTER_BIN"
 if [[ "$FLUTTER_BIN" != "flutter" ]]; then
   export DART_BIN="$(dirname "$FLUTTER_BIN")/dart"
 fi
@@ -29,3 +30,5 @@ bash scripts/build_photo_import_worker.sh
   --dart-define=FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-}" \
   --dart-define=FIREBASE_WEB_VAPID_KEY="${FIREBASE_WEB_VAPID_KEY:-}" \
   --no-wasm-dry-run
+
+python3 scripts/write_pos_web_build_manifest.py write --flutter-bin "$FLUTTER_BIN"

@@ -95,3 +95,23 @@ test('large source payload uses bounded chunks and never becomes a shell instruc
   assert.equal((await run(context)).completed.length, 1);
   assert.equal(context.calls.filter(x => x.remote)[0].remote.query, item.arguments.query);
 });
+
+test('Vercel exact-source deployment uses existing connection once, without Supabase project injection', async () => {
+  const sha = 'a'.repeat(40);
+  const item = {...request(), operation: 'vercel-deploy', sourceSha: sha, arguments: {
+    teamId: 'team_4AfACJKDlP09zRqoJKce3Tib', requestBody: {
+      project: 'prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ', target: 'production',
+      gitSource: {sha, ref: sha}, withLatestCommit: false}}};
+  const context = runtime(item);
+  context.tools.mcp__codex_apps__vercel_create_deployment = async args => {
+    context.calls.push({remote: args}); return {structuredContent: {id: 'dpl_fixture'}};
+  };
+  assert.equal((await run(context)).completed.length, 1);
+  assert.deepEqual(context.calls.filter(x => x.remote), [{remote: item.arguments}]);
+  for (const args of [{...item.arguments, teamId: 'foreign'}, {...item.arguments,
+    requestBody: {...item.arguments.requestBody, target: 'preview'}}]) {
+    const rejected = runtime({...item, arguments: args});
+    await assert.rejects(run(rejected), /Vercel/);
+    assert.equal(rejected.calls.filter(x => x.remote).length, 0);
+  }
+});
