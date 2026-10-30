@@ -240,3 +240,11 @@ Repeated local analysis/tests/compile and their SDK container are omitted; clean
 fresh exact-main checks, production Auth, atomic DB/history/configuration guards,
 the actual provider build, live source/JavaScript proof and HTTP checks remain.
 The login waiver is separate. Retain earlier failures and report them separately.
+
+The production discount migration needed one confirmed compatibility correction:
+`user_accessible_stores(uuid)` returns `SETOF uuid`, not a `store_id` column.
+The owner exception accepts only the pinned before/after hashes of that one-line
+migration correction and its matching fixture return type. It additionally
+requires `--owner-sql-compatibility-evidence FILE`, containing the successful
+requested SQL command, exact corrected input hashes and intact complete log.
+This focused result is recorded separately from the original full-candidate PASS.

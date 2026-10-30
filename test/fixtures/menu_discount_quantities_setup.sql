@@ -40,7 +40,7 @@ CREATE TABLE public.audit_logs (
   actor_id uuid, action text, entity_type text, entity_id uuid, details jsonb
 );
 CREATE FUNCTION public.user_accessible_stores(p_actor uuid)
-RETURNS TABLE(store_id uuid) LANGUAGE sql STABLE AS $$
+RETURNS SETOF uuid LANGUAGE sql STABLE AS $$
   SELECT '10000000-0000-0000-0000-000000000001'::uuid
   WHERE p_actor IN ('20000000-0000-0000-0000-000000000001'::uuid,
                    '20000000-0000-0000-0000-000000000002'::uuid)
