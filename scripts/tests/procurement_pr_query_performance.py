@@ -11,8 +11,14 @@ cmd = ['psql', '-X', '-h', '127.0.0.1', '-p', port, '-d', 'postgres',
 
 
 def sql(value):
-    return subprocess.run(cmd, input=value, text=True, capture_output=True,
-                          check=True).stdout.strip()
+    try:
+        return subprocess.run(cmd, input=value, text=True, capture_output=True,
+                              check=True).stdout.strip()
+    except subprocess.CalledProcessError as error:
+        # Keep the actual isolated PostgreSQL error in the release log instead
+        # of losing it behind the psql process's numeric exit status.
+        print(error.stderr, file=sys.stderr)
+        raise
 
 
 def walk(plan):
