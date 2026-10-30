@@ -1,5 +1,6 @@
 import base64
 import copy
+from contextlib import redirect_stdout
 import hashlib
 import importlib.util
 import io
@@ -35,10 +36,12 @@ class VercelReleaseTests(unittest.TestCase):
                      'mainDartJsSha256': hashlib.sha256(b'compiled-fixture').hexdigest()}
             responses = [io.BytesIO(json.dumps(build).encode()), io.BytesIO(b'compiled-fixture')]
             for response in responses: response.status = 200
+            output = io.StringIO()
             with patch.object(release, 'ROOT', directory), \
                  patch.object(release, 'session', return_value=(directory, manifest)), \
                  patch.object(release, 'request', side_effect=[deployment, {'id': 'dpl_fixture'}, deployment, deployment]) as remote, \
-                 patch.object(release.urllib.request, 'urlopen', side_effect=responses):
+                 patch.object(release.urllib.request, 'urlopen', side_effect=responses), \
+                 redirect_stdout(output):
                 release.deploy(directory)
             calls = remote.call_args_list
             self.assertEqual([c.args[1] for c in calls],
@@ -49,6 +52,7 @@ class VercelReleaseTests(unittest.TestCase):
             receipt = json.loads((directory / 'vercel-receipt.json').read_text())
             self.assertEqual(receipt['productionBuild'], build)
             self.assertTrue(receipt['productionAliasVerified'])
+            self.assertEqual(json.loads(output.getvalue()), receipt)
 
     def test_deployment_never_changes_project_settings_env_or_source_revision(self):
         args = release.deployment_arguments(self.sha)
