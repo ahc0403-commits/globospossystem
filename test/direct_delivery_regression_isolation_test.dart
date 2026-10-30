@@ -28,9 +28,13 @@ const _migrationPath =
 // 2026-10-24: owner-requested cumulative QR balance is covered by
 // qr_payment_summary_test, QR operational lifecycle tests, and the latest
 // safeupdate/payment SQL regression. Only the authorized QR hash is advanced.
+// 2026-10-30: owner-requested per-menu discount quantities retain the existing
+// category and rate. QR quote/operational tests cover remaining-count display,
+// mixed prices and the submitted allocation; isolated SQL covers reservations,
+// cancellation, expiry, stale quotes, tenant permissions and concurrent orders.
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      '5dd3ac71bbe6dd22414328322182433bca22a89b366e1fea2837718f156bd19a',
+      '95aaccc85f1a5c26e5b9de0ce888ec2d3bf8bdee603004ae97e95fd48636e09e',
   // 2026-09-17: bank selection opens an amount-bearing QR before payment.
   // Single/combined QR and no-payment-on-close have operational coverage.
   // Cashier menu cancellation replaces the unserved-only action.

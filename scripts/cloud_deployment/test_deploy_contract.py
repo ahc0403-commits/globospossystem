@@ -34,6 +34,15 @@ class DeployerContractTests(unittest.TestCase):
                                     '; validate_cloud_options')
                 self.assertNotEqual(failed.returncode, 0)
 
+    def test_explicit_vercel_executor_runs_only_reviewed_web_scope_and_keeps_all_gates(self):
+        args = '--supabase-backend mcp --vercel-backend mcp --web-only --mode remote --skip-login-smoke'
+        good = self.shell('parse_args ' + args + '; validate_cloud_options')
+        self.assertEqual(good.returncode, 0, good.stderr)
+        for flag in ['--skip-checks', '--skip-auth-check', '--skip-smoke-tests', '--skip-db',
+                     '--skip-build', '--skip-vercel', '--db-only', '--mode prebuilt']:
+            failed = self.shell('parse_args ' + args + ' ' + flag + '; validate_cloud_options')
+            self.assertNotEqual(failed.returncode, 0, flag)
+
     def test_missing_actual_login_credentials_stop_before_gate_or_production_tools(self):
         failed = self.shell('POS_SUPABASE_BACKEND=mcp; WEB_ONLY=1; '
                             'enforce_clean_git() { echo UNEXPECTED_GIT_GATE; }; '

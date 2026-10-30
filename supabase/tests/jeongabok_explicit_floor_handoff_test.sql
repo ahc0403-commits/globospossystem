@@ -4,7 +4,7 @@ BEGIN;
 DO $$ DECLARE
  target constant uuid := '273b057e-3b69-46e3-93c1-6194c2802849';
  menu uuid; tid uuid; oid uuid; oi uuid; line uuid; qid uuid;
- start_id uuid:=gen_random_uuid(); handoff_id uuid:=gen_random_uuid(); result jsonb;
+ start_id uuid:=gen_random_uuid(); handoff_id uuid:=gen_random_uuid(); check_id uuid:=gen_random_uuid(); result jsonb;
  component uuid;
 BEGIN
  ASSERT EXISTS(SELECT 1 FROM auth.users WHERE id='92000000-0000-4000-8000-000000000001' AND email='kds-lab-1@internal.invalid');
@@ -38,8 +38,14 @@ BEGIN
  ASSERT (SELECT sum(ready_quantity-served_quantity-voided_quantity)=1 FROM public.emergency_floor_ready_lots WHERE source_id=line);
  result:=public.kds_complete_kitchen_batch_v1(handoff_id,jsonb_build_array(jsonb_build_object('item_id',line,'queue_id',qid,'source_kind','base','quantity',1)));
  ASSERT result->>'deduplicated'='true';
- PERFORM public.kds_complete_kitchen_batch_v1(gen_random_uuid(),jsonb_build_array(jsonb_build_object('item_id',line,'queue_id',qid,'source_kind','base','quantity',1)));
+ -- The order-detail check uses the single-item station RPC, independently of
+ -- the existing global handoff sheet. A repeated event must not hand off twice.
+ result:=public.kds_record_station_progress_v3(line,'base','kitchen_done',1,check_id);
+ ASSERT result->>'kitchen_done_quantity'='2',result::text;
+ result:=public.kds_record_station_progress_v3(line,'base','kitchen_done',1,check_id);
+ ASSERT result->>'deduplicated'='true',result::text;
  ASSERT (SELECT kitchen_started_quantity=2 AND kitchen_done_quantity=2 AND tray_dispatched_quantity=2 FROM public.emergency_fulfillment_items WHERE id=line);
+ ASSERT (SELECT sum(ready_quantity-served_quantity-voided_quantity)=2 FROM public.emergency_floor_ready_lots WHERE source_id=line);
 
  -- A component and its parent must also retain previously started quantities.
  INSERT INTO public.orders(restaurant_id,table_id,status) VALUES(target,tid,'pending') RETURNING id INTO oid;
@@ -53,6 +59,9 @@ BEGIN
  PERFORM public.kds_complete_kitchen_batch_v1(gen_random_uuid(),jsonb_build_array(jsonb_build_object('item_id',component,'queue_id',qid,'source_kind','combo_component','quantity',1)));
  ASSERT (SELECT kitchen_started_quantity=2 AND kitchen_done_quantity=1 FROM public.emergency_combo_component_items WHERE id=component);
  ASSERT (SELECT kitchen_started_quantity=2 AND kitchen_done_quantity=1 FROM public.emergency_fulfillment_items WHERE id=line);
+ PERFORM public.kds_record_station_progress_v3(component,'combo_component','kitchen_done',1,gen_random_uuid());
+ ASSERT (SELECT kitchen_started_quantity=2 AND kitchen_done_quantity=2 AND tray_dispatched_quantity=2 FROM public.emergency_combo_component_items WHERE id=component);
+ ASSERT (SELECT kitchen_started_quantity=2 AND kitchen_done_quantity=2 FROM public.emergency_fulfillment_items WHERE id=line);
 END $$;
 ROLLBACK;
 SELECT 'JEONGABOK_EXPLICIT_FLOOR_HANDOFF=PASS';

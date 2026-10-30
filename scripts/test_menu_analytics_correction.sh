@@ -45,6 +45,9 @@ run_sql < test/sql/menu_analytics_correction_test.sql >/dev/null
 run_sql < supabase/migrations/20260929050000_paperless_operations_alias_residuals.sql >/dev/null
 run_sql < test/sql/paperless_operations_alias_residuals_test.sql >/dev/null
 run_sql < supabase/migrations/20261030043935_paperless_menu_timing_trends.sql >/dev/null
+run_sql < supabase/migrations/20261030083942_paperless_bottleneck_diagnostics.sql >/dev/null
+run_sql < test/sql/paperless_bottleneck_analysis_test.sql
 run_sql < test/sql/paperless_menu_timing_trends_test.sql
 run_sql < test/sql/paperless_menu_timing_trends_scale_test.sql
+run_sql < test/sql/paperless_bottleneck_scale_test.sql
 printf 'MENU_ANALYTICS_CORRECTION_SQL_TEST=PASS\n'

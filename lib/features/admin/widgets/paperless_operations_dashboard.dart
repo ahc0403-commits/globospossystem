@@ -12,6 +12,7 @@ import '../../report/report_provider.dart';
 import '../../report/report_excel_file.dart';
 import 'paperless_menu_timing_detail_sheet.dart';
 import 'paperless_timing_trends.dart';
+import 'paperless_bottleneck_analysis.dart';
 
 String paperlessOperationsTitle(BuildContext context) =>
     _PaperlessCopy.of(context).title;
@@ -237,6 +238,7 @@ class PaperlessOperationsDashboard extends StatefulWidget {
     this.loader,
     this.detailLoader,
     this.trendLoader,
+    this.bottleneckLoader,
     this.saveExcelFile,
   });
 
@@ -246,6 +248,7 @@ class PaperlessOperationsDashboard extends StatefulWidget {
   final PaperlessOperationsLoader? loader;
   final PaperlessMenuTimingDetailLoader? detailLoader;
   final PaperlessTimingTrendLoader? trendLoader;
+  final PaperlessBottleneckLoader? bottleneckLoader;
   final ReportExcelFileSaver? saveExcelFile;
 
   @override
@@ -516,7 +519,15 @@ class _PaperlessOperationsDashboardState
               message: copy.noData,
             ),
           )
-        else
+        else ...[
+          PaperlessBottleneckSection(
+            storeId: widget.storeId,
+            startDate: _startDate,
+            endDate: _endDate,
+            loader: widget.bottleneckLoader,
+            loadLive: widget.loader == null,
+          ),
+          const SizedBox(height: 10),
           _PaperlessDashboardBody(
             report: _report!,
             trends: _trends,
@@ -524,6 +535,7 @@ class _PaperlessOperationsDashboardState
             copy: copy,
             onMenuTap: _showMenuDetail,
           ),
+        ],
       ],
     );
   }

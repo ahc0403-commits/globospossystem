@@ -1503,6 +1503,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       return;
     }
     final originalNameKo = menuBaseName(item, 'name_ko');
+    final originalDiscountRemaining = (item['discount_remaining'] as num?)
+        ?.toInt();
+    final discountQuantityController = TextEditingController(
+      text: originalDiscountRemaining?.toString() ?? '',
+    );
     final originalNameVi = menuBaseName(item, 'name_vi');
     final originalPaperlessNameVi = menuBaseName(item, 'paperless_name_vi');
     final originalNameEn = menuBaseName(item, 'name_en');
@@ -1609,6 +1614,28 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       style: AppFonts.system(color: AppColors.textPrimary),
                       decoration: InputDecoration(labelText: l10n.menuPrice),
                     ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    key: const Key('admin_menu_discount_remaining'),
+                    controller: discountQuantityController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: switch (Localizations.localeOf(
+                        context,
+                      ).languageCode) {
+                        'vi' => 'Số lượng ưu đãi còn lại',
+                        'en' => 'Remaining discount quantity',
+                        _ => '남은 할인 수량',
+                      },
+                      helperText: switch (Localizations.localeOf(
+                        context,
+                      ).languageCode) {
+                        'vi' => 'Để trống: không giới hạn · 0: bán giá thường',
+                        'en' => 'Blank: unlimited · 0: normal price',
+                        _ => '빈칸: 수량 제한 없음 · 0: 정상가 판매',
+                      },
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   if (ref.read(authProvider).role == 'super_admin') ...[
                     InvoiceProfileEditor(
@@ -1775,12 +1802,41 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                         originalComboQuantities,
                       );
                   final routeChanged = floorDirect != originalFloorDirect;
+                  final discountText = discountQuantityController.text.trim();
+                  final discountRemaining = discountText.isEmpty
+                      ? null
+                      : int.tryParse(discountText);
+                  if (discountText.isNotEmpty &&
+                      (discountRemaining == null ||
+                          discountRemaining < 0 ||
+                          discountRemaining > 2147483647)) {
+                    showErrorToast(context, switch (Localizations.localeOf(
+                      context,
+                    ).languageCode) {
+                      'vi' => 'Nhập số lượng nguyên từ 0 đến 2147483647.',
+                      'en' => 'Enter a whole quantity from 0 to 2147483647.',
+                      _ => '0부터 2147483647까지의 정수를 입력해 주세요.',
+                    });
+                    return;
+                  }
+                  final discountQuantityChanged =
+                      discountRemaining != originalDiscountRemaining;
                   if (!detailsChanged &&
                       !photoChanged &&
                       !comboChanged &&
-                      !routeChanged) {
+                      !routeChanged &&
+                      !discountQuantityChanged) {
                     showErrorToast(context, l10n.noChanges);
                     return;
+                  }
+
+                  if (discountQuantityChanged) {
+                    final saved = await menuNotifier.setDiscountQuantity(
+                      itemId: itemId,
+                      remaining: discountRemaining,
+                      expectedRemaining: originalDiscountRemaining,
+                    );
+                    if (!saved) return;
                   }
 
                   if (detailsChanged) {
@@ -1854,6 +1910,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     paperlessNameViController.dispose();
     nameEnController.dispose();
     priceController.dispose();
+    discountQuantityController.dispose();
   }
 }
 

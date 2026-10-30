@@ -27,6 +27,9 @@ TOOLS = {
     'functions': 'supabase_list_edge_functions',
     'function': 'supabase_get_edge_function',
     'deploy-function': 'supabase_deploy_edge_function',
+    'vercel-context': 'vercel_get_git_deployment_context',
+    'vercel-inspect': 'vercel_get_deployment',
+    'vercel-deploy': 'vercel_create_deployment',
 }
 MAX_BYTES = 8 * 1024 * 1024
 
@@ -136,7 +139,7 @@ def process_start(pid):
 
 def normalize_result(raw, operation):
     require(isinstance(raw, dict) and not raw.get('isError'),
-            'Authenticated Supabase tool returned an error; operation must stop')
+            'Authenticated cloud tool returned an error; operation must stop')
     data = raw.get('structuredContent')
     if data is None:
         content = [c['text'] for c in raw.get('content', []) if c.get('type') == 'text']
@@ -162,6 +165,11 @@ def normalize_result(raw, operation):
                 'SQL result must contain rows')
         return {'rows': data}
     require(isinstance(data, dict), 'Missing Supabase operation result object')
+    if operation.startswith('vercel-'):
+        require(not data.get('error'), 'Vercel API returned an error; do not retry or change credentials')
+        if set(data) == {'deployment'} and isinstance(data['deployment'], dict):
+            data = data['deployment']
+        return data
     if operation == 'project':
         require(data.get('id', data.get('ref')) == PROJECT,
                 'Supabase returned another project')
@@ -182,7 +190,10 @@ def request(directory, operation, arguments, timeout=180):
     if manifest['phase'] == 'diagnostic':
         require(operation in {'project', 'query', 'migrations', 'functions', 'function'},
                 'Diagnostic execution cannot apply a migration or deploy a function')
-    if operation in {'apply', 'deploy-function'} and manifest['phase'] != 'fixture':
+    if operation == 'vercel-deploy':
+        from vercel_release import authorize_mutation
+        authorize_mutation(directory, manifest, arguments)
+    elif operation in {'apply', 'deploy-function'} and manifest['phase'] != 'fixture':
         if manifest['phase'] == 'coordinated':
             from release import authorize_mutation
             authorize_mutation(directory, manifest, operation, arguments)
@@ -207,7 +218,7 @@ def request(directory, operation, arguments, timeout=180):
     deadline = time.monotonic() + timeout
     while not response_path.exists():
         if time.monotonic() >= deadline:
-            if operation in {'apply', 'deploy-function'} and (directory / (request_id + '.claimed.json')).exists():
+            if operation in {'apply', 'deploy-function', 'vercel-deploy'} and (directory / (request_id + '.claimed.json')).exists():
                 # The connected tool may be awaiting a user's approval. Once a
                 # mutation is claimed it can still execute: keep its official
                 # owner alive until the actual result, rather than closing the

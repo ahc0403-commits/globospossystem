@@ -162,6 +162,9 @@ deno test supabase/functions/_shared/meinvoice_ledger_test.ts
 printf 'CHECK_REPO_STEP=promotion_sync_sql\n'
 bash scripts/test_promotion_sync_sql.sh
 
+printf 'CHECK_REPO_STEP=menu_discount_quantities_sql\n'
+bash scripts/test_menu_discount_quantities.sh
+
 printf 'CHECK_REPO_STEP=measured_index_sql\n'
 SCALE_INDEX_ONLY=1 bash scripts/test_scalability_isolated.sh
 

@@ -37,6 +37,7 @@ WEB_ONLY=0
 ONBOARDING_EDGE_ONLY=0
 MIGRATION_OPTION_SET=0
 POS_SUPABASE_BACKEND="${POS_SUPABASE_BACKEND:-cli}"
+POS_VERCEL_BACKEND="${POS_VERCEL_BACKEND:-cli}"
 LOCAL_RELEASE_EVIDENCE=""
 CLOUD_RELEASE_PLAN=""
 
@@ -78,6 +79,7 @@ Options:
                      direct-order-public Edge update, then prebuilt POS web.
   --mode MODE        prebuilt (default) or remote.
   --supabase-backend MODE  cli (default), or live MCP for DB-only/web-only cloud releases.
+  --vercel-backend MODE    cli (default), or MCP with --web-only --mode remote.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
   --skip-checks      Skip dart analyze and flutter tests.
@@ -321,6 +323,10 @@ parse_args() {
         shift
         POS_SUPABASE_BACKEND="${1:-}"
         ;;
+      --vercel-backend)
+        shift
+        POS_VERCEL_BACKEND="${1:-}"
+        ;;
       --test)
         shift
         [[ -n "${1:-}" ]] || fail "--test requires a file"
@@ -377,13 +383,20 @@ parse_args() {
 }
 
 validate_cloud_options() {
+  [[ "$POS_VERCEL_BACKEND" == "cli" || "$POS_VERCEL_BACKEND" == "mcp" ]] || fail "Unknown Vercel backend."
+  if [[ "$POS_VERCEL_BACKEND" == "mcp" ]]; then
+    [[ "$POS_SUPABASE_BACKEND" == "mcp" && "$WEB_ONLY" == "1" && "$DB_ONLY" == "0" &&
+       "$DEPLOY_MODE" == "remote" && -z "$CLOUD_RELEASE_PLAN" ]] ||
+      fail "Vercel MCP requires the reviewed web-only remote-build executor."
+  fi
   [[ "$POS_SUPABASE_BACKEND" == "mcp" ]] || return 0
   [[ "$DB_ONLY" == "1" || "$WEB_ONLY" == "1" || -n "$CLOUD_RELEASE_PLAN" ]] ||
     fail "MCP release requires reviewed --db-only or --web-only scope; Edge secret operations are unavailable."
   [[ "$SKIP_CHECKS" == "0" && "$SKIP_AUTH_CHECK" == "0" &&
      "$SKIP_SMOKE_TESTS" == "0" && "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" &&
-     "$SKIP_VERCEL" == "0" && -n "$TEST_TARGETS" && "$DEPLOY_MODE" == "prebuilt" ]] ||
-    fail "Cloud releases require all applicable gates and prebuilt deployment."
+     "$SKIP_VERCEL" == "0" && -n "$TEST_TARGETS" &&
+     ( "$DEPLOY_MODE" == "prebuilt" || ( "$POS_VERCEL_BACKEND" == "mcp" && "$DEPLOY_MODE" == "remote" ) ) ]] ||
+    fail "Cloud releases require all applicable gates and a reviewed build executor."
   [[ "$SKIP_LOGIN_SMOKE" == "0" ||
      ( ( "$WEB_ONLY" == "1" || -n "$CLOUD_RELEASE_PLAN" ) && "$SKIP_LOGIN_SMOKE" == "1" && "$LOGIN_SMOKE_OPT_OUT" == "1" ) ]] ||
     fail "Cloud login smoke omission requires explicit --web-only --skip-login-smoke."
@@ -431,7 +444,7 @@ if d.get("id")!="ynriuoomotxuwhuxxmhj" or d.get("status")!="ACTIVE_HEALTHY":
     raise SystemExit("Pinned production MCP project is unavailable")'
   python3 -B "$ROOT_DIR/scripts/cloud_deployment/sdk.py" init \
     --directory "$POS_CLOUD_BRIDGE_DIR" --evidence "$LOCAL_RELEASE_EVIDENCE"
-  if [[ "$DB_ONLY" != "1" ]]; then
+  if [[ "$DB_ONLY" != "1" && "$POS_VERCEL_BACKEND" == "cli" ]]; then
     export POS_CLOUD_VERCEL_BIN="${POS_CLOUD_VERCEL_BIN:-$(command -v vercel)}"
     [[ "$POS_CLOUD_VERCEL_BIN" = /* && -x "$POS_CLOUD_VERCEL_BIN" &&
        "$POS_CLOUD_VERCEL_BIN" != "$ROOT_DIR/scripts/cloud_deployment/bin/vercel" ]] ||
@@ -439,6 +452,9 @@ if d.get("id")!="ynriuoomotxuwhuxxmhj" or d.get("status")!="ACTIVE_HEALTHY":
   fi
   export PATH="$ROOT_DIR/scripts/cloud_deployment/bin:$PATH"
   export POS_SUPABASE_BACKEND
+  if [[ "$POS_VERCEL_BACKEND" == "mcp" ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/vercel_release.py" connection --directory "$POS_CLOUD_BRIDGE_DIR"
+  fi
 }
 
 validate_db_only_options() {
@@ -540,7 +556,7 @@ preflight() {
     fail "Linked Supabase project is not POS production ($POS_PROJECT_REF)."
   fi
 
-  if [[ "$DB_ONLY" != "1" ]]; then
+  if [[ "$DB_ONLY" != "1" && "$POS_VERCEL_BACKEND" == "cli" ]]; then
     [[ -f "$ROOT_DIR/.vercel/project.json" ]] ||
       fail "Missing .vercel/project.json. Run vercel link before deploying."
     grep -Eq "\"projectName\"[[:space:]]*:[[:space:]]*\"$POS_VERCEL_PROJECT\"" "$ROOT_DIR/.vercel/project.json" ||
@@ -604,7 +620,7 @@ preflight() {
     need_cmd flutter
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_VERCEL" != "1" ]]; then
-    need_cmd vercel
+    if [[ "$POS_VERCEL_BACKEND" == "cli" ]]; then need_cmd vercel; fi
     need_cmd curl
   fi
 }
@@ -615,6 +631,10 @@ verify_vercel_firebase_web_env() {
   fi
 
   log "Vercel Firebase web push environment"
+  if [[ "$POS_VERCEL_BACKEND" == "mcp" ]]; then
+    printf 'Production Firebase configuration: PENDING, checked inside the pinned Vercel build and verified from its exact-source attestation. No environment values are retrieved.\n'
+    return 0
+  fi
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '+ vercel env ls production; require Firebase web config names only\n'
     return 0
@@ -1063,6 +1083,17 @@ deploy_vercel() {
   fi
 
   ensure_flutter_env
+
+  if [[ "$POS_VERCEL_BACKEND" == "mcp" ]]; then
+    enforce_clean_git
+    enforce_origin_main_ancestry
+    log "Authenticated Vercel exact-source production build and deploy"
+    run python3 -B "$ROOT_DIR/scripts/cloud_deployment/vercel_release.py" deploy \
+      --directory "${POS_CLOUD_BRIDGE_DIR:-<not-run>}"
+    log "Live URL check"
+    run curl -fsSI -L "$LIVE_URL"
+    return 0
+  fi
 
   local deploy_log
   deploy_log="$(mktemp)"

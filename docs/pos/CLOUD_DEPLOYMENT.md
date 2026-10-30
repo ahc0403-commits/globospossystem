@@ -67,7 +67,7 @@ fabricate success, or broadly replayed with `db push`.
 
 ## Existing Vercel connection and login smoke
 
-Use the existing pinned project link and authenticated official CLI. Vercel
+The default CLI backend uses the existing pinned project link and authenticated official CLI. Vercel
 CLI 65.5.0 `link` automatically refreshes an OIDC token even with `--yes`;
 do not rerun it within the no-new-token scope. Project IDs in the existing
 `.vercel/project.json` are connection metadata, not authentication credentials.
@@ -78,6 +78,36 @@ available there. Preserve the pinned `.vercel/project.json`; remove inherited
 `VERCEL_PROJECT_ID`/`VERCEL_ORG_ID` from the child command environment because
 the existing entrypoint deliberately forbids target overrides. Do not alter
 the stored project or production environment settings.
+
+For an already connected Vercel MCP session, the same official entrypoint also
+supports `--supabase-backend mcp --vercel-backend mcp --web-only --mode remote`.
+The reviewed executor verifies the existing team/project/Git connection and
+submits precisely the freshly verified release SHA, never a floating branch.
+It does not list, decrypt, transfer or change Vercel environment variables, link
+projects, mint tokens, change Git automatic-deployment settings, or override
+project/build settings. The provider consumes its existing production build
+environment. The local full recipe and SDK compilation precheck still execute;
+the actual production compiler additionally validates all public Firebase and
+Supabase inputs inside Vercel, without emitting their values.
+
+The production installer uses the same checksum-pinned Flutter 3.41.6/Dart
+3.11.4 archive as local verification and enforces `pubspec.lock`. The committed
+build helper publishes `pos-release.json` only after successful configuration
+checks and compilation. The official executor requires READY production,
+the pinned project, matching release metadata/provider Git identity, a matching
+production alias, exact-source/toolchain/lockfile attestation, and matching live
+JavaScript SHA256. Some mapped inspection responses omit `gitSource`; that
+omission is recorded. In that case the initiator must be `git` or `api`, the
+prepared creation request must still specify the exact Git commit, and the
+build's actual Git SHA and compiled bytes remain mandatory. Inspection uses
+provider hostnames (without an HTTP scheme); live HTTP checks use HTTPS URLs.
+HTTP checks and the existing Auth/Edge/source checks are
+retained. An owner-approved login waiver remains `NOT_RUN_OWNER_WAIVER`.
+
+Claimed deployment creation is invoked once. A timeout, API rejection, failed
+build, inconsistent alias or missing attestation is a failure, never a deploy
+PASS. Inspect its durable deployment identity and saved predecessor before any
+continuation; do not resubmit an uncertain create request or replay DB work.
 
 A cloud web release normally requires `FIXED_SMOKE_ACCOUNT_CODE` and
 `FIXED_SMOKE_PASSWORD` to be securely supplied before production work. Do not

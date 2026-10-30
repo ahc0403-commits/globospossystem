@@ -791,6 +791,9 @@ class _EmergencyFulfillmentScreenState
               !selected.isDelivery &&
               !selected.isDirectPickup,
         ),
+        // A menu-body tap starts cooking for the direct workflow. The explicit
+        // check action is a separate, authoritative completion/floor handoff.
+        onItemComplete: (item) => _completeItem(item, stationType),
         onItemRevert: (item) => _revertItem(
           item,
           stationType,
@@ -2226,6 +2229,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
     required this.readyPulseOn,
     required this.onBack,
     required this.onItemAction,
+    required this.onItemComplete,
     required this.onItemRevert,
     required this.onServeReady,
     required this.onRevert,
@@ -2241,6 +2245,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
   final bool readyPulseOn;
   final VoidCallback onBack;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
+  final ValueChanged<EmergencyFulfillmentItem> onItemComplete;
   final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
   final VoidCallback? onServeReady;
   final VoidCallback? onRevert;
@@ -2381,6 +2386,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                       readyPulseOn: readyPulseOn,
                       keyPrefix: 'emergency_detail_menu',
                       onItemAction: onItemAction,
+                      onItemComplete: onItemComplete,
                       onItemRevert: onItemRevert,
                     ),
             ),
@@ -2560,6 +2566,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
     required this.readyPulseOn,
     required this.keyPrefix,
     required this.onItemAction,
+    this.onItemComplete,
     required this.onItemRevert,
     this.embedded = false,
   });
@@ -2573,6 +2580,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
   final bool readyPulseOn;
   final String keyPrefix;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
+  final ValueChanged<EmergencyFulfillmentItem>? onItemComplete;
   final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
   final bool embedded;
 
@@ -2605,6 +2613,9 @@ class _EmergencyMenuCollection extends StatelessWidget {
               busy: busy,
               readyPulseOn: readyPulseOn,
               onTap: () => onItemAction(items[index].fulfillmentItem),
+              onComplete: onItemComplete == null
+                  ? null
+                  : () => onItemComplete!(items[index].fulfillmentItem),
               onRevert: () => onItemRevert(items[index].fulfillmentItem),
             ),
           );
@@ -2630,6 +2641,9 @@ class _EmergencyMenuCollection extends StatelessWidget {
             busy: busy,
             readyPulseOn: readyPulseOn,
             onTap: () => onItemAction(items[index].fulfillmentItem),
+            onComplete: onItemComplete == null
+                ? null
+                : () => onItemComplete!(items[index].fulfillmentItem),
             onRevert: () => onItemRevert(items[index].fulfillmentItem),
           ),
         );
@@ -2662,6 +2676,7 @@ class _EmergencyMenuRow extends StatelessWidget {
     required this.busy,
     required this.readyPulseOn,
     required this.onTap,
+    this.onComplete,
     required this.onRevert,
   });
 
@@ -2673,6 +2688,7 @@ class _EmergencyMenuRow extends StatelessWidget {
   final bool busy;
   final bool readyPulseOn;
   final VoidCallback onTap;
+  final VoidCallback? onComplete;
   final VoidCallback onRevert;
 
   @override
@@ -2722,6 +2738,12 @@ class _EmergencyMenuRow extends StatelessWidget {
         !disabledAtStation &&
         limit > 0 &&
         value < limit;
+    final canComplete = preparationOnly
+        ? !busy &&
+              !item.needsReview &&
+              !disabledAtStation &&
+              item.kitchenDoneQuantity < item.requiredQuantity
+        : canAdvance;
     final canRevert =
         !busy &&
         (item.isRevertibleAt(stationType) ||
@@ -2735,7 +2757,7 @@ class _EmergencyMenuRow extends StatelessWidget {
       button: true,
       enabled: canAdvance || canRevert,
       label:
-          '${displayItem.paperlessName}, $value / $displayLimit, '
+          '${displayItem.paperlessName}, ${preparationOnly ? '${copy.startCooking}, ' : ''}$value / $displayLimit, '
           '${disabledAtStation
               ? copy.floorDirectOnly
               : done
@@ -2873,19 +2895,14 @@ class _EmergencyMenuRow extends StatelessWidget {
                     'emergency_menu_item_complete_${displayItem.id}',
                   ),
                   tooltip: preparationOnly
-                      ? copy.startCooking
+                      ? copy.completeAndSendToFloor
                       : copy.actionOne(
                           stationType,
                           isDelivery: isDelivery,
                           isDirectPickup: isDirectPickup,
                         ),
-                  onPressed: canAdvance ? onTap : null,
-                  icon: Icon(
-                    preparationOnly
-                        ? Icons.play_arrow_rounded
-                        : Icons.check_rounded,
-                    size: 20,
-                  ),
+                  onPressed: canComplete ? (onComplete ?? onTap) : null,
+                  icon: Icon(Icons.check_rounded, size: 20),
                 ),
               ],
             );
@@ -3304,6 +3321,11 @@ class _EmergencyCopy {
   String get orderedQuantity => _pick('주문 수량', 'Số lượng', 'Ordered');
   String get completed => _pick('완료', 'Hoàn tất', 'Completed');
   String get startCooking => _pick('조리 시작', 'Bắt đầu nấu', 'Start cooking');
+  String get completeAndSendToFloor => _pick(
+    '1개 완료·층 전달',
+    'Hoàn tất 1 món và chuyển tầng',
+    'Complete one and send to floor',
+  );
   String get cookingBeforeHandoff => _pick(
     '조리중 · 층 전달 전',
     'Đang nấu · chưa chuyển tầng',
@@ -3473,9 +3495,9 @@ class _EmergencyCopy {
     }
     if (error.contains('KDS_CHECKET_SELECTION_STALE')) {
       return _pick(
-        '메뉴 수량이 변경되었습니다. $checketHandoff 화면을 다시 열어 주세요.',
-        'Số lượng món đã thay đổi. Hãy mở lại $checketHandoff.',
-        'Menu quantities changed. Reopen $checketHandoff.',
+        '수량이 변경되었거나 먼저 접수된 동일 메뉴가 있습니다. $checketHandoff 화면에서 먼저 접수된 주문부터 확인해 주세요.',
+        'Số lượng đã đổi hoặc còn món cùng loại nhận trước. Mở $checketHandoff và kiểm tra đơn nhận trước.',
+        'Quantities changed or an earlier ticket has the same menu. Open $checketHandoff and review the earlier tickets first.',
       );
     }
     if (error.contains('KDS_CHECKET_BATCH_QUEUED')) {

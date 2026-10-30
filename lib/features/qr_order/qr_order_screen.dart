@@ -485,11 +485,9 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   }
 
   double get _cartTotal {
-    var total = 0.0;
-    for (final line in _cartItems) {
-      total += line.item.price * line.quantity;
-    }
-    return total;
+    return quoteQrDiscountQuantities(
+      _cartItems.map((line) => (item: line.item, quantity: line.quantity)),
+    ).fold(0.0, (total, line) => total + line.total);
   }
 
   bool get _hasStaleCart {
@@ -803,6 +801,10 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                 ],
                 const SizedBox(height: 8),
                 Text(prices),
+                if (item.discountRemaining case final remaining?) ...[
+                  const SizedBox(height: 8),
+                  Text(_copy.discountRemaining(remaining)),
+                ],
                 const SizedBox(height: 8),
                 Text(
                   hasMealChoices
@@ -859,6 +861,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
 
   Future<void> _submitOrder() async {
     if (_cart.isEmpty || _isSubmitting) return;
+    var reviewedItems = _cartItems;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -866,7 +869,10 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       builder: (context) => _QrReviewDialog(
         copy: _copy,
         languageCode: _languageCode,
-        readLines: () => _cartItems,
+        readLines: () {
+          reviewedItems = _cartItems;
+          return reviewedItems;
+        },
         onQuantity: (item, quantity, takeout) =>
             _setQuantity(item, quantity, isTakeout: takeout),
         onEditOptions: _editCartOption,
@@ -900,20 +906,34 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         : null;
     final submissionEpoch = _orderContextEpoch;
     try {
-      final submittedItems = _cartItems;
+      final submittedItems = reviewedItems;
+      final quotes = quoteQrDiscountQuantities(
+        submittedItems.map(
+          (line) => (item: line.item, quantity: line.quantity),
+        ),
+      );
       final result = await _service.placeOrder(
         token: widget.token,
         clientOrderId: _clientOrderId!,
         expectedOrderId: expectedOrderId,
         items: [
-          for (final line in submittedItems)
+          for (var index = 0; index < submittedItems.length; index++)
             QrOrderLine(
-              menuItemId: menuChoiceBaseId(line.item.id),
-              menuOptionKey: _cartOptionKeys[line.lineKey],
-              quantity: line.quantity,
-              isTakeout: line.isTakeout,
+              menuItemId: menuChoiceBaseId(submittedItems[index].item.id),
+              menuOptionKey: submittedItems[index].item.menuOptionKey,
+              quantity: submittedItems[index].quantity,
+              isTakeout: submittedItems[index].isTakeout,
+              expectedDiscountQuantity:
+                  submittedItems[index].item.discountRemaining == null
+                  ? null
+                  : quotes[index].discountQuantity,
+              expectedDiscountPercent:
+                  submittedItems[index].item.discountRemaining == null
+                  ? null
+                  : submittedItems[index].item.discountPercent,
               comboDrinkChoices:
-                  _comboDrinkChoices[line.lineKey] ?? const <String>[],
+                  _comboDrinkChoices[submittedItems[index].lineKey] ??
+                  const <String>[],
             ),
         ],
       );
@@ -964,7 +984,8 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         }
       });
       if (error.toString().contains('QR_ORDER_CONTEXT_CHANGED') ||
-          error.toString().contains('QR_TAKEOUT_UNAVAILABLE')) {
+          error.toString().contains('QR_TAKEOUT_UNAVAILABLE') ||
+          error.toString().contains('QR_DISCOUNT_QUANTITY_CHANGED')) {
         unawaited(_loadMenu(showLoading: false));
       }
     }
@@ -1834,6 +1855,17 @@ class _QrMenuItemTile extends StatelessWidget {
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
+        if (item.discountRemaining case final remaining?) ...[
+          const SizedBox(height: ToastSpacingTokens.xs),
+          Text(
+            copy.discountRemaining(remaining),
+            key: Key('qr_discount_remaining_${item.id}'),
+            style: AppFonts.system(
+              color: ToastColorTokens.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ],
     );
     final controls = Column(
@@ -2307,6 +2339,9 @@ class _QrReviewDialogState extends State<_QrReviewDialog> {
   Widget build(BuildContext context) {
     final copy = widget.copy, languageCode = widget.languageCode;
     final lines = widget.readLines(), totalLabel = widget.readTotal();
+    final quotes = quoteQrDiscountQuantities(
+      lines.map((line) => (item: line.item, quantity: line.quantity)),
+    );
     final comboDrinkNames = widget.readComboDrinkNames();
     return Dialog(
       key: const Key('qr_confirm_dialog'),
@@ -2357,6 +2392,14 @@ class _QrReviewDialogState extends State<_QrReviewDialog> {
                             id: 'qr_cart_${line.lineKey}',
                             name: line.item.localizedName(languageCode),
                             price: line.item.price,
+                            totalPrice: quotes[index].total,
+                            priceCaption: line.item.discountRemaining == null
+                                ? null
+                                : copy.discountSplit(
+                                    quotes[index].discountQuantity,
+                                    line.quantity -
+                                        quotes[index].discountQuantity,
+                                  ),
                             quantity: line.quantity,
                             language: languageCode,
                             imageUrl: line.item.imageUrl,
@@ -2932,6 +2975,24 @@ class QrOrderCopy {
     _ => 'Delivered $served · Remaining $remaining',
   };
 
+  String discountRemaining(int remaining) => remaining == 0
+      ? switch (code) {
+          'ko' => '할인 수량 소진 · 정상가 판매',
+          'vi' => 'Hết suất ưu đãi · Giá thường',
+          _ => 'Discount sold out · Normal price',
+        }
+      : switch (code) {
+          'ko' => '할인 $remaining개 남음',
+          'vi' => 'Còn $remaining suất ưu đãi',
+          _ => '$remaining discounted portions left',
+        };
+
+  String discountSplit(int discounted, int normal) => switch (code) {
+    'ko' => '할인 $discounted개 · 정상가 $normal개',
+    'vi' => 'Ưu đãi $discounted · Giá thường $normal',
+    _ => 'Discounted $discounted · Normal price $normal',
+  };
+
   String get addItemsTitle => switch (code) {
     'ko' => '추가 주문 메뉴',
     'vi' => 'Chọn món gọi thêm',
@@ -3164,6 +3225,22 @@ class QrOrderCopy {
 
   QrOrderFailurePresentation failureFor(Object error) {
     final raw = error.toString();
+    if (raw.contains('QR_DISCOUNT_QUANTITY_CHANGED')) {
+      return QrOrderFailurePresentation(
+        kind: QrOrderFailureKind.itemUnavailable,
+        title: switch (code) {
+          'ko' => '남은 할인 수량이 변경되었습니다',
+          'vi' => 'Số suất ưu đãi đã thay đổi',
+          _ => 'The remaining discount quantity changed',
+        },
+        body: switch (code) {
+          'ko' => '최신 수량과 가격을 확인한 뒤 다시 주문해 주세요.',
+          'vi' => 'Vui lòng kiểm tra số lượng và giá mới rồi gửi lại đơn.',
+          _ =>
+            'Review the latest quantity and price, then place your order again.',
+        },
+      );
+    }
     if (raw.contains('QR_TOKEN_INVALID')) {
       return QrOrderFailurePresentation(
         kind: QrOrderFailureKind.invalidExpiredOrUnavailable,

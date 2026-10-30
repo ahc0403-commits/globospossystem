@@ -105,6 +105,8 @@ class QrMenuItem {
     required this.price,
     this.originalPrice,
     this.discountPercent = 0,
+    this.discountRemaining,
+    this.discountQuantityMenuId,
     this.description,
     this.imageUrl,
     this.isCombo = false,
@@ -115,7 +117,9 @@ class QrMenuItem {
   QrMenuItem withChoice(MenuChoiceSelection selection) => QrMenuItem(
     id: selection.lineId(id),
     menuOptionKey: selection.key,
-    price: selection.price,
+    price: discountPercent > 0
+        ? (selection.price * (100 - discountPercent) / 100).roundToDouble()
+        : selection.price,
     nameKo: selection.name(nameKo, 'ko'),
     nameVi: selection.name(nameVi, 'vi'),
     nameEn: selection.name(nameEn, 'en'),
@@ -123,8 +127,10 @@ class QrMenuItem {
     name: selection.name(name, 'ko'),
     description: description,
     imageUrl: imageUrl,
-    originalPrice: originalPrice,
+    originalPrice: selection.price,
     discountPercent: discountPercent,
+    discountRemaining: discountRemaining,
+    discountQuantityMenuId: discountQuantityMenuId,
     isCombo: isCombo,
     comboDrinkChoiceCount: comboDrinkChoiceCount,
     comboDrinkOptions: comboDrinkOptions,
@@ -140,6 +146,8 @@ class QrMenuItem {
   final double price;
   final double? originalPrice;
   final double discountPercent;
+  final int? discountRemaining;
+  final String? discountQuantityMenuId;
   final String? description;
   final String? imageUrl;
   final bool isCombo;
@@ -176,6 +184,10 @@ class QrMenuItem {
           ? null
           : _jsonDouble(json['original_price']),
       discountPercent: _jsonDouble(json['discount_percent']),
+      discountRemaining: json['discount_remaining'] == null
+          ? null
+          : _jsonInt(json['discount_remaining']),
+      discountQuantityMenuId: json['discount_quantity_menu_id']?.toString(),
       isCombo: json['is_combo'] == true,
       comboDrinkChoiceCount: _jsonInt(json['combo_drink_choice_count']),
       comboDrinkOptions: json['combo_drink_options'] is List
@@ -190,6 +202,47 @@ class QrMenuItem {
           : const [],
     );
   }
+}
+
+class QrDiscountQuantityQuote {
+  const QrDiscountQuantityQuote(this.discountQuantity, this.total);
+
+  final int discountQuantity;
+  final double total;
+}
+
+/// Apply one shared menu balance to its size/choice/takeout lines in submission
+/// order. This is an estimate; the server validates it before accepting an order.
+List<QrDiscountQuantityQuote> quoteQrDiscountQuantities(
+  Iterable<({QrMenuItem item, int quantity})> lines,
+) {
+  final remaining = <String, int>{};
+  return [
+    for (final line in lines)
+      (() {
+        final item = line.item;
+        if (item.discountRemaining == null) {
+          return QrDiscountQuantityQuote(
+            item.discountPercent > 0 ? line.quantity : 0,
+            item.price * line.quantity,
+          );
+        }
+        final key = item.discountQuantityMenuId ?? item.id;
+        final available = remaining.putIfAbsent(
+          key,
+          () => item.discountRemaining!,
+        );
+        final discounted = item.discountPercent > 0
+            ? line.quantity.clamp(0, available)
+            : 0;
+        remaining[key] = available - discounted;
+        return QrDiscountQuantityQuote(
+          discounted,
+          item.price * discounted +
+              (item.originalPrice ?? item.price) * (line.quantity - discounted),
+        );
+      })(),
+  ];
 }
 
 class QrComboDrinkOption {
@@ -246,6 +299,8 @@ class QrOrderLine {
     required this.quantity,
     this.isTakeout = false,
     this.comboDrinkChoices = const [],
+    this.expectedDiscountQuantity,
+    this.expectedDiscountPercent,
   });
 
   final String? menuOptionKey;
@@ -253,6 +308,8 @@ class QrOrderLine {
   final int quantity;
   final bool isTakeout;
   final List<String> comboDrinkChoices;
+  final int? expectedDiscountQuantity;
+  final double? expectedDiscountPercent;
 
   Map<String, dynamic> toJson() => {
     'menu_item_id': menuItemId,
@@ -260,6 +317,10 @@ class QrOrderLine {
     'quantity': quantity,
     if (isTakeout) 'is_takeout': true,
     if (comboDrinkChoices.isNotEmpty) 'combo_drink_choices': comboDrinkChoices,
+    if (expectedDiscountQuantity != null)
+      'expected_discount_quantity': expectedDiscountQuantity,
+    if (expectedDiscountPercent != null)
+      'expected_discount_percent': expectedDiscountPercent,
   };
 }
 

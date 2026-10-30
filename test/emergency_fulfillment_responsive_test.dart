@@ -1053,8 +1053,141 @@ void main() {
     },
   );
 
+  for (final direct in [false, true]) {
+    for (final source in ['base', 'combo_component']) {
+      testWidgets(
+        'explicit kitchen check completes one $source with directToFloor=$direct',
+        (tester) async {
+          final active = _activeState('kitchen');
+          final food = EmergencyFulfillmentItem.fromJson({
+            'id': 'completion-food',
+            'order_item_id': 'completion-order-item',
+            'name_ko': '완료 확인 메뉴',
+            'ordered_quantity': 2,
+            'kitchen_started_quantity': 2,
+            'workflow_version': 2,
+            'source_kind': source,
+            'kitchen_direct_to_floor': direct,
+          });
+          final fixture = _FixtureEmergencyNotifier(
+            active.copyWith(
+              kitchenDirectToFloor: direct,
+              orders: [
+                active.orders.single.copyWith(items: [food]),
+              ],
+            ),
+          );
+          await _pumpEmergency(
+            tester,
+            fixture: fixture,
+            size: const Size(1024, 768),
+            locale: const Locale('ko'),
+          );
+          await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+          await tester.pump();
+          final complete = find.byKey(
+            const Key('emergency_menu_item_complete_completion-food'),
+          );
+          expect(tester.widget<IconButton>(complete).onPressed, isNotNull);
+          await tester.tap(complete);
+          await tester.pump();
+          expect(fixture.recordedProgress, [
+            ('completion-food', 'kitchen_done', 1),
+          ]);
+          final partial = fixture.state.orders.single.items.single;
+          expect(partial.kitchenDoneQuantity, 1);
+          expect(partial.floorServedQuantity, 0);
+          expect(partial.readyUnservedQuantity, direct ? 1 : 0);
+          expect(partial.isActionableAt('tray'), !direct);
+          expect(
+            find.byKey(const Key('emergency_order_detail_order-1')),
+            findsOneWidget,
+          );
+          await tester.tap(complete);
+          await tester.pump();
+          expect(
+            fixture.state.orders.single.items.single.kitchenDoneQuantity,
+            2,
+          );
+          expect(
+            find.byKey(const Key('emergency_order_detail_order-1')),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  for (final outcome in [
+    EmergencyProgressResult.confirmed,
+    EmergencyProgressResult.queued,
+    EmergencyProgressResult.rejected,
+  ]) {
+    testWidgets(
+      'direct kitchen explicit check waits for $outcome without false floor readiness',
+      (tester) async {
+        final active = _activeState('kitchen');
+        final food = EmergencyFulfillmentItem.fromJson({
+          'id': 'direct-food',
+          'order_item_id': 'direct-order-item',
+          'name_ko': '직접 전달',
+          'ordered_quantity': 1,
+          'kitchen_started_quantity': 1,
+          'workflow_version': 2,
+          'kitchen_direct_to_floor': true,
+        });
+        final fixture = _DeferredEmergencyNotifier(
+          active.copyWith(
+            assignmentResolved: true,
+            kitchenDirectToFloor: true,
+            orders: [
+              active.orders.single.copyWith(items: [food]),
+            ],
+          ),
+        );
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+        );
+        await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+        await tester.pump();
+        final check = find.byKey(
+          const Key('emergency_menu_item_complete_direct-food'),
+        );
+        await tester.tap(check);
+        await tester.pump();
+        expect(tester.widget<IconButton>(check).onPressed, isNull);
+        expect(
+          fixture.state.orders.single.items.single.readyUnservedQuantity,
+          0,
+        );
+        fixture.outcome.complete(outcome);
+        await tester.pumpAndSettle();
+        expect(
+          fixture.state.orders.single.items.single.readyUnservedQuantity,
+          outcome == EmergencyProgressResult.confirmed ? 1 : 0,
+        );
+        expect(
+          fixture.state.orders.single.items.single.kitchenDoneQuantity,
+          outcome == EmergencyProgressResult.confirmed ? 1 : 0,
+        );
+        if (outcome != EmergencyProgressResult.confirmed) {
+          expect(
+            find.byKey(const Key('emergency_order_detail_order-1')),
+            findsOneWidget,
+          );
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
-    'JeonGabok menu tap starts cooking and only floor handoff completes it',
+    'JeonGabok menu tap starts cooking and retains the separate floor handoff sheet',
     (tester) async {
       final active = _activeState('kitchen');
       final food = EmergencyFulfillmentItem.fromJson({
@@ -1083,7 +1216,7 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('emergency_order_order-1')));
       await tester.pump();
-      expect(find.byTooltip('조리 시작'), findsOneWidget);
+      expect(find.byTooltip('1개 완료·층 전달'), findsOneWidget);
       await tester.tap(find.byKey(const Key('emergency_menu_item_jgb-food')));
       await tester.pump();
       expect(fixture.recordedProgress, [('jgb-food', 'kitchen_started', 1)]);
@@ -1098,7 +1231,7 @@ void main() {
               find.byKey(const Key('emergency_menu_item_complete_jgb-food')),
             )
             .onPressed,
-        isNull,
+        isNotNull,
       );
       await tester.tap(find.byKey(const Key('emergency_detail_home')));
       await tester.pump();

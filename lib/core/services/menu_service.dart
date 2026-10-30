@@ -75,6 +75,23 @@ class MenuWorkbookUpdateResult {
 }
 
 class MenuService {
+  Future<void> setDiscountQuantity({
+    required String storeId,
+    required String itemId,
+    required int? remaining,
+    required int? expectedRemaining,
+  }) async {
+    await supabase.rpc(
+      'admin_set_menu_discount_quantity',
+      params: {
+        'p_store_id': storeId,
+        'p_item_id': itemId,
+        'p_remaining': remaining,
+        'p_expected_remaining': expectedRemaining,
+      },
+    );
+  }
+
   Future<List<Map<String, dynamic>>> fetchCategories(String storeId) async {
     // postgrest-dart's order() defaults to DESCENDING; sort_order must be
     // ascending or the menu browser auto-selects the last (often empty test)
@@ -95,6 +112,7 @@ class MenuService {
         .from('menu_items')
         .select(
           '*, '
+          'menu_discount_quantities(remaining), '
           'menu_combo_components!'
           'menu_combo_components_combo_menu_item_id_fkey('
           'id, component_menu_item_id, quantity, sort_order, '
@@ -109,9 +127,16 @@ class MenuService {
         .order('sort_order', ascending: true)
         .order('id', ascending: true);
     return menuCatalogRows(
-      response
-          .map<Map<String, dynamic>>((i) => Map<String, dynamic>.from(i))
-          .toList(),
+      response.map<Map<String, dynamic>>((i) {
+        final row = Map<String, dynamic>.from(i);
+        final quantity = row['menu_discount_quantities'];
+        row['discount_remaining'] = quantity is Map
+            ? quantity['remaining']
+            : quantity is List && quantity.isNotEmpty
+            ? quantity.first['remaining']
+            : null;
+        return row;
+      }).toList(),
     );
   }
 

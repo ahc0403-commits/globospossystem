@@ -21,6 +21,23 @@ class _Auth extends AuthNotifier {
 }
 
 class _Service extends MenuService {
+  int quantityWrites = 0;
+  int? savedRemaining;
+  int? expectedRemaining;
+  @override
+  Future<void> setDiscountQuantity({
+    required String storeId,
+    required String itemId,
+    required int? remaining,
+    required int? expectedRemaining,
+  }) async {
+    expect(storeId, 'store');
+    expect(itemId, 'normal');
+    quantityWrites++;
+    savedRemaining = remaining;
+    this.expectedRemaining = expectedRemaining;
+  }
+
   int moves = 0;
   int reads = 0;
   String? lastMove;
@@ -65,6 +82,9 @@ class _Menu extends MenuNotifier {
             'id': id,
             'name': id,
             'name_ko': id,
+            'name_vi': id,
+            'name_en': id,
+            if (id == 'normal') 'discount_remaining': 7,
             'category_id': 'category',
             'sort_order': index,
             'price': price,
@@ -100,6 +120,49 @@ void main() {
         autoRefreshToken: false,
       ),
     );
+  });
+
+  testWidgets('existing menu saves remaining discount quantity independently', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final service = _Service();
+    final menu = _Menu(service);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((ref) => _Auth()),
+          menuProvider.overrideWith((ref, store) => menu),
+          adminAuditTraceProvider.overrideWith(
+            (ref, store) => Future.value(const []),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          locale: const Locale('ko'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const MenuTab(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('admin_menu_edit_item_normal')));
+    await tester.pumpAndSettle();
+    final field = find.byKey(const Key('admin_menu_discount_remaining'));
+    expect(tester.widget<TextField>(field).controller!.text, '7');
+    await tester.enterText(field, '25');
+    final save = find.widgetWithText(FilledButton, '저장');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(service.quantityWrites, 1);
+    expect(service.savedRemaining, 25);
+    expect(service.expectedRemaining, 7);
+    expect(find.byKey(const Key('admin_menu_edit_item_dialog')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   test(

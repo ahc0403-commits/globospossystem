@@ -24,10 +24,14 @@ class CustomerCartItemCard extends StatelessWidget {
     this.description,
     this.children = const [],
     this.maxQuantity = 50,
+    this.totalPrice,
+    this.priceCaption,
   });
   final String id, name, language;
   final String? imageUrl, description;
   final double price;
+  final double? totalPrice;
+  final String? priceCaption;
   final int quantity, maxQuantity;
   final VoidCallback onMinus, onPlus, onRemove;
   final VoidCallback? onEdit;
@@ -75,9 +79,9 @@ class CustomerCartItemCard extends StatelessWidget {
           alignment: WrapAlignment.spaceBetween,
           spacing: 12,
           children: [
-            Text('${money.format(price)} × $quantity'),
+            Text(priceCaption ?? '${money.format(price)} × $quantity'),
             Text(
-              money.format(price * quantity),
+              money.format(totalPrice ?? price * quantity),
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ],
