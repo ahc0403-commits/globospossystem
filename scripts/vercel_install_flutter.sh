@@ -10,7 +10,7 @@ if [[ ! -x ./.flutter/bin/flutter ]]; then
   curl -fsSL https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.41.6-stable.tar.xz -o "$archive"
   echo "503b3e6b7d352fca5d21b6474eca95ad544d8fc3b053782eab63a360c7fc7569  $archive" | sha256sum -c -
   mkdir .flutter
-  tar -xJf "$archive" -C .flutter --strip-components=1
+  tar --no-same-owner -xJf "$archive" -C .flutter --strip-components=1
 fi
 FLUTTER_BIN="./.flutter/bin/flutter"
 "$FLUTTER_BIN" --version --machine | python3 -c '
