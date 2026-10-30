@@ -178,7 +178,10 @@ void main() {
         'floor/19/null',
         'floor/19/chicken',
       ]);
-      expect(find.textContaining('10/01 19:10:00 (UTC+7)'), findsOneWidget);
+      expect(
+        find.textContaining('10/01 19:10:00 (베트남, UTC+7)'),
+        findsOneWidget,
+      );
       expect(find.text('미기록 / 해당 동선 없음'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

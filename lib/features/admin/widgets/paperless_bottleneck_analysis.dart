@@ -1167,7 +1167,7 @@ class PaperlessRecordedTimeline extends StatelessWidget {
                             'Unrecorded / not applicable',
                             'Chưa ghi nhận / không áp dụng',
                           )
-                        : '${DateFormat('MM/dd HH:mm:ss').format(dates[i]!.add(const Duration(hours: 7)))} (UTC+7)',
+                        : copy.timestamp(dates[i]!),
                   ),
                   if (i > 0 &&
                       dates[i] != null &&
@@ -1208,6 +1208,17 @@ class _Copy {
     'handoff' => t('인계', 'Handoff', 'Bàn giao'),
     _ => t('서빙', 'Service', 'Phục vụ'),
   };
+  String timestamp(DateTime value) {
+    final time = DateFormat(
+      'MM/dd HH:mm:ss',
+    ).format(value.toUtc().add(const Duration(hours: 7)));
+    return t(
+      '$time (베트남, UTC+7)',
+      '$time (Vietnam, UTC+7)',
+      '$time (Việt Nam, UTC+7)',
+    );
+  }
+
   String duration(int? seconds) => seconds == null
       ? '—'
       : '${(seconds / 60).toStringAsFixed(1)} ${t('분', 'min', 'phút')}';
