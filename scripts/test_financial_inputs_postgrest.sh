@@ -34,6 +34,7 @@ docker exec -i --env PGPASSWORD=payroll-fixture "$db_name" psql -X -v ON_ERROR_S
   < scripts/fixtures/fixed_auth_lookup_owned.sql >/dev/null
 for sql_file in \
   scripts/fixtures/financial_inputs.sql \
+  scripts/fixtures/network_report_scope.sql \
   supabase/migrations/20260724025456_attendance_logs_with_names.sql \
   scripts/preflight_payroll_complete_attendance.sql \
   supabase/migrations/20260905010000_payroll_complete_attendance.sql \
