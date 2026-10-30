@@ -234,50 +234,98 @@ Deno.test("fallback rejects wrong ID, branch ID, status, name and oversized body
   }
 });
 Deno.test("primary timeout reserves fallback budget and both failures stop after two calls", async () => {
-  let calls = 0, primaryAborted = false;
-  const result = await fetchCompany(code, (_, init) => {
-    calls++;
-    if (calls === 1) {
-      return new Promise((_, reject) =>
-        init.signal.addEventListener("abort", () => {
-          primaryAborted = true;
-          reject(new Error("aborted"));
-        })
+  // Advance the clock and abort timers together so host scheduling delays
+  // cannot consume the small test budget before fallback gets a chance to run.
+  const nativeSetTimeout = globalThis.setTimeout;
+  const nativeClearTimeout = globalThis.clearTimeout;
+  const nativeNow = Object.getOwnPropertyDescriptor(performance, "now");
+  let now = 0, sequence = 0;
+  const timers = new Map<number, { at: number; run: () => void }>();
+  globalThis.setTimeout = (handler, delay = 0, ...args) => {
+    assert(typeof handler === "function");
+    const id = ++sequence;
+    timers.set(id, { at: now + delay, run: () => handler(...args) });
+    return id;
+  };
+  globalThis.clearTimeout = (id) => {
+    if (id !== undefined) timers.delete(id);
+  };
+  Object.defineProperty(performance, "now", {
+    configurable: true,
+    value: () => now,
+  });
+  function advance(milliseconds: number) {
+    now += milliseconds;
+    for (const [id, timer] of timers) {
+      if (timer.at <= now) {
+        timers.delete(id);
+        timer.run();
+      }
+    }
+  }
+  try {
+    let calls = 0, primaryAborted = false;
+    const lookup = fetchCompany(code, (_, init) => {
+      calls++;
+      if (calls === 1) {
+        return new Promise((_, reject) =>
+          init.signal.addEventListener("abort", () => {
+            primaryAborted = true;
+            reject(new Error("aborted"));
+          })
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ code: "00", data: { id: code, name } })),
+      );
+    }, 80);
+    advance(40);
+    assert(primaryAborted, "primary reserves half the shared deadline");
+    const result = await lookup;
+    assert(
+      primaryAborted && calls === 2 && result?.name === name &&
+        result.source === "vietqr",
+    );
+    for (const status of [429, 500]) {
+      calls = 0;
+      assert(
+        await fetchCompany(code, () => {
+              calls++;
+              return Promise.resolve(new Response("failure", { status }));
+            }) === null && calls === 2,
       );
     }
-    return Promise.resolve(
-      new Response(JSON.stringify({ code: "00", data: { id: code, name } })),
-    );
-  }, 80);
-  assert(
-    primaryAborted && calls === 2 && result?.name === name &&
-      result.source === "vietqr",
-  );
-  for (const status of [429, 500]) {
+    const before = now;
     calls = 0;
-    assert(
-      await fetchCompany(code, () => {
-            calls++;
-            return Promise.resolve(new Response("failure", { status }));
-          }) === null && calls === 2,
+    const bothTimeout = fetchCompany(
+      code,
+      (_, init) =>
+        new Promise((_, reject) => {
+          calls++;
+          init.signal.addEventListener(
+            "abort",
+            () => reject(new Error("aborted")),
+          );
+        }),
+      80,
     );
+    advance(40);
+    for (let turn = 0; turn < 100 && calls < 2; turn++) await Promise.resolve();
+    assert(calls === 2, "fallback starts after the primary timeout");
+    advance(40);
+    assert(timers.size === 0, "fallback cannot extend the shared deadline");
+    assert(await bothTimeout === null);
+
+    assert(
+      calls === 2 && now - before === 80,
+      "one shared deadline",
+    );
+  } finally {
+    globalThis.setTimeout = nativeSetTimeout;
+    globalThis.clearTimeout = nativeClearTimeout;
+    if (nativeNow) Object.defineProperty(performance, "now", nativeNow);
+    else Reflect.deleteProperty(performance, "now");
   }
-  const before = performance.now();
-  calls = 0;
-  assert(
-    await fetchCompany(code, (_, init) =>
-      new Promise((_, reject) => {
-        calls++;
-        init.signal.addEventListener(
-          "abort",
-          () => reject(new Error("aborted")),
-        );
-      }), 80) === null,
-  );
-  assert(
-    calls === 2 && performance.now() - before < 150,
-    "one shared deadline",
-  );
 });
 Deno.test("CORS permits configured origin and OPTIONS is credential-free", async () => {
   const { deps, counts } = fixture();
