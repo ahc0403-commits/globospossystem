@@ -41,6 +41,7 @@ POS_VERCEL_BACKEND="${POS_VERCEL_BACKEND:-cli}"
 LOCAL_RELEASE_EVIDENCE=""
 CLOUD_RELEASE_PLAN=""
 OWNER_VERIFIED_CANDIDATE=""
+OWNER_SQL_COMPAT_EVIDENCE=""
 OWNER_REPEAT_WAIVER=0
 
 # shellcheck source=scripts/lib/production_migration_gate.sh
@@ -211,8 +212,9 @@ enforce_local_release_contract() {
   local evidence_parent
   evidence_parent="$(mktemp -d "${TMPDIR:-/tmp}/pos-release-evidence.XXXXXX")"
   if [[ -n "$OWNER_VERIFIED_CANDIDATE" ]]; then
-    python3 -B "$ROOT_DIR/scripts/cloud_deployment/reuse_candidate.py" \
-      --evidence "$OWNER_VERIFIED_CANDIDATE" --record "$evidence_parent/owner-waiver.json"
+    local -a reuse_arguments=(--evidence "$OWNER_VERIFIED_CANDIDATE" --record "$evidence_parent/owner-waiver.json")
+    if [[ -n "$OWNER_SQL_COMPAT_EVIDENCE" ]]; then reuse_arguments+=(--sql-evidence "$OWNER_SQL_COMPAT_EVIDENCE"); fi
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/reuse_candidate.py" "${reuse_arguments[@]}"
     OWNER_REPEAT_WAIVER=1
     LOCAL_RELEASE_EVIDENCE="$OWNER_VERIFIED_CANDIDATE"
     printf 'REPEATED_LOCAL_VERIFICATION=NOT_RUN_OWNER_WAIVER; record=%s/owner-waiver.json\n' "$evidence_parent"
@@ -306,6 +308,11 @@ confirm_production() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --owner-sql-compatibility-evidence)
+        shift
+        OWNER_SQL_COMPAT_EVIDENCE="${1:-}"
+        [[ -n "$OWNER_SQL_COMPAT_EVIDENCE" ]] || fail "--owner-sql-compatibility-evidence requires a file"
+        ;;
       --owner-verified-candidate)
         shift
         OWNER_VERIFIED_CANDIDATE="${1:-}"

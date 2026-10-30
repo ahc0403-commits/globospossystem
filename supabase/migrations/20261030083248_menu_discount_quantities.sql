@@ -19,7 +19,7 @@ ALTER TABLE public.menu_discount_quantities ENABLE ROW LEVEL SECURITY;
 CREATE POLICY menu_discount_quantities_read ON public.menu_discount_quantities
 FOR SELECT TO authenticated USING (
   public.is_super_admin() OR restaurant_id IN (
-    SELECT store_id FROM public.user_accessible_stores((SELECT auth.uid()))
+    SELECT public.user_accessible_stores((SELECT auth.uid()))
   )
 );
 REVOKE ALL ON public.menu_discount_quantities FROM PUBLIC, anon, authenticated;
