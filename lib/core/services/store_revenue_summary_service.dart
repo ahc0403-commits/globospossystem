@@ -3,6 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 typedef StoreRevenueTotals = ({double dineIn, double delivery});
 
+// The existing non-fiscal test entity used by the invoice/reporting contract.
+// Classification follows its stable identity, including after a store rename.
+const sampleReportingTaxEntityId = '8f3f3ad8-b47c-5a4a-9b88-2e5e8f38b9c1';
+
 /// A complete aggregate for the requested stores. Never accepts a partial row
 /// set or falls back to downloading transaction history on RPC failure.
 class StoreRevenueSummaryService {
@@ -14,6 +18,7 @@ class StoreRevenueSummaryService {
     required List<String> storeIds,
     required DateTime fromDate,
     required DateTime toDate,
+    bool networkOnly = false,
   }) async {
     final scope = Set<String>.of(storeIds);
     final from = DateFormat('yyyy-MM-dd').format(fromDate);
@@ -33,13 +38,16 @@ class StoreRevenueSummaryService {
             storeIds: storeIds.skip(offset).take(100).toList(),
             fromDate: fromDate,
             toDate: toDate,
+            networkOnly: networkOnly,
           ),
         );
       }
       return Map.unmodifiable(result);
     }
     final response = await client.rpc(
-      'get_store_revenue_summary',
+      networkOnly
+          ? 'get_network_store_revenue_summary'
+          : 'get_store_revenue_summary',
       params: {
         'p_store_ids': scope.toList(growable: false),
         'p_from_date': from,
@@ -51,15 +59,30 @@ class StoreRevenueSummaryService {
         response['from_date'] != from ||
         response['to_date'] != to ||
         response['store_count'] != scope.length ||
-        response['rows'] is! List ||
-        (response['rows'] as List).length != scope.length) {
+        response['rows'] is! List) {
+      throw const FormatException('STORE_REVENUE_RESPONSE_INVALID');
+    }
+    final excluded = <String>{};
+    if (networkOnly) {
+      final rawExcluded = response['excluded_store_ids'];
+      if (rawExcluded is! List) {
+        throw const FormatException('STORE_REVENUE_EXCLUSIONS_INVALID');
+      }
+      for (final id in rawExcluded) {
+        if (id is! String || !scope.contains(id) || !excluded.add(id)) {
+          throw const FormatException('STORE_REVENUE_EXCLUSIONS_INVALID');
+        }
+      }
+    }
+    if ((response['rows'] as List).length + excluded.length != scope.length) {
       throw const FormatException('STORE_REVENUE_RESPONSE_INVALID');
     }
     final result = <String, StoreRevenueTotals>{};
     for (final row in response['rows'] as List) {
       if (row is! Map ||
           !scope.contains(row['store_id']) ||
-          result.containsKey(row['store_id'])) {
+          result.containsKey(row['store_id']) ||
+          excluded.contains(row['store_id'])) {
         throw const FormatException('STORE_REVENUE_SCOPE_INVALID');
       }
       result[row['store_id'] as String] = (

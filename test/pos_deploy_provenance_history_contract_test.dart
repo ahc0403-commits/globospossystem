@@ -59,8 +59,8 @@ void main() {
       lessThan(preflight.indexOf('enforce_local_release_contract')),
     );
     expect(
-      preflight.indexOf('enforce_local_release_contract'),
-      lessThan(preflight.indexOf('need_cmd vercel')),
+      preflight.indexOf('need_cmd vercel'),
+      lessThan(preflight.indexOf('enforce_local_release_contract')),
     );
 
     final mainBody = deploy.substring(deploy.indexOf('main() {'));

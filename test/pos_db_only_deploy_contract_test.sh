@@ -66,8 +66,12 @@ chmod +x \
 cat >"$REHEARSAL_REPO/scripts/pos_local_release_gate.py" <<'PYGATE'
 import os,sys
 from pathlib import Path
+if sys.argv[1] == 'verify':
+    assert '--profile' in sys.argv and 'production-checks' in sys.argv
+    assert Path(sys.argv[sys.argv.index('--evidence')+1], 'receipt.json').is_file()
+    raise SystemExit(0)
 assert sys.argv[1:4] == ['run','--kind','exact-main']
-assert sys.argv[4] == '--output' and len(sys.argv) == 6
+assert sys.argv[4] == '--output' and sys.argv[6:] == ['--profile', 'production-checks']
 with open(os.environ['CALL_LOG'],'a') as log:
     log.write('local-release-verifier run --kind exact-main\n')
 if os.environ.get('FAIL_LOCAL_VERIFIER') == '1':

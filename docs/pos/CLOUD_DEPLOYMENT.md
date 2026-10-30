@@ -16,16 +16,17 @@ existing deployment establishes validation of newly changed Edge code.
 
 ## Execution and evidence
 
-1. Commit the complete candidate. Run
-   `python3 -B scripts/pos_local_release_gate.py run --kind candidate --output /absolute/new/evidence`.
-   Publish and merge normally only after the full final candidate passes and
+1. Validate the changed behavior on the publication SHA, then publish and merge
+   normally after the relevant checks pass and
    remote protections are satisfied. Never start remote application tests or
    relax protection as a substitute.
 2. Use a clean, freshly fetched exact `origin/main`. The official entrypoint
-   directly runs a new exact-main full recipe for each release invocation.
+   directly runs the complete exact-main `production-checks` recipe once.
+   Combine multiple migrations and web with `--release-plan` to share that run.
    It accepts no supplied PASS or external receipt. The subsequent SDK process
-   verifies the receipt created by that same invocation to select its immutable
-   pinned image; this is not a second deployment entrypoint.
+   verifies the receipt created by that invocation if a CLI build needs its
+   pinned image. Provider-built web and DB-only phases need no second SDK
+   container. Covered analysis/tests are not rerun after this recipe.
 3. Start the official entrypoint with `--supabase-backend mcp --db-only
    --migration supabase/migrations/TIMESTAMP_name.sql`, or `--web-only`.
    The existing production confirmation still applies. Wait for
@@ -86,8 +87,8 @@ submits precisely the freshly verified release SHA, never a floating branch.
 It does not list, decrypt, transfer or change Vercel environment variables, link
 projects, mint tokens, change Git automatic-deployment settings, or override
 project/build settings. The provider consumes its existing production build
-environment. The local full recipe and SDK compilation precheck still execute;
-the actual production compiler additionally validates all public Firebase and
+environment. The full isolated test recipe executes once; the generic local
+compilation precheck is omitted. The actual production compiler validates all public Firebase and
 Supabase inputs inside Vercel, without emitting their values.
 
 The production installer uses the same checksum-pinned Flutter 3.41.6/Dart
@@ -97,7 +98,7 @@ checks and compilation. The official executor requires READY production,
 the pinned project, matching release metadata/provider Git identity, a matching
 production alias, exact-source/toolchain/lockfile attestation, and matching live
 JavaScript SHA256. Some mapped inspection responses omit `gitSource`; that
-omission is recorded. In that case the initiator must be `git` or `api`, the
+omission is recorded; some responses also omit the initiator `source`. The
 prepared creation request must still specify the exact Git commit, and the
 build's actual Git SHA and compiled bytes remain mandatory. Inspection uses
 provider hostnames (without an HTTP scheme); live HTTP checks use HTTPS URLs.
@@ -222,8 +223,55 @@ reconciliation and the appropriate approval, not an automatic retry. Safe error
 classification distinguishes explicit user/automatic-review denial and approval
 expiry when those are actually reported; it stores no raw private error text.
 A fresh official invocation still runs a new exact-main gate. The preserved
-prior receipt is not accepted as a substitute. Candidate and exact-main checks
-are repeated for a changed recovery adapter before production execution.
+prior receipt is not accepted as a substitute. Changed recovery tooling requires
+its affected regression checks; an application release runs the full recipe once
+on its final main SHA, not again for every phase.
+
+## Generic integrated DB/web release (2026-10-30)
+
+`--release-plan FILE` accepts a committed plan in
+`scripts/cloud_deployment/plans/`: pinned project, ordered unique migration paths
+and SHA256s, optional function signature/return-type contracts, `web: true`,
+`backwardCompatible: true`, and rollback instructions. The included
+`20261030_integrated_pos.json` preserves the timing → discount quantity →
+bottleneck migration order and checks `user_accessible_stores(uuid)` returns
+`SETOF uuid`. Its DB changes are already applied in production; history/source/
+transport hashes are verified and those migrations are not replayed.
+
+```bash
+scripts/deploy_pos_production.sh --supabase-backend mcp --vercel-backend mcp \
+  --mode remote --release-plan scripts/cloud_deployment/plans/20261030_integrated_pos.json \
+  --skip-login-smoke --yes
+```
+
+This is an authorized-production example, not a verification command. The login
+waiver is explicit and remains NOT_RUN_OWNER_WAIVER. The integrated scope rejects
+all other skip flags, owner-candidate reuse, mixed scopes and all Edge writes.
+Read-only connection/function-contract/history checks precede the long recipe.
+The script then runs full final-main checks once, revalidates the plan and DB
+state, applies missing migrations sequentially through the existing atomic
+role/lock/preflight/postcondition/history gate, and deploys web once. A partial
+or uncertain write is not resubmitted; inspect its durable history/identity first.
+Applied versions must form a prefix of the plan. Existing source SHA and exact
+SQL companion/transport provenance are preserved, never rewritten to this SHA.
+
+With the existing authenticated CLI backend (`--vercel-backend cli --mode
+prebuilt`), the production build is staged with `--prebuilt --prod --skip-domain`
+before any DB write. Its real build SHA/lock/toolchain/JS bytes are verified at
+the unique URL; only after DB verification is that same production build promoted
+without rebuilding. A protected URL without existing access stops before DB work.
+The preceding alias identity is recorded and concurrent alias changes block
+promotion. The connected MCP create schema lacks a skip-domain field, so that
+backend deliberately applies DB first, then creates one production build using
+the existing provider environment. It never substitutes a preview build or
+changes project settings to imitate staging.
+
+The actual production compiler, live alias/ID/SHA/compiled-byte checks, Auth,
+permissions and affected-feature checks remain required. Only production-compatible
+additive DB changes belong in this flow; destructive changes need a separate
+expand/contract rollout. Keep one main-triggered official pipeline; do not enable
+a competing Vercel Git deployment that can race ahead of its DB gates. This
+tooling update does not install a runner, change remote protection or enable CI.
 
 ## Explicit owner instruction to stop repeated verification
 

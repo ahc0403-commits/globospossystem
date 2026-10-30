@@ -201,6 +201,35 @@ class IntegrityTests(unittest.TestCase):
         with self.assertRaises(InvalidEvidence): self.verify(kind='exact-main')
         with self.assertRaises(InvalidEvidence): self.verify(run_id='different invocation')
 
+    def test_production_profile_keeps_all_checks_and_explicitly_defers_compilation(self):
+        production = gate.recipe(self.root, 'production-checks')
+        self.assertEqual([s['id'] for s in production['steps']], [s['id'] for s in self.recipe['steps']])
+        self.value.update(profile='production-checks', webBuild='PENDING_PRODUCTION_BUILD')
+        entry = next(s for s in self.value['steps'] if s['id'] == 'repository')
+        fixed = next(s for s in production['steps'] if s['id'] == 'repository')
+        entry['argv'] = fixed['argv']
+        entry['command'] = shlex.join(fixed['argv'])
+        entry['commandSha256'] = hashlib.sha256(json.dumps(fixed['argv']).encode()).hexdigest()
+        log = self.directory / entry['log']
+        text = log.read_text().replace('CHECK_REPO_STEP=flutter_web_release_build\n', '')
+        text = text.replace('CHECK_REPO_COMPLETE\n',
+                            'CHECK_REPO_BUILD=NOT_RUN_PRODUCTION_BUILD_REQUIRED\nCHECK_REPO_COMPLETE\n')
+        log.write_text(text)
+        entry['logSha256'] = sha256(log)
+        entry['counts'] = parse_counts(fixed, text, self.root)
+        fixture = self.directory / 'nested/fixture-images.jsonl'
+        self.value['artifacts'] = [{'path': 'nested/fixture-images.jsonl', 'bytes': fixture.stat().st_size,
+                                    'sha256': sha256(fixture)}]
+        self.assertEqual(self.verify(profile='production-checks')['webBuild'], 'PENDING_PRODUCTION_BUILD')
+        with self.assertRaises(InvalidEvidence): self.verify(profile='full')
+        self.value['webBuild'] = 'PASS'
+        with self.assertRaises(InvalidEvidence): self.verify(profile='production-checks')
+
+    def test_unknown_profile_and_unmarked_compile_omission_are_rejected(self):
+        with self.assertRaises(InvalidEvidence): gate.recipe(self.root, 'skip-sql')
+        self.value['profile'] = 'production-checks'
+        with self.assertRaises(InvalidEvidence): self.verify()
+
     def test_changed_disk_log_and_unproven_derived_fixture_fail(self):
         self.value['filesystemUsage']['logSha256'] = '0'*64
         with self.assertRaises(InvalidEvidence): self.verify()

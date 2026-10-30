@@ -151,13 +151,22 @@ or memory, and distinguish estimates from measurements and unverified items.
 - Flutter tests: `flutter test` (or the relevant test files for focused checks).
 - Format changed Dart files: `dart format <files>`.
 - Production release must use `scripts/deploy_pos_production.sh`; do not bypass
-  it. Complete verification on the final candidate SHA and again on the
-  clean freshly fetched exact `origin/main` release SHA, verify the remote push,
-  and retain production Auth, migration, login and affected-feature checks.
-  The official preflight directly runs `scripts/pos_local_release_gate.py`
-  with `--kind exact-main`. It never accepts a supplied PASS receipt. The isolated
-  Linux recipe preserves the full repository, browser authentication and SQL
-  regression checks. See `docs/pos/local-verification/LOCAL_VERIFICATION.md`.
+  it. During development/publication, run checks relevant to the change. For an
+  application release, run the complete isolated checks exactly once on the
+  clean freshly fetched final `origin/main` SHA. A second complete candidate run
+  is not a prerequisite. The official entrypoint owns
+  `scripts/pos_local_release_gate.py run --kind exact-main --profile production-checks`;
+  analysis, full Flutter/browser/SQL/security regressions remain mandatory.
+  It reuses only that invocation's intact SHA/input-bound results across its
+  phases; it never accepts a supplied PASS receipt. Source, lockfile, recipe or
+  tool changes invalidate evidence. Do not rerun covered analysis/tests or a
+  generic web compilation after those checks. Build once with actual production
+  configuration and verify the deployed build identity/bytes separately.
+  Use `--release-plan` for multiple ordered DB changes and one web deployment.
+  Preserve remote-push verification, production Auth, atomic migration/history,
+  rollback readiness, login and affected-feature checks. A previously authorized
+  login waiver stays explicitly NOT_RUN, never PASS. See
+  `docs/pos/local-verification/LOCAL_VERIFICATION.md`.
   Check current remote branch protection and report required checks as separate
   dependencies; do not change protection, publish substitute statuses, force merge
   or push a PR that starts remote tests without explicit authorization.
@@ -179,6 +188,9 @@ OS/architecture, tool and lockfile versions, start/end timestamps and timezone,
 exit codes, run/pass/fail/skip counts, sanitized complete logs and artifact paths
 and hashes to the final code SHA. Repeat affected checks after source changes;
 distinguish candidate validation from a clean freshly fetched exact-main release.
+Do not repeat the complete recipe on identical inputs for each DB/web phase.
+Release-tooling-only changes require the affected shell/Python/Node contracts
+and syntax/diff checks, not an unrelated full Flutter build or app redeployment.
 Verify the remote pushed SHA and retain the official deployment and operational
 checks. A missing/failed/skipped check is not PASS. Record unavailable required
 OS, device or service checks as unverified; do not substitute unrelated checks.
@@ -200,9 +212,10 @@ See `docs/pos/local-verification/INDEPENDENT_RESULT_VERIFICATION_KO.md`.
 ## Source publication and normal operational adoption authorization (2026-10-24)
 
 The owner subsequently requested commit/push and normal official operational
-adoption. After full verification of the final actual candidate SHA,
+adoption. After risk-appropriate verification of the actual publication SHA,
 source publication, PR and normal merge are authorized when they do not start
-GitHub application tests. Remote security settings, required-check relaxation,
+GitHub application tests. Application deployment still requires the one complete
+final-main release run above. Remote security settings, required-check relaxation,
 admin bypass and new credentials remain outside that general authorization.
 Keep the unconfigured independent-result verifier disabled; it is not a new
 release prerequisite. If existing branch protection blocks normal merge, report

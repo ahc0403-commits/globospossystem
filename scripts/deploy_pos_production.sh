@@ -43,6 +43,9 @@ CLOUD_RELEASE_PLAN=""
 OWNER_VERIFIED_CANDIDATE=""
 OWNER_SQL_COMPAT_EVIDENCE=""
 OWNER_REPEAT_WAIVER=0
+INTEGRATED_RELEASE_PLAN=""
+FULL_RELEASE_CHECKS_VERIFIED=0
+LOCAL_RELEASE_RECEIPT_SHA256=""
 
 # shellcheck source=scripts/lib/production_migration_gate.sh
 source "$ROOT_DIR/scripts/lib/production_migration_gate.sh"
@@ -53,14 +56,18 @@ Usage:
   scripts/deploy_pos_production.sh [options]
 
 Default flow:
-  preflight -> production Auth and test-data hygiene -> locked Flutter dependency bootstrap ->
-  dart analyze -> focused tests ->
-  optional DB migration -> vercel build --prod ->
+  read-only preflight -> final exact-main full checks once -> production Auth ->
+  optional DB migration -> one production build ->
   vercel deploy --prebuilt --prod -> live HTTP check -> operational login smoke
 
+Integrated flow (--release-plan):
+  read-only connection/DB-contract/history preflight -> final exact-main checks once ->
+  ordered atomic migrations -> one production web build/deployment -> live verification.
+  A CLI production build is staged before DB changes and promoted without rebuilding.
+
 DB-only flow:
-  clean exact-main/source and production Supabase preflight -> locked Flutter
-  dependency bootstrap -> dart analyze -> tests -> rollback readiness ->
+  clean exact-main/source and production Supabase preflight -> complete final-main
+  checks once -> rollback readiness ->
   migration-history absence -> SQL preflight -> atomic apply -> verification ->
   migration-history confirmation
 
@@ -80,14 +87,16 @@ Options:
                      Login smoke runs unless explicitly opted out on the CLI.
   --cloud-release-plan FILE  Committed MCP plan: ordered migrations, reviewed
                      direct-order-public Edge update, then prebuilt POS web.
+  --release-plan FILE  Committed generic DB/web plan; one full verification for all
+                     ordered migrations and web. Requires Supabase MCP; no Edge writes.
   --mode MODE        prebuilt (default) or remote.
   --supabase-backend MODE  cli (default), or live MCP for DB-only/web-only cloud releases.
-  --vercel-backend MODE    cli (default), or MCP with --web-only --mode remote.
+  --vercel-backend MODE    cli (default), or MCP with web-only/release-plan remote build.
   --owner-verified-candidate DIR  Explicit owner waiver of repeated local checks;
                      validates a complete candidate receipt and identical app inputs.
-  --test FILE        Add a flutter test target. Use "all" for flutter test.
-  --no-tests         Skip flutter test targets while keeping dart analyze.
-  --skip-checks      Skip dart analyze and flutter tests.
+  --test FILE        Select a target covered by the full suite. Use "all" for all tests.
+  --no-tests         Legacy focused-check option; cannot skip the required full recipe.
+  --skip-checks      Legacy focused-check option; cannot skip the required full recipe.
   --skip-auth-check  Skip required production operational Auth readiness check.
   --skip-login-smoke Skip post-deploy operational login smoke. Report as blocker-risk.
   --skip-smoke-tests Skip synthetic HTTP and login probes; verify deployment
@@ -205,7 +214,7 @@ enforce_local_release_contract() {
   [[ -f "$ROOT_DIR/scripts/pos_local_release_gate.py" ]] ||
     fail "Missing trusted local release verifier."
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '+ python3 -B scripts/pos_local_release_gate.py run --kind exact-main --output <fresh-private-evidence-dir>\n'
+    printf '+ python3 -B scripts/pos_local_release_gate.py run --kind exact-main --output <fresh-private-evidence-dir> --profile production-checks\n'
     printf 'Local verification: NOT RUN (dry-run; no PASS evidence).\n'
     return 0
   fi
@@ -222,12 +231,37 @@ enforce_local_release_contract() {
   fi
   # Always execute the trusted recipe. No supplied receipt, resume, or skip path.
   python3 -B "$ROOT_DIR/scripts/pos_local_release_gate.py" run \
-    --kind exact-main --output "$evidence_parent/evidence" ||
+    --kind exact-main --output "$evidence_parent/evidence" --profile production-checks ||
     fail "Required local release verification failed; see $evidence_parent/evidence."
   LOCAL_RELEASE_EVIDENCE="$evidence_parent/evidence"
+  LOCAL_RELEASE_RECEIPT_SHA256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$LOCAL_RELEASE_EVIDENCE/receipt.json")"
+  FULL_RELEASE_CHECKS_VERIFIED=1
   enforce_clean_git
   enforce_origin_main_ancestry
   printf 'Local release evidence: %s/evidence/receipt.json\n' "$evidence_parent"
+}
+
+verify_current_release_checks() {
+  [[ "$FULL_RELEASE_CHECKS_VERIFIED" == 1 && -n "$LOCAL_RELEASE_EVIDENCE" ]] ||
+    fail "Full checks were not executed by this release."
+  local actual_hash
+  actual_hash="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$LOCAL_RELEASE_EVIDENCE/receipt.json")"
+  [[ "$actual_hash" == "$LOCAL_RELEASE_RECEIPT_SHA256" ]] || fail "This release verification receipt changed."
+  python3 -B "$ROOT_DIR/scripts/pos_local_release_gate.py" verify \
+    --kind exact-main --profile production-checks --evidence "$LOCAL_RELEASE_EVIDENCE" ||
+    fail "Release inputs or verification evidence changed."
+}
+
+validate_full_suite_targets() {
+  local target
+  for target in $TEST_TARGETS; do
+    [[ "$target" == all ]] && continue
+    if [[ "$DB_ONLY" == 1 && ! -f "$ROOT_DIR/$target" ]]; then
+      fail "DB-only test target not found: $target"
+    fi
+    [[ "$target" == test/*_test.dart && -f "$ROOT_DIR/$target" ]] ||
+      fail "Test target is not covered by the complete repository suite: $target"
+  done
 }
 
 run() {
@@ -338,6 +372,11 @@ parse_args() {
         CLOUD_RELEASE_PLAN="${1:-}"
         [[ -n "$CLOUD_RELEASE_PLAN" ]] || fail "--cloud-release-plan requires a file"
         ;;
+      --release-plan)
+        shift
+        INTEGRATED_RELEASE_PLAN="${1:-}"
+        [[ -n "$INTEGRATED_RELEASE_PLAN" ]] || fail "--release-plan requires a file"
+        ;;
       --mode)
         shift
         DEPLOY_MODE="${1:-}"
@@ -414,12 +453,12 @@ validate_cloud_options() {
   fi
   [[ "$POS_VERCEL_BACKEND" == "cli" || "$POS_VERCEL_BACKEND" == "mcp" ]] || fail "Unknown Vercel backend."
   if [[ "$POS_VERCEL_BACKEND" == "mcp" ]]; then
-    [[ "$POS_SUPABASE_BACKEND" == "mcp" && "$WEB_ONLY" == "1" && "$DB_ONLY" == "0" &&
+    [[ "$POS_SUPABASE_BACKEND" == "mcp" && ( "$WEB_ONLY" == "1" || -n "$INTEGRATED_RELEASE_PLAN" ) && "$DB_ONLY" == "0" &&
        "$DEPLOY_MODE" == "remote" && -z "$CLOUD_RELEASE_PLAN" ]] ||
       fail "Vercel MCP requires the reviewed web-only remote-build executor."
   fi
   [[ "$POS_SUPABASE_BACKEND" == "mcp" ]] || return 0
-  [[ "$DB_ONLY" == "1" || "$WEB_ONLY" == "1" || -n "$CLOUD_RELEASE_PLAN" ]] ||
+  [[ "$DB_ONLY" == "1" || "$WEB_ONLY" == "1" || -n "$CLOUD_RELEASE_PLAN" || -n "$INTEGRATED_RELEASE_PLAN" ]] ||
     fail "MCP release requires reviewed --db-only or --web-only scope; Edge secret operations are unavailable."
   [[ "$SKIP_CHECKS" == "0" && "$SKIP_AUTH_CHECK" == "0" &&
      "$SKIP_SMOKE_TESTS" == "0" && "$SKIP_DB" == "0" && "$SKIP_BUILD" == "0" &&
@@ -427,13 +466,20 @@ validate_cloud_options() {
      ( "$DEPLOY_MODE" == "prebuilt" || ( "$POS_VERCEL_BACKEND" == "mcp" && "$DEPLOY_MODE" == "remote" ) ) ]] ||
     fail "Cloud releases require all applicable gates and a reviewed build executor."
   [[ "$SKIP_LOGIN_SMOKE" == "0" ||
-     ( ( "$WEB_ONLY" == "1" || -n "$CLOUD_RELEASE_PLAN" ) && "$SKIP_LOGIN_SMOKE" == "1" && "$LOGIN_SMOKE_OPT_OUT" == "1" ) ]] ||
+     ( ( "$WEB_ONLY" == "1" || -n "$CLOUD_RELEASE_PLAN" || -n "$INTEGRATED_RELEASE_PLAN" ) && "$SKIP_LOGIN_SMOKE" == "1" && "$LOGIN_SMOKE_OPT_OUT" == "1" ) ]] ||
     fail "Cloud login smoke omission requires explicit --web-only --skip-login-smoke."
   if [[ -n "$CLOUD_RELEASE_PLAN" ]]; then
+    [[ -z "$INTEGRATED_RELEASE_PLAN" ]] || fail "Choose one release plan."
     [[ "$DB_ONLY" == "0" && "$WEB_ONLY" == "0" && "$ONBOARDING_EDGE_ONLY" == "0" &&
        "$ROLLBACK_HIERARCHY" == "0" && "$MIGRATION_OPTION_SET" == "0" && -z "$MIGRATION_FILE" ]] ||
       fail "Coordinated plan cannot be combined with other release scopes."
     python3 -B "$ROOT_DIR/scripts/cloud_deployment/release.py" validate --plan "$CLOUD_RELEASE_PLAN"
+  fi
+  if [[ -n "$INTEGRATED_RELEASE_PLAN" ]]; then
+    [[ "$DB_ONLY" == 0 && "$WEB_ONLY" == 0 && "$ONBOARDING_EDGE_ONLY" == 0 &&
+       "$ROLLBACK_HIERARCHY" == 0 && "$MIGRATION_OPTION_SET" == 0 && -z "$MIGRATION_FILE" &&
+       -z "$OWNER_VERIFIED_CANDIDATE" ]] || fail "Integrated plan cannot be combined with another release scope or owner waiver."
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/integrated_release.py" validate --plan "$INTEGRATED_RELEASE_PLAN"
   fi
 }
 
@@ -456,12 +502,17 @@ initialize_cloud_execution() {
   parent="$(mktemp -d "${TMPDIR:-/tmp}/pos-cloud-release.XXXXXX")"
   phase=web-only; [[ "$DB_ONLY" == "1" ]] && phase=db-only
   [[ -z "$CLOUD_RELEASE_PLAN" ]] || phase=coordinated
+  [[ -z "$INTEGRATED_RELEASE_PLAN" ]] || phase=integrated
   export POS_CLOUD_BRIDGE_DIR="$parent/execution"
   python3 -B "$ROOT_DIR/scripts/cloud_deployment/bridge.py" init \
     --directory "$POS_CLOUD_BRIDGE_DIR" --phase "$phase"
   if [[ -n "$CLOUD_RELEASE_PLAN" ]]; then
     python3 -B "$ROOT_DIR/scripts/cloud_deployment/release.py" bind \
       --plan "$CLOUD_RELEASE_PLAN" --directory "$POS_CLOUD_BRIDGE_DIR"
+  fi
+  if [[ -n "$INTEGRATED_RELEASE_PLAN" ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/integrated_release.py" bind \
+      --plan "$INTEGRATED_RELEASE_PLAN" --directory "$POS_CLOUD_BRIDGE_DIR"
   fi
   trap cloud_cleanup EXIT
   printf 'POS_CLOUD_DIRECTORY=%s\n' "$POS_CLOUD_BRIDGE_DIR"
@@ -471,10 +522,6 @@ import json,sys
 d=json.load(sys.stdin)
 if d.get("id")!="ynriuoomotxuwhuxxmhj" or d.get("status")!="ACTIVE_HEALTHY":
     raise SystemExit("Pinned production MCP project is unavailable")'
-  if [[ "$OWNER_REPEAT_WAIVER" == "0" ]]; then
-    python3 -B "$ROOT_DIR/scripts/cloud_deployment/sdk.py" init \
-      --directory "$POS_CLOUD_BRIDGE_DIR" --evidence "$LOCAL_RELEASE_EVIDENCE"
-  fi
   if [[ "$DB_ONLY" != "1" && "$POS_VERCEL_BACKEND" == "cli" ]]; then
     export POS_CLOUD_VERCEL_BIN="${POS_CLOUD_VERCEL_BIN:-$(command -v vercel)}"
     [[ "$POS_CLOUD_VERCEL_BIN" = /* && -x "$POS_CLOUD_VERCEL_BIN" &&
@@ -485,6 +532,18 @@ if d.get("id")!="ynriuoomotxuwhuxxmhj" or d.get("status")!="ACTIVE_HEALTHY":
   export POS_SUPABASE_BACKEND
   if [[ "$POS_VERCEL_BACKEND" == "mcp" ]]; then
     python3 -B "$ROOT_DIR/scripts/cloud_deployment/vercel_release.py" connection --directory "$POS_CLOUD_BRIDGE_DIR"
+  fi
+  if [[ -n "$INTEGRATED_RELEASE_PLAN" ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/integrated_release.py" preflight --directory "$POS_CLOUD_BRIDGE_DIR"
+  fi
+}
+
+initialize_cloud_sdk() {
+  # DB-only and provider-built web releases need no second SDK container.
+  if [[ "$POS_SUPABASE_BACKEND" == mcp && "$DRY_RUN" == 0 && "$DB_ONLY" == 0 &&
+        "$POS_VERCEL_BACKEND" == cli && "$OWNER_REPEAT_WAIVER" == 0 ]]; then
+    python3 -B "$ROOT_DIR/scripts/cloud_deployment/sdk.py" init \
+      --directory "$POS_CLOUD_BRIDGE_DIR" --evidence "$LOCAL_RELEASE_EVIDENCE"
   fi
 }
 
@@ -574,8 +633,7 @@ preflight() {
 
   enforce_clean_git
   enforce_origin_main_ancestry
-  enforce_local_release_contract
-
+  # Read-only connection and contract failures must precede the long recipe.
   initialize_cloud_execution
 
   if [[ "$POS_SUPABASE_BACKEND" == "cli" ]]; then
@@ -653,7 +711,13 @@ preflight() {
   if [[ "$DB_ONLY" != "1" && "$SKIP_VERCEL" != "1" ]]; then
     if [[ "$POS_VERCEL_BACKEND" == "cli" ]]; then need_cmd vercel; fi
     need_cmd curl
+    if [[ "$POS_VERCEL_BACKEND" == cli && "$DRY_RUN" == 0 ]]; then
+      vercel whoami >/dev/null || fail "The selected CLI backend has no existing Vercel authentication; use the connected MCP backend or an existing authenticated CLI environment."
+    fi
   fi
+  validate_full_suite_targets
+  enforce_local_release_contract
+  initialize_cloud_sdk
 }
 
 verify_vercel_firebase_web_env() {
@@ -701,6 +765,12 @@ run_auth_check() {
 }
 
 run_checks() {
+  if [[ "$FULL_RELEASE_CHECKS_VERIFIED" == 1 ]]; then
+    validate_full_suite_targets
+    verify_current_release_checks
+    printf 'ANALYSIS_AND_TESTS=REUSED_PASS (same invocation, exact-main SHA and verified input hashes).\n'
+    return 0
+  fi
   if [[ "$OWNER_REPEAT_WAIVER" == "1" ]]; then
     printf 'REPEATED_ANALYSIS_AND_TESTS=NOT_RUN_OWNER_WAIVER; verified candidate app inputs retained.\n'
     return 0
@@ -1091,6 +1161,10 @@ ensure_flutter_env() {
 }
 
 local_flutter_build() {
+  if [[ "$FULL_RELEASE_CHECKS_VERIFIED" == 1 ]]; then
+    printf 'LOCAL_BUILD_PRECHECK=NOT_RUN; mandatory production build compiles once with production configuration.\n'
+    return 0
+  fi
   if [[ "$OWNER_REPEAT_WAIVER" == "1" ]]; then
     printf 'REPEATED_LOCAL_BUILD=NOT_RUN_OWNER_WAIVER; actual provider build remains required.\n'
     return 0
@@ -1428,20 +1502,56 @@ run_db_only_flow() {
   printf 'Database migration gates finished; Auth, Vercel, live HTTP, and login readiness remain N/A.\n'
 }
 
+run_integrated_release_flow() {
+  load_env
+  ensure_flutter_env
+  verify_allowed_production_origins
+  verify_vercel_firebase_web_env
+  run_auth_check
+  run_checks
+  log "Integrated release: one verification, ordered DB changes, one web build"
+  if [[ "$POS_VERCEL_BACKEND" == cli ]]; then
+    run python3 -B "$ROOT_DIR/scripts/cloud_deployment/cli_web.py" stage \
+      --directory "${POS_CLOUD_BRIDGE_DIR:-<not-run>}"
+  fi
+  run python3 -B "$ROOT_DIR/scripts/cloud_deployment/integrated_release.py" apply \
+    --directory "${POS_CLOUD_BRIDGE_DIR:-<not-run>}"
+  enforce_clean_git
+  enforce_origin_main_ancestry
+  if [[ "$POS_VERCEL_BACKEND" == cli ]]; then
+    run python3 -B "$ROOT_DIR/scripts/cloud_deployment/cli_web.py" promote \
+      --directory "${POS_CLOUD_BRIDGE_DIR:-<not-run>}"
+    run curl -fsSI -L "$LIVE_URL"
+  else
+    # The connected create_deployment schema has no skip-domain option. Keep
+    # DB first, then create once; never pretend a preview is a production build.
+    deploy_vercel
+  fi
+  run_login_smoke
+  log "Integrated deployment flow completed"
+}
+
 main() {
   parse_args "$@"
   readonly POS_SUPABASE_BACKEND
   [[ -z "$CLOUD_RELEASE_PLAN" || "$POS_SUPABASE_BACKEND" == "mcp" ]] ||
     fail "--cloud-release-plan requires --supabase-backend mcp."
+  [[ -z "$INTEGRATED_RELEASE_PLAN" || "$POS_SUPABASE_BACKEND" == mcp ]] ||
+    fail "--release-plan requires --supabase-backend mcp."
   validate_cloud_options
   readonly WEB_ONLY
   readonly CLOUD_RELEASE_PLAN
+  readonly INTEGRATED_RELEASE_PLAN
   validate_web_only_options
   validate_db_only_options
   validate_onboarding_edge_only_options
   cd "$ROOT_DIR"
   confirm_production
   preflight
+  if [[ -n "$INTEGRATED_RELEASE_PLAN" ]]; then
+    run_integrated_release_flow
+    return 0
+  fi
   if [[ "$ONBOARDING_EDGE_ONLY" == "1" ]]; then
     run_onboarding_edge_only_flow
     return 0

@@ -46,6 +46,7 @@ for sql_file in \
   scripts/verify_store_revenue_summary.sql \
   supabase/migrations/20260905040000_store_revenue_summary.sql \
   scripts/verify_store_revenue_summary.sql \
+  supabase/migrations/20261030162550_network_report_operational_scope.sql \
   scripts/preflight_payroll_hourly_rules_batch.sql \
   supabase/migrations/20260905050000_payroll_hourly_rules_batch.sql \
   scripts/verify_payroll_hourly_rules_batch.sql \

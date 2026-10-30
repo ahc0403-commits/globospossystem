@@ -33,7 +33,10 @@ def deployment_arguments(sha):
 
 
 def authorize_mutation(directory, manifest, arguments):
-    require(manifest['phase'] == 'web-only', 'Vercel write requires web-only phase')
+    require(manifest['phase'] in {'web-only', 'integrated'}, 'Vercel write requires web-only or integrated phase')
+    if manifest['phase'] == 'integrated':
+        from integrated_release import require_database
+        require_database(directory, manifest)
     require(arguments == deployment_arguments(manifest['sourceSha']), 'Unbound Vercel target or Git source')
     prepared = json.loads((Path(directory) / 'vercel-prepared.json').read_text())
     require(prepared['arguments'] == arguments and prepared['sourceSha'] == manifest['sourceSha'],
@@ -47,11 +50,12 @@ def verify_deployment(value, sha, identifier=None):
     require(value.get('projectId') == PROJECT or (value.get('project') or {}).get('id') == PROJECT,
             'Vercel returned another project')
     provider_sha = (value.get('gitSource') or {}).get('sha')
-    # `source` describes the deployment initiator. The API can create an
-    # exact-Git deployment while mapped inspection omits gitSource. Its prepared
-    # request and actual build Git identity/compiled bytes are checked as well.
+    # Mapped inspection may omit both gitSource and source. The initiator is
+    # not a commit identity. Missing fields are recorded; a returned SHA that
+    # disagrees is always fatal. Actual build SHA/lock/toolchain/bytes remain
+    # mandatory before a complete deployment receipt can be written.
     require((value.get('meta') or {}).get('githubCommitSha') == sha
-            and (provider_sha == sha or (provider_sha is None and value.get('source') in {'git', 'api'})),
+            and (provider_sha is None or provider_sha == sha),
             'Provider Git source is not release SHA')
     if identifier:
         require(value.get('id') == identifier, 'Production alias points to another deployment')
@@ -68,7 +72,7 @@ def verify_build(value, sha, lock_hash):
 
 def validate_connection(directory):
     directory, manifest = session(directory)
-    require(manifest['phase'] == 'web-only', 'Vercel executor requires web-only phase')
+    require(manifest['phase'] in {'web-only', 'integrated'}, 'Vercel executor requires web-only or integrated phase')
     context = request(directory, 'vercel-context', {})
     teams = [team for team in context.get('teams', []) if team.get('id') == TEAM]
     require(len(teams) == 1, 'Pinned Vercel team is unavailable')
@@ -78,6 +82,27 @@ def validate_connection(directory):
                     {'type': 'github', 'org': 'ahc0403-commits', 'repo': NAME}.items()),
             'Pinned Vercel Git connection differs')
     print('Vercel authenticated team/project/Git source: verified (no CLI credential transfer).')
+
+
+def verify_live(origin, sha):
+    require(origin.startswith('https://') and '/' not in origin[len('https://'):]
+            and origin.endswith('.vercel.app'), 'Invalid deployment origin')
+    with urllib.request.urlopen(origin + '/pos-release.json?sha=' + sha, timeout=30) as response:
+        require(response.status == 200, 'Live build attestation unavailable')
+        build = json.load(response)
+    lock_hash = hashlib.sha256((ROOT / 'pubspec.lock').read_bytes()).hexdigest()
+    verify_build(build, sha, lock_hash)
+    actual_js = hashlib.sha256()
+    total = 0
+    with urllib.request.urlopen(origin + '/main.dart.js?sha=' + sha, timeout=60) as response:
+        require(response.status == 200, 'Live compiled JavaScript unavailable')
+        while chunk := response.read(1024 * 1024):
+            total += len(chunk)
+            require(total <= 64 * 1024 * 1024, 'Compiled JavaScript exceeds verification bound')
+            actual_js.update(chunk)
+    require(total > 0 and actual_js.hexdigest() == build.get('mainDartJsSha256'),
+            'Live compiled JavaScript differs from source build')
+    return build
 
 
 def deploy(directory):
@@ -101,25 +126,17 @@ def deploy(directory):
             break
         require(time.monotonic() < deadline, 'Vercel build timed out; inspect actual state before continuation')
         time.sleep(5)
-    verify_deployment(value, manifest['sourceSha'])
+    verify_deployment(value, manifest['sourceSha'], identifier)
     alias = request(directory, 'vercel-inspect', {'idOrUrl': HOST, 'teamId': TEAM, 'withGitRepoInfo': 'true'})
     verify_deployment(alias, manifest['sourceSha'], identifier)
     require(value.get('url') and '/' not in value['url'] and value['url'].endswith('.vercel.app'), 'Invalid provider URL')
-    build_url = LIVE + '/pos-release.json?sha=' + manifest['sourceSha']
-    with urllib.request.urlopen(build_url, timeout=30) as response:
-        require(response.status == 200, 'Live build attestation unavailable')
-        build = json.load(response)
-    lock_hash = hashlib.sha256((ROOT / 'pubspec.lock').read_bytes()).hexdigest()
-    verify_build(build, manifest['sourceSha'], lock_hash)
-    actual_js = hashlib.sha256()
-    with urllib.request.urlopen(LIVE + '/main.dart.js?sha=' + manifest['sourceSha'], timeout=60) as response:
-        while chunk := response.read(1024 * 1024):
-            actual_js.update(chunk)
-    require(actual_js.hexdigest() == build.get('mainDartJsSha256'), 'Live compiled JavaScript differs from source build')
+    build = verify_live(LIVE, manifest['sourceSha'])
     receipt = {'sourceSha': manifest['sourceSha'], 'deploymentId': identifier,
                'url': 'https://' + value['url'], 'productionUrl': LIVE,
                'providerSourceVerified': True, 'productionAliasVerified': True,
                'providerGitShaReadback': (value.get('gitSource') or {}).get('sha') == manifest['sourceSha'],
+               'providerGitShaStatus': 'VERIFIED' if (value.get('gitSource') or {}).get('sha') else 'NOT_RETURNED',
+               'providerInitiatorReturned': value.get('source') is not None,
                'productionBuild': build, 'rollbackDeploymentId': previous['id']}
     write_new(directory / 'vercel-receipt.json', receipt)
     print(canonical(receipt))

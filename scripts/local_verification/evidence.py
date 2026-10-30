@@ -126,6 +126,13 @@ def parse_counts(step, output, root):
         # Existing optional schema-export upgrade is outside the former required
         # workflow. No production export is requested or loaded by this recipe.
         expected.remove('store_operating_current_schema_upgrade')
+        if step.get('argv') == ['bash', 'scripts/check_repo.sh', '--checks-only']:
+            expected.remove('flutter_web_release_build')
+            require(output.count('CHECK_REPO_BUILD=NOT_RUN_PRODUCTION_BUILD_REQUIRED\n') == 1,
+                    'Missing production build requirement')
+        else:
+            require('CHECK_REPO_BUILD=NOT_RUN_PRODUCTION_BUILD_REQUIRED' not in output,
+                    'Full repository build was skipped')
         actual = re.findall(r'^CHECK_REPO_STEP=([a-z0-9_]+)$', output, re.M)
         require(actual == expected, 'Missing/reordered/duplicate repository stages')
         require(output.splitlines()[-1] == 'CHECK_REPO_COMPLETE', 'Partial repository run')

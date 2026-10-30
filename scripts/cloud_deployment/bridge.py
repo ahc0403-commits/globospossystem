@@ -111,7 +111,7 @@ def session(directory):
     require(value['project'] == PROJECT and value['sourceSha'] == source_sha(),
             'Cloud source SHA or pinned project changed')
     require(value['schemaVersion'] == 1, 'Unsupported cloud protocol')
-    if value['phase'] in {'db-only', 'web-only', 'coordinated'}:
+    if value['phase'] in {'db-only', 'web-only', 'coordinated', 'integrated'}:
         require(not subprocess.check_output(
             ['git', 'status', '--porcelain', '--untracked-files=all'], cwd=ROOT, text=True).strip(),
             'Release source changed after verification')
@@ -194,7 +194,10 @@ def request(directory, operation, arguments, timeout=180):
         from vercel_release import authorize_mutation
         authorize_mutation(directory, manifest, arguments)
     elif operation in {'apply', 'deploy-function'} and manifest['phase'] != 'fixture':
-        if manifest['phase'] == 'coordinated':
+        if manifest['phase'] == 'integrated':
+            from integrated_release import authorize_mutation
+            authorize_mutation(directory, manifest, operation, arguments)
+        elif manifest['phase'] == 'coordinated':
             from release import authorize_mutation
             authorize_mutation(directory, manifest, operation, arguments)
         else:

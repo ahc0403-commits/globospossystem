@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "project": "ynriuoomotxuwhuxxmhj",
+  "backwardCompatible": true,
+  "contracts": [
+    {
+      "signature": "public.user_accessible_stores(uuid)",
+      "resultType": "SETOF uuid"
+    }
+  ],
+  "migrations": [
+    {
+      "path": "supabase/migrations/20261030043935_paperless_menu_timing_trends.sql",
+      "sha256": "936fd7ec750136f04f1f4d6d4dea06c4dae001dba9fe17e836324bf4f83ef0d7"
+    },
+    {
+      "path": "supabase/migrations/20261030083248_menu_discount_quantities.sql",
+      "sha256": "8619316c65c805bdd971d3ec32db3079ab04ddb502abd5988c72a811937517c5"
+    },
+    {
+      "path": "supabase/migrations/20261030083942_paperless_bottleneck_diagnostics.sql",
+      "sha256": "23cf3e85b9ad6f07c8876cab10c8171a8d7db8f345f61d2d89a41efcceb4afce"
+    }
+  ],
+  "web": true,
+  "rollback": "Keep the verified preceding production web deployment. These additive migrations remain installed when rolling back web. Never restore or delete business orders, discounts or migration history to roll back the UI."
+}

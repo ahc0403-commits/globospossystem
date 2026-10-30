@@ -88,14 +88,13 @@ class VercelReleaseTests(unittest.TestCase):
                        {'meta': {'githubCommitSha': 'b' * 40}}, {'id': 'dpl_other'}]:
             with self.subTest(change=change), self.assertRaises(bridge.CloudError):
                 release.verify_deployment({**value, **change}, self.sha, 'dpl_fixture')
-        # Some mapped read tools omit gitSource. The actual provider source
-        # identifies the initiator; build attestation checks actual Git SHA.
+        # Both optional mapped fields may be absent. Complete releases still
+        # require actual build identity and compiled bytes, not metadata alone.
         value.pop('gitSource')
-        with self.assertRaises(bridge.CloudError): release.verify_deployment(value, self.sha)
+        release.verify_deployment(value, self.sha)
         release.verify_deployment({**value, 'source': 'git'}, self.sha)
         release.verify_deployment({**value, 'source': 'api'}, self.sha)
-        with self.assertRaises(bridge.CloudError):
-            release.verify_deployment({**value, 'source': 'cli'}, self.sha)
+        release.verify_deployment({**value, 'source': 'cli'}, self.sha)
 
     def test_configuration_and_toolchain_are_required_actual_build_evidence(self):
         value = {'schemaVersion': 1, 'sourceSha': self.sha, 'publicConfigStatus': 'PASS',
@@ -105,6 +104,35 @@ class VercelReleaseTests(unittest.TestCase):
             bad = dict(value); bad[key] = 'wrong'
             with self.subTest(key=key), self.assertRaises(bridge.CloudError):
                 release.verify_build(bad, self.sha, 'fixture')
+
+    def test_missing_optional_fields_never_substitute_for_actual_build_and_compiled_bytes(self):
+        for failure in [None, 'source', 'bytes']:
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp); (directory / 'pubspec.lock').write_bytes(b'lock')
+                manifest = {'phase': 'web-only', 'sourceSha': self.sha}
+                deployment = {'id': 'dpl_fixture', 'readyState': 'READY', 'target': 'production',
+                              'projectId': release.PROJECT, 'meta': {'githubCommitSha': self.sha},
+                              'url': 'fixture.vercel.app'}
+                build = {'schemaVersion': 1, 'sourceSha': 'b' * 40 if failure == 'source' else self.sha,
+                         'publicConfigStatus': 'PASS', 'flutterVersion': '3.41.6', 'dartVersion': '3.11.4',
+                         'lockfileSha256': hashlib.sha256(b'lock').hexdigest(),
+                         'mainDartJsSha256': hashlib.sha256(b'compiled').hexdigest()}
+                replies = [io.BytesIO(json.dumps(build).encode()),
+                           io.BytesIO(b'tampered' if failure == 'bytes' else b'compiled')]
+                for reply in replies: reply.status = 200
+                with patch.object(release, 'ROOT', directory), \
+                     patch.object(release, 'session', return_value=(directory, manifest)), \
+                     patch.object(release, 'request', side_effect=[deployment, deployment, deployment, deployment]) as remote, \
+                     patch.object(release.urllib.request, 'urlopen', side_effect=replies), redirect_stdout(io.StringIO()):
+                    if failure:
+                        with self.assertRaises(bridge.CloudError): release.deploy(directory)
+                        self.assertFalse((directory / 'vercel-receipt.json').exists())
+                    else:
+                        release.deploy(directory)
+                        receipt = json.loads((directory / 'vercel-receipt.json').read_text())
+                        self.assertEqual(receipt['providerGitShaStatus'], 'NOT_RETURNED')
+                        self.assertFalse(receipt['providerInitiatorReturned'])
+                self.assertEqual(sum(c.args[1] == 'vercel-deploy' for c in remote.call_args_list), 1)
 
     def test_vercel_api_denials_are_not_normalized_as_success(self):
         with self.assertRaises(bridge.CloudError):

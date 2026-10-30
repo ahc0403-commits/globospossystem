@@ -1,15 +1,18 @@
 > Cloud verification update — 2026-10-27: automated verification may run in
 > Codex Cloud; GitHub stores and reviews source. The official deployer executes a
-> fresh fixed exact-main recipe. Remote protection replacement remains unapproved;
+> single final-main test recipe with one actual production build. Remote protection replacement remains unapproved;
 > verification readiness does not authorize protection changes or deployment.
 
 # POS Production Deployment Runbook
 
 For the existing connected Supabase MCP and authenticated Vercel CLI in Codex
 Cloud, follow [Cloud release execution](CLOUD_DEPLOYMENT.md). It preserves this
-entrypoint, final candidate/fresh exact-main verification and operational gates.
+entrypoint, final-main verification and operational gates. Use `--release-plan`
+for several DB changes and one web release; see the generic integrated procedure
+in that document. Development checks are relevant to the change; a duplicate
+complete candidate run is not a prerequisite.
 
-Last updated: 2026-07-17
+Last updated: 2026-10-30
 
 ## Required scope for the next combined release (2026-10-13)
 
@@ -75,25 +78,24 @@ scripts/deploy_pos_production.sh
 
 This default path runs:
 
-1. Clean Git worktree and exact freshly fetched `origin/main` SHA preflight.
+1. Clean Git worktree, freshly fetched exact `origin/main`, production target
+   and read-only connection/DB-contract/history preflight.
 2. Direct execution of the fixed release recipe for that exact SHA,
    with complete logs, process exit codes, assertion counts and artifact hashes.
-3. Production target preflight.
-4. Required production Auth and test-data hygiene check with
+3. Required production Auth and test-data hygiene check with
    `scripts/check_pilot_auth_accounts.sh`.
-5. `dart analyze`.
-6. Focused Flutter test target, currently
-   `test/pilot_feedback_closure_contract_test.dart`.
-7. Optional single Supabase migration apply with migration-history guards.
-8. `vercel build --prod`.
-9. `vercel deploy --prebuilt --prod --yes`.
-10. Live HTTP check for `https://globospossystem.vercel.app`.
-11. Fixed operational account login smoke.
+4. Reuse that invocation's full analysis/test result after checking receipt/input
+   integrity. Covered analysis and focused Flutter tests are not rerun.
+5. Optional single Supabase migration apply with migration-history guards.
+6. `vercel build --prod` once.
+7. `vercel deploy --prebuilt --prod --yes`.
+8. Live HTTP check for `https://globospossystem.vercel.app`.
+9. Fixed operational account login smoke.
 
 Before any production database or Vercel mutation, the script fetches
 `origin/main` into `refs/remotes/origin/main` and requires that freshly fetched
 commit to equal `HEAD`. It then directly executes
-`python3 -B scripts/pos_local_release_gate.py run --kind exact-main` in an
+`python3 -B scripts/pos_local_release_gate.py run --kind exact-main --profile production-checks` in an
 isolated Ubuntu 24.04 x86_64 tool container. The verifier clones only
 committed source, passes no production environment or credentials, runs the
 full repository checks, real Chrome terminal-authentication suite and separate
@@ -106,9 +108,17 @@ environment does not establish a passing run.
 
 Receipts contain the candidate/exact-main kind, source SHA/tree/content hashes,
 recipe/runner hashes, exact tool and package versions, UTC times, process codes,
-assertion counts, full-log hashes and web/nested artifact hashes. The official
+assertion counts, full-log hashes and nested artifact hashes. The official
 deployer always performs a new run; `verify --evidence` is an integrity audit,
 not a signed authorization or a way to supply a PASS file.
+
+All DB/web phases of `--release-plan` share that one run. Its checks receipt
+explicitly records the web build as pending; the actual production build supplies
+compilation and SHA/toolchain/lockfile/compiled-byte evidence. Do not compile the
+same app as a generic repository build, a local precheck and again in Vercel.
+Keep DB guards, Auth, production alias verification, affected-feature checks and
+the separate explicit login waiver. A tooling-only change needs the affected
+tooling regressions, not an application redeploy.
 
 **Check remote protection at release time.** On 2026-10-27 the GitHub branch
 protection API reported no required status checks and required pull-request
@@ -229,7 +239,8 @@ scripts/deploy_pos_production.sh \
 After the dry-run evidence is reviewed, remove only `--dry-run` and run the
 same command from a clean worktree whose `HEAD` exactly equals the freshly
 fetched `origin/main` SHA. The official preflight must execute and pass the
-complete local verification recipe again on that SHA. Record the operator, Asia/Ho_Chi_Minh timestamp, exact SHA, check-run
+complete production-checks recipe once on that SHA. The dry run does not execute
+tests. Record the operator, Asia/Ho_Chi_Minh timestamp, exact SHA, check-run
 evidence, pinned project ref, sanitized command, preflight output, apply
 output, migration-history confirmation, and verification output.
 

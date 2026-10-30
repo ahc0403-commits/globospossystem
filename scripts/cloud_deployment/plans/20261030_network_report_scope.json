@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "project": "ynriuoomotxuwhuxxmhj",
+  "backwardCompatible": true,
+  "contracts": [
+    {
+      "signature": "public.get_store_revenue_summary(uuid[],date,date)",
+      "resultType": "jsonb"
+    }
+  ],
+  "migrations": [
+    {
+      "path": "supabase/migrations/20261030162550_network_report_operational_scope.sql",
+      "sha256": "7aaf7076cc7fb910e1d088ae0c4fc9aec4a5d9d9e349694a9561b6f2259966c7"
+    }
+  ],
+  "web": true,
+  "rollback": "Keep the preceding verified production web deployment. This migration is additive and leaves the individual/archive RPC, restaurants, orders, payments and invoice snapshots unchanged. Web rollback does not require removing the new RPC or editing migration history."
+}

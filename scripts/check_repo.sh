@@ -6,6 +6,14 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 cd "$REPO_ROOT"
 
+BUILD_WEB=1
+if [[ "${1:-}" == "--checks-only" && $# == 1 ]]; then
+  BUILD_WEB=0
+elif [[ $# != 0 ]]; then
+  printf 'Usage: bash scripts/check_repo.sh [--checks-only]\n' >&2
+  exit 2
+fi
+
 printf 'CHECK_REPO_STEP=flutter_dependencies\n'
 flutter pub get --enforce-lockfile
 printf 'CHECK_REPO_STEP=static_analysis\n'
@@ -260,9 +268,13 @@ bash test/cashier_item_edit_sql_test.sh
 printf 'CHECK_REPO_STEP=restaurant_vat_integrity\n'
 bash test/restaurant_vat_integrity_sql_test.sh
 
-printf 'CHECK_REPO_STEP=flutter_web_release_build\n'
-bash scripts/build_photo_import_worker.sh
-flutter build web --release
+if [[ "$BUILD_WEB" == 1 ]]; then
+  printf 'CHECK_REPO_STEP=flutter_web_release_build\n'
+  bash scripts/build_photo_import_worker.sh
+  flutter build web --release
+else
+  printf 'CHECK_REPO_BUILD=NOT_RUN_PRODUCTION_BUILD_REQUIRED\n'
+fi
 printf 'CHECK_REPO_STEP=git_whitespace_contract\n'
 git diff --check
 git show --check --format= HEAD
