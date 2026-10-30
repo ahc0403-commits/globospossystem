@@ -11,6 +11,7 @@ import '../../../main.dart';
 import '../../report/report_provider.dart';
 import '../../report/report_excel_file.dart';
 import 'paperless_menu_timing_detail_sheet.dart';
+import 'paperless_timing_trends.dart';
 
 String paperlessOperationsTitle(BuildContext context) =>
     _PaperlessCopy.of(context).title;
@@ -25,10 +26,14 @@ List<int> buildPaperlessOperationsWorkbook({
   required DateTime startDate,
   required DateTime endDate,
   required String languageCode,
+  Map<String, dynamic>? rawTimingTrends,
 }) {
   final report = _PaperlessReport.fromJson(rawReport);
   return _buildPaperlessOperationsWorkbook(
     report: report,
+    trends: rawTimingTrends == null
+        ? null
+        : PaperlessTimingTrends.fromJson(rawTimingTrends),
     startDate: startDate,
     endDate: endDate,
     languageCode: languageCode,
@@ -37,6 +42,7 @@ List<int> buildPaperlessOperationsWorkbook({
 
 List<int> _buildPaperlessOperationsWorkbook({
   required _PaperlessReport report,
+  PaperlessTimingTrends? trends,
   required DateTime startDate,
   required DateTime endDate,
   required String languageCode,
@@ -161,6 +167,63 @@ List<int> _buildPaperlessOperationsWorkbook({
     ]);
   }
 
+  if (trends != null) {
+    CellValue seconds(int? value) =>
+        value == null ? TextCellValue('') : IntCellValue(value);
+    final comparison = excel['Timing Comparison'];
+    comparison.appendRow([
+      TextCellValue('Baseline'),
+      TextCellValue(dateFormat.format(trends.baselineFrom)),
+      TextCellValue(dateFormat.format(trends.baselineTo)),
+    ]);
+    comparison.appendRow([
+      TextCellValue('Menu Key'),
+      TextCellValue('Menu'),
+      TextCellValue('Baseline Samples'),
+      TextCellValue('Baseline Mean Seconds'),
+      TextCellValue('Current Samples'),
+      TextCellValue('Current Mean Seconds'),
+      TextCellValue('Change Seconds'),
+    ]);
+    final history = excel['Timing Trends'];
+    history.appendRow([
+      TextCellValue('Menu Key'),
+      TextCellValue('Menu'),
+      TextCellValue('From'),
+      TextCellValue('To'),
+      TextCellValue('Samples'),
+      TextCellValue('Mean Seconds'),
+      TextCellValue('Change From Fixed Baseline Seconds'),
+    ]);
+    for (final menu in trends.menus) {
+      comparison.appendRow([
+        TextCellValue(menu.menuKey),
+        TextCellValue(menu.name(languageCode)),
+        IntCellValue(menu.baselineCount),
+        seconds(menu.baselineSeconds),
+        IntCellValue(menu.currentCount),
+        seconds(menu.currentSeconds),
+        seconds(menu.deltaSeconds),
+      ]);
+      for (final bucket in trends.buckets) {
+        final point = menu.points[bucket.index];
+        history.appendRow([
+          TextCellValue(menu.menuKey),
+          TextCellValue(menu.name(languageCode)),
+          TextCellValue(dateFormat.format(bucket.from)),
+          TextCellValue(dateFormat.format(bucket.to)),
+          IntCellValue(point?.sampleCount ?? 0),
+          seconds(point?.averageSeconds),
+          seconds(
+            point == null || menu.baselineSeconds == null
+                ? null
+                : point.averageSeconds - menu.baselineSeconds!,
+          ),
+        ]);
+      }
+    }
+  }
+
   excel.delete('Sheet1');
   return excel.encode() ?? <int>[];
 }
@@ -173,6 +236,7 @@ class PaperlessOperationsDashboard extends StatefulWidget {
     required this.endDate,
     this.loader,
     this.detailLoader,
+    this.trendLoader,
     this.saveExcelFile,
   });
 
@@ -181,6 +245,7 @@ class PaperlessOperationsDashboard extends StatefulWidget {
   final DateTime endDate;
   final PaperlessOperationsLoader? loader;
   final PaperlessMenuTimingDetailLoader? detailLoader;
+  final PaperlessTimingTrendLoader? trendLoader;
   final ReportExcelFileSaver? saveExcelFile;
 
   @override
@@ -191,9 +256,12 @@ class PaperlessOperationsDashboard extends StatefulWidget {
 class _PaperlessOperationsDashboardState
     extends State<PaperlessOperationsDashboard> {
   _PaperlessReport? _report;
+  PaperlessTimingTrends? _trends;
   Object? _error;
   bool _loading = true;
   bool _isExporting = false;
+  bool _trendUnavailable = false;
+  int _loadGeneration = 0;
   late DateTime _startDate;
   late DateTime _endDate;
 
@@ -219,7 +287,8 @@ class _PaperlessOperationsDashboardState
     }
     if (oldWidget.storeId != widget.storeId ||
         rangeChanged ||
-        oldWidget.loader != widget.loader) {
+        oldWidget.loader != widget.loader ||
+        oldWidget.trendLoader != widget.trendLoader) {
       _load();
     }
   }
@@ -252,7 +321,45 @@ class _PaperlessOperationsDashboardState
     await _load();
   }
 
+  Future<Map<String, dynamic>?> _loadTrends({
+    required String storeId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      if (widget.trendLoader case final loader?) {
+        return await loader(
+          storeId: storeId,
+          startDate: startDate,
+          endDate: endDate,
+        );
+      }
+      if (widget.loader != null) return null;
+      final range = reportUtcRange(startDate, endDate);
+      final response = await supabase.rpc(
+        'get_paperless_menu_timing_trends',
+        params: {
+          'p_store_id': storeId,
+          'p_from': range.startUtc.toIso8601String(),
+          'p_to': range.endExclusiveUtc.toIso8601String(),
+        },
+      );
+      return Map<String, dynamic>.from(response as Map);
+    } catch (_) {
+      // Existing operational metrics stay available if trend loading fails.
+      return null;
+    }
+  }
+
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final startDate = _startDate;
+    final endDate = _endDate;
+    final trendsFuture = _loadTrends(
+      storeId: widget.storeId,
+      startDate: startDate,
+      endDate: endDate,
+    );
     setState(() {
       _loading = true;
       _error = null;
@@ -262,7 +369,7 @@ class _PaperlessOperationsDashboardState
       if (widget.loader case final loader?) {
         raw = await loader();
       } else {
-        final range = reportUtcRange(_startDate, _endDate);
+        final range = reportUtcRange(startDate, endDate);
         final response = await supabase.rpc(
           'get_paperless_operations_insights_report',
           params: {
@@ -273,14 +380,30 @@ class _PaperlessOperationsDashboardState
         );
         raw = Map<String, dynamic>.from(response as Map);
       }
+      final trendRaw = await trendsFuture;
       final report = _PaperlessReport.fromJson(raw);
-      if (!mounted) return;
+      PaperlessTimingTrends? trends;
+      try {
+        final data = trendRaw ?? raw['timing_trends'];
+        if (data is Map) {
+          trends = PaperlessTimingTrends.fromJson(
+            Map<String, dynamic>.from(data),
+          );
+        }
+      } catch (_) {
+        // Malformed trend data must not break the established report.
+      }
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _report = report;
+        _trends = trends;
+        _trendUnavailable =
+            trends == null &&
+            (widget.loader == null || widget.trendLoader != null);
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = error;
         _loading = false;
@@ -296,6 +419,7 @@ class _PaperlessOperationsDashboardState
       final languageCode = Localizations.localeOf(context).languageCode;
       final bytes = _buildPaperlessOperationsWorkbook(
         report: report,
+        trends: _trends,
         startDate: _startDate,
         endDate: _endDate,
         languageCode: languageCode,
@@ -384,7 +508,8 @@ class _PaperlessOperationsDashboardState
               action: TextButton(onPressed: _load, child: Text(copy.retry)),
             ),
           )
-        else if ((_report?.orderCount ?? 0) == 0)
+        else if ((_report?.orderCount ?? 0) == 0 &&
+            (_trends?.menus.isEmpty ?? true))
           _DashboardSurface(
             child: _PaperlessMessage(
               icon: Icons.insights_outlined,
@@ -394,6 +519,8 @@ class _PaperlessOperationsDashboardState
         else
           _PaperlessDashboardBody(
             report: _report!,
+            trends: _trends,
+            trendUnavailable: _trendUnavailable,
             copy: copy,
             onMenuTap: _showMenuDetail,
           ),
@@ -534,11 +661,15 @@ class _PeriodBar extends StatelessWidget {
 class _PaperlessDashboardBody extends StatelessWidget {
   const _PaperlessDashboardBody({
     required this.report,
+    required this.trends,
+    required this.trendUnavailable,
     required this.copy,
     required this.onMenuTap,
   });
 
   final _PaperlessReport report;
+  final PaperlessTimingTrends? trends;
+  final bool trendUnavailable;
   final _PaperlessCopy copy;
   final ValueChanged<_MenuOperationMetric> onMenuTap;
 
@@ -547,6 +678,17 @@ class _PaperlessDashboardBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        PaperlessTimingTrendsSection(
+          trends: trends,
+          unavailable: trendUnavailable,
+          onMenuDetails: (menuKey) {
+            final menu = report.menuOperationTimes
+                .where((menu) => menu.menuKey == menuKey)
+                .firstOrNull;
+            if (menu != null) onMenuTap(menu);
+          },
+        ),
+        const SizedBox(height: 10),
         _PerformanceSummary(report: report, copy: copy),
         const SizedBox(height: 10),
         _MenuRankingsSection(report: report, copy: copy),
