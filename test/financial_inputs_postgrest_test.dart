@@ -186,9 +186,9 @@ void main() {
             final isRules = request.uri.path.endsWith(
               '/get_payroll_hourly_rules',
             );
-            final isSummary = request.uri.path.endsWith(
-              '/get_store_revenue_summary',
-            );
+            final isSummary =
+                request.uri.path.endsWith('/get_store_revenue_summary') ||
+                request.uri.path.endsWith('/get_network_store_revenue_summary');
             final isReport = request.uri.path.endsWith(
               '/get_store_report_summary_v2',
             );
@@ -1065,6 +1065,74 @@ void main() {
           await report.loadAllReports();
           expect(report.state.reportSummary!.rows, isEmpty);
           expect(requests, isEmpty);
+        },
+      );
+
+      test(
+        'network excludes sample and closed stores while individual history remains readable',
+        () async {
+          await seed(1);
+          actor = _superAdmin;
+          await sql(
+            "UPDATE restaurants SET tax_entity_id='$sampleReportingTaxEntityId' WHERE id='$_store';",
+          );
+          try {
+            final history = await StoreRevenueSummaryService(client).fetch(
+              storeIds: [_store],
+              fromDate: DateTime(2024),
+              toDate: DateTime(2029, 12, 31),
+            );
+            expect(history[_store]!.dineIn, greaterThan(0));
+            final excluded = await StoreRevenueSummaryService(client).fetch(
+              storeIds: [_store, _otherStore],
+              fromDate: DateTime(2024),
+              toDate: DateTime(2029, 12, 31),
+              networkOnly: true,
+            );
+            expect(excluded.keys, [_otherStore]);
+            await sql(
+              "UPDATE restaurants SET tax_entity_id=NULL,is_active=false WHERE id='$_store';",
+            );
+            final report = _AdminReports(client)
+              ..setStores([_store, _otherStore]);
+            addTearDown(report.dispose);
+            await report.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
+            expect(report.state.reportSummary!.rows.map((r) => r.storeId), [
+              _otherStore,
+            ]);
+            expect(report.state.reportSummary!.totalRevenue, 0);
+          } finally {
+            await sql(
+              "UPDATE restaurants SET tax_entity_id=NULL,is_active=true WHERE id='$_store';",
+            );
+          }
+        },
+      );
+
+      test(
+        'network live refresh removes a newly excluded store instead of retaining old totals',
+        () async {
+          await seed(1);
+          actor = _superAdmin;
+          final report = _AdminReports(client)
+            ..setStores([_store, _otherStore]);
+          addTearDown(report.dispose);
+          await report.setReportRange(DateTime(2024), DateTime(2029, 12, 31));
+          expect(report.state.reportSummary!.totalRevenue, greaterThan(0));
+          await sql(
+            "UPDATE restaurants SET tax_entity_id='$sampleReportingTaxEntityId' WHERE id='$_store';",
+          );
+          try {
+            await report.refreshReportsForStore(_store);
+            expect(report.state.reportSummary!.rows.map((r) => r.storeId), [
+              _otherStore,
+            ]);
+            expect(report.state.reportSummary!.totalRevenue, 0);
+          } finally {
+            await sql(
+              "UPDATE restaurants SET tax_entity_id=NULL WHERE id='$_store';",
+            );
+          }
         },
       );
 

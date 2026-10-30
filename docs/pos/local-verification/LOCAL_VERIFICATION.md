@@ -4,16 +4,22 @@ This candidate migrates execution, not the scope of verification. GitHub stores
 and reviews source. No runner, runner registration token, paid CI, production
 credential, production business fixture or Office modification is required.
 
-## Candidate and exact-main runs
+## One final-main release run (owner decision 2026-10-30)
 
-Commit the candidate locally, then run from its clean checkout:
+During development, run checks relevant to the changed behavior. A full candidate
+run is optional diagnostic evidence, not a second mandatory release gate. The
+official deployment entrypoint directly executes the full test recipe once on
+the clean, freshly fetched final main SHA:
 
 ```bash
-python3 -B scripts/pos_local_release_gate.py run \
-  --kind candidate --output /absolute/new/private/candidate-evidence
-python3 -B scripts/pos_local_release_gate.py verify \
-  --kind candidate --evidence /absolute/new/private/candidate-evidence
+scripts/deploy_pos_production.sh --supabase-backend mcp --vercel-backend mcp \
+  --mode remote --release-plan scripts/cloud_deployment/plans/20261030_integrated_pos.json \
+  --skip-login-smoke --yes
 ```
+
+The shown login omission uses the existing explicit owner waiver. Without that
+waiver, omit `--skip-login-smoke` and supply the existing login environment
+securely. This command is a real production action, not a test command.
 
 An output directory must be new and outside the source checkout. Keep the full
 directory together. `receipt.json` records source SHA/tree/all tracked input
@@ -23,12 +29,24 @@ hashes. Counts distinguish visible Flutter tests, Deno/Node tests, Python assert
 completed repository stages and SQL commands. SQL assertions and performance measurements
 remain in the complete logs; a command count is not an SQL assertion count.
 
-The official `scripts/deploy_pos_production.sh` preflight always executes a new
-`run --kind exact-main` before production mutation. It requires a clean checkout,
+The official preflight executes
+`run --kind exact-main --profile production-checks` before production mutation.
+Read-only connection/DB-contract/history checks run first to fail early. It requires a clean checkout,
 fresh canonical `origin/main == HEAD` before and after validation, and directly
 calls the committed verifier. It does not accept a receipt, alternate recipe,
 resume flag or PASS environment variable. Existing production flags cannot
-skip this recipe. `--dry-run` prints the path and explicitly reports NOT RUN.
+skip this recipe. `--release-plan` combines DB/web phases in that single
+invocation. The later `run_checks` verifies the original receipt hash, all source
+inputs/logs/counts and recipe identity, then reports REUSED_PASS without executing
+tests again. No other invocation's receipt is imported. A changed source/tool/
+lockfile/recipe or damaged evidence stops reuse. `--dry-run` reports NOT RUN.
+
+The production-checks profile runs every test/type/lint/permission/isolation
+stage. Only the generic `flutter_web_release_build` stage is deferred to the
+actual production compiler. The receipt says `webBuild=PENDING_PRODUCTION_BUILD`;
+this is a checks PASS, never evidence of successful compilation or deployment.
+The standalone `full` profile and `bash scripts/check_repo.sh` still include
+the generic build for diagnostics. DB-only checks do not compile a web app.
 
 `verify` checks integrity and completeness for review. Receipts are not signed;
 an operator who can replace every file can forge a self-consistent bundle.
@@ -47,7 +65,9 @@ The machine-readable recipe is `scripts/local_verification/recipe.json`:
    analysis, full Flutter tests, security/role/tenant SQL and Edge tests, format,
    lint and type checks, all procurement/inventory and API fixtures, repository
    secret scan, npm audit, production deploy/migration regressions, web worker
-   compilation and complete Flutter web release build, Git whitespace checks.
+   compilation and complete Flutter web release build in the diagnostic `full`
+   profile, Git whitespace checks. Production uses `check_repo.sh --checks-only`
+   and compiles the worker/app once using the real production build configuration.
 3. The official deployer's additional password-lifecycle, SePay webhook,
    emergency-fulfillment and public-receipt Edge security test suites. Each
    requires a nonempty complete Deno summary with no failures or ignored tests.
@@ -141,6 +161,10 @@ Production targets, Auth readiness, migration-history guards, the official
 deployment path, assigned operational login and affected-feature verification
 remain unchanged. Deterministic local verification does not perform an actual
 sale, tax transmission, production fixture write or operational login.
+
+Release-tooling-only changes are checked with affected shell/Python/Node
+regression suites and syntax/diff validation. They do not require replaying
+unrelated application tests, producing a Windows build or redeploying POS.
 
 ## Remote boundary
 

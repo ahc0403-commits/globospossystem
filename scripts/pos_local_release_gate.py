@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Run the reviewed recipe locally; never accept a caller-supplied PASS receipt.
 
-Production calls `run --kind exact-main`. `verify` detects stale/incomplete or
-damaged evidence for review; it does not authorize a deployment or remote merge.
+Production calls `run --kind exact-main --profile production-checks` once per
+release. Compilation then belongs to the actual production build. `verify`
+detects stale/incomplete or damaged evidence; it is not a receipt importer.
 """
 import argparse
 import datetime as dt
@@ -62,8 +63,13 @@ def source(root):
             'fingerprint': digest, 'inputHashes': hashes}
 
 
-def recipe(root):
-    return json.loads((root / CONTRACT[0]).read_text())
+def recipe(root, profile='full'):
+    require(profile in {'full', 'production-checks'}, 'Unknown verification profile')
+    value = json.loads((root / CONTRACT[0]).read_text())
+    if profile == 'production-checks':
+        repository = next(step for step in value['steps'] if step['id'] == 'repository')
+        repository['argv'] = ['bash', 'scripts/check_repo.sh', '--checks-only']
+    return value
 
 
 def contract_hash(root):
@@ -193,9 +199,13 @@ def validate_tools(environment, expected):
         require(environment.get(key) == value, 'Wrong local tool version: ' + key)
 
 
-def verify(directory, root=ROOT, kind=None, run_id=None):
+def verify(directory, root=ROOT, kind=None, run_id=None, profile=None):
     value = json.loads(evidence_file(directory, 'receipt.json').read_text())
-    expected = recipe(root)
+    actual_profile = value.get('profile', 'full')
+    require(profile is None or actual_profile == profile, 'Wrong verification profile')
+    expected = recipe(root, actual_profile)
+    if actual_profile == 'production-checks':
+        require(value.get('webBuild') == 'PENDING_PRODUCTION_BUILD', 'Missing production build requirement')
     require(value.get('schemaVersion') == 1 and value.get('type') == 'pos-local-verification', 'Wrong evidence type')
     require(value.get('completed') is True and value.get('status') == 'PASS', 'Incomplete/failed evidence')
     require(value.get('kind') == kind if kind else value.get('kind') in {'candidate', 'exact-main'}, 'Wrong evidence kind')
@@ -287,9 +297,10 @@ def verify(directory, root=ROOT, kind=None, run_id=None):
         path = evidence_file(directory, artifact['path'])
         require(path.stat().st_size == artifact['bytes'] > 0 and sha256(path) == artifact['sha256'], 'Artifact changed')
         names.add(artifact['path'])
-    require({'artifacts/web/index.html', 'artifacts/web/main.dart.js',
-             'artifacts/web/flutter_bootstrap.js', 'artifacts/web/photo_import_worker.js'} <= names,
-            'Required web build outputs missing')
+    if actual_profile == 'full':
+        require({'artifacts/web/index.html', 'artifacts/web/main.dart.js',
+                 'artifacts/web/flutter_bootstrap.js', 'artifacts/web/photo_import_worker.js'} <= names,
+                'Required web build outputs missing')
     return value
 
 
@@ -303,16 +314,17 @@ def cleanup_fixtures(run_id):
             subprocess.run(['docker'] + remove + result.stdout.split(), capture_output=True)
 
 
-def run(directory, kind, root=ROOT):
+def run(directory, kind, root=ROOT, profile='full'):
     before = source(root)
     if kind == 'exact-main':
         exact_main(root)
-    expected = recipe(root)
+    expected = recipe(root, profile)
     directory = directory.resolve()
     require(not directory.is_relative_to(root.resolve()), 'Evidence must be outside source checkout')
     directory.mkdir(mode=0o700, parents=True, exist_ok=False)
     run_id = uuid.uuid4().hex
     value = {'schemaVersion': 1, 'type': 'pos-local-verification', 'kind': kind, 'runId': run_id,
+             'profile': profile, 'webBuild': 'PENDING_PRODUCTION_BUILD' if profile == 'production-checks' else 'INCLUDED',
              'startedAt': now(), 'timezone': 'UTC', 'sourceBefore': before,
              'contractSha256': contract_hash(root), 'completed': False, 'status': 'RUNNING',
              'steps': [], 'environment': {'host': {'os': platform.system(),
@@ -456,7 +468,8 @@ def run(directory, kind, root=ROOT):
                     validate_image(image_value, fixed)
                     info.update(rootfsLayers=image_value['RootFS']['Layers'],
                                 runtimeConfigSha256=matched['runtimeConfigSha256'])
-            shutil.copytree(snapshot / 'build/web', directory / 'artifacts/web')
+            if profile == 'full':
+                shutil.copytree(snapshot / 'build/web', directory / 'artifacts/web')
             finish_disk()
             value['artifacts'] = [{'path': str(f.relative_to(directory)), 'sha256': sha256(f), 'bytes': f.stat().st_size}
                                   for area in ['artifacts', 'nested']
@@ -496,14 +509,16 @@ def main():
     execute = sub.add_parser('run')
     execute.add_argument('--kind', required=True, choices=['candidate', 'exact-main'])
     execute.add_argument('--output', type=Path, required=True)
+    execute.add_argument('--profile', choices=['full', 'production-checks'], default='full')
     inspect = sub.add_parser('verify')
     inspect.add_argument('--evidence', type=Path, required=True)
     inspect.add_argument('--kind', choices=['candidate', 'exact-main'])
+    inspect.add_argument('--profile', choices=['full', 'production-checks'])
     args = parser.parse_args()
     try:
         if args.action == 'run':
-            return run(args.output, args.kind)
-        value = verify(args.evidence, ROOT, args.kind)
+            return run(args.output, args.kind, profile=args.profile)
+        value = verify(args.evidence, ROOT, args.kind, profile=args.profile)
         print('POS_LOCAL_EVIDENCE_INTEGRITY_PASS ' + value['sourceBefore']['sha'])
         return 0
     except (InvalidEvidence, subprocess.CalledProcessError, OSError, ValueError, KeyError) as error:

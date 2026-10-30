@@ -92,6 +92,8 @@ class SuperRestaurant {
   bool get isDirect => ownerType == 'internal';
   bool get isExternal => ownerType == 'external';
   bool get isOfficeLinked => ownerType == 'internal';
+  bool get isSample => taxEntityId == sampleReportingTaxEntityId;
+  bool get isReportable => isActive && !isSample;
 
   factory SuperRestaurant.fromJson(Map<String, dynamic> json) {
     final rawCharge = json['per_person_charge'];
@@ -213,6 +215,17 @@ class SuperAdminState {
   final DateTime reportEnd;
   final bool isLoading;
   final String? error;
+
+  /// Operational network reporting never shares the management archive scope.
+  List<SuperRestaurant> get reportingRestaurants =>
+      restaurants.where((restaurant) => restaurant.isReportable).toList();
+
+  SuperRestaurant? get selectedReportingRestaurant {
+    for (final restaurant in reportingRestaurants) {
+      if (restaurant.id == selectedRestaurant?.id) return restaurant;
+    }
+    return null;
+  }
 
   List<Map<String, dynamic>> get filteredBrands {
     if (selectedTaxEntityId == null) return brands;
@@ -481,8 +494,18 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       if (!mounted) return;
       final restaurants = response.map(SuperRestaurant.fromJson).toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final previousScope = state.reportingRestaurants.map((r) => r.id).toSet();
+      final nextScope = restaurants
+          .where((r) => r.isReportable)
+          .map((r) => r.id)
+          .toSet();
+      final scopeChanged =
+          previousScope.length != nextScope.length ||
+          !previousScope.containsAll(nextScope);
+      if (scopeChanged) _reportRequestId++;
       state = state.copyWith(
         restaurants: restaurants,
+        clearReportSummary: scopeChanged,
         isLoading: false,
         clearError: true,
       );
@@ -823,7 +846,9 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       clearReportSummary: true,
       clearError: true,
     );
-    await loadAllReports(selectedRestaurantId: state.selectedRestaurant?.id);
+    await loadAllReports(
+      selectedRestaurantId: state.selectedReportingRestaurant?.id,
+    );
   }
 
   final _liveReportQueue = CoalescedRefresh();
@@ -853,7 +878,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       final prior = state.reportSummary;
       if (full || prior == null) {
         await loadAllReports(
-          selectedRestaurantId: state.selectedRestaurant?.id,
+          selectedRestaurantId: state.selectedReportingRestaurant?.id,
         );
         return;
       }
@@ -869,24 +894,28 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
               storeIds: ids,
               fromDate: state.reportStart,
               toDate: state.reportEnd,
+              networkOnly: true,
             );
         if (!mounted ||
             generation != _reportRequestId ||
             !identical(prior, state.reportSummary)) {
           return;
         }
-        final rows = prior.rows.map((row) {
-          final value = totals[row.storeId];
-          return value == null
-              ? row
-              : SuperAdminRestaurantReport(
+        final reportable = state.reportingRestaurants.map((r) => r.id).toSet();
+        final rows = <SuperAdminRestaurantReport>[
+          for (final row in prior.rows)
+            if (reportable.contains(row.storeId))
+              if (!ids.contains(row.storeId))
+                row
+              else if (totals[row.storeId] case final value?)
+                SuperAdminRestaurantReport(
                   storeId: row.storeId,
                   restaurantName: row.restaurantName,
                   dineIn: value.dineIn,
                   delivery: value.delivery,
                   total: value.dineIn + value.delivery,
-                );
-        }).toList()..sort((a, b) => b.total.compareTo(a.total));
+                ),
+        ]..sort((a, b) => b.total.compareTo(a.total));
         final dineIn = rows.fold<double>(0, (sum, row) => sum + row.dineIn);
         final delivery = rows.fold<double>(0, (sum, row) => sum + row.delivery);
         state = state.copyWith(
@@ -929,7 +958,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       clearReportSummary: true,
     );
     try {
-      final restaurants = state.restaurants;
+      final restaurants = state.reportingRestaurants;
       final sourceRestaurants = selectedRestaurantId == null
           ? restaurants
           : restaurants.where((r) => r.id == selectedRestaurantId).toList();
@@ -955,18 +984,22 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
                 .toList(),
             fromDate: requestedStart,
             toDate: requestedEnd,
+            networkOnly: true,
           );
       if (!mounted || requestId != _reportRequestId) return;
-      final reportRows = sourceRestaurants.map((restaurant) {
-        final value = totals[restaurant.id]!;
-        return SuperAdminRestaurantReport(
-          storeId: restaurant.id,
-          restaurantName: restaurant.name,
-          dineIn: value.dineIn,
-          delivery: value.delivery,
-          total: value.dineIn + value.delivery,
-        );
-      }).toList()..sort((a, b) => b.total.compareTo(a.total));
+      final reportRows =
+          sourceRestaurants.where((r) => totals.containsKey(r.id)).map((
+            restaurant,
+          ) {
+            final value = totals[restaurant.id]!;
+            return SuperAdminRestaurantReport(
+              storeId: restaurant.id,
+              restaurantName: restaurant.name,
+              dineIn: value.dineIn,
+              delivery: value.delivery,
+              total: value.dineIn + value.delivery,
+            );
+          }).toList()..sort((a, b) => b.total.compareTo(a.total));
 
       final dineInTotal = reportRows.fold<double>(
         0,

@@ -133,7 +133,9 @@ def apply(directory, path, source_sha=None):
     request(directory, 'apply', {'name': prepared['transportName'], 'query': prepared['query']})
     # Never equate a success banner with durable source/history verification.
     after = request(directory, 'migrations', {})['migrations']
-    print(canonical(verify_applied(directory, prepared, after)))
+    proof = verify_applied(directory, prepared, after)
+    print(canonical(proof))
+    return proof
 
 
 if __name__ == '__main__':

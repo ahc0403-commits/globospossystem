@@ -66,6 +66,69 @@ class DeployerContractTests(unittest.TestCase):
             failed = self.shell('parse_args ' + args + ' --skip-login-smoke ' + flag + '; validate_cloud_options')
             self.assertNotEqual(failed.returncode, 0, flag)
 
+    def test_integrated_plan_accepts_both_build_backends_and_rejects_weakened_or_mixed_scope(self):
+        args = '--supabase-backend mcp --release-plan scripts/cloud_deployment/plans/20261030_integrated_pos.json --skip-login-smoke'
+        for backend in ['', ' --vercel-backend mcp --mode remote']:
+            result = self.shell('parse_args ' + args + backend + '; validate_cloud_options')
+            self.assertEqual(result.returncode, 0, result.stderr)
+        for flag in ['--skip-checks', '--skip-auth-check', '--skip-db', '--skip-build',
+                     '--skip-smoke-tests', '--skip-vercel', '--no-tests', '--db-only', '--web-only',
+                     '--onboarding-edge-only', '--migration arbitrary.sql']:
+            result = self.shell('parse_args ' + args + ' ' + flag + '; validate_cloud_options')
+            self.assertNotEqual(result.returncode, 0, flag)
+
+    def test_connection_failure_precedes_expensive_verification(self):
+        overrides = ('POS_SUPABASE_BACKEND=mcp; POS_VERCEL_BACKEND=mcp; SKIP_LOGIN_SMOKE=1; '
+                     'enforce_clean_git() { :; }; enforce_origin_main_ancestry() { :; }; '
+                     'initialize_cloud_execution() { echo CONNECTION; return 23; }; '
+                     'enforce_local_release_contract() { echo UNEXPECTED_FULL_RUN; }; preflight')
+        result = self.shell(overrides)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('CONNECTION', result.stdout)
+        self.assertNotIn('UNEXPECTED_FULL_RUN', result.stdout)
+
+    def test_covered_checks_and_local_build_do_not_execute_again(self):
+        result = self.shell('FULL_RELEASE_CHECKS_VERIFIED=1; '
+                            'verify_current_release_checks() { echo INTEGRITY_CHECK; }; '
+                            'flutter() { echo UNEXPECTED_FLUTTER; return 99; }; '
+                            'dart() { echo UNEXPECTED_DART; return 99; }; '
+                            'run_checks; DEPLOY_MODE=remote; local_flutter_build')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('INTEGRITY_CHECK', result.stdout)
+        self.assertIn('REUSED_PASS', result.stdout)
+        self.assertNotIn('UNEXPECTED', result.stdout)
+        # An inherited flag cannot manufacture this invocation's verification.
+        result = self.shell('printf "%s" "$FULL_RELEASE_CHECKS_VERIFIED"',
+                            {'FULL_RELEASE_CHECKS_VERIFIED': '1'})
+        self.assertEqual(result.stdout, '0')
+
+    def test_integrated_flow_orders_stage_db_promote_and_creates_no_edge_releases(self):
+        common = '''
+            POS_SUPABASE_BACKEND=mcp; SKIP_LOGIN_SMOKE=1;
+            load_env() { :; }; ensure_flutter_env() { :; };
+            verify_allowed_production_origins() { :; }; verify_vercel_firebase_web_env() { :; };
+            run_auth_check() { :; }; run_checks() { echo TRACE=checks; };
+            enforce_clean_git() { :; }; enforce_origin_main_ancestry() { :; };
+            run() { printf 'TRACE=%s\n' "$*"; };
+            deploy_vercel() { echo TRACE=web_create_once; };
+            run_login_smoke() { echo TRACE=login_waiver; };
+        '''
+        for backend in ['cli', 'mcp']:
+            result = self.shell(common + 'POS_VERCEL_BACKEND=' + backend + '; run_integrated_release_flow')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            trace = [line for line in result.stdout.splitlines() if line.startswith('TRACE=')]
+            self.assertEqual(trace.count('TRACE=checks'), 1)
+            apply = next(i for i, line in enumerate(trace) if 'integrated_release.py apply' in line)
+            if backend == 'cli':
+                stage = next(i for i, line in enumerate(trace) if 'cli_web.py stage' in line)
+                promote = next(i for i, line in enumerate(trace) if 'cli_web.py promote' in line)
+                self.assertLess(stage, apply); self.assertLess(apply, promote)
+                self.assertNotIn('TRACE=web_create_once', trace)
+            else:
+                self.assertEqual(trace.count('TRACE=web_create_once'), 1)
+                self.assertLess(apply, trace.index('TRACE=web_create_once'))
+            self.assertNotIn('functions deploy', result.stdout)
+
 
 if __name__ == '__main__':
     unittest.main()

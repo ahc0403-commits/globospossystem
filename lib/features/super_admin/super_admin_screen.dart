@@ -339,7 +339,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
         },
       ),
       _AllReportsTab(state: state, notifier: notifier),
-      _DetailedAnalyticsTab(restaurants: state.restaurants),
+      _DetailedAnalyticsTab(restaurants: state.reportingRestaurants),
       const RestaurantSalesExportScreen(embedded: true),
       const PhotoSalesImportScreen(),
       const EmergencyControlPanel(),
@@ -2801,6 +2801,16 @@ class _AllReportsTabState extends State<_AllReportsTab> {
               l10n.superAdminAllReportsTitle,
               style: AppFonts.system(color: AppColors.amber500, fontSize: 30),
             ),
+            Text(
+              switch (Localizations.localeOf(context).languageCode) {
+                'ko' => '운영 매장 기준 · 샘플 및 폐점 매장 제외',
+                'vi' =>
+                  'Chỉ cửa hàng đang hoạt động · Không gồm cửa hàng mẫu và đã đóng',
+                _ => 'Operating stores · Sample and closed stores excluded',
+              },
+              key: const Key('network_report_scope_notice'),
+              style: AppFonts.system(color: AppColors.textSecondary),
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -2808,7 +2818,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 DropdownButton<SuperRestaurant?>(
-                  value: state.selectedRestaurant,
+                  value: state.selectedReportingRestaurant,
                   dropdownColor: AppColors.surface1,
                   hint: Text(
                     l10n.superAdminAllStores,
@@ -2822,7 +2832,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                         style: AppFonts.system(color: AppColors.textPrimary),
                       ),
                     ),
-                    ...state.restaurants.map((restaurant) {
+                    ...state.reportingRestaurants.map((restaurant) {
                       return DropdownMenuItem<SuperRestaurant?>(
                         value: restaurant,
                         child: Text(
@@ -2898,7 +2908,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                 OutlinedButton.icon(
                   key: const Key('super_admin_today_receipt_ledger_entry'),
                   onPressed: () {
-                    final storeId = state.selectedRestaurant?.id;
+                    final storeId = state.selectedReportingRestaurant?.id;
                     context.go(
                       storeId == null
                           ? '/receipts/today'

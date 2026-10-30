@@ -258,8 +258,11 @@ cp "$ROOT_DIR/scripts/lib/production_migration_gate.sh" "$WRONG_REPO/scripts/lib
 # Only the verifier invocation is stubbed to reach the pinned-target assertion.
 cat >"$WRONG_REPO/scripts/pos_local_release_gate.py" <<'PYGATE'
 import sys
+from pathlib import Path
 assert sys.argv[1:4] == ['run','--kind','exact-main']
-assert sys.argv[4] == '--output' and len(sys.argv) == 6
+assert sys.argv[4] == '--output' and sys.argv[6:] == ['--profile', 'production-checks']
+Path(sys.argv[5]).mkdir()
+Path(sys.argv[5], 'receipt.json').write_text('fixture only')
 PYGATE
 printf '%s\n' wrongprojectref >"$WRONG_REPO/supabase/.temp/project-ref"
 git -C "$WRONG_REPO" init -q

@@ -134,7 +134,7 @@ cat >"$APPROVED_REPO/scripts/pos_local_release_gate.py" <<'PYFIXTURE'
 import os,sys
 from pathlib import Path
 assert sys.argv[1:4] == ['run','--kind','exact-main']
-assert sys.argv[4] == '--output' and len(sys.argv) == 6
+assert sys.argv[4] == '--output' and sys.argv[6:] == ['--profile', 'production-checks']
 assert not Path(sys.argv[5]).exists()
 if os.environ['LOCAL_VERIFIER_FIXTURE_MODE'] == 'fail':
     raise SystemExit(42)
