@@ -14,13 +14,6 @@ RETURNS TABLE(store_id uuid) LANGUAGE sql STABLE AS $$
   WHERE p_actor IN ('20000000-0000-0000-0000-000000000001'::uuid,
                    '20000000-0000-0000-0000-000000000002'::uuid)
 $$;
-CREATE TABLE public.restaurants (
-  id uuid PRIMARY KEY, name text NOT NULL,
-  is_active boolean NOT NULL DEFAULT true, tax_entity_id uuid
-);
-INSERT INTO public.restaurants(id,name)
-SELECT ('10000000-0000-0000-0000-' || lpad(i::text,12,'0'))::uuid,
-       'Fixture store ' || i FROM generate_series(1,500) i;
 CREATE FUNCTION public.fixture_can_read(store_id uuid) RETURNS boolean
 LANGUAGE sql STABLE AS $$
   SELECT public.is_super_admin() OR store_id IN (SELECT public.user_accessible_stores(auth.uid()))
@@ -30,10 +23,6 @@ LANGUAGE sql STABLE AS $$
   SELECT public.is_super_admin() OR (public.fixture_can_read(store_id)
     AND auth.uid() = '20000000-0000-0000-0000-000000000001'::uuid)
 $$;
-ALTER TABLE public.restaurants ENABLE ROW LEVEL SECURITY;
-CREATE POLICY restaurants_read ON public.restaurants FOR SELECT TO authenticated
-  USING (public.fixture_can_read(id));
-GRANT SELECT ON public.restaurants TO authenticated;
 CREATE TABLE public.employee_daily_allowances (
   id uuid PRIMARY KEY, store_id uuid NOT NULL, employee_id uuid NOT NULL,
   work_date date NOT NULL, is_split_shift boolean, meal_allowance_amount numeric,
