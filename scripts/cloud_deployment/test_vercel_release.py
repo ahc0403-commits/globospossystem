@@ -1,6 +1,8 @@
 import base64
 import copy
+import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -18,6 +20,35 @@ spec.loader.exec_module(web_build)
 
 class VercelReleaseTests(unittest.TestCase):
     sha = 'a' * 40
+
+    def test_complete_release_inspects_hostnames_and_verifies_actual_live_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / 'pubspec.lock').write_bytes(b'fixture-lock')
+            manifest = {'phase': 'web-only', 'sourceSha': self.sha}
+            deployment = {'id': 'dpl_fixture', 'readyState': 'READY', 'target': 'production',
+                          'projectId': release.PROJECT, 'gitSource': {'sha': self.sha},
+                          'meta': {'githubCommitSha': self.sha}, 'url': 'fixture.vercel.app'}
+            build = {'schemaVersion': 1, 'sourceSha': self.sha, 'publicConfigStatus': 'PASS',
+                     'flutterVersion': '3.41.6', 'dartVersion': '3.11.4',
+                     'lockfileSha256': hashlib.sha256(b'fixture-lock').hexdigest(),
+                     'mainDartJsSha256': hashlib.sha256(b'compiled-fixture').hexdigest()}
+            responses = [io.BytesIO(json.dumps(build).encode()), io.BytesIO(b'compiled-fixture')]
+            for response in responses: response.status = 200
+            with patch.object(release, 'ROOT', directory), \
+                 patch.object(release, 'session', return_value=(directory, manifest)), \
+                 patch.object(release, 'request', side_effect=[deployment, {'id': 'dpl_fixture'}, deployment, deployment]) as remote, \
+                 patch.object(release.urllib.request, 'urlopen', side_effect=responses):
+                release.deploy(directory)
+            calls = remote.call_args_list
+            self.assertEqual([c.args[1] for c in calls],
+                             ['vercel-inspect', 'vercel-deploy', 'vercel-inspect', 'vercel-inspect'])
+            self.assertEqual(calls[0].args[2]['idOrUrl'], release.HOST)
+            self.assertEqual(calls[2].args[2]['idOrUrl'], 'dpl_fixture')
+            self.assertEqual(calls[3].args[2]['idOrUrl'], release.HOST)
+            receipt = json.loads((directory / 'vercel-receipt.json').read_text())
+            self.assertEqual(receipt['productionBuild'], build)
+            self.assertTrue(receipt['productionAliasVerified'])
 
     def test_deployment_never_changes_project_settings_env_or_source_revision(self):
         args = release.deployment_arguments(self.sha)
@@ -54,10 +85,13 @@ class VercelReleaseTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(bridge.CloudError):
                 release.verify_deployment({**value, **change}, self.sha, 'dpl_fixture')
         # Some mapped read tools omit gitSource. The actual provider source
-        # must still be Git; build attestation independently checks actual SHA.
+        # identifies the initiator; build attestation checks actual Git SHA.
         value.pop('gitSource')
         with self.assertRaises(bridge.CloudError): release.verify_deployment(value, self.sha)
         release.verify_deployment({**value, 'source': 'git'}, self.sha)
+        release.verify_deployment({**value, 'source': 'api'}, self.sha)
+        with self.assertRaises(bridge.CloudError):
+            release.verify_deployment({**value, 'source': 'cli'}, self.sha)
 
     def test_configuration_and_toolchain_are_required_actual_build_evidence(self):
         value = {'schemaVersion': 1, 'sourceSha': self.sha, 'publicConfigStatus': 'PASS',

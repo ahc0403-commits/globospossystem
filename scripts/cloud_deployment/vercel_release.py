@@ -17,7 +17,8 @@ from bridge import ROOT, CloudError, canonical, request, require, session, write
 TEAM = 'team_4AfACJKDlP09zRqoJKce3Tib'
 PROJECT = 'prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ'
 NAME = 'globospossystem'
-LIVE = 'https://globospossystem.vercel.app'
+HOST = 'globospossystem.vercel.app'
+LIVE = 'https://' + HOST
 
 
 def deployment_arguments(sha):
@@ -46,8 +47,11 @@ def verify_deployment(value, sha, identifier=None):
     require(value.get('projectId') == PROJECT or (value.get('project') or {}).get('id') == PROJECT,
             'Vercel returned another project')
     provider_sha = (value.get('gitSource') or {}).get('sha')
+    # `source` describes the deployment initiator. The API can create an
+    # exact-Git deployment while mapped inspection omits gitSource. Its prepared
+    # request and actual build Git identity/compiled bytes are checked as well.
     require((value.get('meta') or {}).get('githubCommitSha') == sha
-            and (provider_sha == sha or (provider_sha is None and value.get('source') == 'git')),
+            and (provider_sha == sha or (provider_sha is None and value.get('source') in {'git', 'api'})),
             'Provider Git source is not release SHA')
     if identifier:
         require(value.get('id') == identifier, 'Production alias points to another deployment')
@@ -81,7 +85,7 @@ def deploy(directory):
     arguments = deployment_arguments(manifest['sourceSha'])
     # Created exactly once. A claimed uncertain result is never resubmitted.
     write_new(directory / 'vercel-prepared.json', {'sourceSha': manifest['sourceSha'], 'arguments': arguments})
-    previous = request(directory, 'vercel-inspect', {'idOrUrl': LIVE, 'teamId': TEAM, 'withGitRepoInfo': 'true'})
+    previous = request(directory, 'vercel-inspect', {'idOrUrl': HOST, 'teamId': TEAM, 'withGitRepoInfo': 'true'})
     require(previous.get('readyState') == 'READY' and previous.get('target') == 'production',
             'Missing prior production rollback deployment')
     write_new(directory / 'vercel-rollback.json', {k: previous.get(k) for k in ('id', 'url', 'meta', 'gitSource')})
@@ -98,7 +102,7 @@ def deploy(directory):
         require(time.monotonic() < deadline, 'Vercel build timed out; inspect actual state before continuation')
         time.sleep(5)
     verify_deployment(value, manifest['sourceSha'])
-    alias = request(directory, 'vercel-inspect', {'idOrUrl': LIVE, 'teamId': TEAM, 'withGitRepoInfo': 'true'})
+    alias = request(directory, 'vercel-inspect', {'idOrUrl': HOST, 'teamId': TEAM, 'withGitRepoInfo': 'true'})
     verify_deployment(alias, manifest['sourceSha'], identifier)
     require(value.get('url') and '/' not in value['url'] and value['url'].endswith('.vercel.app'), 'Invalid provider URL')
     build_url = LIVE + '/pos-release.json?sha=' + manifest['sourceSha']

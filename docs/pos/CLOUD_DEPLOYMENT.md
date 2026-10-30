@@ -97,8 +97,11 @@ checks and compilation. The official executor requires READY production,
 the pinned project, matching release metadata/provider Git identity, a matching
 production alias, exact-source/toolchain/lockfile attestation, and matching live
 JavaScript SHA256. Some mapped inspection responses omit `gitSource`; that
-omission is recorded, and provider `source=git` plus the build's actual source
-SHA remain mandatory. HTTP checks and the existing Auth/Edge/source checks are
+omission is recorded. In that case the initiator must be `git` or `api`, the
+prepared creation request must still specify the exact Git commit, and the
+build's actual Git SHA and compiled bytes remain mandatory. Inspection uses
+provider hostnames (without an HTTP scheme); live HTTP checks use HTTPS URLs.
+HTTP checks and the existing Auth/Edge/source checks are
 retained. An owner-approved login waiver remains `NOT_RUN_OWNER_WAIVER`.
 
 Claimed deployment creation is invoked once. A timeout, API rejection, failed
