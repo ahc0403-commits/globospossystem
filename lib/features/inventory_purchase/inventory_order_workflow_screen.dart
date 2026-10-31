@@ -1,7 +1,7 @@
 import '../procurement/procurement_order_review_dialog.dart';
 import '../procurement/inventory_lot_workspace.dart';
 import '../procurement/procurement_receipt_report_pdf.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show FileOptions, StorageException;
 import '../procurement/procurement_process_labels.dart';

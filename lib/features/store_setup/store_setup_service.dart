@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'store_setup_models.dart';
 
 class StoreSetupExistingConfig {

@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class AdminAuditService {
   Future<List<Map<String, dynamic>>> fetchRecentMutationTrace({

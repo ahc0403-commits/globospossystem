@@ -1,4 +1,4 @@
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../admin/einvoice_misa_workbook.dart';
 import '../photo_sales_import/photo_sales_registered_export.dart';
 import 'combined_sales_export.dart';

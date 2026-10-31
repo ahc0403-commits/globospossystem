@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/i18n/menu_localization.dart';
 import '../../../core/ui/pos_design_tokens.dart';
-import '../../../main.dart';
+import '../../../core/services/pos_backend.dart';
 import '../../report/report_provider.dart';
 
 typedef PaperlessBottleneckLoader =

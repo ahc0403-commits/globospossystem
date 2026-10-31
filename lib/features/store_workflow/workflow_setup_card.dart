@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'workflow_service.dart';
 
 class WorkflowSetupCard extends StatefulWidget {

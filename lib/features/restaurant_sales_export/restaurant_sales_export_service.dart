@@ -1,4 +1,4 @@
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'restaurant_sales_export.dart';
 
 class RestaurantSalesExportService {

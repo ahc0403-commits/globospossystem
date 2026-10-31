@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class StaffService {
   Future<void> updateMyFullName(String fullName) async {

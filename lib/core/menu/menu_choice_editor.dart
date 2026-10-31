@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../main.dart';
+import '../services/pos_backend.dart';
 
 /// Edits a bounded definition locally; the parent menu registration saves the
 /// definition, prices and legacy size projections in the same transaction.

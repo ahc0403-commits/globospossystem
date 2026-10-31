@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 import '../layout/platform_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';

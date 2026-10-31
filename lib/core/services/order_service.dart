@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 import '../utils/time_utils.dart';
 import 'operational_day_service.dart';
 

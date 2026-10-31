@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class TablesService {
   bool _isRpcSignatureMismatch(Object error, String functionName) {

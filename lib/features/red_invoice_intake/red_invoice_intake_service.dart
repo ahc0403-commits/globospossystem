@@ -4,7 +4,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'red_invoice_intake_models.dart';
 
 class RedInvoiceIntakeService {

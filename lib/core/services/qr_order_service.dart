@@ -1,7 +1,7 @@
 import '../menu/menu_choices.dart';
 import '../menu/menu_sizes.dart';
 import '../i18n/menu_localization.dart';
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class QrOrderMenu {
   const QrOrderMenu({

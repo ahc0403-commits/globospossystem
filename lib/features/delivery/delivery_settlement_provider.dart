@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/integration_availability.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'delivery_models.dart';
 
 // ─── State ───────────────────────────────────

@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 
-import '../../main.dart';
+import 'pos_backend.dart';
 import 'rpc_compat.dart';
 
 Map<String, dynamic> normalizeInventoryItemPatch(Map<String, dynamic> data) {

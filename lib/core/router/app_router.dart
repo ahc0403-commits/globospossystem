@@ -61,7 +61,6 @@ GoRouter buildAppRouter(ProviderContainer container) {
     redirect: (context, state) {
       final auth = listenable.authState;
       final role = auth.role;
-      final storeId = auth.storeId;
       final isLoggedIn = auth.user != null && role != null;
       final location = state.matchedLocation;
       final fullLocation = state.uri.toString();
@@ -120,10 +119,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return null;
       }
 
-      // 2. super_admin + 레스토랑 없음 → 온보딩
-      if (role == 'super_admin' && storeId == null) {
-        redirectTo = location == '/onboarding' ? null : '/onboarding';
-        NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
+      // Hierarchy management must be available before the first store exists.
+      // Keep the historical URL as an alias of the current registration flow.
+      if (role == 'super_admin' && location == '/onboarding') {
+        redirectTo = '/super-admin';
+        NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
       }
 

@@ -14,7 +14,7 @@ import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/polling_utils.dart';
 import '../../core/utils/time_utils.dart';
 import '../../l10n/app_localizations.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../order/order_model.dart';
 
 const nonRevenueAmountChangedError = 'NON_REVENUE_AMOUNT_CHANGED';
@@ -1110,12 +1110,28 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
+  void _confirmPayment(String storeId, Set<String> settledIds, int generation) {
+    if (!mounted || generation != _scopeGeneration) return;
+    state = state.copyWith(
+      orders: state.orders
+          .where((o) => !settledIds.contains(o.orderId))
+          .toList(),
+      isProcessing: false,
+      paymentSuccess: true,
+      clearSelectedOrder: true,
+    );
+    // A list refresh is a read, never a reason to replay a committed write.
+    unawaited(loadOrders(storeId));
+  }
+
   Future<Map<String, dynamic>?> processPayment(
     String storeId,
     String orderId,
     double amount,
     String method,
   ) async {
+    if (state.isProcessing) return null;
+    final generation = _scopeGeneration;
     state = state.copyWith(
       isProcessing: true,
       paymentSuccess: false,
@@ -1130,13 +1146,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         method: method,
       );
 
-      await loadOrders(storeId);
-
-      state = state.copyWith(
-        isProcessing: false,
-        paymentSuccess: true,
-        clearSelectedOrder: true,
-      );
+      _confirmPayment(storeId, {
+        for (final o in state.orders)
+          if (o.orderId == orderId && amount >= o.remainingDue) orderId,
+      }, generation);
       return payment;
     } catch (error) {
       await _recoverPromotionBoundary(error, storeId, [orderId]);
@@ -1153,6 +1166,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     List<CashierOrder> orders,
     String method,
   ) async {
+    if (state.isProcessing) return null;
+    final generation = _scopeGeneration;
     state = state.copyWith(
       isProcessing: true,
       paymentSuccess: false,
@@ -1173,11 +1188,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         method: method,
       );
 
-      await loadOrders(storeId);
-      state = state.copyWith(
-        isProcessing: false,
-        paymentSuccess: true,
-        clearSelectedOrder: true,
+      _confirmPayment(
+        storeId,
+        orders.map((o) => o.orderId).toSet(),
+        generation,
       );
       return result;
     } catch (error) {
@@ -1258,6 +1272,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     String? staffName,
     required String managerPin,
   }) async {
+    if (state.isProcessing) return null;
+    final generation = _scopeGeneration;
     state = state.copyWith(
       isProcessing: true,
       paymentSuccess: false,
@@ -1274,12 +1290,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         staffName: staffName,
         managerPin: managerPin,
       );
-      await loadOrders(storeId);
-      state = state.copyWith(
-        isProcessing: false,
-        paymentSuccess: true,
-        clearSelectedOrder: true,
-      );
+      _confirmPayment(storeId, {orderId}, generation);
       return payment;
     } catch (error) {
       final amountChanged =
@@ -1306,6 +1317,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     double orderTotal,
     List<PaymentSplitInput> splits,
   ) async {
+    if (state.isProcessing) return null;
+    final generation = _scopeGeneration;
     state = state.copyWith(
       isProcessing: true,
       paymentSuccess: false,
@@ -1320,13 +1333,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         splits: splits,
       );
 
-      await loadOrders(storeId);
-
-      state = state.copyWith(
-        isProcessing: false,
-        paymentSuccess: true,
-        clearSelectedOrder: true,
-      );
+      _confirmPayment(storeId, {orderId}, generation);
       return payments;
     } catch (error) {
       await _recoverPromotionBoundary(error, storeId, [orderId]);

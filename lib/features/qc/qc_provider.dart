@@ -31,21 +31,35 @@ class QcTemplateState {
 }
 
 class QcTemplateNotifier extends StateNotifier<QcTemplateState> {
-  QcTemplateNotifier() : super(const QcTemplateState());
+  QcTemplateNotifier({QcService? service})
+    : _service = service ?? qcService,
+      super(const QcTemplateState());
+
+  final QcService _service;
+  int _generation = 0;
 
   String? _restaurantId;
 
   Future<void> loadTemplates(String storeId) async {
+    if (!mounted) return;
+    final generation = ++_generation;
+    final changedStore = _restaurantId != storeId;
     _restaurantId = storeId;
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(
+      templates: changedStore ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
-      final templates = await qcService.fetchTemplates(storeId);
+      final templates = await _service.fetchTemplates(storeId);
+      if (!mounted || generation != _generation) return;
       state = state.copyWith(
         templates: templates,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || generation != _generation) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapQcTemplateError(e, 'Failed to load QC templates.'),

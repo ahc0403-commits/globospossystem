@@ -1,5 +1,5 @@
 import '../../core/i18n/menu_localization.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 const String promotionScopeAllMenu = 'all_menu';
 const String promotionScopeSelectedItems = 'selected_items';

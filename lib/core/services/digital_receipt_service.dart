@@ -1,6 +1,6 @@
 import '../../features/digital_receipt/digital_receipt_model.dart';
 import '../constants/app_constants.dart';
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class DigitalReceiptService {
   const DigitalReceiptService();

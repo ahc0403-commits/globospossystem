@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 class EinvoiceJobStatus {
   const EinvoiceJobStatus({

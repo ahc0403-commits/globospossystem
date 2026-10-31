@@ -1,7 +1,7 @@
 import '../../core/i18n/menu_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 enum MenuSalesSort { quantity, revenue, orders }
 

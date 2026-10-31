@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 import '../../features/red_invoice_intake/red_invoice_intake_service.dart';
 
 class EinvoiceService {

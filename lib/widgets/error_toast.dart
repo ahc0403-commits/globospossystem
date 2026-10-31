@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
-import '../main.dart';
+import '../core/ui/app_theme.dart';
 
 void showErrorToast(BuildContext context, String message) {
   _showToast(
@@ -35,9 +35,7 @@ void _showToast(
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 3),
       margin: const EdgeInsets.all(16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       content: Row(
         children: [
           Icon(icon, color: Colors.white),
@@ -45,10 +43,7 @@ void _showToast(
           Expanded(
             child: Text(
               message,
-              style: AppFonts.system(
-                color: Colors.white,
-                fontSize: 14,
-              ),
+              style: AppFonts.system(color: Colors.white, fontSize: 14),
             ),
           ),
         ],

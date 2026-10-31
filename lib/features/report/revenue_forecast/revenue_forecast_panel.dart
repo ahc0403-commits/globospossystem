@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
-import '../../../main.dart';
+import '../../../core/services/pos_backend.dart';
 import '../report_excel_file.dart';
 import 'revenue_forecast_defaults_service.dart';
 import 'revenue_forecast_engine.dart';

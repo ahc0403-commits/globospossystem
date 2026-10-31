@@ -6,7 +6,7 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/models/pos_table.dart';
 import '../../core/ui/pos_design_tokens.dart';
-import '../../main.dart';
+import '../../core/ui/app_theme.dart';
 import 'table_order_preview.dart';
 
 typedef TableTapCallback = void Function(PosTable table);

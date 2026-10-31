@@ -230,12 +230,23 @@ class ConnectivityService {
 }
 
 Future<ConnectivityProbeResult> _probeSupabaseHealth() async {
-  final response = await http
-      .get(
-        Uri.parse('${AppConstants.supabaseUrl}/auth/v1/health'),
-        headers: {'apikey': AppConstants.supabaseAnonKey},
-      )
-      .timeout(const Duration(seconds: 4));
+  final client = http.Client();
+  final abort = Completer<void>();
+  final timer = Timer(const Duration(seconds: 4), abort.complete);
+  late http.Response response;
+  try {
+    final request = http.AbortableRequest(
+      'GET',
+      Uri.parse('${AppConstants.supabaseUrl}/auth/v1/health'),
+      abortTrigger: abort.future,
+    )..headers['apikey'] = AppConstants.supabaseAnonKey;
+    response = await http.Response.fromStream(await client.send(request));
+  } on http.RequestAbortedException {
+    throw TimeoutException('Health probe deadline reached');
+  } finally {
+    timer.cancel();
+    client.close();
+  }
 
   if (response.statusCode == 429 || response.statusCode >= 500) {
     return ConnectivityProbeResult.failed(

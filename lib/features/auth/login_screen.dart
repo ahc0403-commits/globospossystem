@@ -6,7 +6,6 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
-import '../../main.dart';
 import '../../core/auth/terminal_auth.dart';
 import '../../widgets/language_switcher.dart';
 import 'auth_provider.dart';

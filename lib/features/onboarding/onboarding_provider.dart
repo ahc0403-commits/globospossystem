@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/store_service.dart';
 import '../../core/utils/permission_utils.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../auth/auth_provider.dart';
 
 const onboardingOnlySuperAdminErrorCode = 'onboarding.only_super_admin';

@@ -6,7 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/tables_service.dart';
 import '../../../core/utils/live_sync_scope.dart';
 import '../../../core/utils/polling_utils.dart';
-import '../../../main.dart';
+import '../../../core/services/pos_backend.dart';
 
 class TableOrderSummary {
   const TableOrderSummary({

@@ -1,6 +1,6 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import '../../../main.dart';
+import '../../../core/services/pos_backend.dart';
 import '../../restaurant_sales_export/invoice_mapping_service.dart';
 
 class InvoiceMappingImportDialog extends StatefulWidget {

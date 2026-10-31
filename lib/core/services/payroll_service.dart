@@ -1,6 +1,6 @@
 import 'package:excel/excel.dart';
 import 'package:pos_payroll/pos_payroll.dart';
-import '../../main.dart';
+import 'pos_backend.dart';
 import 'attendance_service.dart';
 export 'package:pos_payroll/pos_payroll.dart';
 

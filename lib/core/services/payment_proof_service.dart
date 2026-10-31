@@ -15,7 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class PaymentProofSaveResult {
   const PaymentProofSaveResult({required this.queued, this.signedUrl});

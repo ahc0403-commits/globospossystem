@@ -10,7 +10,7 @@ import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
-import '../../../main.dart';
+import '../../../core/ui/app_theme.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
 import '../providers/admin_scope_provider.dart';

@@ -1,4 +1,4 @@
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'photo_sales_import.dart';
 import 'photo_sales_registered_export.dart';
 

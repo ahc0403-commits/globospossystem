@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/permission_utils.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_state.dart';
 

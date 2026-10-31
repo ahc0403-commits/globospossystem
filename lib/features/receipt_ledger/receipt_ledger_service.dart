@@ -1,5 +1,5 @@
 import '../../core/services/payment_service.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'receipt_ledger_model.dart';
 
 class ReceiptLedgerService {

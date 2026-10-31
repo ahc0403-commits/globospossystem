@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class StoreService {
   Future<Map<String, dynamic>> createStore({

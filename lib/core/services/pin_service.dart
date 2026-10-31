@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class PinService {
   String hashPin(String pin) {

@@ -7,7 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../main.dart';
+import 'pos_backend.dart';
 import 'financial_input_service.dart';
 import 'rpc_compat.dart';
 

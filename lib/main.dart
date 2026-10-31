@@ -21,6 +21,7 @@ import 'features/auth/session_recovery_screen.dart';
 import 'l10n/app_localizations.dart';
 
 export 'core/ui/app_theme.dart';
+export 'core/services/pos_backend.dart';
 
 Future<void> main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,7 +66,6 @@ Future<void> main([List<String> args = const []]) async {
 }
 
 /// Supabase client 전역 접근용
-final supabase = Supabase.instance.client;
 
 class GlobosPosApp extends ConsumerStatefulWidget {
   const GlobosPosApp({super.key, required this.router});

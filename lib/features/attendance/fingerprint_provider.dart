@@ -6,7 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/attendance_service.dart';
 import '../../core/hardware/zkteco_fingerprint_service.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 class FingerprintState {
   const FingerprintState({

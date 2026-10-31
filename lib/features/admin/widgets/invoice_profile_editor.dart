@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import '../../../main.dart';
+import '../../../core/services/pos_backend.dart';
 
 /// Approval changes descriptions and units; monetary and VAT snapshots stay intact.
 class InvoiceProfileEditor extends StatefulWidget {
