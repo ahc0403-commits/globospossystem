@@ -1,4 +1,5 @@
 import '../admin/einvoice_misa_workbook.dart';
+import '../admin/misa_vat_projection.dart';
 
 bool _isBlockingRestaurantIssue(String issue) => issue.isNotEmpty;
 
@@ -143,15 +144,16 @@ class RestaurantSalesExport {
             .toSet()
             .length,
   );
-  int get roundedLineGross => receipts.fold(
-    0,
-    (n, r) =>
-        n +
-        r.lineItems.fold(
+  int get roundedLineGross => receipts.fold(0, (total, receipt) {
+    final source = receipt.lineItems
+        .map((l) => (supply: l.supplyAmount, rate: l.vatRate, vat: l.vatAmount))
+        .toList();
+    return total +
+        (projectMisaVatLines(source) ?? source).fold<int>(
           0,
-          (n, l) => n + l.supplyAmount.round() + l.vatAmount.round(),
-        ),
-  );
+          (sum, l) => sum + l.supply.round() + l.vat.round(),
+        );
+  });
   double get supplyAmount =>
       receipts.fold(0, (total, receipt) => total + receipt.supplyAmount);
   double get vatAmount =>
@@ -370,13 +372,25 @@ RestaurantSalesExport createRestaurantSalesExport(
                 line.orderItemId.isEmpty,
           ))
             'MISSING_APPROVED_INVOICE_METADATA',
-          if (lines.any(
-            (line) => !isMisaVatConsistent(
-              line.supplyAmount,
-              line.vatRate,
-              line.vatAmount,
-            ),
-          ))
+          if (projectMisaVatLines(
+                    lines
+                        .map(
+                          (line) => (
+                            supply: line.supplyAmount,
+                            rate: line.vatRate,
+                            vat: line.vatAmount,
+                          ),
+                        )
+                        .toList(),
+                  ) ==
+                  null &&
+              lines.any(
+                (line) => !isMisaVatConsistent(
+                  line.supplyAmount,
+                  line.vatRate,
+                  line.vatAmount,
+                ),
+              ))
             'VAT_AMOUNT_MISMATCH',
           if (!isMisaVatSummaryConsistent(
             lines.map(

@@ -1,4 +1,5 @@
 import 'misa_description_normalization.dart';
+import 'misa_vat_projection.dart';
 
 /// Validation data deliberately excludes buyer contact and tax information.
 class SalesExportIssue {
@@ -154,6 +155,18 @@ List<SalesExportIssue> validateSalesExportJobs(
     }
     final itemIds = <String>{};
     final vatTotals = <double, ({double supply, double vat})>{};
+    final vatInputs = <MisaVatLine>[];
+    for (final entry in raw) {
+      if (entry is! Map) break;
+      final supply = salesExportNumber(entry['total_amount_ex_tax']);
+      final rate = salesExportNumber(entry['vat_rate']);
+      final vat = salesExportNumber(entry['vat_amount']);
+      if (supply == null || rate == null || vat == null) break;
+      vatInputs.add((supply: supply, rate: rate, vat: vat));
+    }
+    final projectedVat = !photo && vatInputs.length == raw.length
+        ? projectMisaVatLines(vatInputs)
+        : null;
     double gross = 0;
     for (final entry in raw) {
       currentLine++;
@@ -254,8 +267,10 @@ List<SalesExportIssue> validateSalesExportJobs(
             vat >= 0 &&
             rate >= 0 &&
             rate <= 100) {
+          final projected = projectedVat?[currentLine - 1];
           if (!(supply * rate / 100).isFinite ||
-              (supply * rate / 100).round() != vat.round()) {
+              (projected == null &&
+                  (supply * rate / 100).round() != vat.round())) {
             add(line, 'vat_amount', 'MISA_EXPORT_SOURCE_AMOUNT_MISMATCH');
           }
           final prev = vatTotals[rate] ?? (supply: 0.0, vat: 0.0);

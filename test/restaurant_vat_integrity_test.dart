@@ -104,6 +104,61 @@ void main() {
       expect(() => build(export), throwsFormatException);
       expect(export.receipts.single.lineItems.single.vatAmount, 23600);
     });
+    test(
+      'exports a balanced half-dong allocation with source audit, combined=$combined',
+      () {
+        final amounts = <(double, double)>[
+          (9187.48, 735),
+          (15006.21, 1200.50),
+          (15006.21, 1200.50),
+          (17456.21, 1396.50),
+          (18068.71, 1445.50),
+          (18987.45, 1519),
+          (21131.20, 1690.50),
+          (21131.20, 1690.50),
+          (24193.69, 1935.50),
+          (38587.41, 3086.99),
+        ];
+        final source = [
+          for (final (supply, vat) in amounts)
+            _line(supply, 8)..['vat_amount'] = vat,
+        ];
+        final export = _export(source);
+        expect(export.isReadyForDownload, isTrue);
+        final book = Excel.decodeBytes(build(export));
+        final rows = book.tables['Hóa đơn GTGT']!.rows.skip(8).toList();
+        final audit = book.tables['Invoice Mapping']!.rows.skip(1).toList();
+        expect(rows, hasLength(amounts.length));
+        for (var i = 0; i < rows.length; i++) {
+          final supply = _value(rows[i], 14), vat = _value(rows[i], 16);
+          expect(isMisaVatConsistent(supply, 8, vat), isTrue);
+          expect(
+            supply + vat,
+            closeTo(amounts[i].$1 + amounts[i].$2, 0.000001),
+          );
+          expect(_value(audit[i], 13), amounts[i].$1);
+          expect(_value(audit[i], 14), amounts[i].$2);
+          expect(_value(audit[i], 15), closeTo(vat - amounts[i].$2, 0.000001));
+        }
+        expect(
+          rows.fold<double>(0, (n, r) => n + _value(r, 14)),
+          closeTo(198755.77, 0.000001),
+        );
+        expect(
+          rows.fold<double>(0, (n, r) => n + _value(r, 16)),
+          closeTo(15900.49, 0.000001),
+        );
+        expect(export.receipts.single.lineItems[1].vatAmount, 1200.50);
+      },
+    );
+    test(
+      'blocks a boundary mismatch that cannot preserve totals, combined=$combined',
+      () {
+        final export = _export([_line(15006.21, 8)..['vat_amount'] = 1200.50]);
+        expect(export.isReadyForDownload, isFalse);
+        expect(() => build(export), throwsFormatException);
+      },
+    );
     test('blocks a paid amount mismatch, combined=$combined', () {
       final export = _export([_line(100, 8)], paidGross: 110);
       expect(export.receipts.single.issues, contains('AMOUNT_MISMATCH'));
