@@ -93,7 +93,7 @@ Options:
   --supabase-backend MODE  cli (default), or live MCP for DB-only/web-only cloud releases.
   --vercel-backend MODE    cli (default), or MCP with web-only/release-plan remote build.
   --owner-verified-candidate DIR  Explicit owner waiver of repeated local checks;
-                     validates a complete candidate receipt and identical app inputs.
+                     validates a complete candidate/exact-main receipt and identical app inputs.
   --test FILE        Select a target covered by the full suite. Use "all" for all tests.
   --no-tests         Legacy focused-check option; cannot skip the required full recipe.
   --skip-checks      Legacy focused-check option; cannot skip the required full recipe.
@@ -448,8 +448,9 @@ parse_args() {
 validate_cloud_options() {
   if [[ -n "$OWNER_VERIFIED_CANDIDATE" ]]; then
     [[ "$POS_SUPABASE_BACKEND" == "mcp" && ( "$DB_ONLY" == "1" ||
-       ( "$WEB_ONLY" == "1" && "$POS_VERCEL_BACKEND" == "mcp" && "$DEPLOY_MODE" == "remote" ) ) ]] ||
-      fail "Owner reuse requires MCP DB-only or provider-built MCP web-only scope."
+       ( ( "$WEB_ONLY" == "1" || -n "$INTEGRATED_RELEASE_PLAN" ) &&
+         "$POS_VERCEL_BACKEND" == "mcp" && "$DEPLOY_MODE" == "remote" ) ) ]] ||
+      fail "Owner reuse requires MCP DB-only or provider-built MCP web/integrated scope."
   fi
   [[ "$POS_VERCEL_BACKEND" == "cli" || "$POS_VERCEL_BACKEND" == "mcp" ]] || fail "Unknown Vercel backend."
   if [[ "$POS_VERCEL_BACKEND" == "mcp" ]]; then
@@ -477,8 +478,8 @@ validate_cloud_options() {
   fi
   if [[ -n "$INTEGRATED_RELEASE_PLAN" ]]; then
     [[ "$DB_ONLY" == 0 && "$WEB_ONLY" == 0 && "$ONBOARDING_EDGE_ONLY" == 0 &&
-       "$ROLLBACK_HIERARCHY" == 0 && "$MIGRATION_OPTION_SET" == 0 && -z "$MIGRATION_FILE" &&
-       -z "$OWNER_VERIFIED_CANDIDATE" ]] || fail "Integrated plan cannot be combined with another release scope or owner waiver."
+       "$ROLLBACK_HIERARCHY" == 0 && "$MIGRATION_OPTION_SET" == 0 && -z "$MIGRATION_FILE" ]] ||
+       fail "Integrated plan cannot be combined with another release scope."
     python3 -B "$ROOT_DIR/scripts/cloud_deployment/integrated_release.py" validate --plan "$INTEGRATED_RELEASE_PLAN"
   fi
 }
@@ -635,7 +636,12 @@ preflight() {
   enforce_origin_main_ancestry
   # Read-only connection and contract failures must precede the long recipe.
   initialize_cloud_execution
-
+  # Local/provider configuration must be selected before the expensive recipe.
+  # The provider validates its own values and emits a required build attestation.
+  if [[ "$DB_ONLY" != "1" && "$ROLLBACK_HIERARCHY" != "1" && "$ONBOARDING_EDGE_ONLY" != "1" ]]; then
+    ensure_flutter_env
+    verify_allowed_production_origins
+  fi
   if [[ "$POS_SUPABASE_BACKEND" == "cli" ]]; then
   [[ -f "$PROJECT_REF_FILE" ]] || fail "Missing project ref file: $PROJECT_REF_FILE"
   local project_ref
@@ -1148,6 +1154,10 @@ rollback_hierarchy() {
 ensure_flutter_env() {
   load_env
   reject_target_overrides
+  if [[ "$POS_VERCEL_BACKEND" == "mcp" && "$DEPLOY_MODE" == "remote" ]]; then
+    printf 'PUBLIC_BUILD_ENV=PENDING_PROVIDER_ATTESTATION; no local values are required or retrieved.\n'
+    return 0
+  fi
   [[ -n "${SUPABASE_URL:-}" ]] || fail "SUPABASE_URL is not set."
   [[ -n "${SUPABASE_ANON_KEY:-}" ]] || fail "SUPABASE_ANON_KEY is not set."
 

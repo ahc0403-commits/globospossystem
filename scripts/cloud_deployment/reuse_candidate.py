@@ -18,6 +18,7 @@ SUPPORT_PATHS = {
     'scripts/cloud_deployment/reuse_candidate.py',
     'scripts/cloud_deployment/test_reuse_candidate.py',
     'docs/pos/CLOUD_DEPLOYMENT.md',
+    'CLAUDE.md',
 }
 COMPAT_FIXES = {
     'supabase/migrations/20261030083248_menu_discount_quantities.sql': (
@@ -38,9 +39,19 @@ def changed_support_paths(before, after):
     return changed
 
 
+def original_kind(original):
+    kind = original.get('kind')
+    gate.require(kind in {'candidate', 'exact-main'}, 'Invalid original verification kind')
+    if kind == 'exact-main':
+        gate.require(original.get('profile') == 'production-checks',
+                     'Exact-main reuse requires the complete production-checks recipe')
+    return kind
+
+
 def verify(evidence, sql_evidence=None):
     evidence = Path(evidence).resolve()
     original = json.loads((evidence / 'receipt.json').read_text())
+    kind = original_kind(original)
     sha = original['sourceBefore']['sha']
     gate.require(len(sha) == 40 and all(c in '0123456789abcdef' for c in sha), 'Invalid candidate identity')
     current = gate.source(ROOT)
@@ -53,7 +64,7 @@ def verify(evidence, sql_evidence=None):
         subprocess.run(['git', 'worktree', 'add', '--detach', str(snapshot), sha], cwd=ROOT,
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
-            receipt = gate.verify(evidence, root=snapshot, kind='candidate')
+            receipt = gate.verify(evidence, root=snapshot, kind=kind)
         finally:
             subprocess.run(['git', 'worktree', 'remove', '--force', str(snapshot)], cwd=ROOT, check=True)
     changed = changed_support_paths(receipt['sourceBefore']['inputHashes'], current['inputHashes'])
@@ -74,6 +85,8 @@ def verify(evidence, sql_evidence=None):
     return {'type': 'pos-owner-repeat-verification-waiver', 'status': 'NOT_RUN_OWNER_WAIVER',
             'candidateSourceSha': sha, 'releaseSourceSha': current['sha'],
             'candidateVerificationStatus': 'PASS', 'applicationInputsVerified': True,
+            'originalVerificationKind': kind,
+            'originalFinishedAt': receipt['finishedAt'],
             'changedReleaseSupportPaths': [p for p in changed if p in SUPPORT_PATHS],
             'sqlCompatibilityFixes': fixes, 'sqlCompatibilityEvidence': sql_proof,
             'candidateReceiptSha256': hashlib.sha256((evidence / 'receipt.json').read_bytes()).hexdigest(),
