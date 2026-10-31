@@ -246,7 +246,9 @@ scripts/deploy_pos_production.sh --supabase-backend mcp --vercel-backend mcp \
 
 This is an authorized-production example, not a verification command. The login
 waiver is explicit and remains NOT_RUN_OWNER_WAIVER. The integrated scope rejects
-all other skip flags, owner-candidate reuse, mixed scopes and all Edge writes.
+all other skip flags, mixed scopes and all Edge writes. The explicit owner
+repeat-verification exception below also supports the provider-built integrated
+scope; it never fabricates a new full-run PASS.
 Read-only connection/function-contract/history checks precede the long recipe.
 The script then runs full final-main checks once, revalidates the plan and DB
 state, applies missing migrations sequentially through the existing atomic
@@ -278,16 +280,29 @@ tooling update does not install a runner, change remote protection or enable CI.
 `--owner-verified-candidate DIR` is an explicit exception for an owner who requests
 immediate deployment without repeating an already completed full run. The default
 path still runs fresh exact-main verification. The exception validates every log,
-artifact and input in the original complete candidate receipt at its actual Git
+artifact and input in the original complete candidate or exact-main
+production-checks receipt at its actual Git
 commit, then compares every current application, SQL, build and recipe input.
 Only the narrowly listed release-support files may differ. Any other change
-rejects reuse. Candidate evidence remains attributed to its original SHA.
+rejects reuse. Evidence remains attributed to its original SHA and finish time;
+the original six-hour expiry is not extended. The narrowly allowed support paths
+include the project release-policy document and this exception's tests.
 
 The new release records `NOT_RUN_OWNER_WAIVER`, never a fabricated exact-main PASS.
 Repeated local analysis/tests/compile and their SDK container are omitted; clean
 fresh exact-main checks, production Auth, atomic DB/history/configuration guards,
 the actual provider build, live source/JavaScript proof and HTTP checks remain.
 The login waiver is separate. Retain earlier failures and report them separately.
+
+For provider-built MCP deployments, frontend configuration stays in Vercel.
+The official script does not require local SUPABASE/Firebase values or retrieve
+them through the environment API. The pinned provider build still verifies the
+production project, public-key role, Firebase/VAPID identity and actual Auth
+settings, and its source/lock/toolchain/JavaScript attestation remains mandatory.
+CLI builds continue to require local frontend configuration. Local configuration
+and the explicitly pinned ALLOWED_ORIGINS are checked before the long recipe.
+This fixes the 2026-11-01 false local-SUPABASE_URL blocker after a completed
+exact-main run; the application and DB/build verification inputs are unchanged.
 
 The production discount migration needed one confirmed compatibility correction:
 `user_accessible_stores(uuid)` returns `SETOF uuid`, not a `store_id` column.

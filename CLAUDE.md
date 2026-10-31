@@ -170,7 +170,14 @@ or memory, and distinguish estimates from measurements and unverified items.
   `scripts/pos_local_release_gate.py run --kind exact-main --profile production-checks`;
   analysis, full Flutter/browser/SQL/security regressions remain mandatory.
   It reuses only that invocation's intact SHA/input-bound results across its
-  phases; it never accepts a supplied PASS receipt. Source, lockfile, recipe or
+  phases; it never accepts an unverified supplied PASS receipt. The explicit
+  owner repeat-verification exception may validate a complete candidate or
+  exact-main production-checks receipt at its original SHA, with the original
+  six-hour expiry and every log/artifact intact. Only the documented release
+  support paths may differ; app, SQL, lockfile, build, recipe and tool changes
+  reject reuse. Record repeated checks as NOT_RUN_OWNER_WAIVER, preserve the
+  original PASS identity, and run checks for the changed release tooling.
+  Source, lockfile, recipe or
   tool changes invalidate evidence. Do not rerun covered analysis/tests or a
   generic web compilation after those checks. Build once with actual production
   configuration and verify the deployed build identity/bytes separately.
