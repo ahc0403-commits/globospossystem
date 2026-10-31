@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:uuid/uuid.dart';
 import 'sales_export_validation.dart';
 import 'misa_description_normalization.dart';
+import 'misa_vat_projection.dart';
 export 'sales_export_validation.dart';
 
 // MISA's discrepancy warning compares VND amounts after rounding to whole dong.
@@ -131,6 +132,9 @@ List<int> buildMisaPendingInvoiceWorkbook(
       'source_unit_price',
       'misa_unit_price',
       'misa_discount_amount',
+      'source_supply_amount',
+      'source_vat_amount',
+      'export_vat_adjustment',
     ].map(TextCellValue.new).toList(),
   );
   final storeTotals =
@@ -316,6 +320,22 @@ List<int> buildMisaPendingInvoiceWorkbook(
           _number(line['misa_unit_price'], fallback: amounts.unitPrice),
         ),
         DoubleCellValue(_number(line['misa_discount_amount'])),
+        DoubleCellValue(
+          _number(line['total_amount_ex_tax'], fallback: amounts.supplyAmount),
+        ),
+        DoubleCellValue(
+          _number(line['vat_amount'], fallback: amounts.vatAmount),
+        ),
+        DoubleCellValue(
+          ((amounts.vatAmount -
+                          _number(
+                            line['vat_amount'],
+                            fallback: amounts.vatAmount,
+                          )) *
+                      100)
+                  .round() /
+              100,
+        ),
       ]);
       ledger.appendRow([
         IntCellValue(3),
@@ -567,8 +587,20 @@ List<
 >
 _prepareMisaLines(List<Map<String, dynamic>> lines, {required bool isPhoto}) {
   if (lines.isEmpty) throw const FormatException('MISA_EXPORT_EMPTY_LINES');
+  final projected = isPhoto
+      ? null
+      : projectMisaVatLines([
+          for (final line in lines)
+            (
+              supply: _number(line['total_amount_ex_tax']),
+              rate: _number(line['vat_rate']),
+              vat: _number(line['vat_amount']),
+            ),
+        ]);
+  var lineIndex = 0;
   return lines
       .map((line) {
+        final projection = projected?[lineIndex++];
         if (!isPhoto &&
             (_text(line['invoice_name_vi']).isEmpty ||
                 _text(line['misa_unit_name']).isEmpty ||
@@ -591,8 +623,13 @@ _prepareMisaLines(List<Map<String, dynamic>> lines, {required bool isPhoto}) {
               )
             : null;
         final supply =
-            photoSplit?.supplyAmount ?? _number(line['total_amount_ex_tax']);
-        final vat = photoSplit?.vatAmount ?? _number(line['vat_amount']);
+            photoSplit?.supplyAmount ??
+            projection?.supply ??
+            _number(line['total_amount_ex_tax']);
+        final vat =
+            photoSplit?.vatAmount ??
+            projection?.vat ??
+            _number(line['vat_amount']);
         final unitPrice = supply / quantity;
         if (!isMisaLineTotalConsistent(quantity, unitPrice, supply) ||
             !isMisaVatConsistent(supply, rate, vat)) {
