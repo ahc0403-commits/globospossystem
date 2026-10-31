@@ -6,10 +6,11 @@ import 'package:archive/archive.dart';
 import 'package:uuid/uuid.dart';
 import 'sales_export_validation.dart';
 import 'misa_description_normalization.dart';
-import 'misa_vat_projection.dart';
+import 'misa_vat_rounding.dart';
 export 'sales_export_validation.dart';
+export 'misa_vat_rounding.dart';
 
-// MISA's discrepancy warning compares VND amounts after rounding to whole dong.
+// Photo's existing gross-split contract uses its original full precision.
 bool isMisaVatConsistent(double supply, double rate, double vat) =>
     supply.isFinite &&
     rate.isFinite &&
@@ -32,8 +33,7 @@ bool isMisaVatSummaryConsistent(
     );
   }
   return totals.entries.every(
-    (entry) =>
-        isMisaVatConsistent(entry.value.supply, entry.key, entry.value.vat),
+    (e) => isMisaVatConsistent(e.value.supply, e.key, e.value.vat),
   );
 }
 
@@ -204,7 +204,7 @@ List<int> buildMisaPendingInvoiceWorkbook(
           ]);
 
     final preparedLines = _prepareMisaLines(lines, isPhoto: isPhoto);
-    if (!isMisaVatSummaryConsistent(
+    if (!(isPhoto ? isMisaVatSummaryConsistent : misaSourceVatSummaryMatches)(
       preparedLines.map(
         (p) => (
           supply: p.amounts.supplyAmount,
@@ -326,16 +326,7 @@ List<int> buildMisaPendingInvoiceWorkbook(
         DoubleCellValue(
           _number(line['vat_amount'], fallback: amounts.vatAmount),
         ),
-        DoubleCellValue(
-          ((amounts.vatAmount -
-                          _number(
-                            line['vat_amount'],
-                            fallback: amounts.vatAmount,
-                          )) *
-                      100)
-                  .round() /
-              100,
-        ),
+        const DoubleCellValue(0),
       ]);
       ledger.appendRow([
         IntCellValue(3),
@@ -445,6 +436,7 @@ List<int> buildMisaPendingInvoiceWorkbook(
     delivery.setColumnWidth(2, 80);
   }
   validateMisaEmailDeliveryWorkbook(workbook);
+  validateMisaWorkbookSourceAmounts(workbook, jobs);
   for (var index = 0; index < _headers.length; index++) {
     sheet.setColumnWidth(index, switch (index) {
       2 || 4 || 5 || 10 => 28,
@@ -577,6 +569,150 @@ void validateMisaEmailDeliveryWorkbook(Excel workbook) {
   }
 }
 
+/// Compares actual cells with the independently supplied receipt snapshots.
+/// Neither the workbook's audit columns nor its hashes are a source of truth.
+void validateMisaWorkbookSourceAmounts(
+  Excel workbook,
+  List<Map<String, dynamic>> sourceJobs,
+) {
+  Never reject() =>
+      throw const FormatException('MISA_EXPORT_SOURCE_AMOUNT_MISMATCH');
+  final sheet = workbook.tables['Hóa đơn GTGT'];
+  final mapping = workbook.tables['Invoice Mapping'];
+  final ledger = workbook.tables['POS Ledger'];
+  if (sheet == null || mapping == null || ledger == null) reject();
+  // Sheet.rows materializes the whole sheet: cache each sheet once to keep
+  // source reconciliation linear in the number of exported lines.
+  final rows = <Sheet, List<List<Data?>>>{
+    sheet: sheet.rows,
+    mapping: mapping.rows,
+    ledger: ledger.rows,
+  };
+  Object? cell(Sheet s, int row, int col) =>
+      row < rows[s]!.length && col < rows[s]![row].length
+      ? rows[s]![row][col]?.value
+      : null;
+  void number(Sheet s, int row, int col, double expected) {
+    if (salesExportNumber(cell(s, row, col)?.toString()) != expected) reject();
+  }
+
+  void text(Sheet s, int row, int col, String expected) {
+    if ((cell(s, row, col)?.toString() ?? '') != expected) reject();
+  }
+
+  for (final entry in const {
+    13: 'source_supply_amount',
+    14: 'source_vat_amount',
+    15: 'export_vat_adjustment',
+  }.entries) {
+    text(mapping, 0, entry.key, entry.value);
+  }
+  final ordered = [...sourceJobs]
+    ..sort((a, b) {
+      final time = _saleDate(a).compareTo(_saleDate(b));
+      return time != 0
+          ? time
+          : '${a['source_system']}:${a['receipt_id'] ?? a['id']}'.compareTo(
+              '${b['source_system']}:${b['receipt_id'] ?? b['id']}',
+            );
+    });
+  var outputRow = 8, auditRow = 1, rounded = 0;
+  double gross = 0;
+  for (var invoice = 0; invoice < ordered.length; invoice++) {
+    final job = ordered[invoice];
+    final photo = job['source_system'] == 'photo_objet_moers';
+    for (final line in _maps(job['line_items_snapshot'])) {
+      final quantity = salesExportNumber(line['quantity'])!;
+      final split = photo
+          ? splitMisaGrossAmount(_number(line['paying_amount_inc_tax']), 8)
+          : null;
+      final supply =
+          split?.supplyAmount ??
+          salesExportNumber(line['total_amount_ex_tax'])!;
+      final vat = split?.vatAmount ?? salesExportNumber(line['vat_amount'])!;
+      final rate = photo ? 8.0 : salesExportNumber(line['vat_rate'])!;
+      text(sheet, outputRow, 0, '${invoice + 1}');
+      number(sheet, outputRow, 12, quantity);
+      number(sheet, outputRow, 13, supply / quantity);
+      number(sheet, outputRow, 14, supply);
+      number(sheet, outputRow, 15, rate);
+      number(sheet, outputRow, 16, vat);
+      text(mapping, auditRow, 0, '${invoice + 1}');
+      number(mapping, auditRow, 1, (outputRow + 1).toDouble());
+      number(mapping, auditRow, 10, _number(line['unit_price']));
+      number(
+        mapping,
+        auditRow,
+        11,
+        _number(line['misa_unit_price'], fallback: supply / quantity),
+      );
+      number(mapping, auditRow, 12, _number(line['misa_discount_amount']));
+      number(
+        mapping,
+        auditRow,
+        13,
+        _number(line['total_amount_ex_tax'], fallback: supply),
+      );
+      number(mapping, auditRow, 14, _number(line['vat_amount'], fallback: vat));
+      number(mapping, auditRow, 15, 0);
+      if (!photo) {
+        text(ledger, auditRow, 3, _text(job['source_system']));
+        text(ledger, auditRow, 4, _text(job['receipt_id'] ?? job['id']));
+        text(ledger, auditRow, 5, _text(job['receipt_number']));
+        text(ledger, auditRow, 6, _text(line['order_item_id']));
+        text(ledger, auditRow, 7, _text(line['menu_item_id']));
+        number(ledger, auditRow, 8, (invoice + 1).toDouble());
+        number(ledger, auditRow, 9, (outputRow + 1).toDouble());
+        text(
+          ledger,
+          auditRow,
+          10,
+          _firstText([
+            job['source_hash'],
+            sha256.convert(utf8.encode(jsonEncode(job))).toString(),
+          ]),
+        );
+        text(
+          ledger,
+          auditRow,
+          12,
+          sha256.convert(utf8.encode(jsonEncode(line))).toString(),
+        );
+        for (final entry in const {
+          3: 'invoice_profile_id',
+          4: 'invoice_approval_type',
+          5: 'invoice_mapping_version',
+          6: 'invoice_effective_from',
+          7: 'invoice_effective_to',
+          8: 'invoice_store_id',
+          9: 'invoice_source_reference',
+        }.entries) {
+          text(mapping, auditRow, entry.key, _text(line[entry.value]));
+        }
+      }
+      gross += supply + vat;
+      rounded += supply.round() + vat.round();
+      outputRow++;
+      auditRow++;
+    }
+  }
+  if (sheet.maxRows != outputRow ||
+      mapping.maxRows != auditRow ||
+      ledger.maxRows != auditRow) {
+    reject();
+  }
+  final contract = workbook.tables['Export Contract'];
+  if (contract == null) reject();
+  final values = {
+    for (final row in contract.rows)
+      if (row.length >= 2) '${row[0]?.value}': '${row[1]?.value}',
+  };
+  if (values['rounded_line_gross'] != '$rounded' ||
+      values['rounding_difference'] != (gross - rounded).toStringAsFixed(2)) {
+    reject();
+  }
+}
+
 List<
   ({
     Map<String, dynamic> line,
@@ -587,20 +723,8 @@ List<
 >
 _prepareMisaLines(List<Map<String, dynamic>> lines, {required bool isPhoto}) {
   if (lines.isEmpty) throw const FormatException('MISA_EXPORT_EMPTY_LINES');
-  final projected = isPhoto
-      ? null
-      : projectMisaVatLines([
-          for (final line in lines)
-            (
-              supply: _number(line['total_amount_ex_tax']),
-              rate: _number(line['vat_rate']),
-              vat: _number(line['vat_amount']),
-            ),
-        ]);
-  var lineIndex = 0;
   return lines
       .map((line) {
-        final projection = projected?[lineIndex++];
         if (!isPhoto &&
             (_text(line['invoice_name_vi']).isEmpty ||
                 _text(line['misa_unit_name']).isEmpty ||
@@ -623,16 +747,15 @@ _prepareMisaLines(List<Map<String, dynamic>> lines, {required bool isPhoto}) {
               )
             : null;
         final supply =
-            photoSplit?.supplyAmount ??
-            projection?.supply ??
-            _number(line['total_amount_ex_tax']);
-        final vat =
-            photoSplit?.vatAmount ??
-            projection?.vat ??
-            _number(line['vat_amount']);
+            photoSplit?.supplyAmount ?? _number(line['total_amount_ex_tax']);
+        final vat = photoSplit?.vatAmount ?? _number(line['vat_amount']);
         final unitPrice = supply / quantity;
         if (!isMisaLineTotalConsistent(quantity, unitPrice, supply) ||
-            !isMisaVatConsistent(supply, rate, vat)) {
+            !(isPhoto ? isMisaVatConsistent : misaSourceVatMatches)(
+              supply,
+              rate,
+              vat,
+            )) {
           throw const FormatException('MISA_EXPORT_SOURCE_AMOUNT_MISMATCH');
         }
         return (

@@ -105,7 +105,7 @@ void main() {
       expect(export.receipts.single.lineItems.single.vatAmount, 23600);
     });
     test(
-      'exports a balanced half-dong allocation with source audit, combined=$combined',
+      'exports half-dong source amounts exactly with source audit, combined=$combined',
       () {
         final amounts = <(double, double)>[
           (9187.48, 735),
@@ -131,14 +131,16 @@ void main() {
         expect(rows, hasLength(amounts.length));
         for (var i = 0; i < rows.length; i++) {
           final supply = _value(rows[i], 14), vat = _value(rows[i], 16);
-          expect(isMisaVatConsistent(supply, 8, vat), isTrue);
+          expect(misaSourceVatMatches(supply, 8, vat), isTrue);
           expect(
             supply + vat,
             closeTo(amounts[i].$1 + amounts[i].$2, 0.000001),
           );
           expect(_value(audit[i], 13), amounts[i].$1);
           expect(_value(audit[i], 14), amounts[i].$2);
-          expect(_value(audit[i], 15), closeTo(vat - amounts[i].$2, 0.000001));
+          expect(supply, amounts[i].$1);
+          expect(vat, amounts[i].$2);
+          expect(_value(audit[i], 15), 0);
         }
         expect(
           rows.fold<double>(0, (n, r) => n + _value(r, 14)),
@@ -152,11 +154,15 @@ void main() {
       },
     );
     test(
-      'blocks a boundary mismatch that cannot preserve totals, combined=$combined',
+      'accepts a two-decimal source boundary without redistribution, combined=$combined',
       () {
         final export = _export([_line(15006.21, 8)..['vat_amount'] = 1200.50]);
-        expect(export.isReadyForDownload, isFalse);
-        expect(() => build(export), throwsFormatException);
+        expect(export.isReadyForDownload, isTrue);
+        final row = Excel.decodeBytes(
+          build(export),
+        ).tables['Hóa đơn GTGT']!.rows[8];
+        expect(_value(row, 14), 15006.21);
+        expect(_value(row, 16), 1200.50);
       },
     );
     test('blocks a paid amount mismatch, combined=$combined', () {
