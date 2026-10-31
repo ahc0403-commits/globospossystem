@@ -7,7 +7,7 @@ import '../../../core/config/integration_availability.dart';
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
-import '../../../main.dart';
+import '../../../core/ui/app_theme.dart';
 import '../delivery_models.dart';
 import '../delivery_settlement_provider.dart';
 import '../../auth/auth_provider.dart';

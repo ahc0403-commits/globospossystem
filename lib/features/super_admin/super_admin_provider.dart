@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/store_revenue_summary_service.dart';
 import '../../core/services/store_service.dart';
 import '../../core/services/catalog_query_service.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../../core/utils/coalesced_refresh.dart';
 import '../report/report_provider.dart';
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import '../../../main.dart';
+import '../../../core/services/pos_backend.dart';
 import '../../restaurant_sales_export/invoice_mapping_service.dart';
 import 'invoice_profile_editor.dart';
 import 'invoice_mapping_import_dialog.dart';

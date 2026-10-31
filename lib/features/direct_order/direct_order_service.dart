@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'direct_order_models.dart';
 import 'direct_order_cart_draft.dart';
 import 'direct_order_requirements.dart';

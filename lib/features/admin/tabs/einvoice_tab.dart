@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
-import '../../../main.dart';
+import '../../../core/services/pos_backend.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
 

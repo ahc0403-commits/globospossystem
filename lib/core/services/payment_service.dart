@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 import '../payments/payment_method_contract.dart';
 
 class PaymentSplitInput {

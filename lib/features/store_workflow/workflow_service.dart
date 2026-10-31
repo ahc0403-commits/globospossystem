@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 typedef WorkflowRpc =
     Future<dynamic> Function(String name, Map<String, dynamic> params);

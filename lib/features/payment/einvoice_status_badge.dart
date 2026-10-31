@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../main.dart';
+import '../../core/ui/app_theme.dart';
 import 'einvoice_provider.dart';
 
 /// Small badge showing the meInvoice queue status for a given order.

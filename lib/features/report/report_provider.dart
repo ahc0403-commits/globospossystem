@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/payments/payment_method_contract.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'menu_sales_analytics.dart';
 
 class DailyRevenue {

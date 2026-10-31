@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'inventory_lot_workspace.dart' show InventoryLotRpc;
 
 /// Reviews the immutable PO contract and records an explicit administrator action.

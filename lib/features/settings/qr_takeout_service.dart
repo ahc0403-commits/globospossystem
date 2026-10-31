@@ -1,4 +1,4 @@
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 class QrTakeoutAvailability {
   const QrTakeoutAvailability({

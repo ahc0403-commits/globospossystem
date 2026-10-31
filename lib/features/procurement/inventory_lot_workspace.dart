@@ -5,7 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/services/inventory_service.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'inventory_lot_editor.dart';
 import 'procurement_inspection_dialog.dart';
 

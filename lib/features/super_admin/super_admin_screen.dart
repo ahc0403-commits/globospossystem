@@ -15,7 +15,8 @@ import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/number_input_utils.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
+import '../../core/ui/app_theme.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../admin/tabs/reports_tab.dart';
@@ -27,6 +28,7 @@ import '../qc/qc_provider.dart';
 import '../restaurant_sales_export/restaurant_sales_export_screen.dart';
 import 'super_admin_provider.dart';
 import 'brand_dialog.dart';
+import 'legal_entity_dialog.dart';
 import 'store_onboarding.dart';
 
 const _superAdminScrollPadding = EdgeInsets.only(bottom: 96);
@@ -1121,6 +1123,17 @@ class _RestaurantsTab extends StatelessWidget {
                       onPressed: _openOfficeSystem,
                       icon: const Icon(Icons.business),
                       label: Text(l10n.superAdminGoToOfficeSystem),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('super_admin_add_legal_entity_action'),
+                      onPressed: () async {
+                        final entity = await showLegalEntityEditor(context);
+                        if (entity != null && context.mounted) {
+                          await notifier.loadLegalEntityStructure(force: true);
+                        }
+                      },
+                      icon: const Icon(Icons.business_outlined),
+                      label: Text(l10n.superAdminLegalEntity),
                     ),
                     OutlinedButton.icon(
                       key: const Key('super_admin_manage_brands_action'),

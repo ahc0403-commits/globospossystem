@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class DiscountService {
   Future<Map<String, dynamic>> applyOrderDiscount({

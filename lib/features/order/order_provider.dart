@@ -10,7 +10,7 @@ import '../../core/services/operational_day_service.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/polling_utils.dart';
 import '../../core/utils/time_utils.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'order_model.dart';
 
 class OrderState {

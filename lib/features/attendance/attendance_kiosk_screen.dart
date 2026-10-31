@@ -10,7 +10,7 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../core/utils/time_utils.dart';
-import '../../main.dart';
+import '../../core/ui/app_theme.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';

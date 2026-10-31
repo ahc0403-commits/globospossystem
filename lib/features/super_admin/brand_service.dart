@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 class BrandPage {
   const BrandPage(this.items, this.hasMore);

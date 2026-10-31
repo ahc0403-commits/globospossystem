@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 
 bool isValidPrinterIpv4Address(String value) {
   final parts = value.trim().split('.');

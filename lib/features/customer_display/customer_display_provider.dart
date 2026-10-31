@@ -7,7 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/digital_receipt_service.dart';
 import '../../core/utils/live_sync_scope.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../../core/payments/collection_bank.dart';
 
 class CustomerDisplayItem {

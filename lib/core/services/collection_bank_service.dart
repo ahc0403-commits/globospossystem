@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 import '../payments/collection_bank.dart';
 
 class CollectionBankService {

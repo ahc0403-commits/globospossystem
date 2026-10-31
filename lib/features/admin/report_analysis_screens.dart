@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/toast/toast.dart';
-import '../../main.dart';
+import '../../core/ui/app_theme.dart';
 import '../report/menu_sales_analytics.dart';
 import '../report/menu_sales_analytics_panel.dart';
 import '../report/report_excel_file.dart';

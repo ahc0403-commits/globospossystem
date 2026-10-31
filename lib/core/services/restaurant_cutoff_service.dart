@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../main.dart';
+import 'pos_backend.dart';
 
 class RestaurantCutoffState {
   const RestaurantCutoffState({

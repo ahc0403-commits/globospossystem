@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'report_provider.dart';
 
 typedef RevenueHistoryRange = ({String storeId, DateTime start, DateTime end});

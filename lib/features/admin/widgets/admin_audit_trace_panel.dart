@@ -4,7 +4,7 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
-import '../../../main.dart';
+import '../../../core/ui/app_theme.dart';
 import '../providers/admin_audit_provider.dart';
 
 class AdminAuditTracePanel extends ConsumerWidget {

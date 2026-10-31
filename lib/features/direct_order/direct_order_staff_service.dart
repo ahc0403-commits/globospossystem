@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'direct_order_service.dart';
 import 'direct_order_requirements.dart';
 import 'package:uuid/uuid.dart';

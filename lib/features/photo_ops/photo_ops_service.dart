@@ -1,7 +1,7 @@
 import '../../core/services/attendance_service.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/services/payroll_service.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'photo_ops_sales_export.dart';
 
 const _photoObjetBrandId = '77000000-0000-0000-0000-000000000001';

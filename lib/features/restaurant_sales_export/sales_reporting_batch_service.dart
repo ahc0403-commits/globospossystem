@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../photo_sales_import/photo_sales_registered_export.dart';
 import 'combined_sales_export.dart';
 import 'restaurant_sales_export.dart';

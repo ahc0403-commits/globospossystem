@@ -29,7 +29,7 @@ import 'combined_sales_export.dart';
 import 'daily_sales_summary.dart';
 import 'daily_sales_report_service.dart';
 import '../../core/payments/collection_bank.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'pos_receipt_ledger.dart';
 import 'pos_receipt_ledger_service.dart';
 import 'restaurant_sales_export.dart';

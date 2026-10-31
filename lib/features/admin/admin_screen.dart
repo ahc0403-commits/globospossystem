@@ -13,7 +13,7 @@ import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
 import '../../core/utils/permission_utils.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
 import 'tabs/menu_tab.dart';

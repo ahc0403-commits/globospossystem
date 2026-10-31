@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 enum ServiceStationKind { kitchen, tray, floor }
 

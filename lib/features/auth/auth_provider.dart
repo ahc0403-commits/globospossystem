@@ -14,7 +14,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'
 import '../../core/services/navigation_history_service.dart';
 import '../../core/auth/terminal_auth.dart';
 import '../../core/utils/role_routes.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import '../admin/providers/settings_provider.dart';
 import '../admin/providers/staff_provider.dart';
 import '../inventory/inventory_provider.dart';

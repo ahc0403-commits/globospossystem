@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/i18n/locale_extensions.dart';
 import '../core/services/connectivity_service.dart';
 import '../core/ui/app_primitives.dart';
-import '../main.dart';
+import '../core/ui/app_theme.dart';
 
 class OfflineBanner extends ConsumerWidget {
   const OfflineBanner({super.key});

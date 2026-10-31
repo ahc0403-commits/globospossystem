@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/i18n/locale_extensions.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'brand_dialog.dart';
 import 'store_registration_config.dart';
 import 'super_admin_provider.dart';

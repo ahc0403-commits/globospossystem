@@ -4,7 +4,7 @@ import 'quality_profile_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 class StoreProcurementSetupService {
   StoreProcurementSetupService({SupabaseClient? client}) : _client = client;

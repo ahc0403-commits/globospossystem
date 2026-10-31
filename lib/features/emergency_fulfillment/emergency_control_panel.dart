@@ -4,7 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/models/fulfillment_mode.dart';
 import '../../core/ui/pos_design_tokens.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 class EmergencyStoreStatus {
   const EmergencyStoreStatus({

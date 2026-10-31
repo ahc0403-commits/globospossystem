@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "project": "ynriuoomotxuwhuxxmhj",
+  "backwardCompatible": true,
+  "contracts": [
+    {
+      "signature": "public.user_accessible_stores(uuid)",
+      "resultType": "SETOF uuid"
+    },
+    {
+      "signature": "public.sync_active_order_promotion(uuid,uuid,timestamptz)",
+      "resultType": "order_discounts"
+    },
+    {
+      "signature": "public.admin_upsert_tax_entity_v2(uuid,text,text,text,text)",
+      "resultType": "tax_entity"
+    },
+    {
+      "signature": "public.get_kds_high_watermark_v2()",
+      "resultType": "bigint"
+    }
+  ],
+  "migrations": [
+    {
+      "path": "supabase/migrations/20261031164134_pos_integrated_resilience.sql",
+      "sha256": "1c94bc56c9d77f9b0e16d02762d708d5f6655073765f91b0f24b088ef82b04aa"
+    }
+  ],
+  "web": true,
+  "rollback": "Preserve the verified preceding web deployment and all financial/reservation/history data. The statement triggers keep the existing allocation helper and old event contract. Web rollback can keep this migration. A DB reversal requires a separately reviewed forward migration restoring the prior row trigger; never erase migration history or business data."
+}

@@ -1,4 +1,4 @@
-import '../../main.dart';
+import 'pos_backend.dart';
 import '../../features/restaurant_sales_export/daily_sales_report_service.dart';
 
 class DailyClosingService {

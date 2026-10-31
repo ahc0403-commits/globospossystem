@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/utils/deadline_http_client.dart';
 
 enum KdsSyncMode {
   legacy,
@@ -246,9 +247,20 @@ class KdsTicketResult {
 // One shared lane per authenticated notifier, across foreground, watchdog,
 // catch-up, confirmed-command refreshes and optional history. Retry here only.
 class KdsReadCoordinator {
+  KdsReadCoordinator({this.maxPending = 8});
+  final int maxPending;
+  int _pending = 0;
   Future<void> _tail = Future.value();
   Future<T> run<T>(Future<T> Function() read) {
+    if (_pending >= maxPending) {
+      return Future.error(StateError('KDS_READ_QUEUE_FULL'));
+    }
+    _pending++;
+    final queuedAt = Stopwatch()..start();
     final result = _tail.then((_) async {
+      if (queuedAt.elapsed >= const Duration(seconds: 15)) {
+        throw TimeoutException('KDS read expired while queued');
+      }
       final started = Stopwatch()..start();
       for (var attempt = 0; ; attempt++) {
         try {
@@ -279,7 +291,14 @@ class KdsReadCoordinator {
         }
       }
     });
-    _tail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _tail = result.then<void>(
+      (_) {
+        _pending--;
+      },
+      onError: (Object _, StackTrace __) {
+        _pending--;
+      },
+    );
     return result;
   }
 }
@@ -341,10 +360,25 @@ class SupabaseKdsSyncGateway implements KdsSyncGateway {
   });
   final KdsReadCoordinator? coordinator;
   final bool boundedJeongabok;
-  Future<dynamic> _rpc(String name, {Map<String, dynamic>? params}) =>
-      coordinator == null
-      ? client.rpc(name, params: params)
-      : coordinator!.run(() async => await client.rpc(name, params: params));
+  Future<dynamic> _rpc(String name, {Map<String, dynamic>? params}) {
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    Future<dynamic> read() {
+      final db = PostgrestClient(
+        client.rest.url,
+        headers: client.rest.headers,
+        httpClient: DeadlineHttpClient(
+          client.rest.httpClient!,
+          deadline,
+          callTimeout: const Duration(seconds: 15),
+          maxResponseBytes: 16 * 1024 * 1024,
+        ),
+      );
+      return db.rpc(name, params: params);
+    }
+
+    return coordinator == null ? read() : coordinator!.run(read);
+  }
+
   Future<KdsTicketsResult> loadTickets(List<String> queueIds) async {
     if (!boundedJeongabok || queueIds.isEmpty || queueIds.length > 50) {
       throw ArgumentError('KDS_BATCH_BOUND');
@@ -482,6 +516,7 @@ class KdsRealtimeSync {
   bool _catchUpRequested = false;
   bool _connectedCallbackSent = false;
   int _subscribedChannels = 0;
+  DateTime _lastConfigCheck = DateTime.now();
   late int _cursor;
 
   int get cursor => _cursor;
@@ -568,7 +603,20 @@ class KdsRealtimeSync {
   Future<void> _watchdogTick() async {
     if (_disposed) return;
     try {
+      // Keep the 5s missed-delivery recovery budget; subscription identity is
+      // reconciled every 30s and control changes also arrive through deltas.
+      if (DateTime.now().difference(_lastConfigCheck) <
+          const Duration(seconds: 30)) {
+        final revision = await gateway.loadHighWatermark();
+        if (revision < _cursor) {
+          await onBootstrapRequired();
+        } else if (revision > _cursor) {
+          await catchUp();
+        }
+        return;
+      }
       final latest = await gateway.loadConfig();
+      _lastConfigCheck = DateTime.now();
       if (!config.hasSameSubscriptionAs(latest)) {
         await onBootstrapRequired();
         return;

@@ -1,4 +1,4 @@
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 typedef LedgerRpc =
     Future<dynamic> Function(String name, Map<String, dynamic> params);

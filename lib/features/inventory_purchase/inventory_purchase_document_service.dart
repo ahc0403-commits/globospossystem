@@ -12,7 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 import '../../core/services/inventory_service.dart';
 import '../../core/ui/app_fonts.dart';
 import '../../l10n/app_localizations.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 
 typedef InventoryPurchasePdfLoader = Future<Uint8List> Function(String path);
 typedef InventoryPurchasePngRasterizer =

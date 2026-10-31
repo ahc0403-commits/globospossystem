@@ -12,7 +12,7 @@ import '../../core/models/fulfillment_mode.dart';
 import '../../core/services/emergency_web_bridge.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/time_utils.dart';
-import '../../main.dart';
+import '../../core/services/pos_backend.dart';
 import 'kds_realtime_sync.dart';
 
 const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
