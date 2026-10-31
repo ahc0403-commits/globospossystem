@@ -1,10 +1,22 @@
+> **모든 명령 시작 전 필수 선행 확인**
+
+계획 수립·조사·구현·검증·운영 배포 등 모든 사용자 작업과 명령을 시작하기 전에
+[공통 작업 원칙](docs/WORKING_PRINCIPLES_KO.md), root `AGENTS.md`와 이 문서,
+현재 작업 경로에 적용되는 `AGENTS.md`·`CLAUDE.md`·`claude.md`의 최신 본문을
+먼저 읽고 따른다. 공통 작업 원칙이나 필수 프로젝트 지침이 없거나 읽을 수 없으면
+변경 작업을 시작하지 않고 정확한 파일 경로와 차단 이유를 보고한다.
+선택적 문서와 대소문자 별칭은 존재하고 적용되는 경우에 확인한다.
+
+이 요구는 에이전트가 따라야 하는 문서 지침이다. 이 문서 적용으로 셸 hook,
+sandbox, CI 또는 배포 스크립트에 기술적 강제가 추가된 것은 아니다.
+
 # CLAUDE.md — GLOBOSVN POS System
 
-When available, read `/Users/andreahn/.claude/CLAUDE.md` first and apply its
-shared rules. In cloud environments the Mac-specific file may not exist: report
-its absence and use these portable project instructions. The owner's cloud
-verification policy below supersedes local-only execution requirements for this
-project. Platform instructions and explicit user requests take precedence.
+Read the shared working principles before these project-specific rules and the
+instruction files applicable to the current path. Use the approved existing
+Codex Cloud workspace and its supported isolated environments. Platform
+instructions and explicit user requests take precedence; project-specific
+business rules and official release gates remain in this document.
 
 Preserve user changes and secrets. Prevent N+1 database and API access using
 bounded, set-based or batched reads and writes, suitable indexes and plans, and
