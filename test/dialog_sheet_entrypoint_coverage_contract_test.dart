@@ -24,6 +24,12 @@ class _OperationalCoverage {
 
 const _coverage = <_OperationalCoverage>[
   _OperationalCoverage(
+    source: 'lib/features/super_admin/legal_entity_dialog.dart',
+    directCalls: 1,
+    test: 'test/pos_integrated_resilience_test.dart',
+    markers: ['legal entity registration retries retain identity in ko en vi'],
+  ),
+  _OperationalCoverage(
     source: 'lib/features/store_procurement/quality_profile_editor.dart',
     directCalls: 1,
     test: 'test/store_lifecycle_overlay_test.dart',
@@ -618,7 +624,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 199 dialog and sheet entrypoints map to operational tests', () {
+  test('all 200 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -630,10 +636,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 196);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 197);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      199,
+      200,
     );
 
     final inventory = File(

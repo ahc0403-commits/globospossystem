@@ -4421,5 +4421,12 @@
   },
   "attendanceStaffLoadFailed": "직원 목록을 불러오지 못했습니다. 다시 시도하세요.",
   "attendanceNoActiveStaff": "활성 직원이 없습니다. 직원 등록과 선택 매장을 확인하세요.",
-  "attendancePayrollPinLoadFailed": "급여 PIN 상태를 확인하지 못해 급여 조회를 잠갔습니다. 근태 조회·추가는 계속 사용할 수 있습니다."
+  "attendancePayrollPinLoadFailed": "급여 PIN 상태를 확인하지 못해 급여 조회를 잠갔습니다. 근태 조회·추가는 계속 사용할 수 있습니다.",
+  "resilienceLegalEntityRegister": "법인 등록",
+  "resilienceLegalEntityName": "법인명",
+  "resilienceLegalEntityTaxCode": "세금번호",
+  "resilienceLegalEntityOwnership": "소유 유형",
+  "resilienceLegalEntityInternal": "내부 법인",
+  "resilienceLegalEntityExternal": "외부 법인",
+  "resilienceLegalEntityFailed": "등록하지 못했습니다. 세금번호와 권한을 확인하고 다시 시도하세요."
 }

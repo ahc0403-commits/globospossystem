@@ -14,6 +14,7 @@ import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/time_utils.dart';
 import '../../core/services/pos_backend.dart';
 import 'kds_realtime_sync.dart';
+import '../../core/utils/deadline_http_client.dart';
 
 const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
 const emergencyFloorDirectBeverageAlarmCoalesceDelay = Duration(seconds: 2);
@@ -1942,9 +1943,11 @@ class EmergencyFulfillmentNotifier
   final Set<String> _progressInFlight = {};
   final math.Random _pollRandom = math.Random();
   final KdsReadCoordinator _jeongabokReads = KdsReadCoordinator();
+  final RequestLifetime _kdsReadLifetime = RequestLifetime();
   bool _boundedJeongabok = false;
   SupabaseKdsSyncGateway _gateway({bool? bounded}) => SupabaseKdsSyncGateway(
     _client,
+    lifetime: _kdsReadLifetime,
     coordinator: (bounded ?? _boundedJeongabok) || _boundedJeongabok
         ? _jeongabokReads
         : null,
@@ -3611,6 +3614,7 @@ class EmergencyFulfillmentNotifier
 
   @override
   void dispose() {
+    _kdsReadLifetime.dispose();
     _subscriptionGeneration += 1;
     _realtimeRefreshTimer?.cancel();
     _pollTimer?.cancel();

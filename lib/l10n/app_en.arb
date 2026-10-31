@@ -4422,5 +4422,12 @@
   },
   "attendanceStaffLoadFailed": "Could not load the staff list. Please retry.",
   "attendanceNoActiveStaff": "No active staff. Check staff registration and the selected store.",
-  "attendancePayrollPinLoadFailed": "Payroll is locked because its PIN status could not be checked. Attendance review and manual entry remain available."
+  "attendancePayrollPinLoadFailed": "Payroll is locked because its PIN status could not be checked. Attendance review and manual entry remain available.",
+  "resilienceLegalEntityRegister": "Register legal entity",
+  "resilienceLegalEntityName": "Legal name",
+  "resilienceLegalEntityTaxCode": "Tax code",
+  "resilienceLegalEntityOwnership": "Ownership",
+  "resilienceLegalEntityInternal": "Internal",
+  "resilienceLegalEntityExternal": "External",
+  "resilienceLegalEntityFailed": "Registration failed. Check the tax code and your access, then retry."
 }

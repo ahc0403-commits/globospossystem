@@ -4421,5 +4421,12 @@
   },
   "attendanceStaffLoadFailed": "Không tải được danh sách nhân viên. Vui lòng thử lại.",
   "attendanceNoActiveStaff": "Không có nhân viên đang làm việc. Kiểm tra đăng ký nhân viên và cửa hàng đã chọn.",
-  "attendancePayrollPinLoadFailed": "Bảng lương đã khóa do không kiểm tra được mã PIN. Vẫn có thể xem và thêm chấm công."
+  "attendancePayrollPinLoadFailed": "Bảng lương đã khóa do không kiểm tra được mã PIN. Vẫn có thể xem và thêm chấm công.",
+  "resilienceLegalEntityRegister": "Đăng ký pháp nhân",
+  "resilienceLegalEntityName": "Tên pháp nhân",
+  "resilienceLegalEntityTaxCode": "Mã số thuế",
+  "resilienceLegalEntityOwnership": "Loại sở hữu",
+  "resilienceLegalEntityInternal": "Nội bộ",
+  "resilienceLegalEntityExternal": "Bên ngoài",
+  "resilienceLegalEntityFailed": "Đăng ký thất bại. Kiểm tra mã số thuế và quyền truy cập rồi thử lại."
 }

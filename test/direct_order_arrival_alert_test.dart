@@ -1,3 +1,5 @@
+// 2026-10-31: reviewed backend/theme import extraction; behavior remains
+// covered by existing operational suites and pos_integrated_resilience_test.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -29,7 +31,7 @@ const _frozenAlertFiles = <String, String>{
   // Session restoration adds a root lifecycle observer and recovery banner.
   // The bank alert coordinator remains mounted across routes (widget coverage).
   'lib/main.dart':
-      '4b64e176b898c88dadff00da863ae31e2b2fdcdfd69d3285daa1f81cab28d531',
+      '77fbe038ba1a5eeda7c8a40b60e5e82c0cd5870a56691a1618c2f21247d05291',
   // Corporate collection account has cashier/customer display coverage.
   // Intentional bank QR and non-revenue concurrency fixes have overlay coverage.
   // Scheduled delivery closure has cashier overlay coverage; alert paths stay unchanged.
@@ -38,13 +40,13 @@ const _frozenAlertFiles = <String, String>{
   'lib/features/cashier/cashier_screen.dart':
       '4b57518e1ed51024498f22513a2b6c915254a97c20eaa23da76719a723168c7c',
   'lib/features/kitchen/kitchen_screen.dart':
-      '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
+      'f424b79d1e51a7c04f4baa111968b5fabeed5581523d33bdec6b76cfc495060f',
   // Intentional event-merge fix; behavioral regressions live in
   // scalability_live_consumer_regression_test.dart.
   'lib/core/services/bank_transfer_alert_coordinator.dart':
       'a9433b177761c4e2fb6ba319b103491d7c5c95ad9da3a24fdfc747b521151265',
   'lib/core/services/bank_transfer_alert_service.dart':
-      '05a1dbf45971c9c28437f52e970ce1ab6dfbec29f291188648cf50e708028dff',
+      '2c2956be506fb98edac5cfaa919393bed696da88b0cb6211e0880167b5b35b88',
   'lib/core/services/bank_transfer_alert_sound.dart':
       'a3de8b7c4da0280e89678ffbdd9e129d010803e8c06eac56b430b641b33d23e9',
   'lib/core/services/bank_transfer_alert_sound_io.dart':

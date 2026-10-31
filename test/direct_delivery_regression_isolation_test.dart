@@ -1,3 +1,5 @@
+// 2026-10-31: reviewed backend/theme import extraction; behavior remains
+// covered by existing operational suites and pos_integrated_resilience_test.
 import 'dart:convert';
 import 'dart:io';
 
@@ -57,20 +59,20 @@ const _frozenFiles = <String, String>{
   // 2026-10-08: eager-load and retain item notes; menu-request behavior is
   // covered by direct_order_support_test and operational kitchen suites.
   'lib/features/kitchen/kitchen_provider.dart':
-      'fd35d653c09194249454d882aa5a5143df2827a68be7b2a441ea46b64c70cb25',
+      '129e3b6aa45015fd2cc581a6c33b4fdb687b7e6ac963192f60a6758b76dd4f40',
   'lib/features/kitchen/kitchen_screen.dart':
-      '6239c0e8ca1dc2b55a83da7906fc2b4e0c9e5134f135bdf9e506b54be8787c4c',
+      'f424b79d1e51a7c04f4baa111968b5fabeed5581523d33bdec6b76cfc495060f',
   // Receipt detail eagerly includes menu requests in the existing query.
   // Payment detail contracts cover the read; the atomic payment SQL is frozen.
   'lib/core/services/payment_service.dart':
-      '51f9d181fce06b2efb94ac073da3393e6e98a07ee418df252c812921fb9c0beb',
+      '1cd56241bfd6c838b95a505ea1edb84deb4a449f50fdb0bea4c2defac826595d',
   // Sugar VAT and mixed combo amounts are covered by beverage_sugar_vat_test.
   'lib/core/payments/payment_total_calculator.dart':
       'ee04b6d78af1b0dfed8cd7669e2e3e513d9140ca5ed4e6a3f089c946186efb9b',
   // Phase 4D moves the reconciled sales report to a server aggregate.
   // Real SQL/API and Excel coverage lives in financial_inputs_postgrest_test.dart.
   'lib/features/report/report_provider.dart':
-      '8ba89ba7b6937baecb78dd5bde9b9751ed160634b7d2ba536909b9ab0cba0548',
+      'cb540608cef001aeee68447d683e3f3bd93c994fb7576c7199f6ab2b18de4850',
   // 2026-10-06: forward the direct order reference for packing headers.
   // Runtime queue->agent bytes coverage verifies 3 sets; regular receipts
   // retain their existing financial behavior and have no utensil block.
