@@ -2,6 +2,30 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
+/// Owns per-request wrappers without owning the shared authenticated transport.
+class RequestLifetime {
+  final _clients = <DeadlineHttpClient>{};
+  bool _disposed = false;
+
+  void add(DeadlineHttpClient client) {
+    if (_disposed) {
+      client.close();
+      throw StateError('Request owner disposed');
+    }
+    _clients.add(client);
+  }
+
+  void remove(DeadlineHttpClient client) => _clients.remove(client);
+
+  void dispose() {
+    _disposed = true;
+    for (final client in _clients) {
+      client.close();
+    }
+    _clients.clear();
+  }
+}
+
 /// Per-job transport budget. Cancellation reaches IOClient/BrowserClient through
 /// the Supabase auth wrapper; this client never closes the shared auth client.
 class DeadlineHttpClient extends http.BaseClient {
@@ -15,9 +39,22 @@ class DeadlineHttpClient extends http.BaseClient {
   final DateTime deadline;
   final Duration callTimeout;
   final int maxResponseBytes;
+  bool _closed = false;
+  final _cancellations = <void Function()>{};
+
+  @override
+  void close() {
+    _closed = true;
+    for (final cancel in _cancellations.toList()) {
+      cancel();
+    }
+    _cancellations.clear();
+    // `inner` belongs to Supabase Auth, not this individual request.
+  }
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (_closed) throw StateError('Request transport closed');
     final remaining = deadline.difference(DateTime.now());
     if (remaining <= Duration.zero) {
       throw TimeoutException('Job deadline reached');
@@ -25,6 +62,12 @@ class DeadlineHttpClient extends http.BaseClient {
     final budget = remaining < callTimeout ? remaining : callTimeout;
     final abort = Completer<void>();
     final timer = Timer(budget, abort.complete);
+    void cancel() {
+      timer.cancel();
+      if (!abort.isCompleted) abort.complete();
+    }
+
+    _cancellations.add(cancel);
     final outgoing =
         http.AbortableStreamedRequest(
             request.method,
@@ -65,6 +108,7 @@ class DeadlineHttpClient extends http.BaseClient {
       throw TimeoutException('HTTP request cancelled at job deadline', budget);
     } finally {
       timer.cancel();
+      _cancellations.remove(cancel);
     }
   }
 }

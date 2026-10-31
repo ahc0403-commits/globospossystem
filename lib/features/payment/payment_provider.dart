@@ -417,6 +417,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   String? _displayedOrderId;
   final _refreshQueue = CoalescedRefresh();
   int _scopeGeneration = 0;
+  int _confirmedCommandRevision = 0;
   String? _channelStoreId;
   int? _channelGeneration;
   Timer? _eventRefreshTimer;
@@ -448,6 +449,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
   Future<void> _loadOrders(String storeId, int generation) async {
     if (!mounted || generation != _scopeGeneration) return;
+    final commandRevision = _confirmedCommandRevision;
     final businessDay = TimeUtils.currentVietnamBusinessDay();
     _scheduleBusinessDayRefresh(storeId, businessDay);
 
@@ -571,7 +573,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         businessDay,
       );
 
-      if (!mounted || generation != _scopeGeneration) return;
+      if (!mounted ||
+          generation != _scopeGeneration ||
+          commandRevision != _confirmedCommandRevision) {
+        return;
+      }
       final selected = state.selectedOrder;
       CashierOrder? updatedSelected;
       if (selected != null) {
@@ -593,7 +599,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
       await subscribeRealtime(storeId);
     } catch (error) {
-      if (!mounted || generation != _scopeGeneration) return;
+      if (!mounted ||
+          generation != _scopeGeneration ||
+          commandRevision != _confirmedCommandRevision) {
+        return;
+      }
       state = state.copyWith(error: 'Failed to load payable orders: $error');
     }
   }
@@ -1112,6 +1122,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
   void _confirmPayment(String storeId, Set<String> settledIds, int generation) {
     if (!mounted || generation != _scopeGeneration) return;
+    _confirmedCommandRevision++;
     state = state.copyWith(
       orders: state.orders
           .where((o) => !settledIds.contains(o.orderId))
@@ -1152,6 +1163,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       }, generation);
       return payment;
     } catch (error) {
+      if (!mounted || generation != _scopeGeneration) return null;
       await _recoverPromotionBoundary(error, storeId, [orderId]);
       state = state.copyWith(
         isProcessing: false,
@@ -1195,6 +1207,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       );
       return result;
     } catch (error) {
+      if (!mounted || generation != _scopeGeneration) return null;
       await _recoverPromotionBoundary(
         error,
         storeId,
@@ -1293,6 +1306,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       _confirmPayment(storeId, {orderId}, generation);
       return payment;
     } catch (error) {
+      if (!mounted || generation != _scopeGeneration) return null;
       final amountChanged =
           error is PostgrestException &&
           ((error.message == 'PAYMENT_AMOUNT_MISMATCH' &&
@@ -1336,6 +1350,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       _confirmPayment(storeId, {orderId}, generation);
       return payments;
     } catch (error) {
+      if (!mounted || generation != _scopeGeneration) return null;
       await _recoverPromotionBoundary(error, storeId, [orderId]);
       state = state.copyWith(
         isProcessing: false,

@@ -356,24 +356,33 @@ class SupabaseKdsSyncGateway implements KdsSyncGateway {
   const SupabaseKdsSyncGateway(
     this.client, {
     this.coordinator,
+    this.lifetime,
     this.boundedJeongabok = false,
   });
   final KdsReadCoordinator? coordinator;
+  final RequestLifetime? lifetime;
   final bool boundedJeongabok;
   Future<dynamic> _rpc(String name, {Map<String, dynamic>? params}) {
     final deadline = DateTime.now().add(const Duration(seconds: 15));
-    Future<dynamic> read() {
+    Future<dynamic> read() async {
+      final transport = DeadlineHttpClient(
+        client.rest.httpClient!,
+        deadline,
+        callTimeout: const Duration(seconds: 15),
+        maxResponseBytes: 16 * 1024 * 1024,
+      );
+      lifetime?.add(transport);
       final db = PostgrestClient(
         client.rest.url,
         headers: client.rest.headers,
-        httpClient: DeadlineHttpClient(
-          client.rest.httpClient!,
-          deadline,
-          callTimeout: const Duration(seconds: 15),
-          maxResponseBytes: 16 * 1024 * 1024,
-        ),
+        httpClient: transport,
       );
-      return db.rpc(name, params: params);
+      try {
+        return await db.rpc(name, params: params);
+      } finally {
+        lifetime?.remove(transport);
+        transport.close();
+      }
     }
 
     return coordinator == null ? read() : coordinator!.run(read);
