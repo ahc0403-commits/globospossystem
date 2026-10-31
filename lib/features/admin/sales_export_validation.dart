@@ -1,5 +1,5 @@
 import 'misa_description_normalization.dart';
-import 'misa_vat_projection.dart';
+import 'misa_vat_rounding.dart';
 
 /// Validation data deliberately excludes buyer contact and tax information.
 class SalesExportIssue {
@@ -154,19 +154,7 @@ List<SalesExportIssue> validateSalesExportJobs(
       continue;
     }
     final itemIds = <String>{};
-    final vatTotals = <double, ({double supply, double vat})>{};
-    final vatInputs = <MisaVatLine>[];
-    for (final entry in raw) {
-      if (entry is! Map) break;
-      final supply = salesExportNumber(entry['total_amount_ex_tax']);
-      final rate = salesExportNumber(entry['vat_rate']);
-      final vat = salesExportNumber(entry['vat_amount']);
-      if (supply == null || rate == null || vat == null) break;
-      vatInputs.add((supply: supply, rate: rate, vat: vat));
-    }
-    final projectedVat = !photo && vatInputs.length == raw.length
-        ? projectMisaVatLines(vatInputs)
-        : null;
+    final vatLines = <({double supply, double rate, double vat})>[];
     double gross = 0;
     for (final entry in raw) {
       currentLine++;
@@ -267,14 +255,10 @@ List<SalesExportIssue> validateSalesExportJobs(
             vat >= 0 &&
             rate >= 0 &&
             rate <= 100) {
-          final projected = projectedVat?[currentLine - 1];
-          if (!(supply * rate / 100).isFinite ||
-              (projected == null &&
-                  (supply * rate / 100).round() != vat.round())) {
+          if (!misaSourceVatMatches(supply, rate, vat)) {
             add(line, 'vat_amount', 'MISA_EXPORT_SOURCE_AMOUNT_MISMATCH');
           }
-          final prev = vatTotals[rate] ?? (supply: 0.0, vat: 0.0);
-          vatTotals[rate] = (supply: prev.supply + supply, vat: prev.vat + vat);
+          vatLines.add((supply: supply, rate: rate, vat: vat));
           gross += supply + vat;
         }
         final q = salesExportNumber(line['quantity']);
@@ -291,13 +275,8 @@ List<SalesExportIssue> validateSalesExportJobs(
       }
     }
     currentLine = 0;
-    for (final total in vatTotals.entries) {
-      if (!total.value.vat.isFinite ||
-          !(total.value.supply * total.key / 100).isFinite ||
-          (total.value.supply * total.key / 100).round() !=
-              total.value.vat.round()) {
-        add({}, 'vat_amount', 'MISA_EXPORT_SOURCE_VAT_SUMMARY_MISMATCH');
-      }
+    if (!misaSourceVatSummaryMatches(vatLines)) {
+      add({}, 'vat_amount', 'MISA_EXPORT_SOURCE_VAT_SUMMARY_MISMATCH');
     }
     final receiptGross = salesExportNumber(job['gross_sales']);
     if (!photo &&
