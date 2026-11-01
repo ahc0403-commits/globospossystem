@@ -78,7 +78,11 @@
       "sourceRoot": "lib/features/direct_order",
       "checks": [
         "feature.direct_order",
-        "official-full-recipe"
+        "official-full-recipe",
+        "direct-order-delivery-quality",
+        "direct-order-translation-help",
+        "direct-order-customer-chat-entry",
+        "direct-order-staff-chat-entry"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -574,6 +578,22 @@
     "runtime-catalog-postgres": {
       "path": "scripts/resilience/integration_runtime_catalog.py",
       "kind": "tooling"
+    },
+    "direct-order-delivery-quality": {
+      "path": "test/direct_order_delivery_quality_notice_test.dart",
+      "kind": "focused"
+    },
+    "direct-order-translation-help": {
+      "path": "test/direct_order_translation_test.dart",
+      "kind": "focused"
+    },
+    "direct-order-customer-chat-entry": {
+      "path": "test/direct_order_access_route_test.dart",
+      "kind": "focused"
+    },
+    "direct-order-staff-chat-entry": {
+      "path": "test/direct_order_photo_approval_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [

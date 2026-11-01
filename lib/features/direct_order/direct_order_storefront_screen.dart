@@ -3,6 +3,7 @@ import '../../core/menu/customer_cart.dart';
 import '../../core/menu/menu_sizes.dart';
 import 'direct_order_translation.dart';
 import 'direct_order_menu_search.dart';
+import 'direct_order_delivery_quality.dart';
 import 'direct_order_cart_draft.dart';
 import 'direct_order_requirements.dart';
 import 'dart:async';
@@ -695,6 +696,7 @@ class _DirectOrderStorefrontScreenState
         catalog: catalog,
         channel: 'direct',
         language: _languageCode,
+        informationFooter: _deliveryQualityNotice(item),
       );
       if (!mounted || selected == null) return;
       item = item.withChoice(selected);
@@ -2587,6 +2589,7 @@ class _DirectOrderStorefrontScreenState
       context,
       title: item.catalogName(_languageCode),
       languageCode: _languageCode,
+      informationFooter: _deliveryQualityNotice(item),
       options: [
         for (final option in options)
           MenuSizeOption(
@@ -2614,6 +2617,7 @@ class _DirectOrderStorefrontScreenState
         context,
         title: base.catalogName(_languageCode),
         languageCode: _languageCode,
+        informationFooter: _deliveryQualityNotice(base),
         options: [
           for (final option in options)
             MenuSizeOption(
@@ -2636,6 +2640,7 @@ class _DirectOrderStorefrontScreenState
         channel: 'direct',
         language: _languageCode,
         initialKey: item.menuOptionKey,
+        informationFooter: _deliveryQualityNotice(base),
       );
       if (!mounted || selected == null || !_cart.containsKey(item.id)) return;
       final target = selected.lineId(base.id);
@@ -2671,6 +2676,7 @@ class _DirectOrderStorefrontScreenState
       context,
       title: item.catalogName(_languageCode),
       languageCode: _languageCode,
+      informationFooter: _deliveryQualityNotice(item),
       options: [
         for (final option in options)
           MenuSizeOption(
@@ -2725,65 +2731,117 @@ class _DirectOrderStorefrontScreenState
     _scheduleCartSave();
   }
 
+  Widget _deliveryQualityNotice(
+    DirectOrderMenuItem item, {
+    EdgeInsetsGeometry padding = const EdgeInsets.only(top: 8),
+  }) {
+    if (!showsDeliveryQualityNotice(
+      storeId: _storefront?.storeId,
+      item: item,
+      pickup: _isPickup,
+    )) {
+      return const SizedBox.shrink();
+    }
+    return Builder(
+      builder: (context) => Padding(
+        padding: padding,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                DirectOrderCopy(
+                  Localizations.localeOf(context).languageCode,
+                ).deliveryQualityNotice,
+                key: Key('direct_delivery_quality_${item.id}'),
+                softWrap: true,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _sizedMenuCard(
     DirectOrderMenuItem item,
     List<DirectOrderMenuItem> options,
   ) {
     return Card(
-      child: ListTile(
-        key: Key('direct_choose_size_${item.sizeMetadata!.menuId}'),
-        leading: (item.imageUrl ?? '').trim().isEmpty
-            ? null
-            : ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  item.imageUrl!,
-                  key: Key('direct_size_image_${item.sizeMetadata!.menuId}'),
-                  width: 64,
-                  height: 64,
-                  fit: BoxFit.cover,
-                  excludeFromSemantics: true,
-                  errorBuilder: (_, _, _) => const SizedBox(
-                    width: 64,
-                    height: 64,
-                    child: Icon(Icons.broken_image_outlined),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            key: Key('direct_choose_size_${item.sizeMetadata!.menuId}'),
+            leading: (item.imageUrl ?? '').trim().isEmpty
+                ? null
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      item.imageUrl!,
+                      key: Key(
+                        'direct_size_image_${item.sizeMetadata!.menuId}',
+                      ),
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      excludeFromSemantics: true,
+                      errorBuilder: (_, _, _) => const SizedBox(
+                        width: 64,
+                        height: 64,
+                        child: Icon(Icons.broken_image_outlined),
+                      ),
+                    ),
                   ),
+            title: Text(item.catalogName(_languageCode)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if ((item.description ?? '').trim().isNotEmpty)
+                  Text(
+                    item.description!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                Text(
+                  options
+                      .map(
+                        (option) =>
+                            '${option.sizeMetadata!.label(_languageCode)} ${_money.format(option.price)}',
+                      )
+                      .join(' · '),
                 ),
-              ),
-        title: Text(item.catalogName(_languageCode)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if ((item.description ?? '').trim().isNotEmpty)
-              Text(
-                item.description!,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            Text(
-              options
-                  .map(
-                    (option) =>
-                        '${option.sizeMetadata!.label(_languageCode)} ${_money.format(option.price)}',
-                  )
-                  .join(' · '),
+              ],
             ),
-          ],
-        ),
-        trailing: IconButton(
-          key: Key('direct_add_option_${item.sizeMetadata!.menuId}'),
-          tooltip: cartText(
-            _languageCode,
-            '다른 옵션 추가',
-            'Thêm tùy chọn khác',
-            'Add another option',
+            trailing: IconButton(
+              key: Key('direct_add_option_${item.sizeMetadata!.menuId}'),
+              tooltip: cartText(
+                _languageCode,
+                '다른 옵션 추가',
+                'Thêm tùy chọn khác',
+                'Add another option',
+              ),
+              onPressed: () => _addMenuOption(item, options),
+              icon: const Icon(Icons.add_shopping_cart),
+            ),
+            onTap: () async {
+              await _addMenuOption(item, options);
+            },
           ),
-          onPressed: () => _addMenuOption(item, options),
-          icon: const Icon(Icons.add_shopping_cart),
-        ),
-        onTap: () async {
-          await _addMenuOption(item, options);
-        },
+          _deliveryQualityNotice(
+            item,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          ),
+        ],
       ),
     );
   }
@@ -2913,6 +2971,7 @@ class _DirectOrderStorefrontScreenState
                 ),
               ),
             ],
+            _deliveryQualityNotice(item),
           ],
         ),
       ),
@@ -4271,6 +4330,7 @@ class _DirectOrderStorefrontScreenState
                 ),
               ],
             ),
+            directOrderAutomaticTranslationNotice(context),
             if (_chatFailures > 0)
               Container(
                 key: const Key('direct_chat_reconnecting'),

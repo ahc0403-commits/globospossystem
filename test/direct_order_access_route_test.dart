@@ -8,6 +8,9 @@ import 'package:globos_pos_system/features/direct_order/direct_order_storefront_
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:globos_pos_system/core/ui/app_theme.dart';
+
+import 'fixtures/direct_order_notice_capture.dart';
 
 const _request = '90000000-0000-4000-8000-000000000001';
 const _key = 'fixture-random-order-key-with-at-least-40-characters';
@@ -158,7 +161,11 @@ class _LinkService extends DirectOrderService {
   }
 }
 
-Future<GoRouter> _pump(WidgetTester tester, _LinkService service) async {
+Future<GoRouter> _pump(
+  WidgetTester tester,
+  _LinkService service, {
+  String language = 'en',
+}) async {
   final router = GoRouter(
     initialLocation: _location,
     routes: [
@@ -181,11 +188,15 @@ Future<GoRouter> _pump(WidgetTester tester, _LinkService service) async {
   );
   await tester.pumpWidget(
     ProviderScope(
-      child: MaterialApp.router(
-        locale: const Locale('en'),
-        routerConfig: router,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
+      child: RepaintBoundary(
+        key: noticeCaptureKey,
+        child: MaterialApp.router(
+          theme: AppTheme.build(),
+          locale: Locale(language),
+          routerConfig: router,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+        ),
       ),
     ),
   );
@@ -194,7 +205,49 @@ Future<GoRouter> _pump(WidgetTester tester, _LinkService service) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(loadNoticeFont);
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  for (final entry in <String, String>{
+    'ko': '서로 다른 언어로 대화해도 메시지가 자동 번역됩니다. 편하게 채팅하세요!',
+    'vi':
+        'Tin nhắn được tự động dịch khi trò chuyện bằng các ngôn ngữ khác nhau. Hãy thoải mái trò chuyện!',
+    'en':
+        'Messages are automatically translated across languages. Feel free to chat!',
+  }.entries) {
+    for (final width in [390.0, 1440.0]) {
+      testWidgets(
+        'customer chat first entry shows separate ${entry.key} help at $width without sending a message',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 900);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final service = _LinkService();
+          final router = await _pump(tester, service, language: entry.key);
+          final notice = find.byKey(
+            const Key('direct_auto_translation_notice'),
+          );
+          await tester.ensureVisible(notice);
+          await tester.pumpAndSettle();
+          expect(find.text(entry.value), findsOneWidget);
+          expect(service.messages, isEmpty);
+          expect(service.restored, 1);
+          // Let the existing transient progress snackbar expire before capture.
+          await tester.pump(const Duration(seconds: 5));
+          await tester.pumpAndSettle();
+          await captureNotice(
+            tester,
+            'customer_chat_${entry.key}_${width.toInt()}',
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          router.dispose();
+        },
+      );
+    }
+  }
 
   testWidgets('completed delivery keeps excess refund access and polling', (
     tester,
@@ -289,6 +342,10 @@ void main() {
   testWidgets(
     'the same order URL restores the order and chat after closing and clearing browser storage',
     (tester) async {
+      tester.view.physicalSize = const Size(390, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final service = _LinkService();
       var router = await _pump(tester, service);
       expect(find.text('DLINK0001'), findsOneWidget);
@@ -299,18 +356,22 @@ void main() {
       router = await _pump(tester, service);
       expect(service.restored, 2);
       expect(find.text('DLINK0001'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byType(TextField),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
       await tester.enterText(
-        find.byType(TextField),
+        find.byKey(const Key('direct_customer_chat_input')),
         'Please check my delivery',
       );
+      await tester.ensureVisible(find.byIcon(Icons.send_rounded));
+      // The existing progress snackbar temporarily covers the bottom composer.
+      // Preserve it and send after its normal display duration.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.send_rounded).hitTestable(), findsOneWidget);
+      await captureNotice(tester, 'customer_send_before');
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pumpAndSettle();
       expect(find.text('Please check my delivery'), findsWidgets);
+      expect(service.messages, hasLength(1));
+      expect(service.messages.single.body, 'Please check my delivery');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       router.dispose();
