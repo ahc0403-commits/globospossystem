@@ -9,7 +9,7 @@
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "a4f152a7f8855bb7494ec98dfda60430851ef82b80c54b5f69a9adce30acf303",
+      "sha256": "4df1f48bc22db3b974e1e8dcbb65be55b44dcc067f95cc14aa599daad8d0d429",
       "mode": "100644"
     },
     "lib/core/services/live_refresh_service.dart": {
@@ -49,7 +49,7 @@
       "mode": "100644"
     },
     "lib/features/super_admin/office_legal_connection_dialog.dart": {
-      "sha256": "977be8d53d81708e602119fbfee8c9e481a4d16e2f4f458ae4a5fd33942ff198",
+      "sha256": "24d0a12456aea96bfd054b7ca0d279f8e283b1b20e12a729a666f33760148317",
       "mode": "100644"
     },
     "lib/features/super_admin/super_admin_screen.dart": {
@@ -57,19 +57,19 @@
       "mode": "100644"
     },
     "lib/l10n/app_en.arb": {
-      "sha256": "0fa7b296ef04bc5062c3238db83fed004eb956b3a33aeaf33e21daca6747a086",
+      "sha256": "d1ba597382a7baed4973df31abb1042e040f393347b8a86e7f7a90c177a1df89",
       "mode": "100644"
     },
     "lib/l10n/app_ko.arb": {
-      "sha256": "a464eadfe9307680f2efe2812e671af11fd1a2e820bfbb2a8575f17f1bd37b87",
+      "sha256": "57743cec704ed5bdbec62c04763a9cffc3e939d9c4ade0dfb1c1cc42d27c8fb7",
       "mode": "100644"
     },
     "lib/l10n/app_vi.arb": {
-      "sha256": "cf41cdd24e9b93940b3b2be1bc44db55e1c82899a82f117fd5c2ed254ea72c0c",
+      "sha256": "768dcde86a36245eee2e761dae2b5b70cd0d515c711fe000596216ba0c27230c",
       "mode": "100644"
     },
     "scripts/resilience/integration_legal_connection.py": {
-      "sha256": "abb06ba54aa0f6437179fddb48fd83dd3c726973c517b8cfc22f87874ed6c192",
+      "sha256": "8e23b54b2a7847909e29ec834c2d606798354e6ef246172031bc0a06b1e1d9fa",
       "mode": "100644"
     },
     "scripts/test_menu_discount_quantities.sh": {
@@ -81,7 +81,7 @@
       "mode": "100644"
     },
     "supabase/migrations/20261101023409_pos_office_legal_connection.sql": {
-      "sha256": "2a3d4ca8d84d7ebf84c6843584967ec930fb3142dd24aba90b3c2f4c2670b2d4",
+      "sha256": "d699a1b01d5dccd6c8dfd7c411edfb301589466a0b85a8da473fed0a55db644a",
       "mode": "100644"
     },
     "test/dialog_sheet_entrypoint_coverage_contract_test.dart": {
@@ -117,7 +117,7 @@
       "mode": "100644"
     },
     "test/office_legal_connection_dialog_test.dart": {
-      "sha256": "827a1627d57719d55cd0d81639a6c7d5e43b9ddb28e359a224dbc0602ca384dd",
+      "sha256": "39906f8581ee5285a3c960185b8e1af3af0a8abe8f88a3f42597228f907681ef",
       "mode": "100644"
     },
     "test/operation_contract_test.dart": {

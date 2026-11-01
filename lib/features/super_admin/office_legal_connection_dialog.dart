@@ -75,6 +75,7 @@ class _OfficeLegalConnectionDialogState
   OfficeConnectionCode? _code;
   Map<String, dynamic>? _result;
   bool _busy = false, _failed = false;
+  bool _capabilityReady = false;
   int _generation = 0;
   List<SuperTaxEntity> get _entities =>
       widget.entities.where((e) => e.isInternal).toList();
@@ -97,8 +98,11 @@ class _OfficeLegalConnectionDialogState
 
   Future<void> _clearCompletedCode() async {
     try {
-      if(TerminalAuth.current!=null) {await TerminalAuth.current!.storage.remove(_key);}
-      else {await (await SharedPreferences.getInstance()).remove(_key);}
+      if (TerminalAuth.current != null) {
+        await TerminalAuth.current!.storage.remove(_key);
+      } else {
+        await (await SharedPreferences.getInstance()).remove(_key);
+      }
     } catch (_) {
       // Cleanup failure does not change the confirmed server result.
     }
@@ -117,11 +121,16 @@ class _OfficeLegalConnectionDialogState
     try {
       final raw = await _read();
       final code = raw == null ? null : OfficeConnectionCode.decode(raw);
+      final capability = await _call('get_office_legal_capability_v1', {});
       final result = await _call('get_office_legal_connection_for_entity_v1', {
         'p_tax_entity_id': _entity,
       });
       if (!mounted || generation != _generation || !_sameActor) return;
       setState(() {
+        _capabilityReady =
+            capability is Map &&
+            capability['contract_version'] == 1 &&
+            capability['ready'] == true;
         _result = result is Map ? Map<String, dynamic>.from(result) : null;
         _code =
             code != null &&
@@ -130,7 +139,9 @@ class _OfficeLegalConnectionDialogState
             : null;
         _failed = false;
       });
-      if(_result?['state']=='confirmed') {await _clearCompletedCode();}
+      if (_result?['state'] == 'confirmed') {
+        await _clearCompletedCode();
+      }
     } catch (_) {
       if (mounted && generation == _generation) setState(() => _failed = true);
     } finally {
@@ -139,7 +150,7 @@ class _OfficeLegalConnectionDialogState
   }
 
   Future<void> _prepare() async {
-    if (_busy || _entity == null || !_sameActor) return;
+    if (_busy || _entity == null || !_sameActor || !_capabilityReady) return;
     final generation = ++_generation;
     setState(() => _busy = true);
     try {
@@ -180,7 +191,9 @@ class _OfficeLegalConnectionDialogState
         _result = Map<String, dynamic>.from(result as Map);
         _failed = false;
       });
-      if(_result?['state']=='confirmed') {await _clearCompletedCode();}
+      if (_result?['state'] == 'confirmed') {
+        await _clearCompletedCode();
+      }
     } catch (_) {
       if (mounted && generation == _generation) setState(() => _failed = true);
     } finally {
@@ -193,11 +206,16 @@ class _OfficeLegalConnectionDialogState
     final generation = ++_generation;
     setState(() => _busy = true);
     try {
+      final capability = await _call('get_office_legal_capability_v1', {});
       final result = await _call('get_office_legal_connection_v1', {
         'p_operation_id': _result!['operation_id'],
       });
       if (!mounted || generation != _generation || !_sameActor) return;
       setState(() {
+        _capabilityReady =
+            capability is Map &&
+            capability['contract_version'] == 1 &&
+            capability['ready'] == true;
         _result = Map<String, dynamic>.from(result as Map);
         _failed = false;
       });
@@ -234,6 +252,7 @@ class _OfficeLegalConnectionDialogState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(l.resilienceOfficeInstructions),
+              if (!_capabilityReady && !_busy) Text(l.resilienceOfficeNotReady),
               const SizedBox(height: 16),
               if (_entities.isEmpty)
                 Text(l.resilienceOfficeInternalOnly)
@@ -297,16 +316,15 @@ class _OfficeLegalConnectionDialogState
           onPressed: _busy ? null : () => Navigator.pop(context),
           child: Text(l.close),
         ),
-        if (_result != null)
-          TextButton(
-            onPressed: _busy ? null : _refresh,
-            child: Text(l.refresh),
-          ),
+        TextButton(
+          onPressed: _busy ? null : (_result == null ? _restore : _refresh),
+          child: Text(l.refresh),
+        ),
         if (state != 'confirmed' &&
             state != 'requires_review' &&
             _entities.isNotEmpty)
           FilledButton(
-            onPressed: _busy ? null : _prepare,
+            onPressed: _busy || !_capabilityReady ? null : _prepare,
             child: Text(l.resilienceOfficePrepare),
           ),
       ],

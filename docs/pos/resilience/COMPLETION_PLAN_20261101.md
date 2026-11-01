@@ -371,7 +371,7 @@ POS는 `scripts/deploy_pos_production.sh`, Office는 `scripts/run_office.sh`의 
 - Office 별도 작업 공간: 정확히 200개라는 이유로 실패하던 연결 목록을 선택 manifest
   최대 200개/키셋 page로 바꿨다. 8개 영향 검사와 bridge 타입 검사 통과.
   최초 법인 연결의 지속 작업·양쪽 확인 UI를 구현했다. 독립 PostgreSQL DB/Auth
-  fixture에서 17개 검사, Office bridge/배치 18개, 확인 화면 POS 2개/Office 3개 통과.
+  fixture에서 20개 검사, Office bridge/배치/준비 상태 21개, 확인 화면 POS 3개/Office 3개 통과.
   새/기존 법인 명시적 선택, 20회 동시/반복 확정, 응답 유실/만료 후 재개, 첫 매장,
   별도 브랜드 ID의 구매 연결 및 정지 계정 제외를 포함한다. 이는 부분 fixture이며
   현재 전체 schema 복원·실제 두 앱 브라우저·신규 매장 전체 업무 검증은 남아 있다.
@@ -391,3 +391,29 @@ build 호출 0회와 시간 표시 진행을 함께 확인했다. 100회 화면 
 이는 Flutter debug fixture의 측정이며 실제 장시간 heap·reconnect·물리 단말 성능,
 구매/계산대/관리자 화면 분리는 아직 미완료다. 원본 개발 로그는
 `/workspace/scratch/pos-resilience-completion-dev/kds-render-tests.log`에 보존했다.
+
+### G2 순차 배포와 권한 회수 — 개발 증거
+
+POS는 Office 서버가 보고한 version 1 준비 상태가 있어야 새 연결을 생성한다.
+Office의 기존 인증된 구매 연결 cron(현재 실제 매분 실행)이 Office DB 계약을 확인한 뒤
+POS에 준비 상태를 보고한다. 매장 수와 무관하게 2회 호출, 전체 3초 abort 예산이다.
+보고 실패는 기존 구매 연결 작업을 중단하지 않는다. POS 보고 유효기간은 15분이며
+새 연결의 시작에만 적용한다. 기존 operation의 조회/확정 결과 복구는 보존한다.
+POS 관리자 권한이 Office commit 이후 회수되면 POS 확정은 재확인 상태로 남긴다.
+
+독립 DB/Auth fixture 20개와 Edge 준비 상태 3개, POS 확인 화면 3개 영향 검사가
+통과했다. 공식 전체 recipe, 운영 capability 전환과 두 앱 브라우저 시험은 미실행이다.
+
+### 다음 실행의 실제 선행 조건
+
+최신 POS/Office schema-only 덤프와 실제 샘플 매장 단말/접속 시간은 아직 미확보다.
+HTTPS 관리 연결과 9개 샘플 계정 인증은 확보했으므로 인증 부재로 기록하지 않는다.
+현재 승인된 클라우드의 네트워크 정책은 HTTP 이외 DB TCP 연결을 제공하지 않으며
+관리 도구에는 full schema export 경로가 없다. 정책 우회나 임의 토큰 추출은 하지 않았다.
+이 입력 전에는 부분 fixture를 전체 신규/업그레이드 검증으로 승격하지 않는다.
+
+G3의 금융·재고·주방·근태 등 전 도메인 명령/unknown 복구, G4의 결제 목록/상세와
+전체 worker 합산 예산, G5의 나머지 큰 화면/파일 상한, G6의 T01–T16/2시간 혼합,
+G7의 frozen 후보·실제 1배/3배 각 12시간·공식 배포/마감 관측은 아직 완료하지 않았다.
+장시간 작업은 백그라운드에도 시작하지 않았으며 현재 12시간 PASS 증거는 없다.
+이 상태에서 최종-main 전체 recipe를 먼저 반복하거나 운영 DB/웹을 부분 반영하지 않는다.

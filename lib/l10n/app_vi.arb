@@ -4439,5 +4439,6 @@
   "resilienceOfficeFailed": "Không thể xác nhận trạng thái liên kết. Hãy kiểm tra lại cùng yêu cầu.",
   "resilienceOfficeCopyCode": "Sao chép mã kết nối",
   "resilienceOfficeOpen": "Mở Office",
-  "resilienceOfficePrepare": "Chuẩn bị yêu cầu liên kết"
+  "resilienceOfficePrepare": "Chuẩn bị yêu cầu liên kết",
+  "resilienceOfficeNotReady": "Dịch vụ kết nối Office đang được chuẩn bị. Hãy làm mới sau ít phút. Hoạt động POS hiện tại vẫn sử dụng được."
 }

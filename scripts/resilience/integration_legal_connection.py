@@ -73,7 +73,8 @@ class LegalConnectionTests(unittest.TestCase):
 
     def setUp(self):
         self.sql('pos_fixture',"TRUNCATE public.pos_office_legal_connections;UPDATE public.users SET is_active=true;"
-                 "UPDATE public.tax_entity SET name='Fixture legal A' WHERE id="+literal(TAX))
+                 "UPDATE public.tax_entity SET name='Fixture legal A' WHERE id="+literal(TAX)+";"
+                 "SET request.jwt.claim.role='service_role';SELECT public.office_report_legal_capability_v1(true);")
         self.sql('office_fixture',"TRUNCATE ops.pos_legal_entity_links,ops.stores,ops.legal_entity_brands,ops.brands,"
                  "accounting.legal_entities,system.audit_log CASCADE;"
                  "UPDATE public.office_user_profiles SET is_suspended=false;")
@@ -197,6 +198,26 @@ class LegalConnectionTests(unittest.TestCase):
         result=self.pos('SELECT public.office_resolve_pos_legal_connection_v1('+literal(OP)+','+literal(PROOF)+');',check=False)
         self.assertNotEqual(result.returncode,0)
         self.assertEqual(self.sql('office_fixture',"SELECT has_table_privilege('authenticated','ops.pos_legal_entity_links','SELECT')").stdout.strip(),'f')
+
+    def test_new_connection_waits_for_office_capability_but_existing_operation_can_resume(self):
+        first=self.begin()
+        self.sql('pos_fixture','TRUNCATE public.pos_office_legal_capability;')
+        self.assertEqual(self.begin()['operation_id'],first['operation_id'])
+        self.sql('pos_fixture','TRUNCATE public.pos_office_legal_connections;')
+        with self.assertRaisesRegex(AssertionError,'POS_OFFICE_LEGAL_CAPABILITY_NOT_READY'):
+            self.begin()
+
+    def test_expired_office_capability_is_not_ready(self):
+        self.sql('pos_fixture',"UPDATE public.pos_office_legal_capability SET reported_at=now()-interval '16 minutes';")
+        state=json.loads(self.pos('SELECT public.get_office_legal_capability_v1();').stdout)
+        self.assertFalse(state['ready'])
+        denied=self.pos('SELECT public.office_report_legal_capability_v1(true);',check=False)
+        self.assertNotEqual(denied.returncode,0)
+
+    def test_actor_revoked_after_office_commit_requires_review(self):
+        row=json.loads(self.commit(self.begin()).stdout)
+        self.sql('pos_fixture',"UPDATE users SET is_active=false WHERE auth_id="+literal(POS_ACTOR))
+        self.assertEqual(self.confirm_pos(row)['state'],'requires_review')
 
     def connected_store(self):
         row=json.loads(self.commit(self.begin()).stdout);confirmed=self.confirm_pos(row)

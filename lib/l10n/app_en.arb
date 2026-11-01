@@ -4440,5 +4440,6 @@
   "resilienceOfficeFailed": "The connection status could not be confirmed. Check the same request again.",
   "resilienceOfficeCopyCode": "Copy connection code",
   "resilienceOfficeOpen": "Open Office",
-  "resilienceOfficePrepare": "Prepare connection request"
+  "resilienceOfficePrepare": "Prepare connection request",
+  "resilienceOfficeNotReady": "The Office connection service is preparing. Refresh shortly. Existing POS operations remain available."
 }

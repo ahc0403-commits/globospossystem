@@ -1,5 +1,35 @@
 -- production-gate: self-verifying
 BEGIN;
+CREATE TABLE public.pos_office_legal_capability (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
+  ready boolean NOT NULL,
+  reported_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.pos_office_legal_capability ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.pos_office_legal_capability FROM PUBLIC,anon,authenticated;
+GRANT ALL ON public.pos_office_legal_capability TO service_role;
+CREATE FUNCTION public.office_report_legal_capability_v1(p_ready boolean)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role' OR p_ready IS NULL THEN
+    RAISE insufficient_privilege; END IF;
+  INSERT INTO public.pos_office_legal_capability(singleton,ready) VALUES(true,p_ready)
+    ON CONFLICT(singleton) DO UPDATE SET ready=excluded.ready,reported_at=now();
+END $$;
+REVOKE ALL ON FUNCTION public.office_report_legal_capability_v1(boolean) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.office_report_legal_capability_v1(boolean) TO service_role;
+CREATE FUNCTION public.get_office_legal_capability_v1() RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role' AND
+      (auth.uid() IS NULL OR NOT coalesce(public.is_super_admin(),false)) THEN
+    RAISE insufficient_privilege; END IF;
+  RETURN jsonb_build_object('contract_version',1,'ready',coalesce((
+    SELECT ready AND reported_at>now()-interval '15 minutes'
+    FROM public.pos_office_legal_capability WHERE singleton),false));
+END $$;
+REVOKE ALL ON FUNCTION public.get_office_legal_capability_v1() FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.get_office_legal_capability_v1() TO authenticated,service_role;
 CREATE TABLE public.pos_office_legal_connections (
   operation_id uuid PRIMARY KEY,
   tax_entity_id uuid NOT NULL REFERENCES public.tax_entity(id),
@@ -62,6 +92,8 @@ BEGIN
   IF EXISTS(SELECT 1 FROM public.pos_office_legal_connections WHERE tax_entity_id=p_tax_entity_id AND state='confirmed') THEN
     RAISE EXCEPTION 'POS_OFFICE_LEGAL_ENTITY_ALREADY_CONNECTED';
   END IF;
+  IF NOT coalesce((public.get_office_legal_capability_v1()->>'ready')::boolean,false) THEN
+    RAISE EXCEPTION 'POS_OFFICE_LEGAL_CAPABILITY_NOT_READY'; END IF;
   SELECT jsonb_build_object('tax_entity_id',e.id,'name',e.name,'tax_code',e.tax_code,'owner_type',e.owner_type)
     INTO body FROM public.tax_entity e WHERE e.id=p_tax_entity_id;
   IF body IS NULL THEN RAISE EXCEPTION 'POS_OFFICE_LEGAL_ENTITY_NOT_FOUND'; END IF;
@@ -146,7 +178,9 @@ BEGIN
     RAISE EXCEPTION 'POS_OFFICE_LEGAL_CONNECTION_EXPIRED'; END IF;
   SELECT jsonb_build_object('tax_entity_id',e.id,'name',e.name,'tax_code',e.tax_code,'owner_type',e.owner_type)
     INTO body FROM public.tax_entity e WHERE e.id=previous.tax_entity_id;
-  IF body IS DISTINCT FROM previous.payload THEN
+  IF body IS DISTINCT FROM previous.payload OR NOT EXISTS(
+      SELECT 1 FROM public.users u WHERE u.auth_id=previous.requested_by
+      AND u.is_active AND u.role='super_admin') THEN
     UPDATE public.pos_office_legal_connections SET state='requires_review' WHERE operation_id=p_operation_id RETURNING * INTO previous;
     RETURN public.pos_office_legal_connection_result_v1(previous);
   END IF;
@@ -163,6 +197,8 @@ GRANT EXECUTE ON FUNCTION public.office_confirm_pos_legal_connection_v1(uuid,tex
 
 DO $$ BEGIN
   IF has_table_privilege('authenticated','public.pos_office_legal_connections','SELECT')
+    OR has_table_privilege('authenticated','public.pos_office_legal_capability','SELECT')
+    OR has_function_privilege('authenticated','public.office_report_legal_capability_v1(boolean)','EXECUTE')
     OR has_table_privilege('anon','public.pos_office_legal_connections','SELECT')
     OR has_function_privilege('authenticated','public.office_resolve_pos_legal_connection_v1(uuid,text)','EXECUTE')
     OR has_function_privilege('anon','public.office_confirm_pos_legal_connection_v1(uuid,text,uuid,uuid,timestamptz)','EXECUTE')
