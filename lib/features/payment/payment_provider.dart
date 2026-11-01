@@ -11,6 +11,7 @@ import '../../core/payments/payment_total_calculator.dart';
 import '../../core/payments/payment_command_coordinator.dart';
 import '../../core/payments/payment_intent_journal.dart';
 import '../../core/utils/operation_contract.dart';
+import '../../core/utils/owned_read_session.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/utils/coalesced_refresh.dart';
@@ -420,7 +421,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     OrderService? orders,
     PaymentCommandCoordinator? commands,
     OperationScopeSnapshot Function()? scope,
-  }) : _commands = commands,
+    Duration readBudget = const Duration(seconds: 15),
+  }) : _readBudget = readBudget,
+       _commands = commands,
        _operationScope = scope,
        _client = client,
        _paymentSource = payments,
@@ -429,6 +432,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   PaymentCommandCoordinator? _commands;
   Future<PaymentCommandCoordinator>? _openingCommands;
   final OperationScopeSnapshot Function()? _operationScope;
+  final Duration _readBudget;
+  OwnedReadSession? _activeCashierRead;
   String? _recoveryScope;
   Future<void>? _loadingRecovery;
 
@@ -479,6 +484,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   void resetOperationScope() {
     if (!mounted) return;
     _scopeGeneration++;
+    _activeCashierRead?.dispose();
     _restaurantId = null;
     _recoveryScope = null;
     _loadingRecovery = null;
@@ -504,6 +510,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       return Future.value();
     }
     if (_restaurantId != storeId) {
+      _activeCashierRead?.dispose();
       _restaurantId = storeId;
       _scopeGeneration++;
       _eventRefreshTimer?.cancel();
@@ -523,124 +530,19 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final businessDay = TimeUtils.currentVietnamBusinessDay();
     _scheduleBusinessDayRefresh(storeId, businessDay);
 
+    final reads = OwnedReadSession(
+      allowedRpcs: const {
+        'get_emergency_order_summaries',
+        'get_emergency_order_item_progress',
+      },
+    );
+    _activeCashierRead = reads;
     try {
-      final storePricing = await _loadStorePricing(storeId);
-      final response = await _db
-          .from('orders')
-          .select(
-            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, menu_option_snapshot, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, vat_profile_snapshot, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
-          )
-          .eq('restaurant_id', storeId)
-          // Payability is an order-status fact derived server-side by
-          // recalc_order_status (ORDER_LIFECYCLE_STATE_CONTRACT_2026_07_03):
-          // serving ⇔ every active item is ready|served.
-          .eq('status', 'serving')
-          .gte('created_at', businessDay.startIso8601)
-          .lt('created_at', businessDay.endIso8601)
-          .order('created_at', ascending: true)
-          .order('created_at', referencedTable: 'order_items', ascending: true)
-          .order('id', referencedTable: 'order_items', ascending: true);
-
-      final emergencySummaries = await _loadEmergencySummaries(
-        response.map((row) => row['id'].toString()).toList(growable: false),
-      );
-      final emergencyItemProgress = await _loadEmergencyItemProgress(
-        response.map((row) => row['id'].toString()).toList(growable: false),
-      );
-
-      final orders = response
-          .map<CashierOrder?>((row) {
-            final data = Map<String, dynamic>.from(row);
-            final itemsRaw = data['order_items'];
-            final itemRows = itemsRaw is List
-                ? itemsRaw
-                      .map((item) => Map<String, dynamic>.from(item as Map))
-                      .toList()
-                : <Map<String, dynamic>>[];
-            itemRows.sort(_compareOrderItemRowsByCreatedAt);
-
-            final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
-
-            final activeDiscount = _activeDiscountFromRaw(
-              data['order_discounts'],
-            );
-            final quote = calculatePaymentQuote(
-              lines: itemRows.map(
-                (row) => _paymentQuoteLineFromRow(
-                  row,
-                  lineDiscounts: activeDiscount?.lineDiscounts,
-                ),
-              ),
-              vatPricingMode: storePricing.vatPricingMode,
-              serviceChargeEnabled: storePricing.serviceChargeEnabled,
-              serviceChargeRate: storePricing.serviceChargeRate,
-              discountTotal: activeDiscount?.hasLineDiscounts == true
-                  ? 0
-                  : activeDiscount?.amount ?? 0,
-            );
-            final paidTotal = _paidTotalFromRaw(data['payments']);
-            final paymentCount = _paymentCountFromRaw(data['payments']);
-            final remainingDue = _remainingDue(quote.payableTotal, paidTotal);
-
-            final tableRaw = data['tables'];
-            final tableNumber = tableRaw is Map<String, dynamic>
-                ? tableRaw['table_number']?.toString() ?? '-'
-                : data['order_purpose']?.toString() == 'staff_meal'
-                ? 'STAFF'
-                : '-';
-
-            final createdAtRaw = data['created_at']?.toString();
-            final emergencySummary = emergencySummaries[data['id'].toString()];
-
-            return CashierOrder(
-              orderId: data['id'].toString(),
-              tableNumber: tableNumber,
-              tableId: data['table_id']?.toString() ?? '',
-              status: 'serving',
-              orderPurpose: data['order_purpose']?.toString() ?? 'customer',
-              orderSource: data['order_source']?.toString() ?? 'staff',
-              items: items,
-              menuSubtotal: quote.menuSubtotal,
-              serviceChargeTotal: quote.serviceChargeTotal,
-              serviceItemTotal: quote.serviceItemTotal,
-              fixedChargeTotal: quote.fixedChargeTotal,
-              discountTotal: quote.discountTotal,
-              vatTotal: quote.vatTotal,
-              totalAmount: quote.payableTotal,
-              paidTotal: paidTotal,
-              paymentCount: paymentCount,
-              remainingDue: remainingDue,
-              createdAt: createdAtRaw != null
-                  ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
-                  : DateTime.now(),
-              activeDiscount: activeDiscount,
-              vatPricingMode: storePricing.vatPricingMode,
-              fulfillmentMode: FulfillmentMode.fromValue(
-                data['fulfillment_mode_snapshot'],
-              ),
-              emergencyModeActive: emergencySummary != null,
-              unservedQuantity: emergencySummary ?? 0,
-              floorServedQuantityByItemId: {
-                for (final entry
-                    in (emergencyItemProgress[data['id'].toString()] ??
-                            const {})
-                        .entries)
-                  if (entry.value.any((line) => line.lineKey == 'base'))
-                    entry.key: entry.value
-                        .firstWhere((line) => line.lineKey == 'base')
-                        .floorServedQuantity,
-              },
-              fulfillmentProgressByItemId:
-                  emergencyItemProgress[data['id'].toString()] ?? const {},
-            );
-          })
-          .whereType<CashierOrder>()
-          .where(_shouldShowCashierOrder)
-          .toList();
-      final completedOrders = await _fetchCompletedOrders(
-        storeId,
-        storePricing,
-        businessDay,
+      final (orders, completedOrders) = await reads.run(
+        _db,
+        (db) => _readCashierOrders(db, storeId, businessDay),
+        budget: _readBudget,
+        maxResponseBytes: 4 * 1024 * 1024,
       );
 
       if (!mounted ||
@@ -675,15 +577,147 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         return;
       }
       state = state.copyWith(error: 'Failed to load payable orders: $error');
+    } finally {
+      if (identical(_activeCashierRead, reads)) _activeCashierRead = null;
+      reads.dispose();
     }
   }
 
-  Future<Map<String, int>> _loadEmergencySummaries(
-    List<String> orderIds,
+  Future<(List<CashierOrder>, List<CashierOrder>)> _readCashierOrders(
+    PostgrestClient db,
+    String storeId,
+    VietnamBusinessDayWindow businessDay,
   ) async {
+    final storePricing = await _loadStorePricing(storeId, reader: db);
+    final response = await db
+        .from('orders')
+        .select(
+          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, menu_option_snapshot, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, vat_profile_snapshot, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
+        )
+        .eq('restaurant_id', storeId)
+        // Payability is an order-status fact derived server-side by
+        // recalc_order_status (ORDER_LIFECYCLE_STATE_CONTRACT_2026_07_03):
+        // serving ⇔ every active item is ready|served.
+        .eq('status', 'serving')
+        .gte('created_at', businessDay.startIso8601)
+        .lt('created_at', businessDay.endIso8601)
+        .order('created_at', ascending: true)
+        .order('created_at', referencedTable: 'order_items', ascending: true)
+        .order('id', referencedTable: 'order_items', ascending: true);
+
+    final emergencySummaries = await _loadEmergencySummaries(
+      response.map((row) => row['id'].toString()).toList(growable: false),
+      reader: db,
+    );
+    final emergencyItemProgress = await _loadEmergencyItemProgress(
+      response.map((row) => row['id'].toString()).toList(growable: false),
+      reader: db,
+    );
+
+    final orders = response
+        .map<CashierOrder?>((row) {
+          final data = Map<String, dynamic>.from(row);
+          final itemsRaw = data['order_items'];
+          final itemRows = itemsRaw is List
+              ? itemsRaw
+                    .map((item) => Map<String, dynamic>.from(item as Map))
+                    .toList()
+              : <Map<String, dynamic>>[];
+          itemRows.sort(_compareOrderItemRowsByCreatedAt);
+
+          final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
+
+          final activeDiscount = _activeDiscountFromRaw(
+            data['order_discounts'],
+          );
+          final quote = calculatePaymentQuote(
+            lines: itemRows.map(
+              (row) => _paymentQuoteLineFromRow(
+                row,
+                lineDiscounts: activeDiscount?.lineDiscounts,
+              ),
+            ),
+            vatPricingMode: storePricing.vatPricingMode,
+            serviceChargeEnabled: storePricing.serviceChargeEnabled,
+            serviceChargeRate: storePricing.serviceChargeRate,
+            discountTotal: activeDiscount?.hasLineDiscounts == true
+                ? 0
+                : activeDiscount?.amount ?? 0,
+          );
+          final paidTotal = _paidTotalFromRaw(data['payments']);
+          final paymentCount = _paymentCountFromRaw(data['payments']);
+          final remainingDue = _remainingDue(quote.payableTotal, paidTotal);
+
+          final tableRaw = data['tables'];
+          final tableNumber = tableRaw is Map<String, dynamic>
+              ? tableRaw['table_number']?.toString() ?? '-'
+              : data['order_purpose']?.toString() == 'staff_meal'
+              ? 'STAFF'
+              : '-';
+
+          final createdAtRaw = data['created_at']?.toString();
+          final emergencySummary = emergencySummaries[data['id'].toString()];
+
+          return CashierOrder(
+            orderId: data['id'].toString(),
+            tableNumber: tableNumber,
+            tableId: data['table_id']?.toString() ?? '',
+            status: 'serving',
+            orderPurpose: data['order_purpose']?.toString() ?? 'customer',
+            orderSource: data['order_source']?.toString() ?? 'staff',
+            items: items,
+            menuSubtotal: quote.menuSubtotal,
+            serviceChargeTotal: quote.serviceChargeTotal,
+            serviceItemTotal: quote.serviceItemTotal,
+            fixedChargeTotal: quote.fixedChargeTotal,
+            discountTotal: quote.discountTotal,
+            vatTotal: quote.vatTotal,
+            totalAmount: quote.payableTotal,
+            paidTotal: paidTotal,
+            paymentCount: paymentCount,
+            remainingDue: remainingDue,
+            createdAt: createdAtRaw != null
+                ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
+                : DateTime.now(),
+            activeDiscount: activeDiscount,
+            vatPricingMode: storePricing.vatPricingMode,
+            fulfillmentMode: FulfillmentMode.fromValue(
+              data['fulfillment_mode_snapshot'],
+            ),
+            emergencyModeActive: emergencySummary != null,
+            unservedQuantity: emergencySummary ?? 0,
+            floorServedQuantityByItemId: {
+              for (final entry
+                  in (emergencyItemProgress[data['id'].toString()] ?? const {})
+                      .entries)
+                if (entry.value.any((line) => line.lineKey == 'base'))
+                  entry.key: entry.value
+                      .firstWhere((line) => line.lineKey == 'base')
+                      .floorServedQuantity,
+            },
+            fulfillmentProgressByItemId:
+                emergencyItemProgress[data['id'].toString()] ?? const {},
+          );
+        })
+        .whereType<CashierOrder>()
+        .where(_shouldShowCashierOrder)
+        .toList();
+    final completedOrders = await _fetchCompletedOrders(
+      storeId,
+      storePricing,
+      businessDay,
+      reader: db,
+    );
+    return (orders, completedOrders);
+  }
+
+  Future<Map<String, int>> _loadEmergencySummaries(
+    List<String> orderIds, {
+    PostgrestClient? reader,
+  }) async {
     if (orderIds.isEmpty) return const {};
     try {
-      final raw = await _db.rpc(
+      final raw = await (reader ?? _db.rest).rpc(
         'get_emergency_order_summaries',
         params: {'p_order_ids': orderIds},
       );
@@ -706,13 +740,16 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   Future<Map<String, Map<String, List<CashierFulfillmentProgress>>>>
-  _loadEmergencyItemProgress(List<String> orderIds) async {
+  _loadEmergencyItemProgress(
+    List<String> orderIds, {
+    PostgrestClient? reader,
+  }) async {
     if (orderIds.isEmpty) return const {};
     try {
       // The RPC applies the same active-session scope previously expressed as
       // emergency_fulfillment_sessions!inner(status), and also unions direct
       // beverage component lines without exposing either ledger for writes.
-      final raw = await _db.rpc(
+      final raw = await (reader ?? _db.rest).rpc(
         'get_emergency_order_item_progress',
         params: {'p_order_ids': orderIds},
       );
@@ -744,9 +781,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   Future<List<CashierOrder>> _fetchCompletedOrders(
     String storeId,
     _CashierStorePricing storePricing,
-    VietnamBusinessDayWindow businessDay,
-  ) async {
-    final response = await _db
+    VietnamBusinessDayWindow businessDay, {
+    PostgrestClient? reader,
+  }) async {
+    final response = await (reader ?? _db.rest)
         .from('orders')
         .select(
           'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, menu_option_snapshot, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, vat_profile_snapshot, paying_amount_inc_tax, combo_components, menu_items(name, name_ko, name_vi, name_en, vat_category))',
@@ -1169,8 +1207,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         message.contains('no function matches');
   }
 
-  Future<_CashierStorePricing> _loadStorePricing(String storeId) async {
-    final response = await _db
+  Future<_CashierStorePricing> _loadStorePricing(
+    String storeId, {
+    PostgrestClient? reader,
+  }) async {
+    final response = await (reader ?? _db.rest)
         .from('restaurants')
         .select(
           'vat_pricing_mode, brands(service_charge_enabled, service_charge_rate)',
@@ -2100,6 +2141,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   @override
   void dispose() {
     _scopeGeneration++;
+    _activeCashierRead?.dispose();
     _refreshQueue.dispose();
     _eventRefreshTimer?.cancel();
     _pollTimer?.cancel();

@@ -14,12 +14,12 @@ main `d5d1797e`는 연결 작업 `45d6b8c8`의 조상이다. 사용자 원래 ch
 
 | 묶음 | 확보한 부분 | 남은 완료 조건 |
 |---|---|---|
-| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth/REST/Office Edge fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
-| G1 | native 복원/최종 객체 대조, 업그레이드 금융 보존·receipt 검사 | Auth 외 Realtime/Storage 등 플랫폼 결합과 모든 신규/업그레이드 업무 |
-| G2 | 양쪽 SQL/Edge/UI 구현, native SQL 20건 및 실제 Auth→REST→Edge 연결/복구 | 두 앱의 실제 로그인→법인→POS 개설/준비→Office 업무 전체 흐름 |
-| G3 | root scope, KDS progress journal, 일부 주문/QC/설정/리포트/근태·증빙 전환 | 나머지 legacy 도메인, 계산대 분할·합산·비매출 복구와 나머지 서버 계약 |
-| G4 | 메뉴 잔량 부분 갱신, 리포트 요청 병합, 증빙 metadata batch | 계산대 summary/detail·페이지, 전체 worker 예산, 규모별 계획/실측 |
-| G5 | native JSON worker 누적 수정, 일부 화면/타이머 수명 | 큰 화면 분리, 파일/큐/이미지/worker 메모리 및 전체 자원 상한 |
+| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth/REST/양쪽 Edge/POS Storage fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
+| G1 | native 복원/최종 객체 대조, 업그레이드 금융 보존·receipt 검사 | Realtime/Office Storage·브라우저 등 전체 플랫폼 결합과 모든 신규/업그레이드 업무 |
+| G2 | 양쪽 SQL/Edge/UI, 실제 신규 법인·첫/추가 매장·Auth worker·직원/사진 근태 연결 | 두 앱의 실제 로그인→법인→POS 개설/준비→Office 업무 전체 흐름 |
+| G3 | root scope, KDS progress/single-payment journal, 인증 명령과 일부 주문/QC/설정/리포트/근태·증빙 전환 | 나머지 legacy 도메인, 계산대 분할·합산·비매출 복구와 나머지 서버 계약 |
+| G4 | 메뉴 잔량 부분 갱신, 리포트 병합, 증빙 metadata batch, 계산대 조회 취소/예산 | 계산대 summary/detail·페이지, 전체 worker 예산, 규모별 계획/실측 |
+| G5 | native JSON worker 누적 수정, 일부 화면/타이머 수명, 근태·증빙 사진 상한 | 큰 화면 분리, 파일/큐/이미지/worker 메모리 및 전체 자원 상한 |
 | G6 | 개별 실제 SQL/API·위젯 검사 | T01–T16 연결, 혼합/실패 주입, 2시간 사전 부하 |
 | G7 | 공식 gate·증거 규칙 보존 | 동결 후보 1배/3배 각 12시간, 최종 main 전체 recipe 1회, 공식 배포, 두 마감 관찰 |
 
@@ -1180,3 +1180,29 @@ range 오류/잘못된 시험 응답/메모리 급증/codec 실패/lint 기록�
 남은 파일 작업은 proof 영속 queue의 총 bytes/건수/원래 owner 이관 및 미확정
 교체/정리 의미, 다른 file/export 경로의 예산과 실제 최악 크기 메모리 측정이다.
 근태 미확인 결과의 재시작 복구와 다른 legacy 도메인도 계속 잔여다.
+
+
+### G4 계산대 갱신의 원본 Auth·물리 요청 수명
+
+계산대 pricing/serving orders/emergency summary/progress/completed 읽기를 한
+OwnedReadSession으로 묶었다. 원본 JWT를 고정하고 매장 전환·root scope reset·
+dispose 때 해당 view의 HTTP만 물리 취소한다. shared Auth는 유지한다. 비동기/HTTP
+job 전체 15초, 개별 response 4MiB, JSON worker 정리 별도 2초다. 동기 Dart 모델
+계산의 CPU preemption이나 총 앱 메모리 상한을 구현했다고 주장하지 않는다.
+
+기존 한 번 실행+최신 후속 한 번 refresh 병합을 보존한다. 실제 TCP 7조건 PASS:
+store 전환/초기화/dispose, body stall deadline, 과대 response, 20회 동시 갱신과 원본
+JWT 유지다. 빈 queue의 20회 갱신은 snapshot 2회(가격 2 + 주문 4 GET)로 실행되며
+중단된 옛 store는 가격 GET 이후 주문 조회를 시작하지 않는다. 기존 계산대 명령/
+복구와 합한 실행 27건, 별도 pricing/promotion/item-ordering 18건 PASS, 분석 0 issue다.
+로그 cashier-owned-read-and-command-tests.log,
+cashier-owned-read-pricing-regressions.log, cashier-owned-read-analysis-final.log.
+가격/할인/VAT/결제 횟수/항목 정렬과 승인된 읽기 결과 뒤 realtime 연결을 보존한다.
+
+이 변경은 summary/detail/keyset paging을 완료하지 않았다. 기존 serving 상세
+전체 projection과 날짜 필터는 유지한다. 후속 날짜 경계 변경은 native
+**table_order_is_current**를 따라야 한다. reset policy가 켜진 이전 일자 dine-in은
+서버의 ORDER_OPERATIONS_CLOSED로 결제가 금지된다. 반면 reset 대상이 아닌
+열린 과거 주문까지 오늘 created_at 필터로 숨기는 문제는 별도 조회 계약에서
+해결해야 한다. 단순 날짜 필터 제거로 이미 마감된 주문을 재결제하게 만들지 않는다.
+G4 규모별 실행 계획/행/bytes, 전체 도메인/G6 혼합·G7 장시간/운영은 계속 잔여다.

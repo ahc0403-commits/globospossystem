@@ -842,6 +842,10 @@
     "attendance-photo-original-auth": {
       "path": "test/attendance_photo_transport_test.dart",
       "kind": "focused"
+    },
+    "cashier-owned-read-lifetime": {
+      "path": "test/cashier_owned_read_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [
