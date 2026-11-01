@@ -834,6 +834,14 @@
     "auth-command-transport": {
       "path": "test/auth_command_session_test.dart",
       "kind": "focused"
+    },
+    "bounded-photo-processing": {
+      "path": "test/bounded_photo_test.dart",
+      "kind": "focused"
+    },
+    "attendance-photo-original-auth": {
+      "path": "test/attendance_photo_transport_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [

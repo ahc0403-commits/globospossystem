@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/attendance_service.dart';
 import '../../core/auth/operation_scope_provider.dart';
+import '../../core/utils/bounded_photo.dart';
 
 class AttendanceKioskState {
   const AttendanceKioskState({
@@ -156,6 +157,8 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
         needsVerification: uncertain,
         errorCode: uncertain
             ? 'ATTENDANCE_RESULT_UNCONFIRMED'
+            : error is PhotoProcessingException
+            ? error.code
             : !savingRecord
             ? error is AttendancePhotoSigningException || _uploadedPath != null
                   ? 'ATTENDANCE_PHOTO_LINK_FAILED'

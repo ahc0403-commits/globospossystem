@@ -5,7 +5,7 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "54848fdaa477c12399afe1625a5af2fe59eae12b6c0587746ab5fbc112d1a216",
+      "sha256": "faf43f19f53969730c50c950c3ff070df233502865e972c42dc2a4b4f24dd22a",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
@@ -18,6 +18,10 @@
     },
     "lib/core/auth/operation_scope_provider.dart": {
       "sha256": "2a282f89968a9df963ebc56faa2de52ebb0369cb1080f421e94cd7fabdf47bd0",
+      "mode": "100644"
+    },
+    "lib/core/i18n/photo_processing_error_message.dart": {
+      "sha256": "dd27acd24d5936e47b222dc762011b6ce175c09922a7e7389c1a8c03d01efce6",
       "mode": "100644"
     },
     "lib/core/payments/payment_command_coordinator.dart": {
@@ -40,6 +44,10 @@
       "sha256": "3fa4e6f3a622717a9a9133c599829d76c7efc2759f93d2421f052ad5661698f2",
       "mode": "100644"
     },
+    "lib/core/services/attendance_service.dart": {
+      "sha256": "11e5a816120660360770febf2e17c5fe218bd4905d577c860966d7dd815c1a09",
+      "mode": "100644"
+    },
     "lib/core/services/emergency_web_bridge_stub.dart": {
       "sha256": "3604eae9f4760c91c4a84ee4f641969d2198215ea0c77cbf9e05ca07238e307c",
       "mode": "100644"
@@ -57,7 +65,7 @@
       "mode": "100644"
     },
     "lib/core/services/payment_proof_service.dart": {
-      "sha256": "eac5f6128fd7769bce34effc618391ef2a25963b5a9fb7004366db036bef1085",
+      "sha256": "bd445b365bbff6a2fe49b95ec956edb37449c1dac8c19c62685b47fa4ba09831",
       "mode": "100644"
     },
     "lib/core/services/payment_service.dart": {
@@ -66,6 +74,10 @@
     },
     "lib/core/utils/auth_http_snapshot.dart": {
       "sha256": "1b825efb5429b9588d5e45a9f3e9b8da35137b03b54ec9cda89f81a597fbce2c",
+      "mode": "100644"
+    },
+    "lib/core/utils/bounded_photo.dart": {
+      "sha256": "d5dfdf19d2a6b9bac05b36bc139a5fb8df05bde0a143962303ca3d73941d96b2",
       "mode": "100644"
     },
     "lib/core/utils/deadline_http_client.dart": {
@@ -120,12 +132,16 @@
       "sha256": "6ea1f136a6abab83b52eadcb4ce2010b1eb346b2c96265874c6070b4663a7e3a",
       "mode": "100644"
     },
+    "lib/features/attendance/attendance_error_message.dart": {
+      "sha256": "085e51c058cf78c41250a9d4aead23961b3800a623c237393cb9ff51ecdba07e",
+      "mode": "100644"
+    },
     "lib/features/attendance/attendance_kiosk_provider.dart": {
-      "sha256": "8d1aea2d69eb02865dff8e0232c36839358f4985dd645c818b6793b9180c99b3",
+      "sha256": "f1215f1ebc96c1e576d096fe539c3dec484cd5d5513fa7ba906509e1f28e8945",
       "mode": "100644"
     },
     "lib/features/attendance/attendance_kiosk_screen.dart": {
-      "sha256": "2855496a8a433e8141dc40cd992cfa59890640d92cb4996dc090aec6099a95ca",
+      "sha256": "cdf1bbab3e471407139daeb689e805bbc253a418416f307db666a24923e5497c",
       "mode": "100644"
     },
     "lib/features/attendance/fingerprint_provider.dart": {
@@ -146,6 +162,10 @@
     },
     "lib/features/cashier/cashier_screen.dart": {
       "sha256": "7c70ee54e53d6fa023eca79e4c60939a26bf5eb165f4aac6285c06f05745bf2b",
+      "mode": "100644"
+    },
+    "lib/features/cashier/payment_proof_modal.dart": {
+      "sha256": "82f98e9f8c20140af897dd8b932fd12ce319ea3e904a63d52774fbba1c758047",
       "mode": "100644"
     },
     "lib/features/emergency_fulfillment/emergency_fulfillment_provider.dart": {
@@ -217,15 +237,15 @@
       "mode": "100644"
     },
     "lib/l10n/app_en.arb": {
-      "sha256": "2714d3aea655efc83de531b47e93c78d9bacb13b011f3c91b2bc6a042dc21bbd",
+      "sha256": "79530d5d1763502e9f55230b59f691694d1f935aa2911c955f3ab434a2a5e860",
       "mode": "100644"
     },
     "lib/l10n/app_ko.arb": {
-      "sha256": "61381cf66e0da49a588d52718914c817af25339fcdf67a3243394c6b8ac67436",
+      "sha256": "08f44bccb036a37e8837d4acf607479d5a3c1d8ec547deacebdc89dfa3f6cf68",
       "mode": "100644"
     },
     "lib/l10n/app_vi.arb": {
-      "sha256": "b1101a199c87d1e16bcc97c3e26dbae2745849d0e8ef1771fcad3192a9be2f9b",
+      "sha256": "21200dd4073fa9663b84730177d9b88bc9378c389025d59b54ebf070b9d85aae",
       "mode": "100644"
     },
     "lib/main.dart": {
@@ -440,6 +460,10 @@
       "sha256": "16be6204aac42212afd71519e6e92bfdbb52e440ebae625f0cf7af1c808a5572",
       "mode": "100644"
     },
+    "test/attendance_photo_transport_test.dart": {
+      "sha256": "ad688e2fde258f76f8909502ee250979509779134a8cfa01ae74687d854b8059",
+      "mode": "100644"
+    },
     "test/attendance_submission_retry_test.dart": {
       "sha256": "c4d36e64ec71b8e248da04e1cb37782f46d8fda7f7eed8c59ee8fdd8d0fc1f1b",
       "mode": "100644"
@@ -450,6 +474,10 @@
     },
     "test/auth_initialization_test.dart": {
       "sha256": "2f870e71efb2d526198ce69fcb51b58a71396847308a695ccc5d24a2b23a772c",
+      "mode": "100644"
+    },
+    "test/bounded_photo_test.dart": {
+      "sha256": "4822e04ee4897dfdbc7ed94c4f304bf16350b3238a003c6f008d32db08bcd755",
       "mode": "100644"
     },
     "test/cashier_cancellation_immutable_contract_test.dart": {

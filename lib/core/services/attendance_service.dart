@@ -1,15 +1,18 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:pos_payroll/pos_payroll.dart';
 
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pos_backend.dart';
 import 'financial_input_service.dart';
 import 'rpc_compat.dart';
+import '../utils/bounded_photo.dart';
+import '../utils/auth_http_snapshot.dart';
+import '../utils/deadline_http_client.dart';
 
 const attendanceScreenRecordLimit = 10;
 const attendanceManagementRecordLimit = 500;
@@ -51,10 +54,10 @@ class AttendanceService implements PayrollDataSource {
     required XFile originalFile,
     required String type,
   }) async {
-    return _uploadAttendancePhotoBytes(
+    return _prepareAttendancePhoto(
       storeId: storeId,
       subjectId: employeeNumber.trim().toUpperCase(),
-      bytes: await originalFile.readAsBytes(),
+      file: originalFile,
       type: type,
     );
   }
@@ -65,12 +68,78 @@ class AttendanceService implements PayrollDataSource {
     required File originalFile,
     required String type,
   }) async {
-    return _uploadAttendancePhotoBytes(
+    return _prepareAttendancePhoto(
       storeId: storeId,
       subjectId: userId,
-      bytes: await originalFile.readAsBytes(),
+      file: XFile(originalFile.path),
       type: type,
     );
+  }
+
+  Future<String?> _prepareAttendancePhoto({
+    required String storeId,
+    required String subjectId,
+    required XFile file,
+    required String type,
+  }) async {
+    final source = _client ?? supabase;
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    // Freeze before file IO/codec await, not after a later actor has signed in.
+    final authorization = await AuthHttpSnapshot.capture(
+      source,
+      budget: const Duration(seconds: 15),
+    );
+    final bytes = await compressBoundedPhoto(
+      file,
+      maxDimension: 800,
+      quality: 70,
+    );
+    return _withPhotoStorage(
+      source,
+      authorization,
+      deadline,
+      (storage) => _uploadAttendancePhotoBytes(
+        storeId: storeId,
+        subjectId: subjectId,
+        bytes: bytes,
+        type: type,
+        storage: storage,
+      ),
+    );
+  }
+
+  Future<T> _withPhotoStorage<T>(
+    SupabaseClient source,
+    AuthHttpSnapshot authorization,
+    DateTime deadline,
+    Future<T> Function(SupabaseStorageClient) run,
+  ) async {
+    if (!authorization.isCurrent()) {
+      throw StateError('ATTENDANCE_PHOTO_ACTOR_CHANGED');
+    }
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      throw TimeoutException('Attendance photo deadline');
+    }
+    final transport = DeadlineHttpClient(
+      source.rest.httpClient!,
+      deadline,
+      callTimeout: remaining,
+      maxResponseBytes: 64 * 1024,
+      responseTooLargeCode: 'ATTENDANCE_PHOTO_RESPONSE_BOUND',
+      isCurrent: authorization.isCurrent,
+    );
+    final storage = SupabaseStorageClient(
+      source.storage.url,
+      {...source.storage.headers, ...authorization.headers},
+      httpClient: transport,
+      retryAttempts: 0,
+    );
+    try {
+      return await run(storage).timeout(remaining);
+    } finally {
+      transport.close();
+    }
   }
 
   Future<String?> _uploadAttendancePhotoBytes({
@@ -78,21 +147,8 @@ class AttendanceService implements PayrollDataSource {
     required String subjectId,
     required Uint8List bytes,
     required String type,
+    required SupabaseStorageClient storage,
   }) async {
-    final original = img.decodeImage(bytes);
-    if (original == null) {
-      return null;
-    }
-
-    final widthDominant = original.width >= original.height;
-    final resized = img.copyResize(
-      original,
-      width: widthDominant ? 800 : null,
-      height: widthDominant ? null : 800,
-    );
-
-    final compressed = Uint8List.fromList(img.encodeJpg(resized, quality: 70));
-
     final now = DateTime.now().toUtc();
     final dateStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
@@ -100,16 +156,18 @@ class AttendanceService implements PayrollDataSource {
     final safeSubjectId = subjectId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     final path = '$storeId/$safeSubjectId/$dateStr/${ts}_$type.jpg';
 
-    await (_client ?? supabase).storage
+    await storage
         .from('attendance-photos')
         .uploadBinary(
           path,
-          compressed,
+          bytes,
           fileOptions: const FileOptions(contentType: 'image/jpeg'),
         );
 
     try {
-      return await signEmployeeAttendancePhoto(path);
+      return await storage
+          .from('attendance-photos')
+          .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
     } catch (_) {
       // Retain only the successfully uploaded path, so signing can be retried
       // without uploading the same photograph again.
@@ -117,10 +175,22 @@ class AttendanceService implements PayrollDataSource {
     }
   }
 
-  Future<String> signEmployeeAttendancePhoto(String path) =>
-      (_client ?? supabase).storage
+  Future<String> signEmployeeAttendancePhoto(String path) async {
+    final source = _client ?? supabase;
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    final authorization = await AuthHttpSnapshot.capture(
+      source,
+      budget: const Duration(seconds: 15),
+    );
+    return _withPhotoStorage(
+      source,
+      authorization,
+      deadline,
+      (storage) => storage
           .from('attendance-photos')
-          .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+          .createSignedUrl(path, 60 * 60 * 24 * 365 * 10),
+    );
+  }
 
   Future<void> upsertFingerprintTemplate({
     required String userId,

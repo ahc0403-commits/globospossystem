@@ -4453,5 +4453,8 @@
   "paymentRecoveryScopeChanged": "The signed-in account or store changed. Open the order again.",
   "paymentRecoveryOrderChanged": "The order changed. Refresh it and confirm the amount again.",
   "paymentRecoveryCancelled": "The previous payment request was cancelled.",
-  "paymentRecoveryConflict": "The original payment details changed. Check its result first."
+  "paymentRecoveryConflict": "The original payment details changed. Check its result first.",
+  "photoFileTooLarge": "This photo is too large. Take another photo or choose a smaller image.",
+  "photoProcessorBusy": "Another photo is being processed. Please try again in a moment.",
+  "photoInvalid": "This photo could not be read. Take another photo or choose a different image."
 }

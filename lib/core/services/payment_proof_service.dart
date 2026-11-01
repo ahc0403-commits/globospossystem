@@ -12,13 +12,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pos_backend.dart';
+import '../utils/bounded_photo.dart';
 
 class PaymentProofSaveResult {
   const PaymentProofSaveResult({required this.queued, this.signedUrl});
@@ -65,7 +65,11 @@ class PaymentProofService {
     return _serialized(() async {
       _requireActor(actor);
       final capturedAt = takenAt ?? DateTime.now();
-      final compressed = _compressImage(await originalFile.readAsBytes());
+      final compressed = await compressBoundedPhoto(
+        originalFile,
+        maxDimension: 1400,
+        quality: 78,
+      );
       final item = _QueuedPaymentProof(
         paymentId: paymentId,
         storeId: storeId,
@@ -334,22 +338,6 @@ class PaymentProofService {
       final file = File(item.localPath!);
       if (await file.exists()) await file.delete();
     }
-  }
-
-  Uint8List _compressImage(Uint8List bytes) {
-    final original = img.decodeImage(bytes);
-    if (original == null) {
-      throw const FileSystemException('Invalid image bytes');
-    }
-
-    final widthDominant = original.width >= original.height;
-    final resized = img.copyResize(
-      original,
-      width: widthDominant ? 1400 : null,
-      height: widthDominant ? null : 1400,
-    );
-
-    return Uint8List.fromList(img.encodeJpg(resized, quality: 78));
   }
 
   Future<Map<String, String>> _lookupTaxEntities(

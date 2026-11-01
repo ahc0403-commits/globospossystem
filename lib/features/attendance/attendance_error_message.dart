@@ -1,9 +1,14 @@
 import '../../l10n/app_localizations.dart';
+import '../../core/i18n/photo_processing_error_message.dart';
 
 String attendanceErrorMessage(
   AppLocalizations l10n,
   String? code,
 ) => switch (code) {
+  'PHOTO_INPUT_TOO_LARGE' ||
+  'PHOTO_OUTPUT_TOO_LARGE' ||
+  'PHOTO_PROCESSOR_BUSY' ||
+  'PHOTO_INVALID' => photoProcessingErrorMessage(l10n, code!),
   'EMPLOYEE_NOT_FOUND' => l10n.attendanceEmployeeNotFound,
   'EMPLOYEE_INACTIVE' => l10n.attendanceEmployeeInactive,
   'ATTENDANCE_ALREADY_CLOCKED_IN_TODAY' => l10n.attendanceAlreadyClockedInToday,

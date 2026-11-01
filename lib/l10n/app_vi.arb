@@ -4452,5 +4452,8 @@
   "paymentRecoveryScopeChanged": "Tài khoản hoặc cửa hàng đã thay đổi. Vui lòng mở lại đơn.",
   "paymentRecoveryOrderChanged": "Đơn đã thay đổi. Tải lại và xác nhận lại số tiền.",
   "paymentRecoveryCancelled": "Yêu cầu thanh toán trước đã bị hủy.",
-  "paymentRecoveryConflict": "Thông tin yêu cầu thanh toán ban đầu đã thay đổi. Kiểm tra kết quả trước."
+  "paymentRecoveryConflict": "Thông tin yêu cầu thanh toán ban đầu đã thay đổi. Kiểm tra kết quả trước.",
+  "photoFileTooLarge": "Ảnh quá lớn. Vui lòng chụp lại hoặc chọn ảnh có kích thước nhỏ hơn.",
+  "photoProcessorBusy": "Một ảnh khác đang được xử lý. Vui lòng thử lại sau giây lát.",
+  "photoInvalid": "Không thể đọc ảnh này. Vui lòng chụp lại hoặc chọn ảnh khác."
 }
