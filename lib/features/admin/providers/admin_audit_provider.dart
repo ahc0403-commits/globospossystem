@@ -1,3 +1,4 @@
+import '../../../core/auth/operation_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -23,6 +24,7 @@ AdminAuditErrorKind classifyAdminAuditError(Object error) {
 
 final adminAuditTraceProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, storeId) async {
+      watchOperationScope(ref);
       return adminAuditService.fetchRecentMutationTrace(storeId: storeId);
     });
 
@@ -94,6 +96,7 @@ class TodaySummary {
 
 final adminTodaySummaryProvider = FutureProvider.autoDispose
     .family<TodaySummary, String>((ref, storeId) async {
+      watchOperationScope(ref);
       final json = await adminAuditService.fetchTodaySummary(storeId: storeId);
       return TodaySummary.fromJson(json);
     });

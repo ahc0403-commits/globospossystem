@@ -500,7 +500,7 @@ QC 후속조치 생성/상태 변경은 원래 조회 generation과 필터를 �
 원본은 `command-scope-final-affected.log`, `command-scope-final-analysis.log`다.
 이 결과는 final-main 전체 recipe/금융 unknown 복구/전 도메인 전환 완료가 아니다.
 
-### G1 현재 스키마 추출·복원 경로 — 실험 중
+### G1 현재 스키마 추출·복원 경로 — 초기 실험 이력(후속 결과는 아래 참조)
 
 현재 관리형 HTTPS 카탈로그 조회로 POS 애플리케이션 객체 4516개, Office 8468개를
 확보하고 추출 전후 정의 해시 일치를 확인했다. 함수 본문·타입·열·제약·인덱스·
@@ -574,3 +574,31 @@ G7 12시간 시험은 아직 별도 증거가 필요하다. 이 단계로 G0–G
 원본 결과는 `/workspace/.private/resilience-pos-upgrade-evidence-20261101/result.json`과
 동일 디렉터리의 전체 로그이며, 각 실행에 source/input/tool/log hash와 run ID를 묶는다.
 운영 배포·1배/3배 각 12시간 시험은 아직 시작하지 않았다.
+
+
+### G3 전역 세션 scope 연결 — 추가 구현
+
+앱 root의 operation scope를 실제 Auth/profile 변경에 연결했다. actor·신뢰한 role·
+활성 법인/매장·허용 매장/브랜드/법인·추가 권한을 반영하며, 정렬/중복 제거한 로컬
+profile hash를 사용한다. 이 hash는 서버 authorization revision이 아니고 RLS를
+대체하지 않는다. 사용자 수정 가능한 user_metadata나 표시 이름·토큰 갱신·loading/
+오류는 권한 근거로 쓰지 않는다. 기존 일괄 매장 조회에 tax_entity_id 열만 추가했고
+새 RPC·항목별 원격 조회·폴링은 추가하지 않았다. 기존 프로필 캐시와도 호환된다.
+
+root의 eager listener가 A→B→A 전환도 세 번의 독립 lifetime으로 처리한다. 인증이
+없거나 비밀번호/동의 절차가 필요한 bound session의 새 조회는 전송 전에 실패한다.
+core가 Auth/화면을 역참조하지 않도록 Auth adapter를 root override에만 설치한다.
+
+23개 실제 데이터 FutureProvider(인증 단순 상수 provider 제외)에 session generation을
+연결했다. 이전 generation의 Future는 현재 캐시를 덮지 않는다. QC 후속조치/issue
+두 notifier도 scope 변경 때 이전 목록·진행 중 조회 lifetime을 폐기한다. 기존 수동
+로그아웃 목록에서 빠졌던 두 상태를 포함한 수정이다. 확정된 QC 후속 쓰기는 사용자
+전환 뒤에도 확정으로 반환하고 옛 매장을 재조회하지 않는다. 아직 다른 모든 legacy
+StateNotifier나 결제 unknown 처리까지 전역 규약을 적용한 것은 아니다.
+
+개발 증거: 초기 새 scope/QC 검사 23개 PASS, 기존 인증/매출/관리자 scope 관련
+5개 파일 50개 PASS, 변경 Dart 파일 정적 분석 오류/경고/정보 0개. 추가 100회
+동일 profile 갱신/100회 scope 변경 검사는 별도 최종 로그에 기록한다. 이는 실제
+기기·혼합 부하·12시간 관측 또는 최종 main 전체 검증/운영 배포 증거가 아니다.
+원본 로그: operation-scope-binding-test.log, operation-scope-existing-regressions.log,
+operation-scope-analysis.log, operation-scope-binding-final.log.

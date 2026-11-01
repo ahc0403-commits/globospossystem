@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -535,11 +536,13 @@ final qcCheckProvider = StateNotifierProvider<QcCheckNotifier, QcCheckState>(
 
 final superAdminQcSummaryProvider = FutureProvider.family
     .autoDispose<List<Map<String, dynamic>>, DateTime>((ref, weekStart) async {
+      watchOperationScope(ref);
       return qcService.fetchSuperAdminSummary(weekStart: weekStart);
     });
 
 final globalQcTemplatesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      watchOperationScope(ref);
       return qcService.fetchGlobalTemplates();
     });
 
@@ -708,10 +711,13 @@ class QcFollowupNotifier extends StateNotifier<QcFollowupState> {
   }
 }
 
+final qcServiceProvider = Provider<QcService>((ref) => qcService);
+
 final qcFollowupProvider =
-    StateNotifierProvider<QcFollowupNotifier, QcFollowupState>(
-      (ref) => QcFollowupNotifier(),
-    );
+    StateNotifierProvider<QcFollowupNotifier, QcFollowupState>((ref) {
+      ref.watch(operationScopeProvider);
+      return QcFollowupNotifier(service: ref.watch(qcServiceProvider));
+    });
 
 // ─── Analytics ────────────────────────────────────
 
@@ -739,6 +745,7 @@ class QcAnalyticsParams {
 
 final qcAnalyticsProvider = FutureProvider.family
     .autoDispose<Map<String, dynamic>, QcAnalyticsParams>((ref, params) async {
+      watchOperationScope(ref);
       return qcService.fetchAnalytics(
         storeId: params.storeId,
         from: params.from,
@@ -825,6 +832,7 @@ class QcIssueQueueNotifier extends StateNotifier<QcIssueQueueState> {
 }
 
 final qcIssueQueueProvider =
-    StateNotifierProvider<QcIssueQueueNotifier, QcIssueQueueState>(
-      (ref) => QcIssueQueueNotifier(),
-    );
+    StateNotifierProvider<QcIssueQueueNotifier, QcIssueQueueState>((ref) {
+      ref.watch(operationScopeProvider);
+      return QcIssueQueueNotifier(service: ref.watch(qcServiceProvider));
+    });

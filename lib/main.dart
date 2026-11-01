@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_constants.dart';
 import 'core/auth/terminal_auth.dart';
+import 'core/auth/operation_scope_provider.dart';
 import 'core/hardware/print_agent_coordinator_provider.dart';
 import 'core/i18n/locale_controller.dart';
 import 'core/layout/platform_info.dart';
@@ -17,6 +18,7 @@ import 'core/services/live_refresh_service.dart';
 import 'core/services/bank_transfer_alert_coordinator.dart';
 import 'core/ui/app_theme.dart';
 import 'features/auth/auth_provider.dart';
+import 'features/auth/operation_scope_binding.dart';
 import 'features/auth/session_recovery_screen.dart';
 import 'l10n/app_localizations.dart';
 
@@ -54,7 +56,15 @@ Future<void> main([List<String> args = const []]) async {
     anonKey: AppConstants.supabaseAnonKey,
     authOptions: terminalAuth.options,
   );
-  final container = ProviderContainer();
+  final container = ProviderContainer(
+    overrides: [
+      operationScopeProvider.overrideWith(
+        (ref) => bindOperationScope(ref, authProvider),
+      ),
+    ],
+  );
+  // Own the session listener before any router/domain reads are created.
+  container.read(operationScopeProvider);
   final router = buildAppRouter(container);
 
   runApp(

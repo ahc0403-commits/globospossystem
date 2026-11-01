@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -28,6 +29,7 @@ final kitchenRestaurantNameProvider = FutureProvider.family<String, String>((
   ref,
   storeId,
 ) async {
+  watchOperationScope(ref);
   final response = await supabase
       .from('restaurants')
       .select('name')

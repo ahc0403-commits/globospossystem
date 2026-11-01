@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import '../../core/i18n/menu_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -385,6 +386,7 @@ List<dynamic> menuSalesList(dynamic value) {
 
 final menuSalesAnalyticsProvider = FutureProvider.autoDispose
     .family<MenuSalesAnalytics, MenuSalesAnalyticsParams>((ref, params) async {
+      watchOperationScope(ref);
       final range = menuSalesUtcRange(params.startDate, params.endDate);
       final response = await supabase.rpc(
         'get_store_menu_sales_analytics',

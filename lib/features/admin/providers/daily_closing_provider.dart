@@ -1,3 +1,4 @@
+import '../../../core/auth/operation_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -223,6 +224,7 @@ String mapDailyClosingError(Object error) {
 
 final dailyClosingHistoryProvider = FutureProvider.autoDispose
     .family<List<DailyClosingRecord>, String>((ref, storeId) async {
+      watchOperationScope(ref);
       final rows = await dailyClosingService.fetchDailyClosings(
         storeId: storeId,
       );
@@ -234,6 +236,7 @@ final dailyClosingDayProvider = FutureProvider.autoDispose
       ref,
       scope,
     ) async {
+      watchOperationScope(ref);
       final rows = await dailyClosingService.fetchDailyClosings(
         storeId: scope.storeId,
         closingDate: scope.day,

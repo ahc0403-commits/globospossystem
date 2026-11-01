@@ -1,3 +1,4 @@
+import '../../../core/auth/operation_scope_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -450,6 +451,7 @@ String _normalizeExternalStatus(
 
 final _einvoiceJobsProvider =
     FutureProvider.autoDispose<List<_EinvoiceQueueItem>>((ref) async {
+      watchOperationScope(ref);
       final result = await supabase
           .from('meinvoice_jobs')
           .select('''
@@ -480,6 +482,7 @@ final _einvoiceJobsProvider =
 // ignore: unused_element
 final _einvoiceOpsFlagsProvider =
     FutureProvider.autoDispose<_EinvoiceOpsFlags?>((ref) async {
+      watchOperationScope(ref);
       try {
         final result = await supabase
             .from('system_config')
@@ -504,6 +507,7 @@ final _einvoiceOpsFlagsProvider =
 
 final _meinvoiceReadinessProvider =
     FutureProvider.autoDispose<List<_MeInvoiceReadiness>>((ref) async {
+      watchOperationScope(ref);
       try {
         final result = await supabase.rpc('get_meinvoice_readiness');
         final rows = result is List ? result : const [];
@@ -524,6 +528,7 @@ final _meinvoiceSellerConfigsProvider =
     FutureProvider.autoDispose<Map<String, _MeInvoiceSellerConfig>>((
       ref,
     ) async {
+      watchOperationScope(ref);
       final result = await supabase.from('meinvoice_tax_entity_config').select(
         '''
             tax_entity_id, auth_base_url, api_base_url, app_id,
@@ -546,6 +551,7 @@ final _meinvoiceSellerConfigsProvider =
 
 final _meinvoiceJobEventsProvider = FutureProvider.autoDispose
     .family<List<_MeInvoiceJobEvent>, String>((ref, jobId) async {
+      watchOperationScope(ref);
       if (jobId.isEmpty) return const <_MeInvoiceJobEvent>[];
       final result = await supabase
           .from('meinvoice_job_events')

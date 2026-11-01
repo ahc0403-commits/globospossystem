@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
@@ -1887,6 +1888,7 @@ class CashierTodaySummary {
 
 final cashierTodaySummaryProvider = FutureProvider.autoDispose
     .family<CashierTodaySummary, String>((ref, storeId) async {
+      watchOperationScope(ref);
       final json = await paymentService.fetchCashierTodaySummary(
         storeId: storeId,
       );

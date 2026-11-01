@@ -642,6 +642,10 @@
     "current-schema-upgrade": {
       "path": "scripts/resilience/run_schema_fixture.py",
       "kind": "focused"
+    },
+    "session-scope-binding": {
+      "path": "test/operation_scope_binding_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [

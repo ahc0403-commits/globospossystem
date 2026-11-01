@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -42,6 +43,7 @@ class _AdminStoreContext {
 
 final _adminStoreContextProvider =
     FutureProvider.family<_AdminStoreContext?, String>((ref, storeId) async {
+      watchOperationScope(ref);
       final response = await supabase
           .from('restaurants')
           .select('name, brand_id')

@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import '../../core/i18n/menu_localization.dart';
 import 'dart:async';
 
@@ -874,6 +875,7 @@ final kitchenProvider = StateNotifierProvider<KitchenNotifier, KitchenState>(
 
 final failedPrintJobsProvider = FutureProvider.autoDispose
     .family<List<FailedPrintJob>, String>((ref, storeId) async {
+      watchOperationScope(ref);
       final rows = await supabase
           .from('print_jobs')
           .select(
@@ -893,6 +895,7 @@ final failedPrintJobsProvider = FutureProvider.autoDispose
 
 final printStationJobsProvider = FutureProvider.autoDispose
     .family<List<FailedPrintJob>, String>((ref, storeId) async {
+      watchOperationScope(ref);
       final rows = await supabase
           .from('print_jobs')
           .select(

@@ -356,6 +356,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
               name: row['name'] as String,
               brandId: row['brand_id'] as String?,
               brandName: row['brand_name'] as String?,
+              legalEntityId: row['tax_entity_id'] as String?,
             ),
           )
           .toList();
@@ -405,6 +406,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
                   'name': s.name,
                   'brand_id': s.brandId,
                   'brand_name': s.brandName,
+                  'tax_entity_id': s.legalEntityId,
                 },
               )
               .toList(),
@@ -588,7 +590,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       try {
         row = await _client
             .from('restaurants')
-            .select('id, name, brand_id, brands(name)')
+            .select('id, name, brand_id, tax_entity_id, brands(name)')
             .eq('id', storeId)
             .eq('is_active', true)
             .maybeSingle();
@@ -611,6 +613,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
           name: row['name']?.toString() ?? storeId,
           brandId: row['brand_id']?.toString(),
           brandName: brand is Map ? brand['name']?.toString() : null,
+          legalEntityId: row['tax_entity_id']?.toString(),
         ),
       ];
       isAccessible = true;
@@ -681,7 +684,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     try {
       final rows = await _client
           .from('restaurants')
-          .select('id, name, brand_id, brands(name)')
+          .select('id, name, brand_id, tax_entity_id, brands(name)')
           .inFilter('id', storeIds)
           // Closed stores must not appear in the client store list. The
           // server-side guard (user_accessible_stores) and refreshed claims
@@ -695,6 +698,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
           id: map['id'].toString(),
           name: map['name']?.toString() ?? 'Unknown Store',
           brandId: map['brand_id']?.toString(),
+          legalEntityId: map['tax_entity_id']?.toString(),
           brandName: brandRaw is Map<String, dynamic>
               ? brandRaw['name']?.toString()
               : null,
