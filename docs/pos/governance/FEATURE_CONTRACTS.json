@@ -662,6 +662,14 @@
     "session-bound-views": {
       "path": "test/session_bound_views_test.dart",
       "kind": "focused"
+    },
+    "rpc-json-cleanup": {
+      "path": "test/rpc_resource_cleanup_test.dart",
+      "kind": "focused"
+    },
+    "native-kds-json-resources": {
+      "path": "test/resilience/native_rpc_resource_probe.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [

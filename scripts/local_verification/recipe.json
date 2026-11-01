@@ -139,6 +139,19 @@
       "timeoutSeconds": 120
     },
     {
+      "id": "native-kds-json-resources",
+      "argv": [
+        "flutter",
+        "test",
+        "--no-pub",
+        "--machine",
+        "--enable-vmservice",
+        "test/resilience/native_rpc_resource_probe.dart"
+      ],
+      "format": "flutter",
+      "timeoutSeconds": 120
+    },
+    {
       "id": "repository",
       "argv": [
         "bash",

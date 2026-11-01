@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '../utils/deadline_http_client.dart';
+import '../utils/rpc_resource_cleanup.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -216,7 +217,8 @@ class PaymentProofService {
       );
       return item.signedUrl!;
     } finally {
-      await db.dispose();
+      transport.close();
+      await disposeRpcJsonWorker(db.dispose);
     }
   }
 

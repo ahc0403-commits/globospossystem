@@ -683,3 +683,36 @@ settings-unsaved-and-phone-regressions.log, settings-report-scope-analysis.log�
 설정의 전송 결과 불명 서버 계약, 엄격한 PIN 조회 실패 표현, 모든 인쇄/파일 단계의
 권한·자원 정리, 나머지 legacy notifier는 여전히 별도 잔여다. 위 시험을 전 도메인
 규약·혼합 부하·최종 main 전체 검증·운영 배포·12시간 시험 완료로 표시하지 않는다.
+
+
+### G5 네이티브 JSON 작업자 누적 — 재현/수정/실측
+
+Postgrest 2.6.0은 임시 PostgrestClient마다 네이티브 JSON isolate를 만든다. KDS
+gateway와 이번 복구 코드의 조회/명령 client 두 곳은 HTTP만 닫고 JSON worker를
+닫지 않았다. 실제 native Flutter VM에서 gateway 조회 100회를 실행했을 때 worker를
+포함한 isolate 수가 3→103으로 늘었다. 운영 DB/실제 네트워크 없이 mock HTTP와
+실제 KDS gateway/Postgrest/VM service를 사용한 재현이다.
+
+세 경로 모두 JSON worker를 정리하며, KDS RPC의 전체 deadline에는 JSON 초기화/
+인코딩/디코딩도 포함한다. HTTP 취소는 기존 물리 abort 경로를 유지한다. 정리
+실패/지연은 최대 2초의 별도 예산과 상수 크기 진단 counter에 남긴다. 확정된 주방
+명령/증빙 첨부 결과를 failed/queued로 바꾸거나 원래 전송 오류를 덮지 않는다.
+증빙 처리도 HTTP wrapper를 닫고 같은 JSON 정리 규칙을 사용한다. 새 조회/자동
+재시도/DB 변경을 추가하지 않았다. 나머지 증빙 metadata batch/scope 검토는 별도다.
+
+수정 뒤 정상 100회, 권한 거부 100회 각각 실제 isolate 수 2→2였다(각 warmup
+포함 HTTP 101회, 동시성 1). `native_rpc_resource_probe.dart`는 기본 *_test.dart
+자동 실행 밖의 명시적 entry이며, 공식 recipe에 `native-kds-json-resources`로
+등록했다. `--enable-vmservice --machine`으로 두 경우를 필수 실행한다. 공식 count
+parser도 2 PASS/0 FAIL/0 SKIP으로 판정했다. VM 통계 조회에 실패하면 PASS/skip으로
+대체하지 않는다. 관련 runtime 검사 39개, 증빙 재시도 1개와 native 2개가 통과했고
+검증 recipe 도구 계약 28개도 통과했다. 변경 Dart 분석 오류/경고/정보 0개다.
+
+원본 개발 로그: native-kds-resource-before.log(재현 FAIL),
+native-kds-resource-after.log, native-kds-resource-errors.log,
+native-kds-resource-final-entry.log, kds-rpc-resource-affected.log,
+proof-owned-resource-regression.log, kds-rpc-resource-analysis.log,
+native-resource-recipe-contract.log. 개발 Linux native debug VM의 작은 합성 응답
+시험이다. 웹의 YAJsonIsolate는 worker를 만들지 않으므로 이 실측을 웹 야간 지연
+원인이나 운영/실기기 성능 향상의 증거로 바꾸지 않는다. 실제 웹 혼합 부하, 전체
+자원/worker 합산 예산, 최종 main 전체 recipe와 운영/12시간 시험은 여전히 미완료다.

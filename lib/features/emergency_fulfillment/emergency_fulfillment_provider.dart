@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../core/utils/rpc_resource_cleanup.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -3207,13 +3208,19 @@ class EmergencyFulfillmentNotifier
     try {
       for (var i = 0; i < ids.length; i += 100) {
         final batch = ids.skip(i).take(100).toList(growable: false);
-        final rows = await db.rpc(
-          'get_kds_progress_receipts_v1',
-          params: {
-            'p_store_id': payloads[batch.first]!['_outbox_store_id'],
-            'p_operation_ids': batch,
-          },
-        );
+        final remaining = deadline.difference(DateTime.now());
+        if (remaining <= Duration.zero) {
+          throw TimeoutException('KDS receipt read deadline reached');
+        }
+        final rows = await db
+            .rpc(
+              'get_kds_progress_receipts_v1',
+              params: {
+                'p_store_id': payloads[batch.first]!['_outbox_store_id'],
+                'p_operation_ids': batch,
+              },
+            )
+            .timeout(remaining);
         if (rows is! List || rows.length > batch.length) {
           throw const FormatException('KDS_PROGRESS_RECEIPT_RESPONSE_INVALID');
         }
@@ -3233,6 +3240,7 @@ class EmergencyFulfillmentNotifier
     } finally {
       _kdsReadLifetime.remove(transport);
       transport.close();
+      await disposeRpcJsonWorker(db.dispose);
     }
   }
 
@@ -3657,11 +3665,17 @@ class EmergencyFulfillmentNotifier
     DateTime? deadline,
   }) async {
     final operationDeadline = DateTime.now().add(const Duration(seconds: 15));
+    final effectiveDeadline =
+        deadline != null && deadline.isBefore(operationDeadline)
+        ? deadline
+        : operationDeadline;
+    final remaining = effectiveDeadline.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      throw TimeoutException('KDS command expired before execution');
+    }
     final transport = DeadlineHttpClient(
       _client.rest.httpClient!,
-      deadline != null && deadline.isBefore(operationDeadline)
-          ? deadline
-          : operationDeadline,
+      effectiveDeadline,
       callTimeout: const Duration(seconds: 15),
     );
     _progressWriteLifetime.add(transport);
@@ -3671,10 +3685,11 @@ class EmergencyFulfillmentNotifier
       httpClient: transport,
     );
     try {
-      return await db.rpc(name, params: params);
+      return await db.rpc(name, params: params).timeout(remaining);
     } finally {
       _progressWriteLifetime.remove(transport);
       transport.close();
+      await disposeRpcJsonWorker(db.dispose);
     }
   }
 
