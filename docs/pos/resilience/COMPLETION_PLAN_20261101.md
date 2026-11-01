@@ -1140,3 +1140,43 @@ PASS(원본 JWT·후속 조회, 빈 profile 거부, 503 단일 전송, 미확정
 `auth-command-transport-after.log`, `auth-command-affected-analysis-final.log`를 보존한다.
 초기 테스트 fixture compile 실패와 lint 4건도 보존한 뒤 수정했다. 최종 main 전체
 recipe/운영/장시간/실단말 증거를 대신하지 않는다.
+
+### G3/G5 근태·결제 증빙 사진의 처리 및 전송 상한
+
+근태/결제 증빙 사진의 원본 readAsBytes → full decode/resize에는 입력 byte/pixel/
+동시 처리 상한이 없었다. 새 bounded_photo 경로는 파일 5MiB, 정적 이미지 4Mi pixel/
+변 8192 이하를 codec 전에 확인하고 촬영/선택 단계에서 1600x1600 제한을 요청한다.
+파일은 stat 후 고정 범위 stream으로 읽고 읽기 전체 10초/정리 1초, 출력 JPEG 1MiB
+이하다. 근태 800/q70, 증빙 1400/q78을 유지하며 작은 이미지를 키우지 않는다.
+native codec worker는 앱당 한 개이고 image buffer 대기 queue를 만들지 않는다.
+web compute는 UI event loop 실행이라는 한계를 명시한다.
+
+첫 경계 시험에서 JPEG startDecode/readInfo도 DCT block을 먼저 할당한다는 점을
+확인했다. 65535x65535 헤더 시험은 약 6.3GB RSS로 커졌고 실패/중단됐다. library
+전에 모든 JPEG SOF·sampling을 확인하도록 보강했고 같은 시험은 즉시 거부된다.
+다중 frame/과도 sampling/PNG huge dimensions도 decode 전에 거부한다. 정적
+JPEG/PNG/WebP를 처리하고 압축된 PNG text/profile은 decode/preview 복사본에서
+제외한다. animation/그 외 format은 재촬영/다른 이미지 안내로 거부한다. 이 정책을
+임의의 모든 파일 형식에 대한 무제한 호환성으로 설명하지 않는다.
+
+유효한 소형 palette lossless WebP에서 image 4.8.0 자체의 IndexError도 발견했다.
+원본 library direct decode 3개 크기에서도 재현됐다. 해당 decoding은 미해결이며
+알기 쉬운 사진 오류로 반환한다. 성공 fixture를 바꿔 lossless 호환 PASS로 숨기지
+않는다. JPEG/PNG/lossy WebP 실제 변환과 거부 경계를 구분해 검사한다.
+
+근태 사진은 codec/file await 전에 원본 Auth를 고정한다. 처리 중 actor 변경은
+upload를 시작하지 않고 upload 도중 변경은 새 actor로 sign 요청을 보내지 않는다.
+기존 성공 upload path의 명시적 sign 재시도 계약은 보존한다. upload+sign 전체
+30초, sign retry 15초/응답 64KiB, storage retry 0으로 제한하며 shared Auth는 유지한다.
+
+개발 native 사진/근태·기존 proof batch 36건, 별도 원본 Auth transfer 3건, 실제
+Chromium 사진 경계 11건 PASS, 영향 분석 0 issue다. browser 결과에는 기존 lossless
+codec 오류 안내 조건도 포함되며 실제 decoding 성공과 구분한다. 로그는
+bounded-photo-native-and-services-v4.log, attendance-photo-original-auth-tests-v2.log,
+bounded-photo-chromium-v3.log, bounded-photo-affected-analysis-final.log다. 초기 XFile
+range 오류/잘못된 시험 응답/메모리 급증/codec 실패/lint 기록을 보존한다. 최종 main/
+실카메라/최소 단말/전체 앱 메모리/혼합·12시간/운영 증거를 대신하지 않는다.
+
+남은 파일 작업은 proof 영속 queue의 총 bytes/건수/원래 owner 이관 및 미확정
+교체/정리 의미, 다른 file/export 경로의 예산과 실제 최악 크기 메모리 측정이다.
+근태 미확인 결과의 재시작 복구와 다른 legacy 도메인도 계속 잔여다.
