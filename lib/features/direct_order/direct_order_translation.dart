@@ -1,5 +1,51 @@
 import 'package:flutter/material.dart';
 
+String directOrderAutomaticTranslationHelp(
+  String languageCode,
+) => switch (languageCode) {
+  'ko' => '서로 다른 언어로 대화해도 메시지가 자동 번역됩니다. 편하게 채팅하세요!',
+  'en' =>
+    'Messages are automatically translated across languages. Feel free to chat!',
+  _ =>
+    'Tin nhắn được tự động dịch khi trò chuyện bằng các ngôn ngữ khác nhau. Hãy thoải mái trò chuyện!',
+};
+
+// Presentation only, outside either participant's stored message list.
+Widget directOrderAutomaticTranslationNotice(BuildContext context) => Padding(
+  padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+  child: DecoratedBox(
+    key: const Key('direct_auto_translation_notice'),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.translate,
+            size: 16,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              directOrderAutomaticTranslationHelp(
+                Localizations.localeOf(context).languageCode,
+              ),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
+);
+
 /// Original text stays accessible when a translation is shown or unavailable.
 class DirectOrderTranslatedText extends StatefulWidget {
   const DirectOrderTranslatedText({

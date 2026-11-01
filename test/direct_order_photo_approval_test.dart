@@ -18,6 +18,8 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'fixtures/direct_order_notice_capture.dart';
+
 class _Auth extends AuthNotifier {
   _Auth() : super() {
     state = const PosAuthState(role: 'cashier', storeId: 'store');
@@ -165,8 +167,10 @@ Future<void> _pump(
   WidgetTester tester,
   _PhotoService service, {
   Stream<PosLiveEvent>? liveEvents,
+  String language = 'en',
+  double width = 1450,
 }) async {
-  tester.view.physicalSize = const Size(1450, 1700);
+  tester.view.physicalSize = Size(width, 1700);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -188,12 +192,15 @@ Future<void> _pump(
           (ref) => liveEvents ?? const Stream<PosLiveEvent>.empty(),
         ),
       ],
-      child: MaterialApp.router(
-        theme: AppTheme.build(),
-        locale: const Locale('en'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        routerConfig: router,
+      child: RepaintBoundary(
+        key: noticeCaptureKey,
+        child: MaterialApp.router(
+          theme: AppTheme.build(),
+          locale: Locale(language),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
       ),
     ),
   );
@@ -217,10 +224,12 @@ void main() {
   final rpcRequests = <http.Request>[];
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
+    await loadNoticeFont();
     SharedPreferences.setMockInitialValues({});
     await Supabase.initialize(
       url: 'http://localhost:54321',
       anonKey: 'photo-test-anon',
+      authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
       httpClient: MockClient((request) async {
         rpcRequests.add(request);
         return http.Response(
@@ -233,6 +242,56 @@ void main() {
     );
   });
   tearDownAll(() => Supabase.instance.dispose());
+
+  for (final entry in <String, String>{
+    'ko': '서로 다른 언어로 대화해도 메시지가 자동 번역됩니다. 편하게 채팅하세요!',
+    'vi':
+        'Tin nhắn được tự động dịch khi trò chuyện bằng các ngôn ngữ khác nhau. Hãy thoải mái trò chuyện!',
+    'en':
+        'Messages are automatically translated across languages. Feel free to chat!',
+  }.entries) {
+    for (final width in [390.0, 1440.0]) {
+      testWidgets(
+        'staff chat first entry shows separate ${entry.key} help at $width with no new write',
+        (tester) async {
+          final service = _PhotoService()
+            ..chatBody = 'Existing customer message';
+          rpcRequests.clear();
+          await _pump(tester, service, language: entry.key, width: width);
+          final notice = find.byKey(
+            const Key('direct_auto_translation_notice'),
+          );
+          if (width < 600) {
+            await tester.scrollUntilVisible(
+              notice,
+              300,
+              scrollable: find.byType(Scrollable).first,
+            );
+          }
+          await tester.ensureVisible(notice);
+          await tester.pumpAndSettle();
+          expect(notice, findsOneWidget);
+          expect(find.text(entry.value), findsOneWidget);
+          expect(find.text('Existing customer message'), findsOneWidget);
+          expect(
+            tester.getBottomLeft(notice).dy,
+            lessThanOrEqualTo(
+              tester.getTopLeft(find.text('Existing customer message')).dy,
+            ),
+          );
+          expect(service.chatBody, 'Existing customer message');
+          expect(service.approvals, 0);
+          expect(rpcRequests, isEmpty);
+          await captureNotice(
+            tester,
+            'staff_chat_${entry.key}_${width.toInt()}',
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
 
   test(
     'staff service sends exact reviewed photo, quote and amount to RPC',

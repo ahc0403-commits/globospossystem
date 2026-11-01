@@ -1,254 +1,207 @@
 {
   "schemaVersion": 1,
-  "baseSha": "cb0d99536f8255b897d65ad099085903a54a0fc9",
-  "kind": "tooling",
-  "summary": "Prepare isolated sample identities and collect source-bound catalog contracts for G0/G1; leave product adoption and restore/soak evidence open.",
+  "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
+  "kind": "application",
+  "summary": "Add localized, non-message translation help on customer/staff chat entry and neutral delivery-only quality copy below price/options for verified BunsikClub menu identities. Ambiguous jajangmyeon/naengmyeon identities remain excluded.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "87c1c17cb517fc17fa8c9c04e7a975224d4a441dccbb8688c9cd426e0c91fc7e",
+      "sha256": "33d32ab29f35721a52cc7cbc8a142feee1afd0d066a66b472a5ed9421e30a6bc",
       "mode": "100644"
     },
-    "docs/pos/resilience/TEST_ENVIRONMENT.md": {
-      "sha256": "9d1612e1066a215f7052c6e43b1c03bf8fb939487edf8fd481c26d60dede9aac",
+    "lib/core/menu/menu_choices.dart": {
+      "sha256": "30258de58ba582362dde9baf16952bc0667b24590bc959185b89994152b5c755",
       "mode": "100644"
     },
-    "scripts/local_verification/recipe.json": {
-      "sha256": "9a6de09f596adff0781ce2dd2fb219c605aed8b2e1a78f8e7bdfb5aa5016a1bf",
+    "lib/core/menu/menu_sizes.dart": {
+      "sha256": "eda2989b9873bb077438cface66efe6e5ff67fcf13f91a2ef1a08b7a09cff335",
       "mode": "100644"
     },
-    "scripts/resilience/integration_runtime_catalog.py": {
-      "sha256": "df7095ce533af289a02b2ad44dbc62912fb24c5cac90fbbe8aa92f5baba40557",
+    "lib/features/direct_order/direct_order_cashier_screen.dart": {
+      "sha256": "0375ac872a9830ec75aec9511f6c45b65a5e537362934eabd18a39cc0ef3083a",
       "mode": "100644"
     },
-    "scripts/resilience/runtime_catalog.py": {
-      "sha256": "d8325629a8416040bf2e07c67fb77867fa0a15504a54689e14a6290fc39aa41c",
+    "lib/features/direct_order/direct_order_delivery_quality.dart": {
+      "sha256": "c71455eac21101f749bd17ec4a2d231016b8f53569c1f4d364c3eab643b95fd3",
       "mode": "100644"
     },
-    "scripts/resilience/runtime_contracts.sql": {
-      "sha256": "e81112fc7951f20c9db0599e45044e23439550586586ecce432ed841f4d24615",
+    "lib/features/direct_order/direct_order_storefront_screen.dart": {
+      "sha256": "c86c5fb094423f281df9ab28c9a6906c0fdd75ed7f737c13de24cac19c2987a0",
       "mode": "100644"
     },
-    "scripts/resilience/sample_accounts.py": {
-      "sha256": "b965c9e3bc2bd63038171e84cd9be9755df7b7467d72c13d807cd68d9ee80c6b",
+    "lib/features/direct_order/direct_order_translation.dart": {
+      "sha256": "18e13acf67f4d537f77ecab34250098fb87f67007e6b0fe86ff0e9028194113b",
       "mode": "100644"
     },
-    "scripts/resilience/tests/test_runtime_catalog.py": {
-      "sha256": "b299c9c943eaf8a01afa9565cb2f264e84415fac6e2b6315d26fb266550da7a2",
+    "test/direct_order_access_route_test.dart": {
+      "sha256": "29a38da7c250ed706ba16919856b421ccb9cd36e1cdbfee2c29255a227cc5018",
       "mode": "100644"
     },
-    "scripts/resilience/tests/test_sample_accounts.py": {
-      "sha256": "b23a25f89aa0eefe137a57d2649ad4e5e8b7318a8b00fcbb016471f6329ec349",
+    "test/direct_order_delivery_quality_notice_test.dart": {
+      "sha256": "bb41b3a7eb5ca47903956f6080552cfe4d0461eddcf2e3ec874802ed563985e1",
+      "mode": "100644"
+    },
+    "test/direct_order_photo_approval_test.dart": {
+      "sha256": "cb475b9b7c48d0c3058f5bed67c40eb0feee4e2943694fdf497de0effaf29011",
+      "mode": "100644"
+    },
+    "test/direct_order_translation_test.dart": {
+      "sha256": "8cac427dcefe6d603bf0901df1841a168c915a8594f9de702e190e37b8a70882",
+      "mode": "100644"
+    },
+    "test/fixtures/direct_order_notice_capture.dart": {
+      "sha256": "06ed541a3506dade92fbb94960b7bf586ae71682a4104ad5f1a73990c91df070",
       "mode": "100644"
     }
   },
   "affectedFeatures": [
     "admin",
-    "attendance",
-    "auth",
     "cashier",
-    "customer_display",
-    "delivery",
-    "digital_receipt",
     "direct_order",
     "emergency_fulfillment",
-    "inventory",
-    "inventory_purchase",
     "kitchen",
-    "onboarding",
-    "order",
     "payment",
-    "photo_inventory",
-    "photo_ops",
     "photo_sales_import",
-    "print_station",
-    "procurement",
-    "qc",
     "qr_order",
-    "receipt_ledger",
-    "red_invoice_intake",
-    "report",
     "restaurant_sales_export",
-    "settings",
-    "store_procurement",
-    "store_setup",
-    "store_workflow",
     "super_admin",
-    "table",
     "waiter"
   ],
   "sharedAreas": [
-    "verification",
     "project-policy",
-    "database"
+    "shared-dart",
+    "verification"
   ],
   "risk": {
-    "business": false,
+    "business": true,
     "financial": false,
-    "authorization": true,
-    "dataAccess": true,
+    "authorization": false,
+    "dataAccess": false,
     "background": false,
-    "dbContract": true,
-    "officeContract": true,
-    "files": true,
+    "dbContract": false,
+    "officeContract": false,
+    "files": false,
     "native": false
   },
   "requiredChecks": [
     "governance-unit",
-    "resilience-tools-unit",
-    "runtime-catalog-unit",
-    "runtime-catalog-postgres",
-    "local-release-verifier"
+    "feature.admin",
+    "feature.cashier",
+    "feature.direct_order",
+    "feature.emergency_fulfillment",
+    "feature.kitchen",
+    "feature.payment",
+    "feature.photo_sales_import",
+    "feature.qr_order",
+    "feature.restaurant_sales_export",
+    "feature.super_admin",
+    "feature.waiter",
+    "direct-order-delivery-quality",
+    "direct-order-translation-help",
+    "direct-order-customer-chat-entry",
+    "direct-order-staff-chat-entry",
+    "official-full-recipe"
   ],
   "businessInvariants": [
-    "No account creation/reset, role change, global logout or business writes; only inventoried sample principal logins and own-profile reads.",
-    "POS and Office retain separate Auth/DB and explicit sample store identity; do not infer legal-entity ownership.",
-    "Catalog evidence is hashes/metadata only, not fresh/upgrade/whole-plan completion; original operational login waiver remains NOT_RUN."
+    "Do not change any menu price, tax, availability, quantity, order RPC, bank configuration, Auth or permission.",
+    "Informational notice is delivery-only, store-scoped and exact catalog-ID scoped; pickup, other stores and combo titles do not inherit the note.",
+    "Preserve existing menu descriptions, size choices and complete KO/VI/EN text without truncation.",
+    "Translation help is presentation-only on chat entry; it never becomes a stored or sent conversation message and follows the viewer locale.",
+    "Optional informationFooter is null by default for all existing shared menu pickers. Preserve required option validation, selected keys, prices and explicit confirmation; review all transitive consumers.",
+    "Jajangmyeon versus Jjagyechi and cold-noodle variants remain unresolved and excluded; no name-based runtime selection or speculative identity assignment."
   ],
   "dataAccessReview": {
     "nPlusOne": {
       "applicable": true,
-      "reason": "Nine independent Auth principals require independent authentication; catalog is one set-based statement/project, no business item requests.",
-      "scale": "9 principals, 2 projects, concurrency one for Auth; 20,000 metadata objects and 6MiB/project maximum.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Each menu card performs only a local constant-set membership check; no remote lookup per menu.",
+      "scale": "Existing loaded catalog; O(1) extra lookup per rendered card, zero additional remote requests.",
+      "verification": "Storefront fake records one catalog read across render/pickup changes; customer/staff chat entry asserts no message write, staff event burst regression preserves one coalesced detail read."
     },
     "setBasedSql": {
-      "applicable": true,
-      "reason": "Catalog columns pre-aggregate by relation; catalog object metadata uses set unions, never loops over business rows.",
-      "scale": "2 catalog statements plus bounded own-profile reads.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "rowsColumns": {
-      "applicable": true,
-      "reason": "Only explicit own-profile columns with limit 2; catalog metadata projects hashes, no function bodies or business rows.",
-      "scale": "At most 2 profile rows per principal; 128KiB/Auth HTTP; 6MiB/catalog.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "joinCardinality": {
-      "applicable": true,
-      "reason": "Catalog columns aggregate separately before relation join; other arms have one row per named object.",
-      "scale": "No business one-to-many joins; duplicate object identities rejected.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "indexesPaging": {
-      "applicable": true,
-      "reason": "Own profile uses auth_id equality and limit 2; catalog snapshot is bounded metadata and avoids OFFSET.",
-      "scale": "9 fixed principals, finite catalogs; no schema/index mutations.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "refreshPolling": {
-      "applicable": true,
-      "reason": "Explicit one-shot checks only; no polling or state invalidations added.",
-      "scale": "One run per evidence capture, 3 calls/principal maximum.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "cacheScope": {
-      "applicable": true,
-      "reason": "No persistent session or profile cache; artifacts identify project/source and each verified principal.",
-      "scale": "Separate target keys/identities; cross-project comparison rejected.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "concurrency": {
-      "applicable": true,
-      "reason": "Auth concurrency one, no retries; read-only two-project catalog captures can run concurrently.",
-      "scale": "9 sample principals, max 2 concurrent catalog calls.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "retryIdempotency": {
-      "applicable": true,
-      "reason": "Never retry password login or unknown cleanup; always attempt only local logout after successful login.",
-      "scale": "1 login attempt, at most 3 HTTP calls/principal, 12-second request timeout.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "largeResults": {
-      "applicable": true,
-      "reason": "Auth and catalog payloads have explicit bounds; oversize or partial results fail, not silently truncate.",
-      "scale": "128KiB per Auth response, <=20,000 objects and <=6MiB catalog; <=7MiB recorder input.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     },
     "repeatedAggregates": {
-      "applicable": true,
-      "reason": "Catalog aggregates only on explicit snapshot; no sales totals, counts per refresh or production polling.",
-      "scale": "One catalog snapshot per DB; no product screen changes.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "applicable": false,
+      "reason": "Presentation-only lookup in one immutable catalog-ID set; uses existing storefront items and locale. No new API/DB read, write, retry, cache, polling, join, aggregate, worker or background task."
     }
   },
-  "rollback": "Revert the evidence tooling normally; do not delete runtime history, business data or other sessions. Private credentials remain outside Git and may be removed only when their assigned test lifecycle ends.",
+  "rollback": "Revert this presentation-only change and its reviewed source assessment through the normal release path; no production-data or DB rollback is needed.",
   "claims": {
     "allPlanComplete": false,
     "performanceImproved": false
   },
   "contractReview": {
     "outcomes": {
-      "applicable": true,
-      "reason": "Login identity and local session cleanup are separate outcomes; unknown cleanup fails and stops further logins.",
-      "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
-      ]
+      "applicable": false,
+      "reason": "Informational text only; no mutation/outcome, DB/Office/external or hardware contract is changed."
     },
     "tenantScope": {
       "applicable": true,
-      "reason": "Whitelist inventoried sample actor/profile/store IDs and separate POS/Office targets; reject broader Office scope.",
+      "reason": "Notice selection checks the actual storefront ID and immutable catalog identity; translated names never select scope.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "direct-order-delivery-quality"
       ]
     },
     "readiness": {
-      "applicable": true,
-      "reason": "Account identity readiness is separate from permission actions, external-effect sandboxing, physical devices and 12-hour soaks.",
-      "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
-      ]
+      "applicable": false,
+      "reason": "Informational text only; no mutation/outcome, DB/Office/external or hardware contract is changed."
     },
     "dbCompatibility": {
-      "applicable": true,
-      "reason": "Catalog hashes current effective functions, triggers, RLS/ACL/indexes and history without changing production schema.",
-      "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
-      ]
+      "applicable": false,
+      "reason": "Informational text only; no mutation/outcome, DB/Office/external or hardware contract is changed."
     },
     "officeBoundary": {
-      "applicable": true,
-      "reason": "Office Auth and profile are verified independently; explicit store mapping is checked, no name or UUID ownership inference.",
-      "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
-      ]
+      "applicable": false,
+      "reason": "Informational text only; no mutation/outcome, DB/Office/external or hardware contract is changed."
     },
     "externalEffects": {
-      "applicable": true,
-      "reason": "No financial/notification/printing writes; session creation and current-session local cleanup are the only Auth effects.",
-      "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
-      ]
+      "applicable": false,
+      "reason": "Informational text only; no mutation/outcome, DB/Office/external or hardware contract is changed."
     },
     "resourceLifetime": {
       "applicable": true,
-      "reason": "Token stays in memory only; local logout finally and stop on uncertain cleanup; no persisted refresh token.",
+      "reason": "Adds static help only, no timers/subscriptions/network work. Screen entry/unmount and existing restore/send/refresh burst regressions remain covered.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "direct-order-delivery-quality",
+        "direct-order-customer-chat-entry",
+        "direct-order-staff-chat-entry"
       ]
     },
     "filesAndHardware": {
-      "applicable": true,
-      "reason": "Private external owned mode-600 files, no shell eval, bounded responses; real hardware and long load remain NOT_RUN.",
-      "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
-      ]
+      "applicable": false,
+      "reason": "Informational text only; no mutation/outcome, DB/Office/external or hardware contract is changed."
     }
   }
 }

@@ -2781,6 +2781,7 @@ class _DirectOrderCashierScreenState
               ],
             ),
           ),
+          directOrderAutomaticTranslationNotice(context),
           const Divider(height: 1),
           if (_requirements.isNotEmpty)
             ConstrainedBox(

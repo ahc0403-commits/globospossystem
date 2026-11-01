@@ -176,6 +176,7 @@ Future<MenuChoiceSelection?> showMenuChoicePicker(
   required String channel,
   required String language,
   String? initialKey,
+  Widget? informationFooter,
 }) {
   String text(String ko, String vi, String en) => switch (language) {
     'ko' => ko,
@@ -271,6 +272,7 @@ Future<MenuChoiceSelection?> showMenuChoicePicker(
                     ),
                   const SizedBox(height: 16),
                 ],
+                if (informationFooter != null) informationFooter,
               ],
             ),
           ),

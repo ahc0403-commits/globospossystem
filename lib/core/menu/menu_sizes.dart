@@ -106,6 +106,7 @@ Future<MenuSizeSelection?> showMenuSizePicker(
   required String languageCode,
   bool allowTakeout = false,
   bool initialTakeout = false,
+  Widget? informationFooter,
 }) {
   final money = NumberFormat('#,###', 'vi_VN');
   String text(String ko, String vi, String en) => switch (languageCode) {
@@ -158,6 +159,7 @@ Future<MenuSizeSelection?> showMenuSizePicker(
                     ),
                   ),
                 ),
+              if (informationFooter != null) informationFooter,
             ],
           ),
         ),
