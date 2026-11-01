@@ -87,8 +87,9 @@ WITH schemas AS MATERIALIZED (
   JOIN schemas n ON n.oid=t.typnamespace GROUP BY n.nspname,t.typname
   UNION ALL
   SELECT 'sequence',format('%I.%I',r.nspname,r.relname),
-    jsonb_build_object('type',pg_catalog.format_type(s.seqtypid,NULL),'start',s.seqstart,'increment',s.seqincrement,
-      'min',s.seqmin,'max',s.seqmax,'cache',s.seqcache,'cycle',s.seqcycle)
+    -- Decimal strings preserve int64 boundaries through JavaScript/MCP transports.
+    jsonb_build_object('type',pg_catalog.format_type(s.seqtypid,NULL),'start',s.seqstart::text,'increment',s.seqincrement::text,
+      'min',s.seqmin::text,'max',s.seqmax::text,'cache',s.seqcache::text,'cycle',s.seqcycle)
   FROM pg_catalog.pg_sequence s JOIN relations r ON r.oid=s.seqrelid
   UNION ALL
   SELECT 'publication',p.pubname,jsonb_build_object('allTables',p.puballtables,'insert',p.pubinsert,

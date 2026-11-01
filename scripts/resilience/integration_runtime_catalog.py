@@ -39,6 +39,7 @@ class CatalogIntegration(unittest.TestCase):
         BEGIN;
         SET LOCAL statement_timeout='10s';
         CREATE SCHEMA resilience_catalog_fixture;
+        CREATE SEQUENCE resilience_catalog_fixture.int64_boundary AS bigint;
         CREATE TABLE resilience_catalog_fixture.entries(id int, actor text DEFAULT 'private-default-sentinel');
         CREATE INDEX entries_actor ON resilience_catalog_fixture.entries(actor);
         ALTER TABLE resilience_catalog_fixture.entries ENABLE ROW LEVEL SECURITY;
@@ -67,6 +68,14 @@ class CatalogIntegration(unittest.TestCase):
         for secret in ('private-default-sentinel', 'private-function-sentinel',
                        'private-history-sentinel', 'private-business-sentinel'):
             self.assertNotIn(secret, raw)
+
+    def test_int64_sequence_boundaries_survive_json_transports(self):
+        _, raw = self.changed('SELECT 1;')
+        data = next(json.loads(line) for line in raw.splitlines() if line.startswith('{'))
+        sequence = next(r for r in data['objects'] if r['kind'] == 'sequence'
+                        and r['identity'] == 'resilience_catalog_fixture.int64_boundary')
+        self.assertEqual(sequence['detail']['max'], '9223372036854775807')
+        self.assertIsInstance(sequence['detail']['start'], str)
 
     def test_function_definition_security_and_grants_detected(self):
         diff, _ = self.changed("""CREATE OR REPLACE FUNCTION resilience_catalog_fixture.lookup(v int)

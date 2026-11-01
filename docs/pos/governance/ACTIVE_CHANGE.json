@@ -17,7 +17,7 @@
       "mode": "100644"
     },
     "scripts/resilience/integration_runtime_catalog.py": {
-      "sha256": "10d02819ec70bc96da9ccf0c528d8e5858e828bf94f406564bddce666c290853",
+      "sha256": "df7095ce533af289a02b2ad44dbc62912fb24c5cac90fbbe8aa92f5baba40557",
       "mode": "100644"
     },
     "scripts/resilience/runtime_catalog.py": {
@@ -25,7 +25,7 @@
       "mode": "100644"
     },
     "scripts/resilience/runtime_contracts.sql": {
-      "sha256": "04f0ffcf8b4e319697e23db26918bdf7adff45fedc67f3862cf95eed177a47df",
+      "sha256": "e81112fc7951f20c9db0599e45044e23439550586586ecce432ed841f4d24615",
       "mode": "100644"
     },
     "scripts/resilience/sample_accounts.py": {
