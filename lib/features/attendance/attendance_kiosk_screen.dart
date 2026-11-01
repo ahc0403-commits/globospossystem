@@ -7,6 +7,7 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/auth/operation_scope_provider.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../core/utils/time_utils.dart';
@@ -22,17 +23,37 @@ typedef AttendancePhotoPicker = Future<XFile?> Function();
 
 enum _KioskViewState { idle, preview, submitting, done }
 
-class AttendanceKioskScreen extends ConsumerStatefulWidget {
+class AttendanceKioskScreen extends ConsumerWidget {
   const AttendanceKioskScreen({super.key, this.photoPickerOverride});
 
   final AttendancePhotoPicker? photoPickerOverride;
 
   @override
-  ConsumerState<AttendanceKioskScreen> createState() =>
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final session = ref.watch(operationScopeProvider);
+    return _AttendanceKioskView(
+      key: ValueKey((
+        auth.user?.id,
+        auth.storeId,
+        auth.role,
+        session.generation,
+      )),
+      photoPickerOverride: photoPickerOverride,
+    );
+  }
+}
+
+class _AttendanceKioskView extends ConsumerStatefulWidget {
+  const _AttendanceKioskView({super.key, this.photoPickerOverride});
+  final AttendancePhotoPicker? photoPickerOverride;
+
+  @override
+  ConsumerState<_AttendanceKioskView> createState() =>
       _AttendanceKioskScreenState();
 }
 
-class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
+class _AttendanceKioskScreenState extends ConsumerState<_AttendanceKioskView> {
   final _employeeNumberController = TextEditingController();
   final _employeeNumberFocus = FocusNode();
   _KioskViewState _viewState = _KioskViewState.idle;
@@ -108,6 +129,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                 imageQuality: 85,
                 requestFullMetadata: false,
               ));
+      if (!mounted) return;
       if (photo == null) {
         if (mounted) {
           showErrorToast(context, context.l10n.attendancePhotoRequired);

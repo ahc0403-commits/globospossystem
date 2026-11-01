@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS recovery, bounded owned report/settings reads and native JSON resource cleanup and additive payment receipts; complete domain adoption, cashier recovery UI, mixed/12h tests and production remain pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "458206389d7647747ec020d86ab01316dd595f8dac03a84f248d2b8cbe887d5d",
+      "sha256": "402876fd1b35aa359f224a700f7c23e15f5795914cc62f6139f4ef914349f73b",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "eac4698f1cbd659df29a951f8e2947daf2685f7ff675d49b294e23827e37395c",
+      "sha256": "2a1803c741fa1befd4ee03a3984a7d3fb8549e1b3789e4a47c598937e1285c65",
       "mode": "100644"
     },
     "lib/core/auth/operation_scope_provider.dart": {
@@ -90,6 +90,14 @@
     },
     "lib/features/admin/tabs/settings_tab.dart": {
       "sha256": "6ea1f136a6abab83b52eadcb4ce2010b1eb346b2c96265874c6070b4663a7e3a",
+      "mode": "100644"
+    },
+    "lib/features/attendance/attendance_kiosk_provider.dart": {
+      "sha256": "8d1aea2d69eb02865dff8e0232c36839358f4985dd645c818b6793b9180c99b3",
+      "mode": "100644"
+    },
+    "lib/features/attendance/attendance_kiosk_screen.dart": {
+      "sha256": "2855496a8a433e8141dc40cd992cfa59890640d92cb4996dc090aec6099a95ca",
       "mode": "100644"
     },
     "lib/features/attendance/fingerprint_provider.dart": {
@@ -284,6 +292,10 @@
       "sha256": "16be6204aac42212afd71519e6e92bfdbb52e440ebae625f0cf7af1c808a5572",
       "mode": "100644"
     },
+    "test/attendance_submission_retry_test.dart": {
+      "sha256": "c4d36e64ec71b8e248da04e1cb37782f46d8fda7f7eed8c59ee8fdd8d0fc1f1b",
+      "mode": "100644"
+    },
     "test/cashier_cancellation_immutable_contract_test.dart": {
       "sha256": "f902dffabdf391d0f3d111a7c9abdbfbe2c60d5041cf7801f1bde63c6db2d41d",
       "mode": "100644"
@@ -366,6 +378,10 @@
     },
     "test/qc_read_epoch_test.dart": {
       "sha256": "28638c580dcfbbb6c54acc77cbe41726dfb8e4d9cddaf185d5219a382593798a",
+      "mode": "100644"
+    },
+    "test/remaining_route_operational_state_test.dart": {
+      "sha256": "37530b091c2199c8f3b91caa09ca9aa316e9a6e0363bef31010d8db364abe853",
       "mode": "100644"
     },
     "test/resilience/native_rpc_resource_probe.dart": {
@@ -476,7 +492,8 @@
     "session-bound-views",
     "rpc-json-cleanup",
     "native-kds-json-resources",
-    "owned-read-lifetime"
+    "owned-read-lifetime",
+    "attendance-scope-commands"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -573,7 +590,7 @@
   "contractReview": {
     "outcomes": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Resource disposal errors/timeouts do not turn confirmed handoffs/proof attachment into failures or overwrite an original transport error.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Resource disposal errors/timeouts do not turn confirmed handoffs/proof attachment into failures or overwrite an original transport error. The actual employee-photo attendance notifier and screen reset on bound actor/access/store changes. Disposed or mismatched scopes cannot start an attendance write after photo upload; an already confirmed original event still returns true without mutating a later view. Durable unknown-event recovery across restart and photo processing budgets remain pending.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -588,12 +605,13 @@
         "payment-receipts-native",
         "settings-command-scope",
         "session-bound-views",
-        "rpc-json-cleanup"
+        "rpc-json-cleanup",
+        "attendance-scope-commands"
       ]
     },
     "tenantScope": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Report/settings reads now abort only their owned HTTP work on view invalidation, while JSON-worker cleanup has a separate bounded budget and cannot change confirmed write outcomes. Shared Auth stays alive. All other legacy-domain scope adoption remains explicitly pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Report/settings reads now abort only their owned HTTP work on view invalidation, while JSON-worker cleanup has a separate bounded budget and cannot change confirmed write outcomes. Shared Auth stays alive. All other legacy-domain scope adoption remains explicitly pending. The actual employee-photo attendance notifier and screen reset on bound actor/access/store changes. Disposed or mismatched scopes cannot start an attendance write after photo upload; an already confirmed original event still returns true without mutating a later view. Durable unknown-event recovery across restart and photo processing budgets remain pending.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -609,7 +627,8 @@
         "payment-receipts-native",
         "settings-command-scope",
         "session-bound-views",
-        "owned-read-lifetime"
+        "owned-read-lifetime",
+        "attendance-scope-commands"
       ]
     },
     "readiness": {
@@ -668,7 +687,7 @@
     },
     "resourceLifetime": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Three temporary KDS clients close their owned JSON workers; native VM counts validate repeated normal/denied calls. The recipe has a dedicated --enable-vmservice entry outside the default Flutter test glob, retaining mandatory execution without duplicate generic execution. Report/settings reads now abort only their owned HTTP work on view invalidation, while JSON-worker cleanup has a separate bounded budget and cannot change confirmed write outcomes. Shared Auth stays alive. All other legacy-domain scope adoption remains explicitly pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Three temporary KDS clients close their owned JSON workers; native VM counts validate repeated normal/denied calls. The recipe has a dedicated --enable-vmservice entry outside the default Flutter test glob, retaining mandatory execution without duplicate generic execution. Report/settings reads now abort only their owned HTTP work on view invalidation, while JSON-worker cleanup has a separate bounded budget and cannot change confirmed write outcomes. Shared Auth stays alive. All other legacy-domain scope adoption remains explicitly pending. The actual employee-photo attendance notifier and screen reset on bound actor/access/store changes. Disposed or mismatched scopes cannot start an attendance write after photo upload; an already confirmed original event still returns true without mutating a later view. Durable unknown-event recovery across restart and photo processing budgets remain pending.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -686,7 +705,8 @@
         "session-bound-views",
         "rpc-json-cleanup",
         "native-kds-json-resources",
-        "owned-read-lifetime"
+        "owned-read-lifetime",
+        "attendance-scope-commands"
       ]
     },
     "filesAndHardware": {

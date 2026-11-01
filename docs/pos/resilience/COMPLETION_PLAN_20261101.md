@@ -754,3 +754,20 @@ owned-read-final-coalescing-analysis.log이며 앞선 증거는 owned-read-lifet
 증거: `/workspace/.private/owned-read-postgrest-evidence-20261101-v7/result.json` 및
 동일 폴더 `focused-postgrest.log`. source SHA와 working patch hash가 기록된 개발
 검사이며 final-main/운영 receipt가 아니다. v1~v6 환경 실패는 그대로 보존한다.
+
+### G3 근태 실제 입력 화면·명령의 session 경계
+
+직원 번호/사진 근태 notifier도 root operation scope에 연결했다. 사진 업로드가
+완료됐을 때 원래 사용자/매장이 더 이상 유효하지 않으면 근태 저장 RPC를 시작하지
+않는다. 이미 서버가 확정한 원래 근태 결과는 화면 종료 뒤에도 true를 유지하고
+새 화면 state에 쓰지 않는다. bound 로그아웃·다른 매장 요청은 전송 전에 거부한다.
+실제 입력 화면은 사용자·매장·역할·session generation이 바뀌면 기존 사진/직원 번호/
+완료 타이머를 정리한다. 카메라가 떠 있는 동안 계정을 바꾼 경우도 이전 결과를
+버리며, 같은 사용자의 표시/토큰 갱신은 미리보기를 지우지 않는다.
+
+개발 영향 검사 16개 PASS: 명령/사진/기존 계약 13개, 기존 실제 근태 제출·오프라인
+화면과 두 계정 전환 시나리오 3개다. 로그는 attendance-scope-command-tests.log,
+attendance-session-widget-tests.log다. 전체 자동 분석 결과는 별도 로그에 기록한다.
+사진 처리의 크기·메모리 상한, 앱 재시작 뒤 unknown 근태의 내구성 있는 복구, 다른
+legacy 근태/급여/직원 관리 경로는 여전히 잔여다. 기존 사진+직원+행동 결과 재확인
+계약은 보존했으며 이 영향 검사를 전체 근태/전역 규약 완료로 표시하지 않는다.
