@@ -590,6 +590,18 @@
     "menu-quantity-sql": {
       "path": "scripts/test_menu_discount_quantities.sh",
       "kind": "focused"
+    },
+    "office-first-legal-sql": {
+      "path": "scripts/resilience/integration_legal_connection.py",
+      "kind": "focused"
+    },
+    "office-legal-dialog": {
+      "path": "test/office_legal_connection_dialog_test.dart",
+      "kind": "focused"
+    },
+    "order-read-lifetimes": {
+      "path": "test/order_read_epoch_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [
@@ -615,7 +627,7 @@
     },
     {
       "id": "G2",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "zero_store_legal_entity",
         "cross_database_recovery",

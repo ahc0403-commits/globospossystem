@@ -353,8 +353,8 @@ POS는 `scripts/deploy_pos_production.sh`, Office는 `scripts/run_office.sh`의 
 
 - 거버넌스 PR #653과 G0/G1 시험 도구 PR #654는 main에 반영됐다.
 - 실제 샘플 POS 8개 + Office 1개 계정을 확인하고 Git 밖 0600 설정에 저장했다.
-  원본 로그인/자기 프로필 시험은 9개 인증, 7개 credential 준비 통과이며
-  sp_order/sp_pr1 초기 설정은 기존 정상 비밀번호 변경 경로로 별도 처리 중이다.
+  원본 로그인/자기 프로필 시험은 9개 인증 통과이며 sp_order/sp_pr1의
+  초기 설정도 기존 정상 비밀번호 변경 경로로 완료해 9개 역할 모두 준비됐다.
 - POS 5,819 / Office 9,359 metadata object의 실제 계약 해시를 확보했다.
   현재 schema-only DDL에 의한 fresh/upgrade 복원 증거는 확보 대기다.
 - G3: 공통 결과/scope/조회 lifetime을 추가하고 주문 상세에 동시 읽기 1개+후속 1개,
@@ -370,7 +370,11 @@ POS는 `scripts/deploy_pos_production.sh`, Office는 `scripts/run_office.sh`의 
   이는 작업 중 입력에 대한 결과이며 최종-main 전체 검증 PASS가 아니다.
 - Office 별도 작업 공간: 정확히 200개라는 이유로 실패하던 연결 목록을 선택 manifest
   최대 200개/키셋 page로 바꿨다. 8개 영향 검사와 bridge 타입 검사 통과.
-  최초 법인 연결의 지속 작업·확인 UI와 양쪽 DB 시험은 아직 구현 중이다.
+  최초 법인 연결의 지속 작업·양쪽 확인 UI를 구현했다. 독립 PostgreSQL DB/Auth
+  fixture에서 17개 검사, Office bridge/배치 18개, 확인 화면 POS 2개/Office 3개 통과.
+  새/기존 법인 명시적 선택, 20회 동시/반복 확정, 응답 유실/만료 후 재개, 첫 매장,
+  별도 브랜드 ID의 구매 연결 및 정지 계정 제외를 포함한다. 이는 부분 fixture이며
+  현재 전체 schema 복원·실제 두 앱 브라우저·신규 매장 전체 업무 검증은 남아 있다.
 - 실제 매장 최소 사양 단말 배정, 최신 POS/Office schema-only 덤프 경로를 요청했다.
   사용자 샘플 계정 제공만으로 물리 단말·인쇄·12시간 부하를 PASS로 만들지 않는다.
 - G5/G6/G7 전체 완료 및 1배/3배 각각 12시간 시험, 운영 배포·마감 2회 관찰은 미완료다.

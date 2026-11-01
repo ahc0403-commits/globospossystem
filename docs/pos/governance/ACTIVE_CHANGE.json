@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
   "kind": "application",
-  "summary": "Implement scoped read lifetimes and bounded menu quota refresh before completing the remaining G0–G7 product work.",
+  "summary": "Implement scoped reads, quota partial refresh and recoverable POS–Office first legal entity contracts and confirmation UI; full restore/soak/release evidence remains pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "6a23ffb4273dd06c10bfff4fd78fcd81de464d85b8079ecbcdf6db62779e6d4d",
+      "sha256": "1c7a275d37a7a3919dad6ecc955c48d3913688a9e61e34e431823771efedcddd",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "6fd5bf41824aac74d720cc40fb5ef87e9f8a79fc63b613a52450ab5b2dc8cf9e",
+      "sha256": "f9983e43e2dc59d78276bde41d443700a36cc493b9a08c76ce7b5c5b19867eea",
       "mode": "100644"
     },
     "lib/core/services/live_refresh_service.dart": {
@@ -44,6 +44,30 @@
       "sha256": "8f19e168def40ea0c48429595dec63cdf54911f8d484294b01fd1a79423a89f6",
       "mode": "100644"
     },
+    "lib/features/super_admin/office_legal_connection_dialog.dart": {
+      "sha256": "977be8d53d81708e602119fbfee8c9e481a4d16e2f4f458ae4a5fd33942ff198",
+      "mode": "100644"
+    },
+    "lib/features/super_admin/super_admin_screen.dart": {
+      "sha256": "4b2804b558452e7586403c09f0971623badd0fbe677b20e1f7c9db1239f9bb90",
+      "mode": "100644"
+    },
+    "lib/l10n/app_en.arb": {
+      "sha256": "0fa7b296ef04bc5062c3238db83fed004eb956b3a33aeaf33e21daca6747a086",
+      "mode": "100644"
+    },
+    "lib/l10n/app_ko.arb": {
+      "sha256": "a464eadfe9307680f2efe2812e671af11fd1a2e820bfbb2a8575f17f1bd37b87",
+      "mode": "100644"
+    },
+    "lib/l10n/app_vi.arb": {
+      "sha256": "cf41cdd24e9b93940b3b2be1bc44db55e1c82899a82f117fd5c2ed254ea72c0c",
+      "mode": "100644"
+    },
+    "scripts/resilience/integration_legal_connection.py": {
+      "sha256": "abb06ba54aa0f6437179fddb48fd83dd3c726973c517b8cfc22f87874ed6c192",
+      "mode": "100644"
+    },
     "scripts/test_menu_discount_quantities.sh": {
       "sha256": "2a4c4ea5a62789c6c0c90ac5e7d906058b1ac4380ccb9d4dd698048f70316e03",
       "mode": "100644"
@@ -52,8 +76,40 @@
       "sha256": "a4bdaa63233db033d4513d4e4d02cb88e05c1101833ed36448a22ccb4db0e045",
       "mode": "100644"
     },
+    "supabase/migrations/20261101023409_pos_office_legal_connection.sql": {
+      "sha256": "2a3d4ca8d84d7ebf84c6843584967ec930fb3142dd24aba90b3c2f4c2670b2d4",
+      "mode": "100644"
+    },
+    "test/dialog_sheet_entrypoint_coverage_contract_test.dart": {
+      "sha256": "cb2cc730847db5a6c085f710c2c5dee92a45315e1c24e96e5b26ffe0f9dc7a0c",
+      "mode": "100644"
+    },
+    "test/fixtures/office_legal_connection_baselines/manifest.json": {
+      "sha256": "e70b04ac6d59c1e315d603303ce04bb6661e9c50a2c5c09551204da24bbb8472",
+      "mode": "100644"
+    },
+    "test/fixtures/office_legal_connection_baselines/office-procurement-connect-baseline.sql": {
+      "sha256": "b2312c2dce543b792a15e1ec1cb70b764d014f6f2ae5920c2221835d8623da27",
+      "mode": "100644"
+    },
+    "test/fixtures/office_legal_connection_baselines/office-store-mapping-baseline.sql": {
+      "sha256": "9d375f798f72d6dd138240169ef98a5efb0cfa687b63eb176cbd007ba5a0d5d8",
+      "mode": "100644"
+    },
+    "test/fixtures/pos_office_legal_connection_office.sql": {
+      "sha256": "023a314cb7e720f8e5c4a104e4062b2824b48eaaa67559f615677d66d458dfed",
+      "mode": "100644"
+    },
+    "test/fixtures/pos_office_legal_connection_pos.sql": {
+      "sha256": "73d32b9a531a6099fa25d2e729e40e10a2bad7415aa3f5ad714ed2c7a9149499",
+      "mode": "100644"
+    },
     "test/menu_quantity_partial_refresh_test.dart": {
       "sha256": "6caa226174be922376fa7b09bf82b4c6bdcc19eefef42c8c0fbaa1c1a858ba9b",
+      "mode": "100644"
+    },
+    "test/office_legal_connection_dialog_test.dart": {
+      "sha256": "827a1627d57719d55cd0d81639a6c7d5e43b9ddb28e359a224dbc0602ca384dd",
       "mode": "100644"
     },
     "test/operation_contract_test.dart": {
@@ -125,8 +181,8 @@
     "dataAccess": true,
     "background": true,
     "dbContract": true,
-    "officeContract": false,
-    "files": false,
+    "officeContract": true,
+    "files": true,
     "native": false
   },
   "requiredChecks": [
@@ -134,13 +190,18 @@
     "operation-outcomes",
     "qc-read-lifetimes",
     "menu-quantity-partial",
-    "menu-quantity-sql"
+    "menu-quantity-sql",
+    "office-first-legal-sql",
+    "office-legal-dialog",
+    "order-read-lifetimes"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
     "Backward compatible live-event INSERT still invalidates legacy clients; new clients merge bounded changed IDs from INSERT and UPDATE signals.",
     "Read scope switches, disposal and late errors cannot restore another store; confirmed writes are distinct from subsequent refresh state.",
-    "Original user workspace and unrelated Excel work remain intact; G0–G7/soak completion stays false until actual evidence exists."
+    "Original user workspace and unrelated Excel work remain intact; G0–G7/soak completion stays false until actual evidence exists.",
+    "The first internal POS legal entity can connect with zero stores, using independent Auth and explicit Office ownership confirmation. External entities retain the existing unsupported policy.",
+    "Each DB transaction is atomic and cross-DB completion is a recoverable operation, never a claimed distributed transaction; proof expires and is never an Auth/service credential."
   ],
   "dataAccessReview": {
     "nPlusOne": {

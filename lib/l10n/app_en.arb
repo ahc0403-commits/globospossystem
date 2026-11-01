@@ -4429,5 +4429,16 @@
   "resilienceLegalEntityOwnership": "Ownership",
   "resilienceLegalEntityInternal": "Internal",
   "resilienceLegalEntityExternal": "External",
-  "resilienceLegalEntityFailed": "Registration failed. Check the tax code and your access, then retry."
+  "resilienceLegalEntityFailed": "Registration failed. Check the tax code and your access, then retry.",
+  "resilienceOfficeLink": "Connect legal entity to Office",
+  "resilienceOfficeInstructions": "Copy the connection code, sign in to Office, then confirm it under POS legal entity connection in System Settings. The code is valid for 20 minutes.",
+  "resilienceOfficeInternalOnly": "Office connections currently support internal legal entities.",
+  "resilienceOfficeConfirmed": "Connected to Office",
+  "resilienceOfficeExpired": "The connection code expired. Prepare a new request.",
+  "resilienceOfficeReview": "Legal entity details changed. The connection requires review.",
+  "resilienceOfficeAwaiting": "Confirm legal entity ownership and connection in Office.",
+  "resilienceOfficeFailed": "The connection status could not be confirmed. Check the same request again.",
+  "resilienceOfficeCopyCode": "Copy connection code",
+  "resilienceOfficeOpen": "Open Office",
+  "resilienceOfficePrepare": "Prepare connection request"
 }

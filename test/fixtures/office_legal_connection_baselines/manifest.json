@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "sourceProject": "raghsbaxcwrxlsacaoau",
+  "capturedAt": "2026-11-01",
+  "purpose": "Definition-only compatibility fixture, not a restorable production schema",
+  "files": [
+    {
+      "path": "office-store-mapping-baseline.sql",
+      "sha256": "9d375f798f72d6dd138240169ef98a5efb0cfa687b63eb176cbd007ba5a0d5d8"
+    },
+    {
+      "path": "office-procurement-connect-baseline.sql",
+      "sha256": "b2312c2dce543b792a15e1ec1cb70b764d014f6f2ae5920c2221835d8623da27"
+    }
+  ]
+}

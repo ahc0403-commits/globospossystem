@@ -4428,5 +4428,16 @@
   "resilienceLegalEntityOwnership": "Loại sở hữu",
   "resilienceLegalEntityInternal": "Nội bộ",
   "resilienceLegalEntityExternal": "Bên ngoài",
-  "resilienceLegalEntityFailed": "Đăng ký thất bại. Kiểm tra mã số thuế và quyền truy cập rồi thử lại."
+  "resilienceLegalEntityFailed": "Đăng ký thất bại. Kiểm tra mã số thuế và quyền truy cập rồi thử lại.",
+  "resilienceOfficeLink": "Liên kết pháp nhân với Office",
+  "resilienceOfficeInstructions": "Sao chép mã kết nối, đăng nhập Office rồi xác nhận tại Liên kết pháp nhân POS trong Cài đặt hệ thống. Mã có hiệu lực trong 20 phút.",
+  "resilienceOfficeInternalOnly": "Hiện chỉ hỗ trợ liên kết Office cho pháp nhân nội bộ.",
+  "resilienceOfficeConfirmed": "Đã liên kết Office",
+  "resilienceOfficeExpired": "Mã kết nối đã hết hạn. Hãy chuẩn bị yêu cầu mới.",
+  "resilienceOfficeReview": "Thông tin pháp nhân đã thay đổi. Cần kiểm tra lại liên kết.",
+  "resilienceOfficeAwaiting": "Hãy xác nhận quyền sở hữu pháp nhân và liên kết trong Office.",
+  "resilienceOfficeFailed": "Không thể xác nhận trạng thái liên kết. Hãy kiểm tra lại cùng yêu cầu.",
+  "resilienceOfficeCopyCode": "Sao chép mã kết nối",
+  "resilienceOfficeOpen": "Mở Office",
+  "resilienceOfficePrepare": "Chuẩn bị yêu cầu liên kết"
 }
