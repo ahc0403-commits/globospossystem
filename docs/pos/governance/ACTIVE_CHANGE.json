@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "700396d3034fd20685217c4a028519e628558b4520c454a9c9d77e51de515816",
+      "sha256": "7fde35d32716023c9297ce70ad581eb74bdec440fcd1aad22b8ce2d5e84e2779",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "a46c3cf0d6c5eb1fb0f8bd29972a16eca7c0cfc925712cfd7ce6906a7ff21c3d",
+      "sha256": "6db6d9047d33bffe04f6929ff5fb60757cbb996506d47ac509583ff2b311d35e",
       "mode": "100644"
     },
     "lib/core/auth/auth_command_session.dart": {
@@ -65,7 +65,7 @@
       "mode": "100644"
     },
     "lib/core/services/payment_proof_service.dart": {
-      "sha256": "bd445b365bbff6a2fe49b95ec956edb37449c1dac8c19c62685b47fa4ba09831",
+      "sha256": "e4ed6bd1672df31ee9d1326897b33c8751068e60ff3c06b3631c21010ed9f55e",
       "mode": "100644"
     },
     "lib/core/services/payment_service.dart": {
@@ -592,6 +592,10 @@
       "sha256": "d381be3d53c25db686107ecd3dadc22f3f77275c107214fd9d37d0d8bb406c98",
       "mode": "100644"
     },
+    "test/payment_proof_outcome_test.dart": {
+      "sha256": "aac544d382876cb556a3b1ac21145119a1f4fdb50cb7c9b9e36c2d7644e13f41",
+      "mode": "100644"
+    },
     "test/payment_recovery_panel_test.dart": {
       "sha256": "07155375ace89eed11c844402ed86f5ce517a831851d435fbeac2b9f9bcaedd1",
       "mode": "100644"
@@ -766,7 +770,8 @@
     "auth-command-transport",
     "bounded-photo-processing",
     "attendance-photo-original-auth",
-    "cashier-owned-read-lifetime"
+    "cashier-owned-read-lifetime",
+    "proof-confirmed-cleanup"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -792,7 +797,8 @@
     "Native two-project first/additional-store fixture now exercises actual initial-password Edge, generation trigger, new employees, POS private Storage and eight photo attendance events with cross-store denial. Synthetic JPEG is decoded by the real Dart image library; no physical camera/hardware, whole lifecycle or production claim.",
     "Own password/consent commands retain original actor epoch and JWT across awaits, reject duplicate in-flight submissions, abort only their own HTTP work after logout/actor change/disposal, and never set a later actor gate/error/cache/navigation. No password is persisted and no write is automatically retried. Command whole budget 15s/input 16KiB/response 64KiB. Durable ambiguous-password recovery remains separate incomplete work.",
     "Attendance/proof photo input is capped before byte/pixel allocation: 5MiB, 4Mi pixels, side <=8192, static JPEG/PNG/WebP; picker <=1600, no upscaling, output <=1MiB. One native codec worker/app without an image queue; web compute is synchronous. Original library lossless palette WebP decode failure remains visible and is not a compatibility PASS. Attendance upload/sign freezes the original JWT before codec await and uses bounded owned transport with no automatic retry.",
-    "Cashier pricing/payable/emergency/completed reads share one original-Auth owned session: whole HTTP/async job 15s, each response <=4MiB, JSON cleanup separately <=2s. Store/actor reset and disposal physically abort only this view requests. At most one active and one latest refresh. Quote/VAT/promotion/items/payment snapshots and realtime subscription after accepted state are preserved. Summary/detail/keyset paging and operating-day eligibility review remain incomplete."
+    "Cashier pricing/payable/emergency/completed reads share one original-Auth owned session: whole HTTP/async job 15s, each response <=4MiB, JSON cleanup separately <=2s. Store/actor reset and disposal physically abort only this view requests. At most one active and one latest refresh. Quote/VAT/promotion/items/payment snapshots and realtime subscription after accepted state are preserved. Summary/detail/keyset paging and operating-day eligibility review remain incomplete.",
+    "A server-acknowledged payment-proof attachment stays uploaded even if local deletion/queue retirement fails. The new client persists an attached marker when possible; intact confirmed records perform only local cleanup after restart, with no metadata/upload/sign/attach request. Preserve ambiguous attachments, malformed confirmations and legacy ownership semantics; a complete durable queue/owner/receipt migration is not claimed."
   ],
   "dataAccessReview": {
     "nPlusOne": {
@@ -845,9 +851,9 @@
     },
     "retryIdempotency": {
       "applicable": true,
-      "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable. Same single-payment operation returns its original confirmed result, including after response loss or order completion; changed amount/method/order is rejected. Native errors roll back payment and receipt together. Client durable intent persistence and explicit reconciliation remain unfinished, so legacy automatic retry behavior is not claimed fixed. Full KDS RPC timeout includes JSON startup/decoding, while physical HTTP close still aborts transport. Cleanup is separately bounded to two seconds and only its failure counter changes; original write evidence and unknown journals remain intact. OwnedReadSession forbids table writes and non-allowlisted RPC calls. It performs only the SDK normal expired-token refresh, sharing Auth refresh; it never retries a business command or closes shared Auth transport. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete.",
+      "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable. Same single-payment operation returns its original confirmed result, including after response loss or order completion; changed amount/method/order is rejected. Native errors roll back payment and receipt together. Client durable intent persistence and explicit reconciliation remain unfinished, so legacy automatic retry behavior is not claimed fixed. Full KDS RPC timeout includes JSON startup/decoding, while physical HTTP close still aborts transport. Cleanup is separately bounded to two seconds and only its failure counter changes; original write evidence and unknown journals remain intact. OwnedReadSession forbids table writes and non-allowlisted RPC calls. It performs only the SDK normal expired-token refresh, sharing Auth refresh; it never retries a business command or closes shared Auth transport. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. New-client proof cleanup of an intact confirmed marker never repeats metadata/upload/sign/attach. Unknown attachment results retain the existing resumable object and explicit bounded retry; loss of every local marker and legacy concurrent clients remain separate durable-journal work.",
       "scale": "Tests cover committed response loss, partial local persistence, cleanup failure, distinct JeonGabok receipt ID, restart and original-ID reuse; no new operation retry loop.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Schema runner rejects another run/project, timeout, partial input and failed cleanup; native fixture logs are distinct development proof. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Schema runner rejects another run/project, timeout, partial input and failed cleanup; native fixture logs are distinct development proof. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. proof-confirmed-cleanup, proof-batch-scope: 11 focused cases; actual chmod fault only in owned temporary directory. This does not prove native server replay/whole-runtime/12h acceptance."
     },
     "largeResults": {
       "applicable": true,
@@ -870,7 +876,7 @@
   "contractReview": {
     "outcomes": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Resource disposal errors/timeouts do not turn confirmed handoffs/proof attachment into failures or overwrite an original transport error. The actual employee-photo attendance notifier and screen reset on bound actor/access/store changes. Disposed or mismatched scopes cannot start an attendance write after photo upload; an already confirmed original event still returns true without mutating a later view. Durable unknown-event recovery across restart and photo processing budgets remain pending. Single full-payment cashier UI now persists and recovers original intents; root scope resets the cashier view and original confirmed results cannot print or update a later actor/store. Separate batch/non-revenue writes remain legacy. This supersedes earlier additive-only status for the single-payment UI, not the pending whole-domain adoption. Actual two-project Auth/REST/Office Edge HTTP verified new zero-store law, immutable operation ownership and lost-ack resume. This is not the two-app browser/open-store/purchase/attendance lifecycle or 12-hour evidence.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Resource disposal errors/timeouts do not turn confirmed handoffs/proof attachment into failures or overwrite an original transport error. The actual employee-photo attendance notifier and screen reset on bound actor/access/store changes. Disposed or mismatched scopes cannot start an attendance write after photo upload; an already confirmed original event still returns true without mutating a later view. Durable unknown-event recovery across restart and photo processing budgets remain pending. Single full-payment cashier UI now persists and recovers original intents; root scope resets the cashier view and original confirmed results cannot print or update a later actor/store. Separate batch/non-revenue writes remain legacy. This supersedes earlier additive-only status for the single-payment UI, not the pending whole-domain adoption. Actual two-project Auth/REST/Office Edge HTTP verified new zero-store law, immutable operation ownership and lost-ack resume. This is not the two-app browser/open-store/purchase/attendance lifecycle or 12-hour evidence. Proof server confirmation and local retirement are now separate. Real Unix deletion-permission fault reproduces the prior false queued outcome; intact confirmed marker recovery sends no HTTP.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -897,7 +903,8 @@
         "two-project-real-platform",
         "first-legal-real-http",
         "runtime-gateway-guards",
-        "owned-platform-guards"
+        "owned-platform-guards",
+        "proof-confirmed-cleanup"
       ]
     },
     "tenantScope": {

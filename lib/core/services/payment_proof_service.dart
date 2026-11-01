@@ -21,17 +21,25 @@ import 'pos_backend.dart';
 import '../utils/bounded_photo.dart';
 
 class PaymentProofSaveResult {
-  const PaymentProofSaveResult({required this.queued, this.signedUrl});
+  const PaymentProofSaveResult({
+    required this.queued,
+    this.signedUrl,
+    this.cleanupPending = false,
+  });
 
   final bool queued;
   final String? signedUrl;
+  final bool cleanupPending;
 
   bool get uploaded => !queued && signedUrl != null;
 }
 
 class PaymentProofService {
-  PaymentProofService({SupabaseClient? client}) : _client = client;
+  PaymentProofService({SupabaseClient? client, Directory? localQueueDirectory})
+    : _client = client,
+      _localQueueDirectory = localQueueDirectory;
   final SupabaseClient? _client;
+  final Directory? _localQueueDirectory;
   SupabaseClient get _db => _client ?? supabase;
   static const _queueKey = 'payment_proof_upload_queue_v1';
 
@@ -95,10 +103,12 @@ class PaymentProofService {
           DateTime.now().add(const Duration(seconds: 30)),
           actor: actor,
         );
-        queue.remove(item);
-        await _writeQueue(queue);
-        await _deleteLocal(item);
-        return PaymentProofSaveResult(queued: false, signedUrl: signedUrl);
+        final retired = await _retireConfirmed(item, queue);
+        return PaymentProofSaveResult(
+          queued: false,
+          signedUrl: signedUrl,
+          cleanupPending: !retired,
+        );
       } catch (error) {
         _recordFailure(item, error);
         await _writeQueue(queue);
@@ -132,7 +142,12 @@ class PaymentProofService {
 
   Future<int> pendingActionCount(String storeId) => _serialized(
     () async => (await _readQueue())
-        .where((item) => item.storeId == storeId && _owns(item) && item.blocked)
+        .where(
+          (item) =>
+              item.storeId == storeId &&
+              _owns(item) &&
+              (item.blocked || item.attached),
+        )
         .length,
   );
 
@@ -161,9 +176,10 @@ class PaymentProofService {
         .where(
           (item) =>
               _owns(item) &&
-              !item.blocked &&
-              item.attempts < 3 &&
-              !(item.nextAttemptAt?.isAfter(DateTime.now()) ?? false),
+              (item.attached ||
+                  !item.blocked &&
+                      item.attempts < 3 &&
+                      !(item.nextAttemptAt?.isAfter(DateTime.now()) ?? false)),
         )
         .take(10)
         .toList();
@@ -171,7 +187,7 @@ class PaymentProofService {
     Object? metadataError;
     try {
       taxes = await _lookupTaxEntities(
-        eligible.where((item) => item.storagePath == null),
+        eligible.where((item) => !item.attached && item.storagePath == null),
         deadline,
         actor,
       );
@@ -185,15 +201,14 @@ class PaymentProofService {
         break;
       }
       try {
-        if (item.storagePath == null && metadataError != null) {
+        if (!item.attached &&
+            item.storagePath == null &&
+            metadataError != null) {
           item.attempts++;
           throw metadataError;
         }
         await _process(item, queue, deadline, actor: actor, taxEntities: taxes);
-        queue.remove(item);
-        await _writeQueue(queue);
-        await _deleteLocal(item);
-        completed++;
+        if (await _retireConfirmed(item, queue)) completed++;
       } catch (error) {
         _recordFailure(item, error);
         await _writeQueue(queue);
@@ -210,6 +225,12 @@ class PaymentProofService {
     Map<String, String>? taxEntities,
   }) async {
     _requireActor(actor);
+    if (item.attached) {
+      if (item.signedUrl == null) {
+        throw StateError('PAYMENT_PROOF_CONFIRMED_STATE_INVALID');
+      }
+      return item.signedUrl!;
+    }
     final remaining = deadline.difference(DateTime.now());
     if (remaining <= Duration.zero) {
       throw TimeoutException('Proof job deadline reached');
@@ -297,10 +318,38 @@ class PaymentProofService {
           'p_taken_at': item.takenAtIso,
         },
       );
+      item.attached = true;
+      // The server acknowledgement is authoritative. A local persistence or
+      // file-cleanup failure cannot turn this confirmed attachment into queued.
+      try {
+        await _writeQueue(queue);
+      } catch (_) {}
       return item.signedUrl!;
     } finally {
       transport.close();
       await disposeRpcJsonWorker(db.dispose);
+    }
+  }
+
+  Future<bool> _retireConfirmed(
+    _QueuedPaymentProof item,
+    List<_QueuedPaymentProof> queue,
+  ) async {
+    if (!item.attached) throw StateError('PAYMENT_PROOF_NOT_CONFIRMED');
+    try {
+      await _deleteLocal(item);
+    } catch (_) {
+      return false;
+    }
+    final index = queue.indexOf(item);
+    if (index < 0) return true;
+    queue.removeAt(index);
+    try {
+      await _writeQueue(queue);
+      return true;
+    } catch (_) {
+      queue.insert(index, item);
+      return false;
     }
   }
 
@@ -386,8 +435,11 @@ class PaymentProofService {
     required String paymentId,
     required Uint8List bytes,
   }) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final queueDir = Directory('${dir.path}/payment_proof_queue');
+    final queueDir =
+        _localQueueDirectory ??
+        Directory(
+          '${(await getApplicationDocumentsDirectory()).path}/payment_proof_queue',
+        );
     if (!queueDir.existsSync()) {
       queueDir.createSync(recursive: true);
     }
@@ -434,6 +486,7 @@ class _QueuedPaymentProof {
     String? jobId,
     this.storagePath,
     this.uploaded = false,
+    this.attached = false,
     this.signedUrl,
     this.attempts = 0,
     this.blocked = false,
@@ -447,7 +500,7 @@ class _QueuedPaymentProof {
   final String paymentId, storeId, takenAtIso, jobId;
   final String? localPath, imageBytesBase64, ownerId;
   String? storagePath, signedUrl, lastError;
-  bool uploaded, blocked;
+  bool uploaded, blocked, attached;
   int attempts;
   DateTime? nextAttemptAt;
   factory _QueuedPaymentProof.fromJson(Map<String, dynamic> json) =>
@@ -461,6 +514,7 @@ class _QueuedPaymentProof {
         jobId: json['job_id']?.toString(),
         storagePath: json['storage_path']?.toString(),
         uploaded: json['uploaded'] == true,
+        attached: json['attached'] == true,
         signedUrl: json['signed_url']?.toString(),
         attempts: (json['attempts'] as num?)?.toInt() ?? 0,
         blocked: json['blocked'] == true,
@@ -479,6 +533,7 @@ class _QueuedPaymentProof {
     'image_bytes_base64': imageBytesBase64,
     'storage_path': storagePath,
     'uploaded': uploaded,
+    'attached': attached,
     'signed_url': signedUrl,
     'attempts': attempts,
     'blocked': blocked,

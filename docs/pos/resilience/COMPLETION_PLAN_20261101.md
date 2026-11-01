@@ -1206,3 +1206,28 @@ cashier-owned-read-pricing-regressions.log, cashier-owned-read-analysis-final.lo
 열린 과거 주문까지 오늘 created_at 필터로 숨기는 문제는 별도 조회 계약에서
 해결해야 한다. 단순 날짜 필터 제거로 이미 마감된 주문을 재결제하게 만들지 않는다.
 G4 규모별 실행 계획/행/bytes, 전체 도메인/G6 혼합·G7 장시간/운영은 계속 잔여다.
+
+
+### G3/G5 결제 증빙 확정과 로컬 정리 결과 분리
+
+서버 attach_payment_proof가 성공한 다음 local file 삭제만 실패해도 이전 코드는
+queued=true/업로드 미완료를 반환했다. owned 임시 directory만 chmod 555로 바꾼
+실제 Unix 파일 삭제 실패로 이 문제를 재현했고 원래 FAIL 로그를 보존한다.
+
+확정된 server ack 뒤 attached marker와 로컬 retirement를 분리했다. 새 클라이언트는
+서버 확정 상태를 유지하고 cleanupPending만 기록한다. 삭제/retirement가 실패하면
+확인된 queue record를 보존한다. 새 서비스 instance에서 보존된 attached marker를
+읽으면 metadata/upload/sign/attach HTTP 없이 로컬 정리만 재개한다. 잘못된 marker에
+signed URL이 없으면 자동 삭제하지 않는다. 업로드 뒤 attach 응답이 미확인이면
+원래 object/sign URL을 보존해 재업로드 없이 연결 단계만 명시적으로 재개한다.
+
+관련 outcome 3개+기존 proof batch/scope 8개, 총 11개 focused 검사 PASS, 영향 분석
+0 issue다. 로그 proof-outcome-cleanup-before.log, proof-outcome-cleanup-final.log,
+proof-outcome-analysis-final.log. 실제 Unix file fault와 가짜 HTTP 업무 응답을 구분한다.
+새 native DB/Storage proof 전체 시나리오나 실제 권한·12시간 증거로 올리지 않는다.
+
+이는 전체 proof queue 이전의 완료가 아니다. 원래 owner 없는 legacy record,
+여러 legacy tab/process의 동시 SharedPreferences 쓰기, 모든 local marker가 실패한
+미확인 결과, queue 총 건수/bytes와 immutable local 파일 교체는 계속 잔여다.
+이 변경만으로 모든 클라이언트의 server attachment replay가 없어졌다고 하지 않는다.
+운영 DB/Edge/web와 혼합·장시간 시험은 아직 시작하지 않았다.

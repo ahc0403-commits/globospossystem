@@ -846,6 +846,10 @@
     "cashier-owned-read-lifetime": {
       "path": "test/cashier_owned_read_test.dart",
       "kind": "focused"
+    },
+    "proof-confirmed-cleanup": {
+      "path": "test/payment_proof_outcome_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [
