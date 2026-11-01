@@ -25,6 +25,7 @@ class ProbeArgumentGuards(unittest.TestCase):
 
     def test_pos_storage_probe_cannot_be_reported_as_office_storage(self):
         self.reject(['--projects','office','--exercise-storage','--storage-reference','/missing-reference'])
+        self.reject(['--projects','pos','--office-storage-reference','/missing-office-reference'])
 
     def test_missing_storage_reference_fails_before_restoring_any_database(self):
         self.reject(['--projects','pos','--exercise-storage'])

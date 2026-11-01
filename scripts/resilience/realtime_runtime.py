@@ -165,6 +165,8 @@ def start(platform,project,reference_path):
     platform.check(before==after,project+'-realtime-installer-preserves-application-auth-storage-catalog')
     restore_authorization(platform,project,reference)
     config['realtimeOrigin']=origin
+    platform.gateways[project].websocket_target=origin
+    platform.gateways[project].websocket_tenant=tenant
     platform.result['servicesPrepared'].append('real-'+project+'-realtime')
     if 'realtime' in platform.result['servicesNotPrepared']:
         platform.result['servicesNotPrepared'].remove('realtime')

@@ -18,6 +18,7 @@ def run(platform,accounts,dart,scoped=None):
     input_path=platform.output/(prefix+'.private.json')
     private_json(input_path,{'kind':'owned-realtime-websocket-probe','runId':platform.run_id,'evidencePrefix':prefix,'projects':[
       {'project':name,'tenant':p['realtimeTenant'],'origin':p['realtimeOrigin'],
+       'gatewayOrigin':p['url'],
        'anon':p['anon'],'userToken':accounts[name]['session']['access_token'],
        **({'service':p['service'],'dbContainer':p['db'],'dbPassword':p['adminPassword'],**scoped[name]} if scoped and name in scoped else {})}
       for name,p in platform.projects.items() if name in accounts]})

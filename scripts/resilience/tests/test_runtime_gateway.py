@@ -1,8 +1,12 @@
 """Transport/isolation guards only; actual Auth/SQL cases run in owned platform."""
 import importlib.util
+import base64
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import threading
+import socket
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -19,6 +23,16 @@ class GatewayTests(unittest.TestCase):
             def log_message(self,*_):pass
             def do_GET(self):
                 seen.append((self.path,self.headers.get('Authorization')))
+                if self.headers.get('Upgrade')=='websocket':
+                    seen.append(('tenant',self.headers.get('Host')))
+                    key=self.headers['Sec-WebSocket-Key']
+                    accept=base64.b64encode(hashlib.sha1((key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest()).decode()
+                    self.send_response(101);self.send_header('Upgrade','websocket')
+                    self.send_header('Connection','Upgrade');self.send_header('Sec-WebSocket-Accept',accept);self.end_headers()
+                    data=self.connection.recv(16384)
+                    if data:self.connection.sendall(data)
+                    self.close_connection=True
+                    return
                 self.send_response(200);self.send_header('Content-Length','2');self.end_headers();self.wfile.write(b'{}')
         self.target=ThreadingHTTPServer(('127.0.0.1',0),Target)
         self.gw=gateway.RuntimeGateway(project='fixture',run_id='a'*32,
@@ -94,6 +108,51 @@ class GatewayTests(unittest.TestCase):
             with self.assertRaises(ValueError):gateway.owned_origin(bad)
         for bad in ['http://localhost.evil.invalid','http://user@localhost','http://localhost/path','https://localhost']:
             self.assertFalse(gateway.local_origin(bad))
+
+    def websocket(self,key='fixture-anon',origin=None):
+        connection=socket.create_connection(self.gw.server_address,timeout=2)
+        request=('GET /realtime/v1/websocket?apikey='+key+'&vsn=1.0.0 HTTP/1.1\r\nHost: localhost\r\n'
+          'Upgrade: websocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Version: 13\r\n'
+          'Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==\r\n'+('Origin: '+origin+'\r\n' if origin else '')+'\r\n')
+        connection.sendall(request.encode());header=b''
+        while not header.endswith(b'\r\n\r\n'):header+=connection.recv(1)
+        return connection,header
+
+    def test_websocket_rejects_wrong_project_external_origin_and_unprepared_server(self):
+        for key,origin,expected in [('another-project',None,b'401'),('fixture-anon','https://external.invalid',b'403'),('fixture-anon',None,b'501')]:
+            with self.subTest(status=expected):
+                connection,header=self.websocket(key,origin)
+                connection.close();self.assertIn(expected,header.split(b'\r\n')[0])
+        self.assertEqual(self.seen,[])
+
+    def test_actual_tcp_upgrade_preserves_bytes_rewrites_only_tenant_and_closes(self):
+        self.gw.websocket_target='http://127.0.0.1:'+str(self.target.server_address[1])
+        self.gw.websocket_tenant='realtime-pos'
+        # All HTTP slots occupied: a WebSocket has separate bounded capacity.
+        for _ in range(16):self.gw.slots.acquire()
+        try:connection,header=self.websocket()
+        finally:
+            for _ in range(16):self.gw.slots.release()
+        with connection:
+            self.assertIn(b'101',header.split(b'\r\n')[0])
+            payload=b'\x81\x80\x00\x01\x02\x03'
+            connection.sendall(payload);self.assertEqual(connection.recv(len(payload)),payload)
+        for _ in range(100):
+            if self.gw.snapshot()['websocketActive']==0:break
+            time.sleep(.01)
+        self.assertIn(('tenant','realtime-pos'),self.seen)
+        self.assertEqual(self.gw.snapshot()['websocketPeak'],1)
+        self.assertEqual(self.gw.snapshot()['websocketTransferredBytes'],len(payload)*2)
+        self.assertEqual(self.gw.snapshot()['websocketActive'],0)
+
+    def test_websocket_capacity_has_an_explicit_limit(self):
+        for _ in range(32):self.gw.websocket_slots.acquire()
+        try:
+            connection,header=self.websocket();connection.close()
+            self.assertIn(b'503',header.split(b'\r\n')[0])
+        finally:
+            for _ in range(32):self.gw.websocket_slots.release()
+        self.assertEqual(self.seen,[])
 
 
 if __name__=='__main__':unittest.main()

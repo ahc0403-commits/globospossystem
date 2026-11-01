@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--exercise-workforce',action='store_true')
     parser.add_argument('--exercise-storage',action='store_true')
     parser.add_argument('--storage-reference',type=Path)
+    parser.add_argument('--office-storage-reference',type=Path)
     parser.add_argument('--exercise-realtime',action='store_true')
     parser.add_argument('--realtime-reference-dir',type=Path)
     parser.add_argument('--exercise-realtime-websocket',action='store_true')
@@ -67,12 +68,19 @@ def main():
         args.exercise_legal_connection=True
     if args.exercise_legal_connection and args.projects!='both':
         parser.error('Cross-project legal/store workflows require both independent projects')
-    if args.exercise_storage and args.projects=='office':
-        parser.error('This Storage probe currently selects POS only')
+    if args.office_storage_reference and args.projects=='pos':
+        parser.error('Office Storage reference requires the independent Office project')
     if args.exercise_legal_connection and (args.deno is None or args.deno_cache is None):
         parser.error('Actual Office Edge requires explicit Deno executable and cache')
-    if args.exercise_storage and args.storage_reference is None:
-        parser.error('Actual Storage needs the private source-bound migration reference')
+    storage_references={}
+    if args.exercise_storage and args.projects!='office':
+        if args.storage_reference is None:
+            parser.error('Actual POS Storage needs its private source-bound migration reference')
+        storage_references['pos']=args.storage_reference
+    if args.office_storage_reference:
+        storage_references['office']=args.office_storage_reference
+    if args.exercise_storage and args.projects=='office' and not args.office_storage_reference:
+        parser.error('Actual Office Storage needs its own private source-bound migration reference')
     if args.exercise_realtime and args.realtime_reference_dir is None:
         parser.error('Actual Realtime needs private project-bound authorization references')
     if args.exercise_realtime_websocket and args.dart is None:
@@ -82,9 +90,10 @@ def main():
     platform=OwnedPlatform(args.snapshot_dir,args.office_root,args.output,projects=selected)
     try:
         with platform.runner.fixture_locks(args.snapshot_dir,list(selected)):
-            if args.exercise_storage:
+            if storage_references:
                 from storage_runtime import preflight
-                preflight(platform,'pos',args.storage_reference)
+                for project,reference in storage_references.items():
+                    preflight(platform,project,reference)
             if args.exercise_realtime:
                 from realtime_runtime import preflight
                 for project in selected:
@@ -101,11 +110,12 @@ def main():
                 if args.exercise_realtime_websocket:
                     from realtime_probe import run
                     run(platform,accounts,args.dart)
-            if args.exercise_storage:
+            if storage_references:
                 from storage_runtime import start
-                start(platform,'pos',args.storage_reference)
                 from storage_probe import run as storage_probe
-                storage_probe(platform)
+                for project,reference in storage_references.items():
+                    start(platform,project,reference)
+                    storage_probe(platform,project)
             if args.exercise_legal_connection:
                 platform.start_office_edge(args.deno,args.deno_cache)
                 from legal_http_scenario import run

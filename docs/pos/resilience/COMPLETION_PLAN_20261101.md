@@ -1288,3 +1288,28 @@ module/lockfile을 실행 전후 비교한다. 같은 index.ts basename도 서�
 전체 브라우저/업무·부하 manifest와 물리 장치다. source/message RLS와 직접 SDK
 성공만으로 실제 앱 KDS handoff·구매·입고·전체 기능/장시간/운영을 완료 처리하지
 않는다. 운영 DB/Edge/web, 2시간 혼합, 각 12시간 및 두 마감 관측은 아직 시작하지 않았다.
+
+### G0 양쪽 Storage와 공통 API 주소의 실제 WebSocket
+
+Office Storage 101개 객체 fingerprint `1dfa2f7694baa5229772951b3f93e81b8e78a356a30c78d38e08bdf9ae8f1d64`와
+실제 migration reference 74개를 읽기 전용으로 확인했다. native snapshot과 일치한다.
+POS attendance-photos 및 Office quality-evidence의 실제 private bucket에서 각각
+upload → sign → 원본 bytes download → unsigned download 거부 → delete/metadata 제거를
+실행했다. 이 기본 transfer는 service-role 검사이며 Office 사용자 업무 권한 PASS는 아니다.
+양쪽 Storage 시작 전후 native schema가 유지되고, 검토한 historical hash 2/62만
+upstream의 지원되는 refresh를 허용한다. 원래 reference는 바꾸지 않는다.
+
+시험용 공통 loopback API 주소의 `/realtime/v1/websocket`을 실제 Realtime에 연결했다.
+원래 프로젝트 key/localhost Origin/정상 handshake만 허용하며 tenant Host만 전달한다.
+HTTP 16개·WebSocket 32개·전체 handler 48개, 전달 buffer 16KiB, idle 120초와 연결
+13시간 상한을 둔다. server 종료는 이 run이 소유한 양 끝 socket만 닫는다.
+SDK probe도 이 공통 주소를 사용해 실제 DB kds_change를 수신한다.
+
+`/workspace/.private/resilience-two-project-gateway-storage-20261101-v9/result.json`:
+119 parent 조건 PASS, 189.33초, cleanup=true. 원본 SHA는 90d5ac57와 기록된 dirty
+tool hashes이며 전후 모든 입력 동일성을 확인했다. Office SHA는 45d6b8c8이다.
+receipt SHA256 `63f94ee9e48a56ea2d799dc58dd149e6affd9292083f8f7c30446d17379cc208`.
+종료 후 HTTP/WS active는 양쪽 모두 0, WS peak 각각 1, 전달 bytes POS 12,146 /
+Office 2,810이다. 별도 TCP transport/isolation 13개와 CLI guard 5개, Dart analyze
+0 issue도 통과했다. 이는 전체 브라우저·실제 주문 handoff·T01–T16·2시간·각 12시간·
+최종-main recipe·운영 배포·물리 장치 검증을 대신하지 않는다. mail/printer는 미준비다.

@@ -86,18 +86,40 @@ Future<void> main(List<String> args) async {
         );
         return Socket.startConnect(address, 4000);
       };
+      final gateway = Uri.parse(project['gatewayOrigin'] as String);
+      require(
+        gateway.scheme == 'http' &&
+            gateway.host == '127.0.0.1' &&
+            gateway.hasPort &&
+            gateway.port > 0 &&
+            gateway.path.isEmpty &&
+            gateway.userInfo.isEmpty &&
+            !gateway.hasQuery &&
+            !gateway.hasFragment,
+        'Owned loopback API gateway required',
+      );
+      final websocketHttp = HttpClient()..findProxy = (_) => 'DIRECT';
+      websocketHttp.connectionFactory = (uri, proxyHost, proxyPort) {
+        require(
+          uri.host == gateway.host &&
+              uri.port == gateway.port &&
+              proxyHost == null,
+          'WebSocket cannot leave its owned gateway',
+        );
+        return Socket.startConnect(InternetAddress.loopbackIPv4, gateway.port);
+      };
       Future<WebSocket> connect(String key) {
         require(key.length <= 8192, 'Fixture key bound');
         final uri = Uri(
           scheme: 'ws',
-          host: tenant,
-          port: 4000,
-          path: '/socket/websocket',
+          host: gateway.host,
+          port: gateway.port,
+          path: '/realtime/v1/websocket',
           queryParameters: {'apikey': key, 'vsn': '1.0.0'},
         );
         return WebSocket.connect(
           uri.toString(),
-          customClient: http,
+          customClient: websocketHttp,
           compression: CompressionOptions.compressionOff,
         ).timeout(const Duration(seconds: 8));
       }
@@ -357,6 +379,7 @@ Future<void> main(List<String> args) async {
             await messages?.cancel().timeout(const Duration(seconds: 2));
           } finally {
             http.close(force: true);
+            websocketHttp.close(force: true);
           }
         }
       }

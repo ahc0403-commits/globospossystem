@@ -5,9 +5,13 @@ the actual JWT roles/RLS. No Auth, SQL, Edge or business result is simulated.
 """
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import base64
+import hashlib
 import hmac
 import ipaddress
 import json
+import select
+import socket
 import threading
 import time
 import urllib.error
@@ -43,6 +47,12 @@ class RuntimeGateway(ThreadingHTTPServer):
         self.edge = None
         self.additional_edges = {}
         self.slots = threading.BoundedSemaphore(16)
+        self.thread_slots = threading.BoundedSemaphore(48)
+        self.websocket_slots = threading.BoundedSemaphore(32)
+        self.websocket_target = None
+        self.websocket_tenant = None
+        self.websocket_connections = set()
+        self.websocket_peak = self.websocket_bytes = 0
         self.guard = threading.Lock()
         self.counts, self.statuses = Counter(), Counter()
         self.active, self.max_active = 0, 0
@@ -57,7 +67,7 @@ class RuntimeGateway(ThreadingHTTPServer):
         return 'http://127.0.0.1:' + str(self.server_address[1])
 
     def process_request(self, request, address):
-        if not self.slots.acquire(blocking=False):
+        if not self.thread_slots.acquire(blocking=False):
             with self.guard:
                 self.statuses['capacity-503'] += 1
             request.sendall(b'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
@@ -66,14 +76,23 @@ class RuntimeGateway(ThreadingHTTPServer):
         try:
             super().process_request(request, address)
         except BaseException:
-            self.slots.release()
+            self.thread_slots.release()
             raise
 
     def process_request_thread(self, request, address):
         try:
             super().process_request_thread(request, address)
         finally:
-            self.slots.release()
+            self.thread_slots.release()
+
+    def server_close(self):
+        with self.guard:
+            connections=list(self.websocket_connections)
+        for pair in connections:
+            for connection in pair:
+                try:connection.shutdown(socket.SHUT_RDWR)
+                except OSError:pass
+        super().server_close()
 
     def snapshot(self):
         with self.guard:
@@ -81,7 +100,9 @@ class RuntimeGateway(ThreadingHTTPServer):
                     'active': self.active, 'maxActive': self.max_active,
                     'totalResponseBytes': self.total_bytes, 'maxResponseBytes': self.max_response_bytes,
                     'latencyBucketsSeconds': ['.01', '.05', '.1', '.25', '.5', '1', '2', '5', '10', '30', '>30'],
-                    'latencyCounts': list(self.latencies), 'faultResponsesDropped': self.dropped}
+                    'latencyCounts': list(self.latencies), 'faultResponsesDropped': self.dropped,
+                    'websocketActive':len(self.websocket_connections),'websocketPeak':self.websocket_peak,
+                    'websocketTransferredBytes':self.websocket_bytes}
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -114,12 +135,22 @@ class GatewayHandler(BaseHTTPRequestHandler):
         gateway = self.server
         route = 'unrouted'
         status, size = 500, 0
+        websocket = self.command=='GET' and urllib.parse.urlsplit(self.path).path=='/realtime/v1/websocket'
+        capacity=gateway.websocket_slots if websocket else gateway.slots
+        if not capacity.acquire(blocking=False):
+            with gateway.guard:gateway.statuses['capacity-503']+=1
+            self._reply(503,b'')
+            return
         with gateway.guard:
             gateway.active += 1
             gateway.max_active = max(gateway.max_active, gateway.active)
         try:
             self.connection.settimeout(15)
             parsed = urllib.parse.urlsplit(self.path)
+            if websocket:
+                status=self._websocket(parsed)
+                route='realtime/websocket'
+                return
             if self.command == 'OPTIONS':
                 status = 204
                 self._reply(status, b'')
@@ -200,6 +231,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
             except OSError:
                 pass
         finally:
+            capacity.release()
             elapsed = time.monotonic() - start
             bounds = [.01,.05,.1,.25,.5,1,2,5,10,30]
             with gateway.guard:
@@ -209,5 +241,83 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 gateway.total_bytes += size
                 gateway.max_response_bytes = max(size, gateway.max_response_bytes)
                 gateway.latencies[next((i for i,b in enumerate(bounds) if elapsed <= b), 10)] += 1
+
+    def _websocket(self,parsed):
+        """Forward RFC6455 bytes to this run's actual server, with bounded buffers.
+
+        No message decoding, authorization response or business event is forged.
+        HTTP has separate capacity so idle channels cannot starve reads/writes.
+        """
+        gateway=self.server
+        query=urllib.parse.parse_qs(parsed.query,max_num_fields=12)
+        keys=query.get('apikey',[])
+        origin=self.headers.get('Origin','')
+        if (len(self.path)>16384 or len(keys)!=1 or not any(
+            hmac.compare_digest(keys[0].encode(),key.encode()) for key in gateway.keys)):
+            self._reply(401,b'');return 401
+        if origin and not local_origin(origin):
+            self._reply(403,b'');return 403
+        key=self.headers.get('Sec-WebSocket-Key','')
+        try:valid_key=len(base64.b64decode(key,validate=True))==16
+        except (ValueError,base64.binascii.Error):valid_key=False
+        if (self.headers.get('Upgrade','').lower()!='websocket' or
+            'upgrade' not in [x.strip().lower() for x in self.headers.get('Connection','').split(',')] or
+            self.headers.get('Sec-WebSocket-Version')!='13' or not valid_key or
+            self.headers.get('Content-Length','0')!='0' or self.headers.get('Transfer-Encoding')):
+            self._reply(400,b'');return 400
+        if not gateway.websocket_target:
+            self._reply(501,b'');return 501
+        target=urllib.parse.urlsplit(owned_origin(gateway.websocket_target))
+        tenant=gateway.websocket_tenant
+        if tenant not in {'realtime-pos','realtime-office'}:
+            raise ValueError('Owned Realtime tenant missing')
+        upstream=socket.create_connection((target.hostname,target.port),timeout=10)
+        pair=(self.connection,upstream)
+        try:
+            # Only the expected handshake fields reach the private server.
+            request=('GET /socket/websocket?'+parsed.query+' HTTP/1.1\r\nHost: '+tenant+
+              '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13'+
+              '\r\nSec-WebSocket-Key: '+key+'\r\n\r\n')
+            upstream.sendall(request.encode('ascii'))
+            header=bytearray();deadline=time.monotonic()+10
+            # Read exactly through the header, preserving the first event byte.
+            while not header.endswith(b'\r\n\r\n'):
+                if len(header)>=16384 or time.monotonic()>deadline:
+                    raise ValueError('Realtime handshake bound')
+                part=upstream.recv(1)
+                if not part:raise ValueError('Realtime handshake ended')
+                header.extend(part)
+            lines=bytes(header).decode('latin-1').split('\r\n')
+            headers={k.lower().strip():v.strip() for line in lines[1:] if ':' in line for k,v in [line.split(':',1)]}
+            accept=base64.b64encode(hashlib.sha1((key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest()).decode()
+            status_line=lines[0].split(' ')
+            if (len(status_line)<2 or status_line[1]!='101' or headers.get('sec-websocket-accept')!=accept or
+                headers.get('upgrade','').lower()!='websocket'):
+                self._reply(502,b'');return 502
+            self.send_response(101)
+            self.send_header('Upgrade','websocket');self.send_header('Connection','Upgrade')
+            self.send_header('Sec-WebSocket-Accept',accept);self.end_headers();self.wfile.flush()
+            self.close_connection=True
+            with gateway.guard:
+                gateway.websocket_connections.add(pair)
+                gateway.websocket_peak=max(gateway.websocket_peak,len(gateway.websocket_connections))
+            for connection in pair:connection.settimeout(5)
+            started=last=time.monotonic()
+            try:
+                while time.monotonic()-started<13*60*60 and time.monotonic()-last<120:
+                    readable,_,_=select.select(pair,[],[],1)
+                    for source in readable:
+                        chunk=source.recv(16384)
+                        if not chunk:return 101
+                        destination=upstream if source is self.connection else self.connection
+                        destination.sendall(chunk)
+                        last=time.monotonic()
+                        with gateway.guard:gateway.websocket_bytes+=len(chunk)
+            except OSError:
+                pass  # Either endpoint closed; never append HTTP to WS bytes.
+            return 101
+        finally:
+            with gateway.guard:gateway.websocket_connections.discard(pair)
+            upstream.close()
 
     do_GET = do_HEAD = do_POST = do_PATCH = do_PUT = do_DELETE = do_OPTIONS = _handle
