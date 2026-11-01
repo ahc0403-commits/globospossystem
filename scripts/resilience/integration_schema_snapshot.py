@@ -44,7 +44,7 @@ def semantic(row):
     return value
 
 
-def run(name,native=False,candidate=False,office_root=None,exercise_transactions=False,exercise_payment_receipts=False):
+def run(name,native=False,candidate=False,office_root=None,exercise_transactions=False,exercise_payment_receipts=False,exercise_legal_connection=False):
     import os,shutil
     m.require(bool(os.environ.get('POS_LOCAL_RUN_ID')) and
       Path(shutil.which('docker') or '').resolve()==(ROOT/'scripts/local_verification/docker').resolve(),
@@ -57,6 +57,9 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
               'Existing-transaction exercise requires POS candidate upgrade')
     m.require(not exercise_payment_receipts or name=='pos' and candidate and exercise_transactions,
               'Payment receipt exercise requires the POS native existing-transaction fixture')
+    m.require(not exercise_legal_connection or name=='pos' and native and candidate
+              and not exercise_transactions and office_root is not None,
+              'Native legal exercise requires fresh POS candidate and explicit Office source')
     manifest,objects=m.load(name,AREA)
     m.inventory_guards(name,AREA)
     m.reference_sql(name,AREA)
@@ -117,26 +120,7 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
         report['anonymousFunctionAclProbeRejected']=True
         if native:
             source=AREA/(name+'-current-application-schema.sql')
-            body=source.read_text()
-            marker=re.search(r'^CREATE (?:OR REPLACE )?(?:FUNCTION|PROCEDURE|TYPE|TABLE|VIEW|SEQUENCE|DOMAIN)\b',body,re.M)
-            m.require(marker is not None,'Native pg_dump schema/object boundary missing')
-            bootstrap=json.loads((AREA/(name+'-bootstrap.json')).read_text())
-            clean=['BEGIN;']
-            for schema in manifest['scope']:clean.append('DROP SCHEMA IF EXISTS '+m.q(schema)+' CASCADE;')
-            for ext in bootstrap['extensions']:
-                if ext['name']!='plpgsql':clean.append('DROP EXTENSION IF EXISTS '+m.q(ext['name'])+' CASCADE;')
-            # pg_dump compares public's ACL against initdb's special default,
-            # unlike an ordinary newly CREATEd schema. Re-establish that baseline
-            # before executing its native GRANT/REVOKE section (which may revoke
-            # this default). The final source ACL is still compared exactly.
-            extensions=['GRANT USAGE ON SCHEMA public TO PUBLIC;']
-            for ext in bootstrap['extensions']:
-                if ext['name']=='plpgsql':continue
-                if not ext['schema'].startswith('pg_'):
-                    extensions.append('CREATE SCHEMA IF NOT EXISTS '+m.q(ext['schema'])+';')
-                extensions.append('CREATE EXTENSION IF NOT EXISTS '+m.q(ext['name'])+' WITH SCHEMA '+m.q(ext['schema'])+' VERSION '+m.lit(ext['version'])+';')
-            extensions.extend(['SET LOCAL check_function_bodies=off;',"SET LOCAL search_path='';"])
-            stream='\n'.join(clean)+'\n'+body[:marker.start()]+'\n'+'\n'.join(extensions)+'\n'+body[marker.start():]+'\nCOMMIT;'
+            stream=m.native_restore_sql(name,AREA)
             report['nativeDumpSha256']=hashlib.sha256(source.read_bytes()).hexdigest()
             report['nativeDumpBytesPreserved']=True
             report['bootstrapInsertion']='source extension prerequisites after native schema creation; original dump bytes retain order'
@@ -217,6 +201,9 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
             if exercise_payment_receipts:
                 from payment_receipt_fixture import run as run_payment_receipts
                 report['paymentCommandReceiptScenario']=run_payment_receipts(sql)
+            if exercise_legal_connection:
+                from legal_connection_native_fixture import run as run_native_legal
+                report['nativeLegalConnectionScenario']=run_native_legal(container,cmd,m,semantic,AREA,Path(office_root))
             return
         # Native dump is a separate, canonical-format serialization for existing
         # repository restore/upgrade tests; no production row has been copied.
@@ -259,6 +246,7 @@ if __name__=='__main__':
     p.add_argument('--office-root',type=Path)
     p.add_argument('--exercise-existing-transactions',action='store_true')
     p.add_argument('--exercise-payment-receipts',action='store_true')
+    p.add_argument('--exercise-legal-connection',action='store_true')
     args=p.parse_args();AREA=args.snapshot_dir
     m.require(not args.candidate_upgrade or args.native_roundtrip,'Candidate upgrade requires native baseline roundtrip')
-    run(args.name,args.native_roundtrip,args.candidate_upgrade,args.office_root,args.exercise_existing_transactions,args.exercise_payment_receipts)
+    run(args.name,args.native_roundtrip,args.candidate_upgrade,args.office_root,args.exercise_existing_transactions,args.exercise_payment_receipts,args.exercise_legal_connection)

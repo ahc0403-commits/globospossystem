@@ -207,7 +207,8 @@
       "sourceRoot": "lib/features/procurement",
       "checks": [
         "feature.procurement",
-        "official-full-recipe"
+        "official-full-recipe",
+        "office-first-legal-native"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -299,7 +300,8 @@
       "sourceRoot": "lib/features/store_setup",
       "checks": [
         "feature.store_setup",
-        "official-full-recipe"
+        "official-full-recipe",
+        "office-first-legal-native"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -319,7 +321,8 @@
       "sourceRoot": "lib/features/super_admin",
       "checks": [
         "feature.super_admin",
-        "official-full-recipe"
+        "official-full-recipe",
+        "office-first-legal-native"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -688,6 +691,10 @@
     },
     "proof-batch-scope": {
       "path": "test/data_access/proof_batch_scope_test.dart",
+      "kind": "focused"
+    },
+    "office-first-legal-native": {
+      "path": "scripts/resilience/legal_connection_native_fixture.py",
       "kind": "focused"
     }
   },

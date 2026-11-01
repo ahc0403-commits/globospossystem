@@ -31,6 +31,22 @@ class SchemaSnapshotTests(unittest.TestCase):
         manifest,rows=m.load('pos',self.area)
         self.assertEqual(rows,[self.row]);self.assertEqual(manifest['projectRef'],m.PROJECTS['pos'])
 
+    def test_native_restore_retains_dump_prefix_and_objects_with_extension_prerequisites(self):
+        self.write('pos-inventory-guards.json',{'schemaInventory':sorted(m.SCOPES['pos']),
+          **{k:0 for k in ['unsupportedRelations','unsupportedTypes','nonViewRules',
+            'customAggregates','customCollations','schemaPublications','otherLanguages','ordinaryInheritance']}})
+        body='-- synthetic native prefix\nCREATE SCHEMA public;\nCREATE TABLE public.synthetic(id integer);\n'
+        p=self.area/'pos-current-application-schema.sql';p.write_text(body);p.chmod(0o600)
+        self.write('pos-bootstrap.json',{'extensions':[{'name':'plpgsql','schema':'pg_catalog','version':'1.0'},
+          {'name':'pgcrypto','schema':'extensions','version':'1.3'}]})
+        result=m.native_restore_sql('pos',self.area)
+        self.assertIn(body[:body.index('CREATE TABLE')],result)
+        self.assertIn(body[body.index('CREATE TABLE'):],result)
+        self.assertLess(result.index('CREATE SCHEMA public;'),result.index('CREATE EXTENSION'))
+        self.assertLess(result.index('CREATE EXTENSION'),result.index('CREATE TABLE public.synthetic'))
+        p.write_text('-- incomplete native file\nCREATE SCHEMA public;')
+        with self.assertRaisesRegex(ValueError,'object boundary'):m.native_restore_sql('pos',self.area)
+
     def test_body_tampering_is_rejected_even_when_manifest_identity_matches(self):
         row=copy.deepcopy(self.row);row['meta']['owner']='another-owner'
         self.write('pos-schema-0.json',[row])

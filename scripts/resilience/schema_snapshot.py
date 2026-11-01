@@ -36,6 +36,32 @@ def require(value,message):
     if not value: raise ValueError(message)
 
 
+def native_restore_sql(name,area):
+    """Preserve the native dump bytes/order and supply its extension baseline."""
+    manifest,_=load(name,area)
+    inventory_guards(name,area)
+    source=private.private_file(area/(name+'-current-application-schema.sql'),max_bytes=MAX_BYTES)
+    bootstrap_path=private.private_file(area/(name+'-bootstrap.json'),max_bytes=MAX_BYTES)
+    body=source.read_text()
+    marker=re.search(r'^CREATE (?:OR REPLACE )?(?:FUNCTION|PROCEDURE|TYPE|TABLE|VIEW|SEQUENCE|DOMAIN)\b',body,re.M)
+    require(marker is not None,'Native pg_dump schema/object boundary missing')
+    bootstrap=json.loads(bootstrap_path.read_text())
+    clean=['BEGIN;']
+    for namespace in manifest['scope']:clean.append('DROP SCHEMA IF EXISTS '+q(namespace)+' CASCADE;')
+    for ext in bootstrap['extensions']:
+        if ext['name']!='plpgsql':clean.append('DROP EXTENSION IF EXISTS '+q(ext['name'])+' CASCADE;')
+    # public has a special initdb ACL baseline, restored before the dump's own
+    # native GRANT/REVOKE section. Final semantic ACL comparison is still required.
+    extensions=['GRANT USAGE ON SCHEMA public TO PUBLIC;']
+    for ext in bootstrap['extensions']:
+        if ext['name']=='plpgsql':continue
+        if not ext['schema'].startswith('pg_'):
+            extensions.append('CREATE SCHEMA IF NOT EXISTS '+q(ext['schema'])+';')
+        extensions.append('CREATE EXTENSION IF NOT EXISTS '+q(ext['name'])+' WITH SCHEMA '+q(ext['schema'])+' VERSION '+lit(ext['version'])+';')
+    extensions.extend(['SET LOCAL check_function_bodies=off;',"SET LOCAL search_path='';"])
+    return '\n'.join(clean)+'\n'+body[:marker.start()]+'\n'+'\n'.join(extensions)+'\n'+body[marker.start():]+'\nCOMMIT;'
+
+
 def manifest_scope(name,manifest):
     scope=set(manifest.get('scope',[]))
     require(manifest.get('projectRef')==PROJECTS[name] and SCOPES[name]<=scope

@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS recovery, bounded owned report/settings reads and native JSON resource cleanup and additive payment receipts; complete domain adoption, cashier recovery UI, mixed/12h tests and production remain pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "cf79f61d2d15091a813a05577505cdaa4070982dd00bc6456b9fa63282b9c585",
+      "sha256": "0b16851835b716122394c6865d4963bbcca7bbb306c54454cdc2fb71ba1be06a",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "405874d203926f471230e5569bb3727b72c7cb7f989572db464a1797f5c30a68",
+      "sha256": "a26544ec54b16d4a068922a2ea0eec075235b8a3979fb4cde59052bdcadf5cd9",
       "mode": "100644"
     },
     "lib/core/auth/operation_scope_provider.dart": {
@@ -209,11 +209,15 @@
       "mode": "100644"
     },
     "scripts/resilience/integration_legal_connection.py": {
-      "sha256": "8e23b54b2a7847909e29ec834c2d606798354e6ef246172031bc0a06b1e1d9fa",
+      "sha256": "aa779c3a8c73b24a43e4692565c1837ef4c01060df157d2cdbb203a361a33915",
       "mode": "100644"
     },
     "scripts/resilience/integration_schema_snapshot.py": {
-      "sha256": "3941d50d2e0ee35f50d46858f4573c912f8a4b53e39458e2cc12c99e8fdb5945",
+      "sha256": "4644ce7c8b65e89e3730a24427e5f790cf956cdbe77b0091f603959a8158d036",
+      "mode": "100644"
+    },
+    "scripts/resilience/legal_connection_native_fixture.py": {
+      "sha256": "6b0814433b1e48744255642b83f0d96dcb5e949a1e4940902884a24e96870d54",
       "mode": "100644"
     },
     "scripts/resilience/office_accounts.py": {
@@ -225,7 +229,7 @@
       "mode": "100644"
     },
     "scripts/resilience/run_schema_fixture.py": {
-      "sha256": "0fbd6d7dea5e80727143f880983241b8653210a108c12c79b05d948cd4926dbc",
+      "sha256": "d19cc4503aceecd5c9f2a9d6ff36151af82f58c785baa3b28bffaba1325796f2",
       "mode": "100644"
     },
     "scripts/resilience/sample_accounts.py": {
@@ -245,7 +249,7 @@
       "mode": "100644"
     },
     "scripts/resilience/schema_snapshot.py": {
-      "sha256": "087b28940543b47881158293e6bbd952230c4176efedb595f00bd4814ad05e01",
+      "sha256": "65fea3a7308b8237c58d929cabce0c237c27a230ec761d080280129bd192cf73",
       "mode": "100644"
     },
     "scripts/resilience/schema_storage_reference_config.sql": {
@@ -261,11 +265,11 @@
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_fixture_runner.py": {
-      "sha256": "1b0dcea27ccf022304c943c67d82960612075d00447dfe2fe54c023a69326415",
+      "sha256": "b7bb6e1acd697568dc91589101ea33d56deaf2e3018d314622261e9832ee4a36",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_snapshot.py": {
-      "sha256": "022e58f202599062cd39ac277279c3fb87e3771b0b20b6c485ed2fc28216d693",
+      "sha256": "433658e498a3bec586262fdda1e06edb056b668055566a0506cd4ab19a2d9c4a",
       "mode": "100644"
     },
     "scripts/test_financial_inputs_postgrest.sh": {
@@ -506,7 +510,8 @@
     "native-kds-json-resources",
     "owned-read-lifetime",
     "attendance-scope-commands",
-    "proof-batch-scope"
+    "proof-batch-scope",
+    "office-first-legal-native"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -538,7 +543,7 @@
       "applicable": true,
       "reason": "New SQL resolves unique direct event and private batch request keys with set joins, no per-ID function loop; existing quota statement batches remain intact. Payment result lookup deduplicates requested UUIDs and joins actor/operation primary keys in one query; native payment is called once per new original command, never once per receipt lookup.",
       "scale": "Synthetic fixture 100001 events, 100 requested IDs, 30 measured calls; actor/store filters inside SQL.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Native two-DB legal cases preserve set-based verified store/procurement mapping and original independent IDs; 200-store execution-plan/scale measurements are still pending."
     },
     "rowsColumns": {
       "applicable": true,
@@ -647,18 +652,19 @@
     },
     "readiness": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
-        "menu-quantity-sql"
+        "menu-quantity-sql",
+        "office-first-legal-native"
       ]
     },
     "dbCompatibility": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -672,18 +678,20 @@
         "schema-runner-unit",
         "current-schema-upgrade",
         "payment-receipts-client",
-        "payment-receipts-native"
+        "payment-receipts-native",
+        "office-first-legal-native"
       ]
     },
     "officeBoundary": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
-        "menu-quantity-sql"
+        "menu-quantity-sql",
+        "office-first-legal-native"
       ]
     },
     "externalEffects": {

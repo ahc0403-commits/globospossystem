@@ -88,6 +88,16 @@ class SchemaRunnerTests(unittest.TestCase):
             child.assert_not_called()
         self.assertFalse(self.output.exists())
 
+    def test_native_legal_cannot_mutate_the_retained_financial_fixture(self):
+        self.input.write('pos-current-application-schema.sql',{'synthetic-private-test-file':True})
+        argv=['schema-runner','pos','--snapshot-dir',str(self.area),'--output',str(self.output),
+          '--native-roundtrip','--candidate-upgrade','--exercise-existing-transactions','--exercise-legal-connection']
+        with patch.object(runner.sys,'argv',argv),patch.object(runner.subprocess,'Popen') as child:
+            with self.assertRaisesRegex(ValueError,'separate from historical'):
+                runner.main()
+            child.assert_not_called()
+        self.assertFalse(self.output.exists())
+
     def test_owned_diagnostics_are_copied_privately_with_the_original_hash(self):
         source=self.input.write('pos-owned-container-diagnostics.log',{'synthetic':'diagnostics'})
         digest=hashlib.sha256(source.read_bytes()).hexdigest()
@@ -113,6 +123,18 @@ class SchemaRunnerTests(unittest.TestCase):
         self.assertTrue(all('label=pos.local.verification=owned-run' in c for c in calls if '--filter' in c))
         self.assertFalse(any('prune' in c for c in calls))
         self.assertEqual([c for c in calls if 'rm' in c][0][-1],'abc123')
+
+
+    def test_two_project_fixture_holds_and_releases_both_project_locks(self):
+        with runner.fixture_locks(self.area,['pos','office']):
+            with self.assertRaises(BlockingIOError):
+                with runner.fixture_locks(self.area,['office']):pass
+        with runner.fixture_locks(self.area,['office','pos']):pass
+        self.assertEqual((self.area/'office-fixture.lock').stat().st_mode & 0o777,0o600)
+
+    def test_fixture_lock_cannot_target_an_unrelated_path(self):
+        with self.assertRaisesRegex(ValueError,'explicit fixture projects'):
+            with runner.fixture_locks(self.area,['../unrelated']):pass
 
 
 if __name__=='__main__':unittest.main()

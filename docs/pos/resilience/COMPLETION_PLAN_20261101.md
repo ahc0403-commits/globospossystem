@@ -799,3 +799,37 @@ proof-original-token-assertion.log, proof-batch-scope-analysis-zero.log(분석 0
 actor가 없는 구형 큐의 서버 권한 계약은 그대로이며 소유권 이행 완료를 주장하지
 않는다. 전체 큐/원본 파일 크기·이미지 처리 메모리·로컬 정리 결과 분리와 다른
 도메인의 G3/G4/G5 적용은 계속 잔여다. 운영/12시간 시험은 아직 시작하지 않았다.
+
+### G1/G2 실제 두 스키마의 최초 법인 연결 계약
+
+작은 연결 fixture의 같은 업무 검사 20개를 실제 POS/Office schema-only 복원으로도
+실행했다. 각각 별도 PostgreSQL 17.6.1.104 컨테이너이며 network=none이다. 기존
+runtime 함수·Auth 테이블·RLS/GRANT·FK·트리거를 대체하지 않는다. POS 4,878개와
+Office 8,834개 원본 객체의 semantic catalog를 대조한 뒤 후보 migration을 적용한다.
+기존 native pg_dump bytes/순서를 보존하는 restore 조합 코드를 공통 helper로 모았다.
+
+현재 스키마의 POS 사용자 profile.restaurant_id는 NOT NULL이다. 따라서 기존 플랫폼
+관리자의 **다른 법인에 속한 기존 매장 맥락**을 명시적으로 만든다. 검사 대상 신규
+법인은 매장이 0개이며 Office 법인/매장 소유 매핑은 미리 심지 않는다. “법인에 매장
+0개”를 “전체 배포 DB에 매장 0개”와 혼동한 기존 작은 fixture 조건을 바로잡았다.
+전체 빈 배포의 관리자 bootstrap 성공을 이 시험으로 주장하지 않는다. Office도 실제
+필수 granted_by/reason과 permission catalog FK, 법인-브랜드 관계 무결성을 유지한다.
+제약을 끄거나 nullable로 바꾸어 시험을 통과시키지 않았다.
+
+20 PASS/0 FAIL/0 ERROR/0 SKIP, 전체 owned 실행 117.43초, 양쪽 컨테이너 정리 확인.
+매장 없는 법인→명시적 기존/새 Office 법인, 첫 매장 manifest, 각 프로젝트의 다른
+Auth/업무 ID, 동일 요청 20회·동시 승인, 응답 유실 뒤 재개, 만료/변조/원본 변경,
+권한 회수/다른 actor·외부 법인 차단, 기존 매핑과 구매 연결을 검사했다. 원래 금융
+함수 5개의 정의 해시는 이번 후보 적용 전후에도 같다. 과거 금융 이력 보존 시나리오와
+동시에 초기화하지 못하도록 실행 모드를 분리했으며 POS/Office 두 fixture lock을
+함께 잡는다. 로그/diagnostic은 원본 해시로 각 실행 폴더에 복사해 후속 실행과 섞이지
+않는다. 도구/restore/lock 검사 26개도 PASS다.
+
+증거: `/workspace/.private/resilience-native-legal-evidence-20261101-v4/result.json`,
+동일 폴더의 `pos-office-native-legal-tests.log`, `pos-office-native-owned-office.log`.
+원본 wrapper 로그는 native-legal-current-schema-run-v4.log,
+도구 검사는 native-legal-schema-tooling-final-unit.log다. 앞선 v1~v3의 fixture 준비/
+예외 adapter 실패는 그대로 보존한다. 운영 DB 변경·실제 Auth 로그인 서버·실제
+Edge HTTP와 두 앱 화면 연결은 이 SQL 실행에 포함되지 않는다. POS 매장 개설/
+준비부터 구매·근태·영업을 잇는 G2/G6, 데이터 규모별 실행 계획과 실제 단말·12시간/
+최종-main 공식 배포는 계속 잔여다.

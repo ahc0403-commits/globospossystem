@@ -101,7 +101,7 @@ class LegalConnectionTests(unittest.TestCase):
 
     def test_zero_store_new_legal_entity_uses_explicit_independent_auth(self):
         request=self.begin()
-        self.assertEqual(self.sql('pos_fixture','SELECT count(*) FROM restaurants').stdout.strip(),'0')
+        self.assertEqual(self.sql('pos_fixture','SELECT count(*) FROM restaurants WHERE tax_entity_id='+literal(TAX)).stdout.strip(),'0')
         row=json.loads(self.commit(request).stdout)
         self.assertNotEqual(row['legal_entity_id'],TAX)
         self.assertNotEqual(row['office_actor_id'],request['requested_by'])
@@ -248,6 +248,7 @@ class LegalConnectionTests(unittest.TestCase):
         first='50000000-0000-4000-8000-000000000001';second='50000000-0000-4000-8000-000000000002'
         self.sql('office_fixture','INSERT INTO accounting.legal_entities(id,code,display_name) VALUES('+literal(legal)+",'OLD','Legacy');"
             'INSERT INTO ops.brands(id,name,status) VALUES('+literal(brand)+",'Legacy brand','active');"
+            'INSERT INTO ops.legal_entity_brands(legal_entity_id,brand_id) VALUES('+literal(legal)+','+literal(brand)+');'
             'INSERT INTO ops.stores(name,status,brand_id,legal_entity_id,pos_store_id,pos_tax_entity_id) VALUES '
             "('Legacy A','active',"+literal(brand)+','+literal(legal)+','+literal(first)+',NULL),'
             "('Legacy B','active',"+literal(brand)+','+literal(legal)+','+literal(second)+','+literal(TAX)+');')
