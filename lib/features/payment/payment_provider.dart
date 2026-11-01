@@ -402,14 +402,20 @@ class PaymentState {
 }
 
 class PaymentNotifier extends StateNotifier<PaymentState> {
-  PaymentNotifier({SupabaseClient? client, PaymentService? payments})
-    : _client = client,
-      _paymentSource = payments,
-      super(const PaymentState());
+  PaymentNotifier({
+    SupabaseClient? client,
+    PaymentService? payments,
+    OrderService? orders,
+  }) : _client = client,
+       _paymentSource = payments,
+       _orderSource = orders,
+       super(const PaymentState());
   final SupabaseClient? _client;
   final PaymentService? _paymentSource;
+  final OrderService? _orderSource;
   SupabaseClient get _db => _client ?? supabase;
   PaymentService get _payments => _paymentSource ?? paymentService;
+  OrderService get _orders => _orderSource ?? orderService;
 
   static const _autoRefreshInterval = Duration(seconds: 2);
   static const _fallbackPollInterval = Duration(seconds: 30);
@@ -899,6 +905,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     required String storeId,
     required CashierOrder order,
   }) async {
+    final generation = _scopeGeneration;
     final l10n = lookupAppLocalizations(const Locale('vi'));
     final items = order.items
         .where((item) => item.status.toLowerCase() != 'cancelled')
@@ -940,10 +947,20 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           },
         },
       );
-      _displayedOrderId = order.orderId;
+      if (mounted &&
+          generation == _scopeGeneration &&
+          _restaurantId == storeId) {
+        _displayedOrderId = order.orderId;
+      }
       return true;
     } catch (error) {
-      state = state.copyWith(error: 'Failed to show customer display: $error');
+      if (mounted &&
+          generation == _scopeGeneration &&
+          _restaurantId == storeId) {
+        state = state.copyWith(
+          error: 'Failed to show customer display: $error',
+        );
+      }
       return false;
     }
   }
@@ -1415,7 +1432,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   Future<void> cancelOrder(String orderId, String storeId) async {
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
-      await orderService.cancelOrder(orderId: orderId, storeId: storeId);
+      await _orders.cancelOrder(orderId: orderId, storeId: storeId);
       state = state.copyWith(
         isProcessing: false,
         clearSelectedOrder: true,
@@ -1442,7 +1459,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     required String operationId,
   }) async {
     return _runItemMutation(storeId, () async {
-      await orderService.cancelItemQuantity(
+      await _orders.cancelItemQuantity(
         storeId: storeId,
         itemId: item.id,
         expectedQuantity: item.quantity,
@@ -1455,7 +1472,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   Future<bool> restoreItemQuantity(String storeId, String operationId) =>
       _runItemMutation(
         storeId,
-        () => orderService.restoreItemQuantity(
+        () => _orders.restoreItemQuantity(
           storeId: storeId,
           operationId: operationId,
         ),
@@ -1468,9 +1485,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     required String operationId,
   }) async {
     String? targetOrderId;
+    final generation = _scopeGeneration;
     final wasDisplayed = _displayedOrderId == orderId;
     final moved = await _runItemMutation(storeId, () async {
-      final result = await orderService.moveOrderItems(
+      final result = await _orders.moveOrderItems(
         storeId: storeId,
         orderId: orderId,
         targetTableId: targetTableId,
@@ -1479,7 +1497,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       );
       targetOrderId = result['target_order_id'] as String;
     });
-    if (moved) {
+    if (moved &&
+        mounted &&
+        generation == _scopeGeneration &&
+        _restaurantId == storeId &&
+        state.error == null) {
       final destination = state.orders
           .where((order) => order.orderId == targetOrderId)
           .firstOrNull;
@@ -1497,26 +1519,26 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     String storeId,
     Future<void> Function() operation,
   ) async {
-    if (state.isProcessing) return false;
+    if (!mounted ||
+        state.isProcessing ||
+        (_restaurantId != null && _restaurantId != storeId)) {
+      return false;
+    }
+    if (_restaurantId == null) {
+      _restaurantId = storeId;
+      _scopeGeneration++;
+    }
+    final generation = _scopeGeneration;
+    bool ownsView() =>
+        mounted && generation == _scopeGeneration && _restaurantId == storeId;
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
       await operation();
-      await loadOrders(storeId);
-      if (state.error != null) {
-        state = state.copyWith(isProcessing: false);
-        return false;
-      }
-      if (_displayedOrderId != null &&
-          state.selectedOrder?.orderId == _displayedOrderId) {
-        await showOnCustomerDisplay(
-          storeId: storeId,
-          order: state.selectedOrder!,
-        );
-      }
-      state = state.copyWith(isProcessing: false, clearError: true);
-      return true;
     } catch (error) {
+      // An old command must never switch the current screen back to its store.
+      if (!ownsView()) return false;
       await loadOrders(storeId);
+      if (!ownsView()) return false;
       state = state.copyWith(
         isProcessing: false,
         error:
@@ -1539,67 +1561,41 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       );
       return false;
     }
-  }
-
-  Future<bool> cancelOrderItem(String itemId, String storeId) async {
-    state = state.copyWith(isProcessing: true, clearError: true);
-    try {
-      await orderService.cancelOrderItem(itemId: itemId, storeId: storeId);
-      await loadOrders(storeId);
-      state = state.copyWith(isProcessing: false, clearError: true);
-      return true;
-    } on PostgrestException catch (error) {
-      state = state.copyWith(
-        isProcessing: false,
-        error: _mapPaymentError(error, 'Failed to cancel order item'),
-      );
-      return false;
-    } catch (error) {
-      state = state.copyWith(
-        isProcessing: false,
-        error: _mapPaymentError(error, 'Failed to cancel order item'),
-      );
-      return false;
-    }
-  }
-
-  Future<bool> restoreCancelledOrder(String orderId, String storeId) async {
-    state = state.copyWith(isProcessing: true, clearError: true);
-    try {
-      await orderService.restoreCancelledOrder(
-        orderId: orderId,
+    // The write is confirmed. Subsequent reads/display failures are not a
+    // rejected mutation and must never invite another cancel/move operation.
+    if (!ownsView()) return true;
+    _confirmedCommandRevision++;
+    await loadOrders(storeId);
+    if (!ownsView()) return true;
+    state = state.copyWith(isProcessing: false);
+    if (state.error == null &&
+        _displayedOrderId != null &&
+        state.selectedOrder?.orderId == _displayedOrderId) {
+      await showOnCustomerDisplay(
         storeId: storeId,
+        order: state.selectedOrder!,
       );
-      await loadOrders(storeId);
-      state = state.copyWith(isProcessing: false, clearError: true);
-      return true;
-    } catch (error) {
-      state = state.copyWith(
-        isProcessing: false,
-        error: _mapPaymentError(error, 'Failed to restore order'),
-      );
-      return false;
     }
+    return true;
   }
 
-  Future<bool> restoreCancelledOrderItem(String itemId, String storeId) async {
-    state = state.copyWith(isProcessing: true, clearError: true);
-    try {
-      await orderService.restoreCancelledOrderItem(
-        itemId: itemId,
-        storeId: storeId,
+  Future<bool> cancelOrderItem(String itemId, String storeId) =>
+      _runItemMutation(
+        storeId,
+        () => _orders.cancelOrderItem(itemId: itemId, storeId: storeId),
       );
-      await loadOrders(storeId);
-      state = state.copyWith(isProcessing: false, clearError: true);
-      return true;
-    } catch (error) {
-      state = state.copyWith(
-        isProcessing: false,
-        error: _mapPaymentError(error, 'Failed to restore order item'),
+
+  Future<bool> restoreCancelledOrder(String orderId, String storeId) =>
+      _runItemMutation(storeId, () async {
+        await _orders.restoreCancelledOrder(orderId: orderId, storeId: storeId);
+      });
+
+  Future<bool> restoreCancelledOrderItem(String itemId, String storeId) =>
+      _runItemMutation(
+        storeId,
+        () =>
+            _orders.restoreCancelledOrderItem(itemId: itemId, storeId: storeId),
       );
-      return false;
-    }
-  }
 
   void resetPaymentSuccess() {
     if (!state.paymentSuccess) {

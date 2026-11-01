@@ -482,3 +482,30 @@ IndexedDB/native 키로 분리했다. 원래 intent 순서를 보존하고 새 j
 bool 결과/실패 후 저장 경로가 남아 있다. 전 도메인 규약 완료, T01–T16 전체 업무,
 2시간 혼합 부하, 1배/3배 각각 12시간, 최종-main 전체 recipe 및 공식 배포는 미완료다.
 원본 개발 로그는 `/workspace/scratch/pos-resilience-completion-dev/`에 보관한다.
+
+### G3 계산대 메뉴 변경·QC 후속조치 — 추가 개발 증거
+
+계산대의 취소/복구/수량 변경/메뉴 이동 6개 경로는 서버 확정과 후속 조회를
+분리했다. 확정 뒤 조회 실패가 false로 바뀌지 않고, 처리 중 A→B 이동·dispose
+뒤에는 A를 다시 불러오거나 B의 선택/오류를 덮지 않는다. 중복 클릭과 현재 매장과
+다른 매장의 요청은 전송 전에 거부한다. 늦은 고객표시 응답도 원래 generation에서만
+표시 추적/오류를 갱신한다. 기존 서버 명령/operation ID·원장 규칙은 유지했다.
+
+QC 후속조치 생성/상태 변경은 원래 조회 generation과 필터를 보존하고, 매장/필터
+전환·dispose 후 과거 응답이 화면을 변경하지 않는다. ReadEpoch checkpoint는 읽기를
+새로 시작하지 않으며 A→B→A 복귀도 과거 응답을 다시 유효하게 만들지 않는다.
+새 mutation RPC나 항목별 조회/자동 재시도를 추가하지 않았다.
+
+영향 6개 시험 파일 49개가 함께 PASS, 변경 Dart 정적 분석은 오류/경고/정보 0개다.
+원본은 `command-scope-final-affected.log`, `command-scope-final-analysis.log`다.
+이 결과는 final-main 전체 recipe/금융 unknown 복구/전 도메인 전환 완료가 아니다.
+
+### G1 현재 스키마 추출·복원 경로 — 실험 중
+
+현재 관리형 HTTPS 카탈로그 조회로 POS 애플리케이션 객체 4516개, Office 8468개를
+확보하고 추출 전후 정의 해시 일치를 확인했다. 함수 본문·타입·열·제약·인덱스·
+트리거·RLS/GRANT·기본 권한과 실제 migration 이력 해시를 Git 밖 0700/0600 경로에
+보관한다. 업무 행·Auth 비밀번호 해시·vault 값·cron 명령/예약 행은 수집하지 않았다.
+관리형 Auth/Storage 및 확장 객체 의존성을 포함한 격리 복원·의미상 카탈로그 대조와
+native pg_dump 재복원이 아직 필요하다. 현 시점의 카탈로그 확보를 전체 복원 PASS나
+G1 완료로 기록하지 않는다. 운영 DB 스키마·업무 데이터는 이 추출로 변경하지 않았다.

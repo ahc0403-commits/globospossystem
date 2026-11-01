@@ -5,6 +5,22 @@ import 'package:globos_pos_system/core/services/qc_service.dart';
 import 'package:globos_pos_system/features/qc/qc_provider.dart';
 
 class _Service extends QcService {
+  final write = Completer<void>();
+  final filters = <String?>[];
+  @override
+  Future<void> createFollowup({
+    required String storeId,
+    required String sourceCheckId,
+    String? assignedToName,
+  }) => write.future;
+  @override
+  Future<void> updateFollowupStatus({
+    required String followupId,
+    required String storeId,
+    required String status,
+    String? resolutionNotes,
+  }) => write.future;
+
   final reads = <String, List<Completer<List<Map<String, dynamic>>>>>{};
 
   Future<List<Map<String, dynamic>>> read(String key) {
@@ -24,7 +40,10 @@ class _Service extends QcService {
   Future<List<Map<String, dynamic>>> fetchFollowups({
     required String storeId,
     String? statusFilter,
-  }) => read(storeId);
+  }) {
+    filters.add(statusFilter);
+    return read(storeId);
+  }
 
   @override
   Future<List<Map<String, dynamic>>> fetchIssueQueue({
@@ -33,6 +52,65 @@ class _Service extends QcService {
 }
 
 void main() {
+  for (final update in [false, true]) {
+    Future<bool> command(QcFollowupNotifier n) => update
+        ? n.updateStatus(followupId: 'followup', storeId: 'a', status: 'closed')
+        : n.createFollowup(storeId: 'a', sourceCheckId: 'check');
+    test(
+      'follow-up ${update ? 'update' : 'create'} keeps its confirmed result and current filter',
+      () async {
+        final service = _Service();
+        final n = QcFollowupNotifier(service: service);
+        addTearDown(n.dispose);
+        final initial = n.load('a', statusFilter: 'open');
+        service.reads['a']!.single.complete([]);
+        await initial;
+        final pending = command(n);
+        service.write.complete();
+        await Future<void>.delayed(Duration.zero);
+        expect(service.filters, ['open', 'open']);
+        service.reads['a']!.last.completeError(StateError('refresh failed'));
+        expect(await pending, isTrue);
+        expect(n.state.error, isNotNull);
+      },
+    );
+    test(
+      'follow-up ${update ? 'update' : 'create'} cannot load A after the screen changes to B',
+      () async {
+        final service = _Service();
+        final n = QcFollowupNotifier(service: service);
+        addTearDown(n.dispose);
+        final initial = n.load('a', statusFilter: 'open');
+        service.reads['a']!.single.complete([]);
+        await initial;
+        final pending = command(n);
+        final newer = n.load('b', statusFilter: 'closed');
+        service.reads['b']!.single.complete([
+          {'id': 'b'},
+        ]);
+        await newer;
+        service.write.complete();
+        expect(await pending, isTrue);
+        expect(service.reads['a'], hasLength(1));
+        expect(n.state.followups.single['id'], 'b');
+      },
+    );
+  }
+  test(
+    'late follow-up write failure after disposal does not touch state',
+    () async {
+      final service = _Service();
+      final n = QcFollowupNotifier(service: service);
+      final initial = n.load('a');
+      service.reads['a']!.single.complete([]);
+      await initial;
+      final pending = n.createFollowup(storeId: 'a', sourceCheckId: 'check');
+      n.dispose();
+      service.write.completeError(StateError('write failed'));
+      expect(await pending, isFalse);
+    },
+  );
+
   test(
     'QC week never resurrects a previous store after a later read',
     () async {

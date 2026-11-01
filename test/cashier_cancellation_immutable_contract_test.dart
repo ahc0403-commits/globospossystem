@@ -23,7 +23,7 @@ void main() {
     ).readAsStringSync();
 
     expect(source, contains('Future<bool> cancelOrderItem'));
-    expect(source, contains('orderService.cancelOrderItem'));
+    expect(source, contains('_orders.cancelOrderItem'));
   });
 
   test('cancellation amounts are server-calculated and append-only', () {

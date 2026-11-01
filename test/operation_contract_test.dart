@@ -12,6 +12,22 @@ OperationScope scope({String actor = 'actor', String revision = '1'}) =>
     );
 
 void main() {
+  test('view checkpoints do not start reads and never survive A to B to A', () {
+    final reads = ReadEpoch();
+    expect(reads.currentToken, isNull);
+    final original = reads.begin('a');
+    final checkpoint = reads.currentToken!;
+    expect(reads.accepts(original), isTrue);
+    expect(reads.accepts(checkpoint), isTrue);
+    reads.begin('b');
+    reads.begin('a');
+    expect(reads.accepts(checkpoint), isFalse);
+    final current = reads.currentToken!;
+    reads.dispose();
+    expect(reads.accepts(current), isFalse);
+    expect(reads.currentToken, isNull);
+  });
+
   test('actor and permission revision are part of scope/cache identity', () {
     expect(scope(), scope());
     expect(scope(), isNot(scope(actor: 'another')));

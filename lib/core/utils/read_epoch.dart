@@ -7,6 +7,12 @@ class ReadEpoch {
 
   Object? get scope => _scope;
 
+  /// Capture a view without starting/cancelling a read. A later filter change,
+  /// same-scope reload, A→B→A switch or disposal invalidates this snapshot.
+  ReadEpochToken? get currentToken => _disposed || _scope == null
+      ? null
+      : ReadEpochToken._(this, _revision, _scope!);
+
   ReadEpochToken begin(Object scope) {
     if (_disposed) throw StateError('Read lifetime is disposed');
     _scope = scope;

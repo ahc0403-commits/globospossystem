@@ -151,7 +151,8 @@
       "sourceRoot": "lib/features/payment",
       "checks": [
         "feature.payment",
-        "official-full-recipe"
+        "official-full-recipe",
+        "cashier-command-scope"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -624,6 +625,10 @@
     },
     "browser-kds-outbox-compatibility": {
       "path": "scripts/resilience/tests/kds_outbox_browser.test.cjs",
+      "kind": "focused"
+    },
+    "cashier-command-scope": {
+      "path": "test/cashier_command_scope_test.dart",
       "kind": "focused"
     }
   },

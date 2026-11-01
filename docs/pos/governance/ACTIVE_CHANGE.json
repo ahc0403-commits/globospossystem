@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads, bounded quota refresh, recoverable first Office legal connection and isolated durable KDS progress recovery; full schema restore, all-domain adoption, soak and production release remain pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "e42fc1155e2de160ae037b489cccfb838a37d51e5d979be389006131f9a3aa47",
+      "sha256": "8a9e024cc09bb4c3b70d285106156d0f7ebf8d5b54d839ca0fc80082d3f1b228",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "fe466e7082f8135a1c09f20310e97c88451f2116d2db97e6edfff635cc2c34db",
+      "sha256": "9311f74bfa6f29a8b17b0732a37af7993e9d5c2ec4683dec489b9f30f760569b",
       "mode": "100644"
     },
     "lib/core/services/emergency_web_bridge_stub.dart": {
@@ -33,7 +33,7 @@
       "mode": "100644"
     },
     "lib/core/utils/read_epoch.dart": {
-      "sha256": "66753e50b3a79dc11b9e1dba8ba0c9597fcb0a421c4717911c17bb489a0bbfd5",
+      "sha256": "24738ba3b3a28161a3138cd9c7364efc0633a3c7507071d3e808cd61fb5aad6f",
       "mode": "100644"
     },
     "lib/features/admin/admin_screen.dart": {
@@ -60,8 +60,12 @@
       "sha256": "6eb11e881e0c20af2f38ee5a86cbf745e0dd66fec06a5c9e61ebfeb629b6f44b",
       "mode": "100644"
     },
+    "lib/features/payment/payment_provider.dart": {
+      "sha256": "9fb1ca1932ac022e25d8746e428f377d35c1e984dc6bc4fed62fd92773e63561",
+      "mode": "100644"
+    },
     "lib/features/qc/qc_provider.dart": {
-      "sha256": "8f19e168def40ea0c48429595dec63cdf54911f8d484294b01fd1a79423a89f6",
+      "sha256": "4ebd29ecae194a178f702dfe5b0ada36da25907be3084ff485829e11a32b8f59",
       "mode": "100644"
     },
     "lib/features/super_admin/office_legal_connection_dialog.dart": {
@@ -128,6 +132,14 @@
       "sha256": "f043d4f711388196b58e47880a249d585946a4eda68b9356f00ec9696cb6774b",
       "mode": "100644"
     },
+    "test/cashier_cancellation_immutable_contract_test.dart": {
+      "sha256": "f902dffabdf391d0f3d111a7c9abdbfbe2c60d5041cf7801f1bde63c6db2d41d",
+      "mode": "100644"
+    },
+    "test/cashier_command_scope_test.dart": {
+      "sha256": "a96e0cb5c1440c32ea1dcfa1f619841f8dd902d06c52e56cd5d3e3808bbe100a",
+      "mode": "100644"
+    },
     "test/dialog_sheet_entrypoint_coverage_contract_test.dart": {
       "sha256": "cb2cc730847db5a6c085f710c2c5dee92a45315e1c24e96e5b26ffe0f9dc7a0c",
       "mode": "100644"
@@ -181,7 +193,7 @@
       "mode": "100644"
     },
     "test/operation_contract_test.dart": {
-      "sha256": "1fddada581d764d746a16072bcc4c78bbb0fe59661e3ae7fd3bbd6bf6178d948",
+      "sha256": "921dce05755cb0741689105a3f459fb62db4e3a4500bbe480eee8f81bc5e215a",
       "mode": "100644"
     },
     "test/order_read_epoch_test.dart": {
@@ -189,7 +201,7 @@
       "mode": "100644"
     },
     "test/qc_read_epoch_test.dart": {
-      "sha256": "b1d6f96a30630cab05ffd817e3ef8f3d7c3c1c81c14014df3a4cf85d2f7c1283",
+      "sha256": "28638c580dcfbbb6c54acc77cbe41726dfb8e4d9cddaf185d5219a382593798a",
       "mode": "100644"
     },
     "test/sql/menu_quantity_batch_events_test.sql": {
@@ -271,7 +283,8 @@
     "office-identity-unit",
     "kds-progress-journal",
     "kds-progress-receipt-sql",
-    "browser-kds-outbox-compatibility"
+    "browser-kds-outbox-compatibility",
+    "cashier-command-scope"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -282,7 +295,8 @@
     "Each DB transaction is atomic and cross-DB completion is a recoverable operation, never a claimed distributed transaction; proof expires and is never an Auth/service credential.",
     "Persist each new KDS item-progress identity before HTTP; a prepared or ambiguous record cannot become a fresh handoff. Preserve existing quantities, floor/checker routing and native command idempotency.",
     "Resolve both direct event UUIDs and JeonGabok private batch request UUIDs by original active actor/store. Never grant clients direct access to the private batch action table.",
-    "Keep new progress journals invisible to legacy clients, preserve original intent order, and retain confirmed writes despite failed cleanup, refresh or later assignment change."
+    "Keep new progress journals invisible to legacy clients, preserve original intent order, and retain confirmed writes despite failed cleanup, refresh or later assignment change.",
+    "Confirmed cashier item mutations remain confirmed after failed follow-up reads; their original view cannot load/apply another active store or a later assignment. QC follow-up writes preserve the active filter and never return an old store after navigation/disposal."
   ],
   "dataAccessReview": {
     "nPlusOne": {
@@ -360,7 +374,7 @@
   "contractReview": {
     "outcomes": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -369,12 +383,13 @@
         "menu-quantity-sql",
         "kds-progress-journal",
         "kds-progress-receipt-sql",
-        "browser-kds-outbox-compatibility"
+        "browser-kds-outbox-compatibility",
+        "cashier-command-scope"
       ]
     },
     "tenantScope": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -383,7 +398,8 @@
         "menu-quantity-sql",
         "kds-progress-journal",
         "kds-progress-receipt-sql",
-        "browser-kds-outbox-compatibility"
+        "browser-kds-outbox-compatibility",
+        "cashier-command-scope"
       ]
     },
     "readiness": {
@@ -435,7 +451,7 @@
     },
     "resourceLifetime": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -444,7 +460,8 @@
         "menu-quantity-sql",
         "kds-progress-journal",
         "kds-progress-receipt-sql",
-        "browser-kds-outbox-compatibility"
+        "browser-kds-outbox-compatibility",
+        "cashier-command-scope"
       ]
     },
     "filesAndHardware": {

@@ -618,18 +618,26 @@ class QcFollowupNotifier extends StateNotifier<QcFollowupState> {
     required String sourceCheckId,
     String? assignedToName,
   }) async {
+    final origin = _reads.currentToken;
     try {
-      await qcService.createFollowup(
+      await _service.createFollowup(
         storeId: storeId,
         sourceCheckId: sourceCheckId,
         assignedToName: assignedToName,
       );
-      await load(storeId);
+      if (mounted && origin != null && _reads.accepts(origin)) {
+        final scope = origin.scope as (String, String?);
+        if (scope.$1 == storeId) {
+          await load(storeId, statusFilter: scope.$2);
+        }
+      }
       return true;
     } catch (e) {
-      state = state.copyWith(
-        error: _mapFollowupError(e, 'Failed to create follow-up.'),
-      );
+      if (mounted && origin != null && _reads.accepts(origin)) {
+        state = state.copyWith(
+          error: _mapFollowupError(e, 'Failed to create follow-up.'),
+        );
+      }
       return false;
     }
   }
@@ -640,19 +648,27 @@ class QcFollowupNotifier extends StateNotifier<QcFollowupState> {
     required String status,
     String? resolutionNotes,
   }) async {
+    final origin = _reads.currentToken;
     try {
-      await qcService.updateFollowupStatus(
+      await _service.updateFollowupStatus(
         followupId: followupId,
         storeId: storeId,
         status: status,
         resolutionNotes: resolutionNotes,
       );
-      await load(storeId);
+      if (mounted && origin != null && _reads.accepts(origin)) {
+        final scope = origin.scope as (String, String?);
+        if (scope.$1 == storeId) {
+          await load(storeId, statusFilter: scope.$2);
+        }
+      }
       return true;
     } catch (e) {
-      state = state.copyWith(
-        error: _mapFollowupError(e, 'Failed to change follow-up status.'),
-      );
+      if (mounted && origin != null && _reads.accepts(origin)) {
+        state = state.copyWith(
+          error: _mapFollowupError(e, 'Failed to change follow-up status.'),
+        );
+      }
       return false;
     }
   }
