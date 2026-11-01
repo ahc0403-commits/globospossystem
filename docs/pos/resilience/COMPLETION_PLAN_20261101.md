@@ -14,7 +14,7 @@ main `d5d1797e`는 연결 작업 `45d6b8c8`의 조상이다. 사용자 원래 ch
 
 | 묶음 | 확보한 부분 | 남은 완료 조건 |
 |---|---|---|
-| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth/REST/양쪽 Edge/POS Storage fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
+| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth/REST/양쪽 Edge/POS Storage·양쪽 Realtime fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
 | G1 | native 복원/최종 객체 대조, 업그레이드 금융 보존·receipt 검사 | Realtime/Office Storage·브라우저 등 전체 플랫폼 결합과 모든 신규/업그레이드 업무 |
 | G2 | 양쪽 SQL/Edge/UI, 실제 신규 법인·첫/추가 매장·Auth worker·직원/사진 근태 연결 | 두 앱의 실제 로그인→법인→POS 개설/준비→Office 업무 전체 흐름 |
 | G3 | root scope, KDS progress/single-payment journal, 인증 명령과 일부 주문/QC/설정/리포트/근태·증빙 전환 | 나머지 legacy 도메인, 계산대 분할·합산·비매출 복구와 나머지 서버 계약 |
@@ -1231,3 +1231,60 @@ proof-outcome-analysis-final.log. 실제 Unix file fault와 가짜 HTTP 업무 �
 미확인 결과, queue 총 건수/bytes와 immutable local 파일 교체는 계속 잔여다.
 이 변경만으로 모든 클라이언트의 server attachment replay가 없어졌다고 하지 않는다.
 운영 DB/Edge/web와 혼합·장시간 시험은 아직 시작하지 않았다.
+
+
+### G0/G2 실제 양쪽 Realtime과 신규 매장의 주방 권한·이벤트
+
+Realtime v2.143.3의 immutable upstream image 전체 filesystem/runtime config를 검증한
+389,946,368-byte single-layer projection을 등록했다. 21,096 entries, 실제 20.22초,
+원본 tar 제거/정리 확인이다. digest와 rootfs/config/inventory SHA는 image policy에
+있다. VFS에서 다층 복사량이 커지는 이전 문제를 반복하지 않도록 처음부터 같은
+검증된 projection 경로를 사용했다. 운영 image/서버 설정은 변경하지 않았다.
+
+운영에서는 각 DB의 realtime.messages 정책과 routine hash/migration version 같은
+읽기 전용 metadata만 private 파일로 캡처했다. POS 정책 1개, Office 0개, 각 routine
+18개/이력 91개다. 운영 tenant 설정·JWT secret·event·업무 row는 복사하지 않는다.
+실제 pinned self-host installer가 격리 DB에서 자체 platform migration/seed를 실행한다.
+운영 이력 91개를 실행했다고 가짜 INSERT하지 않는다. 기존 application/Auth/Storage
+catalog는 전후 동일해야 하고, 메시지 정책은 원본 집합과 표현식/역할까지 같아야 한다.
+Realtime platform 자체가 운영의 모든 object와 byte-identical하다고 주장하지 않는다.
+
+초기 trial에서 APP_NAME 누락, owned container 이름 누락, fixture admin password
+변경 뒤 controller credential 불일치를 차례로 발견해 수정했다. namespace 설정이
+빠진 trial은 public에 control table 네 개를 만들었고 catalog 보존 guard가 거부했다.
+공식 Supabase compose의 DB_AFTER_CONNECT_QUERY=SET search_path TO _realtime 및
+별도 schema를 사용해 해결했다. 이 실패들은 모두 격리 DB에만 있었고 정리 확인했다.
+psql fingerprint는 실제 transaction에서 SET LOCAL을 적용하도록 보강했다. 실패와
+원래 receipt는 덮어쓰지 않는다. 실제 release config eval도 DB 복원 전에 검사한다.
+
+POS 단독 실제 Auth/REST/Realtime API preflight 17조건(47.76초), 실제 Dart SDK
+WebSocket join/서버 broadcast+ack/권한 없는 private KDS topic 거부 포함 18조건
+(78.67초)이 각각 PASS다. tenant health의 db_connected/replication_connected는
+subscription 이전에는 false일 수 있으므로 health 응답만으로 이벤트 전달을 PASS로
+바꾸지 않는다. 실제 message 최대 276 bytes를 관측했다. 각 서버는 512MiB/1CPU,
+기본 DB pool 2, scheduler 2와 WebSocket heap 8MiB를 사용한다.
+
+추가로 두 DB/Auth/REST/실제 Office·POS Edge/POS Storage/양쪽 Realtime을 함께 실행해
+신규 법인 → 첫/추가 매장 → worker → 초기 비밀번호 → 직원/사진 근태를 다시 연결했다.
+새 주방 계정도 실제 첫 비밀번호 변경을 마친 뒤 자기 매장의 control/kitchen channel을
+구독했다. WAL/DB가 연결된 것을 확인하고 **native SQL realtime.send의 kds_change**를
+수신했다. 다른 신규 매장 channel은 permission 오류로 거부됐다. 이는 주문 완료/
+tray/floor 인계 자체를 실행한 시험과 구분한다. 새 매장의 physical acceptance는 false다.
+
+전체 owned 실행 108 parent 조건 PASS, 148.33초/정리 확인이다. 내장 기본 protocol
+검사는 양쪽 합계 6개, 별도 POS scoped KDS 검사는 7개이며 parent 108과 단순 합산해
+다른 통합 완료 수치로 만들지 않는다. 증거:
+`/workspace/.private/resilience-two-project-kds-realtime-20261101-v8/result.json`,
+개발 로그 two-project-new-store-kds-realtime-v8.log. 앞선 v1–v7의 실패/단독 preflight와
+원래 hash도 보존한다. source 6b29d953+기록된 dirty helper 입력의 개발 증거다.
+
+후속 source-binding 보강은 image policy, 실행할 forward SQL, 두 Edge 전체 tracked
+module/lockfile을 실행 전후 비교한다. 같은 index.ts basename도 서로 다른 경로로
+구분한다. 이 검증 전용 변경은 별도 owner/input guard 8개, CLI guard 5개, reference
+6개, image policy 12개 검사로 확인하며 v8의 원래 시간/hash를 고치거나 전체 fixture를
+이유 없이 재실행하지 않는다. Dart probe 정적 분석은 0 issue다.
+
+남은 환경은 실제 두 앱이 쓰는 API gateway의 WebSocket 연결, Office Storage,
+전체 브라우저/업무·부하 manifest와 물리 장치다. source/message RLS와 직접 SDK
+성공만으로 실제 앱 KDS handoff·구매·입고·전체 기능/장시간/운영을 완료 처리하지
+않는다. 운영 DB/Edge/web, 2시간 혼합, 각 12시간 및 두 마감 관측은 아직 시작하지 않았다.

@@ -850,6 +850,18 @@
     "proof-confirmed-cleanup": {
       "path": "test/payment_proof_outcome_test.dart",
       "kind": "focused"
+    },
+    "realtime-source-guards": {
+      "path": "scripts/resilience/tests/test_realtime_runtime.py",
+      "kind": "tooling"
+    },
+    "realtime-native-websocket": {
+      "path": "scripts/resilience/realtime_probe.dart",
+      "kind": "focused"
+    },
+    "new-store-kds-realtime": {
+      "path": "scripts/resilience/kds_realtime_scenario.py",
+      "kind": "focused"
     }
   },
   "workstreams": [

@@ -105,9 +105,9 @@ class FixtureImageTests(unittest.TestCase):
 
     def test_stock_versions_have_distinct_preserved_identities(self):
         fixed = image.policies()
-        self.assertEqual(len(fixed), 5)
-        self.assertEqual(len({p['sourceConfigDigest'] for p in fixed}), 5)
-        self.assertEqual(len({p['derivedImageId'] for p in fixed}), 5)
+        self.assertEqual(len(fixed), 6)
+        self.assertEqual(len({p['sourceConfigDigest'] for p in fixed}), 6)
+        self.assertEqual(len({p['derivedImageId'] for p in fixed}), 6)
         projections = {p['requestedRef']:p['derivedImageId'] for p in fixed}
         with patch.dict(os.environ, {'POS_FIXTURE_IMAGE_MAP':json.dumps(projections),
                                     'POS_POSTGRES_FIXTURE_IMAGE':''}), \

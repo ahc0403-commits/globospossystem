@@ -165,6 +165,37 @@
       "sourceRootfsEntries": 100121,
       "sourceRootfsInventorySha256": "e69e6ba9de537bbba628910744eb863bc695a4e2ed619368326889fb23ca68c0",
       "derivedImageId": "sha256:1fa13e9f58c2b3b52daa6d6e72f3bf91f21f44b43bc1a2bb8a7796ec0777c83a"
+    },
+    {
+      "schemaVersion": 1,
+      "representation": "verified-single-layer-rootfs-v1",
+      "requestedRef": "public.ecr.aws/supabase/realtime:v2.143.3",
+      "sourceRef": "public.ecr.aws/supabase/realtime:v2.143.3@sha256:1591e9049bf15fd392da9e8344db892f6acfe9da274517327dbd14733f32b9e1",
+      "sourceManifestDigest": "sha256:1591e9049bf15fd392da9e8344db892f6acfe9da274517327dbd14733f32b9e1",
+      "os": "linux",
+      "architecture": "amd64",
+      "crane": {
+        "version": "v0.22.1",
+        "archiveUrl": "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz",
+        "archiveSha256": "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0",
+        "binarySha256": "8e75c326adb43b053cfd78b9b987663f8f4fe4557f4d3915905643f25c730992"
+      },
+      "cacheTag": "pos-verified-fixture/realtime:2.143.3-rootfs-1591e9049bf1-v1",
+      "sourceConfigDigest": "sha256:e01aa9d85dc543a64c427e15002c544bbe03467d14741de7b69787aaf2e40177",
+      "runtimeConfigKeys": [
+        "ArgsEscaped",
+        "Cmd",
+        "Entrypoint",
+        "Env",
+        "User",
+        "WorkingDir"
+      ],
+      "runtimeConfigSha256": "6ca45b36093c913d6932fabe7f5698166bd34feca40c5141c042a47b6101dfd8",
+      "rootfsArchiveBytes": 389946368,
+      "rootfsArchiveSha256": "13c61053a4ffdcc7c86081be89bdc9ac9ae3cd783c9a0648bc2f9795e7dc11e4",
+      "sourceRootfsEntries": 21096,
+      "sourceRootfsInventorySha256": "4528fb14de1b220289ce6e877dfc5f5a6d88b7dde0c9658cf79f3f5cac66b47d",
+      "derivedImageId": "sha256:aeb99f89192730488d5ba236e543a33cacf1eed351b0ffdcc8616c05e9c64fb1"
     }
   ],
   "temporaryVolumes": {

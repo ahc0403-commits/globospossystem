@@ -120,7 +120,7 @@ class OwnedPlatform:
     def sql(self, project, body, check=True):
         self.sequence += 1
         return self.command('sql-' + str(self.sequence), ['docker','exec','-i',
-          '--env','PGPASSWORD=fixture-only','--env','PGOPTIONS=-c supautils.hint_roles=',
+          '--env','PGPASSWORD='+self.projects[project].get('adminPassword','fixture-only'),'--env','PGOPTIONS=-c supautils.hint_roles=',
           self.projects[project]['db'], 'psql','-X','-qAt','-U','supabase_admin','-d','postgres',
           '-v','ON_ERROR_STOP=1'], body, check=check)
 
@@ -174,8 +174,19 @@ class OwnedPlatform:
         self.result['officeSourceDirty'] = bool(subprocess.check_output(['git','status','--porcelain'],cwd=self.office_root,text=True))
         self.input_paths = [HERE / name for name in ['owned_platform.py','runtime_gateway.py','schema_snapshot.py',
           'run_schema_fixture.py','run_platform_probe.py','legal_http_scenario.py','store_http_scenario.py',
-          'workforce_http_scenario.py','storage_runtime.py','storage_probe.py','office_edge_runtime.ts','fixtures/attendance.jpg']]
-        self.result['toolHashes'] = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in self.input_paths}
+          'workforce_http_scenario.py','storage_runtime.py','storage_probe.py','realtime_runtime.py',
+          'realtime_probe.py','realtime_probe.dart','kds_realtime_scenario.py','office_edge_runtime.ts','fixtures/attendance.jpg']]
+        self.input_paths += [ROOT/'scripts/local_verification/fixture_postgres_policy.json']
+        self.input_paths += [(ROOT if project=='pos' else self.office_root)/'supabase/migrations'/name
+          for project in self.selected_projects for name in self.schema.CANDIDATE_MIGRATIONS[project]]
+        # Include every tracked Edge module/lockfile, including transitive local
+        # imports. Changes outside the executed app (e.g. UI-only edits) do not
+        # silently turn this component proof into whole-app acceptance.
+        for base in (ROOT,self.office_root):
+            paths=subprocess.check_output(['git','ls-files','-z','supabase/functions'],cwd=base).split(b'\0')
+            self.input_paths += [base/os.fsdecode(path) for path in paths if path]
+        self.input_paths=list(dict.fromkeys(self.input_paths))
+        self.result['toolHashes'] = self.input_hashes()
         for ref in (AUTH_IMAGE, REST_IMAGE):
             image = json.loads(self.command('image-' + ('auth' if ref == AUTH_IMAGE else 'rest'),
               [self.real_docker,'image','inspect',ref]).stdout)[0]
@@ -300,7 +311,7 @@ class OwnedPlatform:
                 failures.append('GatewayThreadNotStopped')
         try:
             for project,config in self.projects.items():
-                for kind in ('auth','rest','db','storage'):
+                for kind in ('auth','rest','db','storage','realtime'):
                     if kind not in config:continue
                     self.command('diagnostic-' + project + '-' + kind, ['docker','logs','--tail','100',config[kind]],check=False)
         except (OSError,subprocess.TimeoutExpired) as error:
@@ -322,8 +333,11 @@ class OwnedPlatform:
                 self.result['status'] = 'FAIL'
             self.save()
 
+    def input_hashes(self):
+        return {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in self.input_paths}
+
     def validate_inputs(self):
-        self.check(self.result['toolHashes']=={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in self.input_paths},
+        self.check(self.result['toolHashes']==self.input_hashes(),
           'runtime-tool-inputs-unchanged')
         self.check(self.result['officeSourceSha']==subprocess.check_output(['git','rev-parse','HEAD'],cwd=self.office_root,text=True).strip()
           and not subprocess.check_output(['git','status','--porcelain'],cwd=self.office_root,text=True),

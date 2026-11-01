@@ -34,4 +34,9 @@ class ProbeArgumentGuards(unittest.TestCase):
         self.reject(['--exercise-workforce','--deno','/missing-deno','--deno-cache','/missing-cache'])
 
 
+    def test_realtime_missing_reference_or_dart_fails_before_any_database(self):
+        self.reject(['--exercise-realtime'])
+        self.reject(['--exercise-realtime-websocket','--realtime-reference-dir','/missing-reference'])
+
+
 if __name__=='__main__':unittest.main()

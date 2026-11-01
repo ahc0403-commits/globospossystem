@@ -66,7 +66,7 @@ class OwnedPlatformGuards(unittest.TestCase):
 
     def test_changed_input_cannot_support_a_pass(self):
         value=self.instance();source=self.area/'tool.py';source.write_text('original')
-        value.input_paths=[source];value.result['toolHashes']={source.name:hashlib.sha256(source.read_bytes()).hexdigest()}
+        value.input_paths=[source];value.result['toolHashes']={str(source):hashlib.sha256(source.read_bytes()).hexdigest()}
         source.write_text('changed')
         with self.assertRaisesRegex(RuntimeError,'runtime-tool-inputs-unchanged'):value.validate_inputs()
 
@@ -77,6 +77,17 @@ class OwnedPlatformGuards(unittest.TestCase):
         value.runner.cleanup_owned.assert_called_once()
         self.assertFalse(value.result['cleanupVerified'])
         self.assertIn('GatewayThreadNotStopped',value.result['cleanupFailures'])
+
+
+    def test_all_source_paths_are_distinct_even_when_basenames_match(self):
+        value=self.instance();a=self.area/'pos/index.ts';b=self.area/'office/index.ts'
+        for path in [a,b]:path.parent.mkdir();path.write_text('original '+path.parent.name)
+        value.input_paths=[a,b]
+        hashes=value.input_hashes()
+        self.assertEqual(len(hashes),2)
+        value.result['toolHashes']=hashes
+        b.write_text('changed Office dependency')
+        with self.assertRaisesRegex(RuntimeError,'runtime-tool-inputs-unchanged'):value.validate_inputs()
 
 
 if __name__=='__main__':unittest.main()

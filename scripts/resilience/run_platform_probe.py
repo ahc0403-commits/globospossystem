@@ -52,9 +52,14 @@ def main():
     parser.add_argument('--exercise-workforce',action='store_true')
     parser.add_argument('--exercise-storage',action='store_true')
     parser.add_argument('--storage-reference',type=Path)
+    parser.add_argument('--exercise-realtime',action='store_true')
+    parser.add_argument('--realtime-reference-dir',type=Path)
+    parser.add_argument('--exercise-realtime-websocket',action='store_true')
+    parser.add_argument('--dart',type=Path)
     parser.add_argument('--deno',type=Path)
     parser.add_argument('--deno-cache',type=Path)
     args=parser.parse_args()
+    if args.exercise_realtime_websocket:args.exercise_realtime=True
     if args.exercise_workforce:
         args.exercise_stores=True
         args.exercise_storage=True
@@ -68,6 +73,10 @@ def main():
         parser.error('Actual Office Edge requires explicit Deno executable and cache')
     if args.exercise_storage and args.storage_reference is None:
         parser.error('Actual Storage needs the private source-bound migration reference')
+    if args.exercise_realtime and args.realtime_reference_dir is None:
+        parser.error('Actual Realtime needs private project-bound authorization references')
+    if args.exercise_realtime_websocket and args.dart is None:
+        parser.error('Actual WebSocket probe needs the explicit Dart SDK')
     signal.signal(signal.SIGTERM,lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     selected=('pos','office') if args.projects=='both' else (args.projects,)
     platform=OwnedPlatform(args.snapshot_dir,args.office_root,args.output,projects=selected)
@@ -76,8 +85,22 @@ def main():
             if args.exercise_storage:
                 from storage_runtime import preflight
                 preflight(platform,'pos',args.storage_reference)
+            if args.exercise_realtime:
+                from realtime_runtime import preflight
+                for project in selected:
+                    preflight(platform,project,args.realtime_reference_dir/(project+'-realtime-authorization-reference-20261101.json'))
+            if args.exercise_realtime_websocket:
+                from realtime_probe import preflight
+                preflight(platform,args.dart)
             platform.start()
             accounts=probe(platform)
+            if args.exercise_realtime:
+                from realtime_runtime import start
+                for project in selected:
+                    start(platform,project,args.realtime_reference_dir/(project+'-realtime-authorization-reference-20261101.json'))
+                if args.exercise_realtime_websocket:
+                    from realtime_probe import run
+                    run(platform,accounts,args.dart)
             if args.exercise_storage:
                 from storage_runtime import start
                 start(platform,'pos',args.storage_reference)
@@ -95,6 +118,9 @@ def main():
                         platform.start_edge('pos','complete-initial-password-change',args.deno,args.deno_cache)
                         from workforce_http_scenario import run as workforce
                         workforce(platform,accounts,registered)
+                        if args.exercise_realtime_websocket:
+                            from kds_realtime_scenario import run as kds
+                            kds(platform,registered,args.dart)
             platform.validate_inputs()
             platform.result['status']='PASS'
     except BaseException as error:

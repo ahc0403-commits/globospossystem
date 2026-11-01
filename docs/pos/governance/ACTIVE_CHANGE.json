@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "7fde35d32716023c9297ce70ad581eb74bdec440fcd1aad22b8ce2d5e84e2779",
+      "sha256": "6ac672fb0ffc3806168e3ff3264eab24bbd4fc65c45e876537740ecc65c978ee",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "6db6d9047d33bffe04f6929ff5fb60757cbb996506d47ac509583ff2b311d35e",
+      "sha256": "42b48df20883237d99068abe2e93e40ce7615cd97aac70455bfdc19ad544f4c7",
       "mode": "100644"
     },
     "lib/core/auth/auth_command_session.dart": {
@@ -265,7 +265,7 @@
       "mode": "100644"
     },
     "scripts/local_verification/fixture_postgres_policy.json": {
-      "sha256": "a56ce5ecf3a6f92063b44317ecfc5ef28eec1aeb516248c874e623f10057310c",
+      "sha256": "cd519a64d3d2a068d47813c34d1d9d83dede287912404679ab2836e849fd0394",
       "mode": "100644"
     },
     "scripts/local_verification/recipe.json": {
@@ -273,7 +273,7 @@
       "mode": "100644"
     },
     "scripts/local_verification/tests/test_fixture_image.py": {
-      "sha256": "c03a61168bbb5b14fe94f7ae9a8887e2c02833bd79d5187af379958bde45ee27",
+      "sha256": "000bf0643380d3aee2670809694c426490246af23c9495ecb17b1d201afe0838",
       "mode": "100644"
     },
     "scripts/local_verification/tests/test_tools_image_layout.py": {
@@ -300,6 +300,10 @@
       "sha256": "aeef5bb8045f40c2ce5c0e4cb988dbf2e7fa5baaa3cfee5c21c4f0e1a4b91f46",
       "mode": "100644"
     },
+    "scripts/resilience/kds_realtime_scenario.py": {
+      "sha256": "cd455ce65381371babec452bc7d6fa3dbad6c8a454c2807f9316974a01d626ee",
+      "mode": "100644"
+    },
     "scripts/resilience/legal_connection_native_fixture.py": {
       "sha256": "6b0814433b1e48744255642b83f0d96dcb5e949a1e4940902884a24e96870d54",
       "mode": "100644"
@@ -317,7 +321,7 @@
       "mode": "100644"
     },
     "scripts/resilience/owned_platform.py": {
-      "sha256": "022904a417aba1108c0a80f8f0d2d33c40eb077c0a8e1aa6d913ebcc99352bab",
+      "sha256": "e661f1d11805064aafb0b89f82d7dcf99a76c878ba5d92f7d55e1a1b9e6ceb9c",
       "mode": "100644"
     },
     "scripts/resilience/payment_command_v2_fixture.py": {
@@ -328,8 +332,20 @@
       "sha256": "bc6ffee63a8a529ebaca50606c6d8955039ee2de11a6b1e571f374358f42836b",
       "mode": "100644"
     },
+    "scripts/resilience/realtime_probe.dart": {
+      "sha256": "80eb576b238660577e6f7fb25448e6825a5586efc608f1dc8683dfde26ea9d39",
+      "mode": "100644"
+    },
+    "scripts/resilience/realtime_probe.py": {
+      "sha256": "aa26998e6a4ee12e71963a001628c5c282f4bdb6287827156835d82aa06d8935",
+      "mode": "100644"
+    },
+    "scripts/resilience/realtime_runtime.py": {
+      "sha256": "552505590a58828ef0948b6994377b5a914bb36cef3d46e507a05e92dd223058",
+      "mode": "100644"
+    },
     "scripts/resilience/run_platform_probe.py": {
-      "sha256": "beba386778b2165cf6b8d63f8085bc51c3cea80ebcd656d0db7d0de2b1728f4e",
+      "sha256": "8c2356f4d013c72b6c3d7b33dd9a89d2cf5e878567bb9473ac411299ec3bff18",
       "mode": "100644"
     },
     "scripts/resilience/run_schema_fixture.py": {
@@ -397,11 +413,15 @@
       "mode": "100644"
     },
     "scripts/resilience/tests/test_owned_platform.py": {
-      "sha256": "e453e17ce6f120f60200a8500e64c6f8f0b846eb6281d47b1c7a1228e588c626",
+      "sha256": "8e073aa1d22cc3f94b86d78b4e67559d0b21c11bbbb8d35e6e2ca08a7ad33a8d",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_platform_probe_arguments.py": {
-      "sha256": "db3078eda785395630eb348a4b8e3db0b5fe532cfb8b09d6e90a7cb05e681765",
+      "sha256": "573a72fb1b220b38b4cdfa8fa185bac194251b222e32cfe2a839451f04058798",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_realtime_runtime.py": {
+      "sha256": "3421985c577b5dd1d5baa0de7d9c2f1b7731d3d53c508f27ce79f7bb756d9553",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_runtime_gateway.py": {
@@ -771,7 +791,10 @@
     "bounded-photo-processing",
     "attendance-photo-original-auth",
     "cashier-owned-read-lifetime",
-    "proof-confirmed-cleanup"
+    "proof-confirmed-cleanup",
+    "realtime-source-guards",
+    "realtime-native-websocket",
+    "new-store-kds-realtime"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -798,7 +821,8 @@
     "Own password/consent commands retain original actor epoch and JWT across awaits, reject duplicate in-flight submissions, abort only their own HTTP work after logout/actor change/disposal, and never set a later actor gate/error/cache/navigation. No password is persisted and no write is automatically retried. Command whole budget 15s/input 16KiB/response 64KiB. Durable ambiguous-password recovery remains separate incomplete work.",
     "Attendance/proof photo input is capped before byte/pixel allocation: 5MiB, 4Mi pixels, side <=8192, static JPEG/PNG/WebP; picker <=1600, no upscaling, output <=1MiB. One native codec worker/app without an image queue; web compute is synchronous. Original library lossless palette WebP decode failure remains visible and is not a compatibility PASS. Attendance upload/sign freezes the original JWT before codec await and uses bounded owned transport with no automatic retry.",
     "Cashier pricing/payable/emergency/completed reads share one original-Auth owned session: whole HTTP/async job 15s, each response <=4MiB, JSON cleanup separately <=2s. Store/actor reset and disposal physically abort only this view requests. At most one active and one latest refresh. Quote/VAT/promotion/items/payment snapshots and realtime subscription after accepted state are preserved. Summary/detail/keyset paging and operating-day eligibility review remain incomplete.",
-    "A server-acknowledged payment-proof attachment stays uploaded even if local deletion/queue retirement fails. The new client persists an attached marker when possible; intact confirmed records perform only local cleanup after restart, with no metadata/upload/sign/attach request. Preserve ambiguous attachments, malformed confirmations and legacy ownership semantics; a complete durable queue/owner/receipt migration is not claimed."
+    "A server-acknowledged payment-proof attachment stays uploaded even if local deletion/queue retirement fails. The new client persists an attached marker when possible; intact confirmed records perform only local cleanup after restart, with no metadata/upload/sign/attach request. Preserve ambiguous attachments, malformed confirmations and legacy ownership semantics; a complete durable queue/owner/receipt migration is not claimed.",
+    "Real pinned Realtime platform uses _realtime for control tables, preserves the application/Auth/Storage catalog, and restores the captured realtime.messages policy set exactly. Native SDK WebSockets deliver real broadcasts and deny unassigned/cross-store topics. Actual new-store Auth kitchen account and native SQL send are exercised, not an order handoff or physical opening. No production Realtime tenant rows/events/secrets or fabricated migration rows are copied."
   ],
   "dataAccessReview": {
     "nPlusOne": {
@@ -845,9 +869,9 @@
     },
     "concurrency": {
       "applicable": true,
-      "reason": "Progress in-flight guards and one flusher bound writes; read and command transports have owned physical deadlines and close on disposal. This does not yet implement the all-worker aggregate budget. Native payment receipt lock is per actor/operation with a five-second lock timeout. Four owned fixture workers deliver the same full payment eight times and verify one financial/stock/invoice effect. All-worker aggregate budgets remain pending. Only one settings form writes per view; an older in-flight read cannot overwrite a confirmed save, and its completed Future cannot permanently block future reloads. Owned native JSON isolates now exit after both normal and denied RPC results; actual VM-service counts remain 2 to 2 after 100 sequential calls instead of the reproduced 3 to 103 leak. All-worker aggregate concurrency remains pending. Report uses CoalescedRefresh to await owned cleanup before starting the latest pending query. A 100-filter burst after one started RPC produces at most two HTTP requests, rather than 100 temporary clients. This is a synthetic client bound, not an operating load benchmark. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. The test gateway admits <=16 connections per project, native REST pools <=8 and Auth pools <=4; body/response are capped at 5/4MiB and transport at 30s. These are fixture resource budgets, not measured production peak capacity. Photo processing now admits one codec job with fixed byte/pixel/output bounds. JPEG frame/sampling checks precede library allocation. Native worker completes before the slot is released; web compute stays on the UI event loop. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending.",
+      "reason": "Progress in-flight guards and one flusher bound writes; read and command transports have owned physical deadlines and close on disposal. This does not yet implement the all-worker aggregate budget. Native payment receipt lock is per actor/operation with a five-second lock timeout. Four owned fixture workers deliver the same full payment eight times and verify one financial/stock/invoice effect. All-worker aggregate budgets remain pending. Only one settings form writes per view; an older in-flight read cannot overwrite a confirmed save, and its completed Future cannot permanently block future reloads. Owned native JSON isolates now exit after both normal and denied RPC results; actual VM-service counts remain 2 to 2 after 100 sequential calls instead of the reproduced 3 to 103 leak. All-worker aggregate concurrency remains pending. Report uses CoalescedRefresh to await owned cleanup before starting the latest pending query. A 100-filter burst after one started RPC produces at most two HTTP requests, rather than 100 temporary clients. This is a synthetic client bound, not an operating load benchmark. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. The test gateway admits <=16 connections per project, native REST pools <=8 and Auth pools <=4; body/response are capped at 5/4MiB and transport at 30s. These are fixture resource budgets, not measured production peak capacity. Photo processing now admits one codec job with fixed byte/pixel/output bounds. JPEG frame/sampling checks precede library allocation. Native worker completes before the slot is released; web compute stays on the UI event loop. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. Owned Realtime instances are capped at 512MiB/1CPU, 2 DB base connections and 2 schedulers; API configuration and literal source authorization are checked. Actual native WebSocket protocol is exercised; shared-gateway WebSocket proxy, whole-app fanout/burst/12h remain pending.",
       "scale": "<=20 sends/round within 15-second send budget after <=15-second receipt budget; per-call deadline <=15 seconds; no parallel receipt batches.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. bounded-photo-processing and attendance-photo-original-auth; native 36 related checks, independent transfer 3 and Chromium photo 11. Physical-device peak memory and whole-plan 12h acceptance remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. bounded-photo-processing and attendance-photo-original-auth; native 36 related checks, independent transfer 3 and Chromium photo 11. Physical-device peak memory and whole-plan 12h acceptance remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. realtime-native-websocket and new-store-kds-realtime: two-project integrated fixture 108 parent checks, 6 basic protocol checks and 7 scoped KDS checks; counts are reported separately, not a full release receipt."
     },
     "retryIdempotency": {
       "applicable": true,
@@ -957,7 +981,7 @@
     },
     "dbCompatibility": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows. Realtime native startup now verifies the entire application/Auth/Storage catalog before/after its pinned installer, and restores actual source message authorization. A missing _realtime search_path created public control tables in an early isolated trial; the fingerprint guard rejected it and official namespace settings fixed the fixture.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -974,12 +998,14 @@
         "payment-receipts-native",
         "office-first-legal-native",
         "auth-platform-preflight",
-        "auth-platform-guards"
+        "auth-platform-guards",
+        "realtime-source-guards",
+        "realtime-native-websocket"
       ]
     },
     "officeBoundary": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows. Both independent real Realtime servers are now in the new-law/first-additional-store/initial-password/employee-photo native HTTP fixture. Office Storage and complete browser/procurement lifecycle remain pending.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
