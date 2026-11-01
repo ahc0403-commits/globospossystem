@@ -33,11 +33,11 @@
       "mode": "100755"
     },
     "scripts/governance/check.py": {
-      "sha256": "41c4f81f3ca4c7c0af3d695d3b2bb3026644eafe5a642c4e9963f409a38b8e13",
+      "sha256": "8b1665baae898677ae1e22ca83f28f7bbf4c52e9d11b50fc2574dcc49757004d",
       "mode": "100644"
     },
     "scripts/governance/tests/test_check.py": {
-      "sha256": "1e853e892df297589f631a286838452c56837e592f3b1717cfd485457f9fd513",
+      "sha256": "74ad57d6d762db785d7f5078b18c3a76842fcced717f9ae488cdeb13ddb6e4bc",
       "mode": "100644"
     },
     "scripts/local_verification/recipe.json": {

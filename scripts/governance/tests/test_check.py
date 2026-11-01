@@ -112,10 +112,12 @@ class ChangeGovernanceTests(unittest.TestCase):
 
     def test_executable_mode_is_bound_to_declared_input(self):
         self.put('scripts/check.sh', '#!/bin/sh\nexit 0\n')
-        self.prepare()
-        (self.root / 'scripts/check.sh').chmod(0o755)
-        with self.assertRaisesRegex(check.GovernanceError, 'inputs are missing or stale'):
-            check.validate(self.root)
+        for mode in [0o755, 0o654]:
+            (self.root / 'scripts/check.sh').chmod(0o644)
+            self.prepare()
+            (self.root / 'scripts/check.sh').chmod(mode)
+            with self.subTest(mode=mode), self.assertRaisesRegex(check.GovernanceError, 'inputs are missing or stale'):
+                check.validate(self.root)
 
     def test_product_source_cannot_use_tooling_exemption(self):
         self.put('lib/features/payment/page.dart', 'const changed = 1;\n')

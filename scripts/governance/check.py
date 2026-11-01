@@ -12,7 +12,6 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
-import stat
 import subprocess
 import sys
 import tarfile
@@ -66,7 +65,7 @@ def digest(path):
     if not path.exists() and not path.is_symlink():
         return None
     data = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
-    mode = '120000' if path.is_symlink() else ('100755' if path.stat().st_mode & stat.S_IXUSR else '100644')
+    mode = '120000' if path.is_symlink() else ('100755' if path.stat().st_mode & 0o111 else '100644')
     return {'sha256': hashlib.sha256(data).hexdigest(), 'mode': mode}
 
 
