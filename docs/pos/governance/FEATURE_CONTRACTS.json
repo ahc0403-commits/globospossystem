@@ -630,6 +630,18 @@
     "cashier-command-scope": {
       "path": "test/cashier_command_scope_test.dart",
       "kind": "focused"
+    },
+    "schema-snapshot-unit": {
+      "path": "scripts/resilience/tests/test_schema_snapshot.py",
+      "kind": "tooling"
+    },
+    "schema-runner-unit": {
+      "path": "scripts/resilience/tests/test_schema_fixture_runner.py",
+      "kind": "tooling"
+    },
+    "current-schema-upgrade": {
+      "path": "scripts/resilience/run_schema_fixture.py",
+      "kind": "focused"
     }
   },
   "workstreams": [

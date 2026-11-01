@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads, bounded quota refresh, recoverable first Office legal connection and isolated durable KDS progress recovery; full schema restore, all-domain adoption, soak and production release remain pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "8a9e024cc09bb4c3b70d285106156d0f7ebf8d5b54d839ca0fc80082d3f1b228",
+      "sha256": "9e463002480817c94b4d1d89bf9b09f2894d00ae9a8d562b8cd75063ac61d548",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "9311f74bfa6f29a8b17b0732a37af7993e9d5c2ec4683dec489b9f30f760569b",
+      "sha256": "8d333a6d78a8740fe43ec23e19e12b5d7c08cde95ec82c5c6d9899f9ff2ee086",
       "mode": "100644"
     },
     "lib/core/services/emergency_web_bridge_stub.dart": {
@@ -100,12 +100,40 @@
       "sha256": "8e23b54b2a7847909e29ec834c2d606798354e6ef246172031bc0a06b1e1d9fa",
       "mode": "100644"
     },
+    "scripts/resilience/integration_schema_snapshot.py": {
+      "sha256": "1c3e17997efae2547c0c6b6fe1ff1d0442fd4359057ed7d8cada993baa141e46",
+      "mode": "100644"
+    },
     "scripts/resilience/office_accounts.py": {
       "sha256": "4722e58bba8bbc3a569a817c2b71e35100d9597c8f2ed21f32d6ad4f3a413bb2",
       "mode": "100644"
     },
+    "scripts/resilience/run_schema_fixture.py": {
+      "sha256": "d858876098dbe87bbce2d21671dbd21766b4ab08386147067370fc62be06d030",
+      "mode": "100644"
+    },
     "scripts/resilience/sample_accounts.py": {
       "sha256": "a28f05fd60483d90042eeb6fdb4d1decb50deacf4a65d84b87ad1f70c278ff51",
+      "mode": "100644"
+    },
+    "scripts/resilience/schema_bootstrap.sql": {
+      "sha256": "5fb5159bedaa8d11c9acf81bef364c2d2729c0ba4b1fd5fe8fde1ef73906258f",
+      "mode": "100644"
+    },
+    "scripts/resilience/schema_export.sql": {
+      "sha256": "1b007afd0661d95bb22975058c356920cefb019bb110dce2cb9217a09bbd1ede",
+      "mode": "100644"
+    },
+    "scripts/resilience/schema_inventory_guards.sql": {
+      "sha256": "503e391a829a19672ea7021a42bb785aafec080700a1acd13066e20ad012ec1c",
+      "mode": "100644"
+    },
+    "scripts/resilience/schema_snapshot.py": {
+      "sha256": "c6e68d5bb668f10f4387d0243fdb9b61a04676c73797c9976d4c96bde2fe1b96",
+      "mode": "100644"
+    },
+    "scripts/resilience/schema_storage_reference_config.sql": {
+      "sha256": "96b9853817e3618b4606e68ecb7aea0f3f6ccc6860ca10fae841e687f20134da",
       "mode": "100644"
     },
     "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
@@ -114,6 +142,14 @@
     },
     "scripts/resilience/tests/test_office_accounts.py": {
       "sha256": "1f54746d47a93991f467b27b2374cefcda1e00627777deab29ed262a61bdbe13",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_schema_fixture_runner.py": {
+      "sha256": "299929ccd8afe7b9e3d8cc00056b805a24ca17d564235cf5577badd39d8cc2d1",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_schema_snapshot.py": {
+      "sha256": "da8132939187572e277a727c9d038b1c91f21cce34e1cdcbf1ceeeaffbf4ba84",
       "mode": "100644"
     },
     "scripts/test_menu_discount_quantities.sh": {
@@ -284,7 +320,10 @@
     "kds-progress-journal",
     "kds-progress-receipt-sql",
     "browser-kds-outbox-compatibility",
-    "cashier-command-scope"
+    "cashier-command-scope",
+    "schema-snapshot-unit",
+    "schema-runner-unit",
+    "current-schema-upgrade"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -296,12 +335,13 @@
     "Persist each new KDS item-progress identity before HTTP; a prepared or ambiguous record cannot become a fresh handoff. Preserve existing quantities, floor/checker routing and native command idempotency.",
     "Resolve both direct event UUIDs and JeonGabok private batch request UUIDs by original active actor/store. Never grant clients direct access to the private batch action table.",
     "Keep new progress journals invisible to legacy clients, preserve original intent order, and retain confirmed writes despite failed cleanup, refresh or later assignment change.",
-    "Confirmed cashier item mutations remain confirmed after failed follow-up reads; their original view cannot load/apply another active store or a later assignment. QC follow-up writes preserve the active filter and never return an old store after navigation/disposal."
+    "Confirmed cashier item mutations remain confirmed after failed follow-up reads; their original view cannot load/apply another active store or a later assignment. QC follow-up writes preserve the active filter and never return an old store after navigation/disposal.",
+    "Application/Auth/Storage schema fixtures are source-hashed, private, owned and network-isolated; clone no production business rows, password hashes, file objects or cron schedules. Bucket reference configuration is separate. Candidate migration success never means production applied, whole-plan complete or twelve-hour PASS."
   ],
   "dataAccessReview": {
     "nPlusOne": {
       "applicable": true,
-      "reason": "KDS receipt recovery is set-based; commands retain domain RPCs and are not disguised as parallel lookup work. Existing item/batch writers remain in scope for the later whole-flow audit.",
+      "reason": "KDS receipt recovery is set-based; commands retain domain RPCs and are not disguised as parallel lookup work. Existing item/batch writers remain in scope for the later whole-flow audit. Schema metadata is captured in bounded identity batches, with preaggregated dependency joins; no per-object remote calls.",
       "scale": "100 receipts/RPC; 101-record development test uses 2 reads and zero replay writes; round sends <=20 queued commands.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
@@ -351,12 +391,12 @@
       "applicable": true,
       "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable.",
       "scale": "Tests cover committed response loss, partial local persistence, cleanup failure, distinct JeonGabok receipt ID, restart and original-ID reuse; no new operation retry loop.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Schema runner rejects another run/project, timeout, partial input and failed cleanup; native fixture logs are distinct development proof."
     },
     "largeResults": {
       "applicable": true,
       "reason": "New progress journal has atomic 1000-record capacity enforcement, receipt batches/bytes are capped, and replay sends a bounded ordered prefix. Existing legacy namespace loading is not claimed fully bounded.",
-      "scale": "Real Chromium capacity/update/reload tests; 100-receipt batches and 256 KiB transport limit; <=20 commands/round.",
+      "scale": "Real Chromium capacity/update/reload tests; 100-receipt batches and 256 KiB transport limit; <=20 commands/round. Schema snapshots: <=20000 identities, <=32 MiB/file, <=64 MiB captured body total; private source only.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "repeatedAggregates": {
@@ -415,7 +455,7 @@
     },
     "dbCompatibility": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -424,7 +464,10 @@
         "menu-quantity-sql",
         "kds-progress-journal",
         "kds-progress-receipt-sql",
-        "browser-kds-outbox-compatibility"
+        "browser-kds-outbox-compatibility",
+        "schema-snapshot-unit",
+        "schema-runner-unit",
+        "current-schema-upgrade"
       ]
     },
     "officeBoundary": {

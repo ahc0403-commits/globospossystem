@@ -406,11 +406,11 @@ POS 관리자 권한이 Office commit 이후 회수되면 POS 확정은 재확�
 
 ### 다음 실행의 실제 선행 조건
 
-최신 POS/Office schema-only 덤프와 실제 샘플 매장 단말/접속 시간은 아직 미확보다.
-HTTPS 관리 연결과 9개 샘플 계정 인증은 확보했으므로 인증 부재로 기록하지 않는다.
-현재 승인된 클라우드의 네트워크 정책은 HTTP 이외 DB TCP 연결을 제공하지 않으며
-관리 도구에는 full schema export 경로가 없다. 정책 우회나 임의 토큰 추출은 하지 않았다.
-이 입력 전에는 부분 fixture를 전체 신규/업그레이드 검증으로 승격하지 않는다.
+당시 미확보였던 최신 schema-only 입력은 아래 G1 추가 작업에서 관리형 HTTPS
+카탈로그 추출·의미상 복원 대조·native pg_dump 재복원으로 확보했다. DB TCP 연결이나
+임의 토큰 추출을 사용하지 않았다. 실제 샘플 단말/접속 시간은 아직 미확보다.
+HTTPS 관리 연결과 검증 계정 인증도 확보했으므로 인증 부재로 기록하지 않는다.
+현재 스키마 확보는 전 업무·실단말·장시간 검증의 완료와 구분한다.
 
 G3의 금융·재고·주방·근태 등 전 도메인 명령/unknown 복구, G4의 결제 목록/상세와
 전체 worker 합산 예산, G5의 나머지 큰 화면/파일 상한, G6의 T01–T16/2시간 혼합,
@@ -509,3 +509,68 @@ QC 후속조치 생성/상태 변경은 원래 조회 generation과 필터를 �
 관리형 Auth/Storage 및 확장 객체 의존성을 포함한 격리 복원·의미상 카탈로그 대조와
 native pg_dump 재복원이 아직 필요하다. 현 시점의 카탈로그 확보를 전체 복원 PASS나
 G1 완료로 기록하지 않는다. 운영 DB 스키마·업무 데이터는 이 추출로 변경하지 않았다.
+
+
+### G1 현재 스키마·후보 마이그레이션·기존 거래 — 추가 검증
+
+관리형 Auth/Storage 정의를 함께 확보한 현재 입력은 POS 4878개 객체, Office
+8834개 객체다. 두 프로젝트 모두 재구성 → 의미상 카탈로그 대조 → native pg_dump
+→ 별도 빈 격리 컨테이너 재복원 → 동일 대조를 통과했다. 테이블/열/함수/제약/인덱스/
+트리거/RLS/테이블·열·함수 GRANT/기본 권한을 비교한다. PostgreSQL deparser의
+UNION 분기 text 상수 기본 alias, ACL 집합 순서와 삭제 열의 물리 번호 공백만
+정규화한다. 값·연산·출력 열·열별 권한 차이는 거부한다. 모르는 namespace/type/
+언어/관계/rule/publication 형태도 별도 inventory에서 0인지 확인한다.
+
+자료는 Git 밖 `/workspace/.private/db-snapshots-v2/`(디렉터리 0700/파일 0600)에
+보관한다. `*-current-application-schema.sql`은 native schema-only dump이고,
+Storage 버킷 참조 설정은 별도 JSON이다. POS 10개, Office 6개의 STANDARD 버킷
+공개 여부·크기/MIME 제한만 보존하며 파일/객체·Auth 비밀번호 해시·업무 행·cron
+예약/명령은 복사하지 않았다. fixture에서는 그 버킷 설정만 집합 INSERT 한다.
+
+현재 전체 스키마를 복제한 격리 DB에서 다음 후보 SQL의 적용 및 자체 검사가 성공했다.
+운영 적용은 아직 하지 않았다.
+
+- POS: `20261101022105`, `20261101023409`, `20261101045728` 순서.
+- Office: `20261101023410`. Office 소스는 별도 작업 공간/브랜치에서 읽는다.
+
+POS 기존 거래 upgrade 시험은 500개 활성 주문선·취소 소비분·부분 결제 2건
+(합계 16200000 VND)·재고 이력 1002건·비동기 invoice job 1건을 먼저 확정했다.
+후보 3개를 적용한 전후 금융/수량/이력 9개 테이블의 행 수·내용 hash가 같았다.
+적용 뒤 원본 500-line 결제/재고 시나리오도 다시 성공했다. 재현 데이터는 모두
+격리 DB에서 생성했으며 실제 매장 거래·출력/발행 업체 호출은 생성하지 않았다.
+별도 기존 `test_store_lifecycle_atomic_release.sh --deployed-schema`의 전체 시나리오도
+현재 스키마와 참조 설정에서 통과했다(등록 지표: 계정 6개, 307ms, preview 1202 bytes).
+단일 fixture의 관측이며 운영 성능 향상이나 전체 T01–T16 완료가 아니다.
+
+버전 관리하는 추출/복원 도구는 `scripts/resilience/schema_*.sql`,
+`schema_snapshot.py`, `integration_schema_snapshot.py`, `run_schema_fixture.py`다.
+읽기 전용 SQL의 SCOPE는 도구의 고정 SCOPES와 같게 치환한다. 전체 identity/hash
+manifest를 먼저 받고, 정렬된 identity 묶음으로 body를 읽어 각 hash와 대조한 뒤
+전체 manifest를 다시 대조한다. 본문/비밀 값을 채팅·일반 로그·Git에 출력하지 않는다.
+예전에 받은 동일 hash의 body는 재사용하고 추가/변경된 body만 다시 받는다.
+bootstrap/unsupported inventory/버킷 설정은 각 고정 SQL로 별도 확보한다.
+
+소유권·이미지 정책과 네트워크 격리/전체 로그/정리 확인을 포함하는 실행 예시는:
+
+```bash
+python3 -B scripts/resilience/run_schema_fixture.py pos \
+  --snapshot-dir /workspace/.private/db-snapshots-v2 \
+  --output /workspace/.private/NEW-pos-schema-upgrade-evidence \
+  --native-roundtrip --candidate-upgrade --exercise-existing-transactions
+```
+
+Office는 `office --native-roundtrip --candidate-upgrade --office-root /absolute/Office`
+옵션을 쓴다. output은 새 Git 외부 디렉터리여야 하며 기존 결과를 지우거나 덮어쓰지
+않는다. 준비 검사는 Docker 시작 전에 수행한다. runner는 자신의 label/run ID만
+정리하고 정리 실패·외부 run receipt·timeout·미완료를 PASS로 만들지 않는다.
+이 개발 증거는 공식 배포 receipt가 아니며 main 전체 recipe/운영 적용을 대신하지 않는다.
+
+Realtime 전송은 기존 SQL fixture의 append 어댑터로 모델링했다. 실제 Realtime
+브라우저 전달, MISA·물리 출력, 모든 사업 참조 데이터·두 앱 생애주기와 G6 혼합/
+G7 12시간 시험은 아직 별도 증거가 필요하다. 이 단계로 G0–G7 완료를 선언하지 않는다.
+
+현재 schema/runner 도구 단위 검사 17개가 통과했다. 실제 versioned runner로 POS
+기존 거래 upgrade를 실행해 PASS/exit 0/소유 resource 정리 확인을 기록했다.
+원본 결과는 `/workspace/.private/resilience-pos-upgrade-evidence-20261101/result.json`과
+동일 디렉터리의 전체 로그이며, 각 실행에 source/input/tool/log hash와 run ID를 묶는다.
+운영 배포·1배/3배 각 12시간 시험은 아직 시작하지 않았다.
