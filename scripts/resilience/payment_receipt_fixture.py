@@ -27,7 +27,7 @@ def run(sql):
         if not condition:raise RuntimeError('Payment receipt fixture failed: '+name)
         checks.append(name)
     def call(body,actor=ACTOR,check_result=True):
-        return sql("BEGIN;SET LOCAL ROLE authenticated;SET LOCAL request.jwt.claim.sub='"+actor+"';"+body+'COMMIT;',check=check_result)
+        return sql("BEGIN;SET LOCAL ROLE authenticated;SET LOCAL request.jwt.claim.role='authenticated';SET LOCAL request.jwt.claim.sub='"+actor+"';"+body+'COMMIT;',check=check_result)
     def once(operation=OP,order=PARTIAL,amount=8000,method='CASH'):
         return "SELECT public.process_payment_once_v1('"+operation+"','"+order+"','"+STORE+"',"+str(amount)+",'"+method+"');"
     def receipts(ids,actor=ACTOR,store=STORE):

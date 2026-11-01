@@ -161,6 +161,10 @@ def main():
             if args.exercise_payment_receipts:
                 scenario=record['detail'].get('paymentCommandReceiptScenario',{})
                 valid=valid and isinstance(scenario,dict) and scenario.get('count',0)>=22 and scenario.get('count')==len(set(scenario.get('checksPassed',[]))) and scenario.get('nativePaymentFunctionsStubbed') is False and scenario.get('fixtureSha256')==hashlib.sha256(Path(__file__).with_name('payment_receipt_fixture.py').read_bytes()).hexdigest()
+                v2=record['detail'].get('paymentCommandV2Scenario',{})
+                valid=valid and v2.get('count',0)>=20 and v2.get('count')==len(set(v2.get('checksPassed',[]))) \
+                    and v2.get('nativeFinancialFunctionsStubbed') is False \
+                    and v2.get('fixtureSha256')==hashlib.sha256(Path(__file__).with_name('payment_command_v2_fixture.py').read_bytes()).hexdigest()
             if args.exercise_legal_connection:
                 scenario=record['detail'].get('nativeLegalConnectionScenario',{})
                 valid=valid and record.get('nativeLegalAttempt')==scenario \

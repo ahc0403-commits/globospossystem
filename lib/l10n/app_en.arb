@@ -4443,5 +4443,15 @@
   "resilienceOfficePrepare": "Prepare connection request",
   "resilienceOfficeNotReady": "The Office connection service is preparing. Refresh shortly. Existing POS operations remain available.",
   "resilienceKdsProgressUnknown": "The handoff result is unconfirmed. Refresh to check the existing request and recover using the same request. Keep this screen open and do not submit another completion before confirmation.",
-  "resilienceKdsProgressNotSaved": "The handoff request could not be saved and was not sent. Check browser storage and try again."
+  "resilienceKdsProgressNotSaved": "The handoff request could not be saved and was not sent. Check browser storage and try again.",
+  "paymentRecoveryTitle": "Payment needs confirmation",
+  "paymentRecoveryRequired": "Check the previous payment result before collecting payment again.",
+  "paymentRecoveryCheck": "Check result",
+  "paymentRecoveryCancel": "Cancel pending payment request",
+  "paymentRecoveryReload": "Retry recovery",
+  "paymentRecoveryStorageUnavailable": "Payment recovery could not be loaded. Please retry before collecting payment.",
+  "paymentRecoveryScopeChanged": "The signed-in account or store changed. Open the order again.",
+  "paymentRecoveryOrderChanged": "The order changed. Refresh it and confirm the amount again.",
+  "paymentRecoveryCancelled": "The previous payment request was cancelled.",
+  "paymentRecoveryConflict": "The original payment details changed. Check its result first."
 }

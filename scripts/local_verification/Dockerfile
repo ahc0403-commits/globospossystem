@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive TZ=UTC LANG=C.UTF-8 \
 RUN --mount=type=secret,id=host_ca_bundle,mode=0444 \
     apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl git unzip xz-utils python3 python3-psycopg2 \
-    ripgrep postgresql postgresql-contrib docker.io fontconfig fonts-noto-core \
+    ripgrep postgresql postgresql-contrib docker.io fontconfig fonts-noto-core libsqlite3-dev \
     fonts-noto-cjk libgtk-3-0 libnss3 libasound2t64 libgbm1 libdrm2 libxss1 \
     libx11-xcb1 libxtst6 libxrandr2 libxcomposite1 libxcursor1 libxdamage1 \
     libxi6 libatk-bridge2.0-0 libxkbcommon0 libglib2.0-0 libglu1-mesa \

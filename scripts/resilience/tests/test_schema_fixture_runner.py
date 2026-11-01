@@ -88,6 +88,17 @@ class SchemaRunnerTests(unittest.TestCase):
             child.assert_not_called()
         self.assertFalse(self.output.exists())
 
+    def test_v1_native_payment_success_does_not_substitute_for_missing_v2(self):
+        self.input.write('pos-current-application-schema.sql',{'synthetic-private-test-file':True})
+        flags=['--native-roundtrip','--candidate-upgrade','--exercise-existing-transactions','--exercise-payment-receipts']
+        detail={'nativeDumpValidated':True,'candidateMigrationSelfChecksPassed':True,
+          'existingBusinessRowsPreserved':True,'postUpgradePaymentStockScenarioPassed':True,
+          'paymentCommandReceiptScenario':{'count':22,'checksPassed':[str(n) for n in range(22)],
+            'nativePaymentFunctionsStubbed':False,
+            'fixtureSha256':hashlib.sha256(Path(runner.__file__).with_name('payment_receipt_fixture.py').read_bytes()).hexdigest()}}
+        self.assertEqual(self.execute(extra_flags=flags,detail_flags=detail),1)
+        self.assertEqual(self.result()['status'],'FAIL')
+
     def test_native_legal_cannot_mutate_the_retained_financial_fixture(self):
         self.input.write('pos-current-application-schema.sql',{'synthetic-private-test-file':True})
         argv=['schema-runner','pos','--snapshot-dir',str(self.area),'--output',str(self.output),

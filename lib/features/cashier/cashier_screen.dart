@@ -1,3 +1,5 @@
+import '../payment/payment_recovery_panel.dart';
+import '../../core/auth/operation_scope_provider.dart';
 import '../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'package:uuid/uuid.dart';
@@ -234,7 +236,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         if (mounted && error != nonRevenueAmountChangedError) {
           showErrorToast(
             context,
-            cashierItemEditErrorText(context, error) ??
+            paymentRecoveryErrorText(context.l10n, error) ??
+                cashierItemEditErrorText(context, error) ??
                 localizeRestaurantCutoffError(context.l10n, error),
           );
         }
@@ -1566,6 +1569,29 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (paymentState.recoveryRecords.isNotEmpty ||
+              paymentState.error == 'PAYMENT_RECOVERY_STORAGE_UNAVAILABLE')
+            PaymentRecoveryPanel(
+              records: paymentState.recoveryRecords,
+              busy: paymentState.isProcessing || paymentState.recoveryLoading,
+              onCheck: (r) {
+                if (storeId != null) {
+                  unawaited(notifier.resolvePaymentRecovery(storeId, r));
+                }
+              },
+              onCancel: (r) {
+                if (storeId != null) {
+                  unawaited(
+                    notifier.resolvePaymentRecovery(storeId, r, cancel: true),
+                  );
+                }
+              },
+              onReload: () {
+                if (storeId != null) {
+                  unawaited(notifier.loadPaymentRecovery(storeId, force: true));
+                }
+              },
+            ),
           OutlinedButton.icon(
             key: const Key('cashier_combined_payment_mode'),
             onPressed: paymentState.isProcessing
@@ -2219,6 +2245,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     }
                   },
                   onProcess: (method, cashTender) async {
+                    final originalScope = ref.read(operationScopeProvider);
+                    bool currentPaymentView() =>
+                        mounted &&
+                        ref.read(operationScopeProvider).generation ==
+                            originalScope.generation;
                     final selectedOrder = paymentState.selectedOrder;
                     if (storeId == null || selectedOrder == null) {
                       return;
@@ -2243,6 +2274,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       }
                     }
 
+                    if (!currentPaymentView() ||
+                        ref.read(paymentProvider).selectedOrder?.orderId !=
+                            selectedOrder.orderId) {
+                      return;
+                    }
                     Map<String, dynamic>? payment;
                     var paymentOrder = selectedOrder;
                     if (nonRevenueInput == null) {
@@ -2262,7 +2298,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       payment = result?.payment;
                       paymentOrder = result?.order ?? selectedOrder;
                     }
-                    if (mounted && ref.read(paymentProvider).paymentSuccess) {
+                    if (payment != null &&
+                        currentPaymentView() &&
+                        ref.read(paymentProvider).paymentSuccess) {
                       if (!paymentOrder.fulfillmentMode.isPaperless) {
                         await _printReceipt(
                           order: paymentOrder,
@@ -2270,6 +2308,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           cashTender: cashTender,
                         );
                       }
+                      if (!currentPaymentView()) return;
                       setState(() {
                         _selectedMethod = null;
                         _selectedNonRevenueType = null;
@@ -2277,7 +2316,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         _showPaymentQueueOnCompact = true;
                       });
                       final proofRequired = requiresPaymentProof(method);
-                      final paymentId = payment?['id']?.toString();
+                      final paymentId = payment['id']?.toString();
 
                       if (proofRequired &&
                           paymentId != null &&
@@ -2287,7 +2326,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                             paymentId: paymentId,
                             storeId: storeId,
                           );
-                          if (!context.mounted) {
+                          if (!context.mounted || !currentPaymentView()) {
                             return;
                           }
 

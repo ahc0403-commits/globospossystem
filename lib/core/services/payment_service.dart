@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pos_backend.dart';
 import '../payments/payment_method_contract.dart';
+import '../payments/payment_command_rpc.dart';
 
 class PaymentSplitInput {
   const PaymentSplitInput({required this.method, required this.amount});
@@ -51,6 +52,75 @@ class PaymentService {
   final SupabaseClient? _client;
   SupabaseClient get _db => _client ?? supabase;
 
+  Future<Map<String, dynamic>> processSinglePaymentCommand({
+    required String operationId,
+    required String orderId,
+    required String storeId,
+    required double amount,
+    required String method,
+    required int expectedPaymentCount,
+    required bool requireFullPayment,
+    required bool Function() isCurrent,
+  }) async {
+    final response = await PaymentCommandRpc(_db)
+        .call(PaymentCommandRpcKind.execute, {
+          'p_operation_id': operationId,
+          'p_order_id': orderId,
+          'p_store_id': storeId,
+          'p_amount': amount,
+          'p_method': normalizePaymentMethodInput(method),
+          'p_expected_payment_count': expectedPaymentCount,
+          'p_require_full_payment': requireFullPayment,
+        }, isCurrent: isCurrent);
+    return _commandPaymentResult(response, orderId, storeId);
+  }
+
+  Future<Map<String, dynamic>> cancelSinglePaymentCommand({
+    required String operationId,
+    required String orderId,
+    required String storeId,
+    required bool Function() isCurrent,
+  }) async {
+    final response = await PaymentCommandRpc(_db).call(
+      PaymentCommandRpcKind.cancel,
+      {
+        'p_operation_id': operationId,
+        'p_order_id': orderId,
+        'p_store_id': storeId,
+      },
+      isCurrent: isCurrent,
+    );
+    if (response is! Map ||
+        response['operation_id'] != operationId ||
+        response['order_id'] != orderId ||
+        response['store_id'] != storeId ||
+        !const {'cancelled', 'confirmed'}.contains(response['status'])) {
+      throw const FormatException('PAYMENT_CANCELLATION_RESPONSE_INVALID');
+    }
+    if (response['status'] == 'confirmed') {
+      _commandPaymentResult(response['result'], orderId, storeId);
+    } else if (response['cancelled_at'] is! String ||
+        DateTime.tryParse(response['cancelled_at']) == null) {
+      throw const FormatException('PAYMENT_CANCELLATION_RESPONSE_INVALID');
+    }
+    return Map<String, dynamic>.from(response);
+  }
+
+  Map<String, dynamic> _commandPaymentResult(
+    dynamic response,
+    String orderId,
+    String storeId,
+  ) {
+    if (response is! Map ||
+        response['id'] is! String ||
+        (response['id'] as String).isEmpty ||
+        response['order_id'] != orderId ||
+        response['restaurant_id'] != storeId) {
+      throw const FormatException('PAYMENT_OPERATION_RESULT_INVALID');
+    }
+    return Map<String, dynamic>.from(response);
+  }
+
   /// The caller must durably retain this original ID before sending and use
   /// result reconciliation on uncertain delivery. This additive API does not
   /// silently turn legacy callers/retries into a new payment intent.
@@ -84,15 +154,17 @@ class PaymentService {
   Future<List<Map<String, dynamic>>> getPaymentCommandReceipts({
     required String storeId,
     required List<String> operationIds,
+    bool Function()? isCurrent,
   }) async {
     if (operationIds.length > 100 || operationIds.any((id) => id.isEmpty)) {
       throw ArgumentError('PAYMENT_RECEIPT_BATCH_INVALID');
     }
     if (operationIds.isEmpty) return const [];
     final ids = operationIds.toSet();
-    final response = await _db.rpc(
-      'get_payment_command_receipts_v1',
-      params: {'p_store_id': storeId, 'p_operation_ids': ids.toList()},
+    final response = await PaymentCommandRpc(_db).call(
+      PaymentCommandRpcKind.receipts,
+      {'p_store_id': storeId, 'p_operation_ids': ids.toList()},
+      isCurrent: isCurrent ?? () => true,
     );
     if (response is! List || response.length > ids.length) {
       throw const FormatException('PAYMENT_RECEIPT_RESPONSE_INVALID');

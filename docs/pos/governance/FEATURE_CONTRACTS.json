@@ -44,7 +44,14 @@
       "checks": [
         "feature.cashier",
         "official-full-recipe",
-        "proof-batch-scope"
+        "proof-batch-scope",
+        "payment-command-recovery",
+        "payment-intent-storage",
+        "payment-command-coordinator",
+        "payment-command-transport",
+        "payment-recovery-panel",
+        "browser-payment-intent-journal",
+        "payment-command-v2-native"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -161,7 +168,14 @@
         "feature.payment",
         "official-full-recipe",
         "cashier-command-scope",
-        "proof-batch-scope"
+        "proof-batch-scope",
+        "payment-command-recovery",
+        "payment-intent-storage",
+        "payment-command-coordinator",
+        "payment-command-transport",
+        "payment-recovery-panel",
+        "browser-payment-intent-journal",
+        "payment-command-v2-native"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -709,6 +723,34 @@
     },
     "auth-platform-guards": {
       "path": "scripts/resilience/tests/test_auth_platform_fixture.py",
+      "kind": "focused"
+    },
+    "payment-command-recovery": {
+      "path": "test/cashier_payment_recovery_test.dart",
+      "kind": "focused"
+    },
+    "payment-intent-storage": {
+      "path": "test/payment_intent_journal_test.dart",
+      "kind": "focused"
+    },
+    "payment-command-coordinator": {
+      "path": "test/payment_command_coordinator_test.dart",
+      "kind": "focused"
+    },
+    "payment-command-transport": {
+      "path": "test/payment_command_rpc_test.dart",
+      "kind": "focused"
+    },
+    "payment-recovery-panel": {
+      "path": "test/payment_recovery_panel_test.dart",
+      "kind": "focused"
+    },
+    "browser-payment-intent-journal": {
+      "path": "scripts/resilience/tests/payment_journal_browser.test.cjs",
+      "kind": "focused"
+    },
+    "payment-command-v2-native": {
+      "path": "scripts/resilience/payment_command_v2_fixture.py",
       "kind": "focused"
     }
   },

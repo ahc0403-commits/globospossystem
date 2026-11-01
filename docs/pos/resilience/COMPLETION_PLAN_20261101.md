@@ -17,7 +17,7 @@ main `d5d1797e`는 연결 작업 `45d6b8c8`의 조상이다. 사용자 원래 ch
 | G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
 | G1 | native 복원/최종 객체 대조, 업그레이드 금융 보존·receipt 검사 | Auth 외 Realtime/Storage 등 플랫폼 결합과 모든 신규/업그레이드 업무 |
 | G2 | 양쪽 SQL/Edge/UI 구현, 실제 두 DB의 연결 20건 | 두 앱의 실제 로그인→법인→POS 개설/준비→Office 업무 전체 흐름 |
-| G3 | root scope, KDS progress journal, 일부 주문/QC/설정/리포트/근태·증빙 전환 | 나머지 legacy 도메인, 내구성 있는 계산대 결제 복구 UI/서버 계약 |
+| G3 | root scope, KDS progress journal, 일부 주문/QC/설정/리포트/근태·증빙 전환 | 나머지 legacy 도메인, 계산대 분할·합산·비매출 복구와 나머지 서버 계약 |
 | G4 | 메뉴 잔량 부분 갱신, 리포트 요청 병합, 증빙 metadata batch | 계산대 summary/detail·페이지, 전체 worker 예산, 규모별 계획/실측 |
 | G5 | native JSON worker 누적 수정, 일부 화면/타이머 수명 | 큰 화면 분리, 파일/큐/이미지/worker 메모리 및 전체 자원 상한 |
 | G6 | 개별 실제 SQL/API·위젯 검사 | T01–T16 연결, 혼합/실패 주입, 2시간 사전 부하 |
@@ -886,3 +886,58 @@ auth-platform-guard-unit.log 및 native-auth-pos-final.log/native-auth-office-fi
 확인한 값이었다. 해당 실행의 host TCP proxy 1개도 별도로 종료/확인했으며 원본
 result를 고치지 않고 같은 private 폴더의 host-proxy-cleanup-correction.json에
 기록했다. 새 Auth fixture는 소유 private IP를 직접 사용해 host proxy를 만들지 않는다.
+
+
+### G1/G3 단일 전액 결제의 내구성 있는 복구
+
+`20261101132612_payment_command_cancellation_barriers.sql`을 CLI로 생성해 기존
+94500 receipt 다음에 추가했다. 원래 금융 함수 5개는 수정하지 않는다. 전액 의도는
+선택 당시 payment count와 금액/수단을 보존하며 native 결제 후 주문이 실제 completed가
+아니면 전체 트랜잭션을 롤백한다. 오래된 전액 표시가 새 항목 추가 후 부분 결제로
+조용히 바뀌지 않는다. 같은 주문/payment count의 서로 다른 요청도 한 건만 청구한다.
+
+결제 취소 RPC는 동일 actor/operation 잠금 안에서 이미 확정된 원본 영수증을 반환하거나
+내구성 있는 취소 barrier를 남긴다. 이후 늦게 도착한 v1/v2 원본 요청도 청구할 수 없다.
+현재 권한 회수와 다른 actor/order 재사용을 거부한다. 취소 응답 유실은 같은 취소를
+재확인하며 결제를 다시 실행하지 않는다. 새 비공개 ledger에는 client/service_role의
+직접 접근 권한이 없다.
+
+계산대의 일반 단일 전액 결제를 새 coordinator에 연결했다. IndexedDB readwrite
+transaction/고유 operation index와 별도 native SQLite FULL 동기화 transaction이
+원래 요청을 먼저 보존한다. 일반 SharedPreferences map이나 메뉴 캐시를 사용하지
+않는다. CAS 승자의 고유 sender만 HTTP를 보낼 수 있다. 미확인 요청은 원래 결과
+조회 또는 취소 확정 전까지 해당 주문의 다른 수단·분할·합산·비매출 결제를 차단한다.
+다시 로그인/새로고침 후 복구 패널에서 확인할 수 있다. 복구된 기존 결제를 새 수단으로
+다시 출력하거나 증빙 창을 열지 않는다. 원래 확정은 저장 정리/조회/권한 전환 실패로
+unknown이 되지 않으며 A→B→A의 뒤늦은 응답은 새 화면을 덮어쓰지 않는다.
+
+로컬 ledger는 100건/총 256KiB/건별 8KiB, native DB 256 pages 이하, 동일 native
+ledger당 실행 worker 1개/대기 100개 이하로 제한한다. 미확인 건은 자동 삭제하지
+않고 full/corrupt/storage 실패 시 청구를 차단한다. SQLite는 isolate와 process 사이의
+원자성을 제공하며 2초 busy timeout 후 실패를 반환한다. RPC는 Auth/응답까지 15초,
+응답 512KiB, 입력 64KiB, 별도 JSON worker 정리 최대 2초다. 자동 청구 재시도는 없다.
+
+검증 결과:
+
+- native 금융·재고·인보이스 원본 함수 fixture: 이전 v1 22건 + 새 v2 20건 PASS,
+  owned 전체 37.64초/정리 확인. 원래 500행 거래/9개 테이블 이력과 함수 정의 보존.
+  실제 cancel/commit 동시 실행은 이 실행에서 commit-wins 분기를 관측했다.
+- SQLite 8건, coordinator 8건, 실제 TCP RPC 6건, 계산대 복구 notifier 5건,
+  ko/en/vi 좁은 폭 복구 패널 3건 PASS. 각 건수는 서로 다른 파일의 개별 결과다.
+- 실제 Chromium IndexedDB 5건 PASS: 20개 동시 claim, 새로고침 후 원본 복구,
+  CAS 충돌, 100건 상한과 terminal 정리, 손상된 저장소 차단.
+- 기존 계산대/프로모션/명령 scope/화면 85건 PASS, 기존 receipt client 11건 PASS,
+  schema/runner 도구 27건 PASS. v1 성공만으로 누락된 v2를 PASS로 올리지 않는 검사도 포함한다. 개발 정적 분석도 0 issue다.
+
+개발 로그는 `/workspace/scratch/pos-resilience-completion-dev/`의
+payment-cashier-ui-regressions-v4.log, payment-storage-panel-final-tests.log,
+payment-command 별 boundary/coordinator 로그, payment-indexeddb-browser-tests.log에 있다.
+SQL 증거는 `/workspace/.private/resilience-payment-command-v2-evidence-20261101/result.json`.
+기록된 5개 migration/2개 fixture 입력 해시가 현재와 같은지 확인해 SQL을 이유 없이
+재실행하지 않았다. source는 b925e533+당시 dirty tree인 개발 증거이며 최종 main receipt가
+아니다. host Linux에는 libsqlite3.so.0만 있어 개발 전용 loader 경로를 사용했고 공식
+Ubuntu Dockerfile에는 libsqlite3-dev를 명시했다. 새 공식 image/전체 recipe는 아직
+실행하지 않았다. 초기 native library/동시 접근 및 테스트 준비 실패 로그도 보존한다.
+
+분할·합산·비매출 자체의 원래 요청 journal/SQL 배치, 전체 런타임·업무 G6,
+실단말·2시간 사전 부하·1배/3배 각 12시간·운영 배포는 계속 미완료다.

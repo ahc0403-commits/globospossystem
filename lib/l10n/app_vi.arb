@@ -4442,5 +4442,15 @@
   "resilienceOfficePrepare": "Chuẩn bị yêu cầu liên kết",
   "resilienceOfficeNotReady": "Dịch vụ kết nối Office đang được chuẩn bị. Hãy làm mới sau ít phút. Hoạt động POS hiện tại vẫn sử dụng được.",
   "resilienceKdsProgressUnknown": "Chưa xác nhận được kết quả bàn giao. Làm mới để kiểm tra và khôi phục cùng yêu cầu. Giữ màn hình này mở và không gửi hoàn tất lần nữa trước khi xác nhận.",
-  "resilienceKdsProgressNotSaved": "Không lưu được yêu cầu bàn giao nên chưa gửi. Kiểm tra bộ nhớ trình duyệt và thử lại."
+  "resilienceKdsProgressNotSaved": "Không lưu được yêu cầu bàn giao nên chưa gửi. Kiểm tra bộ nhớ trình duyệt và thử lại.",
+  "paymentRecoveryTitle": "Cần xác nhận kết quả thanh toán",
+  "paymentRecoveryRequired": "Kiểm tra kết quả thanh toán trước đó trước khi thu tiền lại.",
+  "paymentRecoveryCheck": "Kiểm tra kết quả",
+  "paymentRecoveryCancel": "Hủy yêu cầu thanh toán chưa xác nhận",
+  "paymentRecoveryReload": "Thử khôi phục lại",
+  "paymentRecoveryStorageUnavailable": "Không tải được thông tin khôi phục thanh toán. Vui lòng thử lại trước khi thu tiền.",
+  "paymentRecoveryScopeChanged": "Tài khoản hoặc cửa hàng đã thay đổi. Vui lòng mở lại đơn.",
+  "paymentRecoveryOrderChanged": "Đơn đã thay đổi. Tải lại và xác nhận lại số tiền.",
+  "paymentRecoveryCancelled": "Yêu cầu thanh toán trước đã bị hủy.",
+  "paymentRecoveryConflict": "Thông tin yêu cầu thanh toán ban đầu đã thay đổi. Kiểm tra kết quả trước."
 }

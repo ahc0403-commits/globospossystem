@@ -8,6 +8,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/i18n/menu_localization.dart';
 import '../../core/models/fulfillment_mode.dart';
 import '../../core/payments/payment_total_calculator.dart';
+import '../../core/payments/payment_command_coordinator.dart';
+import '../../core/payments/payment_intent_journal.dart';
+import '../../core/utils/operation_contract.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/utils/coalesced_refresh.dart';
@@ -366,6 +369,8 @@ class PaymentState {
     this.selectedOrder,
     this.isProcessing = false,
     this.paymentSuccess = false,
+    this.recoveryRecords = const [],
+    this.recoveryLoading = false,
     this.error,
   });
 
@@ -374,6 +379,8 @@ class PaymentState {
   final CashierOrder? selectedOrder;
   final bool isProcessing;
   final bool paymentSuccess;
+  final List<Map<String, dynamic>> recoveryRecords;
+  final bool recoveryLoading;
   final String? error;
 
   PaymentState copyWith({
@@ -382,6 +389,8 @@ class PaymentState {
     CashierOrder? selectedOrder,
     bool? isProcessing,
     bool? paymentSuccess,
+    List<Map<String, dynamic>>? recoveryRecords,
+    bool? recoveryLoading,
     String? error,
     bool clearSelectedOrder = false,
     bool clearPaymentSuccess = false,
@@ -397,6 +406,8 @@ class PaymentState {
       paymentSuccess: clearPaymentSuccess
           ? false
           : (paymentSuccess ?? this.paymentSuccess),
+      recoveryRecords: recoveryRecords ?? this.recoveryRecords,
+      recoveryLoading: recoveryLoading ?? this.recoveryLoading,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -407,10 +418,34 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     SupabaseClient? client,
     PaymentService? payments,
     OrderService? orders,
-  }) : _client = client,
+    PaymentCommandCoordinator? commands,
+    OperationScopeSnapshot Function()? scope,
+  }) : _commands = commands,
+       _operationScope = scope,
+       _client = client,
        _paymentSource = payments,
        _orderSource = orders,
        super(const PaymentState());
+  PaymentCommandCoordinator? _commands;
+  Future<PaymentCommandCoordinator>? _openingCommands;
+  final OperationScopeSnapshot Function()? _operationScope;
+  String? _recoveryScope;
+  Future<void>? _loadingRecovery;
+
+  Future<PaymentCommandCoordinator> _commandCoordinator() async {
+    final opening = _openingCommands ??= (() async =>
+        _commands ??= PaymentCommandCoordinator(
+          await PaymentIntentJournal.open(),
+          _payments,
+        ))();
+    try {
+      return await opening;
+    } catch (_) {
+      if (identical(_openingCommands, opening)) _openingCommands = null;
+      rethrow;
+    }
+  }
+
   final SupabaseClient? _client;
   final PaymentService? _paymentSource;
   final OrderService? _orderSource;
@@ -441,8 +476,33 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   bool _realtimeConnected = false;
   final _connectedChannels = <String>{};
 
+  void resetOperationScope() {
+    if (!mounted) return;
+    _scopeGeneration++;
+    _restaurantId = null;
+    _recoveryScope = null;
+    _loadingRecovery = null;
+    _eventRefreshTimer?.cancel();
+    _pollTimer?.cancel();
+    _businessDayTimer?.cancel();
+    _ordersChannel?.unsubscribe();
+    _paymentsChannel?.unsubscribe();
+    _emergencyChannel?.unsubscribe();
+    _ordersChannel = null;
+    _paymentsChannel = null;
+    _emergencyChannel = null;
+    _channelStoreId = null;
+    _channelGeneration = null;
+    _pollStoreId = null;
+    state = const PaymentState();
+  }
+
   Future<void> loadOrders(String storeId) {
     if (!mounted) return Future.value();
+    final scope = _operationScope?.call();
+    if (scope?.isBound == true && scope?.scope?.storeId != storeId) {
+      return Future.value();
+    }
     if (_restaurantId != storeId) {
       _restaurantId = storeId;
       _scopeGeneration++;
@@ -451,6 +511,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       state = const PaymentState();
     }
     final generation = _scopeGeneration;
+    if (_operationScope != null || _db.auth.currentUser != null) {
+      unawaited(loadPaymentRecovery(storeId));
+    }
     return _refreshQueue.run(() => _loadOrders(storeId, generation));
   }
 
@@ -1153,6 +1216,161 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     unawaited(loadOrders(storeId));
   }
 
+  ({String project, String actor, bool Function() current}) _paymentContext(
+    String storeId,
+  ) {
+    final generation = _scopeGeneration;
+    final scope = _operationScope?.call();
+    final actor = scope?.scope?.actorId ?? _db.auth.currentUser?.id;
+    if (actor == null ||
+        (scope?.isBound == true && scope?.scope?.storeId != storeId)) {
+      throw const OperationScopeUnavailable();
+    }
+    bool current() =>
+        mounted &&
+        generation == _scopeGeneration &&
+        (_operationScope?.call().generation == scope?.generation) &&
+        (scope?.isBound == true || _db.auth.currentUser?.id == actor);
+    return (
+      project: Uri.parse(_db.rest.url).origin,
+      actor: actor,
+      current: current,
+    );
+  }
+
+  /// One bounded local ledger read per scope, independent of the 2s/30s order
+  /// refresh. An unavailable/corrupt ledger blocks charging instead of hiding it.
+  Future<void> loadPaymentRecovery(String storeId, {bool force = false}) {
+    if (_loadingRecovery != null) {
+      if (force) {
+        return _loadingRecovery!.then(
+          (_) => loadPaymentRecovery(storeId, force: true),
+        );
+      }
+      return _loadingRecovery!;
+    }
+    final future = _loadPaymentRecovery(storeId, force: force);
+    _loadingRecovery = future;
+    return future.whenComplete(() {
+      if (identical(_loadingRecovery, future)) _loadingRecovery = null;
+    });
+  }
+
+  Future<void> _loadPaymentRecovery(
+    String storeId, {
+    required bool force,
+  }) async {
+    if (!mounted) return;
+    final generation = _scopeGeneration;
+    try {
+      final context = _paymentContext(storeId);
+      final key =
+          '${context.project}:${context.actor}:$storeId:$_scopeGeneration';
+      if (!force && key == _recoveryScope) return;
+      _recoveryScope = key;
+      state = state.copyWith(recoveryLoading: true);
+      final records = await (await _commandCoordinator()).pending(
+        context.project,
+        context.actor,
+        storeId,
+      );
+      if (!context.current()) return;
+      state = state.copyWith(recoveryRecords: records, recoveryLoading: false);
+    } catch (_) {
+      if (mounted && generation == _scopeGeneration) {
+        state = state.copyWith(
+          recoveryLoading: false,
+          error: 'PAYMENT_RECOVERY_STORAGE_UNAVAILABLE',
+        );
+      }
+    }
+  }
+
+  Future<bool> _blockUnresolvedPayment(
+    String storeId,
+    Set<String> orderIds,
+  ) async {
+    final context = _paymentContext(storeId);
+    final rows = await (await _commandCoordinator()).pending(
+      context.project,
+      context.actor,
+      storeId,
+    );
+    if (!context.current()) return true;
+    state = state.copyWith(recoveryRecords: rows);
+    if (rows.any((r) => orderIds.contains(r['order']))) {
+      state = state.copyWith(error: 'PAYMENT_RECOVERY_REQUIRED');
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> resolvePaymentRecovery(
+    String storeId,
+    Map<String, dynamic> record, {
+    bool cancel = false,
+  }) async {
+    if (state.isProcessing || state.recoveryLoading) return;
+    late ({String project, String actor, bool Function() current}) context;
+    try {
+      context = _paymentContext(storeId);
+    } on OperationScopeUnavailable {
+      return;
+    }
+    if (record['project'] != context.project ||
+        record['actor'] != context.actor ||
+        record['store'] != storeId) {
+      return;
+    }
+    state = state.copyWith(
+      isProcessing: true,
+      clearError: true,
+      clearPaymentSuccess: true,
+    );
+    try {
+      final commands = await _commandCoordinator();
+      final result = cancel
+          ? await commands.cancel(record, isCurrent: context.current)
+          : await commands.reconcileOne(record, isCurrent: context.current);
+      if (result.status == CommandStatus.confirmed ||
+          paymentIntentTerminalPhases.contains(result.record['phase'])) {
+        try {
+          await commands.retire(result.record);
+        } catch (_) {
+          /* preserve receipt; never charge again on cleanup failure */
+        }
+      }
+      if (!context.current()) return;
+      if (result.status == CommandStatus.confirmed) {
+        _acceptRecoveredPayment(record['order'] as String);
+      }
+      state = state.copyWith(
+        isProcessing: false,
+        error: result.status == CommandStatus.unknown
+            ? 'PAYMENT_RECOVERY_REQUIRED'
+            : null,
+        clearError: result.status != CommandStatus.unknown,
+      );
+      await loadPaymentRecovery(storeId, force: true);
+      if (context.current()) unawaited(loadOrders(storeId));
+    } catch (_) {
+      if (context.current()) {
+        state = state.copyWith(
+          isProcessing: false,
+          error: 'PAYMENT_RECOVERY_REQUIRED',
+        );
+      }
+    }
+  }
+
+  void _acceptRecoveredPayment(String orderId) {
+    _confirmedCommandRevision++;
+    state = state.copyWith(
+      orders: state.orders.where((o) => o.orderId != orderId).toList(),
+      clearSelectedOrder: state.selectedOrder?.orderId == orderId,
+    );
+  }
+
   Future<Map<String, dynamic>?> processPayment(
     String storeId,
     String orderId,
@@ -1161,31 +1379,90 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   ) async {
     if (state.isProcessing) return null;
     final generation = _scopeGeneration;
+    final selected = state.selectedOrder;
+    // Freeze the quote/version the operator actually selected before any await.
+    if (selected == null ||
+        selected.orderId != orderId ||
+        amount != selected.remainingDue) {
+      state = state.copyWith(error: 'PAYMENT_ORDER_CHANGED');
+      return null;
+    }
     state = state.copyWith(
       isProcessing: true,
       paymentSuccess: false,
       clearError: true,
     );
-
     try {
-      final payment = await _payments.processPayment(
-        orderId: orderId,
-        storeId: storeId,
+      final context = _paymentContext(storeId);
+      final commands = await _commandCoordinator();
+      final candidate = commands.intent(
+        project: context.project,
+        actor: context.actor,
+        store: storeId,
+        order: orderId,
         amount: amount,
         method: method,
+        expectedCount: selected.paymentCount,
+        tableNumber: selected.tableNumber,
       );
-
-      _confirmPayment(storeId, {
-        for (final o in state.orders)
-          if (o.orderId == orderId && amount >= o.remainingDue) orderId,
-      }, generation);
-      return payment;
-    } catch (error) {
-      if (!mounted || generation != _scopeGeneration) return null;
-      await _recoverPromotionBoundary(error, storeId, [orderId]);
+      final result = await commands.execute(
+        candidate,
+        isCurrent: context.current,
+      );
+      final submitted = result.record['operation'] == candidate['operation'];
+      if (result.status == CommandStatus.confirmed) {
+        try {
+          await commands.retire(result.record);
+        } catch (_) {
+          /* confirmed survives storage/refresh errors */
+        }
+        if (!context.current()) return result.payment;
+        if (submitted) {
+          _confirmPayment(storeId, {orderId}, generation);
+          return result.payment;
+        }
+        // Recovered receipts do not print or open proof with a newly selected
+        // method. The existing sale remains available in payment history.
+        _acceptRecoveredPayment(orderId);
+        state = state.copyWith(
+          isProcessing: false,
+          clearSelectedOrder: true,
+          clearError: true,
+        );
+        await loadPaymentRecovery(storeId, force: true);
+        if (context.current()) unawaited(loadOrders(storeId));
+        return null;
+      }
+      if (result.status == CommandStatus.rejected) {
+        try {
+          await commands.retire(result.record);
+        } catch (_) {
+          /* terminal recovery remains visible */
+        }
+        if (!context.current()) return null;
+        if (result.error != null) {
+          await _recoverPromotionBoundary(result.error!, storeId, [orderId]);
+        }
+      }
+      if (!context.current()) return null;
       state = state.copyWith(
         isProcessing: false,
-        error: _mapPaymentError(error, 'Failed to process payment'),
+        error: result.status == CommandStatus.unknown
+            ? 'PAYMENT_RECOVERY_REQUIRED'
+            : _mapPaymentError(
+                result.error ?? StateError('PAYMENT_CANCELLED'),
+                'PAYMENT_REJECTED',
+              ),
+      );
+      await loadPaymentRecovery(storeId, force: true);
+      return null;
+    } catch (error) {
+      if (!mounted || generation != _scopeGeneration) return null;
+      state = state.copyWith(
+        isProcessing: false,
+        error: error is OperationScopeUnavailable
+            ? 'PAYMENT_COMMAND_SCOPE_CHANGED'
+            : 'PAYMENT_RECOVERY_STORAGE_UNAVAILABLE',
       );
       return null;
     }
@@ -1205,6 +1482,15 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
+      if (await _blockUnresolvedPayment(
+        storeId,
+        orders.map((o) => o.orderId).toSet(),
+      )) {
+        if (mounted && generation == _scopeGeneration) {
+          state = state.copyWith(isProcessing: false);
+        }
+        return null;
+      }
       final result = await _payments.processCombinedTablePayment(
         storeId: storeId,
         orders: orders
@@ -1312,6 +1598,12 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
+      if (await _blockUnresolvedPayment(storeId, {orderId})) {
+        if (mounted && generation == _scopeGeneration) {
+          state = state.copyWith(isProcessing: false);
+        }
+        return null;
+      }
       final payment = await _payments.processNonRevenuePayment(
         orderId: orderId,
         storeId: storeId,
@@ -1358,6 +1650,12 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
+      if (await _blockUnresolvedPayment(storeId, {orderId})) {
+        if (mounted && generation == _scopeGeneration) {
+          state = state.copyWith(isProcessing: false);
+        }
+        return null;
+      }
       final payments = await _payments.processPaymentSplits(
         orderId: orderId,
         storeId: storeId,
@@ -1819,9 +2117,21 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 }
 
-final paymentProvider = StateNotifierProvider<PaymentNotifier, PaymentState>(
-  (ref) => PaymentNotifier(),
-);
+final paymentProvider = StateNotifierProvider<PaymentNotifier, PaymentState>((
+  ref,
+) {
+  final notifier = PaymentNotifier(
+    scope: () => ref.read(operationScopeProvider),
+  );
+  ref.listen(operationScopeProvider, (previous, next) {
+    if (previous?.generation != next.generation) {
+      notifier.resetOperationScope();
+      final storeId = next.scope?.storeId;
+      if (storeId != null) unawaited(notifier.loadOrders(storeId));
+    }
+  });
+  return notifier;
+});
 
 class CashierTodaySummary {
   const CashierTodaySummary({
@@ -1903,6 +2213,9 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
         'You do not have permission to complete payment for this order.',
       'INVALID_PAYMENT_METHOD' =>
         'The selected payment method is not supported.',
+      'PAYMENT_ORDER_CHANGED' ||
+      'PAYMENT_OPERATION_CANCELLED' ||
+      'PAYMENT_OPERATION_CONFLICT' => error.message,
       'PAYMENT_ALREADY_EXISTS' => 'This order has already been paid.',
       'ORDER_NOT_FOUND' => 'The selected order could not be found.',
       'ORDER_NOT_PAYABLE' => 'Only open dine-in orders can be paid.',

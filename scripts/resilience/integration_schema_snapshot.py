@@ -176,7 +176,8 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
             versions={'pos':['20261101022105_pos_resilience_completion_contracts.sql',
                              '20261101023409_pos_office_legal_connection.sql',
                              '20261101045728_kds_progress_receipt_reconciliation.sql',
-                             '20261101094500_payment_command_receipts.sql'],
+                             '20261101094500_payment_command_receipts.sql',
+                             '20261101132612_payment_command_cancellation_barriers.sql'],
                       'office':['20261101023410_office_first_pos_legal_connection.sql']}[name]
             for filename in versions:
                 path=Path(target)/'supabase/migrations'/filename
@@ -201,6 +202,8 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
             if exercise_payment_receipts:
                 from payment_receipt_fixture import run as run_payment_receipts
                 report['paymentCommandReceiptScenario']=run_payment_receipts(sql)
+                from payment_command_v2_fixture import run as run_payment_v2
+                report['paymentCommandV2Scenario']=run_payment_v2(sql)
             if exercise_legal_connection:
                 from legal_connection_native_fixture import run as run_native_legal
                 report['nativeLegalConnectionScenario']=run_native_legal(container,cmd,m,semantic,AREA,Path(office_root))

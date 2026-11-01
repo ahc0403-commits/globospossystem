@@ -139,6 +139,16 @@
       "timeoutSeconds": 120
     },
     {
+      "id": "browser-payment-intent-journal",
+      "argv": [
+        "node",
+        "--test",
+        "scripts/resilience/tests/payment_journal_browser.test.cjs"
+      ],
+      "format": "node",
+      "timeoutSeconds": 120
+    },
+    {
       "id": "native-kds-json-resources",
       "argv": [
         "flutter",
