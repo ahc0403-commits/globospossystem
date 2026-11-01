@@ -1,0 +1,646 @@
+{
+  "schemaVersion": 1,
+  "dartPackage": "globos_pos_system",
+  "features": [
+    {
+      "id": "admin",
+      "owner": "admin domain",
+      "sourceRoot": "lib/features/admin",
+      "checks": [
+        "feature.admin",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "attendance",
+      "owner": "attendance domain",
+      "sourceRoot": "lib/features/attendance",
+      "checks": [
+        "feature.attendance",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "auth",
+      "owner": "auth domain",
+      "sourceRoot": "lib/features/auth",
+      "checks": [
+        "feature.auth",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "cashier",
+      "owner": "cashier domain",
+      "sourceRoot": "lib/features/cashier",
+      "checks": [
+        "feature.cashier",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "customer_display",
+      "owner": "customer_display domain",
+      "sourceRoot": "lib/features/customer_display",
+      "checks": [
+        "feature.customer_display",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "delivery",
+      "owner": "delivery domain",
+      "sourceRoot": "lib/features/delivery",
+      "checks": [
+        "feature.delivery",
+        "official-full-recipe"
+      ],
+      "adoption": "retired"
+    },
+    {
+      "id": "digital_receipt",
+      "owner": "digital_receipt domain",
+      "sourceRoot": "lib/features/digital_receipt",
+      "checks": [
+        "feature.digital_receipt",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "direct_order",
+      "owner": "direct_order domain",
+      "sourceRoot": "lib/features/direct_order",
+      "checks": [
+        "feature.direct_order",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "emergency_fulfillment",
+      "owner": "emergency_fulfillment domain",
+      "sourceRoot": "lib/features/emergency_fulfillment",
+      "checks": [
+        "feature.emergency_fulfillment",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "inventory",
+      "owner": "inventory domain",
+      "sourceRoot": "lib/features/inventory",
+      "checks": [
+        "feature.inventory",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "inventory_purchase",
+      "owner": "inventory_purchase domain",
+      "sourceRoot": "lib/features/inventory_purchase",
+      "checks": [
+        "feature.inventory_purchase",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "kitchen",
+      "owner": "kitchen domain",
+      "sourceRoot": "lib/features/kitchen",
+      "checks": [
+        "feature.kitchen",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "onboarding",
+      "owner": "onboarding domain",
+      "sourceRoot": "lib/features/onboarding",
+      "checks": [
+        "feature.onboarding",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "order",
+      "owner": "order domain",
+      "sourceRoot": "lib/features/order",
+      "checks": [
+        "feature.order",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "payment",
+      "owner": "payment domain",
+      "sourceRoot": "lib/features/payment",
+      "checks": [
+        "feature.payment",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "photo_inventory",
+      "owner": "photo_inventory domain",
+      "sourceRoot": "lib/features/photo_inventory",
+      "checks": [
+        "feature.photo_inventory",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "photo_ops",
+      "owner": "photo_ops domain",
+      "sourceRoot": "lib/features/photo_ops",
+      "checks": [
+        "feature.photo_ops",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "photo_sales_import",
+      "owner": "photo_sales_import domain",
+      "sourceRoot": "lib/features/photo_sales_import",
+      "checks": [
+        "feature.photo_sales_import",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "print_station",
+      "owner": "print_station domain",
+      "sourceRoot": "lib/features/print_station",
+      "checks": [
+        "feature.print_station",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "procurement",
+      "owner": "procurement domain",
+      "sourceRoot": "lib/features/procurement",
+      "checks": [
+        "feature.procurement",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "qc",
+      "owner": "qc domain",
+      "sourceRoot": "lib/features/qc",
+      "checks": [
+        "feature.qc",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "qr_order",
+      "owner": "qr_order domain",
+      "sourceRoot": "lib/features/qr_order",
+      "checks": [
+        "feature.qr_order",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "receipt_ledger",
+      "owner": "receipt_ledger domain",
+      "sourceRoot": "lib/features/receipt_ledger",
+      "checks": [
+        "feature.receipt_ledger",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "red_invoice_intake",
+      "owner": "red_invoice_intake domain",
+      "sourceRoot": "lib/features/red_invoice_intake",
+      "checks": [
+        "feature.red_invoice_intake",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "report",
+      "owner": "report domain",
+      "sourceRoot": "lib/features/report",
+      "checks": [
+        "feature.report",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "restaurant_sales_export",
+      "owner": "restaurant_sales_export domain",
+      "sourceRoot": "lib/features/restaurant_sales_export",
+      "checks": [
+        "feature.restaurant_sales_export",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "settings",
+      "owner": "settings domain",
+      "sourceRoot": "lib/features/settings",
+      "checks": [
+        "feature.settings",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "store_procurement",
+      "owner": "store_procurement domain",
+      "sourceRoot": "lib/features/store_procurement",
+      "checks": [
+        "feature.store_procurement",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "store_setup",
+      "owner": "store_setup domain",
+      "sourceRoot": "lib/features/store_setup",
+      "checks": [
+        "feature.store_setup",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "store_workflow",
+      "owner": "store_workflow domain",
+      "sourceRoot": "lib/features/store_workflow",
+      "checks": [
+        "feature.store_workflow",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "super_admin",
+      "owner": "super_admin domain",
+      "sourceRoot": "lib/features/super_admin",
+      "checks": [
+        "feature.super_admin",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "table",
+      "owner": "table domain",
+      "sourceRoot": "lib/features/table",
+      "checks": [
+        "feature.table",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    },
+    {
+      "id": "waiter",
+      "owner": "waiter domain",
+      "sourceRoot": "lib/features/waiter",
+      "checks": [
+        "feature.waiter",
+        "official-full-recipe"
+      ],
+      "adoption": "legacy_or_partial"
+    }
+  ],
+  "sharedAreas": [
+    {
+      "id": "bootstrap",
+      "paths": [
+        "lib/main.dart",
+        "lib/core/router/*",
+        "lib/core/permissions*",
+        "lib/core/*/auth*"
+      ],
+      "affectsAllFeatures": true
+    },
+    {
+      "id": "database",
+      "paths": [
+        "supabase/migrations/*",
+        "supabase/schema.sql",
+        "scripts/*.sql"
+      ],
+      "affectsAllFeatures": true
+    },
+    {
+      "id": "edge",
+      "paths": [
+        "supabase/functions/*"
+      ],
+      "affectsAllFeatures": true
+    },
+    {
+      "id": "web-platform",
+      "paths": [
+        "web/*",
+        "assets/*",
+        "packages/*",
+        "android/*",
+        "ios/*",
+        "macos/*",
+        "windows/*",
+        "linux/*"
+      ],
+      "affectsAllFeatures": true
+    },
+    {
+      "id": "shared-dart",
+      "paths": [
+        "lib/core/*"
+      ],
+      "affectsAllFeatures": false
+    },
+    {
+      "id": "verification",
+      "paths": [
+        "scripts/*",
+        "test/*",
+        "integration_test/*",
+        ".github/*"
+      ],
+      "affectsAllFeatures": false
+    },
+    {
+      "id": "project-policy",
+      "paths": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "docs/*",
+        ".claude/*"
+      ],
+      "affectsAllFeatures": false
+    }
+  ],
+  "checks": {
+    "official-full-recipe": {
+      "path": "scripts/local_verification/recipe.json",
+      "kind": "official_recipe"
+    },
+    "governance-unit": {
+      "path": "scripts/governance/tests/test_check.py",
+      "kind": "tooling"
+    },
+    "cloud-transport": {
+      "path": "scripts/cloud_deployment/test_deploy_contract.py",
+      "kind": "tooling"
+    },
+    "feature.admin": {
+      "path": "test/menu_size_prices_test.dart",
+      "kind": "focused"
+    },
+    "feature.attendance": {
+      "path": "test/attendance_submission_retry_test.dart",
+      "kind": "focused"
+    },
+    "feature.auth": {
+      "path": "test/logout_state_reset_test.dart",
+      "kind": "focused"
+    },
+    "feature.cashier": {
+      "path": "test/menu_language_switch_test.dart",
+      "kind": "focused"
+    },
+    "feature.customer_display": {
+      "path": "test/display_polling_test.dart",
+      "kind": "focused"
+    },
+    "feature.delivery": {
+      "path": "test/deliberry_retirement_test.dart",
+      "kind": "focused"
+    },
+    "feature.digital_receipt": {
+      "path": "test/pos_paperless_visual_test.dart",
+      "kind": "focused"
+    },
+    "feature.direct_order": {
+      "path": "test/menu_choices_test.dart",
+      "kind": "focused"
+    },
+    "feature.emergency_fulfillment": {
+      "path": "test/store_workflow_test.dart",
+      "kind": "focused"
+    },
+    "feature.inventory": {
+      "path": "test/recipe_excel_import_test.dart",
+      "kind": "focused"
+    },
+    "feature.inventory_purchase": {
+      "path": "test/inventory_safety_stock_test.dart",
+      "kind": "focused"
+    },
+    "feature.kitchen": {
+      "path": "test/menu_portion_spice_test.dart",
+      "kind": "focused"
+    },
+    "feature.onboarding": {
+      "path": "test/remaining_route_operational_state_test.dart",
+      "kind": "focused"
+    },
+    "feature.order": {
+      "path": "test/menu_portion_spice_test.dart",
+      "kind": "focused"
+    },
+    "feature.payment": {
+      "path": "test/order_item_ordering_test.dart",
+      "kind": "focused"
+    },
+    "feature.photo_inventory": {
+      "path": "test/photo_inventory_management_test.dart",
+      "kind": "focused"
+    },
+    "feature.photo_ops": {
+      "path": "test/photo_ops_sales_export_test.dart",
+      "kind": "focused"
+    },
+    "feature.photo_sales_import": {
+      "path": "test/photo_sales_import_test.dart",
+      "kind": "focused"
+    },
+    "feature.print_station": {
+      "path": "test/print_station_live_refresh_test.dart",
+      "kind": "focused"
+    },
+    "feature.procurement": {
+      "path": "test/store_lifecycle_overlay_test.dart",
+      "kind": "focused"
+    },
+    "feature.qc": {
+      "path": "test/pos_integrated_resilience_test.dart",
+      "kind": "focused"
+    },
+    "feature.qr_order": {
+      "path": "test/qr_payment_summary_test.dart",
+      "kind": "focused"
+    },
+    "feature.receipt_ledger": {
+      "path": "test/late_invoice_widget_test.dart",
+      "kind": "focused"
+    },
+    "feature.red_invoice_intake": {
+      "path": "test/company_tax_lookup_test.dart",
+      "kind": "focused"
+    },
+    "feature.report": {
+      "path": "test/revenue_history_test.dart",
+      "kind": "focused"
+    },
+    "feature.restaurant_sales_export": {
+      "path": "test/deposit_breakdown_test.dart",
+      "kind": "focused"
+    },
+    "feature.settings": {
+      "path": "test/company_lookup_configuration_test.dart",
+      "kind": "focused"
+    },
+    "feature.store_procurement": {
+      "path": "test/store_lifecycle_overlay_test.dart",
+      "kind": "focused"
+    },
+    "feature.store_setup": {
+      "path": "test/store_lifecycle_card_test.dart",
+      "kind": "focused"
+    },
+    "feature.store_workflow": {
+      "path": "test/store_workflow_test.dart",
+      "kind": "focused"
+    },
+    "feature.super_admin": {
+      "path": "test/brand_service_test.dart",
+      "kind": "focused"
+    },
+    "feature.table": {
+      "path": "test/order_item_ordering_test.dart",
+      "kind": "focused"
+    },
+    "feature.waiter": {
+      "path": "test/waiter_overlay_operational_test.dart",
+      "kind": "focused"
+    },
+    "local-release-verifier": {
+      "path": "scripts/local_verification/tests/test_evidence.py",
+      "kind": "tooling"
+    },
+    "independent-receipt-verifier": {
+      "path": "scripts/receipt_verification/tests/test_verify.py",
+      "kind": "tooling"
+    },
+    "deploy-db-only": {
+      "path": "test/pos_db_only_deploy_contract_test.sh",
+      "kind": "tooling"
+    },
+    "deploy-git-history": {
+      "path": "test/pos_deploy_git_history_guard_test.sh",
+      "kind": "tooling"
+    }
+  },
+  "workstreams": [
+    {
+      "id": "G0",
+      "status": "in_progress",
+      "requiredEvidence": [
+        "feature_inventory",
+        "environment_baseline",
+        "sample_role_matrix",
+        "device_assignment"
+      ]
+    },
+    {
+      "id": "G1",
+      "status": "open",
+      "requiredEvidence": [
+        "pos_runtime_contract",
+        "office_runtime_contract",
+        "fresh_install",
+        "upgrade_install"
+      ]
+    },
+    {
+      "id": "G2",
+      "status": "open",
+      "requiredEvidence": [
+        "zero_store_legal_entity",
+        "cross_database_recovery",
+        "tenant_isolation"
+      ]
+    },
+    {
+      "id": "G3",
+      "status": "open",
+      "requiredEvidence": [
+        "domain_outcomes",
+        "scoped_reads",
+        "unknown_reconciliation"
+      ]
+    },
+    {
+      "id": "G4",
+      "status": "open",
+      "requiredEvidence": [
+        "bounded_reads",
+        "event_fanout",
+        "worker_budget"
+      ]
+    },
+    {
+      "id": "G5",
+      "status": "open",
+      "requiredEvidence": [
+        "screen_isolation",
+        "resource_lifetime",
+        "file_export"
+      ]
+    },
+    {
+      "id": "G6",
+      "status": "open",
+      "requiredEvidence": [
+        "whole_lifecycle",
+        "fault_injection",
+        "mixed_load"
+      ]
+    },
+    {
+      "id": "G7",
+      "status": "open",
+      "requiredEvidence": [
+        "soak_1x",
+        "soak_3x",
+        "physical_device",
+        "official_deployments",
+        "closing_observation_1",
+        "closing_observation_2"
+      ]
+    }
+  ]
+}

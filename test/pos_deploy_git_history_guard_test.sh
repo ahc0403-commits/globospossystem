@@ -141,7 +141,11 @@ if os.environ['LOCAL_VERIFIER_FIXTURE_MODE'] == 'fail':
 Path(sys.argv[5]).mkdir()
 Path(sys.argv[5], 'receipt.json').write_text('fixture only')
 PYFIXTURE
-git -C "$APPROVED_REPO" add scripts/pos_local_release_gate.py
+# This rehearsal isolates Git/full-recipe invocation. The real structural
+# governance behavior is tested with source-changing Git fixtures separately.
+mkdir -p "$APPROVED_REPO/scripts/governance"
+printf '# controlled governance fixture only\n' >"$APPROVED_REPO/scripts/governance/check.py"
+git -C "$APPROVED_REPO" add scripts/pos_local_release_gate.py scripts/governance/check.py
 git -C "$APPROVED_REPO" -c user.name='Deploy Test' -c user.email=deploy-test@globos.test commit --quiet -m 'local verifier fixture'
 git -C "$APPROVED_REPO" push origin main >/dev/null
 

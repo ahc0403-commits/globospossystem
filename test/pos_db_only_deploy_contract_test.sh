@@ -80,6 +80,15 @@ Path(sys.argv[5]).mkdir()
 Path(sys.argv[5],'receipt.json').write_text('controlled test fixture only')
 PYGATE
 
+# Controlled structural gate: actual feature/input failures are covered by the
+# governance suite; this fixture verifies fail-before-SQL invocation ordering.
+mkdir -p "$REHEARSAL_REPO/scripts/governance"
+cat >"$REHEARSAL_REPO/scripts/governance/check.py" <<'PYGOVERNANCE'
+import os
+if os.environ.get('FAIL_CHANGE_GOVERNANCE') == '1':
+    raise SystemExit('Controlled change-governance failure')
+PYGOVERNANCE
+
 git init --bare --initial-branch=main "$ORIGIN_REPO" >/dev/null
 git init --initial-branch=main "$REHEARSAL_REPO" >/dev/null
 git -C "$REHEARSAL_REPO" config user.email deploy-test@globos.test
@@ -237,6 +246,15 @@ EOF
 grep '^psql ' "$CALL_LOG" >"$TMP_DIR/actual-db-sequence.log"
 cmp "$TMP_DIR/expected-db-sequence.log" "$TMP_DIR/actual-db-sequence.log"
 grep -qx 'supabase migration repair 20260717090000 --status applied --yes' "$CALL_LOG"
+
+# A failed impact declaration cannot reach expensive verification or DB writes.
+: >"$CALL_LOG"
+export FAIL_CHANGE_GOVERNANCE=1
+assert_failure 'Controlled change-governance failure' invoke_db_only "$REHEARSAL_REPO"
+unset FAIL_CHANGE_GOVERNANCE
+[[ "$(cat "$CALL_LOG")" != *'local-release-verifier'* ]]
+[[ "$(cat "$CALL_LOG")" != *'psql '* ]]
+[[ "$(cat "$CALL_LOG")" != *'migration repair'* ]]
 
 # Local verification failure must stop before any SQL or migration repair.
 : >"$CALL_LOG"

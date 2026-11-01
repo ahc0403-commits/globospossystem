@@ -14,6 +14,9 @@ elif [[ $# != 0 ]]; then
   exit 2
 fi
 
+printf 'CHECK_REPO_STEP=change_governance\n'
+python3 -B scripts/governance/check.py
+
 printf 'CHECK_REPO_STEP=flutter_dependencies\n'
 flutter pub get --enforce-lockfile
 printf 'CHECK_REPO_STEP=static_analysis\n'

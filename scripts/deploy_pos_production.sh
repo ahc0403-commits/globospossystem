@@ -210,6 +210,9 @@ enforce_local_release_contract() {
   production_deploy_path_requested || return 0
   log "Required local release verification"
   need_cmd python3
+  # Source-impact declarations are required even when a prior complete app
+  # verification is reused under the explicit owner exception.
+  python3 -B "$ROOT_DIR/scripts/governance/check.py"
   need_cmd docker
   [[ -f "$ROOT_DIR/scripts/pos_local_release_gate.py" ]] ||
     fail "Missing trusted local release verifier."

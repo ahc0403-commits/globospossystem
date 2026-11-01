@@ -156,6 +156,22 @@ or memory, and distinguish estimates from measurements and unverified items.
 
 ## Verification and release
 
+- Apply [regression governance](docs/pos/governance/REGRESSION_GOVERNANCE_KO.md)
+  to every change. Declare affected features/shared contracts, business
+  invariants, all eleven performance dimensions, rollback and required checks
+  in the source-bound `ACTIVE_CHANGE.json`. Register every feature and existing
+  verification entry in `FEATURE_CONTRACTS.json`; inventory coverage is not
+  executed test coverage. Shared Dart changes include transitive consumers;
+  DB/Edge/bootstrap changes require conservative cross-feature review.
+- `python3 -B scripts/governance/check.py` runs before the repository recipe
+  and before production release verification, including owner-waiver paths.
+  It blocks stale/uncovered inputs, missing feature/check references and
+  unsupported completion claims. It does not infer that N+1 is absent or that
+  runtime/operational checks passed. Retain the official evidence verifiers.
+- Governance-only changes require their affected Python/shell/transport checks;
+  do not add a full application build or web redeployment. Remaining product
+  work stays in the separately tracked G0–G7 plan and requires its own evidence.
+
 - Run checks relevant to the change and its risk. Documentation-only edits need
   document and diff validation; a full app build is not required.
 - Full repository verification: `bash scripts/check_repo.sh`.
