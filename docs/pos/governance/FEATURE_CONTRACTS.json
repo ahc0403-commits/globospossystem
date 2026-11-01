@@ -88,7 +88,10 @@
       "sourceRoot": "lib/features/emergency_fulfillment",
       "checks": [
         "feature.emergency_fulfillment",
-        "official-full-recipe"
+        "official-full-recipe",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -609,6 +612,18 @@
     },
     "office-identity-unit": {
       "path": "scripts/resilience/tests/test_office_accounts.py",
+      "kind": "focused"
+    },
+    "kds-progress-journal": {
+      "path": "test/kds_progress_journal_test.dart",
+      "kind": "focused"
+    },
+    "kds-progress-receipt-sql": {
+      "path": "scripts/resilience/integration_kds_receipts.py",
+      "kind": "focused"
+    },
+    "browser-kds-outbox-compatibility": {
+      "path": "scripts/resilience/tests/kds_outbox_browser.test.cjs",
       "kind": "focused"
     }
   },

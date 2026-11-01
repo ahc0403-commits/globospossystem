@@ -237,10 +237,14 @@ class _DeferredEmergencyNotifier extends _FixtureEmergencyNotifier {
     }
     seed(
       state.copyWith(
-        pendingQueueIds: result == EmergencyProgressResult.queued
+        pendingQueueIds:
+            result == EmergencyProgressResult.queued ||
+                result == EmergencyProgressResult.unknown
             ? {state.orders.single.queueId}
             : {},
-        error: result == EmergencyProgressResult.queued
+        error: result == EmergencyProgressResult.unknown
+            ? 'KDS_PROGRESS_RESULT_UNKNOWN'
+            : result == EmergencyProgressResult.queued
             ? 'EMERGENCY_PROGRESS_QUEUED'
             : 'EMERGENCY_QUANTITY_CHAIN_VIOLATION',
       ),
@@ -646,8 +650,16 @@ void main() {
             ? findsNothing
             : findsOneWidget,
       );
-      if (outcome == EmergencyProgressResult.queued) {
-        expect(find.text('전송 대기 중입니다. 연결이 복구되면 전달 기록을 전송합니다.'), findsOneWidget);
+      if (outcome == EmergencyProgressResult.queued ||
+          outcome == EmergencyProgressResult.unknown) {
+        expect(
+          find.text(
+            outcome == EmergencyProgressResult.unknown
+                ? '전달 결과를 확인하지 못했습니다. 새로고침을 누르면 기존 요청의 결과부터 확인하고 같은 요청으로 복구합니다. 확인 전 화면을 닫거나 다시 완료 처리하지 마세요.'
+                : '전송 대기 중입니다. 연결이 복구되면 전달 기록을 전송합니다.',
+          ),
+          findsOneWidget,
+        );
         expect(
           tester
               .widget<IconButton>(

@@ -118,6 +118,27 @@
       "timeoutSeconds": 600
     },
     {
+      "id": "kds-progress-receipt-sql",
+      "argv": [
+        "python3",
+        "-B",
+        "scripts/resilience/integration_kds_receipts.py",
+        "-v"
+      ],
+      "format": "unittest",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "browser-kds-outbox-compatibility",
+      "argv": [
+        "node",
+        "--test",
+        "scripts/resilience/tests/kds_outbox_browser.test.cjs"
+      ],
+      "format": "node",
+      "timeoutSeconds": 120
+    },
+    {
       "id": "repository",
       "argv": [
         "bash",

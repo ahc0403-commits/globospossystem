@@ -436,3 +436,49 @@ Office 최초 법인 관리자와 샘플 매장 구매/품질/재무에 필요�
 검증 중 정체성/역할/scope가 바뀌거나 응답·정리가 불명이면 실패/UNKNOWN으로 남긴다.
 기존 sample 도구를 포함한 계정 검증 도구 영향 검사 28개가 통과했다.
 실제 연결 업무/신규 후보 E2E/전체 장시간 시험 PASS로 승격하지 않는다.
+
+추가로 실제 최소 계정 2개의 로그인/본인 프로필/현재 native grant를 확인했다.
+법인 관리자 및 샘플 매장 구매·품질·재무 4개 역할 lane을 충족하며, 생성한 세션은
+각각 local logout으로 정리했다. 기존 운영 bridge의 config_status 읽기도 성공했다.
+이는 `PASS_SELECTED_IDENTITIES`이며 23개 전체 비밀번호 인증이나 신규 후보 법인
+연결 E2E 성공이 아니다. private readiness 결과는 같은 비공개 디렉터리에 보관한다.
+
+### G3/G4/G5 주방 항목 전달 복구 — 개발 증거
+
+항목별 진행 요청을 HTTP 전에 원래 event UUID/actor/store/session/station/floor와
+함께 저장한다. 저장되지 않았다고 확인된 경우 전송하지 않고, 저장/전송 결과가
+불명인 경우 `unknown`으로 보존한다. 확정된 전달은 후속 새로고침/정리 실패로
+실패 처리하지 않는다. 자동 복구는 prepared 요청을 보내지 않고 결과부터 조회하며,
+명시적 새로고침 복구는 원래 ID와 payload를 재사용한다. 로그아웃/담당 변경 뒤
+이전 요청을 새 범위로 재전송하거나 응답을 새 화면에 반영하지 않는다.
+
+전가복의 실제 kitchen batch 요청 UUID는 완료 event UUID와 다르므로, 신규 읽기
+RPC `get_kds_progress_receipts_v1`이 두 원장을 요청 100개씩 집합 조회한다.
+private batch 테이블의 직접 SELECT 권한을 확대하지 않고 현재 활성 actor/store를
+서버에서 확인한다. 추가형 migration은
+`20261101045728_kds_progress_receipt_reconciliation.sql`이며 운영에는 미적용이다.
+기존 수량 계산·층/체커 routing·결제·할인 allocator는 수정하지 않는다.
+
+구버전 탭이 새 미확정 요청을 자동 재전송하지 않도록 새 진행 journal을 별도
+IndexedDB/native 키로 분리했다. 원래 intent 순서를 보존하고 새 journal은 1000건
+상한을 둔다. 전송은 round당 최대 20건/15초, 결과 조회도 전체 15초 및 RPC당
+100개/256 KiB 상한이다. read/write transport는 소유자 dispose 시 회수한다.
+기존 legacy 전체 저장소 읽기와 모든 worker 합산 예산까지 완료했다는 뜻은 아니다.
+
+개발 영향 검사 결과:
+
+- 주방 항목 journal 14개 PASS. 초기 검사에서 이 새 시험 파일의 이름 참조 오류로
+  컴파일 실패했고 수정 후 해당 파일만 재실행했다. 나머지 4개 영향 파일은 같은 앱
+  입력에서 117개 PASS다. 이 분할 결과는 최종-main 통합 전체 검증이 아니다.
+- 변경 Dart 파일 정적 분석: 오류/경고/정보 0개.
+- 실제 Chromium 154/Debian 13 격리 저장/구버전 호환/체크섬/1000건/페이지 새로고침
+  6개 PASS. 공식 recipe의 고정 Chromium 156/Ubuntu 24.04 실행은 아직 미실행이다.
+- PostgreSQL 17 격리 부분 fixture의 receipt/권한/다른 매장/다른 actor/동시 읽기
+  7개 PASS. synthetic event 100001건에서 요청 100개, 30회 server P95 1.6577ms,
+  response 33900 bytes다. 운영 실측 또는 전체 schema 복원 증거가 아니다.
+
+이 단계는 항목 진행 명령의 복구를 보강한 것이다. 나머지 batch/undo/packaging
+명령에는 원래 actor/assignment scope와 transport deadline을 추가했지만 아직 기존
+bool 결과/실패 후 저장 경로가 남아 있다. 전 도메인 규약 완료, T01–T16 전체 업무,
+2시간 혼합 부하, 1배/3배 각각 12시간, 최종-main 전체 recipe 및 공식 배포는 미완료다.
+원본 개발 로그는 `/workspace/scratch/pos-resilience-completion-dev/`에 보관한다.

@@ -627,6 +627,10 @@ class _EmergencyFulfillmentScreenState
                   final notifier = ref.read(
                     emergencyFulfillmentProvider.notifier,
                   );
+                  if (state.error == 'KDS_PROGRESS_RESULT_UNKNOWN') {
+                    await notifier.reconcileUnknownProgress();
+                    return;
+                  }
                   if (_showRecent && state.usesBoundedHistory) {
                     await notifier.loadCompletedHistory();
                   } else {
@@ -3167,7 +3171,17 @@ Color _orderFloorColor(String floorLabel) =>
     };
 
 class _EmergencyCopy {
-  const _EmergencyCopy(this.languageCode, {this.directToFloor = false});
+  const _EmergencyCopy(
+    this.languageCode, {
+    this.directToFloor = false,
+    required this.progressUnknown,
+    required this.progressNotSaved,
+    required this.signInRequired,
+  });
+
+  final String progressUnknown;
+  final String progressNotSaved;
+  final String signInRequired;
 
   final bool directToFloor;
 
@@ -3179,6 +3193,9 @@ class _EmergencyCopy {
   }) => _EmergencyCopy(
     Localizations.localeOf(context).languageCode,
     directToFloor: directToFloor,
+    progressUnknown: context.l10n.resilienceKdsProgressUnknown,
+    progressNotSaved: context.l10n.resilienceKdsProgressNotSaved,
+    signInRequired: context.l10n.connectivitySignInRequiredMessage,
   );
 
   String _pick(String ko, String vi, String en) => switch (languageCode) {
@@ -3464,6 +3481,9 @@ class _EmergencyCopy {
       _pick('$minutes분 경과', 'Đã chờ $minutes phút', '$minutes min elapsed');
 
   String errorMessage(String error) {
+    if (error.contains('EMERGENCY_USER_REQUIRED')) return signInRequired;
+    if (error.contains('KDS_PROGRESS_RESULT_UNKNOWN')) return progressUnknown;
+    if (error.contains('KDS_PROGRESS_NOT_SAVED')) return progressNotSaved;
     if (error.contains('EMERGENCY_QUANTITY_CHAIN_VIOLATION')) {
       return _pick(
         '현재 전달 가능한 수량을 확인해 주세요. 준비되지 않았거나 이미 전달된 음식입니다.',

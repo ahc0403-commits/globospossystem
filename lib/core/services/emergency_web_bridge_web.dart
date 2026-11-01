@@ -28,6 +28,13 @@ external JSPromise<JSString> _readOutbox();
 @JS('globosEmergencyOutboxDelete')
 external JSPromise<JSAny?> _deleteOutbox(JSString id);
 
+@JS('globosEmergencyProgressJournalPut')
+external JSPromise<JSAny?> _putProgress(JSString id, JSString payload);
+@JS('globosEmergencyProgressJournalReadAll')
+external JSPromise<JSString> _readProgress();
+@JS('globosEmergencyProgressJournalDelete')
+external JSPromise<JSAny?> _deleteProgress(JSString id);
+
 @JS('globosEmergencyConfigurePushWorker')
 external JSPromise<JSBoolean> _configurePushWorker(JSString configJson);
 
@@ -41,8 +48,22 @@ abstract final class EmergencyWebBridge {
     await _putOutbox(id.toJS, payload.toJS).toDart;
   }
 
-  static Future<List<EmergencyOutboxRecord>> readOutbox() async {
-    final raw = await _readOutbox().toDart;
+  static Future<void> putProgressJournal(String id, String payload) async {
+    await _putProgress(id.toJS, payload.toJS).toDart;
+  }
+
+  static Future<void> deleteProgressJournal(String id) async {
+    await _deleteProgress(id.toJS).toDart;
+  }
+
+  static Future<List<EmergencyOutboxRecord>> readOutbox() =>
+      _decode(_readOutbox());
+  static Future<List<EmergencyOutboxRecord>> readProgressJournal() =>
+      _decode(_readProgress());
+  static Future<List<EmergencyOutboxRecord>> _decode(
+    JSPromise<JSString> response,
+  ) async {
+    final raw = await response.toDart;
     final decoded = jsonDecode(raw.toDart);
     if (decoded is! List) {
       throw const FormatException('KDS_OUTBOX_RESPONSE_INVALID');

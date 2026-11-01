@@ -14,6 +14,7 @@ import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/time_utils.dart';
 import '../../core/services/pos_backend.dart';
 import 'kds_realtime_sync.dart';
+import 'kds_progress_journal.dart';
 import '../../core/utils/deadline_http_client.dart';
 
 const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
@@ -1901,17 +1902,26 @@ Set<String> emergencyFloorOrderArrivalIds(
   };
 }
 
-enum EmergencyProgressResult { confirmed, queued, rejected }
+enum EmergencyProgressResult { confirmed, queued, unknown, rejected }
 
 class EmergencyFulfillmentNotifier
     extends StateNotifier<EmergencyFulfillmentState> {
   EmergencyFulfillmentNotifier({
     SupabaseClient? client,
+    KdsOutboxStore? outbox,
+    @visibleForTesting this.actorIdForTesting,
     @visibleForTesting this.enableRealtimeSubscriptions = true,
   }) : _providedClient = client,
+       _outbox = outbox ?? KdsOutboxStore(),
        super(const EmergencyFulfillmentState());
 
   final SupabaseClient? _providedClient;
+  final String? Function()? actorIdForTesting;
+  String? get _commandActorId =>
+      actorIdForTesting?.call() ?? _client.auth.currentUser?.id;
+  final KdsOutboxStore _outbox;
+  final _progressEventsInFlight = <String>{};
+  bool _recoveringProgress = false;
   final bool enableRealtimeSubscriptions;
   SupabaseClient get _client => _providedClient ?? supabase;
 
@@ -1944,6 +1954,7 @@ class EmergencyFulfillmentNotifier
   final math.Random _pollRandom = math.Random();
   final KdsReadCoordinator _jeongabokReads = KdsReadCoordinator();
   final RequestLifetime _kdsReadLifetime = RequestLifetime();
+  final RequestLifetime _progressWriteLifetime = RequestLifetime();
   bool _boundedJeongabok = false;
   SupabaseKdsSyncGateway _gateway({bool? bounded}) => SupabaseKdsSyncGateway(
     _client,
@@ -2269,10 +2280,7 @@ class EmergencyFulfillmentNotifier
       if (!mounted) return;
 
       if (syncConfig.boundedJeongabok) {
-        final pending = emergencyOutboxRecordsForStore(
-          await EmergencyWebBridge.readOutbox(),
-          storeId,
-        );
+        final pending = _scopedOutboxRecords(await _outbox.read(), storeId);
         if (!mounted) return;
         state = state.copyWith(
           pendingOutboxCount: pending.length,
@@ -2287,8 +2295,8 @@ class EmergencyFulfillmentNotifier
         return;
       }
       if (boundedBunsik) {
-        final pendingRecords = emergencyOutboxRecordsForStore(
-          await EmergencyWebBridge.readOutbox(),
+        final pendingRecords = _scopedOutboxRecords(
+          await _outbox.read(),
           storeId,
         );
         if (!mounted) return;
@@ -2328,8 +2336,8 @@ class EmergencyFulfillmentNotifier
       }
       if (!mounted) return;
       final next = EmergencyFulfillmentState.fromJson(json);
-      final pendingRecords = await EmergencyWebBridge.readOutbox();
-      final currentPendingRecords = emergencyOutboxRecordsForStore(
+      final pendingRecords = await _outbox.read();
+      final currentPendingRecords = _scopedOutboxRecords(
         pendingRecords,
         storeId,
       );
@@ -2851,8 +2859,8 @@ class EmergencyFulfillmentNotifier
   Future<void> _onKdsConnected() async {
     if (!mounted || _syncMode == KdsSyncMode.legacy) return;
     final error = await _flushOutbox();
-    final pendingRecords = await EmergencyWebBridge.readOutbox();
-    final currentPendingRecords = emergencyOutboxRecordsForStore(
+    final pendingRecords = await _outbox.read();
+    final currentPendingRecords = _scopedOutboxRecords(
       pendingRecords,
       state.restaurantId,
     );
@@ -2982,12 +2990,83 @@ class EmergencyFulfillmentNotifier
   bool applyRealtimeItemRowForTesting(Map<String, dynamic> row) =>
       _applyRealtimeItemRow(row);
 
+  @visibleForTesting
+  Future<String?> flushOutboxForTesting() => _flushOutbox();
+
+  Map<String, dynamic> get _outboxScope => {
+    '_outbox_created_at': DateTime.now().millisecondsSinceEpoch,
+    '_outbox_store_id': state.restaurantId,
+    '_outbox_actor_id': _commandActorId ?? '__unidentified__',
+    '_outbox_session_id': state.sessionId,
+    '_outbox_station_type': state.stationType,
+    '_outbox_floor_label': state.floorLabel,
+  };
+
+  bool _ownsOutbox(Map<String, dynamic> payload) =>
+      mounted &&
+      kdsOutboxScopeMatches(
+        payload,
+        storeId: state.restaurantId,
+        actorId: _commandActorId,
+        sessionId: state.sessionId,
+        stationType: state.stationType,
+        floorLabel: state.floorLabel,
+      );
+
+  List<EmergencyOutboxRecord> _scopedOutboxRecords(
+    Iterable<EmergencyOutboxRecord> records,
+    String? storeId,
+  ) => emergencyOutboxRecordsForStore(records, storeId)
+      .where((record) {
+        final payload = jsonDecode(record.payload);
+        return payload is Map &&
+            _ownsOutbox(Map<String, dynamic>.from(payload));
+      })
+      .toList(growable: false);
+
+  static bool _definiteCommandRejection(Object error) =>
+      error is PostgrestException &&
+      const {'P0001', '42501', '22023', '23503', '23514'}.contains(error.code);
+
+  Future<void> _notePendingProgress(
+    Map<String, dynamic> payload,
+    String error,
+  ) async {
+    List<EmergencyOutboxRecord>? records;
+    try {
+      records = _scopedOutboxRecords(
+        await _outbox.read(),
+        payload['_outbox_store_id']?.toString(),
+      );
+    } catch (_) {
+      /* No durable queue claim when local storage cannot be read. */
+    }
+    if (!_ownsOutbox(payload)) return;
+    state = state.copyWith(
+      pendingOutboxCount: records?.length,
+      pendingQueueIds: {
+        ...(records == null
+            ? state.pendingQueueIds
+            : emergencyPendingQueueIds(records)),
+        payload['queue_id'] as String,
+      },
+      error: error,
+    );
+  }
+
   Future<EmergencyProgressResult> recordProgress({
     required String itemId,
     required String stage,
     int delta = 1,
   }) async {
-    if (!_progressInFlight.add(itemId)) return EmergencyProgressResult.rejected;
+    if (mounted && _commandActorId == null) {
+      state = state.copyWith(error: 'EMERGENCY_USER_REQUIRED');
+      return EmergencyProgressResult.rejected;
+    }
+    if (!mounted || !_progressInFlight.add(itemId)) {
+      return EmergencyProgressResult.rejected;
+    }
+    String? eventId;
     try {
       final order = [...state.orders, ...state.completedOrders]
           .where((order) => order.items.any((item) => item.id == itemId))
@@ -2996,8 +3075,13 @@ class EmergencyFulfillmentNotifier
       if (item == null || state.pendingQueueIds.contains(order!.queueId)) {
         return EmergencyProgressResult.rejected;
       }
-      final eventId = _uuid.v4();
+      eventId = _uuid.v4();
+      _progressEventsInFlight.add(eventId);
       final payload = <String, dynamic>{
+        ..._outboxScope,
+        '_outbox_progress_journal': 1,
+        '_outbox_phase': 'prepared',
+        '_outbox_order_item_id': item.orderItemId,
         'event_id': eventId,
         'item_id': itemId,
         'queue_id': order.queueId,
@@ -3008,47 +3092,218 @@ class EmergencyFulfillmentNotifier
             item.sourceKind == 'combo_component' && !item.isFloorDirect,
         'workflow_v2': item.usesKitchenHandoffWorkflow,
       };
-      late final Map<String, dynamic> response;
-      final commandRevision = _realtimeRevision;
       try {
-        response = await _sendProgress(payload);
-      } catch (error) {
-        if (!mounted) return EmergencyProgressResult.rejected;
-        if (error is PostgrestException) {
-          // No optimistic snapshot rollback: realtime updates to this or other
-          // orders received during the request must remain intact.
-          state = state.copyWith(error: error.message);
-          return EmergencyProgressResult.rejected;
-        }
+        // The original identity must survive a lost HTTP response/tab close.
+        // A prepared record is NEVER automatically sent by the outbox flusher.
+        await _putOutbox(eventId, payload);
+      } catch (_) {
         try {
-          await _putOutbox(eventId, payload);
-          if (!mounted) return EmergencyProgressResult.queued;
-          state = state.copyWith(
-            pendingOutboxCount: state.pendingOutboxCount + 1,
-            pendingQueueIds: {...state.pendingQueueIds, order.queueId},
-            error: 'EMERGENCY_PROGRESS_QUEUED',
+          final saved = (await _outbox.read()).any(
+            (record) => record.id == eventId,
           );
-          return EmergencyProgressResult.queued;
+          if (!saved) {
+            if (_ownsOutbox(payload)) {
+              state = state.copyWith(error: 'KDS_PROGRESS_NOT_SAVED');
+            }
+            return EmergencyProgressResult.rejected;
+          }
         } catch (_) {
-          if (mounted) {
-            state = state.copyWith(error: 'EMERGENCY_PROGRESS_FAILED');
+          /* The local transaction outcome is itself unknown. */
+        }
+        await _notePendingProgress(payload, 'KDS_PROGRESS_RESULT_UNKNOWN');
+        return EmergencyProgressResult.unknown;
+      }
+      if (!_ownsOutbox(payload)) return EmergencyProgressResult.unknown;
+      return await _executePreparedProgress(payload);
+    } finally {
+      if (eventId != null) _progressEventsInFlight.remove(eventId);
+      _progressInFlight.remove(itemId);
+    }
+  }
+
+  Future<EmergencyProgressResult> _executePreparedProgress(
+    Map<String, dynamic> payload,
+  ) async {
+    final eventId = payload['event_id'] as String;
+    final queueId = payload['queue_id'] as String;
+    final commandRevision = _realtimeRevision;
+    late final Map<String, dynamic> response;
+    try {
+      response = await _sendProgress(payload);
+    } catch (error) {
+      if (_definiteCommandRejection(error)) {
+        try {
+          await _outbox.delete(eventId);
+          if (_ownsOutbox(payload)) {
+            state = state.copyWith(
+              error: (error as PostgrestException).message,
+            );
           }
           return EmergencyProgressResult.rejected;
+        } catch (_) {
+          await _notePendingProgress(payload, 'KDS_PROGRESS_RESULT_UNKNOWN');
+          return EmergencyProgressResult.unknown;
         }
       }
-      if (!mounted) return EmergencyProgressResult.confirmed;
-      final result = _commandResult(response);
-      if (commandRevision == _realtimeRevision &&
-          (result.containsKey('floor_served_quantity') ||
-              result.containsKey('kitchen_done_quantity'))) {
-        _applyAuthoritativeProgress(itemId, result);
-      } else {
-        await _refreshConfirmedCommand(order.queueId);
+      try {
+        await _putOutbox(eventId, {...payload, '_outbox_phase': 'queued'});
+        await _notePendingProgress(payload, 'EMERGENCY_PROGRESS_QUEUED');
+        return EmergencyProgressResult.queued;
+      } catch (_) {
+        await _notePendingProgress(payload, 'KDS_PROGRESS_RESULT_UNKNOWN');
+        return EmergencyProgressResult.unknown;
       }
-      if (mounted && delta < 0) _restoreReopenedHistoryOrder(order.queueId);
-      return EmergencyProgressResult.confirmed;
+    }
+    try {
+      await _outbox.delete(eventId);
+    } catch (_) {
+      if (_ownsOutbox(payload)) {
+        state = state.copyWith(error: 'EMERGENCY_ORDER_REFRESH_PENDING');
+      }
+    }
+    // A confirmed write remains confirmed after logout, assignment change or
+    // failed refresh; its response cannot update the new screen's quantities.
+    if (!_ownsOutbox(payload)) return EmergencyProgressResult.confirmed;
+    final result = _commandResult(response);
+    if (commandRevision == _realtimeRevision &&
+        (result.containsKey('floor_served_quantity') ||
+            result.containsKey('kitchen_done_quantity'))) {
+      _applyAuthoritativeProgress(payload['item_id'] as String, result);
+    } else {
+      await _refreshConfirmedCommand(queueId);
+    }
+    if (_ownsOutbox(payload) && (payload['delta'] as int) < 0) {
+      _restoreReopenedHistoryOrder(queueId);
+    }
+    return EmergencyProgressResult.confirmed;
+  }
+
+  Future<Set<String>> _confirmedProgressRecords(
+    List<EmergencyOutboxRecord> records,
+  ) async {
+    final payloads = <String, Map<String, dynamic>>{
+      for (final record in records)
+        if (!_progressEventsInFlight.contains(record.id))
+          record.id: Map<String, dynamic>.from(
+            jsonDecode(record.payload) as Map,
+          ),
+    };
+    if (payloads.isEmpty) return {};
+    final ids = payloads.keys.toList(growable: false);
+    final confirmed = <String>{};
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    final transport = DeadlineHttpClient(
+      _client.rest.httpClient!,
+      deadline,
+      callTimeout: const Duration(seconds: 15),
+      maxResponseBytes: 256 * 1024,
+    );
+    _kdsReadLifetime.add(transport);
+    final db = PostgrestClient(
+      _client.rest.url,
+      headers: _client.rest.headers,
+      httpClient: transport,
+    );
+    try {
+      for (var i = 0; i < ids.length; i += 100) {
+        final batch = ids.skip(i).take(100).toList(growable: false);
+        final rows = await db.rpc(
+          'get_kds_progress_receipts_v1',
+          params: {
+            'p_store_id': payloads[batch.first]!['_outbox_store_id'],
+            'p_operation_ids': batch,
+          },
+        );
+        if (rows is! List || rows.length > batch.length) {
+          throw const FormatException('KDS_PROGRESS_RECEIPT_RESPONSE_INVALID');
+        }
+        final seen = <String>{};
+        for (final row in rows) {
+          final id = row['event_id']?.toString();
+          if (id == null ||
+              !batch.contains(id) ||
+              !seen.add(id) ||
+              !kdsProgressReceiptMatches(payloads[id]!, row)) {
+            throw const FormatException('KDS_PROGRESS_RECEIPT_MISMATCH');
+          }
+          confirmed.add(id);
+        }
+      }
+      return confirmed;
     } finally {
-      _progressInFlight.remove(itemId);
+      _kdsReadLifetime.remove(transport);
+      transport.close();
+    }
+  }
+
+  /// An explicit refresh reconciles the original event before retrying it.
+  /// Reuse its UUID and immutable payload; never generate a second handoff.
+  Future<void> reconcileUnknownProgress() async {
+    if (!mounted || _recoveringProgress || _flushing) return;
+    _recoveringProgress = true;
+    final recoveryScope = _outboxScope;
+    try {
+      final records = _scopedOutboxRecords(
+        await _outbox.read(),
+        state.restaurantId,
+      );
+      final record = records.where((record) {
+        final payload = jsonDecode(record.payload) as Map;
+        return payload['_outbox_progress_journal'] == 1 &&
+            payload['_outbox_phase'] == 'prepared' &&
+            !_progressEventsInFlight.contains(record.id);
+      }).firstOrNull;
+      if (record == null) {
+        await load(showLoading: false);
+        return;
+      }
+      final queues = emergencyPendingQueueIds([record]);
+      if (records
+          .takeWhile((previous) => previous.id != record.id)
+          .any(
+            (previous) =>
+                emergencyPendingQueueIds([previous]).any(queues.contains),
+          )) {
+        await _flushOutbox();
+        return;
+      }
+      final payload = Map<String, dynamic>.from(
+        jsonDecode(record.payload) as Map,
+      );
+      final confirmed = await _confirmedProgressRecords([record]);
+      if (!_ownsOutbox(payload)) return;
+      if (confirmed.contains(record.id)) {
+        await _outbox.delete(record.id);
+        await _refreshConfirmedCommand(payload['queue_id'] as String);
+      } else {
+        _progressEventsInFlight.add(record.id);
+        try {
+          await _executePreparedProgress(payload);
+        } finally {
+          _progressEventsInFlight.remove(record.id);
+        }
+      }
+      if (!_ownsOutbox(payload)) return;
+      final remaining = _scopedOutboxRecords(
+        await _outbox.read(),
+        state.restaurantId,
+      );
+      state = state.copyWith(
+        pendingOutboxCount: remaining.length,
+        pendingQueueIds: emergencyPendingQueueIds(remaining),
+        clearError:
+            remaining.isEmpty &&
+            const {
+              'KDS_PROGRESS_RESULT_UNKNOWN',
+              'EMERGENCY_PROGRESS_QUEUED',
+            }.contains(state.error),
+      );
+    } catch (_) {
+      if (_ownsOutbox(recoveryScope)) {
+        state = state.copyWith(error: 'KDS_PROGRESS_RESULT_UNKNOWN');
+      }
+    } finally {
+      _recoveringProgress = false;
     }
   }
 
@@ -3090,6 +3345,7 @@ class EmergencyFulfillmentNotifier
     if (order == null || state.pendingQueueIds.contains(queueId)) return false;
     final actionId = _uuid.v4();
     final payload = <String, dynamic>{
+      ..._outboxScope,
       'kind': order.usesKitchenHandoffWorkflow && state.stationType == 'floor'
           ? 'serve_ready_order'
           : 'complete_order',
@@ -3154,6 +3410,7 @@ class EmergencyFulfillmentNotifier
     if (allocations.isEmpty) return false;
     final requestId = _uuid.v4();
     final payload = <String, dynamic>{
+      ..._outboxScope,
       'kind': 'kitchen_checket_batch',
       'request_id': requestId,
       'allocations': allocations
@@ -3193,6 +3450,7 @@ class EmergencyFulfillmentNotifier
     if (summary.allocations.isEmpty) return false;
     final requestId = _uuid.v4();
     final payload = <String, dynamic>{
+      ..._outboxScope,
       'kind': 'tray_floor_batch',
       'request_id': requestId,
       'floor_label': summary.floorLabel,
@@ -3233,6 +3491,7 @@ class EmergencyFulfillmentNotifier
     if (allocations.isEmpty) return false;
     final requestId = _uuid.v4();
     final payload = <String, dynamic>{
+      ..._outboxScope,
       'kind': 'customer_delivery_batch',
       'request_id': requestId,
       'allocations': allocations
@@ -3269,6 +3528,7 @@ class EmergencyFulfillmentNotifier
   Future<bool> advanceLeftoverPackaging(LeftoverPackagingTask task) async {
     final eventId = _uuid.v4();
     final payload = <String, dynamic>{
+      ..._outboxScope,
       'kind': 'advance_leftover_packaging',
       'request_id': task.id,
       'queue_id': task.queueId,
@@ -3314,6 +3574,7 @@ class EmergencyFulfillmentNotifier
   }) async {
     final revertId = _uuid.v4();
     final payload = <String, dynamic>{
+      ..._outboxScope,
       'kind': 'revert_order',
       'queue_id': queueId,
       'action_id': actionId,
@@ -3390,17 +3651,46 @@ class EmergencyFulfillmentNotifier
         : Map<String, dynamic>.from(response);
   }
 
+  Future<dynamic> _commandRpc(
+    String name, {
+    required Map<String, dynamic> params,
+    DateTime? deadline,
+  }) async {
+    final operationDeadline = DateTime.now().add(const Duration(seconds: 15));
+    final transport = DeadlineHttpClient(
+      _client.rest.httpClient!,
+      deadline != null && deadline.isBefore(operationDeadline)
+          ? deadline
+          : operationDeadline,
+      callTimeout: const Duration(seconds: 15),
+    );
+    _progressWriteLifetime.add(transport);
+    final db = PostgrestClient(
+      _client.rest.url,
+      headers: _client.rest.headers,
+      httpClient: transport,
+    );
+    try {
+      return await db.rpc(name, params: params);
+    } finally {
+      _progressWriteLifetime.remove(transport);
+      transport.close();
+    }
+  }
+
   Future<Map<String, dynamic>> _sendProgress(
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    DateTime? deadline,
+  }) async {
     if (payload['workflow_v2'] == true) {
       final sourceKind = payload['floor_direct'] == true
           ? 'floor_direct'
           : payload['combo_component'] == true
           ? 'combo_component'
           : 'base';
-      final raw = await _client.rpc(
+      final raw = await _commandRpc(
         'kds_record_station_progress_v3',
+        deadline: deadline,
         params: {
           'p_item_id': payload['item_id'],
           'p_source_kind': sourceKind,
@@ -3417,8 +3707,9 @@ class EmergencyFulfillmentNotifier
           : payload['combo_component'] == true
           ? 'combo_component'
           : 'base';
-      final raw = await _client.rpc(
+      final raw = await _commandRpc(
         'kds_record_progress_v2',
+        deadline: deadline,
         params: {
           'p_item_id': payload['item_id'],
           'p_stage': payload['stage'],
@@ -3430,8 +3721,9 @@ class EmergencyFulfillmentNotifier
       return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
     if (payload['floor_direct'] == true) {
-      final raw = await _client.rpc(
+      final raw = await _commandRpc(
         'emergency_record_floor_direct_progress',
+        deadline: deadline,
         params: {
           'p_floor_direct_item_id': payload['item_id'],
           'p_delta': payload['delta'],
@@ -3441,8 +3733,9 @@ class EmergencyFulfillmentNotifier
       return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
     if (payload['combo_component'] == true) {
-      final raw = await _client.rpc(
+      final raw = await _commandRpc(
         'emergency_record_combo_component_progress',
+        deadline: deadline,
         params: {
           'p_component_item_id': payload['item_id'],
           'p_stage': payload['stage'],
@@ -3452,8 +3745,9 @@ class EmergencyFulfillmentNotifier
       );
       return raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
-    final raw = await _client.rpc(
+    final raw = await _commandRpc(
       'emergency_record_progress',
+      deadline: deadline,
       params: {
         'p_fulfillment_item_id': payload['item_id'],
         'p_stage': payload['stage'],
@@ -3465,15 +3759,17 @@ class EmergencyFulfillmentNotifier
   }
 
   Future<Map<String, dynamic>> _sendOutboxPayload(
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    DateTime? deadline,
+  }) async {
     // The route-aware wrappers delegate food work to the legacy
     // 'emergency_complete_order_stage' / 'emergency_revert_order_action'
     // contracts, then atomically include floor-direct beverage lines.
     switch (payload['kind']) {
       case 'kitchen_checket_batch':
-        final raw = await _client.rpc(
+        final raw = await _commandRpc(
           'kds_complete_kitchen_batch_v1',
+          deadline: deadline,
           params: {
             'p_request_id': payload['request_id'],
             'p_allocations': payload['allocations'],
@@ -3483,8 +3779,9 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       case 'tray_floor_batch':
-        final raw = await _client.rpc(
+        final raw = await _commandRpc(
           'kds_dispatch_tray_floor_batch_v1',
+          deadline: deadline,
           params: {
             'p_request_id': payload['request_id'],
             'p_floor_label': payload['floor_label'],
@@ -3495,8 +3792,9 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       case 'customer_delivery_batch':
-        final raw = await _client.rpc(
+        final raw = await _commandRpc(
           'kds_complete_customer_delivery_batch_v1',
+          deadline: deadline,
           params: {
             'p_request_id': payload['request_id'],
             'p_allocations': payload['allocations'],
@@ -3506,8 +3804,9 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       case 'serve_ready_order':
-        final raw = await _client.rpc(
+        final raw = await _commandRpc(
           'kds_serve_ready_order_v3',
+          deadline: deadline,
           params: {
             'p_queue_id': payload['queue_id'],
             'p_action_id': payload['action_id'],
@@ -3517,10 +3816,11 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       case 'complete_order':
-        final raw = await _client.rpc(
+        final raw = await _commandRpc(
           _syncMode == KdsSyncMode.active
               ? 'kds_complete_order_v2'
               : 'emergency_complete_route_order_stage',
+          deadline: deadline,
           params: {
             'p_queue_id': payload['queue_id'],
             'p_action_id': payload['action_id'],
@@ -3530,10 +3830,11 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       case 'revert_order':
-        final raw = await _client.rpc(
+        final raw = await _commandRpc(
           _syncMode == KdsSyncMode.active
               ? 'kds_revert_order_v2'
               : 'emergency_revert_route_order_action',
+          deadline: deadline,
           params: {
             'p_queue_id': payload['queue_id'],
             'p_action_id': payload['action_id'],
@@ -3544,10 +3845,11 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       case 'advance_leftover_packaging':
-        final raw = await _client.rpc(
+        final raw = await _commandRpc(
           _syncMode == KdsSyncMode.active
               ? 'kds_advance_leftover_v2'
               : 'emergency_advance_leftover_packaging',
+          deadline: deadline,
           params: {
             'p_request_id': payload['request_id'],
             'p_event_id': payload['event_id'],
@@ -3557,16 +3859,17 @@ class EmergencyFulfillmentNotifier
             ? Map<String, dynamic>.from(raw)
             : <String, dynamic>{};
       default:
-        return _sendProgress(payload);
+        return _sendProgress(payload, deadline: deadline);
     }
   }
 
   Future<void> _putOutbox(String id, Map<String, dynamic> payload) async {
-    final storeId = state.restaurantId;
+    final storeId =
+        payload['_outbox_store_id']?.toString() ?? state.restaurantId;
     if (storeId == null || storeId.isEmpty) {
       throw StateError('KDS_OUTBOX_STORE_SCOPE_MISSING');
     }
-    await EmergencyWebBridge.putOutbox(
+    await _outbox.put(
       id,
       jsonEncode({...payload, '_outbox_store_id': storeId}),
     );
@@ -3575,46 +3878,105 @@ class EmergencyFulfillmentNotifier
   Future<String?> _flushOutbox() async {
     if (_flushing) return null;
     _flushing = true;
-    String? rejectedError;
+    String? resultError;
     try {
-      final records = await EmergencyWebBridge.readOutbox();
+      final records = _scopedOutboxRecords(
+        await _outbox.read(),
+        state.restaurantId,
+      ).take(2000).toList(growable: false);
+      final progress = records
+          .where(
+            (record) =>
+                (jsonDecode(record.payload)
+                    as Map)['_outbox_progress_journal'] ==
+                1,
+          )
+          .toList(growable: false);
+      var canReadResults = true;
+      Set<String> confirmed = {};
+      try {
+        confirmed = await _confirmedProgressRecords(progress);
+      } catch (_) {
+        canReadResults = false;
+        resultError = 'KDS_PROGRESS_RESULT_UNKNOWN';
+      }
+      final blockedQueues = <String>{};
+      final flushDeadline = DateTime.now().add(const Duration(seconds: 15));
+      var sends = 0;
       for (final record in records) {
+        final payload = Map<String, dynamic>.from(
+          jsonDecode(record.payload) as Map,
+        );
+        if (!_ownsOutbox(payload)) continue;
+        if (_progressEventsInFlight.contains(record.id)) {
+          blockedQueues.addAll(emergencyPendingQueueIds([record]));
+          continue;
+        }
+        final journal = payload['_outbox_progress_journal'] == 1;
+        if (journal && confirmed.contains(record.id)) {
+          await _outbox.delete(record.id);
+          continue;
+        }
+        if (journal &&
+            (!canReadResults || payload['_outbox_phase'] != 'queued')) {
+          resultError = 'KDS_PROGRESS_RESULT_UNKNOWN';
+          blockedQueues.addAll(emergencyPendingQueueIds([record]));
+          continue; // A tab may have closed either side of the original commit.
+        }
+        if (emergencyPendingQueueIds([record]).any(blockedQueues.contains)) {
+          continue;
+        }
         try {
-          final decoded = jsonDecode(record.payload);
-          if (decoded is! Map) {
-            throw const FormatException('KDS_OUTBOX_PAYLOAD_INVALID');
+          if (sends >= 20 || DateTime.now().isAfter(flushDeadline)) break;
+          // If this process disappears during replay, the next one queries the
+          // original result and requires explicit recovery before a new send.
+          if (journal) {
+            await _putOutbox(record.id, {
+              ...payload,
+              '_outbox_phase': 'prepared',
+            });
           }
-          final payload = Map<String, dynamic>.from(decoded);
-          final recordStoreId = payload['_outbox_store_id']?.toString();
-          final currentStoreId = state.restaurantId;
-          if (recordStoreId != null &&
-              recordStoreId.isNotEmpty &&
-              recordStoreId != currentStoreId) {
-            // A different store/user session must never replay or delete this
-            // record. It remains durable until its owning scope is active.
-            continue;
+          if (!_ownsOutbox(payload)) {
+            break;
           }
-          await _sendOutboxPayload(payload);
-          await EmergencyWebBridge.deleteOutbox(record.id);
-        } on PostgrestException catch (error) {
-          // A server-side contract rejection will not succeed on retry. Remove
-          // it so one invalid undo cannot block later offline actions forever.
-          await EmergencyWebBridge.deleteOutbox(record.id);
-          rejectedError = error.message;
-        } catch (_) {
-          // Preserve ordering and retry the first unavailable event later.
-          break;
+          sends++;
+          await _sendOutboxPayload(payload, deadline: flushDeadline);
+          await _outbox.delete(record.id);
+        } catch (error) {
+          if (journal) {
+            if (!_definiteCommandRejection(error)) {
+              try {
+                await _putOutbox(record.id, {
+                  ...payload,
+                  '_outbox_phase': 'queued',
+                });
+                resultError = 'EMERGENCY_PROGRESS_QUEUED';
+              } catch (_) {
+                resultError = 'KDS_PROGRESS_RESULT_UNKNOWN';
+              }
+            } else {
+              resultError = 'KDS_PROGRESS_RESULT_UNKNOWN';
+            }
+            break;
+          }
+          if (_definiteCommandRejection(error)) {
+            await _outbox.delete(record.id);
+            resultError = (error as PostgrestException).message;
+          } else {
+            break;
+          } // Never delete a legacy event on a gateway/timeout error.
         }
       }
     } finally {
       _flushing = false;
     }
-    return rejectedError;
+    return resultError;
   }
 
   @override
   void dispose() {
     _kdsReadLifetime.dispose();
+    _progressWriteLifetime.dispose();
     _subscriptionGeneration += 1;
     _realtimeRefreshTimer?.cancel();
     _pollTimer?.cancel();

@@ -2,14 +2,22 @@
   "schemaVersion": 1,
   "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
   "kind": "application",
-  "summary": "Implement scoped reads, quota partial refresh and recoverable POS–Office first legal entity contracts and confirmation UI; full restore/soak/release evidence remains pending.",
+  "summary": "Implement scoped reads, bounded quota refresh, recoverable first Office legal connection and isolated durable KDS progress recovery; full schema restore, all-domain adoption, soak and production release remain pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "89ce13d8a8ede48c5db4cb1a23583f2addded3ffa49c592f6a8c5a9638323f0d",
+      "sha256": "e42fc1155e2de160ae037b489cccfb838a37d51e5d979be389006131f9a3aa47",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "87acb76938e69747eb73f3a4b7bceff3cb28b916b11d9e959c337fe82e1ff536",
+      "sha256": "fe466e7082f8135a1c09f20310e97c88451f2116d2db97e6edfff635cc2c34db",
+      "mode": "100644"
+    },
+    "lib/core/services/emergency_web_bridge_stub.dart": {
+      "sha256": "3604eae9f4760c91c4a84ee4f641969d2198215ea0c77cbf9e05ca07238e307c",
+      "mode": "100644"
+    },
+    "lib/core/services/emergency_web_bridge_web.dart": {
+      "sha256": "8dfd378389e873782d2c767226a764dfca2f78ae96929f19cfd6f2c129c3a777",
       "mode": "100644"
     },
     "lib/core/services/live_refresh_service.dart": {
@@ -36,8 +44,16 @@
       "sha256": "76223ffb7626adebc3ca39485fbf7d81bfbc3e2f5f29b079b59a2293462edbe5",
       "mode": "100644"
     },
+    "lib/features/emergency_fulfillment/emergency_fulfillment_provider.dart": {
+      "sha256": "40973d1d9fe3b58e8d1ada7be05d4851e19fa35349109b5abe07803ed4c91eb6",
+      "mode": "100644"
+    },
     "lib/features/emergency_fulfillment/emergency_fulfillment_screen.dart": {
-      "sha256": "524eb0a995ab71d96437181b36f657ea3bf52d65194e9ae41cb3f9cf7ab6a5d0",
+      "sha256": "248cbfd0250be6c13f66537d8e1d8e1b645769c23d8b12811d0f75f37e8f311b",
+      "mode": "100644"
+    },
+    "lib/features/emergency_fulfillment/kds_progress_journal.dart": {
+      "sha256": "df266618cf7e0925d08e4eac1a676639fc35fa739d1ebb9b3cce948b9672c5ac",
       "mode": "100644"
     },
     "lib/features/order/order_provider.dart": {
@@ -57,15 +73,23 @@
       "mode": "100644"
     },
     "lib/l10n/app_en.arb": {
-      "sha256": "d1ba597382a7baed4973df31abb1042e040f393347b8a86e7f7a90c177a1df89",
+      "sha256": "08f30082cf92c5bbe1557f65a2fdc621f1bc982df29f943709713b63faea2b6d",
       "mode": "100644"
     },
     "lib/l10n/app_ko.arb": {
-      "sha256": "57743cec704ed5bdbec62c04763a9cffc3e939d9c4ade0dfb1c1cc42d27c8fb7",
+      "sha256": "b9d1f2816fa33c8776a6bddddc52e074b6cbec0df700d19aad9e4af432321a36",
       "mode": "100644"
     },
     "lib/l10n/app_vi.arb": {
-      "sha256": "768dcde86a36245eee2e761dae2b5b70cd0d515c711fe000596216ba0c27230c",
+      "sha256": "578f85440878695fa5897956d2edc573de4e1b987ac7063ac818556db00b1b25",
+      "mode": "100644"
+    },
+    "scripts/local_verification/recipe.json": {
+      "sha256": "feef0549a349f57cb7b5b36da8ab9a3558973eb1817c0749c2f037d00bd73da0",
+      "mode": "100644"
+    },
+    "scripts/resilience/integration_kds_receipts.py": {
+      "sha256": "f98dc816ab4f8d93b2b180408e3f1d5d367f2db611f5e5b563993b4d46439a0a",
       "mode": "100644"
     },
     "scripts/resilience/integration_legal_connection.py": {
@@ -78,6 +102,10 @@
     },
     "scripts/resilience/sample_accounts.py": {
       "sha256": "a28f05fd60483d90042eeb6fdb4d1decb50deacf4a65d84b87ad1f70c278ff51",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
+      "sha256": "808f0e1d33287bce9d15d8f3d05471fab3400cc7291f418710206571c442b84a",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_office_accounts.py": {
@@ -96,12 +124,24 @@
       "sha256": "d699a1b01d5dccd6c8dfd7c411edfb301589466a0b85a8da473fed0a55db644a",
       "mode": "100644"
     },
+    "supabase/migrations/20261101045728_kds_progress_receipt_reconciliation.sql": {
+      "sha256": "f043d4f711388196b58e47880a249d585946a4eda68b9356f00ec9696cb6774b",
+      "mode": "100644"
+    },
     "test/dialog_sheet_entrypoint_coverage_contract_test.dart": {
       "sha256": "cb2cc730847db5a6c085f710c2c5dee92a45315e1c24e96e5b26ffe0f9dc7a0c",
       "mode": "100644"
     },
     "test/emergency_fulfillment_responsive_test.dart": {
-      "sha256": "bf66cb7469f6bfbf6106646a88c3ebff7a791d442a4c1b3f13899878a6d28057",
+      "sha256": "18d300088818db8bd8244998943e14a2723acd9ae49aa9f3c9ee9c96c0886c87",
+      "mode": "100644"
+    },
+    "test/emergency_outbox_durability_test.dart": {
+      "sha256": "44551537a85d59ad2c078c778a68a4cef4a8b751e38950db7a5bbe21b599d4f9",
+      "mode": "100644"
+    },
+    "test/fixtures/kds_progress_receipts.sql": {
+      "sha256": "70fb254c10097ca3293329f75dc4c9138b8af2e26d512e0342b9327336b8910c",
       "mode": "100644"
     },
     "test/fixtures/office_legal_connection_baselines/manifest.json": {
@@ -122,6 +162,14 @@
     },
     "test/fixtures/pos_office_legal_connection_pos.sql": {
       "sha256": "73d32b9a531a6099fa25d2e729e40e10a2bad7415aa3f5ad714ed2c7a9149499",
+      "mode": "100644"
+    },
+    "test/kds_partial_item_command_test.dart": {
+      "sha256": "4b336162da094a0f0320246c806a968dd26b914b66c0f053ab3818d5faf5402e",
+      "mode": "100644"
+    },
+    "test/kds_progress_journal_test.dart": {
+      "sha256": "da397d8054c0735e84941cc46637a888ef61f3c7a3271cb7ba59a0281c8d585e",
       "mode": "100644"
     },
     "test/menu_quantity_partial_refresh_test.dart": {
@@ -150,6 +198,10 @@
     },
     "test/sql/pos_resilience_batch_test.sql": {
       "sha256": "b24e6b5ed21a3c1f9eaab09c67a3220ca5475d6a287fc3229ff8a2143d4d6728",
+      "mode": "100644"
+    },
+    "web/index.html": {
+      "sha256": "ff8297eba781ef6306a168bb6f8487d34bcf3fc7bd372b9bb31596de62bfd224",
       "mode": "100644"
     }
   },
@@ -192,7 +244,8 @@
     "shared-dart",
     "database",
     "verification",
-    "project-policy"
+    "project-policy",
+    "web-platform"
   ],
   "risk": {
     "business": true,
@@ -215,7 +268,10 @@
     "office-legal-dialog",
     "order-read-lifetimes",
     "kds-display-lifetime",
-    "office-identity-unit"
+    "office-identity-unit",
+    "kds-progress-journal",
+    "kds-progress-receipt-sql",
+    "browser-kds-outbox-compatibility"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -223,77 +279,80 @@
     "Read scope switches, disposal and late errors cannot restore another store; confirmed writes are distinct from subsequent refresh state.",
     "Original user workspace and unrelated Excel work remain intact; G0–G7/soak completion stays false until actual evidence exists.",
     "The first internal POS legal entity can connect with zero stores, using independent Auth and explicit Office ownership confirmation. External entities retain the existing unsupported policy.",
-    "Each DB transaction is atomic and cross-DB completion is a recoverable operation, never a claimed distributed transaction; proof expires and is never an Auth/service credential."
+    "Each DB transaction is atomic and cross-DB completion is a recoverable operation, never a claimed distributed transaction; proof expires and is never an Auth/service credential.",
+    "Persist each new KDS item-progress identity before HTTP; a prepared or ambiguous record cannot become a fresh handoff. Preserve existing quantities, floor/checker routing and native command idempotency.",
+    "Resolve both direct event UUIDs and JeonGabok private batch request UUIDs by original active actor/store. Never grant clients direct access to the private batch action table.",
+    "Keep new progress journals invisible to legacy clients, preserve original intent order, and retain confirmed writes despite failed cleanup, refresh or later assignment change."
   ],
   "dataAccessReview": {
     "nPlusOne": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "KDS receipt recovery is set-based; commands retain domain RPCs and are not disguised as parallel lookup work. Existing item/batch writers remain in scope for the later whole-flow audit.",
+      "scale": "100 receipts/RPC; 101-record development test uses 2 reads and zero replay writes; round sends <=20 queued commands.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "setBasedSql": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "New SQL resolves unique direct event and private batch request keys with set joins, no per-ID function loop; existing quota statement batches remain intact.",
+      "scale": "Synthetic fixture 100001 events, 100 requested IDs, 30 measured calls; actor/store filters inside SQL.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "rowsColumns": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "Receipt returns only original/actual IDs, session, target IDs, stage/delta and whitelisted details; never returns native batch response snapshots.",
+      "scale": "100-result fixture response 33900 bytes; client response cap 256 KiB; quota payload <=100 IDs.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "joinCardinality": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "Both receipt paths join primary unique event/request IDs. DISTINCT requested IDs and fallback exclusion avoid duplicate direct/batch matches.",
+      "scale": "Duplicate request fixture yields one result; rows must not exceed requested IDs; no multiple one-to-many join fan-out introduced.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "indexesPaging": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "Use existing unique event_id/request_id indexes; fixture analyzes 100001 events. Legacy outbox processing takes an ordered prefix rather than a large server OFFSET. Full production-schema plan and write costs still need G1/G6.",
+      "scale": "PostgreSQL fixture P95 server 1.6577 ms on 1 CPU/512 MiB; local progress journal <=1000 entries; replay prefix <=2000 legacy records.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "refreshPolling": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "Unknown progress uses result lookup before original-ID recovery; confirmed mutation patches available authoritative item data or refreshes the affected order. No new polling loop is introduced.",
+      "scale": "Existing notifier flusher concurrency 1; explicit unknown recovery concurrency 1; batches <=100; whole-board sync paths still need later G4 work.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "cacheScope": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "New journal stamps original Auth actor, store, session, station and floor before awaiting. Scope switches cannot replay, remove or apply another assignment record; legacy store-only compatibility remains server-authorized.",
+      "scale": "Actor/station/store/session/floor isolation tests; routing cache clears on each durable read. Global permission revision adoption remains pending.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "concurrency": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "Progress in-flight guards and one flusher bound writes; read and command transports have owned physical deadlines and close on disposal. This does not yet implement the all-worker aggregate budget.",
+      "scale": "<=20 sends/round within 15-second send budget after <=15-second receipt budget; per-call deadline <=15 seconds; no parallel receipt batches.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "retryIdempotency": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable.",
+      "scale": "Tests cover committed response loss, partial local persistence, cleanup failure, distinct JeonGabok receipt ID, restart and original-ID reuse; no new operation retry loop.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "largeResults": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "New progress journal has atomic 1000-record capacity enforcement, receipt batches/bytes are capped, and replay sends a bounded ordered prefix. Existing legacy namespace loading is not claimed fully bounded.",
+      "scale": "Real Chromium capacity/update/reload tests; 100-receipt batches and 256 KiB transport limit; <=20 commands/round.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "repeatedAggregates": {
       "applicable": true,
-      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
-      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
-      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
+      "reason": "Receipt queries use requested unique IDs and no overall count/large aggregate scan. IndexedDB count is only a local bounded-capacity write guard; quota changes remain store/transaction events.",
+      "scale": "100 requests against 100001-row fixture; 30 calls; no recurring SQL whole-event count added.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     }
   },
-  "rollback": "Use the previous verified web while retaining the additive signal column; restore prior quota trigger definitions by reviewed forward migration if required, preserving allocations, financial rows, operation history and tenant boundaries.",
+  "rollback": "Use the previous verified web while retaining additive DB contracts and both legacy/new durable records. Never clear ambiguous intents or financial/history rows for rollback; return to a compatible new client to reconcile original KDS IDs. Any SQL contract rollback is a reviewed forward migration.",
   "claims": {
     "allPlanComplete": false,
     "performanceImproved": false
@@ -307,7 +366,10 @@
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
-        "menu-quantity-sql"
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility"
       ]
     },
     "tenantScope": {
@@ -318,7 +380,10 @@
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
-        "menu-quantity-sql"
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility"
       ]
     },
     "readiness": {
@@ -340,7 +405,10 @@
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
-        "menu-quantity-sql"
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility"
       ]
     },
     "officeBoundary": {
@@ -373,7 +441,10 @@
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
-        "menu-quantity-sql"
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility"
       ]
     },
     "filesAndHardware": {
@@ -384,7 +455,10 @@
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
-        "menu-quantity-sql"
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility"
       ]
     }
   }
