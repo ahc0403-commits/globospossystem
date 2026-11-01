@@ -1030,3 +1030,43 @@ Deno port adapter type check도 PASS다.
 Office 연결 성공을 신규 매장 전체 영업/구매/근태 성공으로 표시하지 않는다.**
 다음은 실제 설정 API·직원/근태·구매 흐름이며, 출력/단말 검증·암호 인계·운영 수락을
 가짜 PASS로 저장하지 않는다. 브라우저 두 앱과 물리 장치 및 장시간 시험은 잔여다.
+
+
+### G0 실제 POS Storage와 시험 자원 보강
+
+실제 Storage API v1.81.0에서 업로드 → 10년 서명 URL → 원본 바이트 다운로드 →
+삭제와 private bucket의 unsigned 접근 거부를 확인했다. 실제 POS Auth/REST를
+포함한 POS 단독 component 시험 24조건 PASS, 73.19초/owned container·network 정리
+확인이다. camera/직원 근태/Office Storage/Realtime/전체 업무 시험을 대신하지 않는다.
+증거는 `/workspace/.private/resilience-real-storage-20261101-v4/result.json`이며
+source 01518a95+당시 도구 hash의 개발 증거다. 초기 공간 부족/마이그레이션 hash
+검증 실패 기록도 보존하며 최종 main 전체 검증 receipt로 올리지 않는다.
+
+현재 운영에서 읽기 전용으로 확인한 Storage schema 97개 object fingerprint가 native
+snapshot과 같음을 검사했다. 실제 migration 74개(ID 0–73)의 참조는 private 파일에만
+둔다. 원본 Storage API의 supported freeze-at 설정으로 신규 74번을 적용하지 않는다.
+버전 간 upstream script amendment로 기존 2/62번 hash 두 개만 supported
+migration-hash refresh를 사용해 갱신한다. 시작 전후 schema fingerprint, ID/name 목록이
+같고 허용한 두 hash 외에는 변경이 없음을 검사한다. 원본 참조 이력은 수정하지 않는다.
+**시작 후 hash까지 원본과 동일하다고 주장하지 않는다.**
+
+이 클라우드 Docker VFS에서 upstream Storage 다층 image의 복사량으로 disk가
+부족해졌다. 같은 upstream digest의 전체 root filesystem과 runtime config를 검증한
+단일 layer projection을 기존 image policy에 등록했다. 부분 image/파일 생략은 없다.
+main fixture PG data는 기존 helper를 통해 container당 1GiB tmpfs, Storage 파일은
+256MiB tmpfs, API는 1 worker/DB pool 4/파일 5MiB로 제한한다. anchor도 명시적 tmpfs를
+쓰며 owned container 삭제에 -v를 사용해 그 container의 anonymous volume을 함께
+정리한다. 과거 결과의 container/network 정리만으로 volume까지 정리했다고 소급하지
+않는다. 기존 출처 불명 volume은 삭제하지 않았다.
+
+사용 중이지 않은 예전 공개 Flutter tools image와 검증한 정확한 cache 두 ID만
+제거해 공간을 확보했다. 사용자 코드/시험 증거는 보존한다. VFS에서 큰 SDK 설치 후
+WORKDIR가 전체 파일을 다시 복사하는 원인도 찾아 Dockerfile의 WORKDIR를 앞당겼다.
+Flutter tools 의존성은 같은 설치 단계에서 먼저 준비한다. **새 공식 tools image 빌드와
+실행은 아직 미검증**이다. image-layout 구조 2건, image policy 12건, gateway 10건,
+owner 7건, CLI scope 3건, Storage source/history guard 5건, schema/runner 27건은 각각
+개별 도구 검사 PASS다. 두 프로젝트 전체 stack이나 장시간 부하 PASS가 아니다.
+
+서비스 JWT는 실제 1배/3배 장시간 계획을 수용하도록 fixture에서만 48시간으로
+발급하고 anchor 수명은 36시간이다. 실제 Auth 1시간 session은 정상 갱신을 계속
+사용해야 한다. 물리 단말·2시간 혼합·각 12시간 시험 및 운영 배포는 아직 미실행이다.

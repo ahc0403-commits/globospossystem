@@ -134,6 +134,40 @@
       "temporaryVolumes": {
         "/var/lib/postgresql/data": 1073741824
       }
+    },
+    {
+      "schemaVersion": 1,
+      "representation": "verified-single-layer-rootfs-v1",
+      "requestedRef": "public.ecr.aws/supabase/storage-api:v1.81.0",
+      "sourceRef": "public.ecr.aws/supabase/storage-api:v1.81.0@sha256:98ffec5d0678803783c30e404c27f4ec65e97efbe014088f2a86b4b8b54b9f54",
+      "sourceManifestDigest": "sha256:98ffec5d0678803783c30e404c27f4ec65e97efbe014088f2a86b4b8b54b9f54",
+      "os": "linux",
+      "architecture": "amd64",
+      "crane": {
+        "version": "v0.22.1",
+        "archiveUrl": "https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz",
+        "archiveSha256": "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0",
+        "binarySha256": "8e75c326adb43b053cfd78b9b987663f8f4fe4557f4d3915905643f25c730992"
+      },
+      "cacheTag": "pos-verified-fixture/storage-api:1.81.0-rootfs-98ffec5d0678-v1",
+      "sourceConfigDigest": "sha256:03a737a1b3dd5f4fc97af8a3b07bb1fc8c98c6d589377474fae3b20c9699527e",
+      "runtimeConfigKeys": [
+        "ArgsEscaped",
+        "Cmd",
+        "Entrypoint",
+        "Env",
+        "ExposedPorts",
+        "WorkingDir"
+      ],
+      "runtimeConfigSha256": "5f74d9a54697efbef45844caf616af34554d4c574aec5a92972a9aa407edf1be",
+      "rootfsArchiveBytes": 935191552,
+      "rootfsArchiveSha256": "fc239553c124b27b72ee35cb81cd22d052da5e7730a8244ea2293d478cff6128",
+      "sourceRootfsEntries": 100121,
+      "sourceRootfsInventorySha256": "e69e6ba9de537bbba628910744eb863bc695a4e2ed619368326889fb23ca68c0",
+      "derivedImageId": "sha256:1fa13e9f58c2b3b52daa6d6e72f3bf91f21f44b43bc1a2bb8a7796ec0777c83a"
     }
-  ]
+  ],
+  "temporaryVolumes": {
+    "/var/lib/postgresql/data": 1073741824
+  }
 }

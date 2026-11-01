@@ -798,6 +798,22 @@
     "first-additional-store-http": {
       "path": "scripts/resilience/store_http_scenario.py",
       "kind": "focused"
+    },
+    "real-storage-http": {
+      "path": "scripts/resilience/storage_probe.py",
+      "kind": "focused"
+    },
+    "storage-runtime-guards": {
+      "path": "scripts/resilience/tests/test_storage_runtime.py",
+      "kind": "tooling"
+    },
+    "platform-selection-guards": {
+      "path": "scripts/resilience/tests/test_platform_probe_arguments.py",
+      "kind": "tooling"
+    },
+    "tools-image-layout": {
+      "path": "scripts/local_verification/tests/test_tools_image_layout.py",
+      "kind": "tooling"
     }
   },
   "workstreams": [

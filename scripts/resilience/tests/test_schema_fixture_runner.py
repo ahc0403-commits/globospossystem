@@ -134,6 +134,7 @@ class SchemaRunnerTests(unittest.TestCase):
         self.assertTrue(all('label=pos.local.verification=owned-run' in c for c in calls if '--filter' in c))
         self.assertFalse(any('prune' in c for c in calls))
         self.assertEqual([c for c in calls if 'rm' in c][0][-1],'abc123')
+        self.assertIn('-v',[c for c in calls if 'rm' in c][0])
 
 
     def test_two_project_fixture_holds_and_releases_both_project_locks(self):

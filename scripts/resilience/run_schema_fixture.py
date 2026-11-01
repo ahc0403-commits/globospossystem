@@ -39,7 +39,7 @@ def cleanup_owned(run_id,env):
     docker=next((p for p in ['/usr/bin/docker','/usr/local/bin/docker'] if Path(p).is_file()),None)
     if docker is None:return False
     prefix=[docker,'--host=unix:///var/run/docker.sock']
-    for listing,remove in [(['ps','-aq'],['rm','-f']),(['network','ls','-q'],['network','rm'])]:
+    for listing,remove in [(['ps','-aq'],['rm','-f','-v']),(['network','ls','-q'],['network','rm'])]:
         query=prefix+listing+['--filter','label=pos.local.verification='+run_id]
         result=subprocess.run(query,env=env,text=True,capture_output=True,timeout=30)
         if result.returncode:return False

@@ -43,10 +43,13 @@ def literal(value):
 
 
 class OwnedPlatform:
-    def __init__(self, snapshot, office_root, output):
+    def __init__(self, snapshot, office_root, output, projects=('pos','office')):
         self.schema = module('platform_schema', HERE / 'schema_snapshot.py')
         self.runner = module('platform_runner', HERE / 'run_schema_fixture.py')
         self.gateway_module = module('platform_gateway', HERE / 'runtime_gateway.py')
+        self.selected_projects=tuple(projects)
+        self.schema.require(bool(self.selected_projects) and len(set(self.selected_projects))==len(self.selected_projects)
+          and set(self.selected_projects)<={'pos','office'},'Explicit nonempty fixture project selection required')
         self.snapshot, self.office_root, self.output = map(Path, (snapshot, office_root, output))
         self.schema.require(self.output.is_absolute() and not self.output.is_symlink()
           and not any((p / '.git').exists() for p in self.output.parents),
@@ -54,7 +57,7 @@ class OwnedPlatform:
         self.schema.require(self.office_root.is_absolute() and (self.office_root / 'supabase/functions/pos-bridge/index.ts').is_file(),
           'Explicit Office checkout is required')
         self.manifests, self.restores = {}, {}
-        for project in ('pos', 'office'):
+        for project in self.selected_projects:
             self.manifests[project], _ = self.schema.load(project, self.snapshot)
             self.schema.inventory_guards(project, self.snapshot)
             self.restores[project] = self.schema.native_restore_sql(project, self.snapshot)
@@ -76,11 +79,13 @@ class OwnedPlatform:
         self.env['PATH'] = str(ROOT / 'scripts/local_verification') + ':' + self.env['PATH']
         self.projects, self.gateways, self.threads, self.processes = {}, {}, [], []
         self.sequence, self.redactions = 0, []
-        self.result = {'kind':'owned-two-project-native-auth-rest-runtime', 'runId':self.run_id,
+        self.result = {'kind':'owned-native-auth-rest-runtime', 'runId':self.run_id,
+          'projectScopes':list(self.selected_projects),'independentProjectCount':len(self.selected_projects),
           'startedAt':datetime.now(timezone.utc).isoformat(), 'status':'RUNNING',
           'productionModified':False, 'productionCredentialsCopied':False,
           'officialReleaseReceipt':False, 'fullPlanComplete':False,
           'servicesPrepared':[], 'servicesNotPrepared':['storage','realtime','mail','printer'],
+          'fixtureMaxLifetimeSeconds':129600,'fixtureApiKeyLifetimeSeconds':172800,
           'checks':[], 'migrations':{}, 'steps':[]}
         self.started = time.monotonic()
         self.save()
@@ -105,7 +110,8 @@ class OwnedPlatform:
         path.write_text(raw)
         path.chmod(0o600)
         self.result['steps'].append({'name':name, 'exitCode':value.returncode,
-          'logSha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+          'logSha256':hashlib.sha256(path.read_bytes()).hexdigest(),
+          'diskAvailableBytes':os.statvfs(self.output).f_bavail*os.statvfs(self.output).f_frsize})
         self.save()
         if check and value.returncode:
             raise RuntimeError('Owned runtime step failed: ' + name)
@@ -125,11 +131,15 @@ class OwnedPlatform:
         self.schema.require(ipaddress.ip_address(address).is_private, 'Only owned private addresses')
         return address
 
+    def container_running(self,name,stage):
+        value=self.command('container-state-'+stage,['docker','inspect','--format','{{.State.Running}}',name],check=False)
+        return value.returncode==0 and value.stdout.strip()=='true'
+
     def jwt(self, project, role):
         def encode(value):
             return base64.urlsafe_b64encode(json.dumps(value, separators=(',',':')).encode()).decode().rstrip('=')
         value = encode({'alg':'HS256','typ':'JWT'}) + '.' + encode({'role':role,
-          'iss':'supabase', 'iat':int(time.time()), 'exp':int(time.time()) + 90000})
+          'iss':'supabase', 'iat':int(time.time()), 'exp':int(time.time()) + 172800})
         signature = base64.urlsafe_b64encode(hmac.new(self.projects[project]['secret'].encode(),
           value.encode(), hashlib.sha256).digest()).decode().rstrip('=')
         token = value + '.' + signature
@@ -137,9 +147,14 @@ class OwnedPlatform:
         return token
 
     def request(self, project, path, body=None, *, token=None, key=None, method=None, headers=None):
+        status,raw=self.exchange(project,path,None if body is None else json.dumps(body).encode(),
+          token=token,key=key,method=method,headers=headers)
+        return status,json.loads(raw) if raw else None
+
+    def exchange(self, project, path, data=None, *, token=None, key=None, method=None, headers=None):
         config = self.projects[project]
         request = urllib.request.Request(config['url'] + path,
-          data=None if body is None else json.dumps(body).encode(),
+          data=data,
           headers={'apikey':key or config['anon'], 'Content-Type':'application/json',
             'Authorization':'Bearer ' + (token or config['anon']), **(headers or {})}, method=method)
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -150,7 +165,7 @@ class OwnedPlatform:
         with response:
             raw = response.read(4 * 1024 * 1024 + 1)
             self.schema.require(len(raw) <= 4 * 1024 * 1024, 'Runtime probe response exceeds bound')
-            return response.status, json.loads(raw) if raw else None
+            return response.status,raw
 
     def start(self):
         self.result['sourceSha'] = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
@@ -158,7 +173,7 @@ class OwnedPlatform:
         self.result['sourceDirty'] = bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True))
         self.result['officeSourceDirty'] = bool(subprocess.check_output(['git','status','--porcelain'],cwd=self.office_root,text=True))
         self.input_paths = [HERE / name for name in ['owned_platform.py','runtime_gateway.py','schema_snapshot.py',
-          'run_schema_fixture.py','run_platform_probe.py','legal_http_scenario.py','store_http_scenario.py','office_edge_runtime.ts']]
+          'run_schema_fixture.py','run_platform_probe.py','legal_http_scenario.py','store_http_scenario.py','storage_runtime.py','storage_probe.py','office_edge_runtime.ts']]
         self.result['toolHashes'] = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in self.input_paths}
         for ref in (AUTH_IMAGE, REST_IMAGE):
             image = json.loads(self.command('image-' + ('auth' if ref == AUTH_IMAGE else 'rest'),
@@ -167,12 +182,14 @@ class OwnedPlatform:
               and image['Architecture'] == 'amd64', 'pinned-' + ('auth' if ref == AUTH_IMAGE else 'rest') + '-image')
         anchor_image = next(p['derivedImageId'] for p in self.policy['additionalImages'] if '17-alpine' in p['requestedRef'])
         self.command('anchor', [self.real_docker,'run','-d','--name',self.anchor,
-          '--label','pos.local.verification=' + self.run_id,'--entrypoint','/bin/sh',anchor_image,'-c','exec sleep 90000'])
+          '--label','pos.local.verification=' + self.run_id,'--tmpfs','/var/lib/postgresql/data:rw,size=1073741824',
+          '--entrypoint','/bin/sh',anchor_image,'-c','exec sleep 129600'])
         self.command('network', ['docker','network','create',self.network])
-        for project in ('pos','office'):
+        for project in self.selected_projects:
             self.start_project(project)
         private_json(self.output / 'runtime.private.json', {'runId':self.run_id, 'projects':self.projects})
-        self.result['servicesPrepared'] = ['native-pos-db','native-office-db','real-pos-auth','real-office-auth','pos-jwt-rest','office-jwt-rest','loopback-project-api-routing']
+        self.result['servicesPrepared'] = [service for p in self.selected_projects
+          for service in ['native-'+p+'-db','real-'+p+'-auth',p+'-jwt-rest']] + ['loopback-project-api-routing']
         self.save()
 
     def start_project(self, project):
@@ -183,11 +200,13 @@ class OwnedPlatform:
         self.redactions.extend([config['secret'], config['password']])
         self.command(project + '-db', ['docker','run','-d','--name',config['db'],'--network',self.network,
           '--memory','2g','--cpus','2','--env','POSTGRES_PASSWORD=fixture-only','public.ecr.aws/supabase/postgres:17.6.1.104'])
-        for _ in range(60):
+        for attempt in range(60):
             ready = subprocess.run(['docker','exec',config['db'],'pg_isready','-h','127.0.0.1','-U','postgres'],
               env=self.env, capture_output=True).returncode == 0
             if ready:
                 break
+            if attempt%10==0 and not self.container_running(config['db'],project+'-db-'+str(attempt)):
+                raise RuntimeError('Owned database exited before readiness')
             time.sleep(.5)
         else:
             raise RuntimeError('Owned database readiness timed out')
@@ -280,7 +299,8 @@ class OwnedPlatform:
                 failures.append('GatewayThreadNotStopped')
         try:
             for project,config in self.projects.items():
-                for kind in ('auth','rest','db'):
+                for kind in ('auth','rest','db','storage'):
+                    if kind not in config:continue
                     self.command('diagnostic-' + project + '-' + kind, ['docker','logs','--tail','100',config[kind]],check=False)
         except (OSError,subprocess.TimeoutExpired) as error:
             failures.append(type(error).__name__)

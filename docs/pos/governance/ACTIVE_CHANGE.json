@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
   "kind": "application",
-  "summary": "Implement scoped reads/views, first Office legal connection, durable KDS progress recovery, bounded reads/proof metadata and native resource cleanup; wire durable single-payment recovery with server cancellation/version barriers. Remaining domain adoption, all-flow runtime, mixed/12h trials and production are incomplete. Actual independent GoTrue/JWT REST and unmodified Office Edge now exercise zero-store legal creation/connection and physical lost-ack recovery; first/additional stores, whole browser/business lifecycles and long tests still remain.",
+  "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "cce286603b31a07ea0cf40b65caf67fa7e41251378029476061af09d43ae696f",
+      "sha256": "ed26c48d102a3f8fa7fde5986c852b509e98cdfcf6db1fa0dc21951549f00ec1",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "08bbe25fdb9c61b63d8be0149df3f705896794e8743e14b9e3609a2d9788426c",
+      "sha256": "2c00c24caf44d8bec3640a83f0244a715b7087412a4e1b68f7bab9641b2c4086",
       "mode": "100644"
     },
     "lib/core/auth/operation_scope_provider.dart": {
@@ -237,11 +237,23 @@
       "mode": "100644"
     },
     "scripts/local_verification/Dockerfile": {
-      "sha256": "b4365d30069fea091f42eeb98e2af82eae671afa815e70a8acf3268bf95bbff4",
+      "sha256": "b00d7a23eb8bf71b7f6f3f11328ae33741813a29529ff01327cdf2a02b6cc273",
+      "mode": "100644"
+    },
+    "scripts/local_verification/fixture_postgres_policy.json": {
+      "sha256": "a56ce5ecf3a6f92063b44317ecfc5ef28eec1aeb516248c874e623f10057310c",
       "mode": "100644"
     },
     "scripts/local_verification/recipe.json": {
       "sha256": "4894294c3cdaf2c2fe0b2a38729b2dbca8c77b1b3a3d766d242a2537a5c90a2b",
+      "mode": "100644"
+    },
+    "scripts/local_verification/tests/test_fixture_image.py": {
+      "sha256": "c03a61168bbb5b14fe94f7ae9a8887e2c02833bd79d5187af379958bde45ee27",
+      "mode": "100644"
+    },
+    "scripts/local_verification/tests/test_tools_image_layout.py": {
+      "sha256": "01cc14b16b94e9f61af95b7003dcd61c115bda891fb185b365941c262b4c0769",
       "mode": "100644"
     },
     "scripts/resilience/auth_platform_fixture.py": {
@@ -277,7 +289,7 @@
       "mode": "100644"
     },
     "scripts/resilience/owned_platform.py": {
-      "sha256": "9985b17414fb692f1a5bf4f05f829c83d80358363188c536d3259d290f5ce677",
+      "sha256": "c6aef534dc3337e351795a21a6393b1d238f1be4fbc1b138388a9e2b4a1a5e51",
       "mode": "100644"
     },
     "scripts/resilience/payment_command_v2_fixture.py": {
@@ -289,15 +301,15 @@
       "mode": "100644"
     },
     "scripts/resilience/run_platform_probe.py": {
-      "sha256": "a77b5489b4130a74b1604b2fbfea7ef927e73051dc918cc681ebaac0d5f628e7",
+      "sha256": "bf2e39adaa14331ef4f09a3322f99cdcd45def4ce84fc9c9196116e30e2111cb",
       "mode": "100644"
     },
     "scripts/resilience/run_schema_fixture.py": {
-      "sha256": "4d633f05ac647cdd6811d9257f84743b8aea39fc495011080e797c2429f1eff7",
+      "sha256": "d4774324ba865805934a379a0a73de2a1d0b5866fd19246fc404abd62731f0a0",
       "mode": "100644"
     },
     "scripts/resilience/runtime_gateway.py": {
-      "sha256": "c9bc77e1e1c2e7c246175513aa5c33c9f9f0abaaf88a69ead74f96cc9702602d",
+      "sha256": "273d519f5ea9da3554d45eb9012a56c5e93379aa01c258d4bfd901a73e95d880",
       "mode": "100644"
     },
     "scripts/resilience/sample_accounts.py": {
@@ -324,6 +336,14 @@
       "sha256": "96b9853817e3618b4606e68ecb7aea0f3f6ccc6860ca10fae841e687f20134da",
       "mode": "100644"
     },
+    "scripts/resilience/storage_probe.py": {
+      "sha256": "83a1500e453590aabffe0a54cffcc60d111d0a62d55ef28af6288d185227eedf",
+      "mode": "100644"
+    },
+    "scripts/resilience/storage_runtime.py": {
+      "sha256": "0219e60b3f4d17bd1441d469ab747701edff9ebb3001becb8ace45d29f9ab6c2",
+      "mode": "100644"
+    },
     "scripts/resilience/store_http_scenario.py": {
       "sha256": "403d25a1828baf11bab16c1a8c0458ab79dac875cc0521a78fe2048790a67248",
       "mode": "100644"
@@ -345,19 +365,27 @@
       "mode": "100644"
     },
     "scripts/resilience/tests/test_owned_platform.py": {
-      "sha256": "cdc538357b4710cc9b0dbbd7dacdd996f0df9a0a87839140e454707f17a3d93c",
+      "sha256": "e453e17ce6f120f60200a8500e64c6f8f0b846eb6281d47b1c7a1228e588c626",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_platform_probe_arguments.py": {
+      "sha256": "8bcb1c48ac35ab3ce45c188f95fd0d0dc48618d16bbb27676c4a67586d20fdb0",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_runtime_gateway.py": {
-      "sha256": "254244bc207f85ea6215f458278511df3a538f9f0ab265e9932a0d6597f22a60",
+      "sha256": "18cc36ef8bfc484d48c5ea4a48147fd65a896c1466d0333e73b15af1458d066f",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_fixture_runner.py": {
-      "sha256": "cb2855c7fff52f4122ca77517080ea41c9bea32c4c2ca517fbb75dc3348429f3",
+      "sha256": "15665fe90e8a10907f953e08778259c73cd6cb74c5935e2c46f573b9b977c99f",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_snapshot.py": {
       "sha256": "433658e498a3bec586262fdda1e06edb056b668055566a0506cd4ab19a2d9c4a",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_storage_runtime.py": {
+      "sha256": "e3faad10ca2eed25950593be2386a4ef29cf195f20294a69efa8c575763617b4",
       "mode": "100644"
     },
     "scripts/test_financial_inputs_postgrest.sh": {

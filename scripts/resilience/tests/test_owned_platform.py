@@ -39,6 +39,14 @@ class OwnedPlatformGuards(unittest.TestCase):
                 platform.OwnedPlatform(self.area,self.area,link)
             child.assert_not_called()
 
+    def test_unknown_empty_or_duplicate_projects_fail_before_startup(self):
+        for projects in [(),('pos','pos'),('unknown',)]:
+            with self.subTest(projects=projects),patch.object(platform.subprocess,'run') as child:
+                with self.assertRaisesRegex(ValueError,'project selection'):
+                    platform.OwnedPlatform(self.area,self.area,self.area/'new-output',projects=projects)
+                child.assert_not_called()
+        self.assertFalse((self.area/'new-output').exists())
+
     def test_one_owned_process_failure_cannot_skip_other_process_or_docker_cleanup(self):
         value=self.instance();bad=Mock();good=Mock()
         bad.poll.return_value=None;bad.terminate.side_effect=OSError('Synthetic process failure')

@@ -130,7 +130,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 self._reply(status, body, {'Content-Type':'application/json'})
                 return
             supplied = self.headers.get('apikey', '')
-            if not any(hmac.compare_digest(supplied.encode(), key.encode()) for key in gateway.keys):
+            signed_or_public_file = self.command in {'GET','HEAD'} and (
+                parsed.path.startswith('/storage/v1/object/sign/') or parsed.path.startswith('/storage/v1/object/public/'))
+            if not signed_or_public_file and not any(hmac.compare_digest(supplied.encode(), key.encode()) for key in gateway.keys):
                 status = 401
                 self._reply(status, b'{"code":"FIXTURE_PROJECT_KEY_REQUIRED"}', {'Content-Type':'application/json'})
                 return
@@ -152,6 +154,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
             elif parsed.path.startswith('/rest/v1/'):
                 target = gateway.targets['rest'] + self.path[len('/rest/v1'):]
                 route = 'rest/' + '/'.join(parsed.path.split('/')[3:5])
+            elif parsed.path.startswith('/storage/v1/') and gateway.targets.get('storage'):
+                target = gateway.targets['storage'] + self.path[len('/storage/v1'):]
+                route = 'storage/' + '/'.join(parsed.path.split('/')[3:5])
             elif parsed.path == '/functions/v1/pos-bridge' and gateway.edge:
                 target = owned_origin(gateway.edge) + '/'
                 route = 'edge/pos-bridge'
