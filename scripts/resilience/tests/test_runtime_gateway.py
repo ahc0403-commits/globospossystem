@@ -138,7 +138,8 @@ class GatewayTests(unittest.TestCase):
             payload=b'\x81\x80\x00\x01\x02\x03'
             connection.sendall(payload);self.assertEqual(connection.recv(len(payload)),payload)
         for _ in range(100):
-            if self.gw.snapshot()['websocketActive']==0:break
+            state=self.gw.snapshot()
+            if state['websocketActive']==0 and state['active']==0:break
             time.sleep(.01)
         self.assertIn(('tenant','realtime-pos'),self.seen)
         self.assertEqual(self.gw.snapshot()['websocketPeak'],1)
