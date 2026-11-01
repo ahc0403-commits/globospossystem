@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads, quota partial refresh and recoverable POS–Office first legal entity contracts and confirmation UI; full restore/soak/release evidence remains pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "1c7a275d37a7a3919dad6ecc955c48d3913688a9e61e34e431823771efedcddd",
+      "sha256": "5d9ef8d4949e2cb465f557dc0fbaa86e9974044f92dd720e6ca610238ce056b0",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "f9983e43e2dc59d78276bde41d443700a36cc493b9a08c76ce7b5c5b19867eea",
+      "sha256": "a4f152a7f8855bb7494ec98dfda60430851ef82b80c54b5f69a9adce30acf303",
       "mode": "100644"
     },
     "lib/core/services/live_refresh_service.dart": {
@@ -34,6 +34,10 @@
     },
     "lib/features/admin/providers/menu_provider.dart": {
       "sha256": "76223ffb7626adebc3ca39485fbf7d81bfbc3e2f5f29b079b59a2293462edbe5",
+      "mode": "100644"
+    },
+    "lib/features/emergency_fulfillment/emergency_fulfillment_screen.dart": {
+      "sha256": "524eb0a995ab71d96437181b36f657ea3bf52d65194e9ae41cb3f9cf7ab6a5d0",
       "mode": "100644"
     },
     "lib/features/order/order_provider.dart": {
@@ -82,6 +86,10 @@
     },
     "test/dialog_sheet_entrypoint_coverage_contract_test.dart": {
       "sha256": "cb2cc730847db5a6c085f710c2c5dee92a45315e1c24e96e5b26ffe0f9dc7a0c",
+      "mode": "100644"
+    },
+    "test/emergency_fulfillment_responsive_test.dart": {
+      "sha256": "bf66cb7469f6bfbf6106646a88c3ebff7a791d442a4c1b3f13899878a6d28057",
       "mode": "100644"
     },
     "test/fixtures/office_legal_connection_baselines/manifest.json": {
@@ -193,7 +201,8 @@
     "menu-quantity-sql",
     "office-first-legal-sql",
     "office-legal-dialog",
-    "order-read-lifetimes"
+    "order-read-lifetimes",
+    "kds-display-lifetime"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",

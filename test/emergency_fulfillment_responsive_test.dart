@@ -293,6 +293,81 @@ EmergencyFulfillmentState _partialReadyState(
 );
 
 void main() {
+  testWidgets('display ticks do not rebuild or sort the screen and board', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(_clockState('floor'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'floor',
+    );
+    final builds = <String, int>{};
+    final original = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      final name = element.widget.runtimeType.toString();
+      builds.update(name, (count) => count + 1, ifAbsent: () => 1);
+      original?.call(element, builtOnce);
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = original);
+    final before = tester
+        .widget<Text>(
+          find.byKey(const Key('emergency_order_elapsed_order-clock')),
+        )
+        .data;
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('emergency_order_elapsed_order-clock')),
+          )
+          .data,
+      isNot(before),
+    );
+    expect(builds['EmergencyFulfillmentScreen'] ?? 0, 0);
+    expect(builds['_EmergencyOrderBoard'] ?? 0, 0);
+    expect(builds['_EmergencyOrderCard'] ?? 0, 0);
+    expect(
+      builds.keys.any((name) => name.startsWith('ValueListenableBuilder')),
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    builds.clear();
+    await tester.pump(const Duration(minutes: 1));
+    expect(builds, isEmpty);
+  });
+
+  testWidgets(
+    'one hundred KDS route lifetimes release their tick listeners and timers',
+    (tester) async {
+      for (var i = 0; i < 100; i++) {
+        final station = ['kitchen', 'tray', 'floor'][i % 3];
+        final fixture = _FixtureEmergencyNotifier(_clockState(station));
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+          expectedStationType: station,
+        );
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        expect(
+          fixture.mounted,
+          isFalse,
+          reason: 'provider leaked on transition $i',
+        );
+      }
+      await tester.pump(const Duration(minutes: 1));
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'JeonGabok visual is immediate and continuous events keep first 500ms window',
     (tester) async {

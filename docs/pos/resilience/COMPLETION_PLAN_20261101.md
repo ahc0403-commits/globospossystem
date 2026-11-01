@@ -379,3 +379,15 @@ POS는 `scripts/deploy_pos_production.sh`, Office는 `scripts/run_office.sh`의 
   사용자 샘플 계정 제공만으로 물리 단말·인쇄·12시간 부하를 PASS로 만들지 않는다.
 - G5/G6/G7 전체 완료 및 1배/3배 각각 12시간 시험, 운영 배포·마감 2회 관찰은 미완료다.
   제품 코드가 아직 고정되지 않아 장시간 시험을 최종 후보 증거로 시작하지 않았다.
+
+### G5 화면 반복 갱신 — 개발 증거
+
+2026-11-01 KDS의 시계/점멸을 화면 setState에서 카드/선택 상세의
+ValueListenableBuilder로 옮겼다. 상위 화면·board의 주문 분류/정렬/페이지 구성은
+시간 tick만으로 재실행하지 않는다. 카드의 메뉴 projection도 tick builder 밖에 둔다.
+기존 주방/트레이/층 시계, 점멸, 부분 전달·서빙·guest floor 검사를 포함한
+영향 검사 99개가 통과했다. 새 3초 측정에서는 상위 화면/board/card widget의
+build 호출 0회와 시간 표시 진행을 함께 확인했다. 100회 화면 진입/종료도 통과했다.
+이는 Flutter debug fixture의 측정이며 실제 장시간 heap·reconnect·물리 단말 성능,
+구매/계산대/관리자 화면 분리는 아직 미완료다. 원본 개발 로그는
+`/workspace/scratch/pos-resilience-completion-dev/kds-render-tests.log`에 보존했다.

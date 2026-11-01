@@ -602,6 +602,10 @@
     "order-read-lifetimes": {
       "path": "test/order_read_epoch_test.dart",
       "kind": "focused"
+    },
+    "kds-display-lifetime": {
+      "path": "test/emergency_fulfillment_responsive_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [
@@ -654,7 +658,7 @@
     },
     {
       "id": "G5",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "screen_isolation",
         "resource_lifetime",
