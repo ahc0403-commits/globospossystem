@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads, quota partial refresh and recoverable POS–Office first legal entity contracts and confirmation UI; full restore/soak/release evidence remains pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "5d9ef8d4949e2cb465f557dc0fbaa86e9974044f92dd720e6ca610238ce056b0",
+      "sha256": "89ce13d8a8ede48c5db4cb1a23583f2addded3ffa49c592f6a8c5a9638323f0d",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "4df1f48bc22db3b974e1e8dcbb65be55b44dcc067f95cc14aa599daad8d0d429",
+      "sha256": "87acb76938e69747eb73f3a4b7bceff3cb28b916b11d9e959c337fe82e1ff536",
       "mode": "100644"
     },
     "lib/core/services/live_refresh_service.dart": {
@@ -70,6 +70,18 @@
     },
     "scripts/resilience/integration_legal_connection.py": {
       "sha256": "8e23b54b2a7847909e29ec834c2d606798354e6ef246172031bc0a06b1e1d9fa",
+      "mode": "100644"
+    },
+    "scripts/resilience/office_accounts.py": {
+      "sha256": "4722e58bba8bbc3a569a817c2b71e35100d9597c8f2ed21f32d6ad4f3a413bb2",
+      "mode": "100644"
+    },
+    "scripts/resilience/sample_accounts.py": {
+      "sha256": "a28f05fd60483d90042eeb6fdb4d1decb50deacf4a65d84b87ad1f70c278ff51",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_office_accounts.py": {
+      "sha256": "1f54746d47a93991f467b27b2374cefcda1e00627777deab29ed262a61bdbe13",
       "mode": "100644"
     },
     "scripts/test_menu_discount_quantities.sh": {
@@ -202,7 +214,8 @@
     "office-first-legal-sql",
     "office-legal-dialog",
     "order-read-lifetimes",
-    "kds-display-lifetime"
+    "kds-display-lifetime",
+    "office-identity-unit"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",

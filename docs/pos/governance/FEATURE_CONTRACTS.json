@@ -606,6 +606,10 @@
     "kds-display-lifetime": {
       "path": "test/emergency_fulfillment_responsive_test.dart",
       "kind": "focused"
+    },
+    "office-identity-unit": {
+      "path": "scripts/resilience/tests/test_office_accounts.py",
+      "kind": "focused"
     }
   },
   "workstreams": [
