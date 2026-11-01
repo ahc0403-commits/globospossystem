@@ -655,3 +655,31 @@ kds-scalar-access-contract.log 및 fixture-acl-isolation-probe-v2~v6.log.
 존재하는 schema를 manifest에서 빼거나, 없는데 있다고 선언하면 거부한다.
 실행 예시에 `--exercise-payment-receipts`를 더하면 native 금융/권한 검사를 포함한다.
 운영 배포·2시간 혼합 부하·1배/3배 각 12시간 시험은 아직 시작하지 않았다.
+
+
+### G3 설정·리포트 전환 — notifier와 호출 화면 함께 연결
+
+설정과 리포트 notifier 두 개도 root session scope에 연결했다. 상태만 폐기하면 같은
+매장의 사용자/권한 변경 뒤 화면 초기화 조건이 충족되지 않아 빈 화면이 남을 수
+있었다. 실제 두 화면의 초기 조회 기준을 사용자·매장·session generation으로
+바꾸고, 구세대 microtask/PIN 후속 단계·오류/toast를 현재 화면에 적용하지 않는다.
+설정 화면은 요청한 사용자/매장의 확인된 데이터만 입력란에 동기화한다.
+
+설정 저장은 원래 view generation을 유지한다. 중복/동시 양식 전송, 최초 조회 중
+저장을 막고 저장 중 같은 범위의 불필요한 조회를 생략한다. 이전 조회가 저장값을
+되돌리거나, 무효화된 Future가 다음 조회를 계속 가로막는 일이 없도록 처리했다.
+A→B→A·계정 전환·dispose 뒤 확정된 저장은 true를 유지하며 이전 상태를 덮지 않는다.
+per_person_charge=NULL 저장/조회가 실제로 표시값도 지운다. 같은 범위의 일반 갱신은
+사용자가 아직 저장하지 않은 입력과 포커스를 보존한다.
+
+21개 영향 검사 PASS: 새 실제 설정/리포트 위젯 2개, 설정 명령 10개, 기존 배경 갱신
+1개/화면 계약 4개/리포트 조회 1개, 기존 설정 대화상자·휴대폰 작업 공간·미저장
+입력/포커스 3개. 변경 Dart 분석 오류/경고/정보 0개다. 원본은
+settings-report-session-views.log, settings-existing-overlay-regressions.log,
+settings-unsaved-and-phone-regressions.log, settings-report-scope-analysis.log다.
+기존 미리 채운 UI fixture는 view predicate를 명시적으로 공급하며, 새 전환 시험은
+실제 notifier/factory/root Auth binding과 두 화면을 사용한다.
+
+설정의 전송 결과 불명 서버 계약, 엄격한 PIN 조회 실패 표현, 모든 인쇄/파일 단계의
+권한·자원 정리, 나머지 legacy notifier는 여전히 별도 잔여다. 위 시험을 전 도메인
+규약·혼합 부하·최종 main 전체 검증·운영 배포·12시간 시험 완료로 표시하지 않는다.

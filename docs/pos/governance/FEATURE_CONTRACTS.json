@@ -654,6 +654,14 @@
     "payment-receipts-native": {
       "path": "scripts/resilience/payment_receipt_fixture.py",
       "kind": "focused"
+    },
+    "settings-command-scope": {
+      "path": "test/settings_command_scope_test.dart",
+      "kind": "focused"
+    },
+    "session-bound-views": {
+      "path": "test/session_bound_views_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [

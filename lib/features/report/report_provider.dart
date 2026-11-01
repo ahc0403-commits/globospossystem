@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/services/pos_backend.dart';
+import '../../core/auth/operation_scope_provider.dart';
 import 'menu_sales_analytics.dart';
 
 class DailyRevenue {
@@ -541,6 +542,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
     DateTime end,
     String storeId,
   ) async {
+    if (!mounted) return;
     final normalizedStart = DateTime(start.year, start.month, start.day);
     final normalizedEnd = DateTime(
       end.year,
@@ -561,6 +563,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
   }
 
   Future<void> loadReport(String storeId) async {
+    if (!mounted) return;
     final requestId = ++_requestId;
     final requestedStart = state.startDate;
     final requestedEnd = state.endDate;
@@ -609,6 +612,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
   }
 
   List<int> exportToExcel({MenuSalesAnalytics? menuSalesAnalytics}) {
+    if (!mounted) return <int>[];
     final summary = state.summary;
     if (summary == null) return <int>[];
 
@@ -928,6 +932,11 @@ class _PhotoObjetDailyAccumulator {
   int teamCount = 0;
 }
 
-final reportProvider = StateNotifierProvider<ReportNotifier, ReportState>(
-  (ref) => ReportNotifier(),
-);
+final reportReadClientProvider = Provider<SupabaseClient?>((ref) => null);
+
+final reportProvider = StateNotifierProvider<ReportNotifier, ReportState>((
+  ref,
+) {
+  ref.watch(operationScopeProvider);
+  return ReportNotifier(client: ref.watch(reportReadClientProvider));
+});

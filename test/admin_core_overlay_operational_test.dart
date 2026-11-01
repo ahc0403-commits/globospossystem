@@ -541,6 +541,12 @@ class _QcFollowupNotifier extends QcFollowupNotifier {
 }
 
 class _SettingsNotifier extends SettingsNotifier {
+  // This preloaded fixture supplies its own view data, without an Auth profile
+  // read. Session transition behavior uses the actual notifier in separate tests.
+  @override
+  bool matchesLoadedView(String? storeId, String? authUid) =>
+      state.storeId == storeId;
+
   void refreshName(String name) {
     state = state.copyWith(restaurantName: name);
   }
