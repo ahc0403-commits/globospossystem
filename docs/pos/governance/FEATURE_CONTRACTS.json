@@ -562,6 +562,18 @@
     "deploy-git-history": {
       "path": "test/pos_deploy_git_history_guard_test.sh",
       "kind": "tooling"
+    },
+    "resilience-tools-unit": {
+      "path": "scripts/resilience/tests/test_sample_accounts.py",
+      "kind": "tooling"
+    },
+    "runtime-catalog-unit": {
+      "path": "scripts/resilience/tests/test_runtime_catalog.py",
+      "kind": "tooling"
+    },
+    "runtime-catalog-postgres": {
+      "path": "scripts/resilience/integration_runtime_catalog.py",
+      "kind": "tooling"
     }
   },
   "workstreams": [
@@ -577,7 +589,7 @@
     },
     {
       "id": "G1",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "pos_runtime_contract",
         "office_runtime_contract",

@@ -1,169 +1,254 @@
 {
   "schemaVersion": 1,
-  "baseSha": "9680808a7d7f43451dc7f4023281d6a0f9f5fb7c",
+  "baseSha": "cb0d99536f8255b897d65ad099085903a54a0fc9",
   "kind": "tooling",
-  "summary": "Activate source-bound change governance for all POS features before remaining product work.",
+  "summary": "Prepare isolated sample identities and collect source-bound catalog contracts for G0/G1; leave product adoption and restore/soak evidence open.",
   "inputs": {
-    "AGENTS.md": {
-      "sha256": "9a88f9b04d2dc4f78b0077ad062d427c574be609a9d4357c0c715276f0691231",
-      "mode": "100644"
-    },
-    "CLAUDE.md": {
-      "sha256": "83a1d26a4ffb00e113e5fdf4284a4a93d1e14b64a241146c3b0b19e6ca9be4e7",
-      "mode": "100644"
-    },
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "2613003dc45cb254fd48a43e3ece507bc9ae7855d00df2b944b281ff95905607",
+      "sha256": "87c1c17cb517fc17fa8c9c04e7a975224d4a441dccbb8688c9cd426e0c91fc7e",
       "mode": "100644"
     },
-    "docs/pos/governance/REGRESSION_GOVERNANCE_KO.md": {
-      "sha256": "8b5abff4fccd94d5d3feaa767e464528a3f09282ec5261b48b252f2f46d0fc3f",
-      "mode": "100644"
-    },
-    "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "7d8f2b3e55aff73a2d706c5f9e0f748b033f28117cc0007f1810eaa83f83bdce",
-      "mode": "100644"
-    },
-    "scripts/check_repo.sh": {
-      "sha256": "fd850c54557d420327825e827146fca475f4b80dc5e55ef4b044f59e69c2ab18",
-      "mode": "100755"
-    },
-    "scripts/deploy_pos_production.sh": {
-      "sha256": "c3648ddb43676a38a36f7502332cc4f071692034519d5be3afe9ae02187958a0",
-      "mode": "100755"
-    },
-    "scripts/governance/check.py": {
-      "sha256": "8b1665baae898677ae1e22ca83f28f7bbf4c52e9d11b50fc2574dcc49757004d",
-      "mode": "100644"
-    },
-    "scripts/governance/tests/test_check.py": {
-      "sha256": "74ad57d6d762db785d7f5078b18c3a76842fcced717f9ae488cdeb13ddb6e4bc",
+    "docs/pos/resilience/TEST_ENVIRONMENT.md": {
+      "sha256": "9d1612e1066a215f7052c6e43b1c03bf8fb939487edf8fd481c26d60dede9aac",
       "mode": "100644"
     },
     "scripts/local_verification/recipe.json": {
-      "sha256": "9d0bd646974d6e650f6c8776e5ce894fff57aa43583cce828a6a51820b66f213",
+      "sha256": "9a6de09f596adff0781ce2dd2fb219c605aed8b2e1a78f8e7bdfb5aa5016a1bf",
       "mode": "100644"
     },
-    "test/pos_db_only_deploy_contract_test.sh": {
-      "sha256": "0e5ee96ecc879517f83d634ecfbb76b7bf552fa090902fc4e4876f759925608d",
-      "mode": "100755"
+    "scripts/resilience/integration_runtime_catalog.py": {
+      "sha256": "10d02819ec70bc96da9ccf0c528d8e5858e828bf94f406564bddce666c290853",
+      "mode": "100644"
     },
-    "test/pos_deploy_git_history_guard_test.sh": {
-      "sha256": "bd0c777d79197f169816c878ea4eb563cd6a0f202b4442c8eff74047f3fc3cb4",
-      "mode": "100755"
+    "scripts/resilience/runtime_catalog.py": {
+      "sha256": "d8325629a8416040bf2e07c67fb77867fa0a15504a54689e14a6290fc39aa41c",
+      "mode": "100644"
+    },
+    "scripts/resilience/runtime_contracts.sql": {
+      "sha256": "04f0ffcf8b4e319697e23db26918bdf7adff45fedc67f3862cf95eed177a47df",
+      "mode": "100644"
+    },
+    "scripts/resilience/sample_accounts.py": {
+      "sha256": "b965c9e3bc2bd63038171e84cd9be9755df7b7467d72c13d807cd68d9ee80c6b",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_runtime_catalog.py": {
+      "sha256": "b299c9c943eaf8a01afa9565cb2f264e84415fac6e2b6315d26fb266550da7a2",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_sample_accounts.py": {
+      "sha256": "b23a25f89aa0eefe137a57d2649ad4e5e8b7318a8b00fcbb016471f6329ec349",
+      "mode": "100644"
     }
   },
-  "affectedFeatures": [],
+  "affectedFeatures": [
+    "admin",
+    "attendance",
+    "auth",
+    "cashier",
+    "customer_display",
+    "delivery",
+    "digital_receipt",
+    "direct_order",
+    "emergency_fulfillment",
+    "inventory",
+    "inventory_purchase",
+    "kitchen",
+    "onboarding",
+    "order",
+    "payment",
+    "photo_inventory",
+    "photo_ops",
+    "photo_sales_import",
+    "print_station",
+    "procurement",
+    "qc",
+    "qr_order",
+    "receipt_ledger",
+    "red_invoice_intake",
+    "report",
+    "restaurant_sales_export",
+    "settings",
+    "store_procurement",
+    "store_setup",
+    "store_workflow",
+    "super_admin",
+    "table",
+    "waiter"
+  ],
   "sharedAreas": [
     "verification",
-    "project-policy"
+    "project-policy",
+    "database"
   ],
   "risk": {
     "business": false,
     "financial": false,
-    "authorization": false,
-    "dataAccess": false,
+    "authorization": true,
+    "dataAccess": true,
     "background": false,
-    "dbContract": false,
-    "officeContract": false,
-    "files": false,
+    "dbContract": true,
+    "officeContract": true,
+    "files": true,
     "native": false
   },
   "requiredChecks": [
     "governance-unit",
-    "cloud-transport",
-    "local-release-verifier",
-    "independent-receipt-verifier",
-    "deploy-db-only",
-    "deploy-git-history"
+    "resilience-tools-unit",
+    "runtime-catalog-unit",
+    "runtime-catalog-postgres",
+    "local-release-verifier"
   ],
   "businessInvariants": [
-    "No application, business SQL, financial allocations or store access rules change.",
-    "Existing sample/retired workflow and Auth boundaries remain in their product contracts."
+    "No account creation/reset, role change, global logout or business writes; only inventoried sample principal logins and own-profile reads.",
+    "POS and Office retain separate Auth/DB and explicit sample store identity; do not infer legal-entity ownership.",
+    "Catalog evidence is hashes/metadata only, not fresh/upgrade/whole-plan completion; original operational login waiver remains NOT_RUN."
   ],
   "dataAccessReview": {
     "nPlusOne": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Nine independent Auth principals require independent authentication; catalog is one set-based statement/project, no business item requests.",
+      "scale": "9 principals, 2 projects, concurrency one for Auth; 20,000 metadata objects and 6MiB/project maximum.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "setBasedSql": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Catalog columns pre-aggregate by relation; catalog object metadata uses set unions, never loops over business rows.",
+      "scale": "2 catalog statements plus bounded own-profile reads.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "rowsColumns": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Only explicit own-profile columns with limit 2; catalog metadata projects hashes, no function bodies or business rows.",
+      "scale": "At most 2 profile rows per principal; 128KiB/Auth HTTP; 6MiB/catalog.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "joinCardinality": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Catalog columns aggregate separately before relation join; other arms have one row per named object.",
+      "scale": "No business one-to-many joins; duplicate object identities rejected.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "indexesPaging": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Own profile uses auth_id equality and limit 2; catalog snapshot is bounded metadata and avoids OFFSET.",
+      "scale": "9 fixed principals, finite catalogs; no schema/index mutations.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "refreshPolling": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Explicit one-shot checks only; no polling or state invalidations added.",
+      "scale": "One run per evidence capture, 3 calls/principal maximum.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "cacheScope": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "No persistent session or profile cache; artifacts identify project/source and each verified principal.",
+      "scale": "Separate target keys/identities; cross-project comparison rejected.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "concurrency": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Auth concurrency one, no retries; read-only two-project catalog captures can run concurrently.",
+      "scale": "9 sample principals, max 2 concurrent catalog calls.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "retryIdempotency": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Never retry password login or unknown cleanup; always attempt only local logout after successful login.",
+      "scale": "1 login attempt, at most 3 HTTP calls/principal, 12-second request timeout.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "largeResults": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Auth and catalog payloads have explicit bounds; oversize or partial results fail, not silently truncate.",
+      "scale": "128KiB per Auth response, <=20,000 objects and <=6MiB catalog; <=7MiB recorder input.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     },
     "repeatedAggregates": {
-      "applicable": false,
-      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+      "applicable": true,
+      "reason": "Catalog aggregates only on explicit snapshot; no sales totals, counts per refresh or production polling.",
+      "scale": "One catalog snapshot per DB; no product screen changes.",
+      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
     }
   },
-  "rollback": "Revert governance tooling through a normal source change; preserve application data, migration history and required existing release gates.",
+  "rollback": "Revert the evidence tooling normally; do not delete runtime history, business data or other sessions. Private credentials remain outside Git and may be removed only when their assigned test lifecycle ends.",
   "claims": {
     "allPlanComplete": false,
     "performanceImproved": false
   },
   "contractReview": {
     "outcomes": {
-      "applicable": false,
-      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+      "applicable": true,
+      "reason": "Login identity and local session cleanup are separate outcomes; unknown cleanup fails and stops further logins.",
+      "checks": [
+        "resilience-tools-unit",
+        "runtime-catalog-unit",
+        "runtime-catalog-postgres"
+      ]
     },
     "tenantScope": {
-      "applicable": false,
-      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+      "applicable": true,
+      "reason": "Whitelist inventoried sample actor/profile/store IDs and separate POS/Office targets; reject broader Office scope.",
+      "checks": [
+        "resilience-tools-unit",
+        "runtime-catalog-unit",
+        "runtime-catalog-postgres"
+      ]
     },
     "readiness": {
-      "applicable": false,
-      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+      "applicable": true,
+      "reason": "Account identity readiness is separate from permission actions, external-effect sandboxing, physical devices and 12-hour soaks.",
+      "checks": [
+        "resilience-tools-unit",
+        "runtime-catalog-unit",
+        "runtime-catalog-postgres"
+      ]
     },
     "dbCompatibility": {
-      "applicable": false,
-      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+      "applicable": true,
+      "reason": "Catalog hashes current effective functions, triggers, RLS/ACL/indexes and history without changing production schema.",
+      "checks": [
+        "resilience-tools-unit",
+        "runtime-catalog-unit",
+        "runtime-catalog-postgres"
+      ]
     },
     "officeBoundary": {
-      "applicable": false,
-      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+      "applicable": true,
+      "reason": "Office Auth and profile are verified independently; explicit store mapping is checked, no name or UUID ownership inference.",
+      "checks": [
+        "resilience-tools-unit",
+        "runtime-catalog-unit",
+        "runtime-catalog-postgres"
+      ]
     },
     "externalEffects": {
-      "applicable": false,
-      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+      "applicable": true,
+      "reason": "No financial/notification/printing writes; session creation and current-session local cleanup are the only Auth effects.",
+      "checks": [
+        "resilience-tools-unit",
+        "runtime-catalog-unit",
+        "runtime-catalog-postgres"
+      ]
     },
     "resourceLifetime": {
-      "applicable": false,
-      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+      "applicable": true,
+      "reason": "Token stays in memory only; local logout finally and stop on uncertain cleanup; no persisted refresh token.",
+      "checks": [
+        "resilience-tools-unit",
+        "runtime-catalog-unit",
+        "runtime-catalog-postgres"
+      ]
     },
     "filesAndHardware": {
-      "applicable": false,
-      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+      "applicable": true,
+      "reason": "Private external owned mode-600 files, no shell eval, bounded responses; real hardware and long load remain NOT_RUN.",
+      "checks": [
+        "resilience-tools-unit",
+        "runtime-catalog-unit",
+        "runtime-catalog-postgres"
+      ]
     }
   }
 }
