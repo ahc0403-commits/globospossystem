@@ -602,3 +602,56 @@ StateNotifier나 결제 unknown 처리까지 전역 규약을 적용한 것은 �
 기기·혼합 부하·12시간 관측 또는 최종 main 전체 검증/운영 배포 증거가 아니다.
 원본 로그: operation-scope-binding-test.log, operation-scope-existing-regressions.log,
 operation-scope-analysis.log, operation-scope-binding-final.log.
+
+
+### G3 단일 결제 결과 원장 — 서버 계약 추가, 계산대 연결 미완료
+
+`20261101094500_payment_command_receipts.sql`은 새 private schema/결과 원장과
+`process_payment_once_v1`, `get_payment_command_receipts_v1`만 추가한다. 기존 단일/
+합산/비매출 결제·프로모션 결제 내부 함수들의 정의 hash는 적용 전후 같았다.
+원래 Auth/업무 profile/매장과 operation UUID를 묶어 직렬화하며, 같은 요청은 처음
+확정된 결과를 돌려준다. 같은 UUID에 다른 금액·수단·주문을 넣으면 거부한다.
+서버 오류 시 금융 변경과 결과 원장을 함께 rollback한다. 조회는 UUID 최대 100개를
+집합 처리하고 현재 유효한 본인 역할·매장 접근을 다시 확인한다. PIN·토큰·전체
+요청을 기록하지 않는다. 이력은 중복 방지 근거이므로 자동 만료/삭제하지 않는다.
+
+PaymentService에는 원래 UUID를 받는 별도 API와 결과 조회·식별 검증을 추가했다.
+**기존 계산대 호출을 이 API로 전환하거나 durable intent/recovery UI를 연결한 것은
+아니다.** 분할 결제의 항목별 호출, 합산/비매출/인쇄 등 복구도 아직 남아 있다.
+이 단계만으로 운영 결제 응답 유실 문제가 해결됐다고 보고하지 않는다.
+
+현재 스키마의 권한 함수는 `user_accessible_stores(uuid) RETURNS SETOF uuid`다.
+초기 작은 fixture가 반환 열 이름을 만들어 후보 KDS 조회의 호환성 오류를 놓쳤다.
+45728/94500의 호출에 명시적 위치 열 alias를 쓰고 작은 fixture도 실제 scalar 반환으로
+수정했다. 실제 현재 스키마의 주방 사용자 조회와 기존 KDS 7개 검사가 통과했다.
+두 DB의 실제 migration 이력을 다시 읽었으며 신규 후보 5개 버전은 모두 미적용이었다.
+기존 운영에 적용된 migration을 수정한 것이 아니다.
+
+시험 중 pinned Supabase 이미지의 supautils 권한 오류 GRANT 안내 hook이 익명
+함수 실행 거부 시 signal 11을 발생시키는 것을 확인했다. 변경 없는 빈 이미지의
+단순 함수로도 재현됐다. 권한/역할/RLS를 바꾸지 않고 owned 시험 연결의 PGOPTIONS에
+`-c supautils.hint_roles=`만 지정했다. 익명 함수 실행이 실제로 거부되고 DB가 살아
+있는지 복원 전에 검사한다. 운영 설정은 변경하지 않았다. 이 격리 이미지 재현을
+운영 DB의 야간 장애 원인으로 단정하지 않는다. 실패 실행과 원본 로그도 보존한다.
+
+영향 검증: 새 클라이언트/기존 프로모션 복구 15개 PASS, 결제·분할·합산·비매출·
+인쇄/세금 관련 기존 계약 12개 파일 75개 PASS, 새 Dart 분석 오류/경고/정보 0개.
+스키마/runner 단위 22개 PASS. native current-schema 실행은 후보 POS 4개를 순서대로
+적용하고 이전 9개 금융/수량 이력 hash 보존과 원래 500-line 시나리오를 통과했다.
+새 금융/권한 시나리오 22개도 PASS: 응답 폐기 뒤 조회/동일 ID 재전송, 변경 payload
+거부, 다른 사용자/매장·비활성 사용자·익명·private 테이블 차단, 4-worker 8회 전달,
+결제·재고 차감·invoice job 각각 1회, 서로 다른 payload 동시 충돌을 검증했다.
+
+실제 native 결과는 `/workspace/.private/resilience-payment-receipts-evidence-20261101-v4/`에
+보관했다(PASS, exit 0, 37.82초, owned resource 정리 확인). 이 실행은 개발 중 dirty
+source 증거이며 final-main 전체 검증/배포 receipt가 아니다. 기록의 replay 시간에는
+충돌/조회 후속 검사도 포함하므로 단일 RPC/P95 또는 운영 성능 수치로 쓰지 않는다.
+원본 개발 로그: payment-receipts-client-test.log, payment-service-existing-contracts.log,
+payment-receipts-client-analysis.log, payment-schema-tools-final-unit.log,
+kds-scalar-access-contract.log 및 fixture-acl-isolation-probe-v2~v6.log.
+
+향후 현재 스키마를 다시 추출할 때 pos_command_private가 존재하면 manifest에도
+포함해야 한다. 알려진 신규 namespace는 선택적으로 허용하되 실제 inventory에
+존재하는 schema를 manifest에서 빼거나, 없는데 있다고 선언하면 거부한다.
+실행 예시에 `--exercise-payment-receipts`를 더하면 native 금융/권한 검사를 포함한다.
+운영 배포·2시간 혼합 부하·1배/3배 각 12시간 시험은 아직 시작하지 않았다.

@@ -44,7 +44,7 @@ def semantic(row):
     return value
 
 
-def run(name,native=False,candidate=False,office_root=None,exercise_transactions=False):
+def run(name,native=False,candidate=False,office_root=None,exercise_transactions=False,exercise_payment_receipts=False):
     import os,shutil
     m.require(bool(os.environ.get('POS_LOCAL_RUN_ID')) and
       Path(shutil.which('docker') or '').resolve()==(ROOT/'scripts/local_verification/docker').resolve(),
@@ -55,6 +55,8 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
                   'Preflight: Office source root and candidate migration are required')
     m.require(not exercise_transactions or name=='pos' and candidate,
               'Existing-transaction exercise requires POS candidate upgrade')
+    m.require(not exercise_payment_receipts or name=='pos' and candidate and exercise_transactions,
+              'Payment receipt exercise requires the POS native existing-transaction fixture')
     manifest,objects=m.load(name,AREA)
     m.inventory_guards(name,AREA)
     m.reference_sql(name,AREA)
@@ -82,7 +84,12 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
             raise RuntimeError('Owned schema reconstruction failed; protected log '+str(log))
         return p
     def sql(body,check=True):
-        return cmd(['docker','exec','-i','--env','PGPASSWORD=fixture-only',container,
+        # The pinned Supabase image's supautils GRANT-hint hook segfaults on a
+        # denied function (also in an empty, unchanged image). Disable only its
+        # cosmetic hints at connection startup; retain all ACL/RLS checks and
+        # prove an anonymous denied call below. No production setting changes.
+        return cmd(['docker','exec','-i','--env','PGPASSWORD=fixture-only',
+                    '--env','PGOPTIONS=-c supautils.hint_roles=',container,
                     'psql','-X','-qAt','-U','supabase_admin','-d','postgres','-v','ON_ERROR_STOP=1'],body,check)
     def business_fingerprint():
         # Fixed table set, one aggregate query; rows are synthetic in this owned
@@ -101,6 +108,13 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
             if cmd(['docker','exec',container,'pg_isready','-h','127.0.0.1','-U','postgres'],check=False).returncode==0:break
             time.sleep(.5)
         else:raise RuntimeError('Owned schema fixture was not ready')
+        probe=sql("BEGIN;CREATE FUNCTION public._pos_fixture_acl_probe() RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$ BEGIN RETURN 1; END $$;REVOKE ALL ON FUNCTION public._pos_fixture_acl_probe() FROM PUBLIC,anon;SET LOCAL ROLE anon;SELECT public._pos_fixture_acl_probe();",check=False)
+        m.require(probe.returncode==3 and 'permission denied for function _pos_fixture_acl_probe' in probe.stderr,
+                  'Pinned fixture must reject anonymous function execution without crashing')
+        m.require(sql("SELECT current_setting('supautils.hint_roles');").stdout.strip()=='',
+                  'Pinned fixture hint-only startup configuration was not applied')
+        report['fixturePermissionErrorHintsDisabled']=True
+        report['anonymousFunctionAclProbeRejected']=True
         if native:
             source=AREA/(name+'-current-application-schema.sql')
             body=source.read_text()
@@ -173,9 +187,12 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
                 report['retainedFixtureTransform']='Distinct synthetic ingredient/menu labels and final COMMIT only; original post-upgrade scenario unchanged'
             target=ROOT if name=='pos' else office_root
             m.require(target is not None and Path(target).is_absolute(),'Office source root is required')
+            native_query="SELECT jsonb_object_agg(p.oid::regprocedure::text,md5(pg_get_functiondef(p.oid))) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN('process_payment','process_combined_table_payment','process_non_revenue_payment','process_payment_before_promotion_read_split','process_payment_without_scoped_promotions');"
+            if name=='pos':native_before=json.loads(sql(native_query).stdout)
             versions={'pos':['20261101022105_pos_resilience_completion_contracts.sql',
                              '20261101023409_pos_office_legal_connection.sql',
-                             '20261101045728_kds_progress_receipt_reconciliation.sql'],
+                             '20261101045728_kds_progress_receipt_reconciliation.sql',
+                             '20261101094500_payment_command_receipts.sql'],
                       'office':['20261101023410_office_first_pos_legal_connection.sql']}[name]
             for filename in versions:
                 path=Path(target)/'supabase/migrations'/filename
@@ -185,6 +202,11 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
                 report['candidateUpgrade'].append({'path':'supabase/migrations/'+filename,
                     'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'status':'APPLIED_TO_OWNED_FIXTURE_ONLY'})
             report['candidateMigrationSelfChecksPassed']=True
+            if name=='pos':
+                native_after=json.loads(sql(native_query).stdout)
+                m.require(native_before==native_after,'Candidate migrations modified existing native payment functions')
+                report['nativePaymentFunctionsUnchanged']=True
+                report['nativePaymentFunctionHashes']=native_before
             if exercise_transactions:
                 after_business=business_fingerprint()
                 report['afterUpgradeBusinessFingerprint']=after_business
@@ -192,6 +214,9 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
                 report['existingBusinessRowsPreserved']=True
                 sql(scenario)
                 report['postUpgradePaymentStockScenarioPassed']=True
+            if exercise_payment_receipts:
+                from payment_receipt_fixture import run as run_payment_receipts
+                report['paymentCommandReceiptScenario']=run_payment_receipts(sql)
             return
         # Native dump is a separate, canonical-format serialization for existing
         # repository restore/upgrade tests; no production row has been copied.
@@ -205,6 +230,18 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
         report['nativeDumpCreated']=True
         # A subsequent independent restore is still required, not implied here.
     finally:
+        # Keep owned PostgreSQL crash/OOM evidence before --rm destroys it.
+        # Logs may contain private source SQL: never print them to the console.
+        diagnostics=[]
+        for argv in [
+            ['docker','inspect','--format','{{json .State}}',container],
+            ['docker','logs','--tail','200',container],
+        ]:
+            detail=cmd(argv,check=False)
+            diagnostics.append(detail.stdout+'\n'+detail.stderr)
+        diagnostic_path=AREA/(name+'-owned-container-diagnostics.log')
+        diagnostic_path.write_text('\n'.join(diagnostics));diagnostic_path.chmod(0o600)
+        report['ownedContainerDiagnosticSha256']=hashlib.sha256(diagnostic_path.read_bytes()).hexdigest()
         cleanup=cmd(['docker','rm','-f',container],check=False)
         report['cleanupExitCode']=cleanup.returncode
         report['elapsedSeconds']=time.monotonic()-started
@@ -221,6 +258,7 @@ if __name__=='__main__':
     p.add_argument('--candidate-upgrade',action='store_true')
     p.add_argument('--office-root',type=Path)
     p.add_argument('--exercise-existing-transactions',action='store_true')
+    p.add_argument('--exercise-payment-receipts',action='store_true')
     args=p.parse_args();AREA=args.snapshot_dir
     m.require(not args.candidate_upgrade or args.native_roundtrip,'Candidate upgrade requires native baseline roundtrip')
-    run(args.name,args.native_roundtrip,args.candidate_upgrade,args.office_root,args.exercise_existing_transactions)
+    run(args.name,args.native_roundtrip,args.candidate_upgrade,args.office_root,args.exercise_existing_transactions,args.exercise_payment_receipts)

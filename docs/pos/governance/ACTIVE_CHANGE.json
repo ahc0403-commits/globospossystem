@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
   "kind": "application",
-  "summary": "Implement scoped reads, bounded quota refresh, first Office legal connection, durable KDS progress recovery, current-schema upgrade fixtures and root session scope binding; all-domain command recovery, soak and production release remain pending.",
+  "summary": "Implement scoped reads, bounded quota refresh, first Office legal connection, durable KDS recovery, root session scope and additive native single-payment receipts; durable cashier intent/UI, other domain commands, soak and production remain pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "a41146474ceb1a498a4160eb123eeb944d16fdc4d08ed9d44c89465acdb64231",
+      "sha256": "78fcc42d3361541b792c1c5a06ebc1dd1f72a7805059b47122fc800afc82737e",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "7bf0393217b34ce4745f7609458c197602349edc09605489133ee7a53b52e259",
+      "sha256": "3fdd928ba8678948ca984c6bda90b82fd025b74225df2d722eb029119c117f90",
       "mode": "100644"
     },
     "lib/core/auth/operation_scope_provider.dart": {
@@ -30,6 +30,10 @@
     },
     "lib/core/services/menu_service.dart": {
       "sha256": "827177c94a83575a847ca106553e868a6fac66b984163c9d8af0db65e21287b0",
+      "mode": "100644"
+    },
+    "lib/core/services/payment_service.dart": {
+      "sha256": "b51eb04151798b7af3434fc53ffb27cb7eb55e796c7ef768ed24bf025995886a",
       "mode": "100644"
     },
     "lib/core/utils/operation_contract.dart": {
@@ -161,15 +165,19 @@
       "mode": "100644"
     },
     "scripts/resilience/integration_schema_snapshot.py": {
-      "sha256": "1c3e17997efae2547c0c6b6fe1ff1d0442fd4359057ed7d8cada993baa141e46",
+      "sha256": "3941d50d2e0ee35f50d46858f4573c912f8a4b53e39458e2cc12c99e8fdb5945",
       "mode": "100644"
     },
     "scripts/resilience/office_accounts.py": {
       "sha256": "4722e58bba8bbc3a569a817c2b71e35100d9597c8f2ed21f32d6ad4f3a413bb2",
       "mode": "100644"
     },
+    "scripts/resilience/payment_receipt_fixture.py": {
+      "sha256": "39d289baf427754fd1e03cf7e20814dfa36107557030ed62d9da4c290ad220b2",
+      "mode": "100644"
+    },
     "scripts/resilience/run_schema_fixture.py": {
-      "sha256": "d858876098dbe87bbce2d21671dbd21766b4ab08386147067370fc62be06d030",
+      "sha256": "0fbd6d7dea5e80727143f880983241b8653210a108c12c79b05d948cd4926dbc",
       "mode": "100644"
     },
     "scripts/resilience/sample_accounts.py": {
@@ -189,7 +197,7 @@
       "mode": "100644"
     },
     "scripts/resilience/schema_snapshot.py": {
-      "sha256": "c6e68d5bb668f10f4387d0243fdb9b61a04676c73797c9976d4c96bde2fe1b96",
+      "sha256": "087b28940543b47881158293e6bbd952230c4176efedb595f00bd4814ad05e01",
       "mode": "100644"
     },
     "scripts/resilience/schema_storage_reference_config.sql": {
@@ -205,11 +213,11 @@
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_fixture_runner.py": {
-      "sha256": "299929ccd8afe7b9e3d8cc00056b805a24ca17d564235cf5577badd39d8cc2d1",
+      "sha256": "1b0dcea27ccf022304c943c67d82960612075d00447dfe2fe54c023a69326415",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_snapshot.py": {
-      "sha256": "da8132939187572e277a727c9d038b1c91f21cce34e1cdcbf1ceeeaffbf4ba84",
+      "sha256": "022e58f202599062cd39ac277279c3fb87e3771b0b20b6c485ed2fc28216d693",
       "mode": "100644"
     },
     "scripts/test_menu_discount_quantities.sh": {
@@ -225,7 +233,11 @@
       "mode": "100644"
     },
     "supabase/migrations/20261101045728_kds_progress_receipt_reconciliation.sql": {
-      "sha256": "f043d4f711388196b58e47880a249d585946a4eda68b9356f00ec9696cb6774b",
+      "sha256": "379504ac52ff674eb4d09d40e423e04c8d5bcd6e00d46c4d99c7fe2cc6c6efe6",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101094500_payment_command_receipts.sql": {
+      "sha256": "43e7e49c440bf412c603ef28707c97b1cb5e4dd70244a632cfd53326e7d84be8",
       "mode": "100644"
     },
     "test/cashier_cancellation_immutable_contract_test.dart": {
@@ -249,7 +261,7 @@
       "mode": "100644"
     },
     "test/fixtures/kds_progress_receipts.sql": {
-      "sha256": "70fb254c10097ca3293329f75dc4c9138b8af2e26d512e0342b9327336b8910c",
+      "sha256": "44794200a78adeed9a74c1f1ca1fd20c7cb51580658b36c009b001765abae12e",
       "mode": "100644"
     },
     "test/fixtures/office_legal_connection_baselines/manifest.json": {
@@ -298,6 +310,10 @@
     },
     "test/order_read_epoch_test.dart": {
       "sha256": "71ffcec58273211b680e920860717af6b6905e5a78f7e8442582627d860992da",
+      "mode": "100644"
+    },
+    "test/payment_command_receipts_test.dart": {
+      "sha256": "ed3642de71b5b38803be28734537a7c94931212a335b8b2f1191195b2c5e100d",
       "mode": "100644"
     },
     "test/qc_read_epoch_test.dart": {
@@ -389,7 +405,9 @@
     "schema-snapshot-unit",
     "schema-runner-unit",
     "current-schema-upgrade",
-    "session-scope-binding"
+    "session-scope-binding",
+    "payment-receipts-client",
+    "payment-receipts-native"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -403,72 +421,75 @@
     "Keep new progress journals invisible to legacy clients, preserve original intent order, and retain confirmed writes despite failed cleanup, refresh or later assignment change.",
     "Confirmed cashier item mutations remain confirmed after failed follow-up reads; their original view cannot load/apply another active store or a later assignment. QC follow-up writes preserve the active filter and never return an old store after navigation/disposal.",
     "Application/Auth/Storage schema fixtures are source-hashed, private, owned and network-isolated; clone no production business rows, password hashes, file objects or cron schedules. Bucket reference configuration is separate. Candidate migration success never means production applied, whole-plan complete or twelve-hour PASS.",
-    "Root-bound client scope tracks trusted actor/role/legal/store/access changes and every A-B-A generation; token/display/loading changes do not trigger data reloads. Twenty-three FutureProvider reads reject blocked sessions and discard prior generations; QC follow-up/issue state is disposed on scope changes. Server RLS remains authoritative; other legacy notifiers and uncertain commands remain unfinished."
+    "Root-bound client scope tracks trusted actor/role/legal/store/access changes and every A-B-A generation; token/display/loading changes do not trigger data reloads. Twenty-three FutureProvider reads reject blocked sessions and discard prior generations; QC follow-up/issue state is disposed on scope changes. Server RLS remains authoritative; other legacy notifiers and uncertain commands remain unfinished.",
+    "Additive single-payment receipts serialize the original actor/operation identity, reject payload reuse, retain immutable native payment results and recheck current actor/store permissions on replay/read. Existing process_payment and combined/non-revenue native definitions, money, stock and invoice semantics stay unchanged. New API is not yet connected to durable cashier intent/UI.",
+    "Current user_accessible_stores returns scalar UUIDs; explicit positional aliases preserve both scalar and named fixture compatibility. No candidate migration has been applied to production.",
+    "Pinned owned fixture supautils crashes on denied function execution even without candidate/schema changes. PGOPTIONS disables only cosmetic GRANT hints; actual anonymous ACL denial, protected tables and native financial execution remain checked. Never change production settings or report this as a reproduced production engine failure."
   ],
   "dataAccessReview": {
     "nPlusOne": {
       "applicable": true,
-      "reason": "KDS receipt recovery is set-based; commands retain domain RPCs and are not disguised as parallel lookup work. Existing item/batch writers remain in scope for the later whole-flow audit. Schema metadata is captured in bounded identity batches, with preaggregated dependency joins; no per-object remote calls.",
+      "reason": "KDS receipt recovery is set-based; commands retain domain RPCs and are not disguised as parallel lookup work. Existing item/batch writers remain in scope for the later whole-flow audit. Schema metadata is captured in bounded identity batches, with preaggregated dependency joins; no per-object remote calls. Payment receipts use one original business command and one optional lookup for <=100 IDs; legacy split-payment per-part calls are still unfinished and are not represented as fixed.",
       "scale": "100 receipts/RPC; 101-record development test uses 2 reads and zero replay writes; round sends <=20 queued commands.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "setBasedSql": {
       "applicable": true,
-      "reason": "New SQL resolves unique direct event and private batch request keys with set joins, no per-ID function loop; existing quota statement batches remain intact.",
+      "reason": "New SQL resolves unique direct event and private batch request keys with set joins, no per-ID function loop; existing quota statement batches remain intact. Payment result lookup deduplicates requested UUIDs and joins actor/operation primary keys in one query; native payment is called once per new original command, never once per receipt lookup.",
       "scale": "Synthetic fixture 100001 events, 100 requested IDs, 30 measured calls; actor/store filters inside SQL.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "rowsColumns": {
       "applicable": true,
-      "reason": "Receipt returns only original/actual IDs, session, target IDs, stage/delta and whitelisted details; never returns native batch response snapshots.",
+      "reason": "Receipt returns only original/actual IDs, session, target IDs, stage/delta and whitelisted details; never returns native batch response snapshots. Single-payment result is the immutable native result already returned by the legacy API; receipt requests are capped at 100. No PIN/token/body is persisted; only request digest, actor/store/order/payment IDs and native result.",
       "scale": "100-result fixture response 33900 bytes; client response cap 256 KiB; quota payload <=100 IDs.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "joinCardinality": {
       "applicable": true,
-      "reason": "Both receipt paths join primary unique event/request IDs. DISTINCT requested IDs and fallback exclusion avoid duplicate direct/batch matches.",
+      "reason": "Both receipt paths join primary unique event/request IDs. DISTINCT requested IDs and fallback exclusion avoid duplicate direct/batch matches. Payment receipt primary key(actor_auth_id,operation_id) and unique payment_id ensure at most one row per distinct requested identity; no independent one-to-many joins added.",
       "scale": "Duplicate request fixture yields one result; rows must not exceed requested IDs; no multiple one-to-many join fan-out introduced.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "indexesPaging": {
       "applicable": true,
-      "reason": "Use existing unique event_id/request_id indexes; fixture analyzes 100001 events. Legacy outbox processing takes an ordered prefix rather than a large server OFFSET. Full production-schema plan and write costs still need G1/G6.",
+      "reason": "Use existing unique event_id/request_id indexes; fixture analyzes 100001 events. Legacy outbox processing takes an ordered prefix rather than a large server OFFSET. Full production-schema plan and write costs still need G1/G6. Payment receipt uses primary-key equality on actor and requested UUID, no OFFSET. This development fixture validates only three original commands; no production-scale latency or universal index improvement is claimed.",
       "scale": "PostgreSQL fixture P95 server 1.6577 ms on 1 CPU/512 MiB; local progress journal <=1000 entries; replay prefix <=2000 legacy records.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "refreshPolling": {
       "applicable": true,
-      "reason": "Unknown progress uses result lookup before original-ID recovery; confirmed mutation patches available authoritative item data or refreshes the affected order. No new polling loop is introduced. Root session fingerprint ignores token/display/loading refresh; only actual access-scope changes invalidate the 23 bound read providers, without adding polling or a network call.",
+      "reason": "Unknown progress uses result lookup before original-ID recovery; confirmed mutation patches available authoritative item data or refreshes the affected order. No new polling loop is introduced. Root session fingerprint ignores token/display/loading refresh; only actual access-scope changes invalidate the 23 bound read providers, without adding polling or a network call. Additive payment APIs do not start automatic polling, retry or list refresh; durable cashier recovery/UI adoption is still required.",
       "scale": "Existing notifier flusher concurrency 1; explicit unknown recovery concurrency 1; batches <=100; whole-board sync paths still need later G4 work.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "cacheScope": {
       "applicable": true,
-      "reason": "New journal stamps original Auth actor, store, session, station and floor before awaiting. Scope switches cannot replay, remove or apply another assignment record; legacy store-only compatibility remains server-authorized. Root scope uses actor ID, trusted role, active legal/store and canonical access-list/permission hash; an eager generation listener preserves A-B-A changes. No user_metadata claims are trusted.",
+      "reason": "New journal stamps original Auth actor, store, session, station and floor before awaiting. Scope switches cannot replay, remove or apply another assignment record; legacy store-only compatibility remains server-authorized. Root scope uses actor ID, trusted role, active legal/store and canonical access-list/permission hash; an eager generation listener preserves A-B-A changes. No user_metadata claims are trusted. Payment receipt replay/reads require original Auth and profile IDs plus current active authorized role/store; store changes and conflicting request payloads cannot reuse another result.",
       "scale": "Actor/station/store/session/floor isolation tests; routing cache clears on each durable read. Global permission revision adoption remains pending. Development tests cover 100 unchanged profile refreshes and 100 changed scopes; remaining legacy notifiers are explicitly not migrated.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "concurrency": {
       "applicable": true,
-      "reason": "Progress in-flight guards and one flusher bound writes; read and command transports have owned physical deadlines and close on disposal. This does not yet implement the all-worker aggregate budget.",
+      "reason": "Progress in-flight guards and one flusher bound writes; read and command transports have owned physical deadlines and close on disposal. This does not yet implement the all-worker aggregate budget. Native payment receipt lock is per actor/operation with a five-second lock timeout. Four owned fixture workers deliver the same full payment eight times and verify one financial/stock/invoice effect. All-worker aggregate budgets remain pending.",
       "scale": "<=20 sends/round within 15-second send budget after <=15-second receipt budget; per-call deadline <=15 seconds; no parallel receipt batches.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "retryIdempotency": {
       "applicable": true,
-      "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable.",
+      "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable. Same single-payment operation returns its original confirmed result, including after response loss or order completion; changed amount/method/order is rejected. Native errors roll back payment and receipt together. Client durable intent persistence and explicit reconciliation remain unfinished, so legacy automatic retry behavior is not claimed fixed.",
       "scale": "Tests cover committed response loss, partial local persistence, cleanup failure, distinct JeonGabok receipt ID, restart and original-ID reuse; no new operation retry loop.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Schema runner rejects another run/project, timeout, partial input and failed cleanup; native fixture logs are distinct development proof."
     },
     "largeResults": {
       "applicable": true,
-      "reason": "New progress journal has atomic 1000-record capacity enforcement, receipt batches/bytes are capped, and replay sends a bounded ordered prefix. Existing legacy namespace loading is not claimed fully bounded.",
+      "reason": "New progress journal has atomic 1000-record capacity enforcement, receipt batches/bytes are capped, and replay sends a bounded ordered prefix. Existing legacy namespace loading is not claimed fully bounded. Receipt recovery caps IDs at 100 and returns only matching own-scope rows. Existing financial core remains unchanged; general export/catalog file and transfer budgets remain pending.",
       "scale": "Real Chromium capacity/update/reload tests; 100-receipt batches and 256 KiB transport limit; <=20 commands/round. Schema snapshots: <=20000 identities, <=32 MiB/file, <=64 MiB captured body total; private source only.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     },
     "repeatedAggregates": {
       "applicable": true,
-      "reason": "Receipt queries use requested unique IDs and no overall count/large aggregate scan. IndexedDB count is only a local bounded-capacity write guard; quota changes remain store/transaction events.",
+      "reason": "Receipt queries use requested unique IDs and no overall count/large aggregate scan. IndexedDB count is only a local bounded-capacity write guard; quota changes remain store/transaction events. Receipt lookup uses stored native result rather than recomputing order finance. Current-scope authorization runs once per RPC; no per-ID total/count aggregate is introduced.",
       "scale": "100 requests against 100001-row fixture; 30 calls; no recurring SQL whole-event count added.",
       "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
     }
@@ -481,22 +502,7 @@
   "contractReview": {
     "outcomes": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation.",
-      "checks": [
-        "official-full-recipe",
-        "operation-outcomes",
-        "qc-read-lifetimes",
-        "menu-quantity-partial",
-        "menu-quantity-sql",
-        "kds-progress-journal",
-        "kds-progress-receipt-sql",
-        "browser-kds-outbox-compatibility",
-        "cashier-command-scope"
-      ]
-    },
-    "tenantScope": {
-      "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -507,7 +513,26 @@
         "kds-progress-receipt-sql",
         "browser-kds-outbox-compatibility",
         "cashier-command-scope",
-        "session-scope-binding"
+        "payment-receipts-client",
+        "payment-receipts-native"
+      ]
+    },
+    "tenantScope": {
+      "applicable": true,
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated.",
+      "checks": [
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility",
+        "cashier-command-scope",
+        "session-scope-binding",
+        "payment-receipts-client",
+        "payment-receipts-native"
       ]
     },
     "readiness": {
@@ -523,7 +548,7 @@
     },
     "dbCompatibility": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -535,7 +560,9 @@
         "browser-kds-outbox-compatibility",
         "schema-snapshot-unit",
         "schema-runner-unit",
-        "current-schema-upgrade"
+        "current-schema-upgrade",
+        "payment-receipts-client",
+        "payment-receipts-native"
       ]
     },
     "officeBoundary": {
@@ -551,18 +578,20 @@
     },
     "externalEffects": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
-        "menu-quantity-sql"
+        "menu-quantity-sql",
+        "payment-receipts-client",
+        "payment-receipts-native"
       ]
     },
     "resourceLifetime": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -573,7 +602,9 @@
         "kds-progress-receipt-sql",
         "browser-kds-outbox-compatibility",
         "cashier-command-scope",
-        "session-scope-binding"
+        "session-scope-binding",
+        "payment-receipts-client",
+        "payment-receipts-native"
       ]
     },
     "filesAndHardware": {

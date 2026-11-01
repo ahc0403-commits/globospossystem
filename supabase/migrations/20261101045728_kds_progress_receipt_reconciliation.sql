@@ -16,7 +16,7 @@ BEGIN
   SELECT min(u.id::text)::uuid,count(*) INTO actor_id,actor_count
     FROM public.users u WHERE u.auth_id=auth.uid() AND u.is_active;
   IF actor_count<>1 OR NOT(public.is_super_admin() OR EXISTS(
-    SELECT 1 FROM public.user_accessible_stores(auth.uid()) s WHERE s.store_id=p_store_id)) THEN
+    SELECT 1 FROM public.user_accessible_stores(auth.uid()) AS s(store_id) WHERE s.store_id=p_store_id)) THEN
     RAISE insufficient_privilege; END IF;
   WITH requested AS MATERIALIZED(SELECT DISTINCT unnest(p_operation_ids) operation_id),
   single_events AS (

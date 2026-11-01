@@ -46,6 +46,7 @@ def main():
     parser.add_argument('--native-roundtrip',action='store_true')
     parser.add_argument('--candidate-upgrade',action='store_true')
     parser.add_argument('--exercise-existing-transactions',action='store_true')
+    parser.add_argument('--exercise-payment-receipts',action='store_true')
     parser.add_argument('--office-root',type=Path)
     args=parser.parse_args()
     spec=importlib.util.spec_from_file_location('schema_snapshot',Path(__file__).with_name('schema_snapshot.py'))
@@ -60,6 +61,8 @@ def main():
     schema.require(not args.candidate_upgrade or args.native_roundtrip,'Candidate mode requires native baseline')
     schema.require(not args.exercise_existing_transactions or args.project=='pos' and args.candidate_upgrade,
                    'Financial history exercise requires POS candidate mode')
+    schema.require(not args.exercise_payment_receipts or args.project=='pos' and args.candidate_upgrade and args.exercise_existing_transactions,
+                   'Payment receipt exercise requires native POS existing-transaction mode')
     if args.candidate_upgrade and args.project=='office':
         schema.require(args.office_root is not None and args.office_root.is_absolute() and
                        (args.office_root/'supabase/migrations/20261101023410_office_first_pos_legal_connection.sql').is_file(),
@@ -79,7 +82,7 @@ def main():
         env['PATH']=str(ROOT/'scripts/local_verification')+os.pathsep+env['PATH']
         command=[sys.executable,'-B',str(Path(__file__).with_name('integration_schema_snapshot.py')),
                  args.project,'--snapshot-dir',str(args.snapshot_dir)]
-        for flag in ['native_roundtrip','candidate_upgrade','exercise_existing_transactions']:
+        for flag in ['native_roundtrip','candidate_upgrade','exercise_existing_transactions','exercise_payment_receipts']:
             if getattr(args,flag):command.append('--'+flag.replace('_','-'))
         if args.office_root:command.extend(['--office-root',str(args.office_root)])
         record={'kind':'development-schema-rehearsal','runId':run_id,'startedAt':now(),
@@ -108,10 +111,21 @@ def main():
                 schema.require(detail.get('runId')==run_id and detail.get('projectRef')==schema.PROJECTS[args.project],
                                'Report belongs to another invocation/project')
                 record['detail']=detail
+                if detail.get('ownedContainerDiagnosticSha256'):
+                    source=schema.private.private_file(args.snapshot_dir/(args.project+'-owned-container-diagnostics.log'),max_bytes=8*1024*1024)
+                    content=source.read_bytes()
+                    schema.require(hashlib.sha256(content).hexdigest()==detail['ownedContainerDiagnosticSha256'],
+                                   'Owned container diagnostics changed after execution')
+                    artifact=args.output/'owned-container-diagnostics.log'
+                    artifact.write_bytes(content);artifact.chmod(0o600)
+                    record['diagnostics']={'path':artifact.name,'sha256':detail['ownedContainerDiagnosticSha256']}
             valid=record.get('exitCode')==0 and record.get('detail',{}).get('semanticCatalogEqual') is True
             if args.native_roundtrip:valid=valid and record['detail'].get('nativeDumpValidated') is True
             if args.candidate_upgrade:valid=valid and record['detail'].get('candidateMigrationSelfChecksPassed') is True
             if args.exercise_existing_transactions:valid=valid and record['detail'].get('existingBusinessRowsPreserved') is True and record['detail'].get('postUpgradePaymentStockScenarioPassed') is True
+            if args.exercise_payment_receipts:
+                scenario=record['detail'].get('paymentCommandReceiptScenario',{})
+                valid=valid and isinstance(scenario,dict) and scenario.get('count',0)>=22 and scenario.get('count')==len(set(scenario.get('checksPassed',[]))) and scenario.get('nativePaymentFunctionsStubbed') is False and scenario.get('fixtureSha256')==hashlib.sha256(Path(__file__).with_name('payment_receipt_fixture.py').read_bytes()).hexdigest()
             record['status']='PASS' if valid and not record.get('timedOut') else 'FAIL'
         except BaseException:
             record['status']='FAIL'

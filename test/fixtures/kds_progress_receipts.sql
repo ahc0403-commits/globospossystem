@@ -6,7 +6,7 @@ CREATE TABLE public.users(id uuid PRIMARY KEY,auth_id uuid UNIQUE,is_active bool
 CREATE TABLE public.fixture_store_access(auth_id uuid,store_id uuid);
 CREATE FUNCTION public.is_super_admin() RETURNS boolean LANGUAGE sql STABLE AS $$
  SELECT EXISTS(SELECT 1 FROM public.users WHERE auth_id=auth.uid() AND is_active AND role='super_admin') $$;
-CREATE FUNCTION public.user_accessible_stores(uuid) RETURNS TABLE(store_id uuid)
+CREATE FUNCTION public.user_accessible_stores(uuid) RETURNS SETOF uuid
  LANGUAGE sql STABLE AS $$ SELECT store_id FROM public.fixture_store_access WHERE auth_id=$1 $$;
 CREATE TABLE public.emergency_fulfillment_events(event_id uuid PRIMARY KEY,session_id uuid,
  restaurant_id uuid,actor_user_id uuid,order_item_id uuid,floor_direct_item_id uuid,

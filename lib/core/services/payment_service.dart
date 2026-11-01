@@ -1,3 +1,5 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'pos_backend.dart';
 import '../payments/payment_method_contract.dart';
 
@@ -44,6 +46,76 @@ String? validatePaymentSplits(List<PaymentSplitInput> splits, double total) {
 }
 
 class PaymentService {
+  PaymentService({SupabaseClient? client}) : _client = client;
+
+  final SupabaseClient? _client;
+  SupabaseClient get _db => _client ?? supabase;
+
+  /// The caller must durably retain this original ID before sending and use
+  /// result reconciliation on uncertain delivery. This additive API does not
+  /// silently turn legacy callers/retries into a new payment intent.
+  Future<Map<String, dynamic>> processPaymentOnce({
+    required String operationId,
+    required String orderId,
+    required String storeId,
+    required double amount,
+    required String method,
+  }) async {
+    final result = await _db.rpc(
+      'process_payment_once_v1',
+      params: {
+        'p_operation_id': operationId,
+        'p_order_id': orderId,
+        'p_store_id': storeId,
+        'p_amount': amount,
+        'p_method': normalizePaymentMethodInput(method),
+      },
+    );
+    if (result is! Map ||
+        result['id'] is! String ||
+        result['order_id'] != orderId ||
+        result['restaurant_id'] != storeId) {
+      throw const FormatException('PAYMENT_OPERATION_RESULT_INVALID');
+    }
+    return Map<String, dynamic>.from(result);
+  }
+
+  /// One bounded set-based lookup; never replay a payment to discover a result.
+  Future<List<Map<String, dynamic>>> getPaymentCommandReceipts({
+    required String storeId,
+    required List<String> operationIds,
+  }) async {
+    if (operationIds.length > 100 || operationIds.any((id) => id.isEmpty)) {
+      throw ArgumentError('PAYMENT_RECEIPT_BATCH_INVALID');
+    }
+    if (operationIds.isEmpty) return const [];
+    final ids = operationIds.toSet();
+    final response = await _db.rpc(
+      'get_payment_command_receipts_v1',
+      params: {'p_store_id': storeId, 'p_operation_ids': ids.toList()},
+    );
+    if (response is! List || response.length > ids.length) {
+      throw const FormatException('PAYMENT_RECEIPT_RESPONSE_INVALID');
+    }
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final row in response) {
+      if (row is! Map ||
+          row['operation_id'] is! String ||
+          !ids.contains(row['operation_id']) ||
+          !seen.add(row['operation_id']) ||
+          row['store_id'] != storeId ||
+          row['result'] is! Map ||
+          row['payment_id'] != row['result']['id'] ||
+          row['order_id'] != row['result']['order_id'] ||
+          row['result']['restaurant_id'] != storeId) {
+        throw const FormatException('PAYMENT_RECEIPT_RESPONSE_INVALID');
+      }
+      result.add(Map<String, dynamic>.from(row));
+    }
+    return result;
+  }
+
   double _toDouble(dynamic value) {
     return switch (value) {
       num v => v.toDouble(),
@@ -67,7 +139,7 @@ class PaymentService {
     required String method,
   }) async {
     final normalizedMethod = normalizePaymentMethodInput(method);
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       'process_payment',
       params: {
         'p_order_id': orderId,
@@ -90,7 +162,7 @@ class PaymentService {
       );
     }
     final normalizedMethod = normalizePaymentMethodInput(method);
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       'process_combined_table_payment',
       params: {
         'p_store_id': storeId,
@@ -106,7 +178,7 @@ class PaymentService {
     required String storeId,
     required int quantity,
   }) async {
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       'set_order_wet_tissue_quantity',
       params: {
         'p_order_id': orderId,
@@ -126,7 +198,7 @@ class PaymentService {
     String? staffName,
     required String managerPin,
   }) async {
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       'process_non_revenue_payment',
       params: {
         'p_order_id': orderId,
@@ -146,7 +218,7 @@ class PaymentService {
     double? receivedAmount,
     bool reprint = false,
   }) async {
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       receivedAmount == null
           ? 'enqueue_receipt_print_job'
           : 'enqueue_cash_receipt_print_job',
@@ -164,7 +236,7 @@ class PaymentService {
     double? receivedAmount,
     bool reprint = false,
   }) async {
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       'enqueue_combined_receipt_print_job',
       params: {
         'p_group_id': combinedPaymentGroupId,
@@ -199,7 +271,7 @@ class PaymentService {
     required String reason,
     required String managerPin,
   }) async {
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       'mark_order_item_service',
       params: {
         'p_item_id': itemId,
@@ -217,7 +289,7 @@ class PaymentService {
     required String reason,
     required String managerPin,
   }) async {
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       'unmark_order_item_service',
       params: {
         'p_item_id': itemId,
@@ -373,10 +445,7 @@ class PaymentService {
       params['p_amount'] = amount;
     }
 
-    final result = await supabase.rpc(
-      'record_payment_adjustment',
-      params: params,
-    );
+    final result = await _db.rpc('record_payment_adjustment', params: params);
     if (result is List && result.isNotEmpty && result.first is Map) {
       return Map<String, dynamic>.from(result.first as Map);
     }
@@ -411,7 +480,7 @@ class PaymentService {
   Future<Map<String, dynamic>> fetchCashierTodaySummary({
     required String storeId,
   }) async {
-    final result = await supabase.rpc(
+    final result = await _db.rpc(
       'get_cashier_today_summary',
       params: {'p_store_id': storeId},
     );

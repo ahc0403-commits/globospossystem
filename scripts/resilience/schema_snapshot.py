@@ -18,6 +18,9 @@ SCOPES={
  'pos':{'public','pos_invoice_private','inventory_migration_backup','auth','storage'},
  'office':{'accounting','core','dashboard','documents','finance','hr','inventory','office_release_transport','ops','private','public','system','workflow','auth','storage'},
 }
+# Review additive application namespaces explicitly. A baseline may precede this
+# migration, but a present namespace can never be omitted from its manifest.
+OPTIONAL_SCOPES={'pos':{'pos_command_private'},'office':set()}
 MAX_BYTES=32*1024*1024
 PLATFORM_SCHEMAS={'cron','extensions','graphql','graphql_public','net','pgbouncer',
                   'realtime','supabase_migrations','vault'}
@@ -31,6 +34,13 @@ def q(value): return '"'+value.replace('"','""')+'"'
 def lit(value): return "'"+value.replace("'","''")+"'"
 def require(value,message):
     if not value: raise ValueError(message)
+
+
+def manifest_scope(name,manifest):
+    scope=set(manifest.get('scope',[]))
+    require(manifest.get('projectRef')==PROJECTS[name] and SCOPES[name]<=scope
+            and scope<=SCOPES[name]|OPTIONAL_SCOPES[name], 'Pinned schema project/scope mismatch')
+    return scope
 
 
 def ordered(records):
@@ -92,7 +102,7 @@ def load(name,area):
     area=Path(area)
     require(area.is_absolute() and not area.is_symlink() and area.stat().st_mode & 0o077 == 0, 'Snapshot directory must be absolute, private and not a symlink')
     manifest=json.loads(private.private_file(area/(name+'-manifest.json'),max_bytes=MAX_BYTES).read_text())
-    require(manifest.get('projectRef')==PROJECTS[name] and set(manifest.get('scope',[]))==SCOPES[name], 'Pinned schema project/scope mismatch')
+    manifest_scope(name,manifest)
     require(0<len(manifest['objects'])<=20000,'Catalog object bound exceeded')
     expected={(r['kind'],r['ident']):r['sha256'] for r in manifest['objects']}
     require(len(expected)==len(manifest['objects']),'Duplicate source identities')
@@ -145,7 +155,10 @@ def inventory_guards(name,area):
     require(set(guards)=={'schemaInventory','unsupportedRelations','unsupportedTypes','nonViewRules',
                          'customAggregates','customCollations','schemaPublications','otherLanguages','ordinaryInheritance'},
             'Missing or unexpected unsupported-shape inventory')
-    require(not(set(guards['schemaInventory'])-SCOPES[name]-PLATFORM_SCHEMAS),'Unreviewed application schema')
+    manifest=json.loads(private.private_file(area/(name+'-manifest.json'),max_bytes=MAX_BYTES).read_text())
+    selected=manifest_scope(name,manifest)
+    require(not(set(guards['schemaInventory'])-selected-PLATFORM_SCHEMAS),'Unreviewed application schema')
+    require(selected<=set(guards['schemaInventory']),'Manifest contains an absent application schema')
     require(all(type(value) is int and value==0 for key,value in guards.items() if key!='schemaInventory'),
             'Unsupported schema shape; extend the exporter explicitly before restoring')
     return guards

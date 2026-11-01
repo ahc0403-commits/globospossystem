@@ -48,6 +48,21 @@ class SchemaSnapshotTests(unittest.TestCase):
             self.write('pos-manifest.json',{**self.manifest,**change})
             with self.assertRaisesRegex(ValueError,'project/scope'):m.load('pos',self.area)
 
+    def test_known_additive_namespace_must_be_captured_when_present(self):
+        guards={'schemaInventory':sorted(m.SCOPES['pos']|{'pos_command_private'}),
+                **{k:0 for k in ['unsupportedRelations','unsupportedTypes','nonViewRules',
+                    'customAggregates','customCollations','schemaPublications','otherLanguages','ordinaryInheritance']}}
+        self.write('pos-inventory-guards.json',guards)
+        with self.assertRaisesRegex(ValueError,'Unreviewed application schema'):
+            m.inventory_guards('pos',self.area)
+        self.write('pos-manifest.json',{**self.manifest,'scope':guards['schemaInventory']})
+        m.load('pos',self.area)
+        m.inventory_guards('pos',self.area)
+        guards['schemaInventory'].remove('pos_command_private')
+        self.write('pos-inventory-guards.json',guards)
+        with self.assertRaisesRegex(ValueError,'absent application schema'):
+            m.inventory_guards('pos',self.area)
+
     def test_world_readable_metadata_and_symlinks_are_rejected(self):
         p=self.area/'pos-schema-0.json';p.chmod(0o644)
         with self.assertRaisesRegex(ValueError,'mode-600'):m.load('pos',self.area)

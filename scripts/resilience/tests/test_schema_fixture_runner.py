@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -24,7 +25,7 @@ class SchemaRunnerTests(unittest.TestCase):
                              'customCollations','schemaPublications','otherLanguages','ordinaryInheritance']}})
         self.output=self.area/'output'
 
-    def execute(self,exit_code=0,foreign=False,cleanup=True,timed_out=False):
+    def execute(self,exit_code=0,foreign=False,cleanup=True,timed_out=False,extra_flags=None,detail_flags=None):
         outer=self
         class Child:
             pid=99999999
@@ -32,7 +33,9 @@ class SchemaRunnerTests(unittest.TestCase):
             def __init__(self,command,**kwargs):
                 detail={'runId':'another-run' if foreign else kwargs['env']['POS_LOCAL_RUN_ID'],
                         'projectRef':m.PROJECTS['pos'],'semanticCatalogEqual':True}
-                outer.input.write('pos-reconstruction-report.json',detail)
+                detail.update(detail_flags or {})
+                suffix='candidate-upgrade' if extra_flags and '--candidate-upgrade' in extra_flags else 'reconstruction'
+                outer.input.write('pos-'+suffix+'-report.json',detail)
                 self.waits=0
             def wait(self,timeout=None):
                 self.waits+=1
@@ -41,6 +44,7 @@ class SchemaRunnerTests(unittest.TestCase):
                 return self.returncode
             def poll(self):return self.returncode
         argv=['schema-runner','pos','--snapshot-dir',str(self.area),'--output',str(self.output)]
+        argv.extend(extra_flags or [])
         with patch.object(runner.sys,'argv',argv),patch.object(runner.subprocess,'Popen',Child),\
              patch.object(runner,'cleanup_owned',return_value=cleanup),patch.object(runner.os,'killpg'),\
              contextlib.redirect_stdout(io.StringIO()):
@@ -67,6 +71,37 @@ class SchemaRunnerTests(unittest.TestCase):
     def test_timeout_is_not_a_completed_success(self):
         self.assertEqual(self.execute(timed_out=True),1)
         self.assertTrue(self.result()['timedOut']);self.assertEqual(self.result()['status'],'FAIL')
+
+    def test_requested_native_payment_stage_cannot_pass_when_missing(self):
+        self.input.write('pos-current-application-schema.sql',{'synthetic-private-test-file':True})
+        flags=['--native-roundtrip','--candidate-upgrade','--exercise-existing-transactions','--exercise-payment-receipts']
+        detail={'nativeDumpValidated':True,'candidateMigrationSelfChecksPassed':True,
+                'existingBusinessRowsPreserved':True,'postUpgradePaymentStockScenarioPassed':True}
+        self.assertEqual(self.execute(extra_flags=flags,detail_flags=detail),1)
+        self.assertEqual(self.result()['status'],'FAIL')
+
+    def test_payment_stage_without_native_fixture_fails_before_docker(self):
+        argv=['schema-runner','pos','--snapshot-dir',str(self.area),'--output',str(self.output),'--exercise-payment-receipts']
+        with patch.object(runner.sys,'argv',argv),patch.object(runner.subprocess,'Popen') as child:
+            with self.assertRaisesRegex(ValueError,'native POS existing-transaction'):
+                runner.main()
+            child.assert_not_called()
+        self.assertFalse(self.output.exists())
+
+    def test_owned_diagnostics_are_copied_privately_with_the_original_hash(self):
+        source=self.input.write('pos-owned-container-diagnostics.log',{'synthetic':'diagnostics'})
+        digest=hashlib.sha256(source.read_bytes()).hexdigest()
+        self.assertEqual(self.execute(detail_flags={'ownedContainerDiagnosticSha256':digest}),0)
+        target=self.output/'owned-container-diagnostics.log'
+        self.assertEqual(target.read_bytes(),source.read_bytes())
+        self.assertEqual(target.stat().st_mode & 0o777,0o600)
+        self.assertEqual(self.result()['diagnostics']['sha256'],digest)
+
+    def test_changed_diagnostics_cannot_support_a_pass(self):
+        self.input.write('pos-owned-container-diagnostics.log',{'synthetic':'changed'})
+        with self.assertRaisesRegex(ValueError,'diagnostics changed'):
+            self.execute(detail_flags={'ownedContainerDiagnosticSha256':'0'*64})
+        self.assertEqual(self.result()['status'],'FAIL')
 
     def test_cleanup_filters_only_this_run_and_never_prunes(self):
         calls=[];responses=iter(['abc123\n','','','',''])
