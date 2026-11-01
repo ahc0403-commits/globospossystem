@@ -37,11 +37,12 @@ VALUES(""" + literal(office_actor) + ",'super_admin','Synthetic Office administr
       "domain_authorities=excluded.domain_authorities,permission_model_version='v2',"
       "is_active=true,is_suspended=false,credential_state='active';" + """
 INSERT INTO core.office_permission_catalog(domain,action,display_name)
-VALUES('system','admin','Synthetic system admin'),('purchase','approve','Synthetic purchase approval')
+VALUES('system','admin','Synthetic system admin'),('purchase','approve','Synthetic purchase approval'),
+ ('purchase','view','Synthetic purchase view'),('finance','view','Synthetic finance view')
 ON CONFLICT(domain,action) DO NOTHING;
 INSERT INTO core.office_access_grants(user_profile_id,domain,action,scope_level,is_active,valid_from,granted_by,reason)
 SELECT p.id,x.domain,x.action,'group',true,now()-interval '1 hour',p.auth_id,'Synthetic runtime connection fixture'
-FROM public.office_user_profiles p CROSS JOIN(VALUES('system','admin'),('purchase','approve'))x(domain,action)
+FROM public.office_user_profiles p CROSS JOIN(VALUES('system','admin'),('purchase','approve'),('purchase','view'),('finance','view'))x(domain,action)
 WHERE p.auth_id=""" + literal(office_actor) + ';')
     platform.check(True,'real-auth-users-have-independent-platform-operator-profiles')
     def pos(name, body):

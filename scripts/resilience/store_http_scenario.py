@@ -62,9 +62,35 @@ def run(platform, accounts, legal):
     count=platform.sql('office',"SELECT count(*) FROM ops.stores WHERE pos_store_id IN ("+
       ','.join("'"+s+"'" for s in stores)+') AND legal_entity_id=\''+legal['officeLegal']+'\';').stdout.strip()
     platform.check(count=='2','both-pos-stores-use-the-verified-office-legal-owner')
+    def sync_procurement(label,expected):
+        status,result=platform.request('office','/functions/v1/pos-bridge',
+          {'action':'procurement_onboarding_sync'},token=platform.dispatch_token)
+        private_json(platform.output/('procurement-onboarding-'+label+'.private.json'),{'status':status,'body':result})
+        platform.check(status==200,'actual-office-procurement-onboarding-'+label)
+        import json
+        rows=json.loads(platform.sql('pos',"SELECT jsonb_agg(jsonb_build_object('store',restaurant_id,'connected',office_connected,'readiness',readiness) ORDER BY restaurant_id) FROM procurement_store_onboarding WHERE restaurant_id IN ("+
+          ','.join(platform.schema.lit(s) for s in stores)+');').stdout)
+        private_json(platform.output/('procurement-readiness-'+label+'.private.json'),rows)
+        platform.check(len(rows)==2 and all(row['connected'] is expected and
+          row['readiness'].get('office_connected') is expected and row['readiness'].get('accounting') is expected
+          and all(row['readiness'].get(k) is True for k in ('requester','store_manager','receiver')) for row in rows),
+          'both-new-store-procurement-native-readiness-'+label)
+    sync_procurement('connected',True)
+    # Explicit fixture fault injection into only this synthetic Office profile.
+    # The real bridge/roster must revoke the suspended principal then converge
+    # after restoration; no production user, grant or business row is changed.
+    profile=platform.schema.lit(accounts['office']['user']['id'])
+    platform.sql('office','UPDATE office_user_profiles SET is_suspended=true WHERE auth_id='+profile+';')
+    sync_procurement('suspended',False)
+    platform.sql('office','UPDATE office_user_profiles SET is_suspended=false WHERE auth_id='+profile+';')
+    sync_procurement('restored',True)
+    count=platform.sql('pos',"SELECT count(*) FROM procurement_role_roster WHERE system='office' AND stage IN ('purchase','finance') AND valid_until>now() AND restaurant_id IN ("+
+      ','.join(platform.schema.lit(s) for s in stores)+');').stdout.strip()
+    platform.check(count=='4','native-office-principals-resume-without-duplicate-active-roster-rows')
     private_json(platform.output/'generated-pos-accounts.private.json',private_accounts)
     platform.result['storeHttpScenario']={'storesCreated':2,'nativeAuthWorkerExercised':True,
-      'fixedAccountRequirements':len(private_accounts),'physicalOpeningAccepted':False,
+      'fixedAccountRequirements':len(private_accounts),'actualProcurementOnboardingAndSuspensionRecovery':True,
+      'physicalOpeningAccepted':False,
       'businessLifecycleComplete':False,'productionModified':False}
     platform.save()
     return {'brand':brand,'tax':legal['tax'],'stores':stores,'accounts':private_accounts}

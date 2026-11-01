@@ -72,7 +72,8 @@ def preflight(platform,project,path):
 
 def application_fingerprint(platform,project):
     query=Path(__file__).with_name('schema_export.sql').read_text().replace('/*SCOPE*/',
-      ','.join(platform.schema.lit(n) for n in sorted(platform.manifests[project]['scope'])))
+      ','.join(platform.schema.lit(n) for n in sorted(set(platform.manifests[project]['scope'])|
+        platform.schema.OPTIONAL_SCOPES[project])))
     query=query[:query.rindex('SELECT kind,ident,meta,encode')]+"SELECT coalesce(jsonb_agg(jsonb_build_array(kind,ident,encode(sha256(convert_to(meta::text,'UTF8')),'hex')) ORDER BY kind,ident),'[]'::jsonb) FROM objects;"
     # psql autocommit would otherwise ignore SET LOCAL and let a role default
     # search_path change dequalification/metadata text during comparison.

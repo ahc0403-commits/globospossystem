@@ -44,6 +44,10 @@
     {
       "path": "supabase/migrations/20261101185522_order_creation_command_receipts.sql",
       "sha256": "7f13d4d7a3a9cb5da7dcf494c09d99a0a7b563cb36e0c945495bc7f5722a693c"
+    },
+    {
+      "path": "supabase/migrations/20261101192425_procurement_readiness_observation_time.sql",
+      "sha256": "73e6caac07ff16485916a82bf811f1fcb6e17097fec6c83eba83eba6db3a6f3d"
     }
   ],
   "web": true,

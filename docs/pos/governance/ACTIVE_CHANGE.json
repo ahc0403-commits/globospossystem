@@ -9,7 +9,7 @@
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "b8a9839c0a123d83c7e9d4d4d179d2f58aea0221cfabfe99a3303164cfe96a49",
+      "sha256": "349797dd7abb9aa098c78757c0482f9941fcbf3bd08264ec50aadfc9b53e0c92",
       "mode": "100644"
     },
     "lib/core/auth/auth_command_session.dart": {
@@ -261,7 +261,7 @@
       "mode": "100644"
     },
     "scripts/cloud_deployment/plans/20261101_pos_resilience_completion.json": {
-      "sha256": "254599f001e1bc68725372d39380ef9191f34ae8fa38edf779a284db17637ec7",
+      "sha256": "aba2154da64dae773d08699b122c163c1941f83f96617ce695174ecc8c76afff",
       "mode": "100644"
     },
     "scripts/local_verification/Dockerfile": {
@@ -313,7 +313,7 @@
       "mode": "100644"
     },
     "scripts/resilience/legal_http_scenario.py": {
-      "sha256": "474ff84b1bed74556df07369ce0335208b07176b39e585da09cab5a401a8daf3",
+      "sha256": "5aab64f32ea9c8d0db12db9e7370030d95079fa45928c7cb747b5a53f5eb4b3c",
       "mode": "100644"
     },
     "scripts/resilience/office_accounts.py": {
@@ -349,7 +349,7 @@
       "mode": "100644"
     },
     "scripts/resilience/realtime_runtime.py": {
-      "sha256": "6b0f39361b9f7bc0d213d67dfdb6ecf6dfa266e36b4d7acd1077578002b6a42e",
+      "sha256": "eac67dafc912a6b1f2b807b84ec3a21a57aae22ac96e15613dd6409b607c0fab",
       "mode": "100644"
     },
     "scripts/resilience/run_platform_probe.py": {
@@ -361,7 +361,7 @@
       "mode": "100644"
     },
     "scripts/resilience/runtime_gateway.py": {
-      "sha256": "c7bec95002f3ae0f0476890e01b9f5fddc17ae36e32bb9b53455fcdcfa3f7e81",
+      "sha256": "9ef04a23a09a385afadbd138f48e8b90eab89345f3e5b2ee0f3f9c1f95f49790",
       "mode": "100644"
     },
     "scripts/resilience/sample_accounts.py": {
@@ -381,7 +381,7 @@
       "mode": "100644"
     },
     "scripts/resilience/schema_snapshot.py": {
-      "sha256": "581c63c7dbfb301608af6572cf7ee18814dd1e5d3408b28ea462143461e10eea",
+      "sha256": "d4c1c24cb487075d3fa6f37df6aa85f9cae05990b982ac0ec9e11f1f4189909a",
       "mode": "100644"
     },
     "scripts/resilience/schema_storage_reference_config.sql": {
@@ -397,7 +397,7 @@
       "mode": "100644"
     },
     "scripts/resilience/store_http_scenario.py": {
-      "sha256": "830f245948706642e9923a536e9ccf733273a6de61f076b1c5d3612770652c53",
+      "sha256": "e7d826f5691d5dd1c1bbb4a508033e5f01fd22da54c4dfd77265719046ceb989",
       "mode": "100644"
     },
     "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
@@ -433,7 +433,7 @@
       "mode": "100644"
     },
     "scripts/resilience/tests/test_runtime_gateway.py": {
-      "sha256": "da02f3299084d6c56a13386c762ae08b61e2b30b26ac3b415a8ef98e2e174fdf",
+      "sha256": "adfc2bc39f9fd11a71cf175cc86bcd12a4bc347bf54e12bd45b4042a491fff29",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_fixture_runner.py": {
@@ -486,6 +486,10 @@
     },
     "supabase/migrations/20261101185522_order_creation_command_receipts.sql": {
       "sha256": "7f13d4d7a3a9cb5da7dcf494c09d99a0a7b563cb36e0c945495bc7f5722a693c",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101192425_procurement_readiness_observation_time.sql": {
+      "sha256": "73e6caac07ff16485916a82bf811f1fcb6e17097fec6c83eba83eba6db3a6f3d",
       "mode": "100644"
     },
     "test/admin_core_overlay_operational_test.dart": {

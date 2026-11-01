@@ -58,6 +58,7 @@ class RuntimeGateway(ThreadingHTTPServer):
         self.active, self.max_active = 0, 0
         self.total_bytes, self.max_response_bytes = 0, 0
         self.latencies = [0] * 11
+        self.websocket_lifetimes = [0] * 11
         self.drop_next = Counter()
         self.dropped = 0
         super().__init__(('127.0.0.1', 0), GatewayHandler)
@@ -100,7 +101,8 @@ class RuntimeGateway(ThreadingHTTPServer):
                     'active': self.active, 'maxActive': self.max_active,
                     'totalResponseBytes': self.total_bytes, 'maxResponseBytes': self.max_response_bytes,
                     'latencyBucketsSeconds': ['.01', '.05', '.1', '.25', '.5', '1', '2', '5', '10', '30', '>30'],
-                    'latencyCounts': list(self.latencies), 'faultResponsesDropped': self.dropped,
+                    'latencyCounts': list(self.latencies),'websocketLifetimeCounts':list(self.websocket_lifetimes),
+                    'faultResponsesDropped': self.dropped,
                     'websocketActive':len(self.websocket_connections),'websocketPeak':self.websocket_peak,
                     'websocketTransferredBytes':self.websocket_bytes}
 
@@ -240,7 +242,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 gateway.statuses[str(status)] += 1
                 gateway.total_bytes += size
                 gateway.max_response_bytes = max(size, gateway.max_response_bytes)
-                gateway.latencies[next((i for i,b in enumerate(bounds) if elapsed <= b), 10)] += 1
+                buckets=gateway.websocket_lifetimes if websocket else gateway.latencies
+                buckets[next((i for i,b in enumerate(bounds) if elapsed <= b), 10)] += 1
 
     def _websocket(self,parsed):
         """Forward RFC6455 bytes to this run's actual server, with bounded buffers.

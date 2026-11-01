@@ -144,6 +144,8 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.gw.snapshot()['websocketPeak'],1)
         self.assertEqual(self.gw.snapshot()['websocketTransferredBytes'],len(payload)*2)
         self.assertEqual(self.gw.snapshot()['websocketActive'],0)
+        self.assertEqual(sum(self.gw.snapshot()['latencyCounts']),0)
+        self.assertEqual(sum(self.gw.snapshot()['websocketLifetimeCounts']),1)
 
     def test_websocket_capacity_has_an_explicit_limit(self):
         for _ in range(32):self.gw.websocket_slots.acquire()

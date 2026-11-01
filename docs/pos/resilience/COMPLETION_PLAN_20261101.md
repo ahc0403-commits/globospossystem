@@ -1361,7 +1361,7 @@ v1의 invoice policy, v2의 개시 차단은 실제 필요한 선행 조건이�
 이 155를 더해 전체 통합 완료 수치로 만들지 않는다.
 
 공식 parser로 준비한 `scripts/cloud_deployment/plans/20261101_pos_resilience_completion.json`
-에는 POS 6개 SQL을 의존 순서와 실제 SHA256으로 고정했다. Office SQL/Edge/web는
+에는 POS 7개 SQL을 의존 순서와 실제 SHA256으로 고정했다. Office SQL/Edge/web는
 별도 공식 단계다. 추가형 원장/확정 기록을 유지한 web rollback을 계획하며 populated
 원장 삭제나 migration history 수정은 하지 않는다. 이 파일 준비는 운영 적용이 아니다.
 
@@ -1386,3 +1386,42 @@ legacy 복구·나머지 결과 규약은 계속 잔여이며 이 수정으로 �
 부하, 동결 1배/3배 각 12시간, 최종 main 전체 recipe 및 공식 운영 배포는 아직 미완료다.
 현재 12시간 작업은 백그라운드에도 실행 중이지 않다. 기존 운영 로그인 smoke 면제는
 NOT_RUN_OWNER_WAIVER로 유지한다.
+
+### G2 구매·회계 연결과 동일 transaction의 권한 회수
+
+실제 Office 권한 catalog에서 확인한 purchase/view와 finance/view를 신뢰된 기존
+합성 운영자 context에 포함하고, 실제 procurement_onboarding_sync를 첫/추가 매장
+매핑 뒤에 실행했다. 법인/매장 owner를 seed하지 않고 기존 운영자의 승인된 업무
+권한을 모델링한다. 두 신규 매장의 requester/store manager/receiver/Office 구매/
+회계 준비 상태가 실제 bridge와 native roster에서 true가 되는 것을 확인했다.
+
+같은 합성 Office profile을 정지시키는 명시적 fault를 주입하자 office_connected는
+false인데 accounting 준비 상태가 true로 남았다. 만료 기록은 clock_timestamp()지만
+후속 recompute가 transaction 시작 now()로 검사해, 방금 만료시킨 행을 같은
+transaction에서 유효한 것으로 계산했다. 실제 Office 정지는 반영됐으므로 이것을
+정지 계정의 금융 실행 성공이나 운영 권한 침해로 확대 해석하지 않는다.
+
+CLI 생성 `20261101192425_procurement_readiness_observation_time.sql`은 native
+connect_procurement_stores의 검토된 유효 정의 hash를 확인한 뒤, 함수 진입의 관측
+시각을 한 번 잡아 기존 8개 시간 비교/기록에 사용한다. 앞선 만료 statement 뒤의
+시각으로 준비 상태를 계산하며 추가 query나 행별 호출을 만들지 않는다. 원래 owner/
+ACL·signature를 유지했는지 transaction 안에서 확인한다. 공식 POS plan은 7개다.
+
+`/workspace/.private/resilience-store-procurement-readiness-20261101-v2/result.json`:
+162 parent 조건 PASS, 109.00초, cleanup=true. 원본 source e7fb8c38+기록된 dirty
+helper/SQL 입력, Office 45d6b8c8이다. receipt SHA256:
+`d12e8654094ec797b78a8a0f604dddd0c563f98db29ba11d9ef54fc5215c7a5d`.
+실제 신규 법인/두 매장/근태/주문/두 KDS 정책과 함께, 정지 시 구매·회계 해제,
+복구 시 재연결과 활성 roster 4행의 중복 없음까지 확인했다. 두 매장 모두 정지
+후 accounting=false, 복구 후 true다. v1의 실제 잘못된 준비 상태/실패 증거도 보존한다.
+이것은 구매 신청→승인→PO→검수/입고 전체 완료 증거가 아니다.
+
+Office 변경은 현재 Office 지침과 기존 정상 PR 게시 승인에 따라 draft PR #224
+(45d6b8c8)로 등록했다. GitHub Actions/runner 성공을 새 배포 전제조건으로 추가하거나
+설정을 바꾸지 않았다. POS PR #655와 함께 검토하며 두 저장소의 최종 공식 gate는
+계속 필요하다.
+
+다음 결합 시험은 이 변경과 양쪽 Storage/Realtime·원장 private namespace까지 함께
+고정해 실행한다. gateway의 HTTP 지연과 장시간 WebSocket 수명은 별도 bucket으로
+기록해, 연결 유지 시간을 요청 지연으로 오인하지 않는다. 운영/2시간/각 12시간은
+여전히 미실행이며 실단말 접속 경로와 전체 업무/혼합 시나리오가 남아 있다.
