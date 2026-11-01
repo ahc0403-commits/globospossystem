@@ -21,6 +21,10 @@ Do not create a separate `claude.md` copy; read case-only aliases once.
 Follow platform instruction precedence and the user's explicit requests.
 Preserve tracked and untracked uncommitted workspace changes and follow the
 production gates in `CLAUDE.md`.
+Read `docs/pos/governance/REGRESSION_GOVERNANCE_KO.md` before product changes.
+Keep the feature contract inventory and source-bound active change assessment
+current. Passing their structural gate does not prove business correctness,
+measured performance or completion of remaining product work.
 Use GitHub for authorized commits/pushes and review. Work in the approved existing
 Codex Cloud workspace and its supported isolated environments; do not move
 verification to the user's Mac or another VM without authorization. The owner's

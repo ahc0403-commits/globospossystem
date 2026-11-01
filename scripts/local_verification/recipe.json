@@ -10,6 +10,12 @@
   },
   "steps": [
     {
+      "id": "change-governance-contract",
+      "argv": ["python3", "-B", "-m", "unittest", "discover", "-s", "scripts/governance/tests", "-v"],
+      "format": "unittest",
+      "timeoutSeconds": 120
+    },
+    {
       "id": "local-gate-contract",
       "argv": [
         "python3",

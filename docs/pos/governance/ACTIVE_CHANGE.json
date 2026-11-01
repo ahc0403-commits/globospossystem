@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "baseSha": "9680808a7d7f43451dc7f4023281d6a0f9f5fb7c",
+  "kind": "tooling",
+  "summary": "Activate source-bound change governance for all POS features before remaining product work.",
+  "inputs": {
+    "AGENTS.md": {
+      "sha256": "9a88f9b04d2dc4f78b0077ad062d427c574be609a9d4357c0c715276f0691231",
+      "mode": "100644"
+    },
+    "CLAUDE.md": {
+      "sha256": "83a1d26a4ffb00e113e5fdf4284a4a93d1e14b64a241146c3b0b19e6ca9be4e7",
+      "mode": "100644"
+    },
+    "docs/pos/governance/FEATURE_CONTRACTS.json": {
+      "sha256": "2613003dc45cb254fd48a43e3ece507bc9ae7855d00df2b944b281ff95905607",
+      "mode": "100644"
+    },
+    "docs/pos/governance/REGRESSION_GOVERNANCE_KO.md": {
+      "sha256": "8b5abff4fccd94d5d3feaa767e464528a3f09282ec5261b48b252f2f46d0fc3f",
+      "mode": "100644"
+    },
+    "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
+      "sha256": "7d8f2b3e55aff73a2d706c5f9e0f748b033f28117cc0007f1810eaa83f83bdce",
+      "mode": "100644"
+    },
+    "scripts/check_repo.sh": {
+      "sha256": "fd850c54557d420327825e827146fca475f4b80dc5e55ef4b044f59e69c2ab18",
+      "mode": "100755"
+    },
+    "scripts/deploy_pos_production.sh": {
+      "sha256": "c3648ddb43676a38a36f7502332cc4f071692034519d5be3afe9ae02187958a0",
+      "mode": "100755"
+    },
+    "scripts/governance/check.py": {
+      "sha256": "8b1665baae898677ae1e22ca83f28f7bbf4c52e9d11b50fc2574dcc49757004d",
+      "mode": "100644"
+    },
+    "scripts/governance/tests/test_check.py": {
+      "sha256": "74ad57d6d762db785d7f5078b18c3a76842fcced717f9ae488cdeb13ddb6e4bc",
+      "mode": "100644"
+    },
+    "scripts/local_verification/recipe.json": {
+      "sha256": "9d0bd646974d6e650f6c8776e5ce894fff57aa43583cce828a6a51820b66f213",
+      "mode": "100644"
+    },
+    "test/pos_db_only_deploy_contract_test.sh": {
+      "sha256": "0e5ee96ecc879517f83d634ecfbb76b7bf552fa090902fc4e4876f759925608d",
+      "mode": "100755"
+    },
+    "test/pos_deploy_git_history_guard_test.sh": {
+      "sha256": "bd0c777d79197f169816c878ea4eb563cd6a0f202b4442c8eff74047f3fc3cb4",
+      "mode": "100755"
+    }
+  },
+  "affectedFeatures": [],
+  "sharedAreas": [
+    "verification",
+    "project-policy"
+  ],
+  "risk": {
+    "business": false,
+    "financial": false,
+    "authorization": false,
+    "dataAccess": false,
+    "background": false,
+    "dbContract": false,
+    "officeContract": false,
+    "files": false,
+    "native": false
+  },
+  "requiredChecks": [
+    "governance-unit",
+    "cloud-transport",
+    "local-release-verifier",
+    "independent-receipt-verifier",
+    "deploy-db-only",
+    "deploy-git-history"
+  ],
+  "businessInvariants": [
+    "No application, business SQL, financial allocations or store access rules change.",
+    "Existing sample/retired workflow and Auth boundaries remain in their product contracts."
+  ],
+  "dataAccessReview": {
+    "nPlusOne": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "setBasedSql": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "rowsColumns": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "joinCardinality": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "indexesPaging": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "refreshPolling": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "cacheScope": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "concurrency": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "retryIdempotency": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "largeResults": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    },
+    "repeatedAggregates": {
+      "applicable": false,
+      "reason": "Governance reads bounded local source/Git metadata; no product database or remote API calls."
+    }
+  },
+  "rollback": "Revert governance tooling through a normal source change; preserve application data, migration history and required existing release gates.",
+  "claims": {
+    "allPlanComplete": false,
+    "performanceImproved": false
+  },
+  "contractReview": {
+    "outcomes": {
+      "applicable": false,
+      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+    },
+    "tenantScope": {
+      "applicable": false,
+      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+    },
+    "readiness": {
+      "applicable": false,
+      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+    },
+    "dbCompatibility": {
+      "applicable": false,
+      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+    },
+    "officeBoundary": {
+      "applicable": false,
+      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+    },
+    "externalEffects": {
+      "applicable": false,
+      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+    },
+    "resourceLifetime": {
+      "applicable": false,
+      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+    },
+    "filesAndHardware": {
+      "applicable": false,
+      "reason": "Governance changes source declarations and local validation only; product behavior and contracts are untouched."
+    }
+  }
+}
