@@ -33,7 +33,11 @@
         "feature.auth",
         "official-full-recipe",
         "auth-platform-preflight",
-        "auth-platform-guards"
+        "auth-platform-guards",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -146,7 +150,11 @@
         "feature.onboarding",
         "official-full-recipe",
         "auth-platform-preflight",
-        "auth-platform-guards"
+        "auth-platform-guards",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -226,7 +234,11 @@
       "checks": [
         "feature.procurement",
         "official-full-recipe",
-        "office-first-legal-native"
+        "office-first-legal-native",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -319,7 +331,11 @@
       "checks": [
         "feature.store_setup",
         "official-full-recipe",
-        "office-first-legal-native"
+        "office-first-legal-native",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -342,7 +358,11 @@
         "official-full-recipe",
         "office-first-legal-native",
         "auth-platform-preflight",
-        "auth-platform-guards"
+        "auth-platform-guards",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -751,6 +771,22 @@
     },
     "payment-command-v2-native": {
       "path": "scripts/resilience/payment_command_v2_fixture.py",
+      "kind": "focused"
+    },
+    "two-project-real-platform": {
+      "path": "scripts/resilience/run_platform_probe.py",
+      "kind": "focused"
+    },
+    "first-legal-real-http": {
+      "path": "scripts/resilience/legal_http_scenario.py",
+      "kind": "focused"
+    },
+    "runtime-gateway-guards": {
+      "path": "scripts/resilience/tests/test_runtime_gateway.py",
+      "kind": "focused"
+    },
+    "owned-platform-guards": {
+      "path": "scripts/resilience/tests/test_owned_platform.py",
       "kind": "focused"
     }
   },

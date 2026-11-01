@@ -14,9 +14,9 @@ main `d5d1797e`는 연결 작업 `45d6b8c8`의 조상이다. 사용자 원래 ch
 
 | 묶음 | 확보한 부분 | 남은 완료 조건 |
 |---|---|---|
-| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
+| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth/REST/Office Edge fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
 | G1 | native 복원/최종 객체 대조, 업그레이드 금융 보존·receipt 검사 | Auth 외 Realtime/Storage 등 플랫폼 결합과 모든 신규/업그레이드 업무 |
-| G2 | 양쪽 SQL/Edge/UI 구현, 실제 두 DB의 연결 20건 | 두 앱의 실제 로그인→법인→POS 개설/준비→Office 업무 전체 흐름 |
+| G2 | 양쪽 SQL/Edge/UI 구현, native SQL 20건 및 실제 Auth→REST→Edge 연결/복구 | 두 앱의 실제 로그인→법인→POS 개설/준비→Office 업무 전체 흐름 |
 | G3 | root scope, KDS progress journal, 일부 주문/QC/설정/리포트/근태·증빙 전환 | 나머지 legacy 도메인, 계산대 분할·합산·비매출 복구와 나머지 서버 계약 |
 | G4 | 메뉴 잔량 부분 갱신, 리포트 요청 병합, 증빙 metadata batch | 계산대 summary/detail·페이지, 전체 worker 예산, 규모별 계획/실측 |
 | G5 | native JSON worker 누적 수정, 일부 화면/타이머 수명 | 큰 화면 분리, 파일/큐/이미지/worker 메모리 및 전체 자원 상한 |
@@ -941,3 +941,56 @@ Ubuntu Dockerfile에는 libsqlite3-dev를 명시했다. 새 공식 image/전체 
 
 분할·합산·비매출 자체의 원래 요청 journal/SQL 배치, 전체 런타임·업무 G6,
 실단말·2시간 사전 부하·1배/3배 각 12시간·운영 배포는 계속 미완료다.
+
+
+### G0/G2 실제 Auth·JWT API·Office Edge의 연결과 응답 유실
+
+`scripts/resilience/owned_platform.py`와 loopback gateway/실행 wrapper를 추가해
+동일 클라우드에서 두 프로젝트를 함께 실행했다. 현재 native POS/Office schema에
+forward migration을 적용하고 실제 GoTrue v2.196.0과 PostgREST 14.5를 immutable
+image digest로 사용한다. REST는 superuser 대신 authenticator 로그인에서 JWT role로
+전환한다. 실제 Auth Admin API가 합성 사용자를 생성하고 실제 로그인/갱신 토큰을
+사용한다. 서버 비밀·계정·SQL 진단은 private 출력 경로에만 둔다. 운영 계정/파일/
+비밀번호 해시/cron 자료를 복사하지 않는다.
+
+Office `pos-bridge/index.ts`와 전체 import 모듈의 업무 코드는 그대로 실행했다.
+시험 adapter는 Deno.serve의 수신 port만 loopback 임의 port로 바꾸고, source/run/PID를
+대조한다. URL import 11개 integrity는 원래 Office scripts/deno.lock과 같으며 도구용
+packageJson workspace 기록만 제거한 별도 fixture lock을 frozen 모드로 사용한다.
+DENO_NO_PACKAGE_JSON과 --no-npm으로 POS의 다른 도구 workspace도 끼어들지 않는다.
+실제 코드의 외부 요청 권한은 loopback으로만 제한한다. 제품 Edge/DB 권한이나
+전역 잠금파일을 변경하지 않았다.
+
+기초 runtime 21조건 PASS, 58.58초/정리 확인 후, 실제 Edge 법인 흐름 36조건 PASS,
+48.04초/정리 확인을 확보했다. 기존 다른 법인/매장에 속한 플랫폼 관리자 맥락만
+provision하고 신규 법인과 소유 관계는 실제 API로 생성했다. Office Auth가 이미
+기본 profile을 만드는 native trigger도 유지했다. 시험 관리자를 준비할 때 이 profile을
+갱신하며 중복 INSERT나 trigger 해제로 해결하지 않는다.
+
+검사 범위는 실제 로그인/갱신 → POS admin_upsert_tax_entity_v2 신규 법인 등록 →
+매장 0개 확인 → 실제 Office 기존 onboarding action의 capability 발표 → 연결 preview/
+확정 → POS 확인 transaction 후 HTTP 응답 강제 유실 → 동일 operation resume →
+20회 HTTP resume이다. Office 법인/활성 link/ACK가 한 건이며 양쪽 Auth/업무 UUID는
+서로 다르다. 익명 함수 ACL·프로젝트 key 혼용·private schema 노출도 차단했다.
+
+단일 EOF 주입에서는 **Deno 전송 계층이 같은 buffered POST를 한 번 더 보내는 현상**을
+관측했다. 코드는 fetch 1회였지만 실제 HTTP는 2회였고 원래 operation 덕분에 owner는
+중복 생성되지 않았다. 지속적인 응답 유실을 주입한 최종 실행도 실제 2번 전송 후
+unknown을 반환하고, 연결 복원 후 같은 요청을 복구했다. 이 관측을 모든 브라우저/
+POS 장애의 원인으로 일반화하지 않는다. 재시도 반복문 유무만으로 모든 쓰기의
+중복 전달 가능성이 없다고 가정하지 않으며, 남은 legacy 쓰기의 원래 ID/멱등성
+전환은 계속 필요하다.
+
+증거는 `/workspace/.private/resilience-two-platform-probe-20261101-v2/result.json`,
+`/workspace/.private/resilience-real-legal-http-20261101-v4/result.json`, 개발 로그
+real-legal-auth-rest-edge-v4.log다. source는 7ef7cca9+기록된 당시 도구 hash의 개발
+증거다. 실행 중 도구 입력과 clean Office 45d6b8c8 source가 바뀌지 않았는지 검사했다.
+후속 cleanup 보강은 별도 도구 검사로 검증하며 과거 receipt의 hash/시간을 덮어쓰지
+않는다. gateway/경로/키/상한/응답 유실 검사 7개, owned process·진단·thread 종료/
+입력 변경 검사 6개, shared schema registry/runner 27개 PASS다. 초기 setup/trigger/
+잠금파일/EOF 기대값 실패와 그 소유 자원 정리 증거도 보존한다.
+
+이 실행은 브라우저의 실제 두 앱 화면, 첫/추가 매장 개설부터 구매·근태·영업까지의
+전체 G2/G6를 완료하지 않았다. 실제 Storage/Realtime/mail/printer는 NOT_PREPARED다.
+없는 서비스를 501로 표시하며 가짜 업로드/이벤트/출력 성공을 반환하지 않는다.
+실단말·2시간 혼합 및 각 12시간 시험, 운영 배포와 두 마감 관찰은 아직 시작하지 않았다.

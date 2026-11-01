@@ -14,6 +14,14 @@ import re
 
 ROOT=Path(__file__).resolve().parents[2]
 PROJECTS={'pos':'ynriuoomotxuwhuxxmhj','office':'raghsbaxcwrxlsacaoau'}
+CANDIDATE_MIGRATIONS={
+ 'pos':['20261101022105_pos_resilience_completion_contracts.sql',
+        '20261101023409_pos_office_legal_connection.sql',
+        '20261101045728_kds_progress_receipt_reconciliation.sql',
+        '20261101094500_payment_command_receipts.sql',
+        '20261101132612_payment_command_cancellation_barriers.sql'],
+ 'office':['20261101023410_office_first_pos_legal_connection.sql'],
+}
 SCOPES={
  'pos':{'public','pos_invoice_private','inventory_migration_backup','auth','storage'},
  'office':{'accounting','core','dashboard','documents','finance','hr','inventory','office_release_transport','ops','private','public','system','workflow','auth','storage'},

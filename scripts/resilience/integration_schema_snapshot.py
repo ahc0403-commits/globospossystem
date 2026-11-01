@@ -173,12 +173,7 @@ def run(name,native=False,candidate=False,office_root=None,exercise_transactions
             m.require(target is not None and Path(target).is_absolute(),'Office source root is required')
             native_query="SELECT jsonb_object_agg(p.oid::regprocedure::text,md5(pg_get_functiondef(p.oid))) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN('process_payment','process_combined_table_payment','process_non_revenue_payment','process_payment_before_promotion_read_split','process_payment_without_scoped_promotions');"
             if name=='pos':native_before=json.loads(sql(native_query).stdout)
-            versions={'pos':['20261101022105_pos_resilience_completion_contracts.sql',
-                             '20261101023409_pos_office_legal_connection.sql',
-                             '20261101045728_kds_progress_receipt_reconciliation.sql',
-                             '20261101094500_payment_command_receipts.sql',
-                             '20261101132612_payment_command_cancellation_barriers.sql'],
-                      'office':['20261101023410_office_first_pos_legal_connection.sql']}[name]
+            versions=m.CANDIDATE_MIGRATIONS[name]
             for filename in versions:
                 path=Path(target)/'supabase/migrations'/filename
                 m.require(path.is_file() and not path.is_symlink(),'Missing candidate migration source')
