@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/services/pos_backend.dart';
 import '../../core/auth/operation_scope_provider.dart';
+import '../../core/utils/coalesced_refresh.dart';
+import '../../core/utils/owned_read_session.dart';
 import 'menu_sales_analytics.dart';
 
 class DailyRevenue {
@@ -536,6 +538,11 @@ class ReportNotifier extends StateNotifier<ReportState> {
 
   final SupabaseClient? _client;
   int _requestId = 0;
+  static const _readRpcs = {'get_store_report_summary_v2'};
+  final _refreshQueue = CoalescedRefresh();
+  OwnedReadSession _reads = OwnedReadSession(allowedRpcs: _readRpcs);
+  Object? _loadScope;
+  Future<void>? _load;
 
   Future<void> setDateRange(
     DateTime start,
@@ -562,27 +569,56 @@ class ReportNotifier extends StateNotifier<ReportState> {
     await loadReport(storeId);
   }
 
-  Future<void> loadReport(String storeId) async {
-    if (!mounted) return;
+  Future<void> loadReport(String storeId) {
+    if (!mounted) return Future.value();
+    final startDate = DateFormat('yyyy-MM-dd').format(state.startDate);
+    final endDate = DateFormat('yyyy-MM-dd').format(state.endDate);
+    final query = (storeId, startDate, endDate);
+    if (_loadScope == query && _load != null) return _load!;
+    _loadScope = query;
     final requestId = ++_requestId;
-    final requestedStart = state.startDate;
-    final requestedEnd = state.endDate;
+    _reads.dispose();
+    final drained = _refreshQueue.run(() async {
+      // Publish ownership before callbacks can synchronously change the view.
+      await Future<void>.value();
+      if (!mounted || requestId != _requestId) return;
+      final owner = _reads = OwnedReadSession(allowedRpcs: _readRpcs);
+      await _fetchReport(storeId, startDate, endDate, requestId, owner);
+    });
+    if (_load == null) {
+      late final Future<void> pending;
+      pending = drained.whenComplete(() {
+        if (identical(_load, pending)) _load = null;
+      });
+      _load = pending;
+    }
+    final pending = _load!;
     state = state.copyWith(
       isLoading: true,
       clearError: true,
       clearSummary: true,
     );
+    return pending;
+  }
 
+  Future<void> _fetchReport(
+    String storeId,
+    String startDate,
+    String endDate,
+    int requestId,
+    OwnedReadSession owner,
+  ) async {
     try {
-      final startDate = DateFormat('yyyy-MM-dd').format(requestedStart);
-      final endDate = DateFormat('yyyy-MM-dd').format(requestedEnd);
-      final response = await (_client ?? supabase).rpc(
-        'get_store_report_summary_v2',
-        params: {
-          'p_store_id': storeId,
-          'p_from_date': startDate,
-          'p_to_date': endDate,
-        },
+      final response = await owner.run(
+        _client ?? supabase,
+        (db) => db.rpc(
+          'get_store_report_summary_v2',
+          params: {
+            'p_store_id': storeId,
+            'p_from_date': startDate,
+            'p_to_date': endDate,
+          },
+        ),
       );
       if (!mounted || requestId != _requestId) return;
       if (response is! Map ||
@@ -609,6 +645,15 @@ class ReportNotifier extends StateNotifier<ReportState> {
         clearSummary: true,
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _requestId++;
+    _load = null;
+    _refreshQueue.dispose();
+    _reads.dispose();
+    super.dispose();
   }
 
   List<int> exportToExcel({MenuSalesAnalytics? menuSalesAnalytics}) {

@@ -236,6 +236,53 @@ void main() {
     },
   );
 
+  test('twenty identical report refreshes share one pending RPC', () async {
+    final n = container.read(reportProvider.notifier);
+    final gate = reportGate = Completer<void>();
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    final first = n.loadReport('store-a');
+    final pending = [for (var i = 0; i < 20; i++) n.loadReport('store-a')];
+    expect(pending.every((p) => identical(p, first)), isTrue);
+    for (var i = 0; i < 100 && reportReads == 0; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(reportReads, 1);
+    gate.complete();
+    await Future.wait([first, ...pending]);
+    expect(reportReads, 1);
+    await n.loadReport('store-a');
+    expect(reportReads, 2);
+  });
+
+  test('rapid report filters retain only the latest queued query', () async {
+    final n = container.read(reportProvider.notifier);
+    final gate = reportGate = Completer<void>();
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    final first = n.loadReport('store-a');
+    for (var i = 0; i < 100 && reportReads == 0; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(reportReads, 1);
+    final calls = [
+      for (var i = 1; i <= 100; i++)
+        n.setDateRange(DateTime(2026, 1, i), DateTime(2026, 1, i), 'store-a'),
+    ];
+    expect(n.state.summary, isNull);
+    expect(n.state.isLoading, isTrue);
+    expect(reportReads, 1);
+    gate.complete();
+    await Future.wait([first, ...calls]);
+    expect(reportReads, 2);
+    expect(n.state.startDate, DateTime(2026, 1, 100));
+    expect(n.state.summary!.dineInRevenue, 200);
+    expect(n.state.error, isNull);
+    expect(n.state.isLoading, isFalse);
+  });
+
   testWidgets(
     'report reloads without a store switch and discards an older actor response',
     (tester) async {
@@ -243,8 +290,19 @@ void main() {
       expect(reportReads, 1);
       final old = container.read(reportProvider.notifier);
       final gate = reportGate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
       final pending = old.loadReport('store-a');
-      await tester.pump();
+      // A request-owned native JSON worker starts asynchronously. Wait until
+      // this specific old request has actually reached the response gate.
+      for (var i = 0; i < 200 && reportReads < 2; i++) {
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(reportReads, 2);
       auth.publish(_state('actor-b'));
       await tester.pumpAndSettle();
       expect(reportReads, 3);

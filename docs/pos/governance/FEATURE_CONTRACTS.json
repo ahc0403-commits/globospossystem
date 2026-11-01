@@ -8,7 +8,9 @@
       "sourceRoot": "lib/features/admin",
       "checks": [
         "feature.admin",
-        "official-full-recipe"
+        "official-full-recipe",
+        "owned-read-lifetime",
+        "session-bound-views"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -252,7 +254,9 @@
       "sourceRoot": "lib/features/report",
       "checks": [
         "feature.report",
-        "official-full-recipe"
+        "official-full-recipe",
+        "owned-read-lifetime",
+        "session-bound-views"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -669,6 +673,10 @@
     },
     "native-kds-json-resources": {
       "path": "test/resilience/native_rpc_resource_probe.dart",
+      "kind": "focused"
+    },
+    "owned-read-lifetime": {
+      "path": "test/data_access/owned_read_session_test.dart",
       "kind": "focused"
     }
   },

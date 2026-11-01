@@ -716,3 +716,41 @@ native-resource-recipe-contract.log. 개발 Linux native debug VM의 작은 합�
 시험이다. 웹의 YAJsonIsolate는 worker를 만들지 않으므로 이 실측을 웹 야간 지연
 원인이나 운영/실기기 성능 향상의 증거로 바꾸지 않는다. 실제 웹 혼합 부하, 전체
 자원/worker 합산 예산, 최종 main 전체 recipe와 운영/12시간 시험은 여전히 미완료다.
+
+### G3/G4 조회 요청의 수명·상한과 리포트 연속 조건 변경
+
+설정/리포트의 읽기는 공유 Auth HTTP client를 닫지 않는 OwnedReadSession을 사용한다.
+원래 actor/JWT를 포착하고 물리 전송 전 사용자 변경을 거부한다. SDK의 만료 토큰
+갱신은 공유하며 자동 업무 재시도를 추가하지 않는다. 조회 세션은 table GET/HEAD와
+검토한 RPC만 허용하고 INSERT/UPDATE/DELETE 및 미등록 RPC를 전송 전에 거부한다.
+전체 조회 예산은 15초이며 JSON 초기화·연속 읽기 간격도 포함한다. 리포트 응답은
+4 MiB, 설정 metadata는 응답당 128 KiB를 넘으면 명시적으로 실패한다. 합계를 자르는
+방식으로 성공 처리하지 않는다. 설정의 두 고정 조회는 한 예산을 사용한다.
+
+같은 리포트 진행 요청 20회는 한 Future/HTTP 요청을 공유한다. 날짜를 빠르게
+100회 바꾸면 실행 중 요청과 마지막 후속 조회만 남긴다. 이전 HTTP/JSON 정리가
+끝난 후 다음 client를 시작하며, 새 조건을 요청하는 즉시 이전 합계를 숨긴다.
+완료 데이터를 무기한 캐시하지 않으며 새 폴링/이벤트를 도입하지 않는다.
+
+개발 영향 검사 고유 26개 PASS(앞선 25개와 추가 연속 조건 변경 1개). 실제 TCP
+응답 중단, 공유 Auth transport 보존, 두 만료 세션의 인증 갱신 1회, 원래 JWT 보존,
+actor 변경 전송 0회, 크기/시간 초과 및 화면/저장 회귀를 포함한다. 마지막 리포트
+4개 재실행과 Dart 분석 0건의 로그는 report-coalescing-tests.log,
+owned-read-final-coalescing-analysis.log이며 앞선 증거는 owned-read-lifetime-final.log다.
+이 수치는 합성 client 검사이며 전체 DB 비용/운영/실단말/12시간 증거가 아니다.
+
+실제 PostgreSQL/PostgREST의 리포트·엑셀 대상 검사는 별도 개발 fixture로 실행한다.
+도구 이미지 복제 시 디스크 부족과 Flutter 내부 의존성 초기화 지연을 확인했으므로
+이 실패는 PASS로 집계하지 않는다. 오프라인 SDK 내부 의존성 준비로 지연 원인을
+확인했다. 후속 개발 실행은 소유한 작은 네트워크 anchor와 기존 관리형 Debian 13
+호스트 도구를 사용하며 Ubuntu 24.04 최종 recipe 증거로 대체하지 않는다. 공식 전체
+검사 전에는 기존 디스크 사전 점검을 다시 충족해야 한다. 금융 fixture는 실패 시
+종료된 소유 컨테이너 로그를 보존하고 준비 루프를 즉시 종료하도록 수정했다.
+
+후속 실제 PostgreSQL 17.6.1.104 + PostgREST 14.5 개발 실행은 7 PASS/0 FAIL/0 SKIP,
+전체 실행 56.43초, 소유 resource 정리 확인으로 끝났다. 기존 혼합 입력 계산과
+일치, 페이지를 넘는 배달 합계, 매장/전체/Excel·분할 결제 합계, 베트남 자정 경계,
+새 조회 실패 후 이전 표시/내보내기 제거, 늦은 날짜 범위 응답 폐기를 검사했다.
+증거: `/workspace/.private/owned-read-postgrest-evidence-20261101-v7/result.json` 및
+동일 폴더 `focused-postgrest.log`. source SHA와 working patch hash가 기록된 개발
+검사이며 final-main/운영 receipt가 아니다. v1~v6 환경 실패는 그대로 보존한다.
