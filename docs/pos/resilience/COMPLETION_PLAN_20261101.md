@@ -14,9 +14,9 @@ main `d5d1797e`는 연결 작업 `45d6b8c8`의 조상이다. 사용자 원래 ch
 
 | 묶음 | 확보한 부분 | 남은 완료 조건 |
 |---|---|---|
-| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth/REST/양쪽 Edge/POS Storage·양쪽 Realtime fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
-| G1 | native 복원/최종 객체 대조, 업그레이드 금융 보존·receipt 검사 | Realtime/Office Storage·브라우저 등 전체 플랫폼 결합과 모든 신규/업그레이드 업무 |
-| G2 | 양쪽 SQL/Edge/UI, 실제 신규 법인·첫/추가 매장·Auth worker·직원/사진 근태 연결 | 두 앱의 실제 로그인→법인→POS 개설/준비→Office 업무 전체 흐름 |
+| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth/REST/양쪽 Edge·Storage·Realtime와 공통 HTTP/WS 주소 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
+| G1 | native 복원/최종 객체 대조, 업그레이드 금융 보존·결제/주문 receipt 검사 | 전체 브라우저 결합과 모든 신규/업그레이드 업무 |
+| G2 | 양쪽 SQL/Edge/UI, 실제 신규 법인·첫/추가 매장·Auth worker·직원/사진 근태, 두 정책의 소프트웨어 주문 전달 연결 | 실제 개시 승인·두 앱 브라우저·구매/입고·Office 업무 전체 흐름 |
 | G3 | root scope, KDS progress/single-payment journal, 인증 명령과 일부 주문/QC/설정/리포트/근태·증빙 전환 | 나머지 legacy 도메인, 계산대 분할·합산·비매출 복구와 나머지 서버 계약 |
 | G4 | 메뉴 잔량 부분 갱신, 리포트 병합, 증빙 metadata batch, 계산대 조회 취소/예산 | 계산대 summary/detail·페이지, 전체 worker 예산, 규모별 계획/실측 |
 | G5 | native JSON worker 누적 수정, 일부 화면/타이머 수명, 근태·증빙 사진 상한 | 큰 화면 분리, 파일/큐/이미지/worker 메모리 및 전체 자원 상한 |
@@ -1313,3 +1313,76 @@ receipt SHA256 `63f94ee9e48a56ea2d799dc58dd149e6affd9292083f8f7c30446d17379cc208
 Office 2,810이다. 별도 TCP transport/isolation 13개와 CLI guard 5개, Dart analyze
 0 issue도 통과했다. 이는 전체 브라우저·실제 주문 handoff·T01–T16·2시간·각 12시간·
 최종-main recipe·운영 배포·물리 장치 검증을 대신하지 않는다. mail/printer는 미준비다.
+
+### G1/G2/G3 실제 주문 재전송 결함과 두 전달 정책
+
+현재 native schema에는 선택형 create_order_with_client_mutation_id 및 그 원장이
+없다. 감사 기준을 그대로 사용해 실제 API를 실행한 결과, 기존 영업일 API는 일반
+create_order로 넘어갔다. 첫 생성 후 같은 mutation ID 재전송이 TABLE_NOT_AVAILABLE로
+실패했다. 이 선택형 계약이 없을 수 있음을 지원하는 기존 코드의 복구 결함이며,
+운영 DB refresh나 감사 값이 잘못됐다는 판단이 아니다.
+
+CLI로 생성한 `20261101185522_order_creation_command_receipts.sql`을 앞선 다섯 POS
+후보 뒤에 추가했다. 기존 영업일 API signature를 유지하고 actor/store/원래 mutation ID,
+요청 hash와 실제 order ID를 한 transaction에 보관한다. 같은 요청은 원래 결과를
+반환하고 수량/테이블/영업일을 바꾼 ID 재사용은 거절한다. 현재 native 역할 목록을
+대조해 주문 actor·매장 권한을 유지했다. 원래 create_order의 할인/가격/재고/세금/
+인쇄/주방 처리와 금융 함수는 수정하지 않는다. 영업일/운영 종료 보호도 유지한다.
+요청 ID 160자, 500개 line/1MiB, 결과 조회 100개 상한이다. 원장에는 앱 직접 권한이
+없으며, 기존 함수 owner와 migration role이 다른 경우 기존의 검토된 DB definer에만
+private usage·해당 원장 SELECT/INSERT·helper 실행을 준다. v4가 이 차이를 실제로
+검출했고 보완 후 native 권한으로 재실행했다.
+
+`/workspace/.private/resilience-new-store-order-handoff-20261101-v6/result.json`:
+**155 parent 조건 PASS, 104.17초, cleanup=true**. 원본 SHA는 6766243e와 기록된 dirty
+입력, Office는 45d6b8c8이다. receipt SHA256:
+`2930ceef312702a78846a4c50b9dfda2ebb78ccf77d40fd1a560601e165ac9ab`.
+실제 양쪽 Auth/REST·Office/POS Edge·POS Storage와 첫/추가 매장·직원/사진 근태를
+기반으로 다음을 확인했다.
+
+- 각 매장의 관리자 API로 구역/테이블/카테고리/메뉴를 등록한다. 승인 정책이 없으면
+  INVOICE_POLICY_REQUIRED이며 부분 메뉴가 남지 않는다. 시험용 단위·출처를 명시한
+  합성 invoice policy만 실제 super admin API로 승인한다. 운영 단위를 추정하지 않는다.
+- 개시 승인이 없는 매장은 주문을 거절하며 부분 주문이 남지 않는다. 이후 KDS 단계는
+  **영업 개시 상태를 명시적으로 설정한 격리 소프트웨어 fixture**다. field verification,
+  credential handover, physical acceptance를 성공으로 위조하거나 실제 승인 RPC에
+  허위 장치 결과를 넣지 않았다. 따라서 신규 매장 개시 완료 증거가 아니다.
+- 실제 주문 commit 뒤 HTTP acknowledgement를 유실시키고 원래 receipt를 조회한 뒤
+  같은 mutation으로 복구한다. 수량 변경 재사용 거절, 다른 actor receipt 숨김,
+  101개 조회 거절, 두 요청 동시 최초 생성의 단일 order도 확인했다.
+- kitchen_floor / kitchen_tray_floor 모두 수량 2를 1개씩 완료·인계·서빙한다.
+  원래 완료 event 재전송/receipt는 중복 완료를 만들지 않고 실제 station snapshot에
+  지정 구역의 주문이 나타난다. 다른 매장 floor는 ITEM_UNAVAILABLE로 숨기며 실제
+  존재하는 대상 수량이 바뀌지 않는다. 최종 수량 2·원래 금액 100,000·결제 0을 확인했다.
+
+v1의 invoice policy, v2의 개시 차단은 실제 필요한 선행 조건이다. v3의 원래 주문
+재전송 실패, v4의 definer ACL, v5의 scoped not-found 응답까지 원본 실패/정리 증거를
+보존한다. 전체 실패 이력을 PASS로 고치지 않는다. 앞선 양쪽 Storage/Realtime 119와
+이 155를 더해 전체 통합 완료 수치로 만들지 않는다.
+
+공식 parser로 준비한 `scripts/cloud_deployment/plans/20261101_pos_resilience_completion.json`
+에는 POS 6개 SQL을 의존 순서와 실제 SHA256으로 고정했다. Office SQL/Edge/web는
+별도 공식 단계다. 추가형 원장/확정 기록을 유지한 web rollback을 계획하며 populated
+원장 삭제나 migration history 수정은 하지 않는다. 이 파일 준비는 운영 적용이 아니다.
+
+실제 Office 권한 catalog 62개(8 domain)의 domain/action/display_name만 읽기 전용으로
+`/workspace/.private/office-permission-catalog-reference-20261101.json`에 0600 보관했다.
+이는 양쪽 새 업무 fixture의 기준 설정용이며 사용자/매출/문서/비밀번호 복제가 아니다.
+아직 전체 구매/급여/문서 업무를 실행했다는 증거는 아니다.
+
+### G3 결제 증빙 대기열 손상 보존
+
+잘못된 JSON envelope를 빈 대기열로 취급하거나 잘못된 member를 걸러내고 다시
+저장해 기존 증빙 기록을 버릴 수 있는 경로를 3개 실패 검사로 재현했다. 이제 전체
+shape·필수 identity/date·상태 type·중복 payment ID를 검사하고 손상 시 원문을
+보존한다. 기존 queue 검사를 새 사진 파일 생성보다 먼저 수행한다. 잘못된 결제 ID가
+문자열 null로 바뀌어 전송되지 않는다. 복구 정보를 버리거나 잘못된 HTTP를 보내지 않는다.
+6개 outcome 검사 및 기존 batch/scope/retry와 합계 15개 PASS, Dart analyze 0 issue다.
+원본 로그 proof-malformed-queue-before.log / proof-malformed-queue-after.log /
+proof-malformed-queue-analysis.log를 보존한다. queue 총량·다중 탭 원자성·owner 없는
+legacy 복구·나머지 결과 규약은 계속 잔여이며 이 수정으로 완료 처리하지 않는다.
+
+전체 브라우저/구매/입고/급여/마감, 나머지 33개 domain 전환, 혼합·실단말·2시간 사전
+부하, 동결 1배/3배 각 12시간, 최종 main 전체 recipe 및 공식 운영 배포는 아직 미완료다.
+현재 12시간 작업은 백그라운드에도 실행 중이지 않다. 기존 운영 로그인 smoke 면제는
+NOT_RUN_OWNER_WAIVER로 유지한다.

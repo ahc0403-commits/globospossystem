@@ -171,4 +171,64 @@ void main() {
       expect(calls, isEmpty);
     },
   );
+  test('wrong queue envelope is preserved and blocks a new capture', () async {
+    const original = '{"unexpected":"preserve this pending evidence"}';
+    SharedPreferences.setMockInitialValues({
+      'payment_proof_upload_queue_v1': original,
+    });
+    await expectLater(
+      service.saveProof(
+        paymentId: 'new-payment',
+        storeId: 'store-a',
+        originalFile: photo,
+      ),
+      throwsFormatException,
+    );
+    expect(calls, isEmpty);
+    expect((await directory.list().toList()), isEmpty);
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        'payment_proof_upload_queue_v1',
+      ),
+      original,
+    );
+  });
+  test('one malformed queue member cannot be silently discarded', () async {
+    final original = jsonEncode([
+      {
+        'payment_id': 'payment-a',
+        'store_id': 'store-a',
+        'taken_at_iso': '2026-11-01T00:00:00Z',
+        'attached': true,
+      },
+      'preserve malformed member for recovery',
+    ]);
+    SharedPreferences.setMockInitialValues({
+      'payment_proof_upload_queue_v1': original,
+    });
+    await expectLater(service.flushPendingUploads(), throwsFormatException);
+    expect(calls, isEmpty);
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        'payment_proof_upload_queue_v1',
+      ),
+      original,
+    );
+  });
+  test('missing queue identity cannot become a literal null payment', () async {
+    final original = jsonEncode([
+      {'store_id': 'store-a', 'taken_at_iso': '2026-11-01T00:00:00Z'},
+    ]);
+    SharedPreferences.setMockInitialValues({
+      'payment_proof_upload_queue_v1': original,
+    });
+    await expectLater(service.flushPendingUploads(), throwsFormatException);
+    expect(calls, isEmpty);
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        'payment_proof_upload_queue_v1',
+      ),
+      original,
+    );
+  });
 }

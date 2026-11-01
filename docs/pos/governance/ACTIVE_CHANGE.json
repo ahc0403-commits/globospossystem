@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "6ac672fb0ffc3806168e3ff3264eab24bbd4fc65c45e876537740ecc65c978ee",
+      "sha256": "8d728874ed2ccf1b0787b471b024202f7673e7174b98c7be030fdfea3b3ad927",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "e44b98f823a116d6a44b37b9a1fb6fdb20c185a24f689378e0f880f6e9a9df6a",
+      "sha256": "b8a9839c0a123d83c7e9d4d4d179d2f58aea0221cfabfe99a3303164cfe96a49",
       "mode": "100644"
     },
     "lib/core/auth/auth_command_session.dart": {
@@ -65,7 +65,7 @@
       "mode": "100644"
     },
     "lib/core/services/payment_proof_service.dart": {
-      "sha256": "e4ed6bd1672df31ee9d1326897b33c8751068e60ff3c06b3631c21010ed9f55e",
+      "sha256": "9da56352c043689b6e154be0dbfb72b7a15dddd5a7fe25f646587fb28bfbf3ea",
       "mode": "100644"
     },
     "lib/core/services/payment_service.dart": {
@@ -260,6 +260,10 @@
       "sha256": "d51f8109306060e4d45d8567207fcbb04d32aed4918500a12e26f4da1510585e",
       "mode": "100644"
     },
+    "scripts/cloud_deployment/plans/20261101_pos_resilience_completion.json": {
+      "sha256": "254599f001e1bc68725372d39380ef9191f34ae8fa38edf779a284db17637ec7",
+      "mode": "100644"
+    },
     "scripts/local_verification/Dockerfile": {
       "sha256": "b00d7a23eb8bf71b7f6f3f11328ae33741813a29529ff01327cdf2a02b6cc273",
       "mode": "100644"
@@ -320,8 +324,12 @@
       "sha256": "ac043673592cd68290faacedacc74ad1275d3427c3207b9078d4293019044cce",
       "mode": "100644"
     },
+    "scripts/resilience/order_handoff_scenario.py": {
+      "sha256": "677a31638ae52d6221066915142c632c2ac9965a3a5e7bae5b33a2f18d5cf936",
+      "mode": "100644"
+    },
     "scripts/resilience/owned_platform.py": {
-      "sha256": "e661f1d11805064aafb0b89f82d7dcf99a76c878ba5d92f7d55e1a1b9e6ceb9c",
+      "sha256": "e97c53de1909f1138b1afa72f52fcdbcb6fa54614376af7a148ff2f885fa3aac",
       "mode": "100644"
     },
     "scripts/resilience/payment_command_v2_fixture.py": {
@@ -345,7 +353,7 @@
       "mode": "100644"
     },
     "scripts/resilience/run_platform_probe.py": {
-      "sha256": "58b74eaca4f5193d55603d822ed9232ef3a047a6133d88d9a99dfd830489a6fe",
+      "sha256": "6045b38e0bf3a957f340901161f7c733b9e007fc08c1b2aeff5142608072c35a",
       "mode": "100644"
     },
     "scripts/resilience/run_schema_fixture.py": {
@@ -373,7 +381,7 @@
       "mode": "100644"
     },
     "scripts/resilience/schema_snapshot.py": {
-      "sha256": "efc6a82dbc1e48b29e00eb32346af46e784447768836b4927be96313585f1bb2",
+      "sha256": "581c63c7dbfb301608af6572cf7ee18814dd1e5d3408b28ea462143461e10eea",
       "mode": "100644"
     },
     "scripts/resilience/schema_storage_reference_config.sql": {
@@ -389,7 +397,7 @@
       "mode": "100644"
     },
     "scripts/resilience/store_http_scenario.py": {
-      "sha256": "6bfd89983f3de73641d9654cf57cbc7cfdb45e4d07ed5e6f747c33325cf48687",
+      "sha256": "830f245948706642e9923a536e9ccf733273a6de61f076b1c5d3612770652c53",
       "mode": "100644"
     },
     "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
@@ -474,6 +482,10 @@
     },
     "supabase/migrations/20261101132612_payment_command_cancellation_barriers.sql": {
       "sha256": "669ea5102c95ca1dea365cc053166d8a4f76d2e23fc59b2d3be1f10d87cefba1",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101185522_order_creation_command_receipts.sql": {
+      "sha256": "7f13d4d7a3a9cb5da7dcf494c09d99a0a7b563cb36e0c945495bc7f5722a693c",
       "mode": "100644"
     },
     "test/admin_core_overlay_operational_test.dart": {
@@ -613,7 +625,7 @@
       "mode": "100644"
     },
     "test/payment_proof_outcome_test.dart": {
-      "sha256": "aac544d382876cb556a3b1ac21145119a1f4fdb50cb7c9b9e36c2d7644e13f41",
+      "sha256": "f7b77267ce70eab21182b4b3a9eeb9862e8a587907a4292f51d14164a57ee969",
       "mode": "100644"
     },
     "test/payment_recovery_panel_test.dart": {
@@ -794,7 +806,8 @@
     "proof-confirmed-cleanup",
     "realtime-source-guards",
     "realtime-native-websocket",
-    "new-store-kds-realtime"
+    "new-store-kds-realtime",
+    "new-store-order-handoff"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",

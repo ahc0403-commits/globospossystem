@@ -50,6 +50,7 @@ def main():
     parser.add_argument('--exercise-legal-connection',action='store_true')
     parser.add_argument('--exercise-stores',action='store_true')
     parser.add_argument('--exercise-workforce',action='store_true')
+    parser.add_argument('--exercise-order-handoff',action='store_true')
     parser.add_argument('--exercise-storage',action='store_true')
     parser.add_argument('--storage-reference',type=Path)
     parser.add_argument('--office-storage-reference',type=Path)
@@ -60,6 +61,7 @@ def main():
     parser.add_argument('--deno',type=Path)
     parser.add_argument('--deno-cache',type=Path)
     args=parser.parse_args()
+    if args.exercise_order_handoff:args.exercise_workforce=True
     if args.exercise_realtime_websocket:args.exercise_realtime=True
     if args.exercise_workforce:
         args.exercise_stores=True
@@ -131,6 +133,9 @@ def main():
                         if args.exercise_realtime_websocket:
                             from kds_realtime_scenario import run as kds
                             kds(platform,registered,args.dart)
+                        if args.exercise_order_handoff:
+                            from order_handoff_scenario import run as order_handoff
+                            order_handoff(platform,accounts,registered)
             platform.validate_inputs()
             platform.result['status']='PASS'
     except BaseException as error:

@@ -19,7 +19,8 @@ CANDIDATE_MIGRATIONS={
         '20261101023409_pos_office_legal_connection.sql',
         '20261101045728_kds_progress_receipt_reconciliation.sql',
         '20261101094500_payment_command_receipts.sql',
-        '20261101132612_payment_command_cancellation_barriers.sql'],
+        '20261101132612_payment_command_cancellation_barriers.sql',
+        '20261101185522_order_creation_command_receipts.sql'],
  'office':['20261101023410_office_first_pos_legal_connection.sql'],
 }
 SCOPES={

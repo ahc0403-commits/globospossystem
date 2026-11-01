@@ -72,6 +72,9 @@ class PaymentProofService {
     final actor = _db.auth.currentUser?.id;
     return _serialized(() async {
       _requireActor(actor);
+      // Validate the existing journal before creating or replacing any file.
+      // A malformed journal must never be interpreted as an empty queue.
+      final queue = [...await _readQueue()];
       final capturedAt = takenAt ?? DateTime.now();
       final compressed = await compressBoundedPhoto(
         originalFile,
@@ -92,7 +95,6 @@ class PaymentProofService {
                 bytes: compressed,
               )).path,
       );
-      final queue = [...await _readQueue()];
       queue.removeWhere((existing) => existing.paymentId == paymentId);
       queue.add(item);
       await _writeQueue(queue);
@@ -455,15 +457,22 @@ class PaymentProofService {
     if (raw == null || raw.isEmpty) return const [];
 
     final decoded = jsonDecode(raw);
-    if (decoded is! List) return const [];
-
-    return decoded
-        .whereType<Map>()
+    if (decoded is! List ||
+        decoded.any((item) => item is! Map<String, dynamic>)) {
+      throw const FormatException('PAYMENT_PROOF_QUEUE_INVALID');
+    }
+    final queue = decoded
         .map(
-          (item) =>
-              _QueuedPaymentProof.fromJson(Map<String, dynamic>.from(item)),
+          (item) => _QueuedPaymentProof.fromJson(item as Map<String, dynamic>),
         )
         .toList();
+    final identities = <String>{};
+    for (final item in queue) {
+      if (!identities.add(item.paymentId)) {
+        throw const FormatException('PAYMENT_PROOF_QUEUE_DUPLICATE_PAYMENT');
+      }
+    }
+    return queue;
   }
 
   Future<void> _writeQueue(List<_QueuedPaymentProof> queue) async {
@@ -503,26 +512,58 @@ class _QueuedPaymentProof {
   bool uploaded, blocked, attached;
   int attempts;
   DateTime? nextAttemptAt;
-  factory _QueuedPaymentProof.fromJson(Map<String, dynamic> json) =>
-      _QueuedPaymentProof(
-        paymentId: json['payment_id'].toString(),
-        storeId: json['store_id'].toString(),
-        ownerId: json['owner_id']?.toString(),
-        localPath: json['local_path']?.toString(),
-        imageBytesBase64: json['image_bytes_base64']?.toString(),
-        takenAtIso: json['taken_at_iso'].toString(),
-        jobId: json['job_id']?.toString(),
-        storagePath: json['storage_path']?.toString(),
-        uploaded: json['uploaded'] == true,
-        attached: json['attached'] == true,
-        signedUrl: json['signed_url']?.toString(),
-        attempts: (json['attempts'] as num?)?.toInt() ?? 0,
-        blocked: json['blocked'] == true,
-        nextAttemptAt: DateTime.tryParse(
-          json['next_attempt_at']?.toString() ?? '',
-        ),
-        lastError: json['last_error']?.toString(),
-      );
+  factory _QueuedPaymentProof.fromJson(Map<String, dynamic> json) {
+    for (final key in ['payment_id', 'store_id', 'taken_at_iso']) {
+      if (json[key] is! String || (json[key] as String).trim().isEmpty) {
+        throw const FormatException('PAYMENT_PROOF_QUEUE_IDENTITY_INVALID');
+      }
+    }
+    if (DateTime.tryParse(json['taken_at_iso'] as String) == null) {
+      throw const FormatException('PAYMENT_PROOF_QUEUE_DATE_INVALID');
+    }
+    for (final key in [
+      'owner_id',
+      'local_path',
+      'image_bytes_base64',
+      'job_id',
+      'storage_path',
+      'signed_url',
+      'next_attempt_at',
+      'last_error',
+    ]) {
+      if (json[key] != null && json[key] is! String) {
+        throw const FormatException('PAYMENT_PROOF_QUEUE_FIELD_INVALID');
+      }
+    }
+    for (final key in ['uploaded', 'attached', 'blocked']) {
+      if (json[key] != null && json[key] is! bool) {
+        throw const FormatException('PAYMENT_PROOF_QUEUE_STATE_INVALID');
+      }
+    }
+    if (json['attempts'] != null &&
+        (json['attempts'] is! int || (json['attempts'] as int) < 0)) {
+      throw const FormatException('PAYMENT_PROOF_QUEUE_ATTEMPTS_INVALID');
+    }
+    return _QueuedPaymentProof(
+      paymentId: json['payment_id'] as String,
+      storeId: json['store_id'] as String,
+      ownerId: json['owner_id']?.toString(),
+      localPath: json['local_path']?.toString(),
+      imageBytesBase64: json['image_bytes_base64']?.toString(),
+      takenAtIso: json['taken_at_iso'] as String,
+      jobId: json['job_id']?.toString(),
+      storagePath: json['storage_path']?.toString(),
+      uploaded: json['uploaded'] == true,
+      attached: json['attached'] == true,
+      signedUrl: json['signed_url']?.toString(),
+      attempts: (json['attempts'] as num?)?.toInt() ?? 0,
+      blocked: json['blocked'] == true,
+      nextAttemptAt: DateTime.tryParse(
+        json['next_attempt_at']?.toString() ?? '',
+      ),
+      lastError: json['last_error']?.toString(),
+    );
+  }
   Map<String, dynamic> toJson() => {
     'payment_id': paymentId,
     'store_id': storeId,

@@ -175,7 +175,8 @@ class OwnedPlatform:
         self.input_paths = [HERE / name for name in ['owned_platform.py','runtime_gateway.py','schema_snapshot.py',
           'run_schema_fixture.py','run_platform_probe.py','legal_http_scenario.py','store_http_scenario.py',
           'workforce_http_scenario.py','storage_runtime.py','storage_probe.py','realtime_runtime.py',
-          'realtime_probe.py','realtime_probe.dart','kds_realtime_scenario.py','office_edge_runtime.ts','fixtures/attendance.jpg']]
+          'realtime_probe.py','realtime_probe.dart','kds_realtime_scenario.py','order_handoff_scenario.py',
+          'office_edge_runtime.ts','fixtures/attendance.jpg']]
         self.input_paths += [ROOT/'scripts/local_verification/fixture_postgres_policy.json']
         self.input_paths += [(ROOT if project=='pos' else self.office_root)/'supabase/migrations'/name
           for project in self.selected_projects for name in self.schema.CANDIDATE_MIGRATIONS[project]]
