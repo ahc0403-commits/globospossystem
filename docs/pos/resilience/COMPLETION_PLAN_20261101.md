@@ -6,6 +6,23 @@
 - 상태: **잔여 구현 진행 중. 개별 구현/영향 검증과 전체 계획·운영 완료는 구분한다. 아래 실행 기록 참조.**
 - 범위: 기존 통합 계획 U01–U12의 잔여 전부, POS 33개 기능, POS–Office 연결 경계. Office 자체의 모든 업무를 새로 감사하는 범위는 아니다.
 
+## 현재 실행 상태 — 구현과 통합 완료 구분
+
+POS 원격 main은 `ad6595a0`, 작업 브랜치는 PR #655이며 아직 draft다. Office 원격
+main `d5d1797e`는 연결 작업 `45d6b8c8`의 조상이다. 사용자 원래 checkout은 변경하지
+않는다. 운영 배포·2시간 사전 혼합 부하·1배/3배 각 12시간은 아직 시작하지 않았다.
+
+| 묶음 | 확보한 부분 | 남은 완료 조건 |
+|---|---|---|
+| G0 | 양쪽 계정 private 보관/범위 점검, 현재 schema, 실제 Auth fixture 준비 | 실단말/하드웨어 배정, 전체 runtime·혼합 부하 manifest 확정 |
+| G1 | native 복원/최종 객체 대조, 업그레이드 금융 보존·receipt 검사 | Auth 외 Realtime/Storage 등 플랫폼 결합과 모든 신규/업그레이드 업무 |
+| G2 | 양쪽 SQL/Edge/UI 구현, 실제 두 DB의 연결 20건 | 두 앱의 실제 로그인→법인→POS 개설/준비→Office 업무 전체 흐름 |
+| G3 | root scope, KDS progress journal, 일부 주문/QC/설정/리포트/근태·증빙 전환 | 나머지 legacy 도메인, 내구성 있는 계산대 결제 복구 UI/서버 계약 |
+| G4 | 메뉴 잔량 부분 갱신, 리포트 요청 병합, 증빙 metadata batch | 계산대 summary/detail·페이지, 전체 worker 예산, 규모별 계획/실측 |
+| G5 | native JSON worker 누적 수정, 일부 화면/타이머 수명 | 큰 화면 분리, 파일/큐/이미지/worker 메모리 및 전체 자원 상한 |
+| G6 | 개별 실제 SQL/API·위젯 검사 | T01–T16 연결, 혼합/실패 주입, 2시간 사전 부하 |
+| G7 | 공식 gate·증거 규칙 보존 | 동결 후보 1배/3배 각 12시간, 최종 main 전체 recipe 1회, 공식 배포, 두 마감 관찰 |
+
 ## 1. 완료의 정의
 
 이번 작업은 아래 여덟 작업 묶음을 끝내고, 새 법인·첫 매장부터 정상 영업·마감까지 실제 연결을 검증하는 것을 목표로 한다. Office 연결, 전역 상태, 부하 시험 세 항목만 끝내고 전체 완료로 표시하지 않는다.
@@ -833,3 +850,39 @@ Auth/업무 ID, 동일 요청 20회·동시 승인, 응답 유실 뒤 재개, �
 Edge HTTP와 두 앱 화면 연결은 이 SQL 실행에 포함되지 않는다. POS 매장 개설/
 준비부터 구매·근태·영업을 잇는 G2/G6, 데이터 규모별 실행 계획과 실제 단말·12시간/
 최종-main 공식 배포는 계속 잔여다.
+
+### G0/G1 실제 Auth 플랫폼 준비와 기존 staging 상태
+
+기존 `globos-pos-staging`/`restaurant-office-staging` 두 프로젝트를 읽기로 확인했다.
+각각 17/166개 migration이며 마지막 이력은 2026-09-15다. 현재 연결 함수·메뉴 할인
+수량·KDS 실시간 계약이 없으므로 현재 후보용 준비 완료 환경으로 간주하지 않는다.
+기존 staging/pilot 데이터·이력·계정은 수정하지 않았다. 새 유료 프로젝트/branch도
+만들지 않았다.
+
+현재 native schema를 복원한 클라우드 소유 DB에 실제 GoTrue v2.196.0을 붙이는
+`scripts/resilience/auth_platform_fixture.py`를 추가했다. immutable 이미지 digest,
+OS/아키텍처/실행 명령, 원본 schema·도구 hash를 검사한다. Auth의 `serve` subcommand로
+이미 복원된 관리형 Auth schema를 사용하며 migration을 재실행/수동 applied 처리하지
+않는다. 설정 근거는 Auth v2.196.0의 cmd/root_cmd.go와 cmd/serve_cmd.go다.
+JWT/DB 비밀은 실행별 새로 생성해 private 환경 파일에만 보관한다. 실제 운영 계정/
+비밀번호/토큰을 복사하지 않는다. 이름에 production project ref가 있는 schema 원본과
+실제 접속 대상인 로컬 소유 컨테이너를 구분한다.
+
+POS와 Office 각각 9개 preflight 조건 PASS: 실제 Auth Admin API 계정 생성, 비밀번호
+로그인, 토큰 갱신, 합성 Auth user 1개 및 입력/이미지·정리 확인을 포함한다. 각각
+25.78/26.83초, Docker 소유 resource 정리 확인이다. API session 본문/토큰은 로그에
+출력하지 않는다. 데이터/서비스가 아닌 출력 경로로 비밀이 나가지 않도록 Git 내부/
+상대/기존/심볼릭 링크 경로·다른 project 입력을 막는 검사 5개도 PASS다. 진단 수집
+실패/공간 부족 때에도 소유 컨테이너 정리를 시도하고 실패/정리 결과를 남긴다.
+
+증거: `/workspace/.private/resilience-real-auth-pos-final-20261101/result.json`,
+`/workspace/.private/resilience-real-auth-office-final-20261101/result.json`,
+auth-platform-guard-unit.log 및 native-auth-pos-final.log/native-auth-office-final.log.
+별도 초기 probe/실패는 그대로 보존한다. 이 결과는 실제 Auth 환경 준비이며
+로그인 스모크 운영 면제 범위를 바꾸지 않는다. 실제 두 앱·Edge·Realtime·Storage를
+잇는 전체 업무/실단말 시험이나 12시간 PASS가 아니다.
+
+앞선 host 개발 금융 fixture v7의 cleanupVerified는 Docker 컨테이너/네트워크만
+확인한 값이었다. 해당 실행의 host TCP proxy 1개도 별도로 종료/확인했으며 원본
+result를 고치지 않고 같은 private 폴더의 host-proxy-cleanup-correction.json에
+기록했다. 새 Auth fixture는 소유 private IP를 직접 사용해 host proxy를 만들지 않는다.

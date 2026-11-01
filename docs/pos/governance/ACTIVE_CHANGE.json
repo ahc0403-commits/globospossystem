@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS recovery, bounded owned report/settings reads and native JSON resource cleanup and additive payment receipts; complete domain adoption, cashier recovery UI, mixed/12h tests and production remain pending.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "0b16851835b716122394c6865d4963bbcca7bbb306c54454cdc2fb71ba1be06a",
+      "sha256": "02dbba9a1888d07c3a0f416781d925a09390663abee4ee04029f75bc6952ad50",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "a26544ec54b16d4a068922a2ea0eec075235b8a3979fb4cde59052bdcadf5cd9",
+      "sha256": "e881e2fd673c0dd6e9e30f6b8870203d38383bb4b3118c0bf3bc14c21515a147",
       "mode": "100644"
     },
     "lib/core/auth/operation_scope_provider.dart": {
@@ -204,6 +204,10 @@
       "sha256": "465ef62c6b881d997e35fc362006d289ec6b36227e657567168f0c73d43c6388",
       "mode": "100644"
     },
+    "scripts/resilience/auth_platform_fixture.py": {
+      "sha256": "26ff48aefd2827e33456cbe769580f73524b8ff84de050b04ccd7a51810e223e",
+      "mode": "100644"
+    },
     "scripts/resilience/integration_kds_receipts.py": {
       "sha256": "f98dc816ab4f8d93b2b180408e3f1d5d367f2db611f5e5b563993b4d46439a0a",
       "mode": "100644"
@@ -258,6 +262,10 @@
     },
     "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
       "sha256": "808f0e1d33287bce9d15d8f3d05471fab3400cc7291f418710206571c442b84a",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_auth_platform_fixture.py": {
+      "sha256": "abb8cf97d6beb63c42ef3462c013e5e3c8879a3f39ccedc19862e0e0c9100bda",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_office_accounts.py": {
@@ -511,7 +519,9 @@
     "owned-read-lifetime",
     "attendance-scope-commands",
     "proof-batch-scope",
-    "office-first-legal-native"
+    "office-first-legal-native",
+    "auth-platform-preflight",
+    "auth-platform-guards"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -652,19 +662,21 @@
     },
     "readiness": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
         "menu-quantity-sql",
-        "office-first-legal-native"
+        "office-first-legal-native",
+        "auth-platform-preflight",
+        "auth-platform-guards"
       ]
     },
     "dbCompatibility": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
@@ -679,19 +691,23 @@
         "current-schema-upgrade",
         "payment-receipts-client",
         "payment-receipts-native",
-        "office-first-legal-native"
+        "office-first-legal-native",
+        "auth-platform-preflight",
+        "auth-platform-guards"
       ]
     },
     "officeBoundary": {
       "applicable": true,
-      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows.",
       "checks": [
         "official-full-recipe",
         "operation-outcomes",
         "qc-read-lifetimes",
         "menu-quantity-partial",
         "menu-quantity-sql",
-        "office-first-legal-native"
+        "office-first-legal-native",
+        "auth-platform-preflight",
+        "auth-platform-guards"
       ]
     },
     "externalEffects": {

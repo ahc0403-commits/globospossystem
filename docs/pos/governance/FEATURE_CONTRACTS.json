@@ -31,7 +31,9 @@
       "sourceRoot": "lib/features/auth",
       "checks": [
         "feature.auth",
-        "official-full-recipe"
+        "official-full-recipe",
+        "auth-platform-preflight",
+        "auth-platform-guards"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -135,7 +137,9 @@
       "sourceRoot": "lib/features/onboarding",
       "checks": [
         "feature.onboarding",
-        "official-full-recipe"
+        "official-full-recipe",
+        "auth-platform-preflight",
+        "auth-platform-guards"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -322,7 +326,9 @@
       "checks": [
         "feature.super_admin",
         "official-full-recipe",
-        "office-first-legal-native"
+        "office-first-legal-native",
+        "auth-platform-preflight",
+        "auth-platform-guards"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -695,6 +701,14 @@
     },
     "office-first-legal-native": {
       "path": "scripts/resilience/legal_connection_native_fixture.py",
+      "kind": "focused"
+    },
+    "auth-platform-preflight": {
+      "path": "scripts/resilience/auth_platform_fixture.py",
+      "kind": "focused"
+    },
+    "auth-platform-guards": {
+      "path": "scripts/resilience/tests/test_auth_platform_fixture.py",
       "kind": "focused"
     }
   },
