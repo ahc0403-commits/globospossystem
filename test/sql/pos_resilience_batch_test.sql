@@ -30,6 +30,7 @@ DELETE FROM order_items WHERE order_id='30000000-0000-0000-0000-000000000088';
 SELECT fixture_assert((SELECT count(*)=1 FROM promotion_probe),'100 deleted lines recompute one order once');
 
 SELECT set_config('pos.quota_events','{}',true);
+SELECT set_config('pos.quota_event_ids_v2','{}',true);
 DELETE FROM pos_live_events WHERE source_table='menu_discount_quantities';
 UPDATE menu_discount_quantities SET remaining=2 WHERE menu_item_id='40000000-0000-0000-0000-000000000001';
 UPDATE menu_discount_quantities SET remaining=3 WHERE menu_item_id='40000000-0000-0000-0000-000000000002';

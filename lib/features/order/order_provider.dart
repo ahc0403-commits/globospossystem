@@ -8,6 +8,8 @@ import '../../core/services/offline_mutation_queue_service.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/operational_day_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../core/utils/coalesced_refresh.dart';
+import '../../core/utils/read_epoch.dart';
 import '../../core/utils/polling_utils.dart';
 import '../../core/utils/time_utils.dart';
 import '../../core/services/pos_backend.dart';
@@ -53,7 +55,10 @@ class OrderState {
 }
 
 class OrderNotifier extends StateNotifier<OrderState> {
-  OrderNotifier() : super(const OrderState()) {
+  OrderNotifier({SupabaseClient? client, OperationalDayService? dayService})
+    : _providedClient = client,
+      _dayService = dayService ?? operationalDayService,
+      super(const OrderState()) {
     _refreshOfflineQueueCount();
   }
 
@@ -68,6 +73,12 @@ class OrderNotifier extends StateNotifier<OrderState> {
   String? _businessDate;
   bool _realtimeConnected = false;
   final _uuid = const Uuid();
+  final SupabaseClient? _providedClient;
+  SupabaseClient get _client => _providedClient ?? supabase;
+  final OperationalDayService _dayService;
+  final _activeReads = ReadEpoch();
+  final _activeRefresh = CoalescedRefresh();
+  (String, String)? _requestedScope;
 
   List<Map<String, dynamic>> _cartPayloadItems() {
     return state.cart
@@ -179,6 +190,8 @@ class OrderNotifier extends StateNotifier<OrderState> {
   }
 
   void clearSession() {
+    _activeReads.invalidate();
+    _requestedScope = null;
     _businessDayTimer?.cancel();
     _unsubscribeOrderItems();
     state = state.copyWith(
@@ -200,11 +213,32 @@ class OrderNotifier extends StateNotifier<OrderState> {
     String tableId,
     String storeId, {
     bool syncOffline = true,
+  }) {
+    if (!mounted) return Future.value();
+    final scope = (storeId, tableId);
+    final changedScope = _requestedScope != scope;
+    _requestedScope = scope;
+    final token = _activeReads.begin(scope);
+    if (changedScope) {
+      _businessDayTimer?.cancel();
+      unawaited(_unsubscribeOrderItems());
+      state = state.copyWith(cart: const [], clearActiveOrder: true);
+    }
+    return _activeRefresh.run(
+      () => _loadActiveOrder(tableId, storeId, token, syncOffline: syncOffline),
+    );
+  }
+
+  Future<void> _loadActiveOrder(
+    String tableId,
+    String storeId,
+    ReadEpochToken token, {
+    required bool syncOffline,
   }) async {
+    if (!mounted || !_activeReads.accepts(token)) return;
     try {
-      final operationalDay = await operationalDayService.ensureStoreDay(
-        storeId,
-      );
+      final operationalDay = await _dayService.ensureStoreDay(storeId);
+      if (!mounted || !_activeReads.accepts(token)) return;
       if (operationalDay.enabled &&
           _businessDate != null &&
           _businessDate != operationalDay.window.dateKey) {
@@ -222,7 +256,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
           }
         },
       );
-      var query = supabase
+      var query = _client
           .from('orders')
           .select(
             'id, table_id, status, created_at, guest_count, leftover_packaging_requests(status), order_items(id, menu_option_snapshot, created_at, menu_item_id, label, unit_price, quantity, status, is_takeout, item_type, combo_components, menu_items(name, name_ko, name_vi, name_en))',
@@ -245,6 +279,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
           .order('created_at', referencedTable: 'order_items', ascending: true)
           .order('id', referencedTable: 'order_items', ascending: true)
           .limit(1);
+      if (!mounted || !_activeReads.accepts(token)) return;
 
       final activeOrder = response.isEmpty
           ? null
@@ -259,8 +294,9 @@ class OrderNotifier extends StateNotifier<OrderState> {
         unawaited(syncOfflineQueue(storeId, tableId: tableId));
       }
 
-      await _subscribeOrderItems(activeOrder?.id, tableId, storeId);
+      await _subscribeOrderItems(activeOrder?.id, tableId, storeId, token);
     } catch (error) {
+      if (!mounted || !_activeReads.accepts(token)) return;
       state = state.copyWith(error: 'Failed to load active order: $error');
     }
   }
@@ -269,7 +305,9 @@ class OrderNotifier extends StateNotifier<OrderState> {
     String? orderId,
     String tableId,
     String storeId,
+    ReadEpochToken token,
   ) async {
+    if (!mounted || !_activeReads.accepts(token)) return;
     if (_subscribedOrderId == orderId &&
         _subscribedTableId == tableId &&
         _subscribedStoreId == storeId &&
@@ -279,12 +317,13 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
 
     await _unsubscribeOrderItems();
+    if (!mounted || !_activeReads.accepts(token)) return;
     _subscribedOrderId = orderId;
     _subscribedTableId = tableId;
     _subscribedStoreId = storeId;
     _realtimeConnected = false;
 
-    _orderItemsChannel = supabase
+    _orderItemsChannel = _client
         .channel(
           LiveSyncScope.entityChannel(
             'waiter_active_order',
@@ -352,6 +391,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
           callback: (_) => _refreshActiveOrderFromRealtime(tableId, storeId),
         )
         .subscribe((status, [error]) {
+          if (!mounted || _requestedScope != (storeId, tableId)) return;
           final connected = status == RealtimeSubscribeStatus.subscribed;
           if (connected != _realtimeConnected) {
             _realtimeConnected = connected;
@@ -364,13 +404,12 @@ class OrderNotifier extends StateNotifier<OrderState> {
   Future<void> _unsubscribeOrderItems() async {
     _pollTimer?.cancel();
     _pollTimer = null;
-    if (_orderItemsChannel != null) {
-      await _orderItemsChannel!.unsubscribe();
-      _orderItemsChannel = null;
-      _subscribedOrderId = null;
-      _subscribedStoreId = null;
-      _subscribedTableId = null;
-    }
+    final channel = _orderItemsChannel;
+    _orderItemsChannel = null;
+    _subscribedOrderId = null;
+    _subscribedStoreId = null;
+    _subscribedTableId = null;
+    if (channel != null) await channel.unsubscribe();
   }
 
   void _refreshActiveOrderFromRealtime(
@@ -378,7 +417,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
     String storeId, [
     PostgresChangePayload? payload,
   ]) {
-    if (!mounted) {
+    if (!mounted || _requestedScope != (storeId, tableId)) {
       return;
     }
     if (payload != null && !_payloadBelongsToTable(payload, tableId)) {
@@ -875,6 +914,8 @@ class OrderNotifier extends StateNotifier<OrderState> {
 
   @override
   void dispose() {
+    _activeReads.dispose();
+    _activeRefresh.dispose();
     _businessDayTimer?.cancel();
     _pollTimer?.cancel();
     unawaited(_unsubscribeOrderItems());

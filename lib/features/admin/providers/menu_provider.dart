@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/menu_service.dart';
+import '../../../core/services/live_refresh_service.dart';
+import '../../../core/utils/coalesced_refresh.dart';
 
 class MenuState {
   const MenuState({
@@ -50,6 +52,26 @@ class MenuNotifier extends StateNotifier<MenuState> {
 
   final String storeId;
   final MenuService _service;
+  final _itemRefresh = CoalescedRefresh();
+  final _pendingQuantityIds = <String>{};
+  bool _pendingFullItems = false;
+
+  Future<void> refreshFromEvent(PosLiveEvent event) {
+    if (!mounted || !event.affects({'menu'})) return Future.value();
+    final ids = event.affectedMenuItemIds;
+    if (event.onlyMenuQuantityChanges &&
+        ids != null &&
+        ids.isNotEmpty &&
+        state.items.hasValue) {
+      _pendingQuantityIds.addAll(ids);
+      if (_pendingQuantityIds.length > 100) {
+        _pendingFullItems = true;
+        _pendingQuantityIds.clear();
+      }
+      return _itemRefresh.run(_drainItems);
+    }
+    return fetchAll();
+  }
 
   String _mapMenuError(Object error, String fallback) {
     if (error is! PostgrestException) {
@@ -134,11 +156,30 @@ class MenuNotifier extends StateNotifier<MenuState> {
         remaining: remaining,
         expectedRemaining: expectedRemaining,
       );
-      await fetchItems();
+      await refreshFromEvent(
+        PosLiveEvent(
+          domain: 'menu',
+          sourceTable: 'menu_discount_quantities',
+          eventType: 'UPDATE',
+          restaurantId: storeId,
+          affectedMenuItemIds: {itemId},
+        ),
+      );
+      if (!mounted) return true;
       state = state.copyWith(clearError: true);
       return true;
     } catch (error) {
-      await fetchItems();
+      if (!mounted) return false;
+      await refreshFromEvent(
+        PosLiveEvent(
+          domain: 'menu',
+          sourceTable: 'menu_discount_quantities',
+          eventType: 'UPDATE',
+          restaurantId: storeId,
+          affectedMenuItemIds: {itemId},
+        ),
+      );
+      if (!mounted) return false;
       state = state.copyWith(
         error: _mapMenuError(error, 'Failed to save discount quantity.'),
       );
@@ -147,9 +188,11 @@ class MenuNotifier extends StateNotifier<MenuState> {
   }
 
   Future<void> fetchCategories() async {
+    if (!mounted) return;
     state = state.copyWith(categories: const AsyncValue.loading());
     try {
       final categories = await _service.fetchCategories(storeId);
+      if (!mounted) return;
 
       final selectedId = state.selectedCategoryId;
       final hasSelectedId =
@@ -165,18 +208,58 @@ class MenuNotifier extends StateNotifier<MenuState> {
         clearError: true,
       );
     } catch (error, stackTrace) {
+      if (!mounted) return;
       state = state.copyWith(categories: AsyncValue.error(error, stackTrace));
     }
   }
 
-  Future<void> fetchItems() async {
-    state = state.copyWith(items: const AsyncValue.loading());
+  Future<void> fetchItems() {
+    if (!mounted) return Future.value();
+    _pendingFullItems = true;
+    return _itemRefresh.run(_drainItems);
+  }
+
+  Future<void> _drainItems() async {
+    if (!mounted) return;
+    final full = _pendingFullItems || !state.items.hasValue;
+    final ids = Set<String>.of(_pendingQuantityIds);
+    _pendingFullItems = false;
+    _pendingQuantityIds.clear();
     try {
-      final items = await _service.fetchItems(storeId);
+      final List<Map<String, dynamic>> items;
+      if (full) {
+        items = await _service.fetchItems(storeId);
+      } else {
+        if (ids.isEmpty) return;
+        final quantities = await _service.fetchDiscountQuantities(storeId, ids);
+        if (!mounted) return;
+        items = [
+          for (final item
+              in state.items.valueOrNull ?? const <Map<String, dynamic>>[])
+            if (quantities.containsKey(item['id']))
+              {...item, 'discount_remaining': quantities[item['id']]}
+            else
+              item,
+        ];
+      }
+      if (!mounted) return;
       state = state.copyWith(items: AsyncValue.data(items), clearError: true);
     } catch (error, stackTrace) {
-      state = state.copyWith(items: AsyncValue.error(error, stackTrace));
+      if (!mounted) return;
+      state = state.copyWith(
+        items: AsyncValue<List<Map<String, dynamic>>>.error(
+          error,
+          stackTrace,
+        ).copyWithPrevious(state.items),
+      );
     }
+  }
+
+  @override
+  void dispose() {
+    _itemRefresh.dispose();
+    _pendingQuantityIds.clear();
+    super.dispose();
   }
 
   void selectCategory(String categoryId) {
@@ -699,6 +782,13 @@ class MenuNotifier extends StateNotifier<MenuState> {
 }
 
 final menuProvider = StateNotifierProvider.autoDispose
-    .family<MenuNotifier, MenuState, String>(
-      (ref, storeId) => MenuNotifier(storeId),
-    );
+    .family<MenuNotifier, MenuState, String>((ref, storeId) {
+      final notifier = MenuNotifier(storeId);
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) => notifier.refreshFromEvent(event));
+      });
+      return notifier;
+    });

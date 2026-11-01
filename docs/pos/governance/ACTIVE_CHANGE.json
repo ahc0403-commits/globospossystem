@@ -1,43 +1,79 @@
 {
   "schemaVersion": 1,
-  "baseSha": "cb0d99536f8255b897d65ad099085903a54a0fc9",
-  "kind": "tooling",
-  "summary": "Prepare isolated sample identities and collect source-bound catalog contracts for G0/G1; leave product adoption and restore/soak evidence open.",
+  "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
+  "kind": "application",
+  "summary": "Implement scoped read lifetimes and bounded menu quota refresh before completing the remaining G0–G7 product work.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "87c1c17cb517fc17fa8c9c04e7a975224d4a441dccbb8688c9cd426e0c91fc7e",
+      "sha256": "6a23ffb4273dd06c10bfff4fd78fcd81de464d85b8079ecbcdf6db62779e6d4d",
       "mode": "100644"
     },
-    "docs/pos/resilience/TEST_ENVIRONMENT.md": {
-      "sha256": "9d1612e1066a215f7052c6e43b1c03bf8fb939487edf8fd481c26d60dede9aac",
+    "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
+      "sha256": "6fd5bf41824aac74d720cc40fb5ef87e9f8a79fc63b613a52450ab5b2dc8cf9e",
       "mode": "100644"
     },
-    "scripts/local_verification/recipe.json": {
-      "sha256": "9a6de09f596adff0781ce2dd2fb219c605aed8b2e1a78f8e7bdfb5aa5016a1bf",
+    "lib/core/services/live_refresh_service.dart": {
+      "sha256": "24ada1e629a4b82a53a42ba79a10375689337943b2a74890b9b374b8726d9387",
       "mode": "100644"
     },
-    "scripts/resilience/integration_runtime_catalog.py": {
-      "sha256": "df7095ce533af289a02b2ad44dbc62912fb24c5cac90fbbe8aa92f5baba40557",
+    "lib/core/services/menu_service.dart": {
+      "sha256": "827177c94a83575a847ca106553e868a6fac66b984163c9d8af0db65e21287b0",
       "mode": "100644"
     },
-    "scripts/resilience/runtime_catalog.py": {
-      "sha256": "d8325629a8416040bf2e07c67fb77867fa0a15504a54689e14a6290fc39aa41c",
+    "lib/core/utils/operation_contract.dart": {
+      "sha256": "21d42551cddd297333aec7086077e0b6bc26b18842b93d1bd80a752abbde0d04",
       "mode": "100644"
     },
-    "scripts/resilience/runtime_contracts.sql": {
-      "sha256": "e81112fc7951f20c9db0599e45044e23439550586586ecce432ed841f4d24615",
+    "lib/core/utils/read_epoch.dart": {
+      "sha256": "66753e50b3a79dc11b9e1dba8ba0c9597fcb0a421c4717911c17bb489a0bbfd5",
       "mode": "100644"
     },
-    "scripts/resilience/sample_accounts.py": {
-      "sha256": "b965c9e3bc2bd63038171e84cd9be9755df7b7467d72c13d807cd68d9ee80c6b",
+    "lib/features/admin/admin_screen.dart": {
+      "sha256": "af4be65f158a152f1584d8cadd049778fdd9e72d9acc2f37ba4790c84a9adf67",
       "mode": "100644"
     },
-    "scripts/resilience/tests/test_runtime_catalog.py": {
-      "sha256": "b299c9c943eaf8a01afa9565cb2f264e84415fac6e2b6315d26fb266550da7a2",
+    "lib/features/admin/providers/menu_provider.dart": {
+      "sha256": "76223ffb7626adebc3ca39485fbf7d81bfbc3e2f5f29b079b59a2293462edbe5",
       "mode": "100644"
     },
-    "scripts/resilience/tests/test_sample_accounts.py": {
-      "sha256": "b23a25f89aa0eefe137a57d2649ad4e5e8b7318a8b00fcbb016471f6329ec349",
+    "lib/features/order/order_provider.dart": {
+      "sha256": "6eb11e881e0c20af2f38ee5a86cbf745e0dd66fec06a5c9e61ebfeb629b6f44b",
+      "mode": "100644"
+    },
+    "lib/features/qc/qc_provider.dart": {
+      "sha256": "8f19e168def40ea0c48429595dec63cdf54911f8d484294b01fd1a79423a89f6",
+      "mode": "100644"
+    },
+    "scripts/test_menu_discount_quantities.sh": {
+      "sha256": "2a4c4ea5a62789c6c0c90ac5e7d906058b1ac4380ccb9d4dd698048f70316e03",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101022105_pos_resilience_completion_contracts.sql": {
+      "sha256": "a4bdaa63233db033d4513d4e4d02cb88e05c1101833ed36448a22ccb4db0e045",
+      "mode": "100644"
+    },
+    "test/menu_quantity_partial_refresh_test.dart": {
+      "sha256": "6caa226174be922376fa7b09bf82b4c6bdcc19eefef42c8c0fbaa1c1a858ba9b",
+      "mode": "100644"
+    },
+    "test/operation_contract_test.dart": {
+      "sha256": "1fddada581d764d746a16072bcc4c78bbb0fe59661e3ae7fd3bbd6bf6178d948",
+      "mode": "100644"
+    },
+    "test/order_read_epoch_test.dart": {
+      "sha256": "71ffcec58273211b680e920860717af6b6905e5a78f7e8442582627d860992da",
+      "mode": "100644"
+    },
+    "test/qc_read_epoch_test.dart": {
+      "sha256": "b1d6f96a30630cab05ffd817e3ef8f3d7c3c1c81c14014df3a4cf85d2f7c1283",
+      "mode": "100644"
+    },
+    "test/sql/menu_quantity_batch_events_test.sql": {
+      "sha256": "91c651a485604fa0a77105b8c5a20cd303a7edc919c5246b4bb1eb0bee7cd34f",
+      "mode": "100644"
+    },
+    "test/sql/pos_resilience_batch_test.sql": {
+      "sha256": "b24e6b5ed21a3c1f9eaab09c67a3220ca5475d6a287fc3229ff8a2143d4d6728",
       "mode": "100644"
     }
   },
@@ -77,102 +113,104 @@
     "waiter"
   ],
   "sharedAreas": [
+    "shared-dart",
+    "database",
     "verification",
-    "project-policy",
-    "database"
+    "project-policy"
   ],
   "risk": {
-    "business": false,
-    "financial": false,
+    "business": true,
+    "financial": true,
     "authorization": true,
     "dataAccess": true,
-    "background": false,
+    "background": true,
     "dbContract": true,
-    "officeContract": true,
-    "files": true,
+    "officeContract": false,
+    "files": false,
     "native": false
   },
   "requiredChecks": [
-    "governance-unit",
-    "resilience-tools-unit",
-    "runtime-catalog-unit",
-    "runtime-catalog-postgres",
-    "local-release-verifier"
+    "official-full-recipe",
+    "operation-outcomes",
+    "qc-read-lifetimes",
+    "menu-quantity-partial",
+    "menu-quantity-sql"
   ],
   "businessInvariants": [
-    "No account creation/reset, role change, global logout or business writes; only inventoried sample principal logins and own-profile reads.",
-    "POS and Office retain separate Auth/DB and explicit sample store identity; do not infer legal-entity ownership.",
-    "Catalog evidence is hashes/metadata only, not fresh/upgrade/whole-plan completion; original operational login waiver remains NOT_RUN."
+    "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
+    "Backward compatible live-event INSERT still invalidates legacy clients; new clients merge bounded changed IDs from INSERT and UPDATE signals.",
+    "Read scope switches, disposal and late errors cannot restore another store; confirmed writes are distinct from subsequent refresh state.",
+    "Original user workspace and unrelated Excel work remain intact; G0–G7/soak completion stays false until actual evidence exists."
   ],
   "dataAccessReview": {
     "nPlusOne": {
       "applicable": true,
-      "reason": "Nine independent Auth principals require independent authentication; catalog is one set-based statement/project, no business item requests.",
-      "scale": "9 principals, 2 projects, concurrency one for Auth; 20,000 metadata objects and 6MiB/project maximum.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "setBasedSql": {
       "applicable": true,
-      "reason": "Catalog columns pre-aggregate by relation; catalog object metadata uses set unions, never loops over business rows.",
-      "scale": "2 catalog statements plus bounded own-profile reads.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "rowsColumns": {
       "applicable": true,
-      "reason": "Only explicit own-profile columns with limit 2; catalog metadata projects hashes, no function bodies or business rows.",
-      "scale": "At most 2 profile rows per principal; 128KiB/Auth HTTP; 6MiB/catalog.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "joinCardinality": {
       "applicable": true,
-      "reason": "Catalog columns aggregate separately before relation join; other arms have one row per named object.",
-      "scale": "No business one-to-many joins; duplicate object identities rejected.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "indexesPaging": {
       "applicable": true,
-      "reason": "Own profile uses auth_id equality and limit 2; catalog snapshot is bounded metadata and avoids OFFSET.",
-      "scale": "9 fixed principals, finite catalogs; no schema/index mutations.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "refreshPolling": {
       "applicable": true,
-      "reason": "Explicit one-shot checks only; no polling or state invalidations added.",
-      "scale": "One run per evidence capture, 3 calls/principal maximum.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "cacheScope": {
       "applicable": true,
-      "reason": "No persistent session or profile cache; artifacts identify project/source and each verified principal.",
-      "scale": "Separate target keys/identities; cross-project comparison rejected.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "concurrency": {
       "applicable": true,
-      "reason": "Auth concurrency one, no retries; read-only two-project catalog captures can run concurrently.",
-      "scale": "9 sample principals, max 2 concurrent catalog calls.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "retryIdempotency": {
       "applicable": true,
-      "reason": "Never retry password login or unknown cleanup; always attempt only local logout after successful login.",
-      "scale": "1 login attempt, at most 3 HTTP calls/principal, 12-second request timeout.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "largeResults": {
       "applicable": true,
-      "reason": "Auth and catalog payloads have explicit bounds; oversize or partial results fail, not silently truncate.",
-      "scale": "128KiB per Auth response, <=20,000 objects and <=6MiB catalog; <=7MiB recorder input.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     },
     "repeatedAggregates": {
       "applicable": true,
-      "reason": "Catalog aggregates only on explicit snapshot; no sales totals, counts per refresh or production polling.",
-      "scale": "One catalog snapshot per DB; no product screen changes.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Review product scope/generation, grouped quota transition tables, batch IDs and request merging; preserve RLS and existing financial behavior.",
+      "scale": "Quota payload <=100 IDs; one active menu item read plus one coalesced follow-up; one event row/store/transaction; functional SQL uses 100-line batches.",
+      "verification": "menu-quantity-partial, menu-quantity-sql, qc-read-lifetimes, operation-outcomes and official-full-recipe; final mixed load still pending."
     }
   },
-  "rollback": "Revert the evidence tooling normally; do not delete runtime history, business data or other sessions. Private credentials remain outside Git and may be removed only when their assigned test lifecycle ends.",
+  "rollback": "Use the previous verified web while retaining the additive signal column; restore prior quota trigger definitions by reviewed forward migration if required, preserving allocations, financial rows, operation history and tenant boundaries.",
   "claims": {
     "allPlanComplete": false,
     "performanceImproved": false
@@ -180,74 +218,90 @@
   "contractReview": {
     "outcomes": {
       "applicable": true,
-      "reason": "Login identity and local session cleanup are separate outcomes; unknown cleanup fails and stops further logins.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql"
       ]
     },
     "tenantScope": {
       "applicable": true,
-      "reason": "Whitelist inventoried sample actor/profile/store IDs and separate POS/Office targets; reject broader Office scope.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql"
       ]
     },
     "readiness": {
       "applicable": true,
-      "reason": "Account identity readiness is separate from permission actions, external-effect sandboxing, physical devices and 12-hour soaks.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql"
       ]
     },
     "dbCompatibility": {
       "applicable": true,
-      "reason": "Catalog hashes current effective functions, triggers, RLS/ACL/indexes and history without changing production schema.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql"
       ]
     },
     "officeBoundary": {
       "applicable": true,
-      "reason": "Office Auth and profile are verified independently; explicit store mapping is checked, no name or UUID ownership inference.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql"
       ]
     },
     "externalEffects": {
       "applicable": true,
-      "reason": "No financial/notification/printing writes; session creation and current-session local cleanup are the only Auth effects.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql"
       ]
     },
     "resourceLifetime": {
       "applicable": true,
-      "reason": "Token stays in memory only; local logout finally and stop on uncertain cleanup; no persisted refresh token.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql"
       ]
     },
     "filesAndHardware": {
       "applicable": true,
-      "reason": "Private external owned mode-600 files, no shell eval, bounded responses; real hardware and long load remain NOT_RUN.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql"
       ]
     }
   }

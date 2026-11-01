@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/services/qc_service.dart';
+import '../../core/utils/read_epoch.dart';
 
 class QcTemplateState {
   const QcTemplateState({
@@ -235,7 +236,13 @@ class QcCheckState {
 }
 
 class QcCheckNotifier extends StateNotifier<QcCheckState> {
-  QcCheckNotifier() : super(const QcCheckState());
+  QcCheckNotifier({QcService? service})
+    : _service = service ?? qcService,
+      super(const QcCheckState());
+
+  final QcService _service;
+  final _weekRead = ReadEpoch();
+  final _rangeRead = ReadEpoch();
 
   String? _restaurantId;
   DateTime? _weekStart;
@@ -244,23 +251,37 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
     required String storeId,
     required DateTime weekStart,
   }) async {
+    if (!mounted) return;
+    final changedStore = _restaurantId != storeId;
+    if (changedStore) {
+      _weekRead.invalidate();
+      _rangeRead.invalidate();
+    }
+    final token = _weekRead.begin((storeId, weekStart));
     _restaurantId = storeId;
     _weekStart = DateTime(weekStart.year, weekStart.month, weekStart.day);
 
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(
+      checks: changedStore ? const [] : null,
+      dateRangeChecks: changedStore ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
       final weekEnd = _weekStart!.add(const Duration(days: 6));
-      final checks = await qcService.fetchChecks(
+      final checks = await _service.fetchChecks(
         storeId: storeId,
         from: _weekStart!,
         to: weekEnd,
       );
+      if (!mounted || !_weekRead.accepts(token)) return;
       state = state.copyWith(
         checks: checks,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || !_weekRead.accepts(token)) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapQcCheckError(e, 'Failed to load QC inspection status.'),
@@ -434,20 +455,34 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
     required DateTime from,
     required DateTime to,
   }) async {
+    if (!mounted) return;
+    final changedStore = _restaurantId != storeId;
+    if (changedStore) {
+      _weekRead.invalidate();
+      _rangeRead.invalidate();
+    }
+    final token = _rangeRead.begin((storeId, from, to));
     _restaurantId = storeId;
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(
+      checks: changedStore ? const [] : null,
+      dateRangeChecks: changedStore ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
-      final checks = await qcService.fetchChecks(
+      final checks = await _service.fetchChecks(
         storeId: storeId,
         from: from,
         to: to,
       );
+      if (!mounted || !_rangeRead.accepts(token)) return;
       state = state.copyWith(
         dateRangeChecks: checks,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || !_rangeRead.accepts(token)) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapQcCheckError(
@@ -484,6 +519,13 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
     }
 
     return fallback;
+  }
+
+  @override
+  void dispose() {
+    _weekRead.dispose();
+    _rangeRead.dispose();
+    super.dispose();
   }
 }
 
@@ -529,26 +571,46 @@ class QcFollowupState {
 }
 
 class QcFollowupNotifier extends StateNotifier<QcFollowupState> {
-  QcFollowupNotifier() : super(const QcFollowupState());
+  QcFollowupNotifier({QcService? service})
+    : _service = service ?? qcService,
+      super(const QcFollowupState());
+
+  final QcService _service;
+  final _reads = ReadEpoch();
 
   Future<void> load(String storeId, {String? statusFilter}) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    if (!mounted) return;
+    final changedScope = _reads.scope != (storeId, statusFilter);
+    final token = _reads.begin((storeId, statusFilter));
+    state = state.copyWith(
+      followups: changedScope ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
-      final followups = await qcService.fetchFollowups(
+      final followups = await _service.fetchFollowups(
         storeId: storeId,
         statusFilter: statusFilter,
       );
+      if (!mounted || !_reads.accepts(token)) return;
       state = state.copyWith(
         followups: followups,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || !_reads.accepts(token)) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapFollowupError(e, 'Failed to load follow-ups.'),
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _reads.dispose();
+    super.dispose();
   }
 
   Future<bool> createFollowup({
@@ -694,18 +756,32 @@ class QcIssueQueueState {
 }
 
 class QcIssueQueueNotifier extends StateNotifier<QcIssueQueueState> {
-  QcIssueQueueNotifier() : super(const QcIssueQueueState());
+  QcIssueQueueNotifier({QcService? service})
+    : _service = service ?? qcService,
+      super(const QcIssueQueueState());
+
+  final QcService _service;
+  final _reads = ReadEpoch();
 
   Future<void> load(String storeId) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    if (!mounted) return;
+    final changedStore = _reads.scope != storeId;
+    final token = _reads.begin(storeId);
+    state = state.copyWith(
+      issues: changedStore ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
-      final issues = await qcService.fetchIssueQueue(storeId: storeId);
+      final issues = await _service.fetchIssueQueue(storeId: storeId);
+      if (!mounted || !_reads.accepts(token)) return;
       state = state.copyWith(
         issues: issues,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || !_reads.accepts(token)) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapIssueQueueError(e, 'Failed to load QSC issue queue.'),
@@ -723,6 +799,12 @@ class QcIssueQueueNotifier extends StateNotifier<QcIssueQueueState> {
     }
 
     return fallback;
+  }
+
+  @override
+  void dispose() {
+    _reads.dispose();
+    super.dispose();
   }
 }
 

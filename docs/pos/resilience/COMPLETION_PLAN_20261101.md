@@ -3,7 +3,7 @@
 - 기준일: 2026-11-01, 베트남 UTC+7
 - 확인한 POS main/운영 SHA: `6de6702e6cc62497623070f6f9cae70c5cc7a502`
 - 확인한 Office main SHA: `8b24d58836b6014d62c498c3f17c106b7da398e8`
-- 상태: **실행계획 수립 완료. 이 문서의 잔여 구현·시험·운영 적용은 아직 실행하지 않았다.**
+- 상태: **잔여 구현 진행 중. 개별 구현/영향 검증과 전체 계획·운영 완료는 구분한다. 아래 실행 기록 참조.**
 - 범위: 기존 통합 계획 U01–U12의 잔여 전부, POS 33개 기능, POS–Office 연결 경계. Office 자체의 모든 업무를 새로 감사하는 범위는 아니다.
 
 ## 1. 완료의 정의
@@ -348,3 +348,30 @@ POS는 `scripts/deploy_pos_production.sh`, Office는 `scripts/run_office.sh`의 
 - 기존 [전체 schema 업그레이드 시험](https://github.com/ahc0403-commits/globospossystem/blob/6de6702e6cc62497623070f6f9cae70c5cc7a502/scripts/test_store_operating_upgrade.sh), [제한된 KDS 부하 실행기](https://github.com/ahc0403-commits/globospossystem/blob/6de6702e6cc62497623070f6f9cae70c5cc7a502/scripts/tests/jeongabok_kds_sync_load.py)는 재사용하되 전체 혼합/실단말 장시간 시험 완료로 간주하지 않는다.
 
 이 계획 수립에서는 운영/제품 코드를 변경하거나 DB/배포를 실행하지 않았다. 기존 사용자 작업 경로와 checkout을 보존했다. 새 표준 타입·연결 요청·soak 실행기·증거 검증·capability 전환은 모두 앞으로 구현할 산출물이다.
+
+## 15. 실행 기록 — 2026-11-01 진행 중
+
+- 거버넌스 PR #653과 G0/G1 시험 도구 PR #654는 main에 반영됐다.
+- 실제 샘플 POS 8개 + Office 1개 계정을 확인하고 Git 밖 0600 설정에 저장했다.
+  원본 로그인/자기 프로필 시험은 9개 인증, 7개 credential 준비 통과이며
+  sp_order/sp_pr1 초기 설정은 기존 정상 비밀번호 변경 경로로 별도 처리 중이다.
+- POS 5,819 / Office 9,359 metadata object의 실제 계약 해시를 확보했다.
+  현재 schema-only DDL에 의한 fresh/upgrade 복원 증거는 확보 대기다.
+- G3: 공통 결과/scope/조회 lifetime을 추가하고 주문 상세에 동시 읽기 1개+후속 1개,
+  전환/종료/로그아웃 후 늦은 응답 차단을 연결했다. QC 주간/기간/후속조치/이슈 조회도
+  매장·조회 조건 전환과 disposal을 보호한다. 전체 도메인 결과 adapter 전환은 남아 있다.
+- G4: 할인 잔량 statement 변경 집합을 매장별 1개 transaction event에 묶고 최대
+  100개 메뉴 ID를 전달한다. 기존 INSERT signal을 유지하며 새 reader는 UPDATE도
+  병합한다. 메뉴는 해당 ID의 수량 컬럼만 읽고 전체 catalog/카테고리는 재조회하지 않는다.
+  ID 없는 구 이벤트/복구 신호는 기존 전체 조회로 복구한다.
+- 개발 영향 검사: 결과/읽기 계약·QC·메뉴 병합 19개와 실제 HTTP 주문 전환 3개 통과.
+  기존 할인 SQL 검사에 새 migration/event 검사를 포함해 PostgreSQL 17에서 통과했다.
+  마지막 수량 동시 주문·취소 복구·후불 할인·기존 50% 정책·원래 결제 함수 보존을 포함한다.
+  이는 작업 중 입력에 대한 결과이며 최종-main 전체 검증 PASS가 아니다.
+- Office 별도 작업 공간: 정확히 200개라는 이유로 실패하던 연결 목록을 선택 manifest
+  최대 200개/키셋 page로 바꿨다. 8개 영향 검사와 bridge 타입 검사 통과.
+  최초 법인 연결의 지속 작업·확인 UI와 양쪽 DB 시험은 아직 구현 중이다.
+- 실제 매장 최소 사양 단말 배정, 최신 POS/Office schema-only 덤프 경로를 요청했다.
+  사용자 샘플 계정 제공만으로 물리 단말·인쇄·12시간 부하를 PASS로 만들지 않는다.
+- G5/G6/G7 전체 완료 및 1배/3배 각각 12시간 시험, 운영 배포·마감 2회 관찰은 미완료다.
+  제품 코드가 아직 고정되지 않아 장시간 시험을 최종 후보 증거로 시작하지 않았다.

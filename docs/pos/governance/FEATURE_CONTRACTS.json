@@ -574,6 +574,22 @@
     "runtime-catalog-postgres": {
       "path": "scripts/resilience/integration_runtime_catalog.py",
       "kind": "tooling"
+    },
+    "operation-outcomes": {
+      "path": "test/operation_contract_test.dart",
+      "kind": "focused"
+    },
+    "qc-read-lifetimes": {
+      "path": "test/qc_read_epoch_test.dart",
+      "kind": "focused"
+    },
+    "menu-quantity-partial": {
+      "path": "test/menu_quantity_partial_refresh_test.dart",
+      "kind": "focused"
+    },
+    "menu-quantity-sql": {
+      "path": "scripts/test_menu_discount_quantities.sh",
+      "kind": "focused"
     }
   },
   "workstreams": [
@@ -608,7 +624,7 @@
     },
     {
       "id": "G3",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "domain_outcomes",
         "scoped_reads",
@@ -617,7 +633,7 @@
     },
     {
       "id": "G4",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "bounded_reads",
         "event_fanout",

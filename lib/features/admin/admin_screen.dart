@@ -30,7 +30,6 @@ import '../procurement/procurement_process_labels.dart';
 import '../photo_inventory/photo_inventory_screen.dart';
 import 'providers/admin_audit_provider.dart';
 import 'providers/admin_scope_provider.dart';
-import 'providers/menu_provider.dart';
 import 'providers/printer_destinations_provider.dart';
 import 'providers/settings_provider.dart';
 
@@ -94,9 +93,6 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         posLiveEventsProvider(liveStoreId),
         (_, next) => next.whenData((event) {
           if (!mounted) return;
-          if (event.affects({'menu'})) {
-            ref.invalidate(menuProvider(liveStoreId));
-          }
           if (event.affectsSourceTables(printerConfigurationTables)) {
             unawaited(
               ref

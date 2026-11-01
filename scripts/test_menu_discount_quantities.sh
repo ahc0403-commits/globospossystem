@@ -58,8 +58,10 @@ Path(sys.argv[1]).write_text(prepared['query'])
 PYATOMIC
 run_sql < "$fixture_tmp/atomic-migration.sql"
 run_sql < supabase/migrations/20261031164134_pos_integrated_resilience.sql
+run_sql < supabase/migrations/20261101022105_pos_resilience_completion_contracts.sql
 run_sql < test/sql/menu_discount_quantities_test.sql
 run_sql < test/sql/pos_resilience_batch_test.sql
+run_sql < test/sql/menu_quantity_batch_events_test.sql
 # Two independent sessions compete for the last portion while the first order
 # remains unpaid. The second must wait and then receive no reservation.
 run_sql -c "UPDATE menu_discount_quantities SET remaining=1 WHERE menu_item_id='40000000-0000-0000-0000-000000000001'; UPDATE store_promotions SET is_active=true,ends_at=now()+interval '1 hour' WHERE id='50000000-0000-0000-0000-000000000001';" >/dev/null
