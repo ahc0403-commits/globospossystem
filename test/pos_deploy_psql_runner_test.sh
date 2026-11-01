@@ -282,6 +282,9 @@ git -C "$WRONG_REPO" push -q -u origin main
 set +e
 wrong_ref_output="$(bash -c '
   source "$1"
+  # This fixture isolates linked-project refusal; frontend setup is tested separately.
+  ensure_flutter_env() { :; }
+  ALLOWED_ORIGINS=https://globospossystem.vercel.app
   DEPLOY_MODE=prebuilt
   SKIP_CHECKS=1
   SKIP_AUTH_CHECK=1
