@@ -29,5 +29,9 @@ class ProbeArgumentGuards(unittest.TestCase):
     def test_missing_storage_reference_fails_before_restoring_any_database(self):
         self.reject(['--projects','pos','--exercise-storage'])
 
+    def test_workforce_cannot_skip_cross_project_dependency_or_private_storage_reference(self):
+        self.reject(['--projects','pos','--exercise-workforce'])
+        self.reject(['--exercise-workforce','--deno','/missing-deno','--deno-cache','/missing-cache'])
+
 
 if __name__=='__main__':unittest.main()

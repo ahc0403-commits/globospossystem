@@ -67,3 +67,4 @@ def run(platform, accounts, legal):
       'fixedAccountRequirements':len(private_accounts),'physicalOpeningAccepted':False,
       'businessLifecycleComplete':False,'productionModified':False}
     platform.save()
+    return {'brand':brand,'stores':stores,'accounts':private_accounts}

@@ -1070,3 +1070,44 @@ owner 7건, CLI scope 3건, Storage source/history guard 5건, schema/runner 27�
 서비스 JWT는 실제 1배/3배 장시간 계획을 수용하도록 fixture에서만 48시간으로
 발급하고 anchor 수명은 36시간이다. 실제 Auth 1시간 session은 정상 갱신을 계속
 사용해야 한다. 물리 단말·2시간 혼합·각 12시간 시험 및 운영 배포는 아직 미실행이다.
+
+
+### G2 신규 두 매장의 초기 비밀번호·직원·사진 근태 연결
+
+같은 독립 두 프로젝트 runtime에서 신규 법인 → 첫/추가 매장 → 실제 고정 계정
+생성 → Office 매핑에 이어, 각 매장의 실제 관리자와 계산대 계정으로 최초 로그인/
+비밀번호 변경/새 비밀번호 로그인을 실행했다. 원본 complete-initial-password-change
+Edge가 실제 Auth password를 변경하고 native trigger의 generation이 1 증가한 뒤
+must_change_password가 false가 되는 것을 확인했다. 시험 계정 비밀번호는 private
+계정 파일만 갱신하며 운영 계정은 수정하지 않았다.
+
+이 Edge는 import.meta.main일 때만 legacy std HTTP listener를 시작한다. 제품 함수를
+고치거나 handler를 대체하지 않고 Deno --preload로 port adapter를 먼저 실행하여
+원본 index.ts가 main module로 남도록 했다. Deno.serve와 legacy Deno.listen 모두
+loopback 임의 port를 사용하며 함수별 readiness/log/lock을 구분한다. 실제 Deno의
+두 listener·main semantics·잘못된 source 거부 3개 검사와 adapter type check PASS다.
+초기 password 함수의 기존 고정 URL 의존성을 새 deno.lock에 기록했고 기존 SDK
+integrity는 동일하다. network는 여전히 loopback만 허용한다.
+
+각 매장 관리자가 실제 직원 등록 API로 직원을 만들고 계산대 계정이 해당 매장의
+private bucket에 사진을 올려 서명 URL의 원본 바이트를 받았다. 실제 photo-backed
+attendance RPC로 clock_in/out 2회(매장당 4개, 총 8개 사건)를 기록했다. 상대 매장의
+근태 입력과 사진 업로드는 각각 거부된다. Auth 고정 계정과 workforce 직원은
+별도 record이며 임의로 같은 ID를 부여하지 않는다.
+
+실제 양쪽 DB/Auth/REST + Office/POS 개설/POS password Edge + POS Storage를 포함한
+97조건 PASS, 전체 77.41초/owned 자원 정리 확인이다. 증거는
+`/workspace/.private/resilience-new-store-workforce-http-20261101-v1/result.json`,
+개발 로그 new-store-workforce-real-http-v1.log다. source 7c63afad+입력 hash의 개발
+시험이며 최종 main 통합 release receipt가 아니다. 시험 중 입력과 clean Office
+source를 고정했고 운영 DB를 쓰지 않았다.
+
+앞선 Storage 전용 시험의 1x1 JPEG는 바이트 왕복은 성공했지만 추가 client decode
+확인에서 잘못된 이미지임을 발견했다. 그 증거를 카메라/이미지 표시 검증으로
+소급하지 않는다. 새 748-byte 96x72 합성 JPEG를 사용하고 실제 앱과 같은 Dart image
+decoder 검사도 추가했다. 사진 fixture는 실제 사람/카메라 자료가 아니다.
+
+실제 카메라 촬영, 물리 출력/암호 인계/운영 수락, 두 앱 전체 브라우저,
+part-timer/급여/구매·입고/판매·마감 전체, 나머지 도메인·혼합/12시간·운영 배포는
+계속 잔여다. 이번 개별 직원/근태 성공만으로 신규 매장 전 프로세스 완료를 선언하지
+않는다.

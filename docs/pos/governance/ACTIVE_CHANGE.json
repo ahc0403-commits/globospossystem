@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "ed26c48d102a3f8fa7fde5986c852b509e98cdfcf6db1fa0dc21951549f00ec1",
+      "sha256": "67b907f6ac0cd6bebc703a41f9da4ed23d2c43d0d482a2ffecd4428fe5bdb769",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "2c00c24caf44d8bec3640a83f0244a715b7087412a4e1b68f7bab9641b2c4086",
+      "sha256": "aac02b64a23347d4c82cea26d820db1ee342fd306447ed18ccbc3bcb089f2ae4",
       "mode": "100644"
     },
     "lib/core/auth/operation_scope_provider.dart": {
@@ -260,6 +260,10 @@
       "sha256": "26ff48aefd2827e33456cbe769580f73524b8ff84de050b04ccd7a51810e223e",
       "mode": "100644"
     },
+    "scripts/resilience/fixtures/attendance.jpg": {
+      "sha256": "ff54d6c00810f53f2dfaf89bddf3708b6bef7ac32d29658e188c3e889d9a297f",
+      "mode": "100644"
+    },
     "scripts/resilience/integration_kds_receipts.py": {
       "sha256": "f98dc816ab4f8d93b2b180408e3f1d5d367f2db611f5e5b563993b4d46439a0a",
       "mode": "100644"
@@ -285,11 +289,11 @@
       "mode": "100644"
     },
     "scripts/resilience/office_edge_runtime.ts": {
-      "sha256": "3a46637b2926d1fd244b5ac831fba1e028ce9b3fcdbd78c8d7cbfa90b31922a5",
+      "sha256": "ac043673592cd68290faacedacc74ad1275d3427c3207b9078d4293019044cce",
       "mode": "100644"
     },
     "scripts/resilience/owned_platform.py": {
-      "sha256": "c6aef534dc3337e351795a21a6393b1d238f1be4fbc1b138388a9e2b4a1a5e51",
+      "sha256": "022904a417aba1108c0a80f8f0d2d33c40eb077c0a8e1aa6d913ebcc99352bab",
       "mode": "100644"
     },
     "scripts/resilience/payment_command_v2_fixture.py": {
@@ -301,7 +305,7 @@
       "mode": "100644"
     },
     "scripts/resilience/run_platform_probe.py": {
-      "sha256": "bf2e39adaa14331ef4f09a3322f99cdcd45def4ce84fc9c9196116e30e2111cb",
+      "sha256": "beba386778b2165cf6b8d63f8085bc51c3cea80ebcd656d0db7d0de2b1728f4e",
       "mode": "100644"
     },
     "scripts/resilience/run_schema_fixture.py": {
@@ -337,7 +341,7 @@
       "mode": "100644"
     },
     "scripts/resilience/storage_probe.py": {
-      "sha256": "83a1500e453590aabffe0a54cffcc60d111d0a62d55ef28af6288d185227eedf",
+      "sha256": "7e07bf8f08603ea6b4e30bce91a9eac1df2514d62203f770147d5b7d329de8b5",
       "mode": "100644"
     },
     "scripts/resilience/storage_runtime.py": {
@@ -345,7 +349,7 @@
       "mode": "100644"
     },
     "scripts/resilience/store_http_scenario.py": {
-      "sha256": "403d25a1828baf11bab16c1a8c0458ab79dac875cc0521a78fe2048790a67248",
+      "sha256": "6bfd89983f3de73641d9654cf57cbc7cfdb45e4d07ed5e6f747c33325cf48687",
       "mode": "100644"
     },
     "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
@@ -360,6 +364,10 @@
       "sha256": "abb8cf97d6beb63c42ef3462c013e5e3c8879a3f39ccedc19862e0e0c9100bda",
       "mode": "100644"
     },
+    "scripts/resilience/tests/test_edge_preload.py": {
+      "sha256": "54c332962a5b298978138d818629aa4d1957c56fe172d0a8fa549d04c5d216d6",
+      "mode": "100644"
+    },
     "scripts/resilience/tests/test_office_accounts.py": {
       "sha256": "1f54746d47a93991f467b27b2374cefcda1e00627777deab29ed262a61bdbe13",
       "mode": "100644"
@@ -369,7 +377,7 @@
       "mode": "100644"
     },
     "scripts/resilience/tests/test_platform_probe_arguments.py": {
-      "sha256": "8bcb1c48ac35ab3ce45c188f95fd0d0dc48618d16bbb27676c4a67586d20fdb0",
+      "sha256": "db3078eda785395630eb348a4b8e3db0b5fe532cfb8b09d6e90a7cb05e681765",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_runtime_gateway.py": {
@@ -388,12 +396,20 @@
       "sha256": "e3faad10ca2eed25950593be2386a4ef29cf195f20294a69efa8c575763617b4",
       "mode": "100644"
     },
+    "scripts/resilience/workforce_http_scenario.py": {
+      "sha256": "940a497273dd90e18c4922ef2b5b0c354c0d06971ff18e34eb2bc62286d13cf6",
+      "mode": "100644"
+    },
     "scripts/test_financial_inputs_postgrest.sh": {
       "sha256": "7fb11617791caf147c579eda68ae60981dc88e4127caff3fc7aed66d5745bc6d",
       "mode": "100644"
     },
     "scripts/test_menu_discount_quantities.sh": {
       "sha256": "2a4c4ea5a62789c6c0c90ac5e7d906058b1ac4380ccb9d4dd698048f70316e03",
+      "mode": "100644"
+    },
+    "supabase/functions/complete-initial-password-change/deno.lock": {
+      "sha256": "529cbf52e10dd63498147ae5344d17b734407113e81f681e8b0eb058512bce03",
       "mode": "100644"
     },
     "supabase/migrations/20261101022105_pos_resilience_completion_contracts.sql": {
@@ -552,6 +568,10 @@
       "sha256": "a3ccef75d24d438c007d7e8a5a609cd7c8622286bf6547ba8bc583632752421d",
       "mode": "100644"
     },
+    "test/resilience_fixture_image_test.dart": {
+      "sha256": "bc77b0e8ef7e3f0bf380e9ec6a2357f3d38cff5641bee16cc53804fa615050c5",
+      "mode": "100644"
+    },
     "test/rpc_resource_cleanup_test.dart": {
       "sha256": "38d5897ff0a11dc9803ddcb769549902175f4726158c921dcd72f73e3e29c460",
       "mode": "100644"
@@ -626,7 +646,8 @@
     "verification",
     "project-policy",
     "web-platform",
-    "bootstrap"
+    "bootstrap",
+    "edge"
   ],
   "risk": {
     "business": true,
@@ -681,7 +702,14 @@
     "first-legal-real-http",
     "runtime-gateway-guards",
     "owned-platform-guards",
-    "first-additional-store-http"
+    "first-additional-store-http",
+    "real-storage-http",
+    "storage-runtime-guards",
+    "platform-selection-guards",
+    "tools-image-layout",
+    "new-store-workforce-http",
+    "edge-preload-listeners",
+    "attendance-fixture-image"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -703,7 +731,8 @@
     "Dispose the native JSON worker owned by each temporary KDS PostgrestClient, not just HTTP. Bound full RPC and cleanup budgets; cleanup failure cannot change a confirmed command or replace the original uncertainty/error. Payment-proof HTTP/JSON cleanup uses the same rule. No DB operation, new query/retry, physical adapter or production setting is added by this resource fix. Linux native VM measurements do not establish browser/night or physical-device improvement.",
     "A cashier full payment persists its original actor/store/order/version/amount/method before HTTP. Only the atomic sending owner may charge. Unknown delivery blocks alternative methods; reconciliation never resubmits. A server cancellation barrier defeats late original delivery, while already committed receipts stay confirmed. Full intent cannot become a stale partial charge. SQLite/IndexedDB fail closed, never evict unknown records, and preserve confirmed results through cleanup failure. Split/combined/non-revenue durable recovery and SQL batching remain incomplete.",
     "Owned runtime uses new private JWT/passwords and real Auth Admin API accounts, independent native DBs, authenticator JWT role switching, and unmodified Office Edge. Loopback routing never forwards missing/wrong project keys, private schemas or unprepared services. A physical lost ACK preserves original operation despite observed Deno transport replay; neither elapsed time nor unprepared Storage/Realtime/physical hardware is faked.",
-    "New law/brand/first and additional stores use real registration APIs and the unmodified store-account-onboarding Edge with real GoTrue Admin writes. Shared brand accounts are reconciled, not duplicated. Actual opening readiness and zero active employees remain blocked rather than being seeded as successful physical handover/business readiness."
+    "New law/brand/first and additional stores use real registration APIs and the unmodified store-account-onboarding Edge with real GoTrue Admin writes. Shared brand accounts are reconciled, not duplicated. Actual opening readiness and zero active employees remain blocked rather than being seeded as successful physical handover/business readiness.",
+    "Native two-project first/additional-store fixture now exercises actual initial-password Edge, generation trigger, new employees, POS private Storage and eight photo attendance events with cross-store denial. Synthetic JPEG is decoded by the real Dart image library; no physical camera/hardware, whole lifecycle or production claim."
   ],
   "dataAccessReview": {
     "nPlusOne": {

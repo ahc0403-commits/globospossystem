@@ -173,7 +173,8 @@ class OwnedPlatform:
         self.result['sourceDirty'] = bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True))
         self.result['officeSourceDirty'] = bool(subprocess.check_output(['git','status','--porcelain'],cwd=self.office_root,text=True))
         self.input_paths = [HERE / name for name in ['owned_platform.py','runtime_gateway.py','schema_snapshot.py',
-          'run_schema_fixture.py','run_platform_probe.py','legal_http_scenario.py','store_http_scenario.py','storage_runtime.py','storage_probe.py','office_edge_runtime.ts']]
+          'run_schema_fixture.py','run_platform_probe.py','legal_http_scenario.py','store_http_scenario.py',
+          'workforce_http_scenario.py','storage_runtime.py','storage_probe.py','office_edge_runtime.ts','fixtures/attendance.jpg']]
         self.result['toolHashes'] = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in self.input_paths}
         for ref in (AUTH_IMAGE, REST_IMAGE):
             image = json.loads(self.command('image-' + ('auth' if ref == AUTH_IMAGE else 'rest'),
@@ -332,27 +333,30 @@ class OwnedPlatform:
         return self.start_edge('office','pos-bridge',deno,deno_cache)
 
     def start_edge(self, project, function_name, deno, deno_cache):
-        self.schema.require((project,function_name) in [('office','pos-bridge'),('pos','store-account-onboarding')],
+        self.schema.require((project,function_name) in [('office','pos-bridge'),('pos','store-account-onboarding'),
+          ('pos','complete-initial-password-change')],
           'Only inspected local Edge entrypoints are supported')
         deno, deno_cache = Path(deno), Path(deno_cache)
         self.schema.require(deno.is_absolute() and os.access(deno,os.X_OK) and deno_cache.is_absolute(),
           'Explicit existing Deno executable/cache are required')
-        source_lock = self.office_root / 'scripts/deno.lock'
+        target_root = self.office_root if project=='office' else ROOT
+        source = target_root / 'supabase/functions' / function_name / 'index.ts'
+        source_lock = source.parent/'deno.lock'
+        if not source_lock.is_file():source_lock = self.office_root / 'scripts/deno.lock'
         lock = json.loads(source_lock.read_text())
         lock.pop('workspace', None)  # URL-only runtime has no tools/packageJson workspace.
-        target_lock = self.output / (project + '-edge-runtime.lock')
+        edge_key=project+'-'+function_name
+        target_lock = self.output / (edge_key + '-edge-runtime.lock')
         private_json(target_lock, lock)
-        self.result.setdefault('edgeLockDerivations',{})[project] = {
+        self.result.setdefault('edgeLockDerivations',{})[edge_key] = {
           'sourceSha256':hashlib.sha256(source_lock.read_bytes()).hexdigest(),
           'derivedSha256':hashlib.sha256(target_lock.read_bytes()).hexdigest(),
           'onlyWorkspaceBookkeepingRemoved':True, 'remoteIntegrityEntries':len(lock.get('remote',{}))}
-        target_root = self.office_root if project=='office' else ROOT
-        source = target_root / 'supabase/functions' / function_name / 'index.ts'
-        ready = self.output / (project + '-edge-ready.json')
+        ready = self.output / (edge_key + '-edge-ready.json')
         env = {'PATH':os.environ.get('PATH',''), 'DENO_DIR':str(deno_cache),
           'DENO_TLS_CA_STORE':'system','DENO_NO_UPDATE_CHECK':'1','DENO_NO_PACKAGE_JSON':'1',
           'POS_FIXTURE_EDGE_READY':str(ready), 'POS_FIXTURE_RUN_ID':self.run_id,
-          'POS_FIXTURE_EDGE_FUNCTION':function_name,
+          'POS_FIXTURE_EDGE_FUNCTION':function_name, 'POS_FIXTURE_EDGE_SOURCE':source.as_uri(),
           'SUPABASE_URL':self.projects[project]['url'],
           'SUPABASE_SERVICE_ROLE_KEY':self.projects[project]['service'],
           'SUPABASE_ANON_KEY':self.projects[project]['anon'],
@@ -366,16 +370,17 @@ class OwnedPlatform:
             env['STORE_ONBOARDING_INITIAL_PASSWORD']=self.projects['pos']['password']
             env['ALLOWED_ORIGINS']=self.projects['pos']['url']
             config_path=source.parent/'deno.json'
-            import_map=self.output/'pos-edge-import-map.json'
-            private_json(import_map,{'imports':json.loads(config_path.read_text())['imports']})
-            import_args=['--import-map='+str(import_map)]
-        log = self.output / ('actual-' + project + '-edge.log')
+            if config_path.is_file():
+                import_map=self.output/(edge_key+'-import-map.json')
+                private_json(import_map,{'imports':json.loads(config_path.read_text())['imports']})
+                import_args=['--import-map='+str(import_map)]
+        log = self.output / ('actual-' + edge_key + '-edge.log')
         with log.open('w') as output:
             log.chmod(0o600)
             process = subprocess.Popen([str(deno),'run','--no-config','--no-npm','--cached-only','--no-check','--frozen',
               '--lock=' + str(target_lock),'--allow-net=127.0.0.1','--allow-env',
               '--allow-read=' + str(target_root) + ',' + str(HERE), '--allow-write=' + str(ready),
-              *import_args,str(HERE / 'office_edge_runtime.ts'),source.as_uri()],
+              *import_args,'--preload='+str(HERE / 'office_edge_runtime.ts'),str(source)],
               cwd=ROOT,env=env,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
         self.processes.append(process)
         for _ in range(100):
@@ -392,7 +397,7 @@ class OwnedPlatform:
                 else:
                     self.gateways[project].additional_edges['/functions/v1/'+function_name]=origin
                 self.result['servicesPrepared'].append('actual-' + project + '-' + function_name + '-edge')
-                self.result.setdefault('edgeSourceSha256ByProject',{})[project] = hashlib.sha256(source.read_bytes()).hexdigest()
+                self.result.setdefault('edgeSourceSha256ByFunction',{})[edge_key] = hashlib.sha256(source.read_bytes()).hexdigest()
                 self.check(True,'actual-' + project + '-edge-bound-to-owned-loopback-port')
                 return
             time.sleep(.1)

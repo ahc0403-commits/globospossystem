@@ -1,14 +1,18 @@
 """Actual upload/sign/download/delete and private-object enforcement, no mock."""
-import base64
 import hashlib
 import json
+from pathlib import Path
 import urllib.error
 import urllib.request
 
 
+def image_bytes():
+    # Generated solid-color 96x72 JPEG; no camera image or personal data.
+    return (Path(__file__).with_name('fixtures')/'attendance.jpg').read_bytes()
+
+
 def run(platform,project='pos'):
-    # Public-domain synthetic 1x1 JPEG. No camera image or personal data copied.
-    image=base64.b64decode('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAEf/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/EH//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/EH//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/EH//2Q==')
+    image=image_bytes()
     config=platform.projects[project]
     path='fixture-'+platform.run_id+'/probe.jpg'
     url='/storage/v1/object/attendance-photos/'+path

@@ -49,11 +49,15 @@ def main():
     parser.add_argument('--projects',choices=['both','pos','office'],default='both')
     parser.add_argument('--exercise-legal-connection',action='store_true')
     parser.add_argument('--exercise-stores',action='store_true')
+    parser.add_argument('--exercise-workforce',action='store_true')
     parser.add_argument('--exercise-storage',action='store_true')
     parser.add_argument('--storage-reference',type=Path)
     parser.add_argument('--deno',type=Path)
     parser.add_argument('--deno-cache',type=Path)
     args=parser.parse_args()
+    if args.exercise_workforce:
+        args.exercise_stores=True
+        args.exercise_storage=True
     if args.exercise_stores:
         args.exercise_legal_connection=True
     if args.exercise_legal_connection and args.projects!='both':
@@ -86,7 +90,11 @@ def main():
                 if args.exercise_stores:
                     platform.start_edge('pos','store-account-onboarding',args.deno,args.deno_cache)
                     from store_http_scenario import run as stores
-                    stores(platform,accounts,legal)
+                    registered=stores(platform,accounts,legal)
+                    if args.exercise_workforce:
+                        platform.start_edge('pos','complete-initial-password-change',args.deno,args.deno_cache)
+                        from workforce_http_scenario import run as workforce
+                        workforce(platform,accounts,registered)
             platform.validate_inputs()
             platform.result['status']='PASS'
     except BaseException as error:
