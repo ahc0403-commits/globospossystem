@@ -41,6 +41,7 @@ class RuntimeGateway(ThreadingHTTPServer):
         self.targets = {'auth': owned_origin(auth), 'rest': owned_origin(rest)}
         self.keys = (anon, service)
         self.edge = None
+        self.additional_edges = {}
         self.slots = threading.BoundedSemaphore(16)
         self.guard = threading.Lock()
         self.counts, self.statuses = Counter(), Counter()
@@ -154,6 +155,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
             elif parsed.path == '/functions/v1/pos-bridge' and gateway.edge:
                 target = owned_origin(gateway.edge) + '/'
                 route = 'edge/pos-bridge'
+            elif parsed.path in gateway.additional_edges:
+                target = owned_origin(gateway.additional_edges[parsed.path]) + '/'
+                route = 'edge/' + parsed.path.rsplit('/',1)[-1]
             else:
                 status = 501
                 self._reply(status, b'{"code":"FIXTURE_SERVICE_NOT_PREPARED"}', {'Content-Type':'application/json'})

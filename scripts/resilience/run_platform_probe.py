@@ -45,9 +45,12 @@ def main():
     parser.add_argument('--office-root',required=True,type=Path)
     parser.add_argument('--output',required=True,type=Path)
     parser.add_argument('--exercise-legal-connection',action='store_true')
+    parser.add_argument('--exercise-stores',action='store_true')
     parser.add_argument('--deno',type=Path)
     parser.add_argument('--deno-cache',type=Path)
     args=parser.parse_args()
+    if args.exercise_stores:
+        args.exercise_legal_connection=True
     if args.exercise_legal_connection and (args.deno is None or args.deno_cache is None):
         parser.error('Actual Office Edge requires explicit Deno executable and cache')
     signal.signal(signal.SIGTERM,lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
@@ -59,7 +62,11 @@ def main():
             if args.exercise_legal_connection:
                 platform.start_office_edge(args.deno,args.deno_cache)
                 from legal_http_scenario import run
-                run(platform,accounts)
+                legal=run(platform,accounts)
+                if args.exercise_stores:
+                    platform.start_edge('pos','store-account-onboarding',args.deno,args.deno_cache)
+                    from store_http_scenario import run as stores
+                    stores(platform,accounts,legal)
             platform.validate_inputs()
             platform.result['status']='PASS'
     except BaseException as error:

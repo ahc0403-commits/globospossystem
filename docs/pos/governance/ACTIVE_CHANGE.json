@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS progress recovery, bounded reads/proof metadata and native resource cleanup; wire durable single-payment recovery with server cancellation/version barriers. Remaining domain adoption, all-flow runtime, mixed/12h trials and production are incomplete. Actual independent GoTrue/JWT REST and unmodified Office Edge now exercise zero-store legal creation/connection and physical lost-ack recovery; first/additional stores, whole browser/business lifecycles and long tests still remain.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "42f0cbd022c8fe8f910cc53abed69ee0b729b29fccda5a159cd360c0ccd9685a",
+      "sha256": "cce286603b31a07ea0cf40b65caf67fa7e41251378029476061af09d43ae696f",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "92ef9427e4ead1bdf21b9f292ffeb36d796802d9d5e0119d6dd62aae9bef400c",
+      "sha256": "08bbe25fdb9c61b63d8be0149df3f705896794e8743e14b9e3609a2d9788426c",
       "mode": "100644"
     },
     "lib/core/auth/operation_scope_provider.dart": {
@@ -265,7 +265,7 @@
       "mode": "100644"
     },
     "scripts/resilience/legal_http_scenario.py": {
-      "sha256": "1650d2c543127001e0352d5aa428305c865d9563a533c683610654bea2a2c950",
+      "sha256": "474ff84b1bed74556df07369ce0335208b07176b39e585da09cab5a401a8daf3",
       "mode": "100644"
     },
     "scripts/resilience/office_accounts.py": {
@@ -273,11 +273,11 @@
       "mode": "100644"
     },
     "scripts/resilience/office_edge_runtime.ts": {
-      "sha256": "9edac342520d75c96cc125b3d4660588243f5bec2afa770548c5079b6b5b9dae",
+      "sha256": "3a46637b2926d1fd244b5ac831fba1e028ce9b3fcdbd78c8d7cbfa90b31922a5",
       "mode": "100644"
     },
     "scripts/resilience/owned_platform.py": {
-      "sha256": "ded7a07054945389a34b99a25a84a4245efabb2facf5dcd3b8c39197d375e124",
+      "sha256": "9985b17414fb692f1a5bf4f05f829c83d80358363188c536d3259d290f5ce677",
       "mode": "100644"
     },
     "scripts/resilience/payment_command_v2_fixture.py": {
@@ -289,7 +289,7 @@
       "mode": "100644"
     },
     "scripts/resilience/run_platform_probe.py": {
-      "sha256": "97d37659aa26a1b0bd6c5c163f3732223f225391226360ef2c6b348b00bdef6c",
+      "sha256": "a77b5489b4130a74b1604b2fbfea7ef927e73051dc918cc681ebaac0d5f628e7",
       "mode": "100644"
     },
     "scripts/resilience/run_schema_fixture.py": {
@@ -297,7 +297,7 @@
       "mode": "100644"
     },
     "scripts/resilience/runtime_gateway.py": {
-      "sha256": "44c5eb258548cbb03f64a7c0c3f2c862935c5c98324f713225f50b3f96825229",
+      "sha256": "c9bc77e1e1c2e7c246175513aa5c33c9f9f0abaaf88a69ead74f96cc9702602d",
       "mode": "100644"
     },
     "scripts/resilience/sample_accounts.py": {
@@ -324,6 +324,10 @@
       "sha256": "96b9853817e3618b4606e68ecb7aea0f3f6ccc6860ca10fae841e687f20134da",
       "mode": "100644"
     },
+    "scripts/resilience/store_http_scenario.py": {
+      "sha256": "403d25a1828baf11bab16c1a8c0458ab79dac875cc0521a78fe2048790a67248",
+      "mode": "100644"
+    },
     "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
       "sha256": "808f0e1d33287bce9d15d8f3d05471fab3400cc7291f418710206571c442b84a",
       "mode": "100644"
@@ -345,7 +349,7 @@
       "mode": "100644"
     },
     "scripts/resilience/tests/test_runtime_gateway.py": {
-      "sha256": "972c93d616a47752d80fca8e37b5a4e73fa3b7998beccf70165b9ca2d4d2fa63",
+      "sha256": "254244bc207f85ea6215f458278511df3a538f9f0ab265e9932a0d6597f22a60",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_fixture_runner.py": {
@@ -648,7 +652,8 @@
     "two-project-real-platform",
     "first-legal-real-http",
     "runtime-gateway-guards",
-    "owned-platform-guards"
+    "owned-platform-guards",
+    "first-additional-store-http"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -669,7 +674,8 @@
     "Settings/report notifier and widget view lifetimes reset and reload on real actor/store/access changes. Confirmed setting saves remain true after navigation/disposal, stale reads cannot undo saves, clearing nullable charges clears UI, and same-scope refresh preserves unsaved controls. PIN follow-up steps and toasts stay in the original widget view. Remaining legacy commands, strict PIN read outcomes and file/resource budgets are not claimed complete.",
     "Dispose the native JSON worker owned by each temporary KDS PostgrestClient, not just HTTP. Bound full RPC and cleanup budgets; cleanup failure cannot change a confirmed command or replace the original uncertainty/error. Payment-proof HTTP/JSON cleanup uses the same rule. No DB operation, new query/retry, physical adapter or production setting is added by this resource fix. Linux native VM measurements do not establish browser/night or physical-device improvement.",
     "A cashier full payment persists its original actor/store/order/version/amount/method before HTTP. Only the atomic sending owner may charge. Unknown delivery blocks alternative methods; reconciliation never resubmits. A server cancellation barrier defeats late original delivery, while already committed receipts stay confirmed. Full intent cannot become a stale partial charge. SQLite/IndexedDB fail closed, never evict unknown records, and preserve confirmed results through cleanup failure. Split/combined/non-revenue durable recovery and SQL batching remain incomplete.",
-    "Owned runtime uses new private JWT/passwords and real Auth Admin API accounts, independent native DBs, authenticator JWT role switching, and unmodified Office Edge. Loopback routing never forwards missing/wrong project keys, private schemas or unprepared services. A physical lost ACK preserves original operation despite observed Deno transport replay; neither elapsed time nor unprepared Storage/Realtime/physical hardware is faked."
+    "Owned runtime uses new private JWT/passwords and real Auth Admin API accounts, independent native DBs, authenticator JWT role switching, and unmodified Office Edge. Loopback routing never forwards missing/wrong project keys, private schemas or unprepared services. A physical lost ACK preserves original operation despite observed Deno transport replay; neither elapsed time nor unprepared Storage/Realtime/physical hardware is faked.",
+    "New law/brand/first and additional stores use real registration APIs and the unmodified store-account-onboarding Edge with real GoTrue Admin writes. Shared brand accounts are reconciled, not duplicated. Actual opening readiness and zero active employees remain blocked rather than being seeded as successful physical handover/business readiness."
   ],
   "dataAccessReview": {
     "nPlusOne": {

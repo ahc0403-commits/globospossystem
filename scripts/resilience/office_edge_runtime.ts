@@ -3,7 +3,9 @@
 const [source] = Deno.args;
 const ready = Deno.env.get("POS_FIXTURE_EDGE_READY") ?? "";
 const runId = Deno.env.get("POS_FIXTURE_RUN_ID") ?? "";
-if (!source?.startsWith("file:///") || !source.endsWith("/supabase/functions/pos-bridge/index.ts") ||
+const functionName = Deno.env.get("POS_FIXTURE_EDGE_FUNCTION") ?? "pos-bridge";
+if (!["pos-bridge","store-account-onboarding"].includes(functionName) ||
+    !source?.startsWith("file:///") || !source.endsWith(`/supabase/functions/${functionName}/index.ts`) ||
     !ready.startsWith("/") || !/^[a-f0-9]{32}$/.test(runId)) {
   throw new Error("EXPLICIT_OWNED_EDGE_SOURCE_REQUIRED");
 }

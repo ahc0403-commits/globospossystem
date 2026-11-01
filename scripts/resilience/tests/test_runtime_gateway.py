@@ -49,6 +49,13 @@ class GatewayTests(unittest.TestCase):
             self.assertEqual(response.status,501)
         self.assertEqual(self.seen,[])
 
+    def test_only_the_explicit_owned_pos_edge_is_routed(self):
+        self.gw.additional_edges['/functions/v1/store-account-onboarding']='http://127.0.0.1:'+str(self.target.server_address[1])
+        with self.request('/functions/v1/store-account-onboarding',headers={'Authorization':'Bearer original-operator'}) as response:
+            self.assertEqual(response.status,200)
+        self.assertEqual(self.seen,[('/','Bearer original-operator')])
+        with self.request('/functions/v1/another-function') as response:self.assertEqual(response.status,501)
+
     def test_local_cors_is_narrow_and_does_not_allow_external_origins(self):
         for origin,allowed in [('http://127.0.0.1:1234',True),('https://external.invalid',False)]:
             with self.request('/rest/v1/orders',headers={'Origin':origin}) as response:

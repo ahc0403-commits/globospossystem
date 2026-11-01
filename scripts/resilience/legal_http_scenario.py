@@ -101,3 +101,4 @@ WHERE p.auth_id=""" + literal(office_actor) + ';')
       'originalOperationId':operation,'realAuthIdsIndependent':True,'repeatedResumeCount':20,
       'productionModified':False}
     platform.save()
+    return {'tax':tax,'officeLegal':linked,'posActor':pos_actor,'officeActor':office_actor}

@@ -994,3 +994,39 @@ real-legal-auth-rest-edge-v4.log다. source는 7ef7cca9+기록된 당시 도구 
 전체 G2/G6를 완료하지 않았다. 실제 Storage/Realtime/mail/printer는 NOT_PREPARED다.
 없는 서비스를 501로 표시하며 가짜 업로드/이벤트/출력 성공을 반환하지 않는다.
 실단말·2시간 혼합 및 각 12시간 시험, 운영 배포와 두 마감 관찰은 아직 시작하지 않았다.
+
+
+### G2 첫/추가 매장의 실제 개설 API와 계정 worker
+
+같은 독립 runtime에서 신규 법인 연결 이후 실제 admin_create_brand_v2로 브랜드/법인
+관계를 만들고 admin_preview_store_registration_v1/admin_register_store_v1로 첫 매장과
+추가 매장을 등록했다. 같은 request 재호출은 같은 매장이다. 기본 paperless
+kitchen_floor와 별도 tray 사용 구성을 사용했다. Office 최초 법인/브랜드/매장 매핑은
+사전에 심지 않는다.
+
+실제 POS store-account-onboarding/index.ts/worker.ts도 원본대로 실행했다. 시험 adapter는
+Office와 같이 local 수신 port만 지정하며, POS 함수의 원본 deno.json import map을
+사용한다. GoTrue Admin API가 실제 Auth 계정을 만들고 원래 SQL이 고정 계정/요건/
+station을 연결한다. 13개 계정 요구사항은 실제 12개 계정이다. 동일 브랜드 관리자는
+두 매장에서 공유하며 중복 생성되지 않는다. 계정 유형별 API 생성은 provider에 bulk
+create가 없는 필수 쓰기이고, 기존 worker의 최대 50개/동시 2/65초 제한과 2개 DB
+준비·마무리 RPC를 유지한다. 새 항목별 DB 조회 경로를 만들지 않았다.
+
+실제 Office store_mapping_sync에 선택한 두 store UUID manifest를 전달해, 두 매장 모두
+앞서 확인한 동일 Office 법인 아래에 연결되는 것까지 확인했다. native Auth/REST/
+양쪽 실제 Edge를 포함한 전체 owned 실행 53조건 PASS, 41.19초/정리 확인이다.
+실행 중 입력 hash와 clean Office source가 유지됐다. 추가 Edge route allowlist/원래
+Authorization/미지원 함수 차단을 포함한 gateway 8개, owned cleanup/input 6개 검사와
+Deno port adapter type check도 PASS다.
+
+증거: `/workspace/.private/resilience-first-additional-store-http-20261101-v1/result.json`,
+개발 로그 first-additional-store-real-http-v1.log. 생성한 모든 계정 ID/역할/fixture용
+비밀번호는 같은 private 폴더의 generated-pos-accounts.private.json에만 보관한다.
+실제 운영 샘플 계정/Office 계정 private 파일과 혼용하지 않는다. DB/서비스는 종료된
+격리 시험 계정이며 운영 계정으로 사용할 수 없다.
+
+현재 두 매장의 workforce accounts_ready는 true지만 employees_active는 0이다.
+테이블/출력 route/test job도 아직 없어 개점 readiness는 false다. **등록/계정 생성/
+Office 연결 성공을 신규 매장 전체 영업/구매/근태 성공으로 표시하지 않는다.**
+다음은 실제 설정 API·직원/근태·구매 흐름이며, 출력/단말 검증·암호 인계·운영 수락을
+가짜 PASS로 저장하지 않는다. 브라우저 두 앱과 물리 장치 및 장시간 시험은 잔여다.

@@ -37,7 +37,8 @@
         "two-project-real-platform",
         "first-legal-real-http",
         "runtime-gateway-guards",
-        "owned-platform-guards"
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -154,7 +155,8 @@
         "two-project-real-platform",
         "first-legal-real-http",
         "runtime-gateway-guards",
-        "owned-platform-guards"
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -238,7 +240,8 @@
         "two-project-real-platform",
         "first-legal-real-http",
         "runtime-gateway-guards",
-        "owned-platform-guards"
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -335,7 +338,8 @@
         "two-project-real-platform",
         "first-legal-real-http",
         "runtime-gateway-guards",
-        "owned-platform-guards"
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -345,7 +349,8 @@
       "sourceRoot": "lib/features/store_workflow",
       "checks": [
         "feature.store_workflow",
-        "official-full-recipe"
+        "official-full-recipe",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -362,7 +367,8 @@
         "two-project-real-platform",
         "first-legal-real-http",
         "runtime-gateway-guards",
-        "owned-platform-guards"
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -787,6 +793,10 @@
     },
     "owned-platform-guards": {
       "path": "scripts/resilience/tests/test_owned_platform.py",
+      "kind": "focused"
+    },
+    "first-additional-store-http": {
+      "path": "scripts/resilience/store_http_scenario.py",
       "kind": "focused"
     }
   },

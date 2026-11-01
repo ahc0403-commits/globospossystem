@@ -158,7 +158,7 @@ class OwnedPlatform:
         self.result['sourceDirty'] = bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True))
         self.result['officeSourceDirty'] = bool(subprocess.check_output(['git','status','--porcelain'],cwd=self.office_root,text=True))
         self.input_paths = [HERE / name for name in ['owned_platform.py','runtime_gateway.py','schema_snapshot.py',
-          'run_schema_fixture.py','run_platform_probe.py','legal_http_scenario.py','office_edge_runtime.ts']]
+          'run_schema_fixture.py','run_platform_probe.py','legal_http_scenario.py','store_http_scenario.py','office_edge_runtime.ts']]
         self.result['toolHashes'] = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in self.input_paths}
         for ref in (AUTH_IMAGE, REST_IMAGE):
             image = json.loads(self.command('image-' + ('auth' if ref == AUTH_IMAGE else 'rest'),
@@ -309,36 +309,53 @@ class OwnedPlatform:
           'actual-office-source-sha-and-clean-tree-unchanged')
 
     def start_office_edge(self, deno, deno_cache):
+        return self.start_edge('office','pos-bridge',deno,deno_cache)
+
+    def start_edge(self, project, function_name, deno, deno_cache):
+        self.schema.require((project,function_name) in [('office','pos-bridge'),('pos','store-account-onboarding')],
+          'Only inspected local Edge entrypoints are supported')
         deno, deno_cache = Path(deno), Path(deno_cache)
         self.schema.require(deno.is_absolute() and os.access(deno,os.X_OK) and deno_cache.is_absolute(),
           'Explicit existing Deno executable/cache are required')
         source_lock = self.office_root / 'scripts/deno.lock'
         lock = json.loads(source_lock.read_text())
         lock.pop('workspace', None)  # URL-only runtime has no tools/packageJson workspace.
-        target_lock = self.output / 'office-edge-runtime.lock'
+        target_lock = self.output / (project + '-edge-runtime.lock')
         private_json(target_lock, lock)
-        self.result['edgeLockDerivation'] = {
+        self.result.setdefault('edgeLockDerivations',{})[project] = {
           'sourceSha256':hashlib.sha256(source_lock.read_bytes()).hexdigest(),
           'derivedSha256':hashlib.sha256(target_lock.read_bytes()).hexdigest(),
           'onlyWorkspaceBookkeepingRemoved':True, 'remoteIntegrityEntries':len(lock.get('remote',{}))}
-        source = self.office_root / 'supabase/functions/pos-bridge/index.ts'
-        ready = self.output / 'edge-ready.json'
+        target_root = self.office_root if project=='office' else ROOT
+        source = target_root / 'supabase/functions' / function_name / 'index.ts'
+        ready = self.output / (project + '-edge-ready.json')
         env = {'PATH':os.environ.get('PATH',''), 'DENO_DIR':str(deno_cache),
           'DENO_TLS_CA_STORE':'system','DENO_NO_UPDATE_CHECK':'1','DENO_NO_PACKAGE_JSON':'1',
           'POS_FIXTURE_EDGE_READY':str(ready), 'POS_FIXTURE_RUN_ID':self.run_id,
-          'SUPABASE_URL':self.projects['office']['url'],
-          'SUPABASE_SERVICE_ROLE_KEY':self.projects['office']['service'],
+          'POS_FIXTURE_EDGE_FUNCTION':function_name,
+          'SUPABASE_URL':self.projects[project]['url'],
+          'SUPABASE_SERVICE_ROLE_KEY':self.projects[project]['service'],
+          'SUPABASE_ANON_KEY':self.projects[project]['anon'],
           'POS_SUPABASE_URL':self.projects['pos']['url'], 'POS_SECRET_KEY':self.projects['pos']['service']}
-        self.dispatch_token=secrets.token_urlsafe(48)
-        self.redactions.append(self.dispatch_token)
+        if not hasattr(self,'dispatch_token'):
+            self.dispatch_token=secrets.token_urlsafe(48)
+            self.redactions.append(self.dispatch_token)
         env['PROCUREMENT_ONBOARDING_DISPATCH_TOKEN']=self.dispatch_token
-        log = self.output / 'actual-office-edge.log'
+        import_args=[]
+        if project=='pos':
+            env['STORE_ONBOARDING_INITIAL_PASSWORD']=self.projects['pos']['password']
+            env['ALLOWED_ORIGINS']=self.projects['pos']['url']
+            config_path=source.parent/'deno.json'
+            import_map=self.output/'pos-edge-import-map.json'
+            private_json(import_map,{'imports':json.loads(config_path.read_text())['imports']})
+            import_args=['--import-map='+str(import_map)]
+        log = self.output / ('actual-' + project + '-edge.log')
         with log.open('w') as output:
             log.chmod(0o600)
             process = subprocess.Popen([str(deno),'run','--no-config','--no-npm','--cached-only','--no-check','--frozen',
               '--lock=' + str(target_lock),'--allow-net=127.0.0.1','--allow-env',
-              '--allow-read=' + str(self.office_root) + ',' + str(HERE), '--allow-write=' + str(ready),
-              str(HERE / 'office_edge_runtime.ts'),source.as_uri()],
+              '--allow-read=' + str(target_root) + ',' + str(HERE), '--allow-write=' + str(ready),
+              *import_args,str(HERE / 'office_edge_runtime.ts'),source.as_uri()],
               cwd=ROOT,env=env,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
         self.processes.append(process)
         for _ in range(100):
@@ -349,10 +366,14 @@ class OwnedPlatform:
                 self.schema.require(record.get('runId')==self.run_id and record.get('pid')==process.pid
                   and type(record.get('port')) is int and 0 < record['port'] < 65536,'Owned Edge readiness identity mismatch')
                 ready.chmod(0o600)
-                self.gateways['office'].edge = 'http://127.0.0.1:' + str(record['port'])
-                self.result['servicesPrepared'].append('actual-office-pos-bridge-edge')
-                self.result['edgeSourceSha256'] = hashlib.sha256(source.read_bytes()).hexdigest()
-                self.check(True,'actual-office-edge-bound-to-owned-loopback-port')
+                origin='http://127.0.0.1:' + str(record['port'])
+                if project=='office':
+                    self.gateways[project].edge=origin
+                else:
+                    self.gateways[project].additional_edges['/functions/v1/'+function_name]=origin
+                self.result['servicesPrepared'].append('actual-' + project + '-' + function_name + '-edge')
+                self.result.setdefault('edgeSourceSha256ByProject',{})[project] = hashlib.sha256(source.read_bytes()).hexdigest()
+                self.check(True,'actual-' + project + '-edge-bound-to-owned-loopback-port')
                 return
             time.sleep(.1)
         raise RuntimeError('Owned Edge readiness deadline reached')
