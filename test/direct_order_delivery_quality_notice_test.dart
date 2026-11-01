@@ -22,6 +22,9 @@ const expectedMenuIds = [
   'b3520540-6722-4782-97e4-11debf7d63e5',
   'e4181065-c4c1-45d3-bdae-de0b31feed81',
   '8182aa51-628f-40dd-93c4-f60f1347157b',
+  '98bedacb-4562-4c4a-80ba-08dce829af59',
+  '11cbe616-15c2-494d-b94a-2842e15acfd2',
+  '3cddfae1-c591-4986-a0ef-b9871a4ec315',
 ];
 const expectedQualityText = {
   'ko': '음식의 특성상 배달 시간에 따라 맛과 식감이 달라질 수 있습니다.',
@@ -248,57 +251,64 @@ void main() {
       );
     });
     for (final width in [390.0, 1440.0]) {
-      testWidgets(
-        '$language menu at $width shows full notice below unchanged price',
-        (tester) async {
-          tester.view.physicalSize = Size(width, 900);
-          tester.view.devicePixelRatio = 1;
-          addTearDown(tester.view.resetPhysicalSize);
-          addTearDown(tester.view.resetDevicePixelRatio);
-          final model = item(deliveryQualityNoticeMenuIds.first);
-          final service = _MenuService(model);
-          await tester.pumpWidget(_app(service, language));
-          await tester.pumpAndSettle();
-          final notice = find.byKey(Key('direct_delivery_quality_${model.id}'));
-          await reveal(tester, notice);
-          expect(
-            find.text(DirectOrderCopy(language).deliveryQualityNotice),
-            findsOneWidget,
-          );
-          final text = tester.widget<Text>(notice);
-          expect(text.maxLines, isNull);
-          expect(text.overflow, isNot(TextOverflow.ellipsis));
-          expect(
-            tester.renderObject<RenderParagraph>(notice).didExceedMaxLines,
-            isFalse,
-          );
-          final card = find
-              .ancestor(of: notice, matching: find.byType(Card))
-              .first;
-          final price = find.descendant(
-            of: card,
-            matching: find.byWidgetPredicate(
-              (widget) =>
-                  widget is Text && (widget.data ?? '').contains('45.000'),
-            ),
-          );
-          expect(price, findsOneWidget);
-          expect(
-            tester.getBottomLeft(price).dy,
-            lessThanOrEqualTo(tester.getTopLeft(notice).dy),
-          );
-          expect(
-            tester.getRect(card).contains(tester.getRect(notice).bottomRight),
-            isTrue,
-          );
-          expect(service.catalogReads, 1);
-          expect(model.price, 45000);
-          expect(model.description, 'Existing description stays unchanged');
-          await captureNotice(tester, 'menu_${language}_${width.toInt()}');
-          expect(tester.takeException(), isNull);
-          await tester.pumpWidget(const SizedBox());
-        },
-      );
+      for (final id in expectedMenuIds) {
+        testWidgets(
+          '$language menu $id at $width shows full notice below unchanged price',
+          (tester) async {
+            tester.view.physicalSize = Size(width, 900);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            final model = item(id);
+            final service = _MenuService(model);
+            await tester.pumpWidget(_app(service, language));
+            await tester.pumpAndSettle();
+            final notice = find.byKey(
+              Key('direct_delivery_quality_${model.id}'),
+            );
+            await reveal(tester, notice);
+            expect(
+              find.text(DirectOrderCopy(language).deliveryQualityNotice),
+              findsOneWidget,
+            );
+            final text = tester.widget<Text>(notice);
+            expect(text.maxLines, isNull);
+            expect(text.overflow, isNot(TextOverflow.ellipsis));
+            expect(
+              tester.renderObject<RenderParagraph>(notice).didExceedMaxLines,
+              isFalse,
+            );
+            final card = find
+                .ancestor(of: notice, matching: find.byType(Card))
+                .first;
+            final price = find.descendant(
+              of: card,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Text && (widget.data ?? '').contains('45.000'),
+              ),
+            );
+            expect(price, findsOneWidget);
+            expect(
+              tester.getBottomLeft(price).dy,
+              lessThanOrEqualTo(tester.getTopLeft(notice).dy),
+            );
+            expect(
+              tester.getRect(card).contains(tester.getRect(notice).bottomRight),
+              isTrue,
+            );
+            expect(service.catalogReads, 1);
+            expect(model.price, 45000);
+            expect(model.description, 'Existing description stays unchanged');
+            await captureNotice(
+              tester,
+              'menu_${id.substring(0, 8)}_${language}_${width.toInt()}',
+            );
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox());
+          },
+        );
+      }
     }
   }
 

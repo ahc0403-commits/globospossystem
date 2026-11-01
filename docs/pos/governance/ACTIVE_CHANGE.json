@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
   "kind": "application",
-  "summary": "Add localized, non-message translation help on customer/staff chat entry and neutral delivery-only quality copy below price/options for verified BunsikClub menu identities. Ambiguous jajangmyeon/naengmyeon identities remain excluded.",
+  "summary": "Add localized, non-message chat translation help and delivery-only quality copy below price/options for exactly six verified BunsikClub catalog IDs. Owner confirmed Jjagyechi plus both mul/bibim naengmyeon; preserve public visibility and all business contracts.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
       "sha256": "33d32ab29f35721a52cc7cbc8a142feee1afd0d066a66b472a5ed9421e30a6bc",
@@ -21,7 +21,7 @@
       "mode": "100644"
     },
     "lib/features/direct_order/direct_order_delivery_quality.dart": {
-      "sha256": "c71455eac21101f749bd17ec4a2d231016b8f53569c1f4d364c3eab643b95fd3",
+      "sha256": "96116ec2bb371f1dddf6ebf9a6fe7d31dc8eeac04dc789d2c39904fdc0c99b74",
       "mode": "100644"
     },
     "lib/features/direct_order/direct_order_storefront_screen.dart": {
@@ -37,7 +37,7 @@
       "mode": "100644"
     },
     "test/direct_order_delivery_quality_notice_test.dart": {
-      "sha256": "bb41b3a7eb5ca47903956f6080552cfe4d0461eddcf2e3ec874802ed563985e1",
+      "sha256": "bfd47f30deaa5bbe9fc1962c923ee9caff8707ddf9e51cb56f4cf4a35f133782",
       "mode": "100644"
     },
     "test/direct_order_photo_approval_test.dart": {
@@ -107,7 +107,7 @@
     "Preserve existing menu descriptions, size choices and complete KO/VI/EN text without truncation.",
     "Translation help is presentation-only on chat entry; it never becomes a stored or sent conversation message and follows the viewer locale.",
     "Optional informationFooter is null by default for all existing shared menu pickers. Preserve required option validation, selected keys, prices and explicit confirmation; review all transitive consumers.",
-    "Jajangmyeon versus Jjagyechi and cold-noodle variants remain unresolved and excluded; no name-based runtime selection or speculative identity assignment."
+    "The owner-confirmed scope is exactly six catalog IDs: spicy pork kimbap, bulgogi kimbap, buldak egg stir-fried noodles, Jjagyechi, mul naengmyeon and bibim naengmyeon. No name-based runtime selection, other menus or catalog visibility changes."
   ],
   "dataAccessReview": {
     "nPlusOne": {

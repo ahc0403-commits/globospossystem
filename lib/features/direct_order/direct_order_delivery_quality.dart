@@ -19,6 +19,9 @@ const deliveryQualityNoticeMenuIds = {
   'b3520540-6722-4782-97e4-11debf7d63e5', // Spicy pork kimbap
   'e4181065-c4c1-45d3-bdae-de0b31feed81', // Bulgogi kimbap
   '8182aa51-628f-40dd-93c4-f60f1347157b', // Buldak egg stir-fried noodles
+  '98bedacb-4562-4c4a-80ba-08dce829af59', // Jjagyechi (owner-confirmed jajang dish)
+  '11cbe616-15c2-494d-b94a-2842e15acfd2', // Mul naengmyeon
+  '3cddfae1-c591-4986-a0ef-b9871a4ec315', // Bibim naengmyeon
 };
 
 bool showsDeliveryQualityNotice({
