@@ -41,7 +41,8 @@
       "sourceRoot": "lib/features/cashier",
       "checks": [
         "feature.cashier",
-        "official-full-recipe"
+        "official-full-recipe",
+        "proof-batch-scope"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -155,7 +156,8 @@
       "checks": [
         "feature.payment",
         "official-full-recipe",
-        "cashier-command-scope"
+        "cashier-command-scope",
+        "proof-batch-scope"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -682,6 +684,10 @@
     },
     "attendance-scope-commands": {
       "path": "test/attendance_submission_retry_test.dart",
+      "kind": "focused"
+    },
+    "proof-batch-scope": {
+      "path": "test/data_access/proof_batch_scope_test.dart",
       "kind": "focused"
     }
   },

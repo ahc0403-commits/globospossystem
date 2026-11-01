@@ -771,3 +771,31 @@ attendance-session-widget-tests.log다. 전체 자동 분석 결과는 별도 �
 사진 처리의 크기·메모리 상한, 앱 재시작 뒤 unknown 근태의 내구성 있는 복구, 다른
 legacy 근태/급여/직원 관리 경로는 여전히 잔여다. 기존 사진+직원+행동 결과 재확인
 계약은 보존했으며 이 영향 검사를 전체 근태/전역 규약 완료로 표시하지 않는다.
+
+### G3/G4 결제 증빙의 metadata 일괄 조회·원래 사용자 보존
+
+기존 flush는 파일마다 매장의 세금 법인을 다시 조회했다. 이제 적격 파일 최대
+10개를 먼저 고르고 distinct 매장의 id/tax_entity_id만 한 번 조회한다(최대 10행,
+64 KiB). 경로가 이미 저장된 파일은 이 조회도 하지 않는다. 기존 원래 storage 경로/
+업로드/서명 완료 상태를 유지하며 세금 법인이 없으면 임의 unknown 경로를 만들지
+않고 해당 파일만 조치 필요로 남긴다. 새 주기나 자동 재시도를 추가하지 않았다.
+
+같은 actor의 동시 flush는 Future 하나를 공유한다. 큐 진입 당시 사용자와 원래 JWT를
+고정해 metadata/업로드 대기 중 계정이 바뀌면 이후 물리 전송을 시작하지 않는다.
+이미 끝난 업로드는 보존하며 원래 actor가 명시적으로 재개하면 서명/첨부부터
+이어진다. 같은 사용자의 토큰 갱신은 진행 작업의 원래 Authorization을 바꾸지
+않는다. Auth snapshot 코드는 설정/리포트와 공통 사용하며 공유 Auth는 닫지 않는다.
+
+고유 개발 검사 19개 PASS: 새 proof batch/scope 8개, 기존 영구 거절/재개 1개,
+owned-read 8개, 실제 TCP deadline 2개. 추가한 원래 Bearer 존재 조건도 1개 대상
+재실행으로 확인했다. 합성 HTTP 10파일 라운드에서 metadata 1회, 전체 필요한 호출
+31회, 동시 handler 최대 1이었다. 11파일은 10+1 배치로 처리했다. 파일별 업로드/
+서명/첨부라는 실제 개별 객체 부작용은 유지하며 거대한 업로드 한 개로 바꾸지
+않았다. 실제 DB RLS 실행 계획·운영 업로드 성능/실단말 측정으로 바꾸지 않는다.
+로그: proof-batch-scope-final-tests.log, proof-batch-scope-extended-tests.log,
+proof-original-token-assertion.log, proof-batch-scope-analysis-zero.log(분석 0건).
+초기 잘못된 fixture/검사 경로 실패는 proof-batch-scope-tests.log에 보존한다.
+
+actor가 없는 구형 큐의 서버 권한 계약은 그대로이며 소유권 이행 완료를 주장하지
+않는다. 전체 큐/원본 파일 크기·이미지 처리 메모리·로컬 정리 결과 분리와 다른
+도메인의 G3/G4/G5 적용은 계속 잔여다. 운영/12시간 시험은 아직 시작하지 않았다.
