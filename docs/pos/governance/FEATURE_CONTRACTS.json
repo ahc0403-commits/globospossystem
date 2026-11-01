@@ -826,6 +826,14 @@
     "attendance-fixture-image": {
       "path": "test/resilience_fixture_image_test.dart",
       "kind": "focused"
+    },
+    "auth-command-scope": {
+      "path": "test/auth_initialization_test.dart",
+      "kind": "focused"
+    },
+    "auth-command-transport": {
+      "path": "test/auth_command_session_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [

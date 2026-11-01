@@ -1111,3 +1111,32 @@ decoder 검사도 추가했다. 사진 fixture는 실제 사람/카메라 자료
 part-timer/급여/구매·입고/판매·마감 전체, 나머지 도메인·혼합/12시간·운영 배포는
 계속 잔여다. 이번 개별 직원/근태 성공만으로 신규 매장 전 프로세스 완료를 선언하지
 않는다.
+
+
+### G3 인증 명령의 실제 늦은 응답·중복 전송 결함 수정
+
+신규 매장 초기 인증을 확인하면서 AuthNotifier의 own-password/consent 명령도
+분석했다. 수정 전 재현 5건 모두 FAIL이었다: 이전 password 성공/실패가 새 actor의
+error를 설정, 이전 consent 성공이 새 actor의 gate를 해제, 동시 password 20회가
+실제 20회 전송, dispose 후 응답이 폐기된 notifier를 사용했다. 야간 장애 당시의
+직접 원인이라고 일반화하지 않고 별도 재현된 전역 상태 결함으로 기록한다.
+
+별도 actor generation과 원본 JWT를 고정한 AuthCommandSession을 적용했다.
+동일 actor의 단순 profile refresh는 명령을 무효화하지 않으며 새 로그인·actor 변경·
+logout·dispose는 원래 명령의 HTTP만 취소한다. shared Auth는 유지한다. password와
+consent는 각자 in-flight 한 건으로 제한하고 후속 profile 조회도 원본 auth_id/JWT를
+사용한다. 다른 actor의 gate/error/cache/navigation을 변경하지 않는다.
+
+원래 Edge/SQL 계약은 유지한다. 명령 전체 15초, 입력 16KiB/응답 64KiB이며 과대
+응답은 JSON decode 전에 차단한다. 새 JSON worker를 만들지 않는다. 타임아웃/
+응답 유실 후 password 쓰기를 자동 재전송하지 않는다. 비밀번호는 메모리 요청에만
+있고 journal/Git/log에 저장하지 않는다. 미확인 password 결과의 재시작 복구 계약은
+별도 잔여이며 이 변경만으로 모든 Auth 명령을 완료 처리하지 않는다.
+
+인증 초기화/기존 password·consent 계약 46건 PASS(위 5건 포함), 실제 TCP 경계 8건
+PASS(원본 JWT·후속 조회, 빈 profile 거부, 503 단일 전송, 미확정 ack, 64KiB 상한,
+실제 body deadline/공유 transport 생존, 전환/입력 상한)다. 개발 로그
+`auth-command-scope-before-v2.log`, `auth-command-scope-after.log`,
+`auth-command-transport-after.log`, `auth-command-affected-analysis-final.log`를 보존한다.
+초기 테스트 fixture compile 실패와 lint 4건도 보존한 뒤 수정했다. 최종 main 전체
+recipe/운영/장시간/실단말 증거를 대신하지 않는다.

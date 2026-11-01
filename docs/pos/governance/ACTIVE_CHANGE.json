@@ -5,11 +5,15 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "67b907f6ac0cd6bebc703a41f9da4ed23d2c43d0d482a2ffecd4428fe5bdb769",
+      "sha256": "54848fdaa477c12399afe1625a5af2fe59eae12b6c0587746ab5fbc112d1a216",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "aac02b64a23347d4c82cea26d820db1ee342fd306447ed18ccbc3bcb089f2ae4",
+      "sha256": "bdb52750451d4e6f35bdd01b524bbebae7e0e23d9addfbb16be5bd8fd3e86694",
+      "mode": "100644"
+    },
+    "lib/core/auth/auth_command_session.dart": {
+      "sha256": "2f0f4701c86b1fcdd56416942e38d7a0a14113b653725b4d9771651edabc2d14",
       "mode": "100644"
     },
     "lib/core/auth/operation_scope_provider.dart": {
@@ -129,7 +133,7 @@
       "mode": "100644"
     },
     "lib/features/auth/auth_provider.dart": {
-      "sha256": "c14b3ab7d02d1e918e7f5249a572ee062e218c5f181a1f9b0155fa8253ee9f94",
+      "sha256": "de2ba093712b02a494f955f9699b365040068b18d8f4c51eca50346d10d80ef2",
       "mode": "100644"
     },
     "lib/features/auth/auth_state.dart": {
@@ -440,6 +444,14 @@
       "sha256": "c4d36e64ec71b8e248da04e1cb37782f46d8fda7f7eed8c59ee8fdd8d0fc1f1b",
       "mode": "100644"
     },
+    "test/auth_command_session_test.dart": {
+      "sha256": "7e79504cf20468bf6ded83a84707c2a119ef4152b7d67ee6706b774cd5eb594f",
+      "mode": "100644"
+    },
+    "test/auth_initialization_test.dart": {
+      "sha256": "2f870e71efb2d526198ce69fcb51b58a71396847308a695ccc5d24a2b23a772c",
+      "mode": "100644"
+    },
     "test/cashier_cancellation_immutable_contract_test.dart": {
       "sha256": "f902dffabdf391d0f3d111a7c9abdbfbe2c60d5041cf7801f1bde63c6db2d41d",
       "mode": "100644"
@@ -500,6 +512,10 @@
       "sha256": "73d32b9a531a6099fa25d2e729e40e10a2bad7415aa3f5ad714ed2c7a9149499",
       "mode": "100644"
     },
+    "test/initial_password_change_contract_test.dart": {
+      "sha256": "d2dc3edaa08c597ec89d22edcb019857027092a803bb861b6508b97da5d79d2a",
+      "mode": "100644"
+    },
     "test/kds_partial_item_command_test.dart": {
       "sha256": "4b336162da094a0f0320246c806a968dd26b914b66c0f053ab3818d5faf5402e",
       "mode": "100644"
@@ -550,6 +566,10 @@
     },
     "test/pos_integrated_resilience_test.dart": {
       "sha256": "8359b4bfd297cbe236a4655850162bffc3ac1d9451e56db56a65141d4741869a",
+      "mode": "100644"
+    },
+    "test/privacy_consent_contract_test.dart": {
+      "sha256": "e01bee7b6499c0690ccefb6cb6926a5dd6ee810a4d2052e7bac6ee85c65a83d0",
       "mode": "100644"
     },
     "test/promotion_payment_recovery_test.dart": {
@@ -709,7 +729,9 @@
     "tools-image-layout",
     "new-store-workforce-http",
     "edge-preload-listeners",
-    "attendance-fixture-image"
+    "attendance-fixture-image",
+    "auth-command-scope",
+    "auth-command-transport"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -732,7 +754,8 @@
     "A cashier full payment persists its original actor/store/order/version/amount/method before HTTP. Only the atomic sending owner may charge. Unknown delivery blocks alternative methods; reconciliation never resubmits. A server cancellation barrier defeats late original delivery, while already committed receipts stay confirmed. Full intent cannot become a stale partial charge. SQLite/IndexedDB fail closed, never evict unknown records, and preserve confirmed results through cleanup failure. Split/combined/non-revenue durable recovery and SQL batching remain incomplete.",
     "Owned runtime uses new private JWT/passwords and real Auth Admin API accounts, independent native DBs, authenticator JWT role switching, and unmodified Office Edge. Loopback routing never forwards missing/wrong project keys, private schemas or unprepared services. A physical lost ACK preserves original operation despite observed Deno transport replay; neither elapsed time nor unprepared Storage/Realtime/physical hardware is faked.",
     "New law/brand/first and additional stores use real registration APIs and the unmodified store-account-onboarding Edge with real GoTrue Admin writes. Shared brand accounts are reconciled, not duplicated. Actual opening readiness and zero active employees remain blocked rather than being seeded as successful physical handover/business readiness.",
-    "Native two-project first/additional-store fixture now exercises actual initial-password Edge, generation trigger, new employees, POS private Storage and eight photo attendance events with cross-store denial. Synthetic JPEG is decoded by the real Dart image library; no physical camera/hardware, whole lifecycle or production claim."
+    "Native two-project first/additional-store fixture now exercises actual initial-password Edge, generation trigger, new employees, POS private Storage and eight photo attendance events with cross-store denial. Synthetic JPEG is decoded by the real Dart image library; no physical camera/hardware, whole lifecycle or production claim.",
+    "Own password/consent commands retain original actor epoch and JWT across awaits, reject duplicate in-flight submissions, abort only their own HTTP work after logout/actor change/disposal, and never set a later actor gate/error/cache/navigation. No password is persisted and no write is automatically retried. Command whole budget 15s/input 16KiB/response 64KiB. Durable ambiguous-password recovery remains separate incomplete work."
   ],
   "dataAccessReview": {
     "nPlusOne": {

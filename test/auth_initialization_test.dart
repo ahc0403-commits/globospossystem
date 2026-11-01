@@ -31,6 +31,13 @@ class _AuthApi {
   bool consentAccepted = true;
   bool mustChangePassword = false;
   bool active = true;
+  int passwordCalls = 0;
+  int acceptConsentCalls = 0;
+  int passwordStatus = 200;
+  Completer<void>? passwordGate;
+  Completer<void>? acceptConsentGate;
+  final passwordStarted = Completer<void>();
+  final acceptConsentStarted = Completer<void>();
   Completer<void>? profileGate;
   Completer<void>? tokenGate;
   Completer<void>? tokenStarted;
@@ -48,7 +55,7 @@ class _AuthApi {
   );
 
   Future<http.Response> handle(http.Request request) async {
-    Object response;
+    Object? response;
     switch (request.url.path) {
       case '/auth/v1/token':
         if (request.url.queryParameters['grant_type'] == 'refresh_token') {
@@ -125,6 +132,10 @@ class _AuthApi {
           'extra_permissions': [],
           'must_change_password': mustChangePassword,
         };
+        if (request.url.queryParameters['select'] ==
+            'must_change_password,password_change_generation') {
+          response = [response];
+        }
       case '/rest/v1/restaurants':
         storeCalls++;
         if (!storeStarted.isCompleted) storeStarted.complete();
@@ -137,6 +148,21 @@ class _AuthApi {
         if (failConsent) throw http.ClientException('offline');
         if (!consentStarted.isCompleted) consentStarted.complete();
         response = consentAccepted;
+      case '/functions/v1/complete-initial-password-change':
+        passwordCalls++;
+        if (!passwordStarted.isCompleted) passwordStarted.complete();
+        await passwordGate?.future;
+        return http.Response(
+          jsonEncode({'password_changed': passwordStatus == 200}),
+          passwordStatus,
+          headers: {'content-type': 'application/json'},
+          request: request,
+        );
+      case '/rest/v1/rpc/accept_my_privacy_consent':
+        acceptConsentCalls++;
+        if (!acceptConsentStarted.isCompleted) acceptConsentStarted.complete();
+        await acceptConsentGate?.future;
+        response = null;
       case '/auth/v1/logout':
         logoutCalls++;
         if (!(logoutStarted?.isCompleted ?? true)) logoutStarted!.complete();
@@ -253,6 +279,109 @@ void main() {
     await auth.login('test@example.test', 'test-password');
     expect(auth.state.passwordChangeRequired, isTrue);
     expect(auth.state.privacyConsentRequired, isTrue);
+  });
+
+  Future<void> switchActor(_AuthApi api, AuthNotifier auth) async {
+    const otherId = '00000000-0000-0000-0000-000000000003';
+    final session = api.client.auth.currentSession!.toJson();
+    (session['user'] as Map)['id'] = otherId;
+    final payload = base64Url
+        .encode(
+          utf8.encode(
+            jsonEncode({
+              'sub': otherId,
+              'exp': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
+            }),
+          ),
+        )
+        .replaceAll('=', '');
+    session['access_token'] = 'e30.$payload.signature';
+    session['refresh_token'] = 'newer-mock-refresh';
+    await api.client.auth.setInitialSession(jsonEncode(session));
+    await _waitForState(auth, (s) => s.user?.id == otherId);
+  }
+
+  test(
+    'password completion cannot change a later actor gate or error',
+    () async {
+      final api = _AuthApi()..passwordGate = Completer<void>();
+      final auth = AuthNotifier(client: api.client);
+      addTearDown(auth.dispose);
+      addTearDown(api.client.dispose);
+      await auth.login('test@example.test', 'test-password');
+      final change = auth.changeOwnPassword('SecureShift12!');
+      await api.passwordStarted.future;
+      api.mustChangePassword = true;
+      await switchActor(api, auth);
+      final profileCalls = api.profileCalls;
+      api.passwordGate!.complete();
+      expect(await change, isFalse);
+      expect(auth.state.passwordChangeRequired, isTrue);
+      expect(auth.state.errorMessage, isNull);
+      expect(api.profileCalls, profileCalls);
+    },
+  );
+
+  test('password failure cannot set error on a later actor', () async {
+    final api = _AuthApi()
+      ..passwordGate = Completer<void>()
+      ..passwordStatus = 500;
+    final auth = AuthNotifier(client: api.client);
+    addTearDown(auth.dispose);
+    addTearDown(api.client.dispose);
+    await auth.login('test@example.test', 'test-password');
+    final change = auth.changeOwnPassword('SecureShift12!');
+    await api.passwordStarted.future;
+    await switchActor(api, auth);
+    api.passwordGate!.complete();
+    expect(await change, isFalse);
+    expect(auth.state.errorMessage, isNull);
+  });
+
+  test('consent completion cannot accept a later actor consent', () async {
+    final api = _AuthApi()
+      ..consentAccepted = false
+      ..acceptConsentGate = Completer<void>();
+    final auth = AuthNotifier(client: api.client);
+    addTearDown(auth.dispose);
+    addTearDown(api.client.dispose);
+    await auth.login('test@example.test', 'test-password');
+    final acceptance = auth.acceptPrivacyConsent(localeName: 'ko');
+    await api.acceptConsentStarted.future;
+    await switchActor(api, auth);
+    api.acceptConsentGate!.complete();
+    await acceptance;
+    expect(auth.state.privacyConsentRequired, isTrue);
+    expect(auth.state.errorMessage, isNull);
+  });
+
+  test('password submissions share a single in-flight operation', () async {
+    final api = _AuthApi()..passwordGate = Completer<void>();
+    final auth = AuthNotifier(client: api.client);
+    addTearDown(auth.dispose);
+    addTearDown(api.client.dispose);
+    await auth.login('test@example.test', 'test-password');
+    final changes = List.generate(
+      20,
+      (_) => auth.changeOwnPassword('SecureShift12!'),
+    );
+    await api.passwordStarted.future;
+    api.passwordGate!.complete();
+    final results = await Future.wait(changes);
+    expect(api.passwordCalls, 1);
+    expect(results.where((value) => value).length, 1);
+  });
+
+  test('password completion after dispose does not write state', () async {
+    final api = _AuthApi()..passwordGate = Completer<void>();
+    final auth = AuthNotifier(client: api.client);
+    addTearDown(api.client.dispose);
+    await auth.login('test@example.test', 'test-password');
+    final change = auth.changeOwnPassword('SecureShift12!');
+    await api.passwordStarted.future;
+    auth.dispose();
+    api.passwordGate!.complete();
+    expect(await change, isFalse);
   });
 
   test('deactivated account cannot enter the shell', () async {
