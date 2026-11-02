@@ -1425,3 +1425,41 @@ Office 변경은 현재 Office 지침과 기존 정상 PR 게시 승인에 따�
 고정해 실행한다. gateway의 HTTP 지연과 장시간 WebSocket 수명은 별도 bucket으로
 기록해, 연결 유지 시간을 요청 지연으로 오인하지 않는다. 운영/2시간/각 12시간은
 여전히 미실행이며 실단말 접속 경로와 전체 업무/혼합 시나리오가 남아 있다.
+
+### 2026-11-02 — 제공된 샘플 계정 브라우저와 주문 복구 개발
+
+운영 샘플의 제공 계정으로 캐셔·주방·1F·매장 관리자 로그인과 초기 화면을
+실제 Chromium에서 확인했다. 운영 업무 데이터는 생성하지 않았다. 후보 코드의
+결제·장애·부하 시험은 실제 Auth/REST/두 DB/Edge/Storage/Realtime를 가진
+소유 격리 사본에서 진행한다. 제공된 9개 Auth ID와 비밀번호는 private 환경에서만
+사용한다. 기존 SAMPLE의 소프트웨어 영업 context만 명시적으로 구성하며 물리
+개시 승인·실단말·인쇄 성공을 seed하지 않는다. 전자계산서 외부 자격증명과
+업체 worker/운영 cron은 복사하지 않는다.
+
+브라우저 Auth가 사용하는 x-supabase-api-version과 파일 업로드 헤더가 시험
+경유기의 CORS 목록에 빠져 있던 것을 실제 UI로 확인해 보완했다. 외부 origin
+허용은 늘리지 않았다. 경유기 14개 검사가 통과했다. 여러 디버그 화면과 두 앱
+컴파일러를 함께 실행한 시험에서는 16GiB 환경의 메모리 포화와 탭 종료를 관측했다.
+이는 운영 야간 원인의 증거가 아니다. 디버그 서버와 시험 탭을 정리하고 릴리스
+빌드·동시 화면 상한으로 전환한다. 이 실행은 장시간 acceptance가 아니다.
+
+일반 테이블 주문/추가 주문은 전송 전에 별도 SQLite/IndexedDB journal에 원래
+project·actor·store·payload·operation을 저장한다. 각 256KiB/총 4MiB/100개,
+프로세스당 실행 16개로 제한한다. 다른 계정/매장과 다중 탭이 원래 요청을
+덮어쓰지 않는다. owner 없는 이전 queue는 보존하고 자동 재전송하지 않는다.
+확정 뒤 local 정리나 화면 재조회 실패로 새 주문 ID가 만들어지지 않게 한다.
+
+CLI 생성 `20261102015533_additional_order_command_receipts.sql`을 8번째 POS
+forward migration으로 등록했다. 기존 native add-items를 한 번 실행하고 같은
+transaction에 original actor/request hash/item IDs를 기록한다. 100-ID receipt
+읽기와 최대 20-command/500-line 복구 batch를 추가한다. 독립 business command의
+native transaction을 유지하며 단순 병렬화를 DB N+1 해결이라고 표시하지 않는다.
+새 클라이언트는 mandatory 계약이 없을 때 unkeyed fallback으로 내려가지 않는다.
+
+개발 검사: 실제 native commit 후 TCP 응답 유실, 동시 원래 요청 재전송, 변경
+payload/다른 actor/상한 거부, 부분 batch 거부 보존 10개 통과. SQLite 5개,
+Chromium IndexedDB 4개 통과. transport/coordinator 7개는 원래 요청 보존·저장
+실패 전송 차단·확정 후 정리 실패·다른 actor 및 60-intent/5-HTTP를 확인했다.
+SQLite 첫 실행의 호스트 loader 누락 실패를 보존하고 기존 local libsqlite3 경로를
+지정한 뒤 해당 5개만 다시 실행했다. 이 개별 결과를 통합 최종-SHA PASS나 전체
+브라우저 업무·2시간/각 12시간·운영 배포 완료로 사용하지 않는다.

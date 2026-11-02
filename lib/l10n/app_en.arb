@@ -4456,5 +4456,8 @@
   "paymentRecoveryConflict": "The original payment details changed. Check its result first.",
   "photoFileTooLarge": "This photo is too large. Take another photo or choose a smaller image.",
   "photoProcessorBusy": "Another photo is being processed. Please try again in a moment.",
-  "photoInvalid": "This photo could not be read. Take another photo or choose a different image."
+  "photoInvalid": "This photo could not be read. Take another photo or choose a different image.",
+  "orderRecoveryPending": "The original order request is saved on this terminal. Check its result or use Sync before placing it again.",
+  "orderRecoveryReviewRequired": "An earlier order request needs review. Keep its original details and check the result before retrying.",
+  "orderRecoveryLegacyReview": "Saved orders from an older version have no verified original account. They are preserved for administrator review and will not be sent under this login."
 }

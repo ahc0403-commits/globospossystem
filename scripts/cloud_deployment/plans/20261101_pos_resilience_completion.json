@@ -18,6 +18,14 @@
     {
       "signature": "public.get_kds_high_watermark_v2()",
       "resultType": "bigint"
+    },
+    {
+      "signature": "public.add_order_items_once_v1(uuid,uuid,jsonb,text)",
+      "resultType": "SETOF order_items"
+    },
+    {
+      "signature": "public.execute_order_command_batch_v1(uuid,jsonb)",
+      "resultType": "jsonb"
     }
   ],
   "migrations": [
@@ -48,6 +56,10 @@
     {
       "path": "supabase/migrations/20261101192425_procurement_readiness_observation_time.sql",
       "sha256": "73e6caac07ff16485916a82bf811f1fcb6e17097fec6c83eba83eba6db3a6f3d"
+    },
+    {
+      "path": "supabase/migrations/20261102015533_additional_order_command_receipts.sql",
+      "sha256": "373586de51653cb0fb18f23f2f63b3afde1f562501c3bb3ffba6ed01df4b8128"
     }
   ],
   "web": true,

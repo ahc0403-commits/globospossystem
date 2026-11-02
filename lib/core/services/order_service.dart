@@ -1,19 +1,20 @@
 import 'pos_backend.dart';
-import '../utils/time_utils.dart';
 import 'operational_day_service.dart';
+import '../utils/time_utils.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../orders/recoverable_order_commands.dart';
+import '../orders/order_intent_journal.dart';
 
 class OrderService {
-  bool _isRpcSignatureMismatch(Object error, String functionName) {
-    final message = error.toString().toLowerCase();
-    if (!message.contains(functionName.toLowerCase())) {
-      return false;
-    }
-
-    return message.contains('could not find the function') ||
-        message.contains('function public.') ||
-        message.contains('does not exist') ||
-        message.contains('no function matches');
-  }
+  OrderService({SupabaseClient? client, OrderIntentJournal? journal})
+    : _providedClient = client,
+      _providedJournal = journal;
+  final SupabaseClient? _providedClient;
+  final OrderIntentJournal? _providedJournal;
+  RecoverableOrderCommands? _commands;
+  RecoverableOrderCommands get commands => _commands ??=
+      RecoverableOrderCommands(_client, journal: _providedJournal);
+  SupabaseClient get _client => _providedClient ?? supabase;
 
   Future<Map<String, dynamic>> createOrder({
     required String storeId,
@@ -21,51 +22,24 @@ class OrderService {
     required List<Map<String, dynamic>> items,
     String? clientMutationId,
     String? businessDate,
+    bool Function()? isCurrent,
   }) async {
     if (clientMutationId != null) {
-      try {
-        final day = await operationalDayService.ensureStoreDay(storeId);
-        final result = await supabase.rpc(
-          'create_order_for_business_day',
-          params: {
-            'p_store_id': storeId,
-            'p_table_id': tableId,
-            'p_items': items,
-            'p_client_mutation_id': clientMutationId,
-            'p_business_date': businessDate ?? day.window.dateKey,
-          },
-        );
-        return Map<String, dynamic>.from(result as Map);
-      } catch (error) {
-        if (!_isRpcSignatureMismatch(error, 'create_order_for_business_day')) {
-          rethrow;
-        }
-        // Old servers cannot validate an offline business date. Never replay
-        // a previous day's creation through an unguarded compatibility RPC.
-        if (businessDate != null &&
-            businessDate != TimeUtils.currentVietnamBusinessDay().dateKey) {
-          rethrow;
-        }
-      }
-      try {
-        final result = await supabase.rpc(
-          'create_order_with_client_mutation_id',
-          params: {
-            'p_store_id': storeId,
-            'p_table_id': tableId,
-            'p_items': items,
-            'p_client_mutation_id': clientMutationId,
-          },
-        );
-        return Map<String, dynamic>.from(result as Map);
-      } catch (error) {
-        if (!_isRpcSignatureMismatch(
-          error,
-          'create_order_with_client_mutation_id',
-        )) {
-          rethrow;
-        }
-      }
+      final result = await commands.execute(
+        kind: 'create',
+        store: storeId,
+        target: tableId,
+        operation: clientMutationId,
+        isCurrent: isCurrent,
+        params: {
+          'p_store_id': storeId,
+          'p_table_id': tableId,
+          'p_items': items,
+          'p_business_date':
+              businessDate ?? TimeUtils.currentVietnamBusinessDay().dateKey,
+        },
+      );
+      return Map<String, dynamic>.from(result as Map);
     }
 
     final result = await supabase.rpc(
@@ -134,29 +108,24 @@ class OrderService {
     required String storeId,
     required List<Map<String, dynamic>> items,
     String? clientMutationId,
+    bool Function()? isCurrent,
   }) async {
     if (clientMutationId != null) {
-      try {
-        final result = await supabase.rpc(
-          'add_items_to_order_with_client_mutation_id',
-          params: {
-            'p_order_id': orderId,
-            'p_store_id': storeId,
-            'p_items': items,
-            'p_client_mutation_id': clientMutationId,
-          },
-        );
-        return (result as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-      } catch (error) {
-        if (!_isRpcSignatureMismatch(
-          error,
-          'add_items_to_order_with_client_mutation_id',
-        )) {
-          rethrow;
-        }
-      }
+      final result = await commands.execute(
+        kind: 'add',
+        store: storeId,
+        target: orderId,
+        operation: clientMutationId,
+        isCurrent: isCurrent,
+        params: {
+          'p_order_id': orderId,
+          'p_store_id': storeId,
+          'p_items': items,
+        },
+      );
+      return (result as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     }
 
     final result = await supabase.rpc(

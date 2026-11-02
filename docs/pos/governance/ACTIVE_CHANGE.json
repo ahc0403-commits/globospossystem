@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
   "kind": "application",
-  "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete.",
+  "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete. Original table/order-add requests now use independent atomic SQLite/IndexedDB intent storage and bounded receipt/recovery batches; legacy ownerless requests are preserved for review. Browser/mixed/12h and production acceptance remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "8d728874ed2ccf1b0787b471b024202f7673e7174b98c7be030fdfea3b3ad927",
+      "sha256": "2e035b950140f673a6171a7730cdd9a8abeb0a96425dd0e02ce89839f341666b",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "349797dd7abb9aa098c78757c0482f9941fcbf3bd08264ec50aadfc9b53e0c92",
+      "sha256": "a5177b40444d390dcca990b3f5142b57dfa7645e1e2a4f1599373a5b6651cdb9",
       "mode": "100644"
     },
     "lib/core/auth/auth_command_session.dart": {
@@ -22,6 +22,30 @@
     },
     "lib/core/i18n/photo_processing_error_message.dart": {
       "sha256": "dd27acd24d5936e47b222dc762011b6ce175c09922a7e7389c1a8c03d01efce6",
+      "mode": "100644"
+    },
+    "lib/core/i18n/restaurant_cutoff_localization.dart": {
+      "sha256": "fe7725edb404bd2f634dde9bb5e96f8fc2105568291e9c82b0deea0e322d1377",
+      "mode": "100644"
+    },
+    "lib/core/orders/order_command_rpc.dart": {
+      "sha256": "c870089d85601f2449e3415e7fa3dc99b31b4655fb4407d5649fec18ea1b1a2e",
+      "mode": "100644"
+    },
+    "lib/core/orders/order_intent_journal.dart": {
+      "sha256": "02b9fa7fb23bb811a0c0b50f5ae41a2ba8e7e03b67681a5ccff8c45d7ace41d4",
+      "mode": "100644"
+    },
+    "lib/core/orders/order_intent_journal_native.dart": {
+      "sha256": "1a3bc252f56082923ae0b0a9cef63f99f7ed8325e1bd38994e5b9cc5e8d718ab",
+      "mode": "100644"
+    },
+    "lib/core/orders/order_intent_journal_web.dart": {
+      "sha256": "9c917cb7b37b925f8c2ebc4a1e5203a9e8cd91d5f63a93b73305d98164a81d6c",
+      "mode": "100644"
+    },
+    "lib/core/orders/recoverable_order_commands.dart": {
+      "sha256": "3978e6cf82cf45a4b2b17c736e7704c834b5e8ac03662c772c2dfcbbd485e5f3",
       "mode": "100644"
     },
     "lib/core/payments/payment_command_coordinator.dart": {
@@ -62,6 +86,10 @@
     },
     "lib/core/services/menu_service.dart": {
       "sha256": "827177c94a83575a847ca106553e868a6fac66b984163c9d8af0db65e21287b0",
+      "mode": "100644"
+    },
+    "lib/core/services/order_service.dart": {
+      "sha256": "e75068c9ef6b6c170baf0b843ef145caedf9b36e77b8d2453f18818fbe42328d",
       "mode": "100644"
     },
     "lib/core/services/payment_proof_service.dart": {
@@ -193,7 +221,7 @@
       "mode": "100644"
     },
     "lib/features/order/order_provider.dart": {
-      "sha256": "6eb11e881e0c20af2f38ee5a86cbf745e0dd66fec06a5c9e61ebfeb629b6f44b",
+      "sha256": "70a24dcdc569672814001dec7292845b94ef27a237940ddef000fdd23b26aa38",
       "mode": "100644"
     },
     "lib/features/payment/einvoice_provider.dart": {
@@ -237,15 +265,15 @@
       "mode": "100644"
     },
     "lib/l10n/app_en.arb": {
-      "sha256": "79530d5d1763502e9f55230b59f691694d1f935aa2911c955f3ab434a2a5e860",
+      "sha256": "5625daf27236a0e16fc4a2325e620d21d0705fae026fb7e80ebb339284813344",
       "mode": "100644"
     },
     "lib/l10n/app_ko.arb": {
-      "sha256": "08f44bccb036a37e8837d4acf607479d5a3c1d8ec547deacebdc89dfa3f6cf68",
+      "sha256": "c1412e1f60df6b5140f00a5186cbfdaf35442f864b8ee3b11cf4c98a9fd51678",
       "mode": "100644"
     },
     "lib/l10n/app_vi.arb": {
-      "sha256": "21200dd4073fa9663b84730177d9b88bc9378c389025d59b54ebf070b9d85aae",
+      "sha256": "a703dd42ff6a0c81538802424f3f9e0b2e89e9995fd58d1f85ead1ed3152d0ba",
       "mode": "100644"
     },
     "lib/main.dart": {
@@ -261,7 +289,7 @@
       "mode": "100644"
     },
     "scripts/cloud_deployment/plans/20261101_pos_resilience_completion.json": {
-      "sha256": "aba2154da64dae773d08699b122c163c1941f83f96617ce695174ecc8c76afff",
+      "sha256": "6c0a4a76bbd553878cc5c783cd0d684ca3464639eac805a8d8b10d359092562a",
       "mode": "100644"
     },
     "scripts/local_verification/Dockerfile": {
@@ -282,6 +310,10 @@
     },
     "scripts/local_verification/tests/test_tools_image_layout.py": {
       "sha256": "01cc14b16b94e9f61af95b7003dcd61c115bda891fb185b365941c262b4c0769",
+      "mode": "100644"
+    },
+    "scripts/resilience/additional_order_recovery_scenario.py": {
+      "sha256": "fc1c2b6cba14f79099444b535ba7992e8cd2625eadfebb3e2d82eea8200518c7",
       "mode": "100644"
     },
     "scripts/resilience/auth_platform_fixture.py": {
@@ -325,11 +357,11 @@
       "mode": "100644"
     },
     "scripts/resilience/order_handoff_scenario.py": {
-      "sha256": "677a31638ae52d6221066915142c632c2ac9965a3a5e7bae5b33a2f18d5cf936",
+      "sha256": "0dedb7f0d4c61bb4ebaf25ae4abb92b07df202f815233f5a9577dafed6855c59",
       "mode": "100644"
     },
     "scripts/resilience/owned_platform.py": {
-      "sha256": "e97c53de1909f1138b1afa72f52fcdbcb6fa54614376af7a148ff2f885fa3aac",
+      "sha256": "811ba3ed9a1c666649cb2dbb44890a01cf1b3d9e90e9eecd8608d9f4043116f5",
       "mode": "100644"
     },
     "scripts/resilience/payment_command_v2_fixture.py": {
@@ -361,7 +393,7 @@
       "mode": "100644"
     },
     "scripts/resilience/runtime_gateway.py": {
-      "sha256": "9ef04a23a09a385afadbd138f48e8b90eab89345f3e5b2ee0f3f9c1f95f49790",
+      "sha256": "fd322e284103db3345f1b4274939a800ab382f401e259ccbc64af64bef631b81",
       "mode": "100644"
     },
     "scripts/resilience/sample_accounts.py": {
@@ -381,7 +413,7 @@
       "mode": "100644"
     },
     "scripts/resilience/schema_snapshot.py": {
-      "sha256": "d4c1c24cb487075d3fa6f37df6aa85f9cae05990b982ac0ec9e11f1f4189909a",
+      "sha256": "266ee327ac3109840c6c7a926c885e6d63061180ad0873bdaa25f724312c262e",
       "mode": "100644"
     },
     "scripts/resilience/schema_storage_reference_config.sql": {
@@ -402,6 +434,10 @@
     },
     "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
       "sha256": "808f0e1d33287bce9d15d8f3d05471fab3400cc7291f418710206571c442b84a",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/order_journal_browser.test.cjs": {
+      "sha256": "f6fb7bc65c66a02e11764a07240658912725e04877b4fb03cf9e6d7372226110",
       "mode": "100644"
     },
     "scripts/resilience/tests/payment_journal_browser.test.cjs": {
@@ -433,7 +469,7 @@
       "mode": "100644"
     },
     "scripts/resilience/tests/test_runtime_gateway.py": {
-      "sha256": "264c596d560aa456f807f18c52a0db36e1f45261b7dd415546e403c97e796a46",
+      "sha256": "9c1d50f5c9689d2def5b3538e9a60400a6780e1e17cb680184b526f2e138f160",
       "mode": "100644"
     },
     "scripts/resilience/tests/test_schema_fixture_runner.py": {
@@ -490,6 +526,10 @@
     },
     "supabase/migrations/20261101192425_procurement_readiness_observation_time.sql": {
       "sha256": "73e6caac07ff16485916a82bf811f1fcb6e17097fec6c83eba83eba6db3a6f3d",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261102015533_additional_order_command_receipts.sql": {
+      "sha256": "373586de51653cb0fb18f23f2f63b3afde1f562501c3bb3ffba6ed01df4b8128",
       "mode": "100644"
     },
     "test/admin_core_overlay_operational_test.dart": {
@@ -608,6 +648,14 @@
       "sha256": "8bf693f9b66ebf359e9a129fdc0cd2b6333243c654f1508cef8395303f913f1d",
       "mode": "100644"
     },
+    "test/operational_stability_closure_contract_test.dart": {
+      "sha256": "2de5040196e3d3c4edeab272511b22f977f725ce4a150545967c9dae07027496",
+      "mode": "100644"
+    },
+    "test/order_intent_journal_test.dart": {
+      "sha256": "55ac254cb97370b5a5ff9dde3185ded55ffc43c85f47c2ca0656b09d670e71d2",
+      "mode": "100644"
+    },
     "test/order_read_epoch_test.dart": {
       "sha256": "71ffcec58273211b680e920860717af6b6905e5a78f7e8442582627d860992da",
       "mode": "100644"
@@ -652,6 +700,10 @@
       "sha256": "28638c580dcfbbb6c54acc77cbe41726dfb8e4d9cddaf185d5219a382593798a",
       "mode": "100644"
     },
+    "test/recoverable_order_commands_test.dart": {
+      "sha256": "ab4cbad77c0eb859704bbd3e8c805e765b91f967da24d83f9d488f314986f761",
+      "mode": "100644"
+    },
     "test/remaining_route_operational_state_test.dart": {
       "sha256": "37530b091c2199c8f3b91caa09ca9aa316e9a6e0363bef31010d8db364abe853",
       "mode": "100644"
@@ -662,6 +714,10 @@
     },
     "test/resilience_fixture_image_test.dart": {
       "sha256": "bc77b0e8ef7e3f0bf380e9ec6a2357f3d38cff5641bee16cc53804fa615050c5",
+      "mode": "100644"
+    },
+    "test/restaurant_daily_cutoff_contract_test.dart": {
+      "sha256": "fa5653f6c98c04ce7f86334878eca0d4c503b6f734d22f9f1e71cfa376553dd7",
       "mode": "100644"
     },
     "test/rpc_resource_cleanup_test.dart": {
@@ -689,7 +745,11 @@
       "mode": "100644"
     },
     "web/index.html": {
-      "sha256": "c9ac8e9a2b369f6a4a3984c32402dac7669fff7cf8f0b8eb70018980e3712f9a",
+      "sha256": "a1ba9ac63d1b6ed99e961b27d3752b72aeb130a829ca63d9a614a8307920cfb3",
+      "mode": "100644"
+    },
+    "web/order_intent_journal.js": {
+      "sha256": "b987fbe08d2f7e9a9584d6b2f5cdcec36bc90639c019981e6817580df75bf4af",
       "mode": "100644"
     },
     "web/payment_intent_journal.js": {
@@ -811,7 +871,11 @@
     "realtime-source-guards",
     "realtime-native-websocket",
     "new-store-kds-realtime",
-    "new-store-order-handoff"
+    "new-store-order-handoff",
+    "order-intent-storage",
+    "order-command-recovery",
+    "browser-order-intent-journal",
+    "additional-order-native-recovery"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -839,74 +903,75 @@
     "Attendance/proof photo input is capped before byte/pixel allocation: 5MiB, 4Mi pixels, side <=8192, static JPEG/PNG/WebP; picker <=1600, no upscaling, output <=1MiB. One native codec worker/app without an image queue; web compute is synchronous. Original library lossless palette WebP decode failure remains visible and is not a compatibility PASS. Attendance upload/sign freezes the original JWT before codec await and uses bounded owned transport with no automatic retry.",
     "Cashier pricing/payable/emergency/completed reads share one original-Auth owned session: whole HTTP/async job 15s, each response <=4MiB, JSON cleanup separately <=2s. Store/actor reset and disposal physically abort only this view requests. At most one active and one latest refresh. Quote/VAT/promotion/items/payment snapshots and realtime subscription after accepted state are preserved. Summary/detail/keyset paging and operating-day eligibility review remain incomplete.",
     "A server-acknowledged payment-proof attachment stays uploaded even if local deletion/queue retirement fails. The new client persists an attached marker when possible; intact confirmed records perform only local cleanup after restart, with no metadata/upload/sign/attach request. Preserve ambiguous attachments, malformed confirmations and legacy ownership semantics; a complete durable queue/owner/receipt migration is not claimed.",
-    "Real pinned Realtime platform uses _realtime for control tables, preserves the application/Auth/Storage catalog, and restores the captured realtime.messages policy set exactly. Native SDK WebSockets deliver real broadcasts and deny unassigned/cross-store topics. Actual new-store Auth kitchen account and native SQL send are exercised, not an order handoff or physical opening. No production Realtime tenant rows/events/secrets or fabricated migration rows are copied."
+    "Real pinned Realtime platform uses _realtime for control tables, preserves the application/Auth/Storage catalog, and restores the captured realtime.messages policy set exactly. Native SDK WebSockets deliver real broadcasts and deny unassigned/cross-store topics. Actual new-store Auth kitchen account and native SQL send are exercised, not an order handoff or physical opening. No production Realtime tenant rows/events/secrets or fabricated migration rows are copied.",
+    "New table/create-add commands persist original project/actor/store/payload before HTTP, reject changed pending requests, preserve confirmed writes after local cleanup failure and resolve server receipts before bounded recovery. Ownerless legacy orders are retained and never assigned to the next login. Existing menu/discount/tax/stock/KDS logic remains in native set-based order functions. Recovery batches contain at most 20 independent commands and 500 total lines; SQL processes each business transaction independently rather than issuing per-line remote or SQL lookups."
   ],
   "dataAccessReview": {
     "nPlusOne": {
       "applicable": true,
-      "reason": "KDS receipt recovery is set-based; commands retain domain RPCs and are not disguised as parallel lookup work. Existing item/batch writers remain in scope for the later whole-flow audit. Schema metadata is captured in bounded identity batches, with preaggregated dependency joins; no per-object remote calls. Payment receipts use one original business command and one optional lookup for <=100 IDs; legacy split-payment per-part calls are still unfinished and are not represented as fixed. JSON lifetime fixes add zero remote calls; the measured gateway still sends 101 calls including warmup for 100 reads. Existing payment-proof per-queued-file metadata lookup still needs the later batch-path review; cleanup is not represented as solving it. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single payment is one native transactional RPC, no item loop; receipt lookup is bounded at 100. Each RPC owns a 15s/512KiB response budget (plus separate <=2s JSON cleanup), never retries a charge, and freezes original Auth/params. Local financial ledger is separate, <=100 records/256KiB, <=8KiB per record, with one native worker per ledger and <=100 queued requests; SQLite busy wait <=2s per lock, native DB <=256 pages. Multi-step partial/combined SQL paths remain unfinished.",
+      "reason": "KDS receipt recovery is set-based; commands retain domain RPCs and are not disguised as parallel lookup work. Existing item/batch writers remain in scope for the later whole-flow audit. Schema metadata is captured in bounded identity batches, with preaggregated dependency joins; no per-object remote calls. Payment receipts use one original business command and one optional lookup for <=100 IDs; legacy split-payment per-part calls are still unfinished and are not represented as fixed. JSON lifetime fixes add zero remote calls; the measured gateway still sends 101 calls including warmup for 100 reads. Existing payment-proof per-queued-file metadata lookup still needs the later batch-path review; cleanup is not represented as solving it. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single payment is one native transactional RPC, no item loop; receipt lookup is bounded at 100. Each RPC owns a 15s/512KiB response budget (plus separate <=2s JSON cleanup), never retries a charge, and freezes original Auth/params. Local financial ledger is separate, <=100 records/256KiB, <=8KiB per record, with one native worker per ledger and <=100 queued requests; SQLite busy wait <=2s per lock, native DB <=256 pages. Multi-step partial/combined SQL paths remain unfinished. Order recovery reads original receipts in at most two 100-ID RPCs and sends at most 100 size-bounded command batches within one 30s total HTTP budget (at most five batches for 100 small commands). The transport test measures five HTTP calls for 60 independent intents. This does not establish reduced native DB work or remove per-business-command transactions.",
       "scale": "100 receipts/RPC; 101-record development test uses 2 reads and zero replay writes; round sends <=20 queued commands.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "setBasedSql": {
       "applicable": true,
-      "reason": "New SQL resolves unique direct event and private batch request keys with set joins, no per-ID function loop; existing quota statement batches remain intact. Payment result lookup deduplicates requested UUIDs and joins actor/operation primary keys in one query; native payment is called once per new original command, never once per receipt lookup. Single payment is one native transactional RPC, no item loop; receipt lookup is bounded at 100. Each RPC owns a 15s/512KiB response budget (plus separate <=2s JSON cleanup), never retries a charge, and freezes original Auth/params. Local financial ledger is separate, <=100 records/256KiB, <=8KiB per record, with one native worker per ledger and <=100 queued requests; SQLite busy wait <=2s per lock, native DB <=256 pages. Multi-step partial/combined SQL paths remain unfinished.",
+      "reason": "New SQL resolves unique direct event and private batch request keys with set joins, no per-ID function loop; existing quota statement batches remain intact. Payment result lookup deduplicates requested UUIDs and joins actor/operation primary keys in one query; native payment is called once per new original command, never once per receipt lookup. Single payment is one native transactional RPC, no item loop; receipt lookup is bounded at 100. Each RPC owns a 15s/512KiB response budget (plus separate <=2s JSON cleanup), never retries a charge, and freezes original Auth/params. Local financial ledger is separate, <=100 records/256KiB, <=8KiB per record, with one native worker per ledger and <=100 queued requests; SQLite busy wait <=2s per lock, native DB <=256 pages. Multi-step partial/combined SQL paths remain unfinished. The new add wrapper calls the existing set-based native add-items function once, aggregates returned IDs once and resolves them in one indexed join. The recovery batch invokes up to 20 independent original business commands with separate atomic subtransactions; it adds no per-menu-item query loop.",
       "scale": "Synthetic fixture 100001 events, 100 requested IDs, 30 measured calls; actor/store filters inside SQL.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Native two-DB legal cases preserve set-based verified store/procurement mapping and original independent IDs; 200-store execution-plan/scale measurements are still pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Native two-DB legal cases preserve set-based verified store/procurement mapping and original independent IDs; 200-store execution-plan/scale measurements are still pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "rowsColumns": {
       "applicable": true,
-      "reason": "Receipt returns only original/actual IDs, session, target IDs, stage/delta and whitelisted details; never returns native batch response snapshots. Single-payment result is the immutable native result already returned by the legacy API; receipt requests are capped at 100. No PIN/token/body is persisted; only request digest, actor/store/order/payment IDs and native result. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added.",
+      "reason": "Receipt returns only original/actual IDs, session, target IDs, stage/delta and whitelisted details; never returns native batch response snapshots. Single-payment result is the immutable native result already returned by the legacy API; receipt requests are capped at 100. No PIN/token/body is persisted; only request digest, actor/store/order/payment IDs and native result. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Receipt reads return only matching original actor/store IDs and confirmation metadata, at most 100 requests. Recovery acknowledgements return operation/status metadata, not full order lists.",
       "scale": "100-result fixture response 33900 bytes; client response cap 256 KiB; quota payload <=100 IDs.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "joinCardinality": {
       "applicable": true,
-      "reason": "Both receipt paths join primary unique event/request IDs. DISTINCT requested IDs and fallback exclusion avoid duplicate direct/batch matches. Payment receipt primary key(actor_auth_id,operation_id) and unique payment_id ensure at most one row per distinct requested identity; no independent one-to-many joins added.",
+      "reason": "Both receipt paths join primary unique event/request IDs. DISTINCT requested IDs and fallback exclusion avoid duplicate direct/batch matches. Payment receipt primary key(actor_auth_id,operation_id) and unique payment_id ensure at most one row per distinct requested identity; no independent one-to-many joins added. New receipt reads join distinct requested IDs to the primary key; added item results join immutable unique item IDs. No one-to-many relation is joined to another unaggregated one-to-many relation.",
       "scale": "Duplicate request fixture yields one result; rows must not exceed requested IDs; no multiple one-to-many join fan-out introduced.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "indexesPaging": {
       "applicable": true,
-      "reason": "Use existing unique event_id/request_id indexes; fixture analyzes 100001 events. Legacy outbox processing takes an ordered prefix rather than a large server OFFSET. Full production-schema plan and write costs still need G1/G6. Payment receipt uses primary-key equality on actor and requested UUID, no OFFSET. This development fixture validates only three original commands; no production-scale latency or universal index improvement is claimed.",
+      "reason": "Use existing unique event_id/request_id indexes; fixture analyzes 100001 events. Legacy outbox processing takes an ordered prefix rather than a large server OFFSET. Full production-schema plan and write costs still need G1/G6. Payment receipt uses primary-key equality on actor and requested UUID, no OFFSET. This development fixture validates only three original commands; no production-scale latency or universal index improvement is claimed. Receipt tables use (actor_auth_id,restaurant_id,client_mutation_id) primary keys and exact scope filters. Production-scale plans and latency remain pending; these bounded receipt reads add no OFFSET pagination.",
       "scale": "PostgreSQL fixture P95 server 1.6577 ms on 1 CPU/512 MiB; local progress journal <=1000 entries; replay prefix <=2000 legacy records.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "refreshPolling": {
       "applicable": true,
-      "reason": "Unknown progress uses result lookup before original-ID recovery; confirmed mutation patches available authoritative item data or refreshes the affected order. No new polling loop is introduced. Root session fingerprint ignores token/display/loading refresh; only actual access-scope changes invalidate the 23 bound read providers, without adding polling or a network call. Additive payment APIs do not start automatic polling, retry or list refresh; durable cashier recovery/UI adoption is still required. Settings suppress duplicate form writes and same-scope reloads while saving; session-bound views reload once after an actual actor/access change. No new poll loop or per-item API was added. Report refreshes share an identical pending query; rapid different filters retain one active read and only the latest queued query. No timer, polling, automatic retry or new refresh source is introduced. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending.",
+      "reason": "Unknown progress uses result lookup before original-ID recovery; confirmed mutation patches available authoritative item data or refreshes the affected order. No new polling loop is introduced. Root session fingerprint ignores token/display/loading refresh; only actual access-scope changes invalidate the 23 bound read providers, without adding polling or a network call. Additive payment APIs do not start automatic polling, retry or list refresh; durable cashier recovery/UI adoption is still required. Settings suppress duplicate form writes and same-scope reloads while saving; session-bound views reload once after an actual actor/access change. No new poll loop or per-item API was added. Report refreshes share an identical pending query; rapid different filters retain one active read and only the latest queued query. No timer, polling, automatic retry or new refresh source is introduced. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. Order confirmation clears the cart independently of refresh or local retirement failure. The notifier shares its in-flight submission, invalidates old view generations and does not replay ownerless legacy entries. Recovery does not issue an active-order read per pending command.",
       "scale": "Existing notifier flusher concurrency 1; explicit unknown recovery concurrency 1; batches <=100; whole-board sync paths still need later G4 work.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "cacheScope": {
       "applicable": true,
-      "reason": "New journal stamps original Auth actor, store, session, station and floor before awaiting. Scope switches cannot replay, remove or apply another assignment record; legacy store-only compatibility remains server-authorized. Root scope uses actor ID, trusted role, active legal/store and canonical access-list/permission hash; an eager generation listener preserves A-B-A changes. No user_metadata claims are trusted. Payment receipt replay/reads require original Auth and profile IDs plus current active authorized role/store; store changes and conflicting request payloads cannot reuse another result. Settings/report widget bootstraps now include actor/store/session generation, not store alone; a discarded notifier is followed by a new same-store query instead of a permanently empty screen. Owned reads snapshot the original Auth principal/JWT and reject an actor change before the first physical send. Report keys use store and normalized date range within a session-bound notifier; completed queries are not persistently cached. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending.",
+      "reason": "New journal stamps original Auth actor, store, session, station and floor before awaiting. Scope switches cannot replay, remove or apply another assignment record; legacy store-only compatibility remains server-authorized. Root scope uses actor ID, trusted role, active legal/store and canonical access-list/permission hash; an eager generation listener preserves A-B-A changes. No user_metadata claims are trusted. Payment receipt replay/reads require original Auth and profile IDs plus current active authorized role/store; store changes and conflicting request payloads cannot reuse another result. Settings/report widget bootstraps now include actor/store/session generation, not store alone; a discarded notifier is followed by a new same-store query instead of a permanently empty screen. Owned reads snapshot the original Auth principal/JWT and reject an actor change before the first physical send. Report keys use store and normalized date range within a session-bound notifier; completed queries are not persistently cached. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. The dedicated order journal uses immutable project/actor/store/kind/target identity and payload. Another actor cannot read/replay/settle it. Legacy records without an original actor remain preserved for review rather than inheriting the next login.",
       "scale": "Actor/station/store/session/floor isolation tests; routing cache clears on each durable read. Global permission revision adoption remains pending. Development tests cover 100 unchanged profile refreshes and 100 changed scopes; remaining legacy notifiers are explicitly not migrated.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "concurrency": {
       "applicable": true,
-      "reason": "Progress in-flight guards and one flusher bound writes; read and command transports have owned physical deadlines and close on disposal. This does not yet implement the all-worker aggregate budget. Native payment receipt lock is per actor/operation with a five-second lock timeout. Four owned fixture workers deliver the same full payment eight times and verify one financial/stock/invoice effect. All-worker aggregate budgets remain pending. Only one settings form writes per view; an older in-flight read cannot overwrite a confirmed save, and its completed Future cannot permanently block future reloads. Owned native JSON isolates now exit after both normal and denied RPC results; actual VM-service counts remain 2 to 2 after 100 sequential calls instead of the reproduced 3 to 103 leak. All-worker aggregate concurrency remains pending. Report uses CoalescedRefresh to await owned cleanup before starting the latest pending query. A 100-filter burst after one started RPC produces at most two HTTP requests, rather than 100 temporary clients. This is a synthetic client bound, not an operating load benchmark. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. The test gateway admits <=16 connections per project, native REST pools <=8 and Auth pools <=4; body/response are capped at 5/4MiB and transport at 30s. These are fixture resource budgets, not measured production peak capacity. Photo processing now admits one codec job with fixed byte/pixel/output bounds. JPEG frame/sampling checks precede library allocation. Native worker completes before the slot is released; web compute stays on the UI event loop. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. Owned Realtime instances are capped at 512MiB/1CPU, 2 DB base connections and 2 schedulers; API configuration and literal source authorization are checked. Actual native WebSocket protocol is exercised; shared-gateway WebSocket proxy, whole-app fanout/burst/12h remain pending.",
+      "reason": "Progress in-flight guards and one flusher bound writes; read and command transports have owned physical deadlines and close on disposal. This does not yet implement the all-worker aggregate budget. Native payment receipt lock is per actor/operation with a five-second lock timeout. Four owned fixture workers deliver the same full payment eight times and verify one financial/stock/invoice effect. All-worker aggregate budgets remain pending. Only one settings form writes per view; an older in-flight read cannot overwrite a confirmed save, and its completed Future cannot permanently block future reloads. Owned native JSON isolates now exit after both normal and denied RPC results; actual VM-service counts remain 2 to 2 after 100 sequential calls instead of the reproduced 3 to 103 leak. All-worker aggregate concurrency remains pending. Report uses CoalescedRefresh to await owned cleanup before starting the latest pending query. A 100-filter burst after one started RPC produces at most two HTTP requests, rather than 100 temporary clients. This is a synthetic client bound, not an operating load benchmark. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. The test gateway admits <=16 connections per project, native REST pools <=8 and Auth pools <=4; body/response are capped at 5/4MiB and transport at 30s. These are fixture resource budgets, not measured production peak capacity. Photo processing now admits one codec job with fixed byte/pixel/output bounds. JPEG frame/sampling checks precede library allocation. Native worker completes before the slot is released; web compute stays on the UI event loop. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. Owned Realtime instances are capped at 512MiB/1CPU, 2 DB base connections and 2 schedulers; API configuration and literal source authorization are checked. Actual native WebSocket protocol is exercised; shared-gateway WebSocket proxy, whole-app fanout/burst/12h remain pending. One coordinator admits at most 16 active logical order writes; each journal admits at most 100 records. Native SQLite serializes bounded worker transactions; browser IndexedDB uses one strict atomic transaction per claim/settlement. Cross-tab and independent native-isolate ownership are exercised.",
       "scale": "<=20 sends/round within 15-second send budget after <=15-second receipt budget; per-call deadline <=15 seconds; no parallel receipt batches.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. bounded-photo-processing and attendance-photo-original-auth; native 36 related checks, independent transfer 3 and Chromium photo 11. Physical-device peak memory and whole-plan 12h acceptance remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. realtime-native-websocket and new-store-kds-realtime: two-project integrated fixture 108 parent checks, 6 basic protocol checks and 7 scoped KDS checks; counts are reported separately, not a full release receipt."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. bounded-photo-processing and attendance-photo-original-auth; native 36 related checks, independent transfer 3 and Chromium photo 11. Physical-device peak memory and whole-plan 12h acceptance remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. realtime-native-websocket and new-store-kds-realtime: two-project integrated fixture 108 parent checks, 6 basic protocol checks and 7 scoped KDS checks; counts are reported separately, not a full release receipt. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "retryIdempotency": {
       "applicable": true,
-      "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable. Same single-payment operation returns its original confirmed result, including after response loss or order completion; changed amount/method/order is rejected. Native errors roll back payment and receipt together. Client durable intent persistence and explicit reconciliation remain unfinished, so legacy automatic retry behavior is not claimed fixed. Full KDS RPC timeout includes JSON startup/decoding, while physical HTTP close still aborts transport. Cleanup is separately bounded to two seconds and only its failure counter changes; original write evidence and unknown journals remain intact. OwnedReadSession forbids table writes and non-allowlisted RPC calls. It performs only the SDK normal expired-token refresh, sharing Auth refresh; it never retries a business command or closes shared Auth transport. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. New-client proof cleanup of an intact confirmed marker never repeats metadata/upload/sign/attach. Unknown attachment results retain the existing resumable object and explicit bounded retry; loss of every local marker and legacy concurrent clients remain separate durable-journal work.",
+      "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable. Same single-payment operation returns its original confirmed result, including after response loss or order completion; changed amount/method/order is rejected. Native errors roll back payment and receipt together. Client durable intent persistence and explicit reconciliation remain unfinished, so legacy automatic retry behavior is not claimed fixed. Full KDS RPC timeout includes JSON startup/decoding, while physical HTTP close still aborts transport. Cleanup is separately bounded to two seconds and only its failure counter changes; original write evidence and unknown journals remain intact. OwnedReadSession forbids table writes and non-allowlisted RPC calls. It performs only the SDK normal expired-token refresh, sharing Auth refresh; it never retries a business command or closes shared Auth transport. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. New-client proof cleanup of an intact confirmed marker never repeats metadata/upload/sign/attach. Unknown attachment results retain the existing resumable object and explicit bounded retry; loss of every local marker and legacy concurrent clients remain separate durable-journal work. Persist original intent before HTTP; retain unknown outcomes and query atomic server receipts before replay. Never fall through to an unkeyed RPC. Recovery has a 30s total HTTP budget and <=15s per transport, no nested retry loop or fresh operation ID after uncertainty. SQL lock/deadlock failures remain retryable with original IDs.",
       "scale": "Tests cover committed response loss, partial local persistence, cleanup failure, distinct JeonGabok receipt ID, restart and original-ID reuse; no new operation retry loop.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Schema runner rejects another run/project, timeout, partial input and failed cleanup; native fixture logs are distinct development proof. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. proof-confirmed-cleanup, proof-batch-scope: 11 focused cases; actual chmod fault only in owned temporary directory. This does not prove native server replay/whole-runtime/12h acceptance."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Schema runner rejects another run/project, timeout, partial input and failed cleanup; native fixture logs are distinct development proof. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. proof-confirmed-cleanup, proof-batch-scope: 11 focused cases; actual chmod fault only in owned temporary directory. This does not prove native server replay/whole-runtime/12h acceptance. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "largeResults": {
       "applicable": true,
-      "reason": "New progress journal has atomic 1000-record capacity enforcement, receipt batches/bytes are capped, and replay sends a bounded ordered prefix. Existing legacy namespace loading is not claimed fully bounded. Receipt recovery caps IDs at 100 and returns only matching own-scope rows. Existing financial core remains unchanged; general export/catalog file and transfer budgets remain pending. New owned report reads enforce 4 MiB per response and one 15-second total read deadline; settings use 128 KiB per response and two fixed metadata reads within the same deadline. Oversized responses fail explicitly rather than truncate financial totals. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. Photo processing now admits one codec job with fixed byte/pixel/output bounds. JPEG frame/sampling checks precede library allocation. Native worker completes before the slot is released; web compute stays on the UI event loop. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending.",
+      "reason": "New progress journal has atomic 1000-record capacity enforcement, receipt batches/bytes are capped, and replay sends a bounded ordered prefix. Existing legacy namespace loading is not claimed fully bounded. Receipt recovery caps IDs at 100 and returns only matching own-scope rows. Existing financial core remains unchanged; general export/catalog file and transfer budgets remain pending. New owned report reads enforce 4 MiB per response and one 15-second total read deadline; settings use 128 KiB per response and two fixed metadata reads within the same deadline. Oversized responses fail explicitly rather than truncate financial totals. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. Photo processing now admits one codec job with fixed byte/pixel/output bounds. JPEG frame/sampling checks precede library allocation. Native worker completes before the slot is released; web compute stays on the UI event loop. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. Dedicated journals cap each intent at 256KiB and all records at 4MiB. Recovery batches cap 20 commands, 500 total lines and 512KiB of client payload; transport input is <=1MiB and response <=4MiB. Oversize/storage failure occurs before a new order HTTP write.",
       "scale": "Real Chromium capacity/update/reload tests; 100-receipt batches and 256 KiB transport limit; <=20 commands/round. Schema snapshots: <=20000 identities, <=32 MiB/file, <=64 MiB captured body total; private source only.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. bounded-photo-processing and attendance-photo-original-auth; native 36 related checks, independent transfer 3 and Chromium photo 11. Physical-device peak memory and whole-plan 12h acceptance remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. bounded-photo-processing and attendance-photo-original-auth; native 36 related checks, independent transfer 3 and Chromium photo 11. Physical-device peak memory and whole-plan 12h acceptance remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "repeatedAggregates": {
       "applicable": true,
-      "reason": "Receipt queries use requested unique IDs and no overall count/large aggregate scan. IndexedDB count is only a local bounded-capacity write guard; quota changes remain store/transaction events. Receipt lookup uses stored native result rather than recomputing order finance. Current-scope authorization runs once per RPC; no per-ID total/count aggregate is introduced.",
+      "reason": "Receipt queries use requested unique IDs and no overall count/large aggregate scan. IndexedDB count is only a local bounded-capacity write guard; quota changes remain store/transaction events. Receipt lookup uses stored native result rather than recomputing order finance. Current-scope authorization runs once per RPC; no per-ID total/count aggregate is introduced. Recovery uses indexed original receipt lookup and compact confirmations, not full-store counts or financial totals. Existing per-order native financial recomputation is preserved; production mixed-load/12h aggregate costs remain unmeasured.",
       "scale": "100 requests against 100001-row fixture; 30 calls; no recurring SQL whole-event count added.",
-      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending."
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     }
   },
   "rollback": "Use the previous verified web while retaining additive DB contracts and both legacy/new durable records. Never clear ambiguous intents or financial/history rows for rollback; return to a compatible new client to reconcile original KDS IDs. Any SQL contract rollback is a reviewed forward migration. Keep cancellation barriers and immutable receipts when rolling back the web; never delete unknown single-payment intents or re-use cancelled IDs.",

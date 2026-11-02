@@ -121,7 +121,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin', '')
         if local_origin(origin):
             self.send_header('Access-Control-Allow-Origin', origin)
-            self.send_header('Access-Control-Allow-Headers', 'authorization,apikey,content-type,x-client-info,accept-profile,content-profile,prefer,range')
+            self.send_header('Access-Control-Allow-Headers', 'authorization,apikey,content-type,x-client-info,x-supabase-api-version,accept-profile,content-profile,prefer,range,cache-control,x-upsert')
             self.send_header('Access-Control-Allow-Methods', 'GET,HEAD,POST,PATCH,PUT,DELETE,OPTIONS')
             self.send_header('Access-Control-Expose-Headers', 'content-range,range-unit,preference-applied,location')
             self.send_header('Vary', 'Origin')

@@ -86,6 +86,19 @@ class GatewayTests(unittest.TestCase):
             with self.request('/rest/v1/orders',headers={'Origin':origin}) as response:
                 self.assertEqual(response.headers.get('Access-Control-Allow-Origin'),origin if allowed else None)
 
+    def test_browser_auth_and_storage_preflight_allow_sdk_headers_only_locally(self):
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        requested='authorization, apikey, x-supabase-api-version, x-client-info, content-type, cache-control, x-upsert'
+        for origin,allowed in [('http://127.0.0.1:8211',True),('https://external.invalid',False)]:
+            request=urllib.request.Request(self.gw.origin+'/auth/v1/token?grant_type=password',method='OPTIONS',
+              headers={'Origin':origin,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':requested})
+            with opener.open(request,timeout=2) as response:
+                self.assertEqual(response.status,204)
+                actual=response.headers.get('Access-Control-Allow-Headers','')
+                self.assertNotIn('*',actual)
+                self.assertEqual(set(requested.replace(' ','').split(','))<=set(actual.split(',')),allowed)
+        self.assertEqual(self.seen,[])
+
     def test_physical_response_loss_occurs_after_upstream_and_preserves_metrics(self):
         self.gw.drop_next['rest/rpc/confirmed_operation']=1
         with self.assertRaises(OSError):

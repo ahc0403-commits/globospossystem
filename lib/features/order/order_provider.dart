@@ -11,7 +11,6 @@ import '../../core/utils/live_sync_scope.dart';
 import '../../core/utils/coalesced_refresh.dart';
 import '../../core/utils/read_epoch.dart';
 import '../../core/utils/polling_utils.dart';
-import '../../core/utils/time_utils.dart';
 import '../../core/services/pos_backend.dart';
 import 'order_model.dart';
 
@@ -73,6 +72,8 @@ class OrderNotifier extends StateNotifier<OrderState> {
   String? _businessDate;
   bool _realtimeConnected = false;
   final _uuid = const Uuid();
+  int _commandGeneration = 0;
+  late final _orders = OrderService(client: _client);
   final SupabaseClient? _providedClient;
   SupabaseClient get _client => _providedClient ?? supabase;
   final OperationalDayService _dayService;
@@ -190,6 +191,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
   }
 
   void clearSession() {
+    _commandGeneration++;
     _activeReads.invalidate();
     _requestedScope = null;
     _businessDayTimer?.cancel();
@@ -203,7 +205,13 @@ class OrderNotifier extends StateNotifier<OrderState> {
   }
 
   Future<void> _refreshOfflineQueueCount() async {
-    final count = await offlineMutationQueueService.pendingCount();
+    final store = _requestedScope?.$1;
+    final count = store == null
+        ? 0
+        : (await offlineMutationQueueService.list())
+                  .where((r) => r.storeId == store)
+                  .length +
+              (await _orders.commands.pending(store)).length;
     if (mounted) {
       state = state.copyWith(offlineQueueCount: count);
     }
@@ -217,6 +225,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
     if (!mounted) return Future.value();
     final scope = (storeId, tableId);
     final changedScope = _requestedScope != scope;
+    if (changedScope) _commandGeneration++;
     _requestedScope = scope;
     final token = _activeReads.begin(scope);
     if (changedScope) {
@@ -463,103 +472,103 @@ class OrderNotifier extends StateNotifier<OrderState> {
   }
 
   Future<void> submitOrder(String storeId, String tableId) async {
+    if (state.isSubmitting) return;
     if (state.cart.isEmpty) {
       state = state.copyWith(error: _orderItemsRequiredMessage);
       return;
     }
-
-    final clientMutationId = _uuid.v4();
-    final payloadItems = _cartPayloadItems();
+    final generation = _commandGeneration;
+    final actor = _client.auth.currentUser?.id;
+    bool current() =>
+        mounted &&
+        generation == _commandGeneration &&
+        _client.auth.currentUser?.id == actor;
+    final items = _cartPayloadItems();
     state = state.copyWith(isSubmitting: true, clearError: true);
-
     try {
-      await orderService.createOrder(
+      await _orders.createOrder(
         storeId: storeId,
         tableId: tableId,
-        items: payloadItems,
-        clientMutationId: clientMutationId,
+        items: items,
+        clientMutationId: _uuid.v4(),
+        isCurrent: current,
       );
-
+      if (!current()) return;
       state = state.copyWith(cart: const []);
-      await loadActiveOrder(tableId, storeId);
+      await loadActiveOrder(tableId, storeId, syncOffline: false);
     } catch (error) {
-      if (_isRecoverableConnectivityError(error)) {
-        await _queueOfflineMutation(
-          QueuedMutation(
-            id: clientMutationId,
-            type: OfflineMutationQueueService.createOrderType,
-            storeId: storeId,
-            payload: {'tableId': tableId, 'items': payloadItems},
-            createdAt: DateTime.now().toUtc(),
-            lastError: error.toString(),
-          ),
-        );
-        state = state.copyWith(
-          cart: const [],
-          error:
-              'Order queued locally. It will sync with the same mutation key when connection recovers.',
-        );
-        return;
+      if (current()) {
+        await _orderFailure(error, storeId, 'create', tableId, current);
       }
-      state = state.copyWith(
-        error: _mapOrderError(error, 'Failed to submit order'),
-      );
     } finally {
-      state = state.copyWith(isSubmitting: false);
+      if (current()) {
+        await _refreshOfflineQueueCount();
+        if (current()) state = state.copyWith(isSubmitting: false);
+      }
     }
   }
 
   Future<void> addMoreItems(String orderId, String storeId) async {
+    if (state.isSubmitting) return;
     if (state.cart.isEmpty) {
       state = state.copyWith(error: _orderItemsRequiredMessage);
       return;
     }
-
-    final activeTableId = state.activeOrder?.tableId;
-    final clientMutationId = _uuid.v4();
-    final payloadItems = _cartPayloadItems();
+    final generation = _commandGeneration;
+    final actor = _client.auth.currentUser?.id;
+    bool current() =>
+        mounted &&
+        generation == _commandGeneration &&
+        _client.auth.currentUser?.id == actor;
+    final table = state.activeOrder?.tableId;
+    final items = _cartPayloadItems();
     state = state.copyWith(isSubmitting: true, clearError: true);
-
     try {
-      await orderService.addItemsToOrder(
+      await _orders.addItemsToOrder(
         orderId: orderId,
         storeId: storeId,
-        items: payloadItems,
-        clientMutationId: clientMutationId,
+        items: items,
+        clientMutationId: _uuid.v4(),
+        isCurrent: current,
       );
-
+      if (!current()) return;
       state = state.copyWith(cart: const []);
-      if (activeTableId != null) {
-        await loadActiveOrder(activeTableId, storeId);
+      if (table != null) {
+        await loadActiveOrder(table, storeId, syncOffline: false);
       }
     } catch (error) {
-      if (_isRecoverableConnectivityError(error)) {
-        await _queueOfflineMutation(
-          QueuedMutation(
-            id: clientMutationId,
-            type: OfflineMutationQueueService.addItemsToOrderType,
-            storeId: storeId,
-            payload: {
-              'orderId': orderId,
-              'tableId': activeTableId,
-              'items': payloadItems,
-            },
-            createdAt: DateTime.now().toUtc(),
-            lastError: error.toString(),
-          ),
-        );
-        state = state.copyWith(
-          cart: const [],
-          error:
-              'Additional items queued locally. They will sync with the same mutation key when connection recovers.',
-        );
+      if (current()) {
+        await _orderFailure(error, storeId, 'add', orderId, current);
+      }
+    } finally {
+      if (current()) {
+        await _refreshOfflineQueueCount();
+        if (current()) state = state.copyWith(isSubmitting: false);
+      }
+    }
+  }
+
+  Future<void> _orderFailure(
+    Object error,
+    String store,
+    String kind,
+    String target,
+    bool Function() current,
+  ) async {
+    try {
+      final pending = await _orders.commands.pending(store);
+      if (!current()) return;
+      if (pending.any((r) => r['kind'] == kind && r['target'] == target)) {
+        state = state.copyWith(cart: const [], error: 'ORDER_RECOVERY_PENDING');
         return;
       }
+    } catch (_) {
+      /* The original storage error remains visible; no write is sent without an intent. */
+    }
+    if (current()) {
       state = state.copyWith(
-        error: _mapOrderError(error, 'Failed to add items to order'),
+        error: _mapOrderError(error, 'Failed to submit order'),
       );
-    } finally {
-      state = state.copyWith(isSubmitting: false);
     }
   }
 
@@ -828,92 +837,43 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
-  Future<void> _queueOfflineMutation(QueuedMutation mutation) async {
-    await offlineMutationQueueService.enqueue(mutation);
-    await _refreshOfflineQueueCount();
-  }
-
   Future<void> syncOfflineQueue(String storeId, {String? tableId}) async {
-    if (state.isSyncingOfflineQueue) {
-      return;
-    }
-
-    final queue = (await offlineMutationQueueService.list())
-        .where((entry) => entry.storeId == storeId)
-        .toList();
-    if (queue.isEmpty) {
-      await _refreshOfflineQueueCount();
-      return;
-    }
-
+    if (!mounted || state.isSyncingOfflineQueue) return;
+    final generation = _commandGeneration;
+    final actor = _client.auth.currentUser?.id;
+    bool current() =>
+        mounted &&
+        generation == _commandGeneration &&
+        _client.auth.currentUser?.id == actor;
     state = state.copyWith(isSyncingOfflineQueue: true, clearError: true);
-    var archivedExpired = false;
     try {
-      final operationalDay = await operationalDayService.ensureStoreDay(
-        storeId,
-      );
-      for (final entry in queue) {
-        try {
-          if (operationalDay.expiresMutation(entry.createdAt)) {
-            await offlineMutationQueueService.archiveExpired(entry);
-            archivedExpired = true;
-            state = state.copyWith(error: 'ORDER_BUSINESS_DAY_EXPIRED');
-            continue;
-          }
-          if (entry.type == OfflineMutationQueueService.createOrderType) {
-            await orderService.createOrder(
-              storeId: storeId,
-              tableId: entry.payload['tableId']?.toString() ?? '',
-              items: _payloadItems(entry),
-              clientMutationId: entry.id,
-              businessDate: TimeUtils.formatDate(entry.createdAt),
-            );
-          } else if (entry.type ==
-              OfflineMutationQueueService.addItemsToOrderType) {
-            await orderService.addItemsToOrder(
-              orderId: entry.payload['orderId']?.toString() ?? '',
-              storeId: storeId,
-              items: _payloadItems(entry),
-              clientMutationId: entry.id,
-            );
-          }
-          await offlineMutationQueueService.remove(entry.id);
-        } catch (error) {
-          if (error is PostgrestException &&
-              (error.message == 'ORDER_BUSINESS_DAY_EXPIRED' ||
-                  error.message == 'ORDER_OPERATIONS_CLOSED')) {
-            await offlineMutationQueueService.archiveExpired(entry);
-            archivedExpired = true;
-            continue;
-          }
-          if (_isRecoverableConnectivityError(error)) {
-            await offlineMutationQueueService.markFailed(entry.id, error);
-            break;
-          }
-          await offlineMutationQueueService.remove(entry.id);
-          state = state.copyWith(
-            error:
-                'Queued order could not be synced and was removed: ${_mapOrderError(error, 'Sync failed')}',
-          );
-        }
+      // Legacy records have no verifiable original actor/project. Preserve them
+      // for review; never silently assign them to whoever logs in next.
+      final legacy = (await offlineMutationQueueService.list())
+          .where((r) => r.storeId == storeId)
+          .isNotEmpty;
+      await _orders.commands.recover(storeId, isCurrent: current);
+      if (current() && legacy) {
+        state = state.copyWith(error: 'ORDER_RECOVERY_LEGACY_REVIEW');
       }
     } catch (error) {
-      state = state.copyWith(error: _mapOrderError(error, 'Sync failed'));
+      if (current()) {
+        state = state.copyWith(error: _mapOrderError(error, 'Sync failed'));
+      }
     } finally {
-      await _refreshOfflineQueueCount();
-      state = state.copyWith(isSyncingOfflineQueue: false);
+      if (current()) {
+        await _refreshOfflineQueueCount();
+        if (current()) state = state.copyWith(isSyncingOfflineQueue: false);
+      }
     }
-
-    if (tableId != null) {
-      await loadActiveOrder(tableId, storeId);
-    }
-    if (archivedExpired && mounted) {
-      state = state.copyWith(error: 'ORDER_BUSINESS_DAY_EXPIRED');
+    if (tableId != null && current()) {
+      await loadActiveOrder(tableId, storeId, syncOffline: false);
     }
   }
 
   @override
   void dispose() {
+    _commandGeneration++;
     _activeReads.dispose();
     _activeRefresh.dispose();
     _businessDayTimer?.cancel();
@@ -982,28 +942,4 @@ String _mapOrderError(Object error, String fallbackPrefix) {
     };
   }
   return '$fallbackPrefix: $error';
-}
-
-List<Map<String, dynamic>> _payloadItems(QueuedMutation entry) {
-  final items = entry.payload['items'];
-  if (items is! List) {
-    return const <Map<String, dynamic>>[];
-  }
-  return items
-      .whereType<Map>()
-      .map((item) => Map<String, dynamic>.from(item))
-      .toList();
-}
-
-bool _isRecoverableConnectivityError(Object error) {
-  if (error is PostgrestException) {
-    return false;
-  }
-  final normalized = error.toString().toLowerCase();
-  return normalized.contains('socket') ||
-      normalized.contains('network') ||
-      normalized.contains('connection') ||
-      normalized.contains('timeout') ||
-      normalized.contains('failed host lookup') ||
-      normalized.contains('connection closed');
 }

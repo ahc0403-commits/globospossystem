@@ -10,6 +10,7 @@ import secrets
 import uuid
 
 from owned_platform import private_json
+from additional_order_recovery_scenario import run as exercise_additional_recovery
 
 
 def run(platform, accounts, registered):
@@ -161,6 +162,7 @@ def run(platform, accounts, registered):
         count=platform.sql('pos','SELECT count(*) FROM orders WHERE table_id='+platform.schema.lit(second_table['id'])+';').stdout.strip()
         platform.check(simultaneous[0]['id']==simultaneous[1]['id'] and count=='1',
           'concurrent-original-order-intent-creates-one-native-order-'+str(index))
+        exercise_additional_recovery(platform,store=store,order=simultaneous[0]['id'],menu=menu['id'],manager=manager,other_actor=accounts['pos']['session']['access_token'])
         completed.append({'store':store,'order':order['id'],'item':item,'state':state,'workflow':'kitchen_tray_floor' if tray else 'kitchen_floor'})
     private_json(platform.output/'new-store-order-handoff.private.json',completed)
     platform.result['newStoreOrderHandoff']={'stores':len(completed),'actualAuthApiAndNativeSql':True,

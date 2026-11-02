@@ -168,7 +168,11 @@
       "checks": [
         "feature.order",
         "official-full-recipe",
-        "new-store-order-handoff"
+        "new-store-order-handoff",
+        "order-intent-storage",
+        "order-command-recovery",
+        "browser-order-intent-journal",
+        "additional-order-native-recovery"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -391,7 +395,11 @@
       "sourceRoot": "lib/features/waiter",
       "checks": [
         "feature.waiter",
-        "official-full-recipe"
+        "official-full-recipe",
+        "order-intent-storage",
+        "order-command-recovery",
+        "browser-order-intent-journal",
+        "additional-order-native-recovery"
       ],
       "adoption": "legacy_or_partial"
     }
@@ -868,6 +876,22 @@
     },
     "new-store-order-handoff": {
       "path": "scripts/resilience/order_handoff_scenario.py",
+      "kind": "focused"
+    },
+    "order-intent-storage": {
+      "path": "test/order_intent_journal_test.dart",
+      "kind": "focused"
+    },
+    "order-command-recovery": {
+      "path": "test/recoverable_order_commands_test.dart",
+      "kind": "focused"
+    },
+    "browser-order-intent-journal": {
+      "path": "scripts/resilience/tests/order_journal_browser.test.cjs",
+      "kind": "focused"
+    },
+    "additional-order-native-recovery": {
+      "path": "scripts/resilience/additional_order_recovery_scenario.py",
       "kind": "focused"
     }
   },
