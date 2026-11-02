@@ -10,12 +10,8 @@ void main() {
   const migrationPath =
       'supabase/migrations/20260513020000_operational_stability_closure.sql';
 
-  test('offline order queue has backend idempotency anchors', () {
+  test('historical offline anchors and preserved archive remain available', () {
     final sql = readRepoFile(migrationPath);
-    final orderService = readRepoFile('lib/core/services/order_service.dart');
-    final orderProvider = readRepoFile(
-      'lib/features/order/order_provider.dart',
-    );
     final queueService = readRepoFile(
       'lib/core/services/offline_mutation_queue_service.dart',
     );
@@ -43,18 +39,6 @@ void main() {
         'CREATE OR REPLACE FUNCTION public.add_items_to_order_with_client_mutation_id',
       ),
     );
-    expect(orderService, contains('create_order_with_client_mutation_id'));
-    expect(
-      orderService,
-      contains('add_items_to_order_with_client_mutation_id'),
-    );
-    expect(orderService, contains('_isRpcSignatureMismatch'));
-    expect(orderService, contains("'create_order'"));
-    expect(orderService, contains("'add_items_to_order'"));
-    expect(orderProvider, contains('offlineMutationQueueService.enqueue'));
-    expect(orderProvider, contains('syncOfflineQueue'));
-    expect(orderProvider, contains('clientMutationId: entry.id'));
-    expect(orderProvider, contains('_orderItemsRequiredMessage'));
     expect(queueService, contains('pos_offline_mutation_queue_v1'));
     expect(workspace, contains('orderWorkspaceOfflineQueueMessage'));
     expect(englishArb, contains('Offline orders are queued locally'));

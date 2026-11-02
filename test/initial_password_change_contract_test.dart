@@ -53,6 +53,7 @@ void main() {
   test('signed-in users can change only their own password from app nav', () {
     final nav = readRepoFile('lib/widgets/app_nav_bar.dart');
     final provider = readRepoFile('lib/features/auth/auth_provider.dart');
+    final transport = readRepoFile('lib/core/auth/auth_command_session.dart');
     final function = readRepoFile(
       'supabase/functions/complete-initial-password-change/index.ts',
     );
@@ -60,7 +61,7 @@ void main() {
     expect(nav, contains("Key('app_nav_change_password_button')"));
     expect(nav, contains("context.go('/change-password')"));
     expect(provider, contains('Future<bool> changeOwnPassword'));
-    expect(provider, contains("'mode': 'self_service'"));
+    expect(transport, contains("'mode': 'self_service'"));
     expect(function, contains('body.mode === "self_service"'));
     expect(function, contains('updatePassword(authId, newPassword)'));
     expect(function, isNot(contains('body.user_id')));
@@ -110,11 +111,15 @@ void main() {
     'authenticated Edge flow is the only client password completion path',
     () {
       final provider = readRepoFile('lib/features/auth/auth_provider.dart');
+      final transport = readRepoFile('lib/core/auth/auth_command_session.dart');
       final function = readRepoFile(
         'supabase/functions/complete-initial-password-change/index.ts',
       );
 
-      expect(provider, contains("'complete-initial-password-change'"));
+      expect(
+        transport,
+        contains('/functions/v1/complete-initial-password-change'),
+      );
       expect(provider, isNot(contains('supabase.auth.updateUser')));
       expect(function, contains('callerClient.auth.getUser()'));
       expect(function, contains('serviceClient.auth.admin.updateUserById'));

@@ -29,6 +29,8 @@ class _EmergencyOutboxSnapshot {
 abstract final class EmergencyWebBridge {
   static const _primaryKey = 'kds_command_outbox_v2';
   static const _backupKey = 'kds_command_outbox_backup_v2';
+  static const _progressKey = 'kds_progress_journal_v1';
+  static const _progressBackupKey = 'kds_progress_journal_backup_v1';
   static const _schemaVersion = 2;
   static const _maximumRecords = 1000;
   static Future<void> _operationTail = Future<void>.value();
@@ -52,52 +54,82 @@ abstract final class EmergencyWebBridge {
     return result.future;
   }
 
-  static Future<void> putOutbox(String id, String payload) => _serialized(
-    () async {
-      _validatePayload(id, payload);
-      final snapshot = await _readUnlocked();
-      final next = snapshot.records.where((record) => record.id != id).toList();
-      if (next.length >= _maximumRecords) {
-        throw StateError('KDS_OUTBOX_CAPACITY_EXCEEDED');
-      }
-      next.add(
-        EmergencyOutboxRecord(
-          id: id,
-          payload: payload,
-          createdAtEpochMs: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
-      await _writeUnlocked(next, generation: snapshot.generation + 1);
-    },
-  );
-
-  static Future<List<EmergencyOutboxRecord>> readOutbox() => _serialized(
-    () async => List.unmodifiable((await _readUnlocked()).records),
-  );
-
-  static Future<void> deleteOutbox(String id) => _serialized(() async {
-    final snapshot = await _readUnlocked();
+  static Future<void> putOutbox(String id, String payload) => _put(id, payload);
+  static Future<void> putProgressJournal(String id, String payload) =>
+      _put(id, payload, progress: true);
+  static Future<void> _put(
+    String id,
+    String payload, {
+    bool progress = false,
+  }) => _serialized(() async {
+    _validatePayload(id, payload);
+    final snapshot = await _readUnlocked(progress: progress);
+    final next = snapshot.records.where((record) => record.id != id).toList();
+    if (next.length >= _maximumRecords) {
+      throw StateError('KDS_OUTBOX_CAPACITY_EXCEEDED');
+    }
+    next.add(
+      EmergencyOutboxRecord(
+        id: id,
+        payload: payload,
+        createdAtEpochMs:
+            progress && jsonDecode(payload)['_outbox_created_at'] is int
+            ? jsonDecode(payload)['_outbox_created_at'] as int
+            : DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
     await _writeUnlocked(
-      snapshot.records
-          .where((record) => record.id != id)
-          .toList(growable: false),
+      next,
       generation: snapshot.generation + 1,
+      progress: progress,
     );
   });
 
-  static Future<_EmergencyOutboxSnapshot> _readUnlocked() async {
+  static Future<List<EmergencyOutboxRecord>> readOutbox() =>
+      _read(progress: false);
+  static Future<List<EmergencyOutboxRecord>> readProgressJournal() =>
+      _read(progress: true);
+  static Future<List<EmergencyOutboxRecord>> _read({required bool progress}) =>
+      _serialized(
+        () async => List.unmodifiable(
+          (await _readUnlocked(progress: progress)).records,
+        ),
+      );
+
+  static Future<void> deleteOutbox(String id) => _delete(id);
+  static Future<void> deleteProgressJournal(String id) =>
+      _delete(id, progress: true);
+  static Future<void> _delete(String id, {bool progress = false}) =>
+      _serialized(() async {
+        final snapshot = await _readUnlocked(progress: progress);
+        await _writeUnlocked(
+          snapshot.records
+              .where((record) => record.id != id)
+              .toList(growable: false),
+          generation: snapshot.generation + 1,
+          progress: progress,
+        );
+      });
+
+  static Future<_EmergencyOutboxSnapshot> _readUnlocked({
+    bool progress = false,
+  }) async {
     final preferences = await SharedPreferences.getInstance();
     Object? primaryError;
     Object? backupError;
     _EmergencyOutboxSnapshot? primary;
     _EmergencyOutboxSnapshot? backup;
     try {
-      primary = _decode(preferences.getString(_primaryKey));
+      primary = _decode(
+        preferences.getString(progress ? _progressKey : _primaryKey),
+      );
     } catch (error) {
       primaryError = error;
     }
     try {
-      backup = _decode(preferences.getString(_backupKey));
+      backup = _decode(
+        preferences.getString(progress ? _progressBackupKey : _backupKey),
+      );
     } catch (error) {
       backupError = error;
     }
@@ -194,6 +226,7 @@ abstract final class EmergencyWebBridge {
   static Future<void> _writeUnlocked(
     List<EmergencyOutboxRecord> records, {
     required int generation,
+    bool progress = false,
   }) async {
     final preferences = await SharedPreferences.getInstance();
     final rawRecords = records
@@ -211,8 +244,14 @@ abstract final class EmergencyWebBridge {
       'records': rawRecords,
       'checksum': _checksum(rawRecords, generation: generation),
     });
-    if (!await preferences.setString(_backupKey, encoded) ||
-        !await preferences.setString(_primaryKey, encoded)) {
+    if (!await preferences.setString(
+          progress ? _progressBackupKey : _backupKey,
+          encoded,
+        ) ||
+        !await preferences.setString(
+          progress ? _progressKey : _primaryKey,
+          encoded,
+        )) {
       throw StateError('KDS_OUTBOX_WRITE_FAILED');
     }
   }

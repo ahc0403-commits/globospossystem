@@ -5,35 +5,49 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '../utils/deadline_http_client.dart';
+import '../utils/rpc_resource_cleanup.dart';
+import '../utils/auth_http_snapshot.dart';
+import '../utils/owned_read_session.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pos_backend.dart';
+import '../utils/bounded_photo.dart';
 
 class PaymentProofSaveResult {
-  const PaymentProofSaveResult({required this.queued, this.signedUrl});
+  const PaymentProofSaveResult({
+    required this.queued,
+    this.signedUrl,
+    this.cleanupPending = false,
+  });
 
   final bool queued;
   final String? signedUrl;
+  final bool cleanupPending;
 
   bool get uploaded => !queued && signedUrl != null;
 }
 
 class PaymentProofService {
+  PaymentProofService({SupabaseClient? client, Directory? localQueueDirectory})
+    : _client = client,
+      _localQueueDirectory = localQueueDirectory;
+  final SupabaseClient? _client;
+  final Directory? _localQueueDirectory;
+  SupabaseClient get _db => _client ?? supabase;
   static const _queueKey = 'payment_proof_upload_queue_v1';
 
   Future<void> markProofRequired({
     required String paymentId,
     required String storeId,
   }) async {
-    await supabase.rpc(
+    await _db.rpc(
       'mark_payment_proof_required',
       params: {'p_payment_id': paymentId, 'p_store_id': storeId},
     );
@@ -54,43 +68,56 @@ class PaymentProofService {
     required String storeId,
     required XFile originalFile,
     DateTime? takenAt,
-  }) => _serialized(() async {
-    final capturedAt = takenAt ?? DateTime.now();
-    final compressed = _compressImage(await originalFile.readAsBytes());
-    final item = _QueuedPaymentProof(
-      paymentId: paymentId,
-      storeId: storeId,
-      ownerId: supabase.auth.currentUser?.id,
-      jobId: sha256.convert(compressed).toString(),
-      takenAtIso: capturedAt.toUtc().toIso8601String(),
-      imageBytesBase64: kIsWeb ? base64Encode(compressed) : null,
-      localPath: kIsWeb
-          ? null
-          : (await _persistQueueFile(
-              paymentId: paymentId,
-              bytes: compressed,
-            )).path,
-    );
-    final queue = [...await _readQueue()];
-    queue.removeWhere((existing) => existing.paymentId == paymentId);
-    queue.add(item);
-    await _writeQueue(queue);
-    try {
-      final signedUrl = await _process(
-        item,
-        queue,
-        DateTime.now().add(const Duration(seconds: 30)),
+  }) {
+    final actor = _db.auth.currentUser?.id;
+    return _serialized(() async {
+      _requireActor(actor);
+      // Validate the existing journal before creating or replacing any file.
+      // A malformed journal must never be interpreted as an empty queue.
+      final queue = [...await _readQueue()];
+      final capturedAt = takenAt ?? DateTime.now();
+      final compressed = await compressBoundedPhoto(
+        originalFile,
+        maxDimension: 1400,
+        quality: 78,
       );
-      queue.remove(item);
+      final item = _QueuedPaymentProof(
+        paymentId: paymentId,
+        storeId: storeId,
+        ownerId: actor,
+        jobId: sha256.convert(compressed).toString(),
+        takenAtIso: capturedAt.toUtc().toIso8601String(),
+        imageBytesBase64: kIsWeb ? base64Encode(compressed) : null,
+        localPath: kIsWeb
+            ? null
+            : (await _persistQueueFile(
+                paymentId: paymentId,
+                bytes: compressed,
+              )).path,
+      );
+      queue.removeWhere((existing) => existing.paymentId == paymentId);
+      queue.add(item);
       await _writeQueue(queue);
-      await _deleteLocal(item);
-      return PaymentProofSaveResult(queued: false, signedUrl: signedUrl);
-    } catch (error) {
-      _recordFailure(item, error);
-      await _writeQueue(queue);
-      return const PaymentProofSaveResult(queued: true);
-    }
-  });
+      try {
+        final signedUrl = await _process(
+          item,
+          queue,
+          DateTime.now().add(const Duration(seconds: 30)),
+          actor: actor,
+        );
+        final retired = await _retireConfirmed(item, queue);
+        return PaymentProofSaveResult(
+          queued: false,
+          signedUrl: signedUrl,
+          cleanupPending: !retired,
+        );
+      } catch (error) {
+        _recordFailure(item, error);
+        await _writeQueue(queue);
+        return const PaymentProofSaveResult(queued: true);
+      }
+    });
+  }
 
   /// Preserve permanently failed work until an explicit user retry/permission fix.
   Future<void> resumePendingUploads({String? storeId}) => _serialized(() async {
@@ -107,54 +134,128 @@ class PaymentProofService {
   });
 
   bool _owns(_QueuedPaymentProof item) =>
-      item.ownerId == null || item.ownerId == supabase.auth.currentUser?.id;
+      item.ownerId == null || item.ownerId == _db.auth.currentUser?.id;
+
+  void _requireActor(String? actor) {
+    if (_db.auth.currentUser?.id != actor) {
+      throw StateError('PAYMENT_PROOF_ACTOR_CHANGED');
+    }
+  }
+
   Future<int> pendingActionCount(String storeId) => _serialized(
     () async => (await _readQueue())
-        .where((item) => item.storeId == storeId && _owns(item) && item.blocked)
+        .where(
+          (item) =>
+              item.storeId == storeId &&
+              _owns(item) &&
+              (item.blocked || item.attached),
+        )
         .length,
   );
 
-  Future<int> flushPendingUploads() => _serialized(() async {
+  Future<int>? _pendingFlush;
+  String? _pendingFlushActor;
+
+  Future<int> flushPendingUploads() {
+    final actor = _db.auth.currentUser?.id;
+    if (_pendingFlush != null && actor == _pendingFlushActor) {
+      return _pendingFlush!;
+    }
+    _pendingFlushActor = actor;
+    late final Future<int> pending;
+    pending = _serialized(() => _flush(actor)).whenComplete(() {
+      if (identical(_pendingFlush, pending)) _pendingFlush = null;
+    });
+    _pendingFlush = pending;
+    return pending;
+  }
+
+  Future<int> _flush(String? actor) async {
+    if (_db.auth.currentUser?.id != actor) return 0;
     final queue = [...await _readQueue()];
     final deadline = DateTime.now().add(const Duration(seconds: 30));
-    var completed = 0, attempted = 0;
-    for (final item in [...queue]) {
-      if (attempted >= 10 || !DateTime.now().isBefore(deadline)) break;
-      if (!_owns(item) ||
-          item.blocked ||
-          item.attempts >= 3 ||
-          (item.nextAttemptAt?.isAfter(DateTime.now()) ?? false)) {
-        continue;
+    final eligible = queue
+        .where(
+          (item) =>
+              _owns(item) &&
+              (item.attached ||
+                  !item.blocked &&
+                      item.attempts < 3 &&
+                      !(item.nextAttemptAt?.isAfter(DateTime.now()) ?? false)),
+        )
+        .take(10)
+        .toList();
+    Map<String, String> taxes = const {};
+    Object? metadataError;
+    try {
+      taxes = await _lookupTaxEntities(
+        eligible.where((item) => !item.attached && item.storagePath == null),
+        deadline,
+        actor,
+      );
+    } catch (error) {
+      metadataError = error;
+    }
+    var completed = 0;
+    for (final item in eligible) {
+      if (!DateTime.now().isBefore(deadline) ||
+          _db.auth.currentUser?.id != actor) {
+        break;
       }
-      attempted++;
       try {
-        await _process(item, queue, deadline);
-        queue.remove(item);
-        await _writeQueue(queue);
-        await _deleteLocal(item);
-        completed++;
+        if (!item.attached &&
+            item.storagePath == null &&
+            metadataError != null) {
+          item.attempts++;
+          throw metadataError;
+        }
+        await _process(item, queue, deadline, actor: actor, taxEntities: taxes);
+        if (await _retireConfirmed(item, queue)) completed++;
       } catch (error) {
         _recordFailure(item, error);
         await _writeQueue(queue);
       }
     }
     return completed;
-  });
+  }
 
   Future<String> _process(
     _QueuedPaymentProof item,
     List<_QueuedPaymentProof> queue,
-    DateTime deadline,
-  ) async {
-    final transport = DeadlineHttpClient(supabase.rest.httpClient!, deadline);
+    DateTime deadline, {
+    required String? actor,
+    Map<String, String>? taxEntities,
+  }) async {
+    _requireActor(actor);
+    if (item.attached) {
+      if (item.signedUrl == null) {
+        throw StateError('PAYMENT_PROOF_CONFIRMED_STATE_INVALID');
+      }
+      return item.signedUrl!;
+    }
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      throw TimeoutException('Proof job deadline reached');
+    }
+    final authorization = await AuthHttpSnapshot.capture(
+      _db,
+      budget: remaining,
+    );
+    _requireActor(actor);
+    final transport = DeadlineHttpClient(
+      _db.rest.httpClient!,
+      deadline,
+      isCurrent: () =>
+          _db.auth.currentUser?.id == actor && authorization.isCurrent(),
+    );
     final db = PostgrestClient(
-      supabase.rest.url,
-      headers: supabase.rest.headers,
+      _db.rest.url,
+      headers: authorization.headers,
       httpClient: transport,
     );
     final storage = SupabaseStorageClient(
-      supabase.storage.url,
-      supabase.storage.headers,
+      _db.storage.url,
+      {..._db.storage.headers, ...authorization.headers},
       httpClient: transport,
       retryAttempts: 0,
     );
@@ -162,7 +263,12 @@ class PaymentProofService {
       item.attempts++;
       await _writeQueue(queue);
       if (item.storagePath == null) {
-        final taxEntity = await _lookupTaxEntityId(item.storeId, db);
+        final taxes =
+            taxEntities ?? await _lookupTaxEntities([item], deadline, actor);
+        final taxEntity = taxes[item.storeId];
+        if (taxEntity == null) {
+          throw StateError('PAYMENT_PROOF_STORE_TAX_ENTITY_REQUIRED');
+        }
         final date = DateTime.parse(item.takenAtIso).toUtc();
         final dateStr =
             '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
@@ -214,9 +320,38 @@ class PaymentProofService {
           'p_taken_at': item.takenAtIso,
         },
       );
+      item.attached = true;
+      // The server acknowledgement is authoritative. A local persistence or
+      // file-cleanup failure cannot turn this confirmed attachment into queued.
+      try {
+        await _writeQueue(queue);
+      } catch (_) {}
       return item.signedUrl!;
     } finally {
-      await db.dispose();
+      transport.close();
+      await disposeRpcJsonWorker(db.dispose);
+    }
+  }
+
+  Future<bool> _retireConfirmed(
+    _QueuedPaymentProof item,
+    List<_QueuedPaymentProof> queue,
+  ) async {
+    if (!item.attached) throw StateError('PAYMENT_PROOF_NOT_CONFIRMED');
+    try {
+      await _deleteLocal(item);
+    } catch (_) {
+      return false;
+    }
+    final index = queue.indexOf(item);
+    if (index < 0) return true;
+    queue.removeAt(index);
+    try {
+      await _writeQueue(queue);
+      return true;
+    } catch (_) {
+      queue.insert(index, item);
+      return false;
     }
   }
 
@@ -256,41 +391,57 @@ class PaymentProofService {
     }
   }
 
-  Uint8List _compressImage(Uint8List bytes) {
-    final original = img.decodeImage(bytes);
-    if (original == null) {
-      throw const FileSystemException('Invalid image bytes');
+  Future<Map<String, String>> _lookupTaxEntities(
+    Iterable<_QueuedPaymentProof> items,
+    DateTime deadline,
+    String? actor,
+  ) async {
+    final ids = items.map((item) => item.storeId).toSet();
+    if (ids.isEmpty) return const {};
+    if (ids.length > 10) {
+      throw StateError('PAYMENT_PROOF_METADATA_BATCH_INVALID');
     }
-
-    final widthDominant = original.width >= original.height;
-    final resized = img.copyResize(
-      original,
-      width: widthDominant ? 1400 : null,
-      height: widthDominant ? null : 1400,
-    );
-
-    return Uint8List.fromList(img.encodeJpg(resized, quality: 78));
-  }
-
-  Future<String> _lookupTaxEntityId(String storeId, PostgrestClient db) async {
-    final row = await db
-        .from('restaurants')
-        .select('tax_entity_id')
-        .eq('id', storeId)
-        .maybeSingle();
-
-    final taxEntityId = row?['tax_entity_id']?.toString();
-    return (taxEntityId == null || taxEntityId.isEmpty)
-        ? 'unknown-tax-entity'
-        : taxEntityId;
+    _requireActor(actor);
+    final owner = OwnedReadSession();
+    try {
+      final rows = await owner.run(
+        _db,
+        (db) => db
+            .from('restaurants')
+            .select('id,tax_entity_id')
+            .inFilter('id', ids.toList())
+            .limit(ids.length),
+        budget: deadline.difference(DateTime.now()),
+        maxResponseBytes: 64 * 1024,
+      );
+      _requireActor(actor);
+      final result = <String, String>{};
+      final seen = <String>{};
+      for (final row in rows) {
+        final id = row['id'];
+        if (id is! String || !ids.contains(id) || !seen.add(id)) {
+          throw const FormatException(
+            'PAYMENT_PROOF_METADATA_RESPONSE_INVALID',
+          );
+        }
+        final tax = row['tax_entity_id'];
+        if (tax is String && tax.isNotEmpty) result[id] = tax;
+      }
+      return result;
+    } finally {
+      owner.dispose();
+    }
   }
 
   Future<File> _persistQueueFile({
     required String paymentId,
     required Uint8List bytes,
   }) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final queueDir = Directory('${dir.path}/payment_proof_queue');
+    final queueDir =
+        _localQueueDirectory ??
+        Directory(
+          '${(await getApplicationDocumentsDirectory()).path}/payment_proof_queue',
+        );
     if (!queueDir.existsSync()) {
       queueDir.createSync(recursive: true);
     }
@@ -306,15 +457,22 @@ class PaymentProofService {
     if (raw == null || raw.isEmpty) return const [];
 
     final decoded = jsonDecode(raw);
-    if (decoded is! List) return const [];
-
-    return decoded
-        .whereType<Map>()
+    if (decoded is! List ||
+        decoded.any((item) => item is! Map<String, dynamic>)) {
+      throw const FormatException('PAYMENT_PROOF_QUEUE_INVALID');
+    }
+    final queue = decoded
         .map(
-          (item) =>
-              _QueuedPaymentProof.fromJson(Map<String, dynamic>.from(item)),
+          (item) => _QueuedPaymentProof.fromJson(item as Map<String, dynamic>),
         )
         .toList();
+    final identities = <String>{};
+    for (final item in queue) {
+      if (!identities.add(item.paymentId)) {
+        throw const FormatException('PAYMENT_PROOF_QUEUE_DUPLICATE_PAYMENT');
+      }
+    }
+    return queue;
   }
 
   Future<void> _writeQueue(List<_QueuedPaymentProof> queue) async {
@@ -337,6 +495,7 @@ class _QueuedPaymentProof {
     String? jobId,
     this.storagePath,
     this.uploaded = false,
+    this.attached = false,
     this.signedUrl,
     this.attempts = 0,
     this.blocked = false,
@@ -350,28 +509,61 @@ class _QueuedPaymentProof {
   final String paymentId, storeId, takenAtIso, jobId;
   final String? localPath, imageBytesBase64, ownerId;
   String? storagePath, signedUrl, lastError;
-  bool uploaded, blocked;
+  bool uploaded, blocked, attached;
   int attempts;
   DateTime? nextAttemptAt;
-  factory _QueuedPaymentProof.fromJson(Map<String, dynamic> json) =>
-      _QueuedPaymentProof(
-        paymentId: json['payment_id'].toString(),
-        storeId: json['store_id'].toString(),
-        ownerId: json['owner_id']?.toString(),
-        localPath: json['local_path']?.toString(),
-        imageBytesBase64: json['image_bytes_base64']?.toString(),
-        takenAtIso: json['taken_at_iso'].toString(),
-        jobId: json['job_id']?.toString(),
-        storagePath: json['storage_path']?.toString(),
-        uploaded: json['uploaded'] == true,
-        signedUrl: json['signed_url']?.toString(),
-        attempts: (json['attempts'] as num?)?.toInt() ?? 0,
-        blocked: json['blocked'] == true,
-        nextAttemptAt: DateTime.tryParse(
-          json['next_attempt_at']?.toString() ?? '',
-        ),
-        lastError: json['last_error']?.toString(),
-      );
+  factory _QueuedPaymentProof.fromJson(Map<String, dynamic> json) {
+    for (final key in ['payment_id', 'store_id', 'taken_at_iso']) {
+      if (json[key] is! String || (json[key] as String).trim().isEmpty) {
+        throw const FormatException('PAYMENT_PROOF_QUEUE_IDENTITY_INVALID');
+      }
+    }
+    if (DateTime.tryParse(json['taken_at_iso'] as String) == null) {
+      throw const FormatException('PAYMENT_PROOF_QUEUE_DATE_INVALID');
+    }
+    for (final key in [
+      'owner_id',
+      'local_path',
+      'image_bytes_base64',
+      'job_id',
+      'storage_path',
+      'signed_url',
+      'next_attempt_at',
+      'last_error',
+    ]) {
+      if (json[key] != null && json[key] is! String) {
+        throw const FormatException('PAYMENT_PROOF_QUEUE_FIELD_INVALID');
+      }
+    }
+    for (final key in ['uploaded', 'attached', 'blocked']) {
+      if (json[key] != null && json[key] is! bool) {
+        throw const FormatException('PAYMENT_PROOF_QUEUE_STATE_INVALID');
+      }
+    }
+    if (json['attempts'] != null &&
+        (json['attempts'] is! int || (json['attempts'] as int) < 0)) {
+      throw const FormatException('PAYMENT_PROOF_QUEUE_ATTEMPTS_INVALID');
+    }
+    return _QueuedPaymentProof(
+      paymentId: json['payment_id'] as String,
+      storeId: json['store_id'] as String,
+      ownerId: json['owner_id']?.toString(),
+      localPath: json['local_path']?.toString(),
+      imageBytesBase64: json['image_bytes_base64']?.toString(),
+      takenAtIso: json['taken_at_iso'] as String,
+      jobId: json['job_id']?.toString(),
+      storagePath: json['storage_path']?.toString(),
+      uploaded: json['uploaded'] == true,
+      attached: json['attached'] == true,
+      signedUrl: json['signed_url']?.toString(),
+      attempts: (json['attempts'] as num?)?.toInt() ?? 0,
+      blocked: json['blocked'] == true,
+      nextAttemptAt: DateTime.tryParse(
+        json['next_attempt_at']?.toString() ?? '',
+      ),
+      lastError: json['last_error']?.toString(),
+    );
+  }
   Map<String, dynamic> toJson() => {
     'payment_id': paymentId,
     'store_id': storeId,
@@ -382,6 +574,7 @@ class _QueuedPaymentProof {
     'image_bytes_base64': imageBytesBase64,
     'storage_path': storagePath,
     'uploaded': uploaded,
+    'attached': attached,
     'signed_url': signedUrl,
     'attempts': attempts,
     'blocked': blocked,

@@ -1,3 +1,5 @@
+import 'support/payment_command_fixture.dart';
+import 'package:globos_pos_system/core/payments/payment_command_coordinator.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,15 +11,20 @@ class _Payments extends PaymentService {
   var calls = 0;
   var boundary = true;
   @override
-  Future<Map<String, dynamic>> processPayment({
+  Future<Map<String, dynamic>> processSinglePaymentCommand({
+    required String operationId,
     required String orderId,
     required String storeId,
     required double amount,
     required String method,
+    required int expectedPaymentCount,
+    required bool requireFullPayment,
+    required bool Function() isCurrent,
   }) async {
     calls++;
     throw PostgrestException(
       message: 'PAYMENT_AMOUNT_MISMATCH',
+      code: 'P0001',
       details: boundary ? 'PROMOTION_PRICE_CHANGED' : 'ordinary rejection',
     );
   }
@@ -25,7 +32,12 @@ class _Payments extends PaymentService {
 
 class _Cashier extends PaymentNotifier {
   _Cashier(SupabaseClient client, PaymentService payments)
-    : super(client: client, payments: payments);
+    : super(
+        client: client,
+        payments: payments,
+        commands: PaymentCommandCoordinator(MemoryPaymentJournal(), payments),
+        scope: () => paymentFixtureScope(),
+      );
   @override
   Future<void> subscribeRealtime(String storeId) async {}
 }
@@ -66,6 +78,9 @@ void main() {
     client = SupabaseClient('http://127.0.0.1:${server.port}', 'fixture');
     payments = _Payments();
     cashier = _Cashier(client, payments);
+    await cashier.loadOrders('store');
+    requests.clear();
+    cashier.selectOrder(paymentFixtureOrder());
   });
   tearDown(() async {
     cashier.dispose();

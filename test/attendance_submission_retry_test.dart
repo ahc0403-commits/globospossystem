@@ -3,6 +3,9 @@ import 'dart:typed_data';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:globos_pos_system/core/auth/operation_scope_provider.dart';
+import 'package:globos_pos_system/core/utils/operation_contract.dart';
 import 'package:globos_pos_system/core/services/attendance_service.dart';
 import 'package:globos_pos_system/features/attendance/attendance_kiosk_provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,6 +22,8 @@ class _Service extends AttendanceService {
   Object? uploadError;
   Object? recordError;
   Completer<String?>? uploadWait;
+  Completer<Map<String, dynamic>>? recordWait;
+  Completer<void>? recordStarted;
   final records = <Map<String, dynamic>>[];
 
   @override
@@ -47,7 +52,9 @@ class _Service extends AttendanceService {
     String? photoUrl,
   }) async {
     writes++;
+    recordStarted?.complete();
     if (recordError != null) throw recordError!;
+    if (recordWait != null) return recordWait!.future;
     return {'id': 'saved'};
   }
 
@@ -75,7 +82,9 @@ void main() {
     notifier = AttendanceKioskNotifier(service: service);
     photo = XFile.fromData(Uint8List.fromList([1, 2, 3]));
   });
-  tearDown(() => notifier.dispose());
+  tearDown(() {
+    if (notifier.mounted) notifier.dispose();
+  });
 
   Future<bool> submit({String employee = ' bt1 ', XFile? file}) =>
       notifier.recordAttendance(
@@ -232,6 +241,94 @@ void main() {
     expect(await first, isTrue);
     expect((service.uploads, service.writes), (1, 1));
   });
+
+  test(
+    'disposal during photo upload prevents a later attendance write',
+    () async {
+      final upload = service.uploadWait = Completer<String?>();
+      final pending = submit();
+      notifier.dispose();
+      upload.complete('https://example.test/photo.jpg');
+      expect(await pending, isFalse);
+      expect(service.writes, 0);
+    },
+  );
+
+  test(
+    'confirmed attendance survives disposal without updating a new view',
+    () async {
+      final write = service.recordWait = Completer<Map<String, dynamic>>();
+      final started = service.recordStarted = Completer<void>();
+      final pending = submit();
+      await started.future;
+      notifier.dispose();
+      write.complete({'id': 'original-event'});
+      expect(await pending, isTrue);
+      expect(service.writes, 1);
+    },
+  );
+
+  test(
+    'actual provider invalidates original actor scope and blocks other stores',
+    () async {
+      OperationScope actor(String id) => OperationScope(
+        actorId: id,
+        storeId: 'store-1',
+        role: 'attendance',
+        authorizationRevision: 'fixture-v1',
+      );
+      final scope = OperationScopeNotifier(isBound: true)..publish(actor('a'));
+      final c = ProviderContainer(
+        overrides: [
+          operationScopeProvider.overrideWith((ref) => scope),
+          attendanceKioskServiceProvider.overrideWithValue(service),
+        ],
+      );
+      final sub = c.listen(attendanceKioskProvider, (_, _) {});
+      addTearDown(() {
+        sub.close();
+        c.dispose();
+      });
+      final old = c.read(attendanceKioskProvider.notifier);
+      final upload = service.uploadWait = Completer<String?>();
+      final pending = old.recordAttendance(
+        employeeNumber: 'BT1',
+        storeId: 'store-1',
+        type: 'clock_in',
+        photoFile: photo,
+      );
+      scope.publish(actor('b'));
+      final current = c.read(attendanceKioskProvider.notifier);
+      expect(identical(old, current), isFalse);
+      expect(old.mounted, isFalse);
+      upload.complete('https://example.test/photo.jpg');
+      expect(await pending, isFalse);
+      expect(service.writes, 0);
+      expect(current.state.lastAction, isNull);
+      expect(
+        await current.recordAttendance(
+          employeeNumber: 'BT1',
+          storeId: 'store-2',
+          type: 'clock_in',
+          photoFile: photo,
+        ),
+        isFalse,
+      );
+      scope.publish(null);
+      expect(
+        await c
+            .read(attendanceKioskProvider.notifier)
+            .recordAttendance(
+              employeeNumber: 'BT1',
+              storeId: 'store-1',
+              type: 'clock_in',
+              photoFile: photo,
+            ),
+        isFalse,
+      );
+      expect(service.uploads, 1);
+    },
+  );
 
   test(
     'lost write response verifies the result without repeating the write',

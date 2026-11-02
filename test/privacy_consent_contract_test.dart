@@ -88,7 +88,10 @@ void main() {
       expect(login, isNot(contains('context.go(')));
       expect(login, isNot(contains('ref.listen(authProvider')));
       expect(provider, contains('has_accepted_current_privacy_consent'));
-      expect(provider, contains('accept_my_privacy_consent'));
+      expect(
+        readRepoFile('lib/core/auth/auth_command_session.dart'),
+        contains('accept_my_privacy_consent'),
+      );
       expect(provider, contains('authErrorPrivacyConsentFailed'));
       expect(provider, contains('authErrorPrivacyConsentSetupMissing'));
       expect(provider, contains('authErrorPrivacyConsentProfileMissing'));

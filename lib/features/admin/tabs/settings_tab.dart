@@ -9,6 +9,7 @@ import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/layout/adaptive_layout.dart';
 import '../../../core/services/printer_destination_service.dart';
 import '../../../core/services/pin_service.dart';
+import '../../../core/auth/operation_scope_provider.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
@@ -48,7 +49,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   final _printerIpController = TextEditingController();
   final Set<String> _testingDestinationIds = <String>{};
   String _operationMode = 'standard';
-  String? _initializedRestaurantId;
+  Object? _initializedScope;
+  int _viewGeneration = 0;
   String? _lastError;
   String? _lastPrinterError;
   SettingsState? _formSettings;
@@ -61,6 +63,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
   PinService get _pinService => widget.pinServiceOverride ?? pinService;
 
+  bool _acceptsView(int generation) => mounted && generation == _viewGeneration;
+
   @override
   void dispose() {
     _restaurantNameController.dispose();
@@ -72,28 +76,31 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   }
 
   Future<void> _loadPayrollPinStatus(String storeId) async {
+    final origin = _viewGeneration;
     try {
       final hasPin = await _pinService.hasPayrollPin(storeId);
-      if (!mounted) return;
+      if (!_acceptsView(origin)) return;
       setState(() => _hasPayrollPin = hasPin);
     } catch (_) {
-      if (!mounted) return;
+      if (!_acceptsView(origin)) return;
       setState(() => _hasPayrollPin = null);
     }
   }
 
   Future<void> _loadDiscountManagerPinStatus(String storeId) async {
+    final origin = _viewGeneration;
     try {
       final hasPin = await _pinService.hasDiscountManagerPin(storeId);
-      if (!mounted) return;
+      if (!_acceptsView(origin)) return;
       setState(() => _hasDiscountManagerPin = hasPin);
     } catch (_) {
-      if (!mounted) return;
+      if (!_acceptsView(origin)) return;
       setState(() => _hasDiscountManagerPin = false);
     }
   }
 
   Future<void> _showSetPayrollPinDialog(String storeId) async {
+    final origin = _viewGeneration;
     final pageContext = context;
     final l10n = context.l10n;
     final pinController = TextEditingController();
@@ -153,6 +160,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   onPressed: _isSavingPayrollPin
                       ? null
                       : () async {
+                          if (!pageContext.mounted || !_acceptsView(origin)) {
+                            return;
+                          }
                           final pin = pinController.text.trim();
                           final confirm = confirmController.text.trim();
                           final validPin = RegExp(r'^\d{4}$').hasMatch(pin);
@@ -174,16 +184,20 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                           setState(() => _isSavingPayrollPin = true);
                           try {
                             await _pinService.setPin(storeId, pin);
-                            if (!pageContext.mounted) return;
+                            if (!pageContext.mounted || !_acceptsView(origin)) {
+                              return;
+                            }
                             Navigator.of(pageContext).pop();
                             setState(() => _hasPayrollPin = true);
-                            if (!pageContext.mounted) return;
+                            if (!pageContext.mounted || !_acceptsView(origin)) {
+                              return;
+                            }
                             showSuccessToast(
                               pageContext,
                               l10n.settingsPayrollPinSaved,
                             );
                           } catch (e) {
-                            if (pageContext.mounted) {
+                            if (pageContext.mounted && _acceptsView(origin)) {
                               showErrorToast(
                                 pageContext,
                                 l10n.settingsPayrollPinSaveFailed(
@@ -192,7 +206,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               );
                             }
                           } finally {
-                            if (mounted) {
+                            if (pageContext.mounted && _acceptsView(origin)) {
                               setState(() => _isSavingPayrollPin = false);
                             }
                           }
@@ -222,6 +236,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   }
 
   Future<void> _showSetDiscountManagerPinDialog(String storeId) async {
+    final origin = _viewGeneration;
     final pageContext = context;
     final l10n = context.l10n;
     final pinController = TextEditingController();
@@ -281,6 +296,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   onPressed: _isSavingDiscountManagerPin
                       ? null
                       : () async {
+                          if (!pageContext.mounted || !_acceptsView(origin)) {
+                            return;
+                          }
                           final pin = pinController.text.trim();
                           final confirm = confirmController.text.trim();
                           final validPin = RegExp(r'^\d{4,8}$').hasMatch(pin);
@@ -305,16 +323,20 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               storeId,
                               pin,
                             );
-                            if (!pageContext.mounted) return;
+                            if (!pageContext.mounted || !_acceptsView(origin)) {
+                              return;
+                            }
                             Navigator.of(pageContext).pop();
                             await _loadDiscountManagerPinStatus(storeId);
-                            if (!pageContext.mounted) return;
+                            if (!pageContext.mounted || !_acceptsView(origin)) {
+                              return;
+                            }
                             showSuccessToast(
                               pageContext,
                               l10n.settingsDiscountManagerPinSaved,
                             );
                           } catch (e) {
-                            if (pageContext.mounted) {
+                            if (pageContext.mounted && _acceptsView(origin)) {
                               showErrorToast(
                                 pageContext,
                                 l10n.settingsDiscountManagerPinSaveFailed(
@@ -323,7 +345,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               );
                             }
                           } finally {
-                            if (mounted) {
+                            if (pageContext.mounted && _acceptsView(origin)) {
                               setState(
                                 () => _isSavingDiscountManagerPin = false,
                               );
@@ -355,27 +377,31 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   }
 
   Future<void> _clearPayrollPin(String storeId) async {
+    final origin = _viewGeneration;
     final entered = await showPinDialog(
       context,
       title: context.l10n.settingsPayrollPinEnterCurrent,
     );
-    if (entered == null) return;
+    if (entered == null || !_acceptsView(origin)) return;
 
     try {
       final ok = await _pinService.verifyPin(storeId, entered);
+      if (!mounted || !_acceptsView(origin)) return;
       if (!ok) {
-        if (mounted) {
+        if (mounted && _acceptsView(origin)) {
           showErrorToast(context, context.l10n.settingsPayrollPinIncorrect);
         }
         return;
       }
       await _pinService.clearPin(storeId);
-      if (mounted) setState(() => _hasPayrollPin = false);
-      if (mounted) {
+      if (mounted && _acceptsView(origin)) {
+        setState(() => _hasPayrollPin = false);
+      }
+      if (mounted && _acceptsView(origin)) {
         showSuccessToast(context, context.l10n.settingsPayrollPinDeleted);
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && _acceptsView(origin)) {
         showErrorToast(
           context,
           context.l10n.settingsPayrollPinDeleteFailed('$e'),
@@ -385,17 +411,19 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   }
 
   Future<void> _clearDiscountManagerPin(String storeId) async {
+    final origin = _viewGeneration;
     try {
       await _pinService.clearDiscountManagerPin(storeId);
+      if (!mounted || !_acceptsView(origin)) return;
       await _loadDiscountManagerPinStatus(storeId);
-      if (mounted) {
+      if (mounted && _acceptsView(origin)) {
         showSuccessToast(
           context,
           context.l10n.settingsDiscountManagerPinDeleted,
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && _acceptsView(origin)) {
         showErrorToast(
           context,
           context.l10n.settingsDiscountManagerPinDeleteFailed('$e'),
@@ -410,6 +438,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     final authState = ref.watch(authProvider);
     final authUid = authState.user?.id;
     final storeId = ref.watch(adminScopedStoreIdProvider);
+    final scope = ref.watch(operationScopeProvider);
     final settingsState = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final printerState = ref.watch(printerProvider);
@@ -418,18 +447,35 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         ? const AsyncValue<List<Map<String, dynamic>>>.data([])
         : ref.watch(adminAuditTraceProvider(storeId));
 
-    if (storeId != null &&
-        authUid != null &&
-        storeId != _initializedRestaurantId) {
-      _initializedRestaurantId = storeId;
-      Future.microtask(() async {
-        await notifier.loadSettings(storeId, authUid);
-        await _loadPayrollPinStatus(storeId);
-        await _loadDiscountManagerPinStatus(storeId);
-      });
+    final viewScope = (authUid, storeId, scope.generation);
+    if (_initializedScope != viewScope) {
+      _initializedScope = viewScope;
+      final origin = ++_viewGeneration;
+      _restaurantNameController.clear();
+      _addressController.clear();
+      _perPersonController.clear();
+      _fullNameController.clear();
+      _formSettings = null;
+      _hasPayrollPin = null;
+      _hasDiscountManagerPin = null;
+      _isSavingPayrollPin = false;
+      _isSavingDiscountManagerPin = false;
+      _lastError = null;
+      if (storeId != null && authUid != null) {
+        Future.microtask(() async {
+          if (!_acceptsView(origin)) return;
+          await notifier.loadSettings(storeId, authUid);
+          if (!_acceptsView(origin)) return;
+          await _loadPayrollPinStatus(storeId);
+          if (!_acceptsView(origin)) return;
+          await _loadDiscountManagerPinStatus(storeId);
+        });
+      }
     }
 
-    if (!settingsState.isLoading && settingsState.restaurantName.isNotEmpty) {
+    if (!settingsState.isLoading &&
+        settingsState.restaurantName.isNotEmpty &&
+        notifier.matchesLoadedView(storeId, authUid)) {
       final previous = _formSettings;
       final newScope =
           previous == null || previous.storeId != settingsState.storeId;
@@ -462,12 +508,14 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       _formSettings = settingsState;
     }
 
-    if (settingsState.error != null &&
+    if (settingsState.storeId == storeId &&
+        settingsState.error != null &&
         settingsState.error!.isNotEmpty &&
         settingsState.error != _lastError) {
       _lastError = settingsState.error;
+      final origin = _viewGeneration;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
+        if (_acceptsView(origin)) {
           showErrorToast(context, settingsState.error!);
         }
       });
@@ -995,6 +1043,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   onPressed: settingsState.isSavingRestaurant
                       ? null
                       : () async {
+                          final origin = _viewGeneration;
                           final success = await notifier.saveRestaurant(
                             name: _restaurantNameController.text.trim(),
                             address: _addressController.text.trim(),
@@ -1005,7 +1054,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                 ? parseDecimalInput(_perPersonController.text)
                                 : null,
                           );
-                          if (!context.mounted) return;
+                          if (!context.mounted || !_acceptsView(origin)) return;
                           if (success) {
                             showSuccessToast(
                               context,
@@ -1095,10 +1144,11 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   onPressed: settingsState.isSavingProfile || authUid == null
                       ? null
                       : () async {
+                          final origin = _viewGeneration;
                           final success = await notifier.updateFullName(
                             _fullNameController.text.trim(),
                           );
-                          if (!context.mounted) return;
+                          if (!context.mounted || !_acceptsView(origin)) return;
                           if (success) {
                             showSuccessToast(
                               context,

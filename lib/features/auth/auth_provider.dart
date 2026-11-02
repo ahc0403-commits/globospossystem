@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'
         User;
 import '../../core/services/navigation_history_service.dart';
 import '../../core/auth/terminal_auth.dart';
+import '../../core/auth/auth_command_session.dart';
 import '../../core/utils/role_routes.dart';
 import '../../core/services/pos_backend.dart';
 import '../admin/providers/settings_provider.dart';
@@ -72,6 +73,16 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   Future<void>? _profileLoad;
   String? _profileUserId;
   int _sessionGeneration = 0;
+  int _actorGeneration = 0;
+  final _authCommands = <AuthCommandSession>{};
+
+  void _invalidateAuthCommands() {
+    _actorGeneration++;
+    for (final command in _authCommands) {
+      command.close();
+    }
+    _authCommands.clear();
+  }
 
   void _invalidateProfileLoad() {
     _profileRetry?.cancel();
@@ -102,6 +113,9 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
                 event == AuthChangeEvent.tokenRefreshed ||
                 event == AuthChangeEvent.userUpdated) &&
             session != null) {
+          if (_activeUserId != null && _activeUserId != session.user.id) {
+            _invalidateAuthCommands();
+          }
           if (state.user != null && state.user?.id != session.user.id) {
             _invalidateProfileLoad();
             state = state.copyWith(clearUser: true, isRestoring: true);
@@ -262,6 +276,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   }
 
   Future<void> login(String email, String password) async {
+    _invalidateAuthCommands();
     _invalidateProfileLoad();
     _retryCount = 0;
     _signedOutHandled = false;
@@ -356,6 +371,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
               name: row['name'] as String,
               brandId: row['brand_id'] as String?,
               brandName: row['brand_name'] as String?,
+              legalEntityId: row['tax_entity_id'] as String?,
             ),
           )
           .toList();
@@ -405,6 +421,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
                   'name': s.name,
                   'brand_id': s.brandId,
                   'brand_name': s.brandName,
+                  'tax_entity_id': s.legalEntityId,
                 },
               )
               .toList(),
@@ -424,6 +441,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   void _finishSignOut() {
     if (_signedOutHandled) return;
     _signedOutHandled = true;
+    _invalidateAuthCommands();
     final userId = _activeUserId;
     _invalidateProfileLoad();
     _retryCount = 0;
@@ -452,6 +470,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   }
 
   Future<void> logout() async {
+    _invalidateAuthCommands();
     _invalidateProfileLoad();
     try {
       await _client.auth.signOut(scope: SignOutScope.local);
@@ -479,30 +498,29 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     String newPassword, {
     required bool selfService,
   }) async {
+    if (!mounted || state.isPasswordChangeSubmitting) return false;
+    final user = state.user;
+    if (user == null || _client.auth.currentUser?.id != user.id) return false;
+    final generation = _actorGeneration;
+    bool isCurrent() =>
+        mounted &&
+        _actorGeneration == generation &&
+        state.user?.id == user.id &&
+        _client.auth.currentUser?.id == user.id;
+    final gateWasRequired = state.passwordChangeRequired;
+    final command = AuthCommandSession(_client, isCurrent);
+    _authCommands.add(command);
     state = state.copyWith(isPasswordChangeSubmitting: true, clearError: true);
 
     try {
-      final response = await _client.functions.invoke(
-        'complete-initial-password-change',
-        body: {
-          'new_password': newPassword,
-          if (selfService) 'mode': 'self_service',
-        },
-      );
-      if (response.status < 200 || response.status >= 300) {
-        throw StateError('password change function rejected the request');
-      }
+      await command.changePassword(newPassword, selfService: selfService);
+      if (!isCurrent()) return false;
 
-      if (!selfService || state.passwordChangeRequired) {
+      if (!selfService || gateWasRequired) {
         // A forced reset is cleared only for the generation that this request
         // started. Re-read the server-owned gate before POS navigation.
-        final profile = await _client
-            .from('users')
-            .select('must_change_password, password_change_generation')
-            .eq('auth_id', state.user!.id)
-            .single();
-        final isStillRequired =
-            profile['must_change_password'] as bool? ?? true;
+        final isStillRequired = await command.passwordStillRequired(user.id);
+        if (!isCurrent()) return false;
         if (isStillRequired) {
           throw StateError('password change was not confirmed by the server');
         }
@@ -513,10 +531,10 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         passwordChangeRequired: false,
         clearError: true,
       );
-      final user = state.user;
-      if (user != null) await _saveCachedProfile(user);
-      return true;
+      await _saveCachedProfile(user);
+      return isCurrent();
     } on AuthException catch (error) {
+      if (!isCurrent()) return false;
       state = state.copyWith(
         isPasswordChangeSubmitting: false,
         passwordChangeRequired: state.passwordChangeRequired,
@@ -524,42 +542,60 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       );
       return false;
     } catch (_) {
+      if (!isCurrent()) return false;
       state = state.copyWith(
         isPasswordChangeSubmitting: false,
         passwordChangeRequired: state.passwordChangeRequired,
         errorMessage: authErrorPasswordChangeFailed,
       );
       return false;
+    } finally {
+      _authCommands.remove(command);
+      command.close();
     }
   }
 
   Future<void> acceptPrivacyConsent({required String localeName}) async {
-    if (state.user == null) return;
+    if (!mounted || state.user == null || state.isPrivacyConsentSubmitting) {
+      return;
+    }
+    final user = state.user!;
+    if (_client.auth.currentUser?.id != user.id) return;
+    final generation = _actorGeneration;
+    bool isCurrent() =>
+        mounted &&
+        _actorGeneration == generation &&
+        state.user?.id == user.id &&
+        _client.auth.currentUser?.id == user.id;
+    final command = AuthCommandSession(_client, isCurrent);
+    _authCommands.add(command);
 
     state = state.copyWith(isPrivacyConsentSubmitting: true, clearError: true);
 
     try {
-      await _client.rpc(
-        'accept_my_privacy_consent',
-        params: {'p_consent_locale': localeName},
-      );
+      await command.acceptConsent(localeName);
+      if (!isCurrent()) return;
       state = state.copyWith(
         isPrivacyConsentSubmitting: false,
         privacyConsentRequired: false,
         clearError: true,
       );
-      final user = state.user;
-      if (user != null) await _saveCachedProfile(user);
+      await _saveCachedProfile(user);
+      if (!isCurrent()) return;
       final role = state.role;
       if (role != null) {
         NavigationHistoryService.instance.push(homeRouteForRole(role));
       }
     } catch (error) {
+      if (!isCurrent()) return;
       state = state.copyWith(
         isPrivacyConsentSubmitting: false,
         privacyConsentRequired: true,
         errorMessage: _privacyConsentErrorMessage(error),
       );
+    } finally {
+      _authCommands.remove(command);
+      command.close();
     }
   }
 
@@ -588,7 +624,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       try {
         row = await _client
             .from('restaurants')
-            .select('id, name, brand_id, brands(name)')
+            .select('id, name, brand_id, tax_entity_id, brands(name)')
             .eq('id', storeId)
             .eq('is_active', true)
             .maybeSingle();
@@ -611,6 +647,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
           name: row['name']?.toString() ?? storeId,
           brandId: row['brand_id']?.toString(),
           brandName: brand is Map ? brand['name']?.toString() : null,
+          legalEntityId: row['tax_entity_id']?.toString(),
         ),
       ];
       isAccessible = true;
@@ -645,6 +682,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
   @override
   void dispose() {
+    _invalidateAuthCommands();
     _invalidateProfileLoad();
     _authSub?.cancel();
     super.dispose();
@@ -681,7 +719,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     try {
       final rows = await _client
           .from('restaurants')
-          .select('id, name, brand_id, brands(name)')
+          .select('id, name, brand_id, tax_entity_id, brands(name)')
           .inFilter('id', storeIds)
           // Closed stores must not appear in the client store list. The
           // server-side guard (user_accessible_stores) and refreshed claims
@@ -695,6 +733,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
           id: map['id'].toString(),
           name: map['name']?.toString() ?? 'Unknown Store',
           brandId: map['brand_id']?.toString(),
+          legalEntityId: map['tax_entity_id']?.toString(),
           brandName: brandRaw is Map<String, dynamic>
               ? brandRaw['name']?.toString()
               : null,

@@ -1,43 +1,763 @@
 {
   "schemaVersion": 1,
-  "baseSha": "cb0d99536f8255b897d65ad099085903a54a0fc9",
-  "kind": "tooling",
-  "summary": "Prepare isolated sample identities and collect source-bound catalog contracts for G0/G1; leave product adoption and restore/soak evidence open.",
+  "baseSha": "ad6595a014145ac7021d2488276c89fba829ba47",
+  "kind": "application",
+  "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete. Original table/order-add requests now use independent atomic SQLite/IndexedDB intent storage and bounded receipt/recovery batches; legacy ownerless requests are preserved for review. Browser/mixed/12h and production acceptance remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "87c1c17cb517fc17fa8c9c04e7a975224d4a441dccbb8688c9cd426e0c91fc7e",
+      "sha256": "c9a21cd3ad8ff26e27b2fa46d07eee91dca8040c45d474d481627d4727a724ec",
       "mode": "100644"
     },
-    "docs/pos/resilience/TEST_ENVIRONMENT.md": {
-      "sha256": "9d1612e1066a215f7052c6e43b1c03bf8fb939487edf8fd481c26d60dede9aac",
+    "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
+      "sha256": "8bdc2cdf7e164a9f15af2f7a36b06a1803f02c683630328a43da9399b71278da",
+      "mode": "100644"
+    },
+    "lib/core/auth/auth_command_session.dart": {
+      "sha256": "2f0f4701c86b1fcdd56416942e38d7a0a14113b653725b4d9771651edabc2d14",
+      "mode": "100644"
+    },
+    "lib/core/auth/operation_scope_provider.dart": {
+      "sha256": "2a282f89968a9df963ebc56faa2de52ebb0369cb1080f421e94cd7fabdf47bd0",
+      "mode": "100644"
+    },
+    "lib/core/i18n/photo_processing_error_message.dart": {
+      "sha256": "dd27acd24d5936e47b222dc762011b6ce175c09922a7e7389c1a8c03d01efce6",
+      "mode": "100644"
+    },
+    "lib/core/i18n/restaurant_cutoff_localization.dart": {
+      "sha256": "5b5ccfaa97aac70f99f56ed7742902209bb6ddf598810ff6ae72be387c0d0941",
+      "mode": "100644"
+    },
+    "lib/core/orders/order_command_rpc.dart": {
+      "sha256": "c870089d85601f2449e3415e7fa3dc99b31b4655fb4407d5649fec18ea1b1a2e",
+      "mode": "100644"
+    },
+    "lib/core/orders/order_intent_journal.dart": {
+      "sha256": "02b9fa7fb23bb811a0c0b50f5ae41a2ba8e7e03b67681a5ccff8c45d7ace41d4",
+      "mode": "100644"
+    },
+    "lib/core/orders/order_intent_journal_native.dart": {
+      "sha256": "1a3bc252f56082923ae0b0a9cef63f99f7ed8325e1bd38994e5b9cc5e8d718ab",
+      "mode": "100644"
+    },
+    "lib/core/orders/order_intent_journal_web.dart": {
+      "sha256": "9c917cb7b37b925f8c2ebc4a1e5203a9e8cd91d5f63a93b73305d98164a81d6c",
+      "mode": "100644"
+    },
+    "lib/core/orders/recoverable_order_commands.dart": {
+      "sha256": "3978e6cf82cf45a4b2b17c736e7704c834b5e8ac03662c772c2dfcbbd485e5f3",
+      "mode": "100644"
+    },
+    "lib/core/payments/payment_command_coordinator.dart": {
+      "sha256": "cd8f036fb08f3ead2c96bf0ec0bac9597f2672322a6eadd790af163dd380d788",
+      "mode": "100644"
+    },
+    "lib/core/payments/payment_command_rpc.dart": {
+      "sha256": "b5bc3c2e13969a0628f7c43e9e1c24f00ed885fcde5d86fb7e82c9b7ec2ba347",
+      "mode": "100644"
+    },
+    "lib/core/payments/payment_intent_journal.dart": {
+      "sha256": "50f7db8b2ccf0482583765f3335dad574e7ff0c6cffb37d0e096ec734e2c28a0",
+      "mode": "100644"
+    },
+    "lib/core/payments/payment_intent_journal_native.dart": {
+      "sha256": "8273c523dc622901b0c7f5c0e3fcde3f09acfa10b566357094098cfcd659e7ea",
+      "mode": "100644"
+    },
+    "lib/core/payments/payment_intent_journal_web.dart": {
+      "sha256": "3fa4e6f3a622717a9a9133c599829d76c7efc2759f93d2421f052ad5661698f2",
+      "mode": "100644"
+    },
+    "lib/core/services/attendance_service.dart": {
+      "sha256": "11e5a816120660360770febf2e17c5fe218bd4905d577c860966d7dd815c1a09",
+      "mode": "100644"
+    },
+    "lib/core/services/emergency_web_bridge_stub.dart": {
+      "sha256": "3604eae9f4760c91c4a84ee4f641969d2198215ea0c77cbf9e05ca07238e307c",
+      "mode": "100644"
+    },
+    "lib/core/services/emergency_web_bridge_web.dart": {
+      "sha256": "8dfd378389e873782d2c767226a764dfca2f78ae96929f19cfd6f2c129c3a777",
+      "mode": "100644"
+    },
+    "lib/core/services/live_refresh_service.dart": {
+      "sha256": "24ada1e629a4b82a53a42ba79a10375689337943b2a74890b9b374b8726d9387",
+      "mode": "100644"
+    },
+    "lib/core/services/menu_service.dart": {
+      "sha256": "827177c94a83575a847ca106553e868a6fac66b984163c9d8af0db65e21287b0",
+      "mode": "100644"
+    },
+    "lib/core/services/order_service.dart": {
+      "sha256": "e75068c9ef6b6c170baf0b843ef145caedf9b36e77b8d2453f18818fbe42328d",
+      "mode": "100644"
+    },
+    "lib/core/services/payment_proof_service.dart": {
+      "sha256": "9da56352c043689b6e154be0dbfb72b7a15dddd5a7fe25f646587fb28bfbf3ea",
+      "mode": "100644"
+    },
+    "lib/core/services/payment_service.dart": {
+      "sha256": "e8e14bceeff0480f8b518ece4c6d4864d638ea0ed444e74e0ee8b51f7e8f34a5",
+      "mode": "100644"
+    },
+    "lib/core/utils/auth_http_snapshot.dart": {
+      "sha256": "1b825efb5429b9588d5e45a9f3e9b8da35137b03b54ec9cda89f81a597fbce2c",
+      "mode": "100644"
+    },
+    "lib/core/utils/bounded_photo.dart": {
+      "sha256": "d5dfdf19d2a6b9bac05b36bc139a5fb8df05bde0a143962303ca3d73941d96b2",
+      "mode": "100644"
+    },
+    "lib/core/utils/deadline_http_client.dart": {
+      "sha256": "f0f98aec918f4f66adb9c039fbb9be268c4abd713067270390c6cbaffbcb20d7",
+      "mode": "100644"
+    },
+    "lib/core/utils/operation_contract.dart": {
+      "sha256": "21d42551cddd297333aec7086077e0b6bc26b18842b93d1bd80a752abbde0d04",
+      "mode": "100644"
+    },
+    "lib/core/utils/owned_read_session.dart": {
+      "sha256": "d80b303420174412cf96c18c25731edf5758b891a5bf1effc51beed26e407410",
+      "mode": "100644"
+    },
+    "lib/core/utils/read_epoch.dart": {
+      "sha256": "24738ba3b3a28161a3138cd9c7364efc0633a3c7507071d3e808cd61fb5aad6f",
+      "mode": "100644"
+    },
+    "lib/core/utils/rpc_resource_cleanup.dart": {
+      "sha256": "b960054899c99955e58864f352affc262f9730e5b72665caecfaeaded327cfc4",
+      "mode": "100644"
+    },
+    "lib/features/admin/admin_screen.dart": {
+      "sha256": "e3d652aa4d2d6dfbe3d418f807f6903ddf8a0002c5ff2b53d8a8cb9c24189be8",
+      "mode": "100644"
+    },
+    "lib/features/admin/providers/admin_audit_provider.dart": {
+      "sha256": "f426ace3189b67a469b398dc1c22567495f38110c9d612d01e3986cec2d22adf",
+      "mode": "100644"
+    },
+    "lib/features/admin/providers/daily_closing_provider.dart": {
+      "sha256": "dc385e1b87d2987af9758c795441d7ad167573cad81a767b6279d42f64708ae8",
+      "mode": "100644"
+    },
+    "lib/features/admin/providers/menu_provider.dart": {
+      "sha256": "76223ffb7626adebc3ca39485fbf7d81bfbc3e2f5f29b079b59a2293462edbe5",
+      "mode": "100644"
+    },
+    "lib/features/admin/providers/settings_provider.dart": {
+      "sha256": "069ac6f8b7a2d6ebbce4df23b27db20e88dce829704ebba5d0571d32b1f10ac1",
+      "mode": "100644"
+    },
+    "lib/features/admin/tabs/einvoice_tab.dart": {
+      "sha256": "822fe02d9b490e9f368a02bb0b80bb2efdaab576f57df13026fc57eced58138b",
+      "mode": "100644"
+    },
+    "lib/features/admin/tabs/reports_tab.dart": {
+      "sha256": "652668b1a0150ac1fc1aa67a874dbdb9fc2c20c38808cb8226b281361ac07d6b",
+      "mode": "100644"
+    },
+    "lib/features/admin/tabs/settings_tab.dart": {
+      "sha256": "6ea1f136a6abab83b52eadcb4ce2010b1eb346b2c96265874c6070b4663a7e3a",
+      "mode": "100644"
+    },
+    "lib/features/attendance/attendance_error_message.dart": {
+      "sha256": "085e51c058cf78c41250a9d4aead23961b3800a623c237393cb9ff51ecdba07e",
+      "mode": "100644"
+    },
+    "lib/features/attendance/attendance_kiosk_provider.dart": {
+      "sha256": "f1215f1ebc96c1e576d096fe539c3dec484cd5d5513fa7ba906509e1f28e8945",
+      "mode": "100644"
+    },
+    "lib/features/attendance/attendance_kiosk_screen.dart": {
+      "sha256": "cdf1bbab3e471407139daeb689e805bbc253a418416f307db666a24923e5497c",
+      "mode": "100644"
+    },
+    "lib/features/attendance/fingerprint_provider.dart": {
+      "sha256": "48562b30a88aee0c4ea655614a50a7ece08c8b50d4e3212c0ea080517967b48f",
+      "mode": "100644"
+    },
+    "lib/features/auth/auth_provider.dart": {
+      "sha256": "de2ba093712b02a494f955f9699b365040068b18d8f4c51eca50346d10d80ef2",
+      "mode": "100644"
+    },
+    "lib/features/auth/auth_state.dart": {
+      "sha256": "c2b6fc097013d0633843fce33a22971f85eff98f41723a687f9f95c621edb281",
+      "mode": "100644"
+    },
+    "lib/features/auth/operation_scope_binding.dart": {
+      "sha256": "01311b7f3a63042b7ac068f233c3feadfb404a3146ca96ed062d70df8c763685",
+      "mode": "100644"
+    },
+    "lib/features/cashier/cashier_screen.dart": {
+      "sha256": "7c70ee54e53d6fa023eca79e4c60939a26bf5eb165f4aac6285c06f05745bf2b",
+      "mode": "100644"
+    },
+    "lib/features/cashier/payment_proof_modal.dart": {
+      "sha256": "82f98e9f8c20140af897dd8b932fd12ce319ea3e904a63d52774fbba1c758047",
+      "mode": "100644"
+    },
+    "lib/features/emergency_fulfillment/emergency_fulfillment_provider.dart": {
+      "sha256": "b1a4a5b5f893f8c56e32a75b7784a9f125302afe8d756d85f449d0b9965ced8b",
+      "mode": "100644"
+    },
+    "lib/features/emergency_fulfillment/emergency_fulfillment_screen.dart": {
+      "sha256": "248cbfd0250be6c13f66537d8e1d8e1b645769c23d8b12811d0f75f37e8f311b",
+      "mode": "100644"
+    },
+    "lib/features/emergency_fulfillment/kds_progress_journal.dart": {
+      "sha256": "df266618cf7e0925d08e4eac1a676639fc35fa739d1ebb9b3cce948b9672c5ac",
+      "mode": "100644"
+    },
+    "lib/features/emergency_fulfillment/kds_realtime_sync.dart": {
+      "sha256": "fe72419358c038c528cd23f39786e12eb2982290c4b29d85a173411831184f64",
+      "mode": "100644"
+    },
+    "lib/features/kitchen/kitchen_provider.dart": {
+      "sha256": "c81cc269128f693c2b85b77bbeaa71d556852796ebc7ec6fb1bf89183720988a",
+      "mode": "100644"
+    },
+    "lib/features/kitchen/kitchen_screen.dart": {
+      "sha256": "439cbc51d61888341bd4ff005e0710a5eceaa06ee8e46b4b73978a4ce42bafaf",
+      "mode": "100644"
+    },
+    "lib/features/order/order_provider.dart": {
+      "sha256": "9a21a89ecb4480dea1cd895b66466e58109cf2df07dc316b0528d771c49aef33",
+      "mode": "100644"
+    },
+    "lib/features/payment/einvoice_provider.dart": {
+      "sha256": "f9b5be7be51b2e61e42af5ca432b4d7095cb7e94c5794b6b890b3de53974a808",
+      "mode": "100644"
+    },
+    "lib/features/payment/payment_provider.dart": {
+      "sha256": "4170bfb73ac2f023e8d63a4cceab1ebfb3d3b039229b333d1b481ac96d2b966a",
+      "mode": "100644"
+    },
+    "lib/features/payment/payment_recovery_panel.dart": {
+      "sha256": "747d92f6c7a0bf3c4be1db1a228b8060890eed03581e3d8dfcbc790724f3293c",
+      "mode": "100644"
+    },
+    "lib/features/qc/qc_provider.dart": {
+      "sha256": "6a1370770c44cd8eff48e763f46ced28299fa34d144e8fae5897b821c605095f",
+      "mode": "100644"
+    },
+    "lib/features/report/menu_sales_analytics.dart": {
+      "sha256": "4adc56eb7577261b8b81b9d08e96e7e35284246c9f063fbbb63e6badfe45af93",
+      "mode": "100644"
+    },
+    "lib/features/report/report_provider.dart": {
+      "sha256": "ebdc1ae27aba0efd1a4a9e1325de40bab022aafc356fa9d62901494f0d5d30fd",
+      "mode": "100644"
+    },
+    "lib/features/report/revenue_history_provider.dart": {
+      "sha256": "da1c9f7f4963281c3d79a2023c99f20f48584b6c23b55c82e274e123fa0f628f",
+      "mode": "100644"
+    },
+    "lib/features/super_admin/office_legal_connection_dialog.dart": {
+      "sha256": "24d0a12456aea96bfd054b7ca0d279f8e283b1b20e12a729a666f33760148317",
+      "mode": "100644"
+    },
+    "lib/features/super_admin/super_admin_screen.dart": {
+      "sha256": "4b2804b558452e7586403c09f0971623badd0fbe677b20e1f7c9db1239f9bb90",
+      "mode": "100644"
+    },
+    "lib/features/waiter/waiter_screen.dart": {
+      "sha256": "c200874a2df4a9648c9db566616e6a30774a8d0e29bd163c85353851f0262aad",
+      "mode": "100644"
+    },
+    "lib/l10n/app_en.arb": {
+      "sha256": "16f0846b46d413c6e81eebb7ece45fb044f1bbda8a5d256b66be561721869271",
+      "mode": "100644"
+    },
+    "lib/l10n/app_ko.arb": {
+      "sha256": "3a4e47a981ba0fdab26f6e314d193807026f26bdb62c3acd2aa15bdd30cc8832",
+      "mode": "100644"
+    },
+    "lib/l10n/app_vi.arb": {
+      "sha256": "92afa99f9e1ddacaa2cb86a29e18bd088863a2af29b21d922a43258a1ebe5bb3",
+      "mode": "100644"
+    },
+    "lib/main.dart": {
+      "sha256": "de6b8db8543690dbc4a09ebc39ceb0be7e815f18cd0b4db1ce5361742e1c3c31",
+      "mode": "100644"
+    },
+    "pubspec.lock": {
+      "sha256": "1ea9d27800185b1e36371d29832942c3f3f3670227156e8cad5d37ee8cf2809c",
+      "mode": "100644"
+    },
+    "pubspec.yaml": {
+      "sha256": "d51f8109306060e4d45d8567207fcbb04d32aed4918500a12e26f4da1510585e",
+      "mode": "100644"
+    },
+    "scripts/cloud_deployment/plans/20261101_pos_resilience_completion.json": {
+      "sha256": "6c0a4a76bbd553878cc5c783cd0d684ca3464639eac805a8d8b10d359092562a",
+      "mode": "100644"
+    },
+    "scripts/local_verification/Dockerfile": {
+      "sha256": "b00d7a23eb8bf71b7f6f3f11328ae33741813a29529ff01327cdf2a02b6cc273",
+      "mode": "100644"
+    },
+    "scripts/local_verification/fixture_postgres_policy.json": {
+      "sha256": "cd519a64d3d2a068d47813c34d1d9d83dede287912404679ab2836e849fd0394",
       "mode": "100644"
     },
     "scripts/local_verification/recipe.json": {
-      "sha256": "9a6de09f596adff0781ce2dd2fb219c605aed8b2e1a78f8e7bdfb5aa5016a1bf",
+      "sha256": "4894294c3cdaf2c2fe0b2a38729b2dbca8c77b1b3a3d766d242a2537a5c90a2b",
       "mode": "100644"
     },
-    "scripts/resilience/integration_runtime_catalog.py": {
-      "sha256": "df7095ce533af289a02b2ad44dbc62912fb24c5cac90fbbe8aa92f5baba40557",
+    "scripts/local_verification/tests/test_fixture_image.py": {
+      "sha256": "000bf0643380d3aee2670809694c426490246af23c9495ecb17b1d201afe0838",
       "mode": "100644"
     },
-    "scripts/resilience/runtime_catalog.py": {
-      "sha256": "d8325629a8416040bf2e07c67fb77867fa0a15504a54689e14a6290fc39aa41c",
+    "scripts/local_verification/tests/test_tools_image_layout.py": {
+      "sha256": "01cc14b16b94e9f61af95b7003dcd61c115bda891fb185b365941c262b4c0769",
       "mode": "100644"
     },
-    "scripts/resilience/runtime_contracts.sql": {
-      "sha256": "e81112fc7951f20c9db0599e45044e23439550586586ecce432ed841f4d24615",
+    "scripts/resilience/additional_order_recovery_scenario.py": {
+      "sha256": "fc1c2b6cba14f79099444b535ba7992e8cd2625eadfebb3e2d82eea8200518c7",
+      "mode": "100644"
+    },
+    "scripts/resilience/auth_platform_fixture.py": {
+      "sha256": "26ff48aefd2827e33456cbe769580f73524b8ff84de050b04ccd7a51810e223e",
+      "mode": "100644"
+    },
+    "scripts/resilience/fixtures/attendance.jpg": {
+      "sha256": "ff54d6c00810f53f2dfaf89bddf3708b6bef7ac32d29658e188c3e889d9a297f",
+      "mode": "100644"
+    },
+    "scripts/resilience/integration_kds_receipts.py": {
+      "sha256": "f98dc816ab4f8d93b2b180408e3f1d5d367f2db611f5e5b563993b4d46439a0a",
+      "mode": "100644"
+    },
+    "scripts/resilience/integration_legal_connection.py": {
+      "sha256": "aa779c3a8c73b24a43e4692565c1837ef4c01060df157d2cdbb203a361a33915",
+      "mode": "100644"
+    },
+    "scripts/resilience/integration_schema_snapshot.py": {
+      "sha256": "aeef5bb8045f40c2ce5c0e4cb988dbf2e7fa5baaa3cfee5c21c4f0e1a4b91f46",
+      "mode": "100644"
+    },
+    "scripts/resilience/kds_realtime_scenario.py": {
+      "sha256": "cd455ce65381371babec452bc7d6fa3dbad6c8a454c2807f9316974a01d626ee",
+      "mode": "100644"
+    },
+    "scripts/resilience/legal_connection_native_fixture.py": {
+      "sha256": "6b0814433b1e48744255642b83f0d96dcb5e949a1e4940902884a24e96870d54",
+      "mode": "100644"
+    },
+    "scripts/resilience/legal_http_scenario.py": {
+      "sha256": "5aab64f32ea9c8d0db12db9e7370030d95079fa45928c7cb747b5a53f5eb4b3c",
+      "mode": "100644"
+    },
+    "scripts/resilience/office_accounts.py": {
+      "sha256": "4722e58bba8bbc3a569a817c2b71e35100d9597c8f2ed21f32d6ad4f3a413bb2",
+      "mode": "100644"
+    },
+    "scripts/resilience/office_edge_runtime.ts": {
+      "sha256": "ac043673592cd68290faacedacc74ad1275d3427c3207b9078d4293019044cce",
+      "mode": "100644"
+    },
+    "scripts/resilience/order_handoff_scenario.py": {
+      "sha256": "0dedb7f0d4c61bb4ebaf25ae4abb92b07df202f815233f5a9577dafed6855c59",
+      "mode": "100644"
+    },
+    "scripts/resilience/owned_platform.py": {
+      "sha256": "811ba3ed9a1c666649cb2dbb44890a01cf1b3d9e90e9eecd8608d9f4043116f5",
+      "mode": "100644"
+    },
+    "scripts/resilience/payment_command_v2_fixture.py": {
+      "sha256": "3cf0bde58b0d626541e159e62759be6413303c589816753a489b7fa0acb72026",
+      "mode": "100644"
+    },
+    "scripts/resilience/payment_receipt_fixture.py": {
+      "sha256": "bc6ffee63a8a529ebaca50606c6d8955039ee2de11a6b1e571f374358f42836b",
+      "mode": "100644"
+    },
+    "scripts/resilience/realtime_probe.dart": {
+      "sha256": "4c1a0dbe8c16995aa66cd9fdaf140aa0b68a3c55a84d56b9e45e90ad4882fd82",
+      "mode": "100644"
+    },
+    "scripts/resilience/realtime_probe.py": {
+      "sha256": "1c21f68087c2733535669d6e869a955fa93f79c0293dd253467975e05b47e259",
+      "mode": "100644"
+    },
+    "scripts/resilience/realtime_runtime.py": {
+      "sha256": "eac67dafc912a6b1f2b807b84ec3a21a57aae22ac96e15613dd6409b607c0fab",
+      "mode": "100644"
+    },
+    "scripts/resilience/run_platform_probe.py": {
+      "sha256": "6045b38e0bf3a957f340901161f7c733b9e007fc08c1b2aeff5142608072c35a",
+      "mode": "100644"
+    },
+    "scripts/resilience/run_schema_fixture.py": {
+      "sha256": "d4774324ba865805934a379a0a73de2a1d0b5866fd19246fc404abd62731f0a0",
+      "mode": "100644"
+    },
+    "scripts/resilience/runtime_gateway.py": {
+      "sha256": "fd322e284103db3345f1b4274939a800ab382f401e259ccbc64af64bef631b81",
       "mode": "100644"
     },
     "scripts/resilience/sample_accounts.py": {
-      "sha256": "b965c9e3bc2bd63038171e84cd9be9755df7b7467d72c13d807cd68d9ee80c6b",
+      "sha256": "a28f05fd60483d90042eeb6fdb4d1decb50deacf4a65d84b87ad1f70c278ff51",
       "mode": "100644"
     },
-    "scripts/resilience/tests/test_runtime_catalog.py": {
-      "sha256": "b299c9c943eaf8a01afa9565cb2f264e84415fac6e2b6315d26fb266550da7a2",
+    "scripts/resilience/schema_bootstrap.sql": {
+      "sha256": "5fb5159bedaa8d11c9acf81bef364c2d2729c0ba4b1fd5fe8fde1ef73906258f",
       "mode": "100644"
     },
-    "scripts/resilience/tests/test_sample_accounts.py": {
-      "sha256": "b23a25f89aa0eefe137a57d2649ad4e5e8b7318a8b00fcbb016471f6329ec349",
+    "scripts/resilience/schema_export.sql": {
+      "sha256": "1b007afd0661d95bb22975058c356920cefb019bb110dce2cb9217a09bbd1ede",
+      "mode": "100644"
+    },
+    "scripts/resilience/schema_inventory_guards.sql": {
+      "sha256": "503e391a829a19672ea7021a42bb785aafec080700a1acd13066e20ad012ec1c",
+      "mode": "100644"
+    },
+    "scripts/resilience/schema_snapshot.py": {
+      "sha256": "266ee327ac3109840c6c7a926c885e6d63061180ad0873bdaa25f724312c262e",
+      "mode": "100644"
+    },
+    "scripts/resilience/schema_storage_reference_config.sql": {
+      "sha256": "96b9853817e3618b4606e68ecb7aea0f3f6ccc6860ca10fae841e687f20134da",
+      "mode": "100644"
+    },
+    "scripts/resilience/storage_probe.py": {
+      "sha256": "735f728b7947c17e78be6880729b8d42ead890aec1fb808a9c8942790cc5fdca",
+      "mode": "100644"
+    },
+    "scripts/resilience/storage_runtime.py": {
+      "sha256": "0219e60b3f4d17bd1441d469ab747701edff9ebb3001becb8ace45d29f9ab6c2",
+      "mode": "100644"
+    },
+    "scripts/resilience/store_http_scenario.py": {
+      "sha256": "e7d826f5691d5dd1c1bbb4a508033e5f01fd22da54c4dfd77265719046ceb989",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/kds_outbox_browser.test.cjs": {
+      "sha256": "808f0e1d33287bce9d15d8f3d05471fab3400cc7291f418710206571c442b84a",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/order_journal_browser.test.cjs": {
+      "sha256": "f6fb7bc65c66a02e11764a07240658912725e04877b4fb03cf9e6d7372226110",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/payment_journal_browser.test.cjs": {
+      "sha256": "dea3f458793d2480760be27eeb10fd69fc13c73684e568e3df655ecee4a7f20d",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_auth_platform_fixture.py": {
+      "sha256": "abb8cf97d6beb63c42ef3462c013e5e3c8879a3f39ccedc19862e0e0c9100bda",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_edge_preload.py": {
+      "sha256": "54c332962a5b298978138d818629aa4d1957c56fe172d0a8fa549d04c5d216d6",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_office_accounts.py": {
+      "sha256": "1f54746d47a93991f467b27b2374cefcda1e00627777deab29ed262a61bdbe13",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_owned_platform.py": {
+      "sha256": "8e073aa1d22cc3f94b86d78b4e67559d0b21c11bbbb8d35e6e2ca08a7ad33a8d",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_platform_probe_arguments.py": {
+      "sha256": "9731a2d1153573d7e3ddc8ecce40a0a8f44eff87dadd73e4694f2eaa5a804270",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_realtime_runtime.py": {
+      "sha256": "3421985c577b5dd1d5baa0de7d9c2f1b7731d3d53c508f27ce79f7bb756d9553",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_runtime_gateway.py": {
+      "sha256": "9c1d50f5c9689d2def5b3538e9a60400a6780e1e17cb680184b526f2e138f160",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_schema_fixture_runner.py": {
+      "sha256": "15665fe90e8a10907f953e08778259c73cd6cb74c5935e2c46f573b9b977c99f",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_schema_snapshot.py": {
+      "sha256": "433658e498a3bec586262fdda1e06edb056b668055566a0506cd4ab19a2d9c4a",
+      "mode": "100644"
+    },
+    "scripts/resilience/tests/test_storage_runtime.py": {
+      "sha256": "e3faad10ca2eed25950593be2386a4ef29cf195f20294a69efa8c575763617b4",
+      "mode": "100644"
+    },
+    "scripts/resilience/workforce_http_scenario.py": {
+      "sha256": "940a497273dd90e18c4922ef2b5b0c354c0d06971ff18e34eb2bc62286d13cf6",
+      "mode": "100644"
+    },
+    "scripts/test_financial_inputs_postgrest.sh": {
+      "sha256": "7fb11617791caf147c579eda68ae60981dc88e4127caff3fc7aed66d5745bc6d",
+      "mode": "100644"
+    },
+    "scripts/test_menu_discount_quantities.sh": {
+      "sha256": "2a4c4ea5a62789c6c0c90ac5e7d906058b1ac4380ccb9d4dd698048f70316e03",
+      "mode": "100644"
+    },
+    "supabase/functions/complete-initial-password-change/deno.lock": {
+      "sha256": "529cbf52e10dd63498147ae5344d17b734407113e81f681e8b0eb058512bce03",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101022105_pos_resilience_completion_contracts.sql": {
+      "sha256": "a4bdaa63233db033d4513d4e4d02cb88e05c1101833ed36448a22ccb4db0e045",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101023409_pos_office_legal_connection.sql": {
+      "sha256": "d699a1b01d5dccd6c8dfd7c411edfb301589466a0b85a8da473fed0a55db644a",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101045728_kds_progress_receipt_reconciliation.sql": {
+      "sha256": "379504ac52ff674eb4d09d40e423e04c8d5bcd6e00d46c4d99c7fe2cc6c6efe6",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101094500_payment_command_receipts.sql": {
+      "sha256": "43e7e49c440bf412c603ef28707c97b1cb5e4dd70244a632cfd53326e7d84be8",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101132612_payment_command_cancellation_barriers.sql": {
+      "sha256": "669ea5102c95ca1dea365cc053166d8a4f76d2e23fc59b2d3be1f10d87cefba1",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101185522_order_creation_command_receipts.sql": {
+      "sha256": "7f13d4d7a3a9cb5da7dcf494c09d99a0a7b563cb36e0c945495bc7f5722a693c",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261101192425_procurement_readiness_observation_time.sql": {
+      "sha256": "73e6caac07ff16485916a82bf811f1fcb6e17097fec6c83eba83eba6db3a6f3d",
+      "mode": "100644"
+    },
+    "supabase/migrations/20261102015533_additional_order_command_receipts.sql": {
+      "sha256": "373586de51653cb0fb18f23f2f63b3afde1f562501c3bb3ffba6ed01df4b8128",
+      "mode": "100644"
+    },
+    "test/admin_core_overlay_operational_test.dart": {
+      "sha256": "16be6204aac42212afd71519e6e92bfdbb52e440ebae625f0cf7af1c808a5572",
+      "mode": "100644"
+    },
+    "test/attendance_photo_transport_test.dart": {
+      "sha256": "ad688e2fde258f76f8909502ee250979509779134a8cfa01ae74687d854b8059",
+      "mode": "100644"
+    },
+    "test/attendance_submission_retry_test.dart": {
+      "sha256": "c4d36e64ec71b8e248da04e1cb37782f46d8fda7f7eed8c59ee8fdd8d0fc1f1b",
+      "mode": "100644"
+    },
+    "test/auth_command_session_test.dart": {
+      "sha256": "7e79504cf20468bf6ded83a84707c2a119ef4152b7d67ee6706b774cd5eb594f",
+      "mode": "100644"
+    },
+    "test/auth_initialization_test.dart": {
+      "sha256": "2f870e71efb2d526198ce69fcb51b58a71396847308a695ccc5d24a2b23a772c",
+      "mode": "100644"
+    },
+    "test/bounded_photo_test.dart": {
+      "sha256": "4822e04ee4897dfdbc7ed94c4f304bf16350b3238a003c6f008d32db08bcd755",
+      "mode": "100644"
+    },
+    "test/cashier_cancellation_immutable_contract_test.dart": {
+      "sha256": "f902dffabdf391d0f3d111a7c9abdbfbe2c60d5041cf7801f1bde63c6db2d41d",
+      "mode": "100644"
+    },
+    "test/cashier_command_scope_test.dart": {
+      "sha256": "a96e0cb5c1440c32ea1dcfa1f619841f8dd902d06c52e56cd5d3e3808bbe100a",
+      "mode": "100644"
+    },
+    "test/cashier_owned_read_test.dart": {
+      "sha256": "412595dd77cd18066f4f0b0f67fc4801d8acdf3e32ea673f29aec5dce50e4566",
+      "mode": "100644"
+    },
+    "test/cashier_payment_recovery_test.dart": {
+      "sha256": "2fd87e3415aa712fdd2a74008481adb6c3dd9cebe3068a717ec8b5ecf4950ab5",
+      "mode": "100644"
+    },
+    "test/data_access/owned_read_session_test.dart": {
+      "sha256": "685b7d3b5542464f633314da227369df7e2d78afe2f5e03406ff07147d44ebfe",
+      "mode": "100644"
+    },
+    "test/data_access/proof_batch_scope_test.dart": {
+      "sha256": "5336764ffaead21a1a4ba49292f3af085e4bc3b8805c2ff784075326f7b999eb",
+      "mode": "100644"
+    },
+    "test/data_access/proof_retry_probe_test.dart": {
+      "sha256": "f31220f6a7951a50e34e77cbd3d2e6e923bede6ac631c91bf7a705ee9f1cd798",
+      "mode": "100644"
+    },
+    "test/dialog_sheet_entrypoint_coverage_contract_test.dart": {
+      "sha256": "cb2cc730847db5a6c085f710c2c5dee92a45315e1c24e96e5b26ffe0f9dc7a0c",
+      "mode": "100644"
+    },
+    "test/emergency_fulfillment_responsive_test.dart": {
+      "sha256": "18d300088818db8bd8244998943e14a2723acd9ae49aa9f3c9ee9c96c0886c87",
+      "mode": "100644"
+    },
+    "test/emergency_outbox_durability_test.dart": {
+      "sha256": "44551537a85d59ad2c078c778a68a4cef4a8b751e38950db7a5bbe21b599d4f9",
+      "mode": "100644"
+    },
+    "test/fixtures/kds_progress_receipts.sql": {
+      "sha256": "44794200a78adeed9a74c1f1ca1fd20c7cb51580658b36c009b001765abae12e",
+      "mode": "100644"
+    },
+    "test/fixtures/office_legal_connection_baselines/manifest.json": {
+      "sha256": "e70b04ac6d59c1e315d603303ce04bb6661e9c50a2c5c09551204da24bbb8472",
+      "mode": "100644"
+    },
+    "test/fixtures/office_legal_connection_baselines/office-procurement-connect-baseline.sql": {
+      "sha256": "b2312c2dce543b792a15e1ec1cb70b764d014f6f2ae5920c2221835d8623da27",
+      "mode": "100644"
+    },
+    "test/fixtures/office_legal_connection_baselines/office-store-mapping-baseline.sql": {
+      "sha256": "9d375f798f72d6dd138240169ef98a5efb0cfa687b63eb176cbd007ba5a0d5d8",
+      "mode": "100644"
+    },
+    "test/fixtures/pos_office_legal_connection_office.sql": {
+      "sha256": "023a314cb7e720f8e5c4a104e4062b2824b48eaaa67559f615677d66d458dfed",
+      "mode": "100644"
+    },
+    "test/fixtures/pos_office_legal_connection_pos.sql": {
+      "sha256": "73d32b9a531a6099fa25d2e729e40e10a2bad7415aa3f5ad714ed2c7a9149499",
+      "mode": "100644"
+    },
+    "test/initial_password_change_contract_test.dart": {
+      "sha256": "d2dc3edaa08c597ec89d22edcb019857027092a803bb861b6508b97da5d79d2a",
+      "mode": "100644"
+    },
+    "test/kds_partial_item_command_test.dart": {
+      "sha256": "4b336162da094a0f0320246c806a968dd26b914b66c0f053ab3818d5faf5402e",
+      "mode": "100644"
+    },
+    "test/kds_progress_journal_test.dart": {
+      "sha256": "da397d8054c0735e84941cc46637a888ef61f3c7a3271cb7ba59a0281c8d585e",
+      "mode": "100644"
+    },
+    "test/menu_quantity_partial_refresh_test.dart": {
+      "sha256": "6caa226174be922376fa7b09bf82b4c6bdcc19eefef42c8c0fbaa1c1a858ba9b",
+      "mode": "100644"
+    },
+    "test/office_legal_connection_dialog_test.dart": {
+      "sha256": "39906f8581ee5285a3c960185b8e1af3af0a8abe8f88a3f42597228f907681ef",
+      "mode": "100644"
+    },
+    "test/operation_contract_test.dart": {
+      "sha256": "921dce05755cb0741689105a3f459fb62db4e3a4500bbe480eee8f81bc5e215a",
+      "mode": "100644"
+    },
+    "test/operation_scope_binding_test.dart": {
+      "sha256": "8bf693f9b66ebf359e9a129fdc0cd2b6333243c654f1508cef8395303f913f1d",
+      "mode": "100644"
+    },
+    "test/operational_stability_closure_contract_test.dart": {
+      "sha256": "2de5040196e3d3c4edeab272511b22f977f725ce4a150545967c9dae07027496",
+      "mode": "100644"
+    },
+    "test/order_intent_journal_test.dart": {
+      "sha256": "55ac254cb97370b5a5ff9dde3185ded55ffc43c85f47c2ca0656b09d670e71d2",
+      "mode": "100644"
+    },
+    "test/order_read_epoch_test.dart": {
+      "sha256": "71ffcec58273211b680e920860717af6b6905e5a78f7e8442582627d860992da",
+      "mode": "100644"
+    },
+    "test/order_submission_lifetime_test.dart": {
+      "sha256": "506b1140a0205d7747e6fa72afbce7f381812198b536b9e53bbe999c5e20d1f9",
+      "mode": "100644"
+    },
+    "test/payment_command_coordinator_test.dart": {
+      "sha256": "16593d2c9cfec83ca13a08663e972b5ef2b7545afda0b6e4b77f7e199c19b30f",
+      "mode": "100644"
+    },
+    "test/payment_command_receipts_test.dart": {
+      "sha256": "ed3642de71b5b38803be28734537a7c94931212a335b8b2f1191195b2c5e100d",
+      "mode": "100644"
+    },
+    "test/payment_command_rpc_test.dart": {
+      "sha256": "f98b7414989ca00bf87b771292e146d6582a98ae72fe42947160c58097a187d2",
+      "mode": "100644"
+    },
+    "test/payment_intent_journal_test.dart": {
+      "sha256": "d381be3d53c25db686107ecd3dadc22f3f77275c107214fd9d37d0d8bb406c98",
+      "mode": "100644"
+    },
+    "test/payment_proof_outcome_test.dart": {
+      "sha256": "f7b77267ce70eab21182b4b3a9eeb9862e8a587907a4292f51d14164a57ee969",
+      "mode": "100644"
+    },
+    "test/payment_recovery_panel_test.dart": {
+      "sha256": "07155375ace89eed11c844402ed86f5ce517a831851d435fbeac2b9f9bcaedd1",
+      "mode": "100644"
+    },
+    "test/pos_integrated_resilience_test.dart": {
+      "sha256": "8359b4bfd297cbe236a4655850162bffc3ac1d9451e56db56a65141d4741869a",
+      "mode": "100644"
+    },
+    "test/privacy_consent_contract_test.dart": {
+      "sha256": "e01bee7b6499c0690ccefb6cb6926a5dd6ee810a4d2052e7bac6ee85c65a83d0",
+      "mode": "100644"
+    },
+    "test/promotion_payment_recovery_test.dart": {
+      "sha256": "c359cea4eba7d27d939a51a9c6c9d7c189a28cb9a2e616568baf50be11646daa",
+      "mode": "100644"
+    },
+    "test/qc_read_epoch_test.dart": {
+      "sha256": "28638c580dcfbbb6c54acc77cbe41726dfb8e4d9cddaf185d5219a382593798a",
+      "mode": "100644"
+    },
+    "test/recoverable_order_commands_test.dart": {
+      "sha256": "ab4cbad77c0eb859704bbd3e8c805e765b91f967da24d83f9d488f314986f761",
+      "mode": "100644"
+    },
+    "test/remaining_route_operational_state_test.dart": {
+      "sha256": "37530b091c2199c8f3b91caa09ca9aa316e9a6e0363bef31010d8db364abe853",
+      "mode": "100644"
+    },
+    "test/resilience/native_rpc_resource_probe.dart": {
+      "sha256": "a3ccef75d24d438c007d7e8a5a609cd7c8622286bf6547ba8bc583632752421d",
+      "mode": "100644"
+    },
+    "test/resilience_fixture_image_test.dart": {
+      "sha256": "bc77b0e8ef7e3f0bf380e9ec6a2357f3d38cff5641bee16cc53804fa615050c5",
+      "mode": "100644"
+    },
+    "test/restaurant_daily_cutoff_contract_test.dart": {
+      "sha256": "fa5653f6c98c04ce7f86334878eca0d4c503b6f734d22f9f1e71cfa376553dd7",
+      "mode": "100644"
+    },
+    "test/rpc_resource_cleanup_test.dart": {
+      "sha256": "38d5897ff0a11dc9803ddcb769549902175f4726158c921dcd72f73e3e29c460",
+      "mode": "100644"
+    },
+    "test/session_bound_views_test.dart": {
+      "sha256": "326230e85535c2c7707f476add3dbdf98cfa275bd829101422e082b65a14a62a",
+      "mode": "100644"
+    },
+    "test/settings_command_scope_test.dart": {
+      "sha256": "0dfc02c96bc66edb78e35f1e6758136a8f1de25d7306085dfabae8619c76c19a",
+      "mode": "100644"
+    },
+    "test/sql/menu_quantity_batch_events_test.sql": {
+      "sha256": "91c651a485604fa0a77105b8c5a20cd303a7edc919c5246b4bb1eb0bee7cd34f",
+      "mode": "100644"
+    },
+    "test/sql/pos_resilience_batch_test.sql": {
+      "sha256": "b24e6b5ed21a3c1f9eaab09c67a3220ca5475d6a287fc3229ff8a2143d4d6728",
+      "mode": "100644"
+    },
+    "test/support/payment_command_fixture.dart": {
+      "sha256": "a92ec731c6a06bd33689a1b9fef38c020569c46680b9f57383a75bcc605a06c7",
+      "mode": "100644"
+    },
+    "web/index.html": {
+      "sha256": "a1ba9ac63d1b6ed99e961b27d3752b72aeb130a829ca63d9a614a8307920cfb3",
+      "mode": "100644"
+    },
+    "web/order_intent_journal.js": {
+      "sha256": "b987fbe08d2f7e9a9584d6b2f5cdcec36bc90639c019981e6817580df75bf4af",
+      "mode": "100644"
+    },
+    "web/payment_intent_journal.js": {
+      "sha256": "fb7acab8dbf7162c4a4d83a1f2c5f5e52bac99b5f7b1d4ab1a92bb416132e5a7",
       "mode": "100644"
     }
   },
@@ -77,102 +797,190 @@
     "waiter"
   ],
   "sharedAreas": [
+    "shared-dart",
+    "database",
     "verification",
     "project-policy",
-    "database"
+    "web-platform",
+    "bootstrap",
+    "edge"
   ],
   "risk": {
-    "business": false,
-    "financial": false,
+    "business": true,
+    "financial": true,
     "authorization": true,
     "dataAccess": true,
-    "background": false,
+    "background": true,
     "dbContract": true,
     "officeContract": true,
     "files": true,
-    "native": false
+    "native": true
   },
   "requiredChecks": [
-    "governance-unit",
-    "resilience-tools-unit",
-    "runtime-catalog-unit",
-    "runtime-catalog-postgres",
-    "local-release-verifier"
+    "official-full-recipe",
+    "operation-outcomes",
+    "qc-read-lifetimes",
+    "menu-quantity-partial",
+    "menu-quantity-sql",
+    "office-first-legal-sql",
+    "office-legal-dialog",
+    "order-read-lifetimes",
+    "kds-display-lifetime",
+    "office-identity-unit",
+    "kds-progress-journal",
+    "kds-progress-receipt-sql",
+    "browser-kds-outbox-compatibility",
+    "cashier-command-scope",
+    "schema-snapshot-unit",
+    "schema-runner-unit",
+    "current-schema-upgrade",
+    "session-scope-binding",
+    "payment-receipts-client",
+    "payment-receipts-native",
+    "settings-command-scope",
+    "session-bound-views",
+    "rpc-json-cleanup",
+    "native-kds-json-resources",
+    "owned-read-lifetime",
+    "attendance-scope-commands",
+    "proof-batch-scope",
+    "office-first-legal-native",
+    "auth-platform-preflight",
+    "auth-platform-guards",
+    "payment-command-recovery",
+    "payment-intent-storage",
+    "payment-command-coordinator",
+    "payment-command-transport",
+    "payment-recovery-panel",
+    "browser-payment-intent-journal",
+    "payment-command-v2-native",
+    "two-project-real-platform",
+    "first-legal-real-http",
+    "runtime-gateway-guards",
+    "owned-platform-guards",
+    "first-additional-store-http",
+    "real-storage-http",
+    "storage-runtime-guards",
+    "platform-selection-guards",
+    "tools-image-layout",
+    "new-store-workforce-http",
+    "edge-preload-listeners",
+    "attendance-fixture-image",
+    "auth-command-scope",
+    "auth-command-transport",
+    "bounded-photo-processing",
+    "attendance-photo-original-auth",
+    "cashier-owned-read-lifetime",
+    "proof-confirmed-cleanup",
+    "realtime-source-guards",
+    "realtime-native-websocket",
+    "new-store-kds-realtime",
+    "new-store-order-handoff",
+    "order-intent-storage",
+    "order-command-recovery",
+    "browser-order-intent-journal",
+    "additional-order-native-recovery",
+    "order-submission-lifetime"
   ],
   "businessInvariants": [
-    "No account creation/reset, role change, global logout or business writes; only inventoried sample principal logins and own-profile reads.",
-    "POS and Office retain separate Auth/DB and explicit sample store identity; do not infer legal-entity ownership.",
-    "Catalog evidence is hashes/metadata only, not fresh/upgrade/whole-plan completion; original operational login waiver remains NOT_RUN."
+    "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
+    "Backward compatible live-event INSERT still invalidates legacy clients; new clients merge bounded changed IDs from INSERT and UPDATE signals.",
+    "Read scope switches, disposal and late errors cannot restore another store; confirmed writes are distinct from subsequent refresh state.",
+    "Original user workspace and unrelated Excel work remain intact; G0–G7/soak completion stays false until actual evidence exists.",
+    "The first internal POS legal entity can connect with zero stores, using independent Auth and explicit Office ownership confirmation. External entities retain the existing unsupported policy.",
+    "Each DB transaction is atomic and cross-DB completion is a recoverable operation, never a claimed distributed transaction; proof expires and is never an Auth/service credential.",
+    "Persist each new KDS item-progress identity before HTTP; a prepared or ambiguous record cannot become a fresh handoff. Preserve existing quantities, floor/checker routing and native command idempotency.",
+    "Resolve both direct event UUIDs and JeonGabok private batch request UUIDs by original active actor/store. Never grant clients direct access to the private batch action table.",
+    "Keep new progress journals invisible to legacy clients, preserve original intent order, and retain confirmed writes despite failed cleanup, refresh or later assignment change.",
+    "Confirmed cashier item mutations remain confirmed after failed follow-up reads; their original view cannot load/apply another active store or a later assignment. QC follow-up writes preserve the active filter and never return an old store after navigation/disposal.",
+    "Application/Auth/Storage schema fixtures are source-hashed, private, owned and network-isolated; clone no production business rows, password hashes, file objects or cron schedules. Bucket reference configuration is separate. Candidate migration success never means production applied, whole-plan complete or twelve-hour PASS.",
+    "Root-bound client scope tracks trusted actor/role/legal/store/access changes and every A-B-A generation; token/display/loading changes do not trigger data reloads. Twenty-three FutureProvider reads reject blocked sessions and discard prior generations; QC follow-up/issue state is disposed on scope changes. Server RLS remains authoritative; other legacy notifiers and uncertain commands remain unfinished.",
+    "Additive single-payment receipts serialize the original actor/operation identity, reject payload reuse, retain immutable native payment results and recheck current actor/store permissions on replay/read. Existing process_payment and combined/non-revenue native definitions, money, stock and invoice semantics stay unchanged. New API is not yet connected to durable cashier intent/UI.",
+    "Current user_accessible_stores returns scalar UUIDs; explicit positional aliases preserve both scalar and named fixture compatibility. No candidate migration has been applied to production.",
+    "Pinned owned fixture supautils crashes on denied function execution even without candidate/schema changes. PGOPTIONS disables only cosmetic GRANT hints; actual anonymous ACL denial, protected tables and native financial execution remain checked. Never change production settings or report this as a reproduced production engine failure.",
+    "Settings/report notifier and widget view lifetimes reset and reload on real actor/store/access changes. Confirmed setting saves remain true after navigation/disposal, stale reads cannot undo saves, clearing nullable charges clears UI, and same-scope refresh preserves unsaved controls. PIN follow-up steps and toasts stay in the original widget view. Remaining legacy commands, strict PIN read outcomes and file/resource budgets are not claimed complete.",
+    "Dispose the native JSON worker owned by each temporary KDS PostgrestClient, not just HTTP. Bound full RPC and cleanup budgets; cleanup failure cannot change a confirmed command or replace the original uncertainty/error. Payment-proof HTTP/JSON cleanup uses the same rule. No DB operation, new query/retry, physical adapter or production setting is added by this resource fix. Linux native VM measurements do not establish browser/night or physical-device improvement.",
+    "A cashier full payment persists its original actor/store/order/version/amount/method before HTTP. Only the atomic sending owner may charge. Unknown delivery blocks alternative methods; reconciliation never resubmits. A server cancellation barrier defeats late original delivery, while already committed receipts stay confirmed. Full intent cannot become a stale partial charge. SQLite/IndexedDB fail closed, never evict unknown records, and preserve confirmed results through cleanup failure. Split/combined/non-revenue durable recovery and SQL batching remain incomplete.",
+    "Owned runtime uses new private JWT/passwords and real Auth Admin API accounts, independent native DBs, authenticator JWT role switching, and unmodified Office Edge. Loopback routing never forwards missing/wrong project keys, private schemas or unprepared services. A physical lost ACK preserves original operation despite observed Deno transport replay; neither elapsed time nor unprepared Storage/Realtime/physical hardware is faked.",
+    "New law/brand/first and additional stores use real registration APIs and the unmodified store-account-onboarding Edge with real GoTrue Admin writes. Shared brand accounts are reconciled, not duplicated. Actual opening readiness and zero active employees remain blocked rather than being seeded as successful physical handover/business readiness.",
+    "Native two-project first/additional-store fixture now exercises actual initial-password Edge, generation trigger, new employees, POS private Storage and eight photo attendance events with cross-store denial. Synthetic JPEG is decoded by the real Dart image library; no physical camera/hardware, whole lifecycle or production claim.",
+    "Own password/consent commands retain original actor epoch and JWT across awaits, reject duplicate in-flight submissions, abort only their own HTTP work after logout/actor change/disposal, and never set a later actor gate/error/cache/navigation. No password is persisted and no write is automatically retried. Command whole budget 15s/input 16KiB/response 64KiB. Durable ambiguous-password recovery remains separate incomplete work.",
+    "Attendance/proof photo input is capped before byte/pixel allocation: 5MiB, 4Mi pixels, side <=8192, static JPEG/PNG/WebP; picker <=1600, no upscaling, output <=1MiB. One native codec worker/app without an image queue; web compute is synchronous. Original library lossless palette WebP decode failure remains visible and is not a compatibility PASS. Attendance upload/sign freezes the original JWT before codec await and uses bounded owned transport with no automatic retry.",
+    "Cashier pricing/payable/emergency/completed reads share one original-Auth owned session: whole HTTP/async job 15s, each response <=4MiB, JSON cleanup separately <=2s. Store/actor reset and disposal physically abort only this view requests. At most one active and one latest refresh. Quote/VAT/promotion/items/payment snapshots and realtime subscription after accepted state are preserved. Summary/detail/keyset paging and operating-day eligibility review remain incomplete.",
+    "A server-acknowledged payment-proof attachment stays uploaded even if local deletion/queue retirement fails. The new client persists an attached marker when possible; intact confirmed records perform only local cleanup after restart, with no metadata/upload/sign/attach request. Preserve ambiguous attachments, malformed confirmations and legacy ownership semantics; a complete durable queue/owner/receipt migration is not claimed.",
+    "Real pinned Realtime platform uses _realtime for control tables, preserves the application/Auth/Storage catalog, and restores the captured realtime.messages policy set exactly. Native SDK WebSockets deliver real broadcasts and deny unassigned/cross-store topics. Actual new-store Auth kitchen account and native SQL send are exercised, not an order handoff or physical opening. No production Realtime tenant rows/events/secrets or fabricated migration rows are copied.",
+    "New table/create-add commands persist original project/actor/store/payload before HTTP, reject changed pending requests, preserve confirmed writes after local cleanup failure and resolve server receipts before bounded recovery. Ownerless legacy orders are retained and never assigned to the next login. Existing menu/discount/tax/stock/KDS logic remains in native set-based order functions. Recovery batches contain at most 20 independent commands and 500 total lines; SQL processes each business transaction independently rather than issuing per-line remote or SQL lookups.",
+    "Recovery-storage reads fail visibly without leaving submit/sync flags stuck. Table/session generations reset their own busy/count state and prevent the original late result from mutating a later table. A focused failing reproduction covers both storage failure and table-switch confirmation; original intents remain preserved."
   ],
   "dataAccessReview": {
     "nPlusOne": {
       "applicable": true,
-      "reason": "Nine independent Auth principals require independent authentication; catalog is one set-based statement/project, no business item requests.",
-      "scale": "9 principals, 2 projects, concurrency one for Auth; 20,000 metadata objects and 6MiB/project maximum.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "KDS receipt recovery is set-based; commands retain domain RPCs and are not disguised as parallel lookup work. Existing item/batch writers remain in scope for the later whole-flow audit. Schema metadata is captured in bounded identity batches, with preaggregated dependency joins; no per-object remote calls. Payment receipts use one original business command and one optional lookup for <=100 IDs; legacy split-payment per-part calls are still unfinished and are not represented as fixed. JSON lifetime fixes add zero remote calls; the measured gateway still sends 101 calls including warmup for 100 reads. Existing payment-proof per-queued-file metadata lookup still needs the later batch-path review; cleanup is not represented as solving it. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single payment is one native transactional RPC, no item loop; receipt lookup is bounded at 100. Each RPC owns a 15s/512KiB response budget (plus separate <=2s JSON cleanup), never retries a charge, and freezes original Auth/params. Local financial ledger is separate, <=100 records/256KiB, <=8KiB per record, with one native worker per ledger and <=100 queued requests; SQLite busy wait <=2s per lock, native DB <=256 pages. Multi-step partial/combined SQL paths remain unfinished. Order recovery reads original receipts in at most two 100-ID RPCs and sends at most 100 size-bounded command batches within one 30s total HTTP budget (at most five batches for 100 small commands). The transport test measures five HTTP calls for 60 independent intents. This does not establish reduced native DB work or remove per-business-command transactions.",
+      "scale": "100 receipts/RPC; 101-record development test uses 2 reads and zero replay writes; round sends <=20 queued commands.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "setBasedSql": {
       "applicable": true,
-      "reason": "Catalog columns pre-aggregate by relation; catalog object metadata uses set unions, never loops over business rows.",
-      "scale": "2 catalog statements plus bounded own-profile reads.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "New SQL resolves unique direct event and private batch request keys with set joins, no per-ID function loop; existing quota statement batches remain intact. Payment result lookup deduplicates requested UUIDs and joins actor/operation primary keys in one query; native payment is called once per new original command, never once per receipt lookup. Single payment is one native transactional RPC, no item loop; receipt lookup is bounded at 100. Each RPC owns a 15s/512KiB response budget (plus separate <=2s JSON cleanup), never retries a charge, and freezes original Auth/params. Local financial ledger is separate, <=100 records/256KiB, <=8KiB per record, with one native worker per ledger and <=100 queued requests; SQLite busy wait <=2s per lock, native DB <=256 pages. Multi-step partial/combined SQL paths remain unfinished. The new add wrapper calls the existing set-based native add-items function once, aggregates returned IDs once and resolves them in one indexed join. The recovery batch invokes up to 20 independent original business commands with separate atomic subtransactions; it adds no per-menu-item query loop.",
+      "scale": "Synthetic fixture 100001 events, 100 requested IDs, 30 measured calls; actor/store filters inside SQL.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Native two-DB legal cases preserve set-based verified store/procurement mapping and original independent IDs; 200-store execution-plan/scale measurements are still pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "rowsColumns": {
       "applicable": true,
-      "reason": "Only explicit own-profile columns with limit 2; catalog metadata projects hashes, no function bodies or business rows.",
-      "scale": "At most 2 profile rows per principal; 128KiB/Auth HTTP; 6MiB/catalog.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Receipt returns only original/actual IDs, session, target IDs, stage/delta and whitelisted details; never returns native batch response snapshots. Single-payment result is the immutable native result already returned by the legacy API; receipt requests are capped at 100. No PIN/token/body is persisted; only request digest, actor/store/order/payment IDs and native result. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Receipt reads return only matching original actor/store IDs and confirmation metadata, at most 100 requests. Recovery acknowledgements return operation/status metadata, not full order lists.",
+      "scale": "100-result fixture response 33900 bytes; client response cap 256 KiB; quota payload <=100 IDs.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "joinCardinality": {
       "applicable": true,
-      "reason": "Catalog columns aggregate separately before relation join; other arms have one row per named object.",
-      "scale": "No business one-to-many joins; duplicate object identities rejected.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Both receipt paths join primary unique event/request IDs. DISTINCT requested IDs and fallback exclusion avoid duplicate direct/batch matches. Payment receipt primary key(actor_auth_id,operation_id) and unique payment_id ensure at most one row per distinct requested identity; no independent one-to-many joins added. New receipt reads join distinct requested IDs to the primary key; added item results join immutable unique item IDs. No one-to-many relation is joined to another unaggregated one-to-many relation.",
+      "scale": "Duplicate request fixture yields one result; rows must not exceed requested IDs; no multiple one-to-many join fan-out introduced.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "indexesPaging": {
       "applicable": true,
-      "reason": "Own profile uses auth_id equality and limit 2; catalog snapshot is bounded metadata and avoids OFFSET.",
-      "scale": "9 fixed principals, finite catalogs; no schema/index mutations.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Use existing unique event_id/request_id indexes; fixture analyzes 100001 events. Legacy outbox processing takes an ordered prefix rather than a large server OFFSET. Full production-schema plan and write costs still need G1/G6. Payment receipt uses primary-key equality on actor and requested UUID, no OFFSET. This development fixture validates only three original commands; no production-scale latency or universal index improvement is claimed. Receipt tables use (actor_auth_id,restaurant_id,client_mutation_id) primary keys and exact scope filters. Production-scale plans and latency remain pending; these bounded receipt reads add no OFFSET pagination.",
+      "scale": "PostgreSQL fixture P95 server 1.6577 ms on 1 CPU/512 MiB; local progress journal <=1000 entries; replay prefix <=2000 legacy records.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "refreshPolling": {
       "applicable": true,
-      "reason": "Explicit one-shot checks only; no polling or state invalidations added.",
-      "scale": "One run per evidence capture, 3 calls/principal maximum.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Unknown progress uses result lookup before original-ID recovery; confirmed mutation patches available authoritative item data or refreshes the affected order. No new polling loop is introduced. Root session fingerprint ignores token/display/loading refresh; only actual access-scope changes invalidate the 23 bound read providers, without adding polling or a network call. Additive payment APIs do not start automatic polling, retry or list refresh; durable cashier recovery/UI adoption is still required. Settings suppress duplicate form writes and same-scope reloads while saving; session-bound views reload once after an actual actor/access change. No new poll loop or per-item API was added. Report refreshes share an identical pending query; rapid different filters retain one active read and only the latest queued query. No timer, polling, automatic retry or new refresh source is introduced. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. Order confirmation clears the cart independently of refresh or local retirement failure. The notifier shares its in-flight submission, invalidates old view generations and does not replay ownerless legacy entries. Recovery does not issue an active-order read per pending command.",
+      "scale": "Existing notifier flusher concurrency 1; explicit unknown recovery concurrency 1; batches <=100; whole-board sync paths still need later G4 work.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "cacheScope": {
       "applicable": true,
-      "reason": "No persistent session or profile cache; artifacts identify project/source and each verified principal.",
-      "scale": "Separate target keys/identities; cross-project comparison rejected.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "New journal stamps original Auth actor, store, session, station and floor before awaiting. Scope switches cannot replay, remove or apply another assignment record; legacy store-only compatibility remains server-authorized. Root scope uses actor ID, trusted role, active legal/store and canonical access-list/permission hash; an eager generation listener preserves A-B-A changes. No user_metadata claims are trusted. Payment receipt replay/reads require original Auth and profile IDs plus current active authorized role/store; store changes and conflicting request payloads cannot reuse another result. Settings/report widget bootstraps now include actor/store/session generation, not store alone; a discarded notifier is followed by a new same-store query instead of a permanently empty screen. Owned reads snapshot the original Auth principal/JWT and reject an actor change before the first physical send. Report keys use store and normalized date range within a session-bound notifier; completed queries are not persistently cached. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. The dedicated order journal uses immutable project/actor/store/kind/target identity and payload. Another actor cannot read/replay/settle it. Legacy records without an original actor remain preserved for review rather than inheriting the next login.",
+      "scale": "Actor/station/store/session/floor isolation tests; routing cache clears on each durable read. Global permission revision adoption remains pending. Development tests cover 100 unchanged profile refreshes and 100 changed scopes; remaining legacy notifiers are explicitly not migrated.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "concurrency": {
       "applicable": true,
-      "reason": "Auth concurrency one, no retries; read-only two-project catalog captures can run concurrently.",
-      "scale": "9 sample principals, max 2 concurrent catalog calls.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Progress in-flight guards and one flusher bound writes; read and command transports have owned physical deadlines and close on disposal. This does not yet implement the all-worker aggregate budget. Native payment receipt lock is per actor/operation with a five-second lock timeout. Four owned fixture workers deliver the same full payment eight times and verify one financial/stock/invoice effect. All-worker aggregate budgets remain pending. Only one settings form writes per view; an older in-flight read cannot overwrite a confirmed save, and its completed Future cannot permanently block future reloads. Owned native JSON isolates now exit after both normal and denied RPC results; actual VM-service counts remain 2 to 2 after 100 sequential calls instead of the reproduced 3 to 103 leak. All-worker aggregate concurrency remains pending. Report uses CoalescedRefresh to await owned cleanup before starting the latest pending query. A 100-filter burst after one started RPC produces at most two HTTP requests, rather than 100 temporary clients. This is a synthetic client bound, not an operating load benchmark. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. The test gateway admits <=16 connections per project, native REST pools <=8 and Auth pools <=4; body/response are capped at 5/4MiB and transport at 30s. These are fixture resource budgets, not measured production peak capacity. Photo processing now admits one codec job with fixed byte/pixel/output bounds. JPEG frame/sampling checks precede library allocation. Native worker completes before the slot is released; web compute stays on the UI event loop. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. Owned Realtime instances are capped at 512MiB/1CPU, 2 DB base connections and 2 schedulers; API configuration and literal source authorization are checked. Actual native WebSocket protocol is exercised; shared-gateway WebSocket proxy, whole-app fanout/burst/12h remain pending. One coordinator admits at most 16 active logical order writes; each journal admits at most 100 records. Native SQLite serializes bounded worker transactions; browser IndexedDB uses one strict atomic transaction per claim/settlement. Cross-tab and independent native-isolate ownership are exercised.",
+      "scale": "<=20 sends/round within 15-second send budget after <=15-second receipt budget; per-call deadline <=15 seconds; no parallel receipt batches.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. bounded-photo-processing and attendance-photo-original-auth; native 36 related checks, independent transfer 3 and Chromium photo 11. Physical-device peak memory and whole-plan 12h acceptance remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. realtime-native-websocket and new-store-kds-realtime: two-project integrated fixture 108 parent checks, 6 basic protocol checks and 7 scoped KDS checks; counts are reported separately, not a full release receipt. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "retryIdempotency": {
       "applicable": true,
-      "reason": "Never retry password login or unknown cleanup; always attempt only local logout after successful login.",
-      "scale": "1 login attempt, at most 3 HTTP calls/principal, 12-second request timeout.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Write-ahead identity survives lost HTTP/storage acknowledgement. Prepared records are result-only on automatic flush; manual recovery reuses immutable original ID. Only whitelisted definitive Postgres rejection removes intent; ambiguous gateway errors remain durable. Same single-payment operation returns its original confirmed result, including after response loss or order completion; changed amount/method/order is rejected. Native errors roll back payment and receipt together. Client durable intent persistence and explicit reconciliation remain unfinished, so legacy automatic retry behavior is not claimed fixed. Full KDS RPC timeout includes JSON startup/decoding, while physical HTTP close still aborts transport. Cleanup is separately bounded to two seconds and only its failure counter changes; original write evidence and unknown journals remain intact. OwnedReadSession forbids table writes and non-allowlisted RPC calls. It performs only the SDK normal expired-token refresh, sharing Auth refresh; it never retries a business command or closes shared Auth transport. Proof flushing selects at most 10 eligible files, preloads only id/tax_entity_id for distinct stores in one <=10-row/64-KiB request, and retains existing object paths. Per-object upload/sign/attach remains necessary bounded serial storage work, not a claimed set-based storage API. Same-actor simultaneous flushes share one pending future. Actor changes stop subsequent physical sends; original JWT headers are captured for RPC/storage. No persistent store metadata cache is added. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. New-client proof cleanup of an intact confirmed marker never repeats metadata/upload/sign/attach. Unknown attachment results retain the existing resumable object and explicit bounded retry; loss of every local marker and legacy concurrent clients remain separate durable-journal work. Persist original intent before HTTP; retain unknown outcomes and query atomic server receipts before replay. Never fall through to an unkeyed RPC. Recovery has a 30s total HTTP budget and <=15s per transport, no nested retry loop or fresh operation ID after uncertainty. SQL lock/deadlock failures remain retryable with original IDs.",
+      "scale": "Tests cover committed response loss, partial local persistence, cleanup failure, distinct JeonGabok receipt ID, restart and original-ID reuse; no new operation retry loop.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. Schema runner rejects another run/project, timeout, partial input and failed cleanup; native fixture logs are distinct development proof. proof-batch-scope: synthetic 10-file round measures one metadata request, 31 total required calls, max active HTTP handlers 1; 11 files drain in 10+1 batches. Native RLS plans, real upload limits and whole-plan mixed load remain pending. proof-confirmed-cleanup, proof-batch-scope: 11 focused cases; actual chmod fault only in owned temporary directory. This does not prove native server replay/whole-runtime/12h acceptance. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "largeResults": {
       "applicable": true,
-      "reason": "Auth and catalog payloads have explicit bounds; oversize or partial results fail, not silently truncate.",
-      "scale": "128KiB per Auth response, <=20,000 objects and <=6MiB catalog; <=7MiB recorder input.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "New progress journal has atomic 1000-record capacity enforcement, receipt batches/bytes are capped, and replay sends a bounded ordered prefix. Existing legacy namespace loading is not claimed fully bounded. Receipt recovery caps IDs at 100 and returns only matching own-scope rows. Existing financial core remains unchanged; general export/catalog file and transfer budgets remain pending. New owned report reads enforce 4 MiB per response and one 15-second total read deadline; settings use 128 KiB per response and two fixed metadata reads within the same deadline. Oversized responses fail explicitly rather than truncate financial totals. Single full-payment uses one RPC, immutable local CAS ownership, no automatic charge retry and atomic server cancellation. Native SQLite/IndexedDB ledgers are separate from menu cache, <=100 records/256KiB/8KiB each; one native worker and <=100 pending per ledger. Existing split/combined/non-revenue batching/recovery remains incomplete. Photo processing now admits one codec job with fixed byte/pixel/output bounds. JPEG frame/sampling checks precede library allocation. Native worker completes before the slot is released; web compute stays on the UI event loop. Cashier list refresh now shares one owned read session across existing pricing/order/emergency/history reads; cancels abandoned view HTTP, freezes original headers and retains one active plus one latest refresh. Payload/row shape and quote semantics are unchanged; bounded summary/detail/page reads remain pending. Dedicated journals cap each intent at 256KiB and all records at 4MiB. Recovery batches cap 20 commands, 500 total lines and 512KiB of client payload; transport input is <=1MiB and response <=4MiB. Oversize/storage failure occurs before a new order HTTP write.",
+      "scale": "Real Chromium capacity/update/reload tests; 100-receipt batches and 256 KiB transport limit; <=20 commands/round. Schema snapshots: <=20000 identities, <=32 MiB/file, <=64 MiB captured body total; private source only.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. bounded-photo-processing and attendance-photo-original-auth; native 36 related checks, independent transfer 3 and Chromium photo 11. Physical-device peak memory and whole-plan 12h acceptance remain pending. cashier-owned-read-lifetime: 7 real TCP cases; 20 repeated refresh calls produce 2 snapshots (2 pricing+4 order requests for empty queues), stalled/oversized bodies and store/reset/disposal cancellation preserve shared Auth. Existing cashier command/recovery combined 27 tests and pricing/item-ordering 18 pass; native production-scale rows/bytes/plans and 12h remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     },
     "repeatedAggregates": {
       "applicable": true,
-      "reason": "Catalog aggregates only on explicit snapshot; no sales totals, counts per refresh or production polling.",
-      "scale": "One catalog snapshot per DB; no product screen changes.",
-      "verification": "resilience-tools-unit, runtime-catalog-unit, runtime-catalog-postgres; live sanitized metadata/login evidence separately, never inferred from these tests."
+      "reason": "Receipt queries use requested unique IDs and no overall count/large aggregate scan. IndexedDB count is only a local bounded-capacity write guard; quota changes remain store/transaction events. Receipt lookup uses stored native result rather than recomputing order finance. Current-scope authorization runs once per RPC; no per-ID total/count aggregate is introduced. Recovery uses indexed original receipt lookup and compact confirmations, not full-store counts or financial totals. Existing per-order native financial recomputation is preserved; production mixed-load/12h aggregate costs remain unmeasured.",
+      "scale": "100 requests against 100001-row fixture; 30 calls; no recurring SQL whole-event count added.",
+      "verification": "kds-progress-journal, kds-progress-receipt-sql, browser-kds-outbox-compatibility plus existing quota/order/QC checks; official full recipe and mixed production-scale/12-hour evidence remain pending. order-intent-storage, order-command-recovery, browser-order-intent-journal and additional-order-native-recovery; full-browser/mixed/12h acceptance remains pending."
     }
   },
-  "rollback": "Revert the evidence tooling normally; do not delete runtime history, business data or other sessions. Private credentials remain outside Git and may be removed only when their assigned test lifecycle ends.",
+  "rollback": "Use the previous verified web while retaining additive DB contracts and both legacy/new durable records. Never clear ambiguous intents or financial/history rows for rollback; return to a compatible new client to reconcile original KDS IDs. Any SQL contract rollback is a reviewed forward migration. Keep cancellation barriers and immutable receipts when rolling back the web; never delete unknown single-payment intents or re-use cancelled IDs.",
   "claims": {
     "allPlanComplete": false,
     "performanceImproved": false
@@ -180,74 +988,179 @@
   "contractReview": {
     "outcomes": {
       "applicable": true,
-      "reason": "Login identity and local session cleanup are separate outcomes; unknown cleanup fails and stops further logins.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Resource disposal errors/timeouts do not turn confirmed handoffs/proof attachment into failures or overwrite an original transport error. The actual employee-photo attendance notifier and screen reset on bound actor/access/store changes. Disposed or mismatched scopes cannot start an attendance write after photo upload; an already confirmed original event still returns true without mutating a later view. Durable unknown-event recovery across restart and photo processing budgets remain pending. Single full-payment cashier UI now persists and recovers original intents; root scope resets the cashier view and original confirmed results cannot print or update a later actor/store. Separate batch/non-revenue writes remain legacy. This supersedes earlier additive-only status for the single-payment UI, not the pending whole-domain adoption. Actual two-project Auth/REST/Office Edge HTTP verified new zero-store law, immutable operation ownership and lost-ack resume. This is not the two-app browser/open-store/purchase/attendance lifecycle or 12-hour evidence. Proof server confirmation and local retirement are now separate. Real Unix deletion-permission fault reproduces the prior false queued outcome; intact confirmed marker recovery sends no HTTP.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility",
+        "cashier-command-scope",
+        "payment-receipts-client",
+        "payment-receipts-native",
+        "settings-command-scope",
+        "session-bound-views",
+        "rpc-json-cleanup",
+        "attendance-scope-commands",
+        "payment-command-recovery",
+        "payment-intent-storage",
+        "payment-command-coordinator",
+        "payment-command-transport",
+        "payment-recovery-panel",
+        "browser-payment-intent-journal",
+        "payment-command-v2-native",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards",
+        "proof-confirmed-cleanup"
       ]
     },
     "tenantScope": {
       "applicable": true,
-      "reason": "Whitelist inventoried sample actor/profile/store IDs and separate POS/Office targets; reject broader Office scope.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Report/settings reads now abort only their owned HTTP work on view invalidation, while JSON-worker cleanup has a separate bounded budget and cannot change confirmed write outcomes. Shared Auth stays alive. All other legacy-domain scope adoption remains explicitly pending. The actual employee-photo attendance notifier and screen reset on bound actor/access/store changes. Disposed or mismatched scopes cannot start an attendance write after photo upload; an already confirmed original event still returns true without mutating a later view. Durable unknown-event recovery across restart and photo processing budgets remain pending. Proof uploads retain original actor/object identity through account changes and explicit owner recovery without reupload. Original Auth headers are shared through a pure snapshot helper with existing owned-read behavior tests. Legacy actor-less queue entries retain existing server-enforced compatibility; their ownership migration, total queue/file budgets and cleanup-result refinements remain separate unfinished work. Single full-payment cashier UI now persists and recovers original intents; root scope resets the cashier view and original confirmed results cannot print or update a later actor/store. Separate batch/non-revenue writes remain legacy. This supersedes earlier additive-only status for the single-payment UI, not the pending whole-domain adoption. Actual two-project Auth/REST/Office Edge HTTP verified new zero-store law, immutable operation ownership and lost-ack resume. This is not the two-app browser/open-store/purchase/attendance lifecycle or 12-hour evidence.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility",
+        "cashier-command-scope",
+        "session-scope-binding",
+        "payment-receipts-client",
+        "payment-receipts-native",
+        "settings-command-scope",
+        "session-bound-views",
+        "owned-read-lifetime",
+        "attendance-scope-commands",
+        "proof-batch-scope",
+        "payment-command-recovery",
+        "payment-intent-storage",
+        "payment-command-coordinator",
+        "payment-command-transport",
+        "payment-recovery-panel",
+        "browser-payment-intent-journal",
+        "payment-command-v2-native",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards"
       ]
     },
     "readiness": {
       "applicable": true,
-      "reason": "Account identity readiness is separate from permission actions, external-effect sandboxing, physical devices and 12-hour soaks.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "office-first-legal-native",
+        "auth-platform-preflight",
+        "auth-platform-guards"
       ]
     },
     "dbCompatibility": {
       "applicable": true,
-      "reason": "Catalog hashes current effective functions, triggers, RLS/ACL/indexes and history without changing production schema.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Current POS/Office schema reconstruction and native dump roundtrips compare 4878/8834 scoped objects, preserve column ACLs and unsupported-shape guards; candidate SQL is exercised only in owned fixtures. Existing POS financial/quantity hashes and the original 500-line scenario are checked across upgrade. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows. Realtime native startup now verifies the entire application/Auth/Storage catalog before/after its pinned installer, and restores actual source message authorization. A missing _realtime search_path created public control tables in an early isolated trial; the fingerprint guard rejected it and official namespace settings fixed the fixture.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility",
+        "schema-snapshot-unit",
+        "schema-runner-unit",
+        "current-schema-upgrade",
+        "payment-receipts-client",
+        "payment-receipts-native",
+        "office-first-legal-native",
+        "auth-platform-preflight",
+        "auth-platform-guards",
+        "realtime-source-guards",
+        "realtime-native-websocket"
       ]
     },
     "officeBoundary": {
       "applicable": true,
-      "reason": "Office Auth and profile are verified independently; explicit store mapping is checked, no name or UUID ownership inference.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Twenty shared first-legal connection cases also execute against the complete native POS/Office snapshots in two independent PostgreSQL instances, including actual Auth table, grants, triggers and FK/RLS contracts. Native cases model the pre-existing POS administrator in an unrelated store: the new legal entity itself has zero stores, and no Office owner mapping is preseeded. Whole empty-deployment bootstrap, GoTrue/Edge/browser onboarding and actual terminal evidence remain separate incomplete stages. Native POS and Office schemas each support a real pinned GoTrue v2.196.0 serve-only preflight with one fresh synthetic Admin API user, password login and refresh. Local ephemeral JWT/DB secrets stay outside Git; no production identities are copied or Auth history fabricated. This proves Auth environment preparation, not the complete bridge/browser/store/bootstrap workflows. Both independent real Realtime servers are now in the new-law/first-additional-store/initial-password/employee-photo native HTTP fixture. Office Storage and complete browser/procurement lifecycle remain pending.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "office-first-legal-native",
+        "auth-platform-preflight",
+        "auth-platform-guards"
       ]
     },
     "externalEffects": {
       "applicable": true,
-      "reason": "No financial/notification/printing writes; session creation and current-session local cleanup are the only Auth effects.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Proof uploads retain original actor/object identity through account changes and explicit owner recovery without reupload. Original Auth headers are shared through a pure snapshot helper with existing owned-read behavior tests. Legacy actor-less queue entries retain existing server-enforced compatibility; their ownership migration, total queue/file budgets and cleanup-result refinements remain separate unfinished work.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "payment-receipts-client",
+        "payment-receipts-native",
+        "proof-batch-scope"
       ]
     },
     "resourceLifetime": {
       "applicable": true,
-      "reason": "Token stays in memory only; local logout finally and stop on uncertain cleanup; no persisted refresh token.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. Cashier item cancel/restore/move writes and QC follow-up callbacks separate confirmed mutation results from same-generation refresh; uncertain native writes still require later per-domain reconciliation. Root operation scope now binds 23 read providers and two QC notifiers; other legacy notifiers are not claimed migrated. Eager transitions invalidate prior read generations while a confirmed follow-up write keeps its result. Additive native single-payment receipt APIs are verified in the current-schema synthetic fixture; durable cashier intent/UI and split/combined/non-revenue recovery are not yet migrated. Settings/profile confirmed callbacks and PIN follow-up/view state are guarded across A-B-A, actor and disposal boundaries. Actual settings/report widget tests exercise fresh same-store reload on actor/access changes. Three temporary KDS clients close their owned JSON workers; native VM counts validate repeated normal/denied calls. The recipe has a dedicated --enable-vmservice entry outside the default Flutter test glob, retaining mandatory execution without duplicate generic execution. Report/settings reads now abort only their owned HTTP work on view invalidation, while JSON-worker cleanup has a separate bounded budget and cannot change confirmed write outcomes. Shared Auth stays alive. All other legacy-domain scope adoption remains explicitly pending. The actual employee-photo attendance notifier and screen reset on bound actor/access/store changes. Disposed or mismatched scopes cannot start an attendance write after photo upload; an already confirmed original event still returns true without mutating a later view. Durable unknown-event recovery across restart and photo processing budgets remain pending. Proof uploads retain original actor/object identity through account changes and explicit owner recovery without reupload. Original Auth headers are shared through a pure snapshot helper with existing owned-read behavior tests. Legacy actor-less queue entries retain existing server-enforced compatibility; their ownership migration, total queue/file budgets and cleanup-result refinements remain separate unfinished work. Bounded photo previews/codec/transport protect attendance and payment evidence. Original actor transfer is checked through file IO and upload; actual camera/device/print and durable uncertain attendance recovery remain incomplete. Cashier reads abort the original physical transport on scope/disposal and bound JSON cleanup; source Auth client survives.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility",
+        "cashier-command-scope",
+        "session-scope-binding",
+        "payment-receipts-client",
+        "payment-receipts-native",
+        "settings-command-scope",
+        "session-bound-views",
+        "rpc-json-cleanup",
+        "native-kds-json-resources",
+        "owned-read-lifetime",
+        "attendance-scope-commands",
+        "proof-batch-scope",
+        "bounded-photo-processing",
+        "attendance-photo-original-auth",
+        "cashier-owned-read-lifetime"
       ]
     },
     "filesAndHardware": {
       "applicable": true,
-      "reason": "Private external owned mode-600 files, no shell eval, bounded responses; real hardware and long load remain NOT_RUN.",
+      "reason": "Preserve existing domain operations and separate original write scope/result from menu/QC/order read lifetimes. Full domain adoption, schema upgrade and device load are still pending. The new probe runs actual Linux native Dart isolates with synthetic HTTP, not physical terminals/printers or real production traffic. Web YAJsonIsolate creates no such worker; browser performance/real-device tests remain separate. Bounded photo previews/codec/transport protect attendance and payment evidence. Original actor transfer is checked through file IO and upload; actual camera/device/print and durable uncertain attendance recovery remain incomplete.",
       "checks": [
-        "resilience-tools-unit",
-        "runtime-catalog-unit",
-        "runtime-catalog-postgres"
+        "official-full-recipe",
+        "operation-outcomes",
+        "qc-read-lifetimes",
+        "menu-quantity-partial",
+        "menu-quantity-sql",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility",
+        "bounded-photo-processing",
+        "attendance-photo-original-auth"
       ]
     }
   }

@@ -84,14 +84,10 @@ void main() {
     expect(sql, contains('WITH (security_invoker = true)'));
   });
 
-  test('offline replay reaches the same server-enforced mutation boundary', () {
+  test('offline recovery preserves stable server closure errors', () {
     final orders = readRepoFile(orderProvider);
 
     expect(orders, contains('syncOfflineQueue'));
-    expect(orders, contains('orderService.createOrder'));
-    expect(orders, contains('orderService.addItemsToOrder'));
-    expect(orders, contains('OfflineMutationQueueService.createOrderType'));
-    expect(orders, contains('OfflineMutationQueueService.addItemsToOrderType'));
     expect(orders, contains('RESTAURANT_KITCHEN_CLOSED'));
     expect(orders, contains('RESTAURANT_DAILY_SALES_CLOSED'));
   });

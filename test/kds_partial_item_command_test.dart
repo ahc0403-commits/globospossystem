@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:globos_pos_system/core/services/emergency_web_bridge.dart';
+import 'package:globos_pos_system/features/emergency_fulfillment/kds_progress_journal.dart';
 import 'package:globos_pos_system/features/emergency_fulfillment/emergency_fulfillment_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -13,7 +13,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class _Notifier extends EmergencyFulfillmentNotifier {
   void seed(EmergencyFulfillmentState value) => state = value;
 
-  _Notifier(SupabaseClient client) : super(client: client) {
+  _Notifier(SupabaseClient client)
+    : super(client: client, actorIdForTesting: () => 'fixture-auth') {
     state = EmergencyFulfillmentState.fromJson({
       'assigned': true,
       'active': true,
@@ -199,7 +200,7 @@ void main() {
       );
       expect(jsonDecode(calls.single.body)['p_action'], 'floor_served');
       expect(notifier.state.orders.single.isCompleteAt('floor'), isFalse);
-      expect(await EmergencyWebBridge.readOutbox(), isEmpty);
+      expect(await KdsOutboxStore().read(), isEmpty);
     },
   );
 
@@ -234,7 +235,7 @@ void main() {
       expect(await pending, EmergencyProgressResult.rejected);
       expect(notifier.state.orders.single.items.single.floorServedQuantity, 1);
       expect(notifier.state.error, 'EMERGENCY_QUANTITY_CHAIN_VIOLATION');
-      expect(await EmergencyWebBridge.readOutbox(), isEmpty);
+      expect(await KdsOutboxStore().read(), isEmpty);
     },
   );
 
@@ -259,7 +260,7 @@ void main() {
       );
       expect(notifier.state.orders.single.items.single.floorServedQuantity, 0);
       expect(notifier.state.pendingQueueIds, {'queue-1'});
-      final records = await EmergencyWebBridge.readOutbox();
+      final records = await KdsOutboxStore().read();
       expect(records, hasLength(1));
       final payload = jsonDecode(records.single.payload);
       expect(payload['event_id'], records.single.id);
@@ -309,7 +310,7 @@ void main() {
       expect(item.floorServedQuantity, 1);
       expect(item.kitchenDoneQuantity, 1);
       expect(item.requiredQuantity, 2);
-      expect(await EmergencyWebBridge.readOutbox(), isEmpty);
+      expect(await KdsOutboxStore().read(), isEmpty);
     },
   );
 
@@ -335,7 +336,7 @@ void main() {
       expect(await notifier.completeOrder(queueId: 'queue-1'), isTrue);
       expect(calls, ['kds_serve_ready_order_v3', 'get_kds_ticket_v2']);
       expect(notifier.state.error, 'EMERGENCY_ORDER_REFRESH_PENDING');
-      expect(await EmergencyWebBridge.readOutbox(), isEmpty);
+      expect(await KdsOutboxStore().read(), isEmpty);
     },
   );
 

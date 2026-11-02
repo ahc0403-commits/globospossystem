@@ -34,7 +34,9 @@ void main() {
           Object? body;
           var status = 200;
           if (r.url.path.endsWith('/restaurants')) {
-            body = {'tax_entity_id': 'audit-tax'};
+            body = [
+              {'id': 'audit-store', 'tax_entity_id': 'audit-tax'},
+            ];
           } else if (r.url.path.contains('/storage/v1/object/sign/')) {
             body = {
               'signedURL': '/object/sign/payment-proofs/audit?token=fixture',

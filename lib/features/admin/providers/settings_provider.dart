@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/store_service.dart';
 import '../../../core/services/staff_service.dart';
 import '../../../core/services/pos_backend.dart';
+import '../../../core/auth/operation_scope_provider.dart';
+import '../../../core/utils/owned_read_session.dart';
 
 class SettingsState {
   const SettingsState({
@@ -45,6 +47,7 @@ class SettingsState {
     String? fullName,
     String? role,
     bool clearError = false,
+    bool clearPerPersonCharge = false,
   }) {
     return SettingsState(
       isLoading: isLoading ?? this.isLoading,
@@ -55,7 +58,9 @@ class SettingsState {
       restaurantName: restaurantName ?? this.restaurantName,
       address: address ?? this.address,
       operationMode: operationMode ?? this.operationMode,
-      perPersonCharge: perPersonCharge ?? this.perPersonCharge,
+      perPersonCharge: clearPerPersonCharge
+          ? null
+          : (perPersonCharge ?? this.perPersonCharge),
       fullName: fullName ?? this.fullName,
       role: role ?? this.role,
     );
@@ -63,16 +68,41 @@ class SettingsState {
 }
 
 class SettingsNotifier extends StateNotifier<SettingsState> {
-  SettingsNotifier({SupabaseClient? client})
-    : _client = client,
-      super(const SettingsState());
+  SettingsNotifier({
+    SupabaseClient? client,
+    StoreService? stores,
+    StaffService? staff,
+  }) : _client = client,
+       _stores = stores ?? restaurantService,
+       _staff = staff ?? staffService,
+       super(const SettingsState());
 
   final SupabaseClient? _client;
+  final StoreService _stores;
+  final StaffService _staff;
 
   Future<void>? _load;
   String? _loadScope;
   String? _loadedScope;
   int _loadGeneration = 0;
+  int _scopeGeneration = 0;
+  OwnedReadSession _reads = OwnedReadSession();
+
+  bool _accepts(int origin) => mounted && origin == _scopeGeneration;
+
+  bool matchesLoadedView(String? storeId, String? authUid) =>
+      mounted &&
+      storeId != null &&
+      authUid != null &&
+      _loadedScope == '$storeId:$authUid' &&
+      _loadScope == _loadedScope;
+
+  void _invalidateLoads() {
+    _loadGeneration++;
+    _load = null;
+    _reads.dispose();
+    _reads = OwnedReadSession();
+  }
 
   String _mapSettingsError(Object error, String fallback) {
     if (error is! PostgrestException) {
@@ -107,8 +137,18 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     String authUid, {
     bool showLoading = true,
   }) {
+    if (!mounted) return Future.value();
     final scope = '$storeId:$authUid';
+    if (_loadScope == scope &&
+        (state.isSavingRestaurant || state.isSavingProfile)) {
+      return Future.value();
+    }
     if (_loadScope == scope && _load != null) return _load!;
+    if (_loadScope != scope) {
+      _scopeGeneration++;
+      _reads.dispose();
+      _reads = OwnedReadSession();
+    }
     _loadScope = scope;
     final generation = ++_loadGeneration;
     return _load =
@@ -117,6 +157,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           authUid,
           scope,
           generation,
+          _reads,
           showLoading: showLoading,
         ).whenComplete(() {
           if (generation == _loadGeneration) _load = null;
@@ -127,7 +168,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     String storeId,
     String authUid,
     String scope,
-    int generation, {
+    int generation,
+    OwnedReadSession owner, {
     required bool showLoading,
   }) async {
     // A different store/account never displays the previous scope's settings.
@@ -137,19 +179,23 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       state = state.copyWith(clearError: true);
     }
     try {
-      final client = _client ?? supabase;
-      final restaurantData = await client
-          .from('restaurants')
-          .select('id, name, address, operation_mode, per_person_charge')
-          .eq('id', storeId)
-          .single();
-
-      if (!mounted || generation != _loadGeneration) return;
-      final userData = await client
-          .from('users')
-          .select('full_name, role')
-          .eq('auth_id', authUid)
-          .single();
+      final data = await owner.run(_client ?? supabase, (client) async {
+        final restaurant = await client
+            .from('restaurants')
+            .select('id, name, address, operation_mode, per_person_charge')
+            .eq('id', storeId)
+            .single();
+        if (!mounted || generation != _loadGeneration) return null;
+        final user = await client
+            .from('users')
+            .select('full_name, role')
+            .eq('auth_id', authUid)
+            .single();
+        return (restaurant, user);
+      }, maxResponseBytes: 128 * 1024);
+      if (data == null || !mounted || generation != _loadGeneration) return;
+      final restaurantData = data.$1;
+      final userData = data.$2;
 
       final rawCharge = restaurantData['per_person_charge'];
       final charge = switch (rawCharge) {
@@ -169,6 +215,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
             restaurantData['operation_mode']?.toString().toLowerCase() ??
             'standard',
         perPersonCharge: charge,
+        clearPerPersonCharge: charge == null,
         fullName: userData['full_name']?.toString() ?? '',
         role: userData['role']?.toString() ?? '',
         clearError: true,
@@ -188,6 +235,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     required String operationMode,
     required double? perPersonCharge,
   }) async {
+    if (!mounted ||
+        state.isLoading ||
+        state.isSavingRestaurant ||
+        state.isSavingProfile) {
+      return false;
+    }
     final storeId = state.storeId;
     if (storeId == null) {
       state = state.copyWith(error: 'Store is not available.');
@@ -217,9 +270,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       return false;
     }
 
+    final origin = _scopeGeneration;
+    _invalidateLoads();
     state = state.copyWith(isSavingRestaurant: true, clearError: true);
     try {
-      await restaurantService.updateRestaurantSettings(
+      await _stores.updateRestaurantSettings(
         id: storeId,
         name: normalizedName,
         operationMode: normalizedMode,
@@ -227,16 +282,20 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         perPersonCharge: perPersonCharge,
       );
 
+      if (!_accepts(origin)) return true;
+      _invalidateLoads();
       state = state.copyWith(
         isSavingRestaurant: false,
         restaurantName: normalizedName,
         address: normalizedAddress,
         operationMode: normalizedMode,
         perPersonCharge: perPersonCharge,
+        clearPerPersonCharge: perPersonCharge == null,
         clearError: true,
       );
       return true;
     } catch (error) {
+      if (!_accepts(origin)) return false;
       state = state.copyWith(
         isSavingRestaurant: false,
         error: _mapSettingsError(error, 'Failed to save store settings.'),
@@ -246,6 +305,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<bool> updateFullName(String fullName) async {
+    if (!mounted ||
+        state.isLoading ||
+        state.isSavingRestaurant ||
+        state.isSavingProfile) {
+      return false;
+    }
     final normalized = fullName.trim();
     if (normalized.isEmpty) {
       state = state.copyWith(error: 'Enter a name.');
@@ -257,10 +322,14 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       return false;
     }
 
+    final origin = _scopeGeneration;
+    _invalidateLoads();
     state = state.copyWith(isSavingProfile: true, clearError: true);
     try {
-      await staffService.updateMyFullName(normalized);
+      await _staff.updateMyFullName(normalized);
 
+      if (!_accepts(origin)) return true;
+      _invalidateLoads();
       state = state.copyWith(
         isSavingProfile: false,
         fullName: normalized,
@@ -268,6 +337,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       );
       return true;
     } catch (error) {
+      if (!_accepts(origin)) return false;
       state = state.copyWith(
         isSavingProfile: false,
         error: _mapSettingsError(error, 'Failed to save profile.'),
@@ -275,8 +345,22 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       return false;
     }
   }
+
+  @override
+  void dispose() {
+    _scopeGeneration++;
+    _loadGeneration++;
+    _load = null;
+    _reads.dispose();
+    super.dispose();
+  }
 }
 
+final settingsReadClientProvider = Provider<SupabaseClient?>((ref) => null);
+
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
-  (ref) => SettingsNotifier(),
+  (ref) {
+    ref.watch(operationScopeProvider);
+    return SettingsNotifier(client: ref.watch(settingsReadClientProvider));
+  },
 );

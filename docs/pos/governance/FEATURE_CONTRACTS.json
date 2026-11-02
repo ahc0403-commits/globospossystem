@@ -8,7 +8,9 @@
       "sourceRoot": "lib/features/admin",
       "checks": [
         "feature.admin",
-        "official-full-recipe"
+        "official-full-recipe",
+        "owned-read-lifetime",
+        "session-bound-views"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -18,7 +20,8 @@
       "sourceRoot": "lib/features/attendance",
       "checks": [
         "feature.attendance",
-        "official-full-recipe"
+        "official-full-recipe",
+        "attendance-scope-commands"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -28,7 +31,14 @@
       "sourceRoot": "lib/features/auth",
       "checks": [
         "feature.auth",
-        "official-full-recipe"
+        "official-full-recipe",
+        "auth-platform-preflight",
+        "auth-platform-guards",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -38,7 +48,15 @@
       "sourceRoot": "lib/features/cashier",
       "checks": [
         "feature.cashier",
-        "official-full-recipe"
+        "official-full-recipe",
+        "proof-batch-scope",
+        "payment-command-recovery",
+        "payment-intent-storage",
+        "payment-command-coordinator",
+        "payment-command-transport",
+        "payment-recovery-panel",
+        "browser-payment-intent-journal",
+        "payment-command-v2-native"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -88,7 +106,11 @@
       "sourceRoot": "lib/features/emergency_fulfillment",
       "checks": [
         "feature.emergency_fulfillment",
-        "official-full-recipe"
+        "official-full-recipe",
+        "kds-progress-journal",
+        "kds-progress-receipt-sql",
+        "browser-kds-outbox-compatibility",
+        "new-store-order-handoff"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -128,7 +150,14 @@
       "sourceRoot": "lib/features/onboarding",
       "checks": [
         "feature.onboarding",
-        "official-full-recipe"
+        "official-full-recipe",
+        "auth-platform-preflight",
+        "auth-platform-guards",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -138,7 +167,13 @@
       "sourceRoot": "lib/features/order",
       "checks": [
         "feature.order",
-        "official-full-recipe"
+        "official-full-recipe",
+        "new-store-order-handoff",
+        "order-intent-storage",
+        "order-command-recovery",
+        "browser-order-intent-journal",
+        "additional-order-native-recovery",
+        "order-submission-lifetime"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -148,7 +183,16 @@
       "sourceRoot": "lib/features/payment",
       "checks": [
         "feature.payment",
-        "official-full-recipe"
+        "official-full-recipe",
+        "cashier-command-scope",
+        "proof-batch-scope",
+        "payment-command-recovery",
+        "payment-intent-storage",
+        "payment-command-coordinator",
+        "payment-command-transport",
+        "payment-recovery-panel",
+        "browser-payment-intent-journal",
+        "payment-command-v2-native"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -198,7 +242,13 @@
       "sourceRoot": "lib/features/procurement",
       "checks": [
         "feature.procurement",
-        "official-full-recipe"
+        "official-full-recipe",
+        "office-first-legal-native",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -248,7 +298,9 @@
       "sourceRoot": "lib/features/report",
       "checks": [
         "feature.report",
-        "official-full-recipe"
+        "official-full-recipe",
+        "owned-read-lifetime",
+        "session-bound-views"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -288,7 +340,14 @@
       "sourceRoot": "lib/features/store_setup",
       "checks": [
         "feature.store_setup",
-        "official-full-recipe"
+        "official-full-recipe",
+        "office-first-legal-native",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards",
+        "first-additional-store-http",
+        "new-store-order-handoff"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -298,7 +357,8 @@
       "sourceRoot": "lib/features/store_workflow",
       "checks": [
         "feature.store_workflow",
-        "official-full-recipe"
+        "official-full-recipe",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -308,7 +368,15 @@
       "sourceRoot": "lib/features/super_admin",
       "checks": [
         "feature.super_admin",
-        "official-full-recipe"
+        "official-full-recipe",
+        "office-first-legal-native",
+        "auth-platform-preflight",
+        "auth-platform-guards",
+        "two-project-real-platform",
+        "first-legal-real-http",
+        "runtime-gateway-guards",
+        "owned-platform-guards",
+        "first-additional-store-http"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -328,7 +396,12 @@
       "sourceRoot": "lib/features/waiter",
       "checks": [
         "feature.waiter",
-        "official-full-recipe"
+        "official-full-recipe",
+        "order-intent-storage",
+        "order-command-recovery",
+        "browser-order-intent-journal",
+        "additional-order-native-recovery",
+        "order-submission-lifetime"
       ],
       "adoption": "legacy_or_partial"
     }
@@ -574,6 +647,258 @@
     "runtime-catalog-postgres": {
       "path": "scripts/resilience/integration_runtime_catalog.py",
       "kind": "tooling"
+    },
+    "operation-outcomes": {
+      "path": "test/operation_contract_test.dart",
+      "kind": "focused"
+    },
+    "qc-read-lifetimes": {
+      "path": "test/qc_read_epoch_test.dart",
+      "kind": "focused"
+    },
+    "menu-quantity-partial": {
+      "path": "test/menu_quantity_partial_refresh_test.dart",
+      "kind": "focused"
+    },
+    "menu-quantity-sql": {
+      "path": "scripts/test_menu_discount_quantities.sh",
+      "kind": "focused"
+    },
+    "office-first-legal-sql": {
+      "path": "scripts/resilience/integration_legal_connection.py",
+      "kind": "focused"
+    },
+    "office-legal-dialog": {
+      "path": "test/office_legal_connection_dialog_test.dart",
+      "kind": "focused"
+    },
+    "order-read-lifetimes": {
+      "path": "test/order_read_epoch_test.dart",
+      "kind": "focused"
+    },
+    "kds-display-lifetime": {
+      "path": "test/emergency_fulfillment_responsive_test.dart",
+      "kind": "focused"
+    },
+    "office-identity-unit": {
+      "path": "scripts/resilience/tests/test_office_accounts.py",
+      "kind": "focused"
+    },
+    "kds-progress-journal": {
+      "path": "test/kds_progress_journal_test.dart",
+      "kind": "focused"
+    },
+    "kds-progress-receipt-sql": {
+      "path": "scripts/resilience/integration_kds_receipts.py",
+      "kind": "focused"
+    },
+    "browser-kds-outbox-compatibility": {
+      "path": "scripts/resilience/tests/kds_outbox_browser.test.cjs",
+      "kind": "focused"
+    },
+    "cashier-command-scope": {
+      "path": "test/cashier_command_scope_test.dart",
+      "kind": "focused"
+    },
+    "schema-snapshot-unit": {
+      "path": "scripts/resilience/tests/test_schema_snapshot.py",
+      "kind": "tooling"
+    },
+    "schema-runner-unit": {
+      "path": "scripts/resilience/tests/test_schema_fixture_runner.py",
+      "kind": "tooling"
+    },
+    "current-schema-upgrade": {
+      "path": "scripts/resilience/run_schema_fixture.py",
+      "kind": "focused"
+    },
+    "session-scope-binding": {
+      "path": "test/operation_scope_binding_test.dart",
+      "kind": "focused"
+    },
+    "payment-receipts-client": {
+      "path": "test/payment_command_receipts_test.dart",
+      "kind": "focused"
+    },
+    "payment-receipts-native": {
+      "path": "scripts/resilience/payment_receipt_fixture.py",
+      "kind": "focused"
+    },
+    "settings-command-scope": {
+      "path": "test/settings_command_scope_test.dart",
+      "kind": "focused"
+    },
+    "session-bound-views": {
+      "path": "test/session_bound_views_test.dart",
+      "kind": "focused"
+    },
+    "rpc-json-cleanup": {
+      "path": "test/rpc_resource_cleanup_test.dart",
+      "kind": "focused"
+    },
+    "native-kds-json-resources": {
+      "path": "test/resilience/native_rpc_resource_probe.dart",
+      "kind": "focused"
+    },
+    "owned-read-lifetime": {
+      "path": "test/data_access/owned_read_session_test.dart",
+      "kind": "focused"
+    },
+    "attendance-scope-commands": {
+      "path": "test/attendance_submission_retry_test.dart",
+      "kind": "focused"
+    },
+    "proof-batch-scope": {
+      "path": "test/data_access/proof_batch_scope_test.dart",
+      "kind": "focused"
+    },
+    "office-first-legal-native": {
+      "path": "scripts/resilience/legal_connection_native_fixture.py",
+      "kind": "focused"
+    },
+    "auth-platform-preflight": {
+      "path": "scripts/resilience/auth_platform_fixture.py",
+      "kind": "focused"
+    },
+    "auth-platform-guards": {
+      "path": "scripts/resilience/tests/test_auth_platform_fixture.py",
+      "kind": "focused"
+    },
+    "payment-command-recovery": {
+      "path": "test/cashier_payment_recovery_test.dart",
+      "kind": "focused"
+    },
+    "payment-intent-storage": {
+      "path": "test/payment_intent_journal_test.dart",
+      "kind": "focused"
+    },
+    "payment-command-coordinator": {
+      "path": "test/payment_command_coordinator_test.dart",
+      "kind": "focused"
+    },
+    "payment-command-transport": {
+      "path": "test/payment_command_rpc_test.dart",
+      "kind": "focused"
+    },
+    "payment-recovery-panel": {
+      "path": "test/payment_recovery_panel_test.dart",
+      "kind": "focused"
+    },
+    "browser-payment-intent-journal": {
+      "path": "scripts/resilience/tests/payment_journal_browser.test.cjs",
+      "kind": "focused"
+    },
+    "payment-command-v2-native": {
+      "path": "scripts/resilience/payment_command_v2_fixture.py",
+      "kind": "focused"
+    },
+    "two-project-real-platform": {
+      "path": "scripts/resilience/run_platform_probe.py",
+      "kind": "focused"
+    },
+    "first-legal-real-http": {
+      "path": "scripts/resilience/legal_http_scenario.py",
+      "kind": "focused"
+    },
+    "runtime-gateway-guards": {
+      "path": "scripts/resilience/tests/test_runtime_gateway.py",
+      "kind": "focused"
+    },
+    "owned-platform-guards": {
+      "path": "scripts/resilience/tests/test_owned_platform.py",
+      "kind": "focused"
+    },
+    "first-additional-store-http": {
+      "path": "scripts/resilience/store_http_scenario.py",
+      "kind": "focused"
+    },
+    "real-storage-http": {
+      "path": "scripts/resilience/storage_probe.py",
+      "kind": "focused"
+    },
+    "storage-runtime-guards": {
+      "path": "scripts/resilience/tests/test_storage_runtime.py",
+      "kind": "tooling"
+    },
+    "platform-selection-guards": {
+      "path": "scripts/resilience/tests/test_platform_probe_arguments.py",
+      "kind": "tooling"
+    },
+    "tools-image-layout": {
+      "path": "scripts/local_verification/tests/test_tools_image_layout.py",
+      "kind": "tooling"
+    },
+    "new-store-workforce-http": {
+      "path": "scripts/resilience/workforce_http_scenario.py",
+      "kind": "focused"
+    },
+    "edge-preload-listeners": {
+      "path": "scripts/resilience/tests/test_edge_preload.py",
+      "kind": "tooling"
+    },
+    "attendance-fixture-image": {
+      "path": "test/resilience_fixture_image_test.dart",
+      "kind": "focused"
+    },
+    "auth-command-scope": {
+      "path": "test/auth_initialization_test.dart",
+      "kind": "focused"
+    },
+    "auth-command-transport": {
+      "path": "test/auth_command_session_test.dart",
+      "kind": "focused"
+    },
+    "bounded-photo-processing": {
+      "path": "test/bounded_photo_test.dart",
+      "kind": "focused"
+    },
+    "attendance-photo-original-auth": {
+      "path": "test/attendance_photo_transport_test.dart",
+      "kind": "focused"
+    },
+    "cashier-owned-read-lifetime": {
+      "path": "test/cashier_owned_read_test.dart",
+      "kind": "focused"
+    },
+    "proof-confirmed-cleanup": {
+      "path": "test/payment_proof_outcome_test.dart",
+      "kind": "focused"
+    },
+    "realtime-source-guards": {
+      "path": "scripts/resilience/tests/test_realtime_runtime.py",
+      "kind": "tooling"
+    },
+    "realtime-native-websocket": {
+      "path": "scripts/resilience/realtime_probe.dart",
+      "kind": "focused"
+    },
+    "new-store-kds-realtime": {
+      "path": "scripts/resilience/kds_realtime_scenario.py",
+      "kind": "focused"
+    },
+    "new-store-order-handoff": {
+      "path": "scripts/resilience/order_handoff_scenario.py",
+      "kind": "focused"
+    },
+    "order-intent-storage": {
+      "path": "test/order_intent_journal_test.dart",
+      "kind": "focused"
+    },
+    "order-command-recovery": {
+      "path": "test/recoverable_order_commands_test.dart",
+      "kind": "focused"
+    },
+    "browser-order-intent-journal": {
+      "path": "scripts/resilience/tests/order_journal_browser.test.cjs",
+      "kind": "focused"
+    },
+    "additional-order-native-recovery": {
+      "path": "scripts/resilience/additional_order_recovery_scenario.py",
+      "kind": "focused"
+    },
+    "order-submission-lifetime": {
+      "path": "test/order_submission_lifetime_test.dart",
+      "kind": "focused"
     }
   },
   "workstreams": [
@@ -599,7 +924,7 @@
     },
     {
       "id": "G2",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "zero_store_legal_entity",
         "cross_database_recovery",
@@ -608,7 +933,7 @@
     },
     {
       "id": "G3",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "domain_outcomes",
         "scoped_reads",
@@ -617,7 +942,7 @@
     },
     {
       "id": "G4",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "bounded_reads",
         "event_fanout",
@@ -626,7 +951,7 @@
     },
     {
       "id": "G5",
-      "status": "open",
+      "status": "in_progress",
       "requiredEvidence": [
         "screen_isolation",
         "resource_lifetime",

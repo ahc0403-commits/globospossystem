@@ -34,11 +34,15 @@ class DeadlineHttpClient extends http.BaseClient {
     this.deadline, {
     this.callTimeout = const Duration(seconds: 10),
     this.maxResponseBytes = 1024 * 1024,
+    this.responseTooLargeCode = 'PAYMENT_PROOF_RESPONSE_TOO_LARGE',
+    this.isCurrent,
   });
   final http.Client inner;
   final DateTime deadline;
   final Duration callTimeout;
   final int maxResponseBytes;
+  final String responseTooLargeCode;
+  final bool Function()? isCurrent;
   bool _closed = false;
   final _cancellations = <void Function()>{};
 
@@ -55,6 +59,9 @@ class DeadlineHttpClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     if (_closed) throw StateError('Request transport closed');
+    if (isCurrent != null && !isCurrent!()) {
+      throw StateError('REQUEST_ACTOR_CHANGED');
+    }
     final remaining = deadline.difference(DateTime.now());
     if (remaining <= Duration.zero) {
       throw TimeoutException('Job deadline reached');
@@ -90,7 +97,7 @@ class DeadlineHttpClient extends http.BaseClient {
       await for (final chunk in response.stream) {
         if (bytes.length + chunk.length > maxResponseBytes) {
           if (!abort.isCompleted) abort.complete();
-          throw const FormatException('PAYMENT_PROOF_RESPONSE_TOO_LARGE');
+          throw FormatException(responseTooLargeCode);
         }
         bytes.add(chunk);
       }

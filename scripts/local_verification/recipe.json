@@ -118,6 +118,50 @@
       "timeoutSeconds": 600
     },
     {
+      "id": "kds-progress-receipt-sql",
+      "argv": [
+        "python3",
+        "-B",
+        "scripts/resilience/integration_kds_receipts.py",
+        "-v"
+      ],
+      "format": "unittest",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "browser-kds-outbox-compatibility",
+      "argv": [
+        "node",
+        "--test",
+        "scripts/resilience/tests/kds_outbox_browser.test.cjs"
+      ],
+      "format": "node",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "browser-payment-intent-journal",
+      "argv": [
+        "node",
+        "--test",
+        "scripts/resilience/tests/payment_journal_browser.test.cjs"
+      ],
+      "format": "node",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "native-kds-json-resources",
+      "argv": [
+        "flutter",
+        "test",
+        "--no-pub",
+        "--machine",
+        "--enable-vmservice",
+        "test/resilience/native_rpc_resource_probe.dart"
+      ],
+      "format": "flutter",
+      "timeoutSeconds": 120
+    },
+    {
       "id": "repository",
       "argv": [
         "bash",

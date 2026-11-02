@@ -3,6 +3,7 @@ import '../direct_order/direct_order_requirements.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -48,8 +49,10 @@ class _EmergencyFulfillmentScreenState
   bool _flashing = false;
   bool _showRecent = false;
   bool _actionBusy = false;
-  bool _readyPulseOn = false;
-  DateTime _now = DateTime.now();
+  final _displayTicks = ValueNotifier<(DateTime, bool)>((
+    DateTime.now(),
+    false,
+  ));
   String? _selectedOrderId;
   int _page = 0;
   Timer? _flashTimer;
@@ -214,16 +217,16 @@ class _EmergencyFulfillmentScreenState
       _clockTimer = null;
       return;
     }
-    _now = DateTime.now();
+    _displayTicks.value = (DateTime.now(), _displayTicks.value.$2);
     _clockTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      setState(() {
-        final wallClockNow = DateTime.now();
-        final nextTick = _now.add(const Duration(seconds: 1));
-        // Advance visibly on every tick, while still catching up after a
-        // browser tab has been throttled or suspended.
-        _now = wallClockNow.isAfter(nextTick) ? wallClockNow : nextTick;
-      });
+      final current = _displayTicks.value;
+      final wallClockNow = DateTime.now();
+      final nextTick = current.$1.add(const Duration(seconds: 1));
+      _displayTicks.value = (
+        wallClockNow.isAfter(nextTick) ? wallClockNow : nextTick,
+        current.$2,
+      );
     });
   }
 
@@ -238,11 +241,13 @@ class _EmergencyFulfillmentScreenState
     if (!needsPulse) {
       _readyPulseTimer?.cancel();
       _readyPulseTimer = null;
-      _readyPulseOn = false;
+      _displayTicks.value = (_displayTicks.value.$1, false);
       return;
     }
     _readyPulseTimer ??= Timer.periodic(const Duration(milliseconds: 500), (_) {
-      if (mounted) setState(() => _readyPulseOn = !_readyPulseOn);
+      if (mounted) {
+        _displayTicks.value = (_displayTicks.value.$1, !_displayTicks.value.$2);
+      }
     });
   }
 
@@ -462,6 +467,7 @@ class _EmergencyFulfillmentScreenState
     _clockTimer?.cancel();
     unawaited(_foregroundPushSub.cancel());
     _stateSub.close();
+    _displayTicks.dispose();
     super.dispose();
   }
 
@@ -621,6 +627,10 @@ class _EmergencyFulfillmentScreenState
                   final notifier = ref.read(
                     emergencyFulfillmentProvider.notifier,
                   );
+                  if (state.error == 'KDS_PROGRESS_RESULT_UNKNOWN') {
+                    await notifier.reconcileUnknownProgress();
+                    return;
+                  }
                   if (_showRecent && state.usesBoundedHistory) {
                     await notifier.loadCompletedHistory();
                   } else {
@@ -736,7 +746,6 @@ class _EmergencyFulfillmentScreenState
     EmergencyFulfillmentState state,
     _EmergencyCopy copy,
   ) {
-    final now = _now;
     final stationType = state.stationType ?? 'kitchen';
     final activeOrders = sortEmergencyOrdersForStation(
       state.orders
@@ -773,41 +782,44 @@ class _EmergencyFulfillmentScreenState
             orElse: () => null,
           );
     if (selected != null) {
-      return _EmergencyOrderDetails(
-        order: selected,
-        stationType: stationType,
-        copy: copy,
-        now: now,
-        busy: _actionBusy,
-        pending: state.pendingQueueIds.contains(selected.queueId),
-        error: state.error,
-        readyPulseOn: _readyPulseOn,
-        onBack: () => setState(() => _selectedOrderId = null),
-        onItemAction: (item) => _completeItem(
-          item,
-          stationType,
-          preparationOnly:
-              item.kitchenDirectToFloor &&
-              !selected.isDelivery &&
-              !selected.isDirectPickup,
+      return ValueListenableBuilder<(DateTime, bool)>(
+        valueListenable: _displayTicks,
+        builder: (context, tick, _) => _EmergencyOrderDetails(
+          order: selected,
+          stationType: stationType,
+          copy: copy,
+          now: tick.$1,
+          busy: _actionBusy,
+          pending: state.pendingQueueIds.contains(selected.queueId),
+          error: state.error,
+          readyPulseOn: tick.$2,
+          onBack: () => setState(() => _selectedOrderId = null),
+          onItemAction: (item) => _completeItem(
+            item,
+            stationType,
+            preparationOnly:
+                item.kitchenDirectToFloor &&
+                !selected.isDelivery &&
+                !selected.isDirectPickup,
+          ),
+          // A menu-body tap starts cooking for the direct workflow. The explicit
+          // check action is a separate, authoritative completion/floor handoff.
+          onItemComplete: (item) => _completeItem(item, stationType),
+          onItemRevert: (item) => _revertItem(
+            item,
+            stationType,
+            preparationOnly:
+                item.kitchenDirectToFloor &&
+                !selected.isDelivery &&
+                !selected.isDirectPickup,
+          ),
+          onServeReady: stationType == 'floor' && selected.hasReadyUnservedFood
+              ? () => _serveReadyOrder(selected)
+              : null,
+          onRevert: selected.lastActionId == null
+              ? null
+              : () => _revertOrder(selected),
         ),
-        // A menu-body tap starts cooking for the direct workflow. The explicit
-        // check action is a separate, authoritative completion/floor handoff.
-        onItemComplete: (item) => _completeItem(item, stationType),
-        onItemRevert: (item) => _revertItem(
-          item,
-          stationType,
-          preparationOnly:
-              item.kitchenDirectToFloor &&
-              !selected.isDelivery &&
-              !selected.isDirectPickup,
-        ),
-        onServeReady: stationType == 'floor' && selected.hasReadyUnservedFood
-            ? () => _serveReadyOrder(selected)
-            : null,
-        onRevert: selected.lastActionId == null
-            ? null
-            : () => _revertOrder(selected),
       );
     }
 
@@ -940,9 +952,8 @@ class _EmergencyFulfillmentScreenState
                     stationType: stationType,
                     pendingQueueIds: state.pendingQueueIds,
                     requestedPage: _page,
-                    now: now,
+                    displayTicks: _displayTicks,
                     copy: copy,
-                    readyPulseOn: _readyPulseOn,
                     onPageChanged: (page) => setState(() => _page = page),
                     onSelected: (orderId) =>
                         setState(() => _selectedOrderId = orderId),
@@ -1533,9 +1544,8 @@ class _EmergencyOrderBoard extends StatelessWidget {
     required this.stationType,
     required this.pendingQueueIds,
     required this.requestedPage,
-    required this.now,
+    required this.displayTicks,
     required this.copy,
-    required this.readyPulseOn,
     required this.onPageChanged,
     required this.onSelected,
   });
@@ -1544,9 +1554,8 @@ class _EmergencyOrderBoard extends StatelessWidget {
   final String stationType;
   final Set<String> pendingQueueIds;
   final int requestedPage;
-  final DateTime now;
+  final ValueListenable<(DateTime, bool)> displayTicks;
   final _EmergencyCopy copy;
-  final bool readyPulseOn;
   final ValueChanged<int> onPageChanged;
   final ValueChanged<String> onSelected;
 
@@ -1603,9 +1612,8 @@ class _EmergencyOrderBoard extends StatelessWidget {
                     order: order,
                     stationType: stationType,
                     pending: pendingQueueIds.contains(order.queueId),
-                    now: now,
+                    displayTicks: displayTicks,
                     copy: copy,
-                    readyPulseOn: readyPulseOn,
                     onTap: () => onSelected(order.orderId),
                   );
                 },
@@ -1772,18 +1780,16 @@ class _EmergencyOrderCard extends StatelessWidget {
     required this.order,
     required this.stationType,
     required this.pending,
-    required this.now,
+    required this.displayTicks,
     required this.copy,
-    required this.readyPulseOn,
     required this.onTap,
   });
 
   final EmergencyFulfillmentOrder order;
   final String stationType;
   final bool pending;
-  final DateTime now;
+  final ValueListenable<(DateTime, bool)> displayTicks;
   final _EmergencyCopy copy;
-  final bool readyPulseOn;
   final VoidCallback onTap;
 
   @override
@@ -1844,249 +1850,269 @@ class _EmergencyOrderCard extends StatelessWidget {
           (item) => item.readyFromPreviousStage && !item.completed,
         );
     final stationReady = trayReady || floorReady;
-    final cardColor = stationReady && readyPulseOn
-        ? PosColors.info.withValues(alpha: 0.18)
-        : PosColors.surface;
-    final effectiveBorderTone = stationReady && readyPulseOn
-        ? PosColors.info
-        : borderTone;
-    // The header is the station-level clock. Supplemental batches retain
-    // their independent timers below, but must never replace this primary
-    // kitchen/tray/floor clock with an optional item timestamp.
-    final elapsed = order.stationElapsedAt(now, stationType);
-    final orderHeaderStyle =
-        (Theme.of(context).textTheme.titleMedium ??
-                const TextStyle(fontSize: 16))
-            .copyWith(color: Colors.white, fontWeight: FontWeight.w900);
-    final tableHeaderStyle = orderHeaderStyle.copyWith(
-      fontSize: (orderHeaderStyle.fontSize ?? 16) * 1.4,
-    );
-    final orderIdentifier = order.isDelivery
-        ? copy.delivery
-        : order.isDirectPickup
-        ? '${copy.takeout} ${order.tableNumber}'
-        : order.tableNumber;
-    final baseSemantics = order.isDelivery
-        ? '${copy.order} ${order.queueNo}, ${copy.delivery}, '
-              '${visibleItems.length} ${copy.items}, $totalProgress'
-        : order.isDirectPickup
-        ? '${copy.order} ${order.queueNo}, ${copy.takeout} ${order.tableNumber}, '
-              '${visibleItems.length} ${copy.items}, $totalProgress'
-        : '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
-              '${copy.floorName(order.floorLabel)}, ${visibleItems.length} ${copy.items}, '
-              '$totalProgress';
-    final semantics = trayReady
-        ? '$baseSemantics, ${copy.trayReadyWaiting}'
-        : baseSemantics;
+    return ValueListenableBuilder<(DateTime, bool)>(
+      valueListenable: displayTicks,
+      builder: (context, tick, _) {
+        final now = tick.$1;
+        final readyPulseOn = tick.$2;
+        final cardColor = stationReady && readyPulseOn
+            ? PosColors.info.withValues(alpha: 0.18)
+            : PosColors.surface;
+        final effectiveBorderTone = stationReady && readyPulseOn
+            ? PosColors.info
+            : borderTone;
+        // The header is the station-level clock. Supplemental batches retain
+        // their independent timers below, but must never replace this primary
+        // kitchen/tray/floor clock with an optional item timestamp.
+        final elapsed = order.stationElapsedAt(now, stationType);
+        final orderHeaderStyle =
+            (Theme.of(context).textTheme.titleMedium ??
+                    const TextStyle(fontSize: 16))
+                .copyWith(color: Colors.white, fontWeight: FontWeight.w900);
+        final tableHeaderStyle = orderHeaderStyle.copyWith(
+          fontSize: (orderHeaderStyle.fontSize ?? 16) * 1.4,
+        );
+        final orderIdentifier = order.isDelivery
+            ? copy.delivery
+            : order.isDirectPickup
+            ? '${copy.takeout} ${order.tableNumber}'
+            : order.tableNumber;
+        final baseSemantics = order.isDelivery
+            ? '${copy.order} ${order.queueNo}, ${copy.delivery}, '
+                  '${visibleItems.length} ${copy.items}, $totalProgress'
+            : order.isDirectPickup
+            ? '${copy.order} ${order.queueNo}, ${copy.takeout} ${order.tableNumber}, '
+                  '${visibleItems.length} ${copy.items}, $totalProgress'
+            : '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
+                  '${copy.floorName(order.floorLabel)}, ${visibleItems.length} ${copy.items}, '
+                  '$totalProgress';
+        final semantics = trayReady
+            ? '$baseSemantics, ${copy.trayReadyWaiting}'
+            : baseSemantics;
 
-    return Semantics(
-      button: true,
-      label: semantics,
-      child: Material(
-        key: ValueKey('emergency_order_card_surface_${order.orderId}'),
-        color: cardColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: effectiveBorderTone,
-            width: trayReady ? 4 : 2,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          key: ValueKey('emergency_order_${order.orderId}'),
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                key: ValueKey('emergency_order_card_header_${order.orderId}'),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                color: floorReady && readyPulseOn ? PosColors.info : tone,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              '#${order.queueNo}',
-                              key: Key(
-                                'emergency_order_number_${order.orderId}',
+        return Semantics(
+          button: true,
+          label: semantics,
+          child: Material(
+            key: ValueKey('emergency_order_card_surface_${order.orderId}'),
+            color: cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(
+                color: effectiveBorderTone,
+                width: trayReady ? 4 : 2,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: ValueKey('emergency_order_${order.orderId}'),
+              onTap: onTap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    key: ValueKey(
+                      'emergency_order_card_header_${order.orderId}',
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    color: floorReady && readyPulseOn ? PosColors.info : tone,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  '#${order.queueNo}',
+                                  key: Key(
+                                    'emergency_order_number_${order.orderId}',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: orderHeaderStyle,
+                                ),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: orderHeaderStyle,
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  orderIdentifier,
+                                  key: Key(
+                                    'emergency_order_table_${order.orderId}',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: tableHeaderStyle,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              pending
+                                  ? Icons.cloud_upload_outlined
+                                  : Icons.schedule_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              formatEmergencyElapsed(elapsed),
+                              key: Key(
+                                'emergency_order_elapsed_${order.orderId}',
+                              ),
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (order.directOrderPacking != null)
+                            Text(
+                              DirectOrderCopy(
+                                Localizations.localeOf(context).languageCode,
+                              ).packingCount(
+                                (order.directOrderPacking!['diner_count']
+                                        as num?)
+                                    ?.toInt(),
+                                utensilsRequested:
+                                    order
+                                        .directOrderPacking!['utensils_requested'] !=
+                                    false,
+                              ),
+                              key: Key(
+                                'emergency_order_packing_${order.orderId}',
+                              ),
+                              maxLines: 2,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          DirectOrderConfirmedNotes(
+                            text: order.directOrderPacking?['confirmed_notes']
+                                ?.toString(),
+                          ),
+                          Expanded(
+                            child: _EmergencyCardMenuList(
+                              items: visibleItems,
+                              stationType: stationType,
+                              readyPulseOn: readyPulseOn,
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              orderIdentifier,
-                              key: Key(
-                                'emergency_order_table_${order.orderId}',
+                          if (supplementalBatches.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  for (final batch in supplementalBatches) ...[
+                                    if (batch != supplementalBatches.first)
+                                      const SizedBox(width: 5),
+                                    Container(
+                                      key: Key(
+                                        'emergency_additional_batch_timer_'
+                                        '${order.orderId}_${batch.sequence - 1}',
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            (batch.completed
+                                                    ? PosColors.success
+                                                    : PosColors.warning)
+                                                .withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${copy.additionalOrder(batch.sequence - 1)} '
+                                        '${formatEmergencyElapsed(batch.elapsedAt(now))}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: batch.completed
+                                                  ? PosColors.success
+                                                  : PosColors.warning,
+                                              fontWeight: FontWeight.w900,
+                                              fontFeatures: const [
+                                                FontFeature.tabularFigures(),
+                                              ],
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: tableHeaderStyle,
                             ),
+                          ],
+                          const SizedBox(height: 4),
+                          Text(
+                            totalProgress,
+                            key: Key(
+                              'emergency_card_total_progress_${order.orderId}',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: tone,
+                                  fontWeight: FontWeight.w900,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            pending
+                                ? copy.pendingSync
+                                : completed
+                                ? copy.completed
+                                : actionable
+                                ? copy.waitingForAction
+                                : copy.waitingForPrevious,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: tone,
+                                  fontWeight: FontWeight.w800,
+                                ),
                           ),
                         ],
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          pending
-                              ? Icons.cloud_upload_outlined
-                              : Icons.schedule_rounded,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          formatEmergencyElapsed(elapsed),
-                          key: Key('emergency_order_elapsed_${order.orderId}'),
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (order.directOrderPacking != null)
-                        Text(
-                          DirectOrderCopy(
-                            Localizations.localeOf(context).languageCode,
-                          ).packingCount(
-                            (order.directOrderPacking!['diner_count'] as num?)
-                                ?.toInt(),
-                            utensilsRequested:
-                                order
-                                    .directOrderPacking!['utensils_requested'] !=
-                                false,
-                          ),
-                          key: Key('emergency_order_packing_${order.orderId}'),
-                          maxLines: 2,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                      DirectOrderConfirmedNotes(
-                        text: order.directOrderPacking?['confirmed_notes']
-                            ?.toString(),
-                      ),
-                      Expanded(
-                        child: _EmergencyCardMenuList(
-                          items: visibleItems,
-                          stationType: stationType,
-                          readyPulseOn: readyPulseOn,
-                        ),
-                      ),
-                      if (supplementalBatches.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (final batch in supplementalBatches) ...[
-                                if (batch != supplementalBatches.first)
-                                  const SizedBox(width: 5),
-                                Container(
-                                  key: Key(
-                                    'emergency_additional_batch_timer_'
-                                    '${order.orderId}_${batch.sequence - 1}',
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        (batch.completed
-                                                ? PosColors.success
-                                                : PosColors.warning)
-                                            .withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Text(
-                                    '${copy.additionalOrder(batch.sequence - 1)} '
-                                    '${formatEmergencyElapsed(batch.elapsedAt(now))}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: batch.completed
-                                              ? PosColors.success
-                                              : PosColors.warning,
-                                          fontWeight: FontWeight.w900,
-                                          fontFeatures: const [
-                                            FontFeature.tabularFigures(),
-                                          ],
-                                        ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 4),
-                      Text(
-                        totalProgress,
-                        key: Key(
-                          'emergency_card_total_progress_${order.orderId}',
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: tone,
-                              fontWeight: FontWeight.w900,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        pending
-                            ? copy.pendingSync
-                            : completed
-                            ? copy.completed
-                            : actionable
-                            ? copy.waitingForAction
-                            : copy.waitingForPrevious,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: tone,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -3145,7 +3171,17 @@ Color _orderFloorColor(String floorLabel) =>
     };
 
 class _EmergencyCopy {
-  const _EmergencyCopy(this.languageCode, {this.directToFloor = false});
+  const _EmergencyCopy(
+    this.languageCode, {
+    this.directToFloor = false,
+    required this.progressUnknown,
+    required this.progressNotSaved,
+    required this.signInRequired,
+  });
+
+  final String progressUnknown;
+  final String progressNotSaved;
+  final String signInRequired;
 
   final bool directToFloor;
 
@@ -3157,6 +3193,9 @@ class _EmergencyCopy {
   }) => _EmergencyCopy(
     Localizations.localeOf(context).languageCode,
     directToFloor: directToFloor,
+    progressUnknown: context.l10n.resilienceKdsProgressUnknown,
+    progressNotSaved: context.l10n.resilienceKdsProgressNotSaved,
+    signInRequired: context.l10n.connectivitySignInRequiredMessage,
   );
 
   String _pick(String ko, String vi, String en) => switch (languageCode) {
@@ -3442,6 +3481,9 @@ class _EmergencyCopy {
       _pick('$minutes분 경과', 'Đã chờ $minutes phút', '$minutes min elapsed');
 
   String errorMessage(String error) {
+    if (error.contains('EMERGENCY_USER_REQUIRED')) return signInRequired;
+    if (error.contains('KDS_PROGRESS_RESULT_UNKNOWN')) return progressUnknown;
+    if (error.contains('KDS_PROGRESS_NOT_SAVED')) return progressNotSaved;
     if (error.contains('EMERGENCY_QUANTITY_CHAIN_VIOLATION')) {
       return _pick(
         '현재 전달 가능한 수량을 확인해 주세요. 준비되지 않았거나 이미 전달된 음식입니다.',

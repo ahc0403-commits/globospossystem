@@ -1,9 +1,11 @@
+import '../../core/auth/operation_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/services/qc_service.dart';
+import '../../core/utils/read_epoch.dart';
 
 class QcTemplateState {
   const QcTemplateState({
@@ -235,7 +237,13 @@ class QcCheckState {
 }
 
 class QcCheckNotifier extends StateNotifier<QcCheckState> {
-  QcCheckNotifier() : super(const QcCheckState());
+  QcCheckNotifier({QcService? service})
+    : _service = service ?? qcService,
+      super(const QcCheckState());
+
+  final QcService _service;
+  final _weekRead = ReadEpoch();
+  final _rangeRead = ReadEpoch();
 
   String? _restaurantId;
   DateTime? _weekStart;
@@ -244,23 +252,37 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
     required String storeId,
     required DateTime weekStart,
   }) async {
+    if (!mounted) return;
+    final changedStore = _restaurantId != storeId;
+    if (changedStore) {
+      _weekRead.invalidate();
+      _rangeRead.invalidate();
+    }
+    final token = _weekRead.begin((storeId, weekStart));
     _restaurantId = storeId;
     _weekStart = DateTime(weekStart.year, weekStart.month, weekStart.day);
 
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(
+      checks: changedStore ? const [] : null,
+      dateRangeChecks: changedStore ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
       final weekEnd = _weekStart!.add(const Duration(days: 6));
-      final checks = await qcService.fetchChecks(
+      final checks = await _service.fetchChecks(
         storeId: storeId,
         from: _weekStart!,
         to: weekEnd,
       );
+      if (!mounted || !_weekRead.accepts(token)) return;
       state = state.copyWith(
         checks: checks,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || !_weekRead.accepts(token)) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapQcCheckError(e, 'Failed to load QC inspection status.'),
@@ -434,20 +456,34 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
     required DateTime from,
     required DateTime to,
   }) async {
+    if (!mounted) return;
+    final changedStore = _restaurantId != storeId;
+    if (changedStore) {
+      _weekRead.invalidate();
+      _rangeRead.invalidate();
+    }
+    final token = _rangeRead.begin((storeId, from, to));
     _restaurantId = storeId;
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(
+      checks: changedStore ? const [] : null,
+      dateRangeChecks: changedStore ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
-      final checks = await qcService.fetchChecks(
+      final checks = await _service.fetchChecks(
         storeId: storeId,
         from: from,
         to: to,
       );
+      if (!mounted || !_rangeRead.accepts(token)) return;
       state = state.copyWith(
         dateRangeChecks: checks,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || !_rangeRead.accepts(token)) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapQcCheckError(
@@ -485,6 +521,13 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
 
     return fallback;
   }
+
+  @override
+  void dispose() {
+    _weekRead.dispose();
+    _rangeRead.dispose();
+    super.dispose();
+  }
 }
 
 final qcCheckProvider = StateNotifierProvider<QcCheckNotifier, QcCheckState>(
@@ -493,11 +536,13 @@ final qcCheckProvider = StateNotifierProvider<QcCheckNotifier, QcCheckState>(
 
 final superAdminQcSummaryProvider = FutureProvider.family
     .autoDispose<List<Map<String, dynamic>>, DateTime>((ref, weekStart) async {
+      watchOperationScope(ref);
       return qcService.fetchSuperAdminSummary(weekStart: weekStart);
     });
 
 final globalQcTemplatesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      watchOperationScope(ref);
       return qcService.fetchGlobalTemplates();
     });
 
@@ -529,21 +574,35 @@ class QcFollowupState {
 }
 
 class QcFollowupNotifier extends StateNotifier<QcFollowupState> {
-  QcFollowupNotifier() : super(const QcFollowupState());
+  QcFollowupNotifier({QcService? service})
+    : _service = service ?? qcService,
+      super(const QcFollowupState());
+
+  final QcService _service;
+  final _reads = ReadEpoch();
 
   Future<void> load(String storeId, {String? statusFilter}) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    if (!mounted) return;
+    final changedScope = _reads.scope != (storeId, statusFilter);
+    final token = _reads.begin((storeId, statusFilter));
+    state = state.copyWith(
+      followups: changedScope ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
-      final followups = await qcService.fetchFollowups(
+      final followups = await _service.fetchFollowups(
         storeId: storeId,
         statusFilter: statusFilter,
       );
+      if (!mounted || !_reads.accepts(token)) return;
       state = state.copyWith(
         followups: followups,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || !_reads.accepts(token)) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapFollowupError(e, 'Failed to load follow-ups.'),
@@ -551,23 +610,37 @@ class QcFollowupNotifier extends StateNotifier<QcFollowupState> {
     }
   }
 
+  @override
+  void dispose() {
+    _reads.dispose();
+    super.dispose();
+  }
+
   Future<bool> createFollowup({
     required String storeId,
     required String sourceCheckId,
     String? assignedToName,
   }) async {
+    final origin = _reads.currentToken;
     try {
-      await qcService.createFollowup(
+      await _service.createFollowup(
         storeId: storeId,
         sourceCheckId: sourceCheckId,
         assignedToName: assignedToName,
       );
-      await load(storeId);
+      if (mounted && origin != null && _reads.accepts(origin)) {
+        final scope = origin.scope as (String, String?);
+        if (scope.$1 == storeId) {
+          await load(storeId, statusFilter: scope.$2);
+        }
+      }
       return true;
     } catch (e) {
-      state = state.copyWith(
-        error: _mapFollowupError(e, 'Failed to create follow-up.'),
-      );
+      if (mounted && origin != null && _reads.accepts(origin)) {
+        state = state.copyWith(
+          error: _mapFollowupError(e, 'Failed to create follow-up.'),
+        );
+      }
       return false;
     }
   }
@@ -578,19 +651,27 @@ class QcFollowupNotifier extends StateNotifier<QcFollowupState> {
     required String status,
     String? resolutionNotes,
   }) async {
+    final origin = _reads.currentToken;
     try {
-      await qcService.updateFollowupStatus(
+      await _service.updateFollowupStatus(
         followupId: followupId,
         storeId: storeId,
         status: status,
         resolutionNotes: resolutionNotes,
       );
-      await load(storeId);
+      if (mounted && origin != null && _reads.accepts(origin)) {
+        final scope = origin.scope as (String, String?);
+        if (scope.$1 == storeId) {
+          await load(storeId, statusFilter: scope.$2);
+        }
+      }
       return true;
     } catch (e) {
-      state = state.copyWith(
-        error: _mapFollowupError(e, 'Failed to change follow-up status.'),
-      );
+      if (mounted && origin != null && _reads.accepts(origin)) {
+        state = state.copyWith(
+          error: _mapFollowupError(e, 'Failed to change follow-up status.'),
+        );
+      }
       return false;
     }
   }
@@ -630,10 +711,13 @@ class QcFollowupNotifier extends StateNotifier<QcFollowupState> {
   }
 }
 
+final qcServiceProvider = Provider<QcService>((ref) => qcService);
+
 final qcFollowupProvider =
-    StateNotifierProvider<QcFollowupNotifier, QcFollowupState>(
-      (ref) => QcFollowupNotifier(),
-    );
+    StateNotifierProvider<QcFollowupNotifier, QcFollowupState>((ref) {
+      ref.watch(operationScopeProvider);
+      return QcFollowupNotifier(service: ref.watch(qcServiceProvider));
+    });
 
 // ─── Analytics ────────────────────────────────────
 
@@ -661,6 +745,7 @@ class QcAnalyticsParams {
 
 final qcAnalyticsProvider = FutureProvider.family
     .autoDispose<Map<String, dynamic>, QcAnalyticsParams>((ref, params) async {
+      watchOperationScope(ref);
       return qcService.fetchAnalytics(
         storeId: params.storeId,
         from: params.from,
@@ -694,18 +779,32 @@ class QcIssueQueueState {
 }
 
 class QcIssueQueueNotifier extends StateNotifier<QcIssueQueueState> {
-  QcIssueQueueNotifier() : super(const QcIssueQueueState());
+  QcIssueQueueNotifier({QcService? service})
+    : _service = service ?? qcService,
+      super(const QcIssueQueueState());
+
+  final QcService _service;
+  final _reads = ReadEpoch();
 
   Future<void> load(String storeId) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    if (!mounted) return;
+    final changedStore = _reads.scope != storeId;
+    final token = _reads.begin(storeId);
+    state = state.copyWith(
+      issues: changedStore ? const [] : null,
+      isLoading: true,
+      clearError: true,
+    );
     try {
-      final issues = await qcService.fetchIssueQueue(storeId: storeId);
+      final issues = await _service.fetchIssueQueue(storeId: storeId);
+      if (!mounted || !_reads.accepts(token)) return;
       state = state.copyWith(
         issues: issues,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
+      if (!mounted || !_reads.accepts(token)) return;
       state = state.copyWith(
         isLoading: false,
         error: _mapIssueQueueError(e, 'Failed to load QSC issue queue.'),
@@ -724,9 +823,16 @@ class QcIssueQueueNotifier extends StateNotifier<QcIssueQueueState> {
 
     return fallback;
   }
+
+  @override
+  void dispose() {
+    _reads.dispose();
+    super.dispose();
+  }
 }
 
 final qcIssueQueueProvider =
-    StateNotifierProvider<QcIssueQueueNotifier, QcIssueQueueState>(
-      (ref) => QcIssueQueueNotifier(),
-    );
+    StateNotifierProvider<QcIssueQueueNotifier, QcIssueQueueState>((ref) {
+      ref.watch(operationScopeProvider);
+      return QcIssueQueueNotifier(service: ref.watch(qcServiceProvider));
+    });

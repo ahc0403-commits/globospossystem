@@ -1,3 +1,5 @@
+import 'support/payment_command_fixture.dart';
+import 'package:globos_pos_system/core/payments/payment_command_coordinator.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
@@ -25,16 +27,29 @@ class _Qc extends QcService {
 
 class _Payments extends PaymentService {
   @override
-  Future<Map<String, dynamic>> processPayment({
+  Future<Map<String, dynamic>> processSinglePaymentCommand({
+    required String operationId,
     required String orderId,
     required String storeId,
     required double amount,
     required String method,
+    required int expectedPaymentCount,
+    required bool requireFullPayment,
+    required bool Function() isCurrent,
   }) async => {'id': 'committed'};
 }
 
 class _Cashier extends PaymentNotifier {
-  _Cashier() : super(payments: _Payments());
+  _Cashier(SupabaseClient client)
+    : super(
+        client: client,
+        payments: _Payments(),
+        commands: PaymentCommandCoordinator(
+          MemoryPaymentJournal(),
+          _Payments(),
+        ),
+        scope: () => paymentFixtureScope(),
+      );
   final refresh = Completer<void>();
   @override
   Future<void> loadOrders(String storeId) => refresh.future;
@@ -42,7 +57,15 @@ class _Cashier extends PaymentNotifier {
 
 class _CashierReads extends PaymentNotifier {
   _CashierReads(SupabaseClient client)
-    : super(client: client, payments: _Payments());
+    : super(
+        client: client,
+        payments: _Payments(),
+        commands: PaymentCommandCoordinator(
+          MemoryPaymentJournal(),
+          _Payments(),
+        ),
+        scope: () => paymentFixtureScope(),
+      );
   @override
   Future<void> subscribeRealtime(String storeId) async {}
 }
@@ -119,6 +142,7 @@ void main() {
           throw StateError('first read missing: $seen; ${cashier.state.error}');
         },
       );
+      cashier.selectOrder(paymentFixtureOrder());
       expect(
         (await cashier.processPayment('store', 'order', 100, 'CASH'))?['id'],
         'committed',
@@ -211,7 +235,9 @@ void main() {
   test(
     'committed payment returns while its follow-up read is still pending',
     () async {
-      final cashier = _Cashier();
+      final client = SupabaseClient('https://fixture.invalid', 'fixture');
+      final cashier = _Cashier(client);
+      cashier.selectOrder(paymentFixtureOrder());
       final result = await cashier
           .processPayment('store', 'order', 100, 'CASH')
           .timeout(const Duration(seconds: 1));
@@ -220,6 +246,7 @@ void main() {
       expect(cashier.state.paymentSuccess, isTrue);
       cashier.refresh.complete();
       cashier.dispose();
+      await client.dispose();
     },
   );
 

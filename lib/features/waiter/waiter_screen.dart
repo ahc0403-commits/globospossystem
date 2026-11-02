@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import '../../core/i18n/menu_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +29,7 @@ final restaurantNameProvider = FutureProvider.family<String, String>((
   ref,
   storeId,
 ) async {
+  watchOperationScope(ref);
   final response = await supabase
       .from('restaurants')
       .select('name')
@@ -48,6 +50,7 @@ class StoreSettings {
 
 final restaurantSettingsProvider = FutureProvider.family<StoreSettings, String>(
   (ref, storeId) async {
+    watchOperationScope(ref);
     final response = await supabase
         .from('restaurants')
         .select('operation_mode, per_person_charge')

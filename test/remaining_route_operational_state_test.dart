@@ -12,6 +12,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
+import 'package:globos_pos_system/core/auth/operation_scope_provider.dart';
 import 'package:globos_pos_system/core/services/printer_destination_service.dart';
 import 'package:globos_pos_system/core/ui/app_primitives.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
@@ -20,6 +21,7 @@ import 'package:globos_pos_system/features/attendance/attendance_kiosk_screen.da
 import 'package:globos_pos_system/features/attendance/attendance_kiosk_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
+import 'package:globos_pos_system/features/auth/operation_scope_binding.dart';
 import 'package:globos_pos_system/features/auth/login_screen.dart';
 import 'package:globos_pos_system/features/auth/privacy_consent_screen.dart';
 import 'package:globos_pos_system/features/kitchen/kitchen_provider.dart';
@@ -56,6 +58,8 @@ class _AuthNotifier extends AuthNotifier {
   _AuthNotifier(PosAuthState initialState) : super() {
     state = initialState;
   }
+
+  void publish(PosAuthState value) => state = value;
 
   @override
   Future<void> logout() async {}
@@ -119,6 +123,7 @@ Future<void> _pump(
   WidgetTester tester, {
   required Widget child,
   PosAuthState authState = _storeAuth,
+  _AuthNotifier? authNotifier,
   List<Override> overrides = const [],
   Size physicalSize = const Size(1280, 900),
   Locale locale = const Locale('vi'),
@@ -134,7 +139,9 @@ Future<void> _pump(
     ProviderScope(
       key: UniqueKey(),
       overrides: [
-        authProvider.overrideWith((ref) => _AuthNotifier(authState)),
+        authProvider.overrideWith(
+          (ref) => authNotifier ?? _AuthNotifier(authState),
+        ),
         ...overrides,
       ],
       child: MaterialApp.router(
@@ -660,6 +667,98 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final switchWhileCameraOpen in [true, false]) {
+    testWidgets(
+      'Attendance kiosk clears an old actor photo (camera open: $switchWhileCameraOpen)',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        PosAuthState actor(String id) => _storeAuth.copyWith(
+          user: User(
+            id: id,
+            appMetadata: const {},
+            userMetadata: const {},
+            aud: 'authenticated',
+            createdAt: '2026-11-01T00:00:00Z',
+          ),
+        );
+        final auth = _AuthNotifier(actor('actor-a'));
+        final camera = Completer<XFile?>();
+        final photo = XFile.fromData(
+          base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+          ),
+          mimeType: 'image/png',
+          name: 'attendance.png',
+        );
+        addTearDown(() {
+          if (!camera.isCompleted) camera.complete(null);
+        });
+        await _pump(
+          tester,
+          authNotifier: auth,
+          child: AttendanceKioskScreen(
+            photoPickerOverride: () => camera.future,
+          ),
+          overrides: [
+            operationScopeProvider.overrideWith(
+              (ref) => bindOperationScope(ref, authProvider),
+            ),
+            serviceConnectivityProvider.overrideWith(
+              (ref) => Stream.value(
+                const ServiceConnectivityState(
+                  kind: ServiceConnectivityKind.online,
+                ),
+              ),
+            ),
+          ],
+        );
+        await tester.enterText(
+          find.byKey(const Key('attendance_employee_number_field')),
+          'NV-001',
+        );
+        await tester.tap(find.byKey(const Key('attendance_employee_clock_in')));
+        await tester.pump();
+        if (!switchWhileCameraOpen) {
+          camera.complete(photo);
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('attendance_photo_preview')),
+            findsOneWidget,
+          );
+          auth.publish(
+            actor(
+              'actor-a',
+            ).copyWith(isLoading: true, errorMessage: 'transient'),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('attendance_photo_preview')),
+            findsOneWidget,
+          );
+        }
+        auth.publish(actor('actor-b'));
+        await tester.pumpAndSettle();
+        if (switchWhileCameraOpen) {
+          camera.complete(photo);
+          await tester.pumpAndSettle();
+        }
+        expect(find.byKey(const Key('attendance_photo_preview')), findsNothing);
+        expect(
+          tester
+              .widget<TextField>(
+                find.byKey(const Key('attendance_employee_number_field')),
+              )
+              .controller!
+              .text,
+          isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   testWidgets('Photo Ops executes loading, error, and populated states', (
     tester,

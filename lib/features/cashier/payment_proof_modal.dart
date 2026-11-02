@@ -5,8 +5,10 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/photo_processing_error_message.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/payment_proof_service.dart';
+import '../../core/utils/bounded_photo.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/error_toast.dart';
 
@@ -38,9 +40,15 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
       final source = PlatformInfo.isAndroid
           ? ImageSource.camera
           : ImageSource.gallery;
-      final picked = await _picker.pickImage(source: source, imageQuality: 90);
+      final picked = await _picker.pickImage(
+        source: source,
+        imageQuality: 90,
+        maxWidth: photoPickerDimension,
+        maxHeight: photoPickerDimension,
+      );
       if (picked == null || !mounted) return;
-      final previewBytes = await picked.readAsBytes();
+      final previewBytes = await readBoundedPhoto(picked);
+      if (!mounted) return;
 
       setState(() {
         _selectedFile = picked;
@@ -48,7 +56,12 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
       });
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, context.l10n.paymentProofCaptureFailed('$e'));
+      showErrorToast(
+        context,
+        e is PhotoProcessingException
+            ? photoProcessingErrorMessage(context.l10n, e.code)
+            : context.l10n.paymentProofCaptureFailed('$e'),
+      );
     }
   }
 
@@ -70,7 +83,12 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
       Navigator.of(context).pop(result);
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, context.l10n.paymentProofSaveFailed('$e'));
+      showErrorToast(
+        context,
+        e is PhotoProcessingException
+            ? photoProcessingErrorMessage(context.l10n, e.code)
+            : context.l10n.paymentProofSaveFailed('$e'),
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

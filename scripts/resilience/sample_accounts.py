@@ -42,18 +42,20 @@ def require(condition, message):
         raise CheckError(message)
 
 
-def private_file(path):
+def private_file(path, max_bytes=MAX_BYTES):
     path = Path(path)
     info = path.lstat()
     require(stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600
             and info.st_uid == os.getuid(), 'Private file must be owned mode-600 regular file')
     resolved = path.resolve()
     require(not resolved.is_relative_to(ROOT), 'Private file must be outside this repository')
+    require(not any((parent / '.git').exists() for parent in resolved.parents),
+            'Private file must be outside every Git worktree')
     # Prevent another user replacing a private path between reads.
     for parent in resolved.parents:
         require(not (parent.stat().st_mode & 0o022) or bool(parent.stat().st_mode & stat.S_ISVTX),
                 'Private file parent is writable by another user')
-    require(info.st_size <= MAX_BYTES, 'Private input exceeds size bound')
+    require(info.st_size <= max_bytes, 'Private input exceeds size bound')
     return resolved
 
 
@@ -122,8 +124,11 @@ class Client:
         self.calls = []
         self.opener = urllib.request.build_opener(NoRedirect)
 
+    def allows(self, path, payload, method):
+        return path.startswith(('/auth/v1/', '/rest/v1/'))
+
     def request(self, path, payload=None, token=None, method=None):
-        require(path.startswith(('/auth/v1/', '/rest/v1/')), 'Unsupported sample check endpoint')
+        require(self.allows(path, payload, method), 'Unsupported check endpoint')
         headers = {'apikey': self.key, 'Content-Type': 'application/json'}
         if token:
             headers['Authorization'] = 'Bearer ' + token

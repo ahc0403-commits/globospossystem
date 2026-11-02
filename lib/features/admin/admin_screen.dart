@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -30,7 +31,6 @@ import '../procurement/procurement_process_labels.dart';
 import '../photo_inventory/photo_inventory_screen.dart';
 import 'providers/admin_audit_provider.dart';
 import 'providers/admin_scope_provider.dart';
-import 'providers/menu_provider.dart';
 import 'providers/printer_destinations_provider.dart';
 import 'providers/settings_provider.dart';
 
@@ -43,6 +43,7 @@ class _AdminStoreContext {
 
 final _adminStoreContextProvider =
     FutureProvider.family<_AdminStoreContext?, String>((ref, storeId) async {
+      watchOperationScope(ref);
       final response = await supabase
           .from('restaurants')
           .select('name, brand_id')
@@ -94,9 +95,6 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         posLiveEventsProvider(liveStoreId),
         (_, next) => next.whenData((event) {
           if (!mounted) return;
-          if (event.affects({'menu'})) {
-            ref.invalidate(menuProvider(liveStoreId));
-          }
           if (event.affectsSourceTables(printerConfigurationTables)) {
             unawaited(
               ref

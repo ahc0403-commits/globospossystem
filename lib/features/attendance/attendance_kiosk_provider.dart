@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/attendance_service.dart';
+import '../../core/auth/operation_scope_provider.dart';
+import '../../core/utils/bounded_photo.dart';
 
 class AttendanceKioskState {
   const AttendanceKioskState({
@@ -44,11 +46,17 @@ class AttendanceKioskState {
 }
 
 class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
-  AttendanceKioskNotifier({AttendanceService? service})
-    : _service = service ?? attendanceService,
-      super(const AttendanceKioskState());
+  AttendanceKioskNotifier({
+    AttendanceService? service,
+    bool Function(String storeId)? isScopeCurrent,
+  }) : _service = service ?? attendanceService,
+       _isScopeCurrent = isScopeCurrent,
+       super(const AttendanceKioskState());
 
   final AttendanceService _service;
+  final bool Function(String storeId)? _isScopeCurrent;
+  bool _matchesScope(String storeId) =>
+      mounted && (_isScopeCurrent?.call(storeId) ?? true);
   AttendanceKioskState get currentState => state;
   (String, String, String, XFile)? _submission;
   String? _photoUrl;
@@ -61,7 +69,7 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
     required String type,
     required XFile photoFile,
   }) async {
-    if (state.isSubmitting) return false;
+    if (!_matchesScope(storeId) || state.isSubmitting) return false;
     final normalizedNumber = employeeNumber.trim().toUpperCase();
     final submission = (storeId, normalizedNumber, type, photoFile);
     if (_submission != submission) {
@@ -105,6 +113,9 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
         if (_photoUrl == null || _photoUrl!.isEmpty) {
           throw StateError('ATTENDANCE_PHOTO_UPLOAD_FAILED');
         }
+        // Photo completion may outlive its original actor/store. Never turn
+        // that old preview into a new attendance write in a later session.
+        if (!_matchesScope(storeId)) return false;
         savingRecord = true;
         _submittedAt = DateTime.now().toUtc();
         await _service.recordEmployeeAttendance(
@@ -114,7 +125,9 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
           photoUrl: _photoUrl,
         );
       }
-      if (!mounted) return false;
+      // A confirmed original write remains confirmed after navigation/logout.
+      // Only the original live view may receive its success state.
+      if (!_matchesScope(storeId)) return true;
       state = state.copyWith(
         isSubmitting: false,
         lastAction: type,
@@ -124,7 +137,7 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
       );
       return true;
     } catch (error) {
-      if (!mounted) return false;
+      if (!_matchesScope(storeId)) return false;
       if (error is AttendancePhotoSigningException) {
         _uploadedPath = error.path;
       }
@@ -144,6 +157,8 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
         needsVerification: uncertain,
         errorCode: uncertain
             ? 'ATTENDANCE_RESULT_UNCONFIRMED'
+            : error is PhotoProcessingException
+            ? error.code
             : !savingRecord
             ? error is AttendancePhotoSigningException || _uploadedPath != null
                   ? 'ATTENDANCE_PHOTO_LINK_FAILED'
@@ -157,7 +172,7 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
   }
 
   void clearResult() {
-    if (state.isSubmitting) return;
+    if (!mounted || state.isSubmitting) return;
     _submission = null;
     _photoUrl = null;
     _uploadedPath = null;
@@ -196,7 +211,18 @@ String attendanceErrorCode(Object error) {
   return 'ATTENDANCE_RECORD_FAILED';
 }
 
+final attendanceKioskServiceProvider = Provider<AttendanceService>(
+  (ref) => attendanceService,
+);
+
 final attendanceKioskProvider =
-    StateNotifierProvider<AttendanceKioskNotifier, AttendanceKioskState>(
-      (ref) => AttendanceKioskNotifier(),
-    );
+    StateNotifierProvider<AttendanceKioskNotifier, AttendanceKioskState>((ref) {
+      final snapshot = ref.watch(operationScopeProvider);
+      var active = true;
+      ref.onDispose(() => active = false);
+      return AttendanceKioskNotifier(
+        service: ref.watch(attendanceKioskServiceProvider),
+        isScopeCurrent: (storeId) =>
+            active && (!snapshot.isBound || snapshot.scope?.storeId == storeId),
+      );
+    });

@@ -75,6 +75,27 @@ class MenuWorkbookUpdateResult {
 }
 
 class MenuService {
+  Future<Map<String, int?>> fetchDiscountQuantities(
+    String storeId,
+    Set<String> itemIds,
+  ) async {
+    if (itemIds.isEmpty) return const {};
+    if (itemIds.length > 100) {
+      throw ArgumentError('Menu quantity batch exceeds 100 IDs');
+    }
+    final rows = await supabase
+        .from('menu_discount_quantities')
+        .select('menu_item_id,remaining')
+        .eq('restaurant_id', storeId)
+        .inFilter('menu_item_id', itemIds.toList());
+    return {
+      // Missing/deleted quota rows restore unlimited normal catalog behavior.
+      for (final id in itemIds) id: null,
+      for (final row in rows)
+        row['menu_item_id'].toString(): (row['remaining'] as num?)?.toInt(),
+    };
+  }
+
   Future<void> setDiscountQuantity({
     required String storeId,
     required String itemId,

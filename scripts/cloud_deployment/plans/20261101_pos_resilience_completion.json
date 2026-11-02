@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "project": "ynriuoomotxuwhuxxmhj",
+  "backwardCompatible": true,
+  "contracts": [
+    {
+      "signature": "public.user_accessible_stores(uuid)",
+      "resultType": "SETOF uuid"
+    },
+    {
+      "signature": "public.sync_active_order_promotion(uuid,uuid,timestamptz)",
+      "resultType": "order_discounts"
+    },
+    {
+      "signature": "public.admin_upsert_tax_entity_v2(uuid,text,text,text,text)",
+      "resultType": "tax_entity"
+    },
+    {
+      "signature": "public.get_kds_high_watermark_v2()",
+      "resultType": "bigint"
+    },
+    {
+      "signature": "public.add_order_items_once_v1(uuid,uuid,jsonb,text)",
+      "resultType": "SETOF order_items"
+    },
+    {
+      "signature": "public.execute_order_command_batch_v1(uuid,jsonb)",
+      "resultType": "jsonb"
+    }
+  ],
+  "migrations": [
+    {
+      "path": "supabase/migrations/20261101022105_pos_resilience_completion_contracts.sql",
+      "sha256": "a4bdaa63233db033d4513d4e4d02cb88e05c1101833ed36448a22ccb4db0e045"
+    },
+    {
+      "path": "supabase/migrations/20261101023409_pos_office_legal_connection.sql",
+      "sha256": "d699a1b01d5dccd6c8dfd7c411edfb301589466a0b85a8da473fed0a55db644a"
+    },
+    {
+      "path": "supabase/migrations/20261101045728_kds_progress_receipt_reconciliation.sql",
+      "sha256": "379504ac52ff674eb4d09d40e423e04c8d5bcd6e00d46c4d99c7fe2cc6c6efe6"
+    },
+    {
+      "path": "supabase/migrations/20261101094500_payment_command_receipts.sql",
+      "sha256": "43e7e49c440bf412c603ef28707c97b1cb5e4dd70244a632cfd53326e7d84be8"
+    },
+    {
+      "path": "supabase/migrations/20261101132612_payment_command_cancellation_barriers.sql",
+      "sha256": "669ea5102c95ca1dea365cc053166d8a4f76d2e23fc59b2d3be1f10d87cefba1"
+    },
+    {
+      "path": "supabase/migrations/20261101185522_order_creation_command_receipts.sql",
+      "sha256": "7f13d4d7a3a9cb5da7dcf494c09d99a0a7b563cb36e0c945495bc7f5722a693c"
+    },
+    {
+      "path": "supabase/migrations/20261101192425_procurement_readiness_observation_time.sql",
+      "sha256": "73e6caac07ff16485916a82bf811f1fcb6e17097fec6c83eba83eba6db3a6f3d"
+    },
+    {
+      "path": "supabase/migrations/20261102015533_additional_order_command_receipts.sql",
+      "sha256": "373586de51653cb0fb18f23f2f63b3afde1f562501c3bb3ffba6ed01df4b8128"
+    }
+  ],
+  "web": true,
+  "rollback": "Keep the verified preceding POS web and all additive DB contracts, confirmed order/payment/connection receipts, financial snapshots and history. Old clients keep the day-aware order signature and native financial entrypoints. Do not drop populated receipt tables or rewrite migration history. Any DB reversal requires a reviewed forward migration and outcome reconciliation. Office DB/Edge/web uses its separate official release after this POS capability-aware web; deploy each project web once."
+}

@@ -368,11 +368,12 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/super_admin/super_admin_screen.dart',
-    directCalls: 8,
+    directCalls: 9,
     test: 'test/super_admin_overlay_operational_test.dart',
     additionalTests: [
       'test/independent_brand_widget_test.dart',
       'test/store_onboarding_widget_test.dart',
+      'test/office_legal_connection_dialog_test.dart',
     ],
     markers: [
       'super_admin_store_sheet',
@@ -383,6 +384,7 @@ const _coverage = <_OperationalCoverage>[
       'resume existing onboarding',
       'legal_entity_accounting_dialog',
       'brand_management_dialog',
+      'lost creation response reuses the persisted operation and reads its result first',
     ],
   ),
   _OperationalCoverage(
@@ -624,7 +626,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 200 dialog and sheet entrypoints map to operational tests', () {
+  test('all 201 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -636,10 +638,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 197);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 198);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      200,
+      201,
     );
 
     final inventory = File(

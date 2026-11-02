@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
+import '../../../core/auth/operation_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -91,13 +92,17 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
   DateTime? _pendingEnd;
   DateTime? _lastAppliedStart;
   DateTime? _lastAppliedEnd;
-  String? _initializedRestaurantId;
+  Object? _initializedScope;
+  int _viewGeneration = 0;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final auth = ref.watch(authProvider);
+    final operationScope = ref.watch(operationScopeProvider);
     final storeId = widget.overrideStoreId ?? auth.storeId;
+    final viewScope = (auth.user?.id, storeId, operationScope.generation);
+    final isCurrentView = _initializedScope == viewScope;
     final selectedStores = auth.accessibleStores.where(
       (store) => store.id == storeId,
     );
@@ -122,7 +127,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     final reportNotifier = ref.read(reportProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');
     final dateFormat = DateFormat('dd/MM/yyyy');
-    final summary = reportState.summary;
+    final summary = isCurrentView ? reportState.summary : null;
     final hasOperationalData = summary != null && summary.totalOrders > 0;
     final menuSalesParams = storeId == null
         ? null
@@ -153,9 +158,16 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       _lastAppliedEnd = appliedEnd;
     }
 
-    if (storeId != null && _initializedRestaurantId != storeId) {
-      _initializedRestaurantId = storeId;
-      Future.microtask(() => reportNotifier.loadReport(storeId));
+    if (_initializedScope != viewScope) {
+      _initializedScope = viewScope;
+      final origin = ++_viewGeneration;
+      if (storeId != null) {
+        Future.microtask(() {
+          if (mounted && origin == _viewGeneration) {
+            reportNotifier.loadReport(storeId);
+          }
+        });
+      }
     }
 
     void applyReportRange(DateTime start, DateTime end) {
@@ -259,7 +271,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         );
       }
 
-      if (reportState.error != null) {
+      if (isCurrentView && reportState.error != null) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -902,6 +914,8 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     ReportNotifier notifier,
     MenuSalesAnalytics? menuSalesAnalytics,
   ) async {
+    final origin = _viewGeneration;
+    if (!identical(notifier, ref.read(reportProvider.notifier))) return;
     final reportState = ref.read(reportProvider);
     final bytes = notifier.exportToExcel(
       menuSalesAnalytics: menuSalesAnalytics,
@@ -919,7 +933,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       mimeType: MimeType.microsoftExcel,
     );
 
-    if (mounted) {
+    if (mounted && origin == _viewGeneration) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(context.l10n.reportsSaved)));

@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/pos_backend.dart';
 
@@ -30,6 +31,7 @@ class EinvoiceJobStatus {
 
 final einvoiceJobStatusProvider = FutureProvider.autoDispose
     .family<EinvoiceJobStatus?, String>((ref, orderId) async {
+      watchOperationScope(ref);
       final result = await supabase
           .from('meinvoice_jobs')
           .select('status, transaction_id, manual_action_type, buyer_kind')

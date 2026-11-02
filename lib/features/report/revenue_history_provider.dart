@@ -1,3 +1,4 @@
+import '../../core/auth/operation_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,6 +10,7 @@ typedef RevenueHistoryRange = ({String storeId, DateTime start, DateTime end});
 
 final revenueHistoryProvider = FutureProvider.autoDispose
     .family<List<DailyRevenue>, RevenueHistoryRange>((ref, range) {
+      watchOperationScope(ref);
       return loadRevenueHistory(supabase, range);
     });
 

@@ -5,10 +5,13 @@ ENV DEBIAN_FRONTEND=noninteractive TZ=UTC LANG=C.UTF-8 \
     PATH=/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     HOME=/home/ubuntu PUB_CACHE=/home/ubuntu/.pub-cache \
     CHROME_EXECUTABLE=/usr/local/bin/pos-test-chrome
+# Create the working directory before the large SDK layer. Creating it after
+# installation duplicated the entire SDK snapshot on the managed VFS driver.
+WORKDIR /work
 RUN --mount=type=secret,id=host_ca_bundle,mode=0444 \
     apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl git unzip xz-utils python3 python3-psycopg2 \
-    ripgrep postgresql postgresql-contrib docker.io fontconfig fonts-noto-core \
+    ripgrep postgresql postgresql-contrib docker.io fontconfig fonts-noto-core libsqlite3-dev \
     fonts-noto-cjk libgtk-3-0 libnss3 libasound2t64 libgbm1 libdrm2 libxss1 \
     libx11-xcb1 libxtst6 libxrandr2 libxcomposite1 libxcursor1 libxdamage1 \
     libxi6 libatk-bridge2.0-0 libxkbcommon0 libglib2.0-0 libglu1-mesa \
@@ -28,8 +31,7 @@ RUN --mount=type=secret,id=host_ca_bundle,mode=0444 \
     && unzip -q /tmp/chrome.zip -d /opt && rm /tmp/chrome.zip \
     && printf '#!/bin/sh\nexec /opt/chrome-linux64/chrome --no-sandbox --disable-dev-shm-usage "$@"\n' > /usr/local/bin/pos-test-chrome \
     && chmod 755 /usr/local/bin/pos-test-chrome \
-    && chown -R ubuntu:ubuntu /opt/flutter /home/ubuntu \
-    && chmod -R g+rwX /opt/flutter /home/ubuntu \
-    && su -p -s /bin/sh ubuntu -c 'export PATH=/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin; git config --global --add safe.directory /opt/flutter && flutter --version && chmod -R g+rwX /opt/flutter /home/ubuntu'
+    && chown -R ubuntu:ubuntu /opt/flutter /home/ubuntu /work \
+    && chmod -R g+rwX /opt/flutter /home/ubuntu /work \
+    && su -p -s /bin/sh ubuntu -c 'export PATH=/opt/flutter/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:/usr/sbin:/usr/bin:/sbin:/bin; git config --global --add safe.directory /opt/flutter && if [ -n "${SSL_CERT_FILE:-}" ]; then dart --root-certs-file="$SSL_CERT_FILE" pub get --directory /opt/flutter/packages/flutter_tools; else dart pub get --directory /opt/flutter/packages/flutter_tools; fi && flutter --version && chmod -R g+rwX /opt/flutter /home/ubuntu /work'
 USER ubuntu
-WORKDIR /work

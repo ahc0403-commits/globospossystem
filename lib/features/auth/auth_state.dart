@@ -6,12 +6,14 @@ class AccessibleStore {
     required this.name,
     this.brandId,
     this.brandName,
+    this.legalEntityId,
   });
 
   final String id;
   final String name;
   final String? brandId;
   final String? brandName;
+  final String? legalEntityId;
 }
 
 class PosAuthState {

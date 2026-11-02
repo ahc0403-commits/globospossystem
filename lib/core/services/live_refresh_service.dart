@@ -18,6 +18,7 @@ class PosLiveEvent {
     this.isFallback = false,
     this.affectedDomains,
     this.affectedRestaurantIds,
+    this.affectedMenuItemIds,
   }) : _changes = null;
 
   const PosLiveEvent._merged({
@@ -28,6 +29,7 @@ class PosLiveEvent {
     required this.isFallback,
     required this.affectedDomains,
     required this.affectedRestaurantIds,
+    required this.affectedMenuItemIds,
     required Set<_LiveChange> changes,
   }) : _changes = changes;
 
@@ -39,6 +41,7 @@ class PosLiveEvent {
       isFallback = true,
       affectedDomains = null,
       affectedRestaurantIds = null,
+      affectedMenuItemIds = null,
       _changes = null;
 
   final String domain;
@@ -48,6 +51,10 @@ class PosLiveEvent {
   final bool isFallback;
   final Set<String>? affectedDomains;
   final Set<String>? affectedRestaurantIds;
+
+  /// IDs only, capped by the producer and merger; no prices or business rows.
+  /// Null means a compatible full/recovery read is required.
+  final Set<String>? affectedMenuItemIds;
 
   /// Null denotes a global/recovery signal; multiple stores retain their scope.
   Set<String>? get restaurantIds => isFallback
@@ -88,6 +95,22 @@ class PosLiveEvent {
       isFallback ||
       _changeKinds.any((change) => tables.contains(change.sourceTable));
 
+  bool get onlyMenuQuantityChanges =>
+      !isFallback &&
+      affects({'menu'}) &&
+      _changeKinds
+          .where((change) => change.domain == 'menu' || change.domain == '*')
+          .every((change) => change.sourceTable == 'menu_discount_quantities');
+
+  Set<String>? _mergeMenuIds(PosLiveEvent other) {
+    if ((affects({'menu'}) && affectedMenuItemIds == null) ||
+        (other.affects({'menu'}) && other.affectedMenuItemIds == null)) {
+      return null;
+    }
+    final ids = {...?affectedMenuItemIds, ...?other.affectedMenuItemIds};
+    return ids.length <= 100 ? Set.unmodifiable(ids) : null;
+  }
+
   PosLiveEvent merge(PosLiveEvent other) => PosLiveEvent._merged(
     domain: domain == other.domain ? domain : '*',
     sourceTable: sourceTable == other.sourceTable ? sourceTable : '*',
@@ -100,6 +123,7 @@ class PosLiveEvent {
       ...?other.affectedDomains,
       if (other.affectedDomains == null) other.domain,
     }),
+    affectedMenuItemIds: _mergeMenuIds(other),
     affectedRestaurantIds:
         restaurantIds == null ||
             other.restaurantIds == null ||
@@ -110,11 +134,19 @@ class PosLiveEvent {
   );
 
   factory PosLiveEvent.fromRecord(Map<String, dynamic> record) {
+    final rawIds = record['affected_ids'];
+    final ids =
+        rawIds is List &&
+            rawIds.length <= 100 &&
+            rawIds.every((id) => id is String && id.isNotEmpty)
+        ? Set<String>.unmodifiable(rawIds.cast<String>())
+        : null;
     return PosLiveEvent(
       domain: record['domain']?.toString() ?? '*',
       sourceTable: record['source_table']?.toString() ?? '',
       eventType: record['event_type']?.toString() ?? 'UPDATE',
       restaurantId: record['restaurant_id']?.toString(),
+      affectedMenuItemIds: ids,
     );
   }
 }
@@ -127,7 +159,13 @@ final posLiveEventsProvider = StreamProvider.autoDispose
       // the auth session exists (and keep unauthenticated widget surfaces
       // side-effect free); the provider is recreated when the signed-in
       // profile mounts its store-scoped listener.
-      if (Supabase.instance.client.auth.currentSession == null) {
+      SupabaseClient client;
+      try {
+        client = Supabase.instance.client;
+      } on AssertionError {
+        return const Stream<PosLiveEvent>.empty();
+      }
+      if (client.auth.currentSession == null) {
         return const Stream<PosLiveEvent>.empty();
       }
 
@@ -149,10 +187,10 @@ final posLiveEventsProvider = StreamProvider.autoDispose
         });
       }
 
-      var channel = Supabase.instance.client
+      var channel = client
           .channel('public:pos_live_events:$storeId')
           .onPostgresChanges(
-            event: PostgresChangeEvent.insert,
+            event: PostgresChangeEvent.all,
             schema: 'public',
             table: 'pos_live_events',
             filter: storeId == '*'
@@ -163,6 +201,9 @@ final posLiveEventsProvider = StreamProvider.autoDispose
                     value: storeId,
                   ),
             callback: (payload) {
+              // Retention deletes are not source changes. UPDATE is used only
+              // to merge IDs into the transaction's existing quota signal.
+              if (payload.newRecord.isEmpty) return;
               emitDebounced(PosLiveEvent.fromRecord(payload.newRecord));
             },
           );

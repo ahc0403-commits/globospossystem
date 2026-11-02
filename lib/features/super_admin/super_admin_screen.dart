@@ -29,6 +29,7 @@ import '../restaurant_sales_export/restaurant_sales_export_screen.dart';
 import 'super_admin_provider.dart';
 import 'brand_dialog.dart';
 import 'legal_entity_dialog.dart';
+import 'office_legal_connection_dialog.dart';
 import 'store_onboarding.dart';
 
 const _superAdminScrollPadding = EdgeInsets.only(bottom: 96);
@@ -1096,6 +1097,21 @@ class _RestaurantsTab extends StatelessWidget {
                     ),
                   );
                   final actions = [
+                    OutlinedButton.icon(
+                      key: const Key('super_admin_office_legal_connection'),
+                      onPressed:
+                          state.taxEntities.any((entity) => entity.isInternal)
+                          ? () => showDialog<void>(
+                              context: context,
+                              builder: (_) => OfficeLegalConnectionDialog(
+                                entities: state.taxEntities,
+                                actorId: supabase.auth.currentUser?.id ?? '',
+                              ),
+                            )
+                          : null,
+                      icon: const Icon(Icons.link),
+                      label: Text(l10n.resilienceOfficeLink),
+                    ),
                     OutlinedButton.icon(
                       key: const Key(
                         'super_admin_legal_entity_accounting_action',

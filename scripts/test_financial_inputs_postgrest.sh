@@ -8,18 +8,25 @@ run_name="pos-financial-test-$$"
 db_name="${run_name}-db"
 rest_name="${run_name}-rest"
 cleanup() {
+  local result=$?
+  if [[ "$result" != 0 ]]; then
+    docker logs --tail 80 "$db_name" 2>&1 || true
+    docker logs --tail 80 "$rest_name" 2>&1 || true
+  fi
   docker rm -f "$rest_name" "$db_name" >/dev/null 2>&1 || true
   docker network rm "$run_name" >/dev/null 2>&1 || true
+  return "$result"
 }
 trap cleanup EXIT
 docker network create "$run_name" >/dev/null
 printf 'FINANCIAL_API_TEST_STEP=database_start\n'
-docker run --detach --rm --name "$db_name" --network "$run_name" \
+docker run --detach --name "$db_name" --network "$run_name" \
   --env POSTGRES_PASSWORD=payroll-fixture --env POSTGRES_DB=payroll_test \
   public.ecr.aws/supabase/postgres:17.6.1.104 >/dev/null
 for attempt in $(seq 1 60); do
   # Bootstrap uses a Unix socket only; TCP readiness excludes that temporary DB.
   if docker exec "$db_name" pg_isready -h 127.0.0.1 -U postgres -d payroll_test >/dev/null 2>&1; then break; fi
+  if [[ "$(docker inspect --format '{{.State.Status}}' "$db_name")" == exited ]]; then exit 1; fi
   if [[ "$attempt" == 60 ]]; then docker logs --tail 60 "$db_name"; exit 1; fi
   sleep 1
 done
@@ -69,7 +76,7 @@ SET request.jwt.claim.role='service_role';
 DO $$ BEGIN IF find_fixed_account_auth_user(' owned@example.invalid ')->>'email' IS DISTINCT FROM 'OWNED@EXAMPLE.INVALID' THEN RAISE EXCEPTION 'FIXED_AUTH_LOOKUP_MISMATCH'; END IF; END $$;
 SQL
 printf 'FINANCIAL_API_TEST_STEP=postgrest_start\n'
-docker run --detach --rm --name "$rest_name" --network "$run_name" \
+docker run --detach --name "$rest_name" --network "$run_name" \
   --publish 127.0.0.1::3000 \
   --env "PGRST_DB_URI=postgres://postgres@${db_name}:5432/payroll_test" \
   --env PGPASSWORD=payroll-fixture \
@@ -79,8 +86,9 @@ docker run --detach --rm --name "$rest_name" --network "$run_name" \
 rest_address="$(docker port "$rest_name" 3000/tcp)"
 for attempt in $(seq 1 60); do
   if curl --fail --silent "http://${rest_address}/" >/dev/null; then break; fi
+  if [[ "$(docker inspect --format '{{.State.Status}}' "$rest_name")" == exited ]]; then exit 1; fi
   if [[ "$attempt" == 60 ]]; then docker logs --tail 60 "$rest_name"; exit 1; fi
   sleep 1
 done
 FINANCIAL_TEST_DB_CONTAINER="$db_name" FINANCIAL_TEST_RPC_URL="http://${rest_address}" \
-  flutter test --no-pub --machine test/financial_inputs_postgrest_test.dart
+  flutter test --no-pub --machine test/financial_inputs_postgrest_test.dart "$@"

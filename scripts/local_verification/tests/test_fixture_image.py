@@ -105,9 +105,9 @@ class FixtureImageTests(unittest.TestCase):
 
     def test_stock_versions_have_distinct_preserved_identities(self):
         fixed = image.policies()
-        self.assertEqual(len(fixed), 4)
-        self.assertEqual(len({p['sourceConfigDigest'] for p in fixed}), 4)
-        self.assertEqual(len({p['derivedImageId'] for p in fixed}), 4)
+        self.assertEqual(len(fixed), 6)
+        self.assertEqual(len({p['sourceConfigDigest'] for p in fixed}), 6)
+        self.assertEqual(len({p['derivedImageId'] for p in fixed}), 6)
         projections = {p['requestedRef']:p['derivedImageId'] for p in fixed}
         with patch.dict(os.environ, {'POS_FIXTURE_IMAGE_MAP':json.dumps(projections),
                                     'POS_POSTGRES_FIXTURE_IMAGE':''}), \
@@ -157,7 +157,7 @@ class FixtureImageTests(unittest.TestCase):
     def test_only_new_stock_fixture_data_uses_reviewed_temporary_storage(self):
         for fixed in image.policies():
             options = image.temporary_volume_options(fixed)
-            if fixed['requestedRef'].startswith('postgres:'):
+            if fixed['requestedRef'].startswith(('postgres:','public.ecr.aws/supabase/postgres:')):
                 self.assertEqual(options, {'/var/lib/postgresql/data':'rw,size=1073741824'})
                 good = {'HostConfig':{'Tmpfs':options},'Mounts':[]}
                 self.assertEqual(image.validate_temporary_storage(good,fixed), options)

@@ -31,6 +31,8 @@ dependencies:
   # Local Cache (read-only, 메뉴 조회 한정)
   drift: ^2.22.1
   sqlite3_flutter_libs: ^0.5.28
+  # Durable payment intents, isolated from the read-only menu cache.
+  sqlite3: ^2.9.4
   path_provider: ^2.1.5
   path: ^1.9.1
 

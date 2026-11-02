@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/utils/deadline_http_client.dart';
+import '../../core/utils/rpc_resource_cleanup.dart';
 
 enum KdsSyncMode {
   legacy,
@@ -365,6 +366,10 @@ class SupabaseKdsSyncGateway implements KdsSyncGateway {
   Future<dynamic> _rpc(String name, {Map<String, dynamic>? params}) {
     final deadline = DateTime.now().add(const Duration(seconds: 15));
     Future<dynamic> read() async {
+      final remaining = deadline.difference(DateTime.now());
+      if (remaining <= Duration.zero) {
+        throw TimeoutException('KDS read expired before execution');
+      }
       final transport = DeadlineHttpClient(
         client.rest.httpClient!,
         deadline,
@@ -378,10 +383,11 @@ class SupabaseKdsSyncGateway implements KdsSyncGateway {
         httpClient: transport,
       );
       try {
-        return await db.rpc(name, params: params);
+        return await db.rpc(name, params: params).timeout(remaining);
       } finally {
         lifetime?.remove(transport);
         transport.close();
+        await disposeRpcJsonWorker(db.dispose);
       }
     }
 

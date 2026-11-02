@@ -237,10 +237,14 @@ class _DeferredEmergencyNotifier extends _FixtureEmergencyNotifier {
     }
     seed(
       state.copyWith(
-        pendingQueueIds: result == EmergencyProgressResult.queued
+        pendingQueueIds:
+            result == EmergencyProgressResult.queued ||
+                result == EmergencyProgressResult.unknown
             ? {state.orders.single.queueId}
             : {},
-        error: result == EmergencyProgressResult.queued
+        error: result == EmergencyProgressResult.unknown
+            ? 'KDS_PROGRESS_RESULT_UNKNOWN'
+            : result == EmergencyProgressResult.queued
             ? 'EMERGENCY_PROGRESS_QUEUED'
             : 'EMERGENCY_QUANTITY_CHAIN_VIOLATION',
       ),
@@ -293,6 +297,81 @@ EmergencyFulfillmentState _partialReadyState(
 );
 
 void main() {
+  testWidgets('display ticks do not rebuild or sort the screen and board', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(_clockState('floor'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'floor',
+    );
+    final builds = <String, int>{};
+    final original = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      final name = element.widget.runtimeType.toString();
+      builds.update(name, (count) => count + 1, ifAbsent: () => 1);
+      original?.call(element, builtOnce);
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = original);
+    final before = tester
+        .widget<Text>(
+          find.byKey(const Key('emergency_order_elapsed_order-clock')),
+        )
+        .data;
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('emergency_order_elapsed_order-clock')),
+          )
+          .data,
+      isNot(before),
+    );
+    expect(builds['EmergencyFulfillmentScreen'] ?? 0, 0);
+    expect(builds['_EmergencyOrderBoard'] ?? 0, 0);
+    expect(builds['_EmergencyOrderCard'] ?? 0, 0);
+    expect(
+      builds.keys.any((name) => name.startsWith('ValueListenableBuilder')),
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    builds.clear();
+    await tester.pump(const Duration(minutes: 1));
+    expect(builds, isEmpty);
+  });
+
+  testWidgets(
+    'one hundred KDS route lifetimes release their tick listeners and timers',
+    (tester) async {
+      for (var i = 0; i < 100; i++) {
+        final station = ['kitchen', 'tray', 'floor'][i % 3];
+        final fixture = _FixtureEmergencyNotifier(_clockState(station));
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+          expectedStationType: station,
+        );
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        expect(
+          fixture.mounted,
+          isFalse,
+          reason: 'provider leaked on transition $i',
+        );
+      }
+      await tester.pump(const Duration(minutes: 1));
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'JeonGabok visual is immediate and continuous events keep first 500ms window',
     (tester) async {
@@ -571,8 +650,16 @@ void main() {
             ? findsNothing
             : findsOneWidget,
       );
-      if (outcome == EmergencyProgressResult.queued) {
-        expect(find.text('전송 대기 중입니다. 연결이 복구되면 전달 기록을 전송합니다.'), findsOneWidget);
+      if (outcome == EmergencyProgressResult.queued ||
+          outcome == EmergencyProgressResult.unknown) {
+        expect(
+          find.text(
+            outcome == EmergencyProgressResult.unknown
+                ? '전달 결과를 확인하지 못했습니다. 새로고침을 누르면 기존 요청의 결과부터 확인하고 같은 요청으로 복구합니다. 확인 전 화면을 닫거나 다시 완료 처리하지 마세요.'
+                : '전송 대기 중입니다. 연결이 복구되면 전달 기록을 전송합니다.',
+          ),
+          findsOneWidget,
+        );
         expect(
           tester
               .widget<IconButton>(
