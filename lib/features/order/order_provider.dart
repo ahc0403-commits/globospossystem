@@ -54,10 +54,14 @@ class OrderState {
 }
 
 class OrderNotifier extends StateNotifier<OrderState> {
-  OrderNotifier({SupabaseClient? client, OperationalDayService? dayService})
-    : _providedClient = client,
-      _dayService = dayService ?? operationalDayService,
-      super(const OrderState()) {
+  OrderNotifier({
+    SupabaseClient? client,
+    OperationalDayService? dayService,
+    OrderService? orders,
+  }) : _providedClient = client,
+       _providedOrders = orders,
+       _dayService = dayService ?? operationalDayService,
+       super(const OrderState()) {
     _refreshOfflineQueueCount();
   }
 
@@ -73,7 +77,8 @@ class OrderNotifier extends StateNotifier<OrderState> {
   bool _realtimeConnected = false;
   final _uuid = const Uuid();
   int _commandGeneration = 0;
-  late final _orders = OrderService(client: _client);
+  final OrderService? _providedOrders;
+  late final _orders = _providedOrders ?? OrderService(client: _client);
   final SupabaseClient? _providedClient;
   SupabaseClient get _client => _providedClient ?? supabase;
   final OperationalDayService _dayService;
@@ -201,19 +206,39 @@ class OrderNotifier extends StateNotifier<OrderState> {
       clearActiveOrder: true,
       clearError: true,
       isSubmitting: false,
+      isSyncingOfflineQueue: false,
+      offlineQueueCount: 0,
     );
   }
 
   Future<void> _refreshOfflineQueueCount() async {
+    final generation = _commandGeneration;
     final store = _requestedScope?.$1;
-    final count = store == null
-        ? 0
-        : (await offlineMutationQueueService.list())
-                  .where((r) => r.storeId == store)
-                  .length +
-              (await _orders.commands.pending(store)).length;
-    if (mounted) {
-      state = state.copyWith(offlineQueueCount: count);
+    try {
+      final pending = store == null
+          ? 0
+          : (await _orders.commands.pending(store)).length;
+      var legacy = 0;
+      var legacyUnreadable = false;
+      if (store != null) {
+        try {
+          legacy = (await offlineMutationQueueService.list())
+              .where((r) => r.storeId == store)
+              .length;
+        } catch (_) {
+          legacyUnreadable = true;
+        }
+      }
+      if (mounted && generation == _commandGeneration) {
+        state = state.copyWith(
+          offlineQueueCount: pending + legacy,
+          error: legacyUnreadable ? 'ORDER_RECOVERY_LEGACY_REVIEW' : null,
+        );
+      }
+    } catch (_) {
+      if (mounted && generation == _commandGeneration) {
+        state = state.copyWith(error: 'ORDER_RECOVERY_STORAGE_UNAVAILABLE');
+      }
     }
   }
 
@@ -231,7 +256,12 @@ class OrderNotifier extends StateNotifier<OrderState> {
     if (changedScope) {
       _businessDayTimer?.cancel();
       unawaited(_unsubscribeOrderItems());
-      state = state.copyWith(cart: const [], clearActiveOrder: true);
+      state = state.copyWith(
+        cart: const [],
+        clearActiveOrder: true,
+        isSubmitting: false,
+        isSyncingOfflineQueue: false,
+      );
     }
     return _activeRefresh.run(
       () => _loadActiveOrder(tableId, storeId, token, syncOffline: syncOffline),
@@ -251,7 +281,12 @@ class OrderNotifier extends StateNotifier<OrderState> {
       if (operationalDay.enabled &&
           _businessDate != null &&
           _businessDate != operationalDay.window.dateKey) {
-        state = state.copyWith(cart: const [], clearActiveOrder: true);
+        state = state.copyWith(
+          cart: const [],
+          clearActiveOrder: true,
+          isSubmitting: false,
+          isSyncingOfflineQueue: false,
+        );
       }
       _businessDate = operationalDay.window.dateKey;
       _businessDayTimer?.cancel();
@@ -849,9 +884,14 @@ class OrderNotifier extends StateNotifier<OrderState> {
     try {
       // Legacy records have no verifiable original actor/project. Preserve them
       // for review; never silently assign them to whoever logs in next.
-      final legacy = (await offlineMutationQueueService.list())
-          .where((r) => r.storeId == storeId)
-          .isNotEmpty;
+      var legacy = false;
+      try {
+        legacy = (await offlineMutationQueueService.list())
+            .where((r) => r.storeId == storeId)
+            .isNotEmpty;
+      } catch (_) {
+        legacy = true;
+      }
       await _orders.commands.recover(storeId, isCurrent: current);
       if (current() && legacy) {
         state = state.copyWith(error: 'ORDER_RECOVERY_LEGACY_REVIEW');

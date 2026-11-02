@@ -4458,5 +4458,6 @@
   "photoInvalid": "Không thể đọc ảnh này. Vui lòng chụp lại hoặc chọn ảnh khác.",
   "orderRecoveryPending": "Yêu cầu gốc đã được lưu trên thiết bị này. Hãy kiểm tra kết quả hoặc đồng bộ trước khi đặt lại.",
   "orderRecoveryReviewRequired": "Một yêu cầu đặt món trước đó cần được kiểm tra. Giữ nguyên nội dung gốc và xác nhận kết quả trước khi thử lại.",
-  "orderRecoveryLegacyReview": "Các đơn lưu từ phiên bản cũ không có tài khoản gốc đã xác minh. Đơn được giữ lại để quản trị viên kiểm tra và không tự gửi bằng tài khoản hiện tại."
+  "orderRecoveryLegacyReview": "Các đơn lưu từ phiên bản cũ không có tài khoản gốc đã xác minh. Đơn được giữ lại để quản trị viên kiểm tra và không tự gửi bằng tài khoản hiện tại.",
+  "orderRecoveryStorageUnavailable": "Không thể đọc hoặc ghi dữ liệu khôi phục đơn trên thiết bị này. Hãy nhờ quản trị viên kiểm tra kết quả trước khi đặt lại."
 }

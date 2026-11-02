@@ -4459,5 +4459,6 @@
   "photoInvalid": "This photo could not be read. Take another photo or choose a different image.",
   "orderRecoveryPending": "The original order request is saved on this terminal. Check its result or use Sync before placing it again.",
   "orderRecoveryReviewRequired": "An earlier order request needs review. Keep its original details and check the result before retrying.",
-  "orderRecoveryLegacyReview": "Saved orders from an older version have no verified original account. They are preserved for administrator review and will not be sent under this login."
+  "orderRecoveryLegacyReview": "Saved orders from an older version have no verified original account. They are preserved for administrator review and will not be sent under this login.",
+  "orderRecoveryStorageUnavailable": "The order recovery storage on this terminal is unavailable. Check the result with an administrator before placing the order again."
 }

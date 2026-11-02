@@ -5,11 +5,11 @@
   "summary": "Implement scoped reads/views, first Office legal connection, durable KDS and single-payment recovery, bounded reads/proof metadata and native resource cleanup. Real independent Auth/JWT REST, first/additional store registration with Auth worker and Office mapping, and POS private Storage are exercised in isolated development fixtures. Full business/browser/domain adoption, mixed/12h trials and production remain incomplete. Original table/order-add requests now use independent atomic SQLite/IndexedDB intent storage and bounded receipt/recovery batches; legacy ownerless requests are preserved for review. Browser/mixed/12h and production acceptance remain incomplete.",
   "inputs": {
     "docs/pos/governance/FEATURE_CONTRACTS.json": {
-      "sha256": "2e035b950140f673a6171a7730cdd9a8abeb0a96425dd0e02ce89839f341666b",
+      "sha256": "c9a21cd3ad8ff26e27b2fa46d07eee91dca8040c45d474d481627d4727a724ec",
       "mode": "100644"
     },
     "docs/pos/resilience/COMPLETION_PLAN_20261101.md": {
-      "sha256": "a5177b40444d390dcca990b3f5142b57dfa7645e1e2a4f1599373a5b6651cdb9",
+      "sha256": "8bdc2cdf7e164a9f15af2f7a36b06a1803f02c683630328a43da9399b71278da",
       "mode": "100644"
     },
     "lib/core/auth/auth_command_session.dart": {
@@ -25,7 +25,7 @@
       "mode": "100644"
     },
     "lib/core/i18n/restaurant_cutoff_localization.dart": {
-      "sha256": "fe7725edb404bd2f634dde9bb5e96f8fc2105568291e9c82b0deea0e322d1377",
+      "sha256": "5b5ccfaa97aac70f99f56ed7742902209bb6ddf598810ff6ae72be387c0d0941",
       "mode": "100644"
     },
     "lib/core/orders/order_command_rpc.dart": {
@@ -221,7 +221,7 @@
       "mode": "100644"
     },
     "lib/features/order/order_provider.dart": {
-      "sha256": "70a24dcdc569672814001dec7292845b94ef27a237940ddef000fdd23b26aa38",
+      "sha256": "9a21a89ecb4480dea1cd895b66466e58109cf2df07dc316b0528d771c49aef33",
       "mode": "100644"
     },
     "lib/features/payment/einvoice_provider.dart": {
@@ -265,15 +265,15 @@
       "mode": "100644"
     },
     "lib/l10n/app_en.arb": {
-      "sha256": "5625daf27236a0e16fc4a2325e620d21d0705fae026fb7e80ebb339284813344",
+      "sha256": "16f0846b46d413c6e81eebb7ece45fb044f1bbda8a5d256b66be561721869271",
       "mode": "100644"
     },
     "lib/l10n/app_ko.arb": {
-      "sha256": "c1412e1f60df6b5140f00a5186cbfdaf35442f864b8ee3b11cf4c98a9fd51678",
+      "sha256": "3a4e47a981ba0fdab26f6e314d193807026f26bdb62c3acd2aa15bdd30cc8832",
       "mode": "100644"
     },
     "lib/l10n/app_vi.arb": {
-      "sha256": "a703dd42ff6a0c81538802424f3f9e0b2e89e9995fd58d1f85ead1ed3152d0ba",
+      "sha256": "92afa99f9e1ddacaa2cb86a29e18bd088863a2af29b21d922a43258a1ebe5bb3",
       "mode": "100644"
     },
     "lib/main.dart": {
@@ -660,6 +660,10 @@
       "sha256": "71ffcec58273211b680e920860717af6b6905e5a78f7e8442582627d860992da",
       "mode": "100644"
     },
+    "test/order_submission_lifetime_test.dart": {
+      "sha256": "506b1140a0205d7747e6fa72afbce7f381812198b536b9e53bbe999c5e20d1f9",
+      "mode": "100644"
+    },
     "test/payment_command_coordinator_test.dart": {
       "sha256": "16593d2c9cfec83ca13a08663e972b5ef2b7545afda0b6e4b77f7e199c19b30f",
       "mode": "100644"
@@ -875,7 +879,8 @@
     "order-intent-storage",
     "order-command-recovery",
     "browser-order-intent-journal",
-    "additional-order-native-recovery"
+    "additional-order-native-recovery",
+    "order-submission-lifetime"
   ],
   "businessInvariants": [
     "Preserve existing 50% menu quota reservation/cancel restoration and immutable deferred-order allocations; do not modify the original payment/promotion allocator.",
@@ -904,7 +909,8 @@
     "Cashier pricing/payable/emergency/completed reads share one original-Auth owned session: whole HTTP/async job 15s, each response <=4MiB, JSON cleanup separately <=2s. Store/actor reset and disposal physically abort only this view requests. At most one active and one latest refresh. Quote/VAT/promotion/items/payment snapshots and realtime subscription after accepted state are preserved. Summary/detail/keyset paging and operating-day eligibility review remain incomplete.",
     "A server-acknowledged payment-proof attachment stays uploaded even if local deletion/queue retirement fails. The new client persists an attached marker when possible; intact confirmed records perform only local cleanup after restart, with no metadata/upload/sign/attach request. Preserve ambiguous attachments, malformed confirmations and legacy ownership semantics; a complete durable queue/owner/receipt migration is not claimed.",
     "Real pinned Realtime platform uses _realtime for control tables, preserves the application/Auth/Storage catalog, and restores the captured realtime.messages policy set exactly. Native SDK WebSockets deliver real broadcasts and deny unassigned/cross-store topics. Actual new-store Auth kitchen account and native SQL send are exercised, not an order handoff or physical opening. No production Realtime tenant rows/events/secrets or fabricated migration rows are copied.",
-    "New table/create-add commands persist original project/actor/store/payload before HTTP, reject changed pending requests, preserve confirmed writes after local cleanup failure and resolve server receipts before bounded recovery. Ownerless legacy orders are retained and never assigned to the next login. Existing menu/discount/tax/stock/KDS logic remains in native set-based order functions. Recovery batches contain at most 20 independent commands and 500 total lines; SQL processes each business transaction independently rather than issuing per-line remote or SQL lookups."
+    "New table/create-add commands persist original project/actor/store/payload before HTTP, reject changed pending requests, preserve confirmed writes after local cleanup failure and resolve server receipts before bounded recovery. Ownerless legacy orders are retained and never assigned to the next login. Existing menu/discount/tax/stock/KDS logic remains in native set-based order functions. Recovery batches contain at most 20 independent commands and 500 total lines; SQL processes each business transaction independently rather than issuing per-line remote or SQL lookups.",
+    "Recovery-storage reads fail visibly without leaving submit/sync flags stuck. Table/session generations reset their own busy/count state and prevent the original late result from mutating a later table. A focused failing reproduction covers both storage failure and table-switch confirmation; original intents remain preserved."
   ],
   "dataAccessReview": {
     "nPlusOne": {

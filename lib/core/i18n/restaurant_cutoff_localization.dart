@@ -4,6 +4,9 @@ const restaurantKitchenClosedCode = 'RESTAURANT_KITCHEN_CLOSED';
 const restaurantDailySalesClosedCode = 'RESTAURANT_DAILY_SALES_CLOSED';
 
 String localizeRestaurantCutoffError(AppLocalizations l10n, String message) {
+  if (message.contains('ORDER_RECOVERY_STORAGE_UNAVAILABLE')) {
+    return l10n.orderRecoveryStorageUnavailable;
+  }
   if (message.contains('ORDER_RECOVERY_LEGACY_REVIEW')) {
     return l10n.orderRecoveryLegacyReview;
   }

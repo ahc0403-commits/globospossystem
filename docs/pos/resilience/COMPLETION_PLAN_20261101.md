@@ -1463,3 +1463,25 @@ Chromium IndexedDB 4개 통과. transport/coordinator 7개는 원래 요청 보�
 SQLite 첫 실행의 호스트 loader 누락 실패를 보존하고 기존 local libsqlite3 경로를
 지정한 뒤 해당 5개만 다시 실행했다. 이 개별 결과를 통합 최종-SHA PASS나 전체
 브라우저 업무·2시간/각 12시간·운영 배포 완료로 사용하지 않는다.
+
+추가 상태 경계 검사에서 복구 저장소 오류가 submit finally로 전파되어 busy가
+풀리지 않는 경우와, table generation 변경 뒤 이전 finally가 폐기되어 busy가
+남는 경우를 각각 실패 재현했다. `order_submission_lifetime_test.dart`의 두
+실행 실패를 보존한 뒤, count 조회 오류의 가시적 보존·세대 보호와 table/session
+전환의 busy/count 초기화로 두 검사를 통과했다. 복구 저장소 안내는 ko/en/vi를
+지원한다. 이는 원래 주문 intent를 삭제하거나 다른 테이블로 옮기는 수정이 아니다.
+
+`58da3530`은 clean/pushed 후보이며 이 SHA의 영향 분석 0 issue, 관련 Dart
+27개와 경유기 14개가 통과했다. 동일 후보의 격리 JavaScript release build도
+성공했다. 이 빌드의 실제 홀 UI에서 native create commit 후 TCP 응답을 끊자
+원래 요청 보존 안내가 나타났고, 새로고침 뒤 T1 원래 주문을 다시 표시했다.
+DB에서 주문 1/receipt 1/수량 1을 확인했다. 홀 UI에는 기존 waiter 호환성 시험을
+위한 별도 생성 local actor를 사용했으며 제공된 샘플 계정 역할을 바꾸지 않았다.
+이를 신규 매장 waiter 계정 provisioning 성공으로 표시하지 않는다. 제공된
+주방·트레이·층·캐셔와 나머지 업무의 결합은 계속 진행한다.
+
+손상된 이전 SharedPreferences queue가 독립된 새 journal의 receipt 복구까지
+가로막지 않도록 두 저장소의 오류 처리를 분리했다. 이전 원본 bytes는 유지하고
+검토 안내를 표시한다. 새 receipt 조회·확정 정리와 busy 해제가 가능한지 추가
+검사해 상태 경계 3개를 통과했다. 최초 두 실제 실패와 수정 후 로그는 private
+`order-lifetime-reproduction.log` / `order-lifetime-final.log`로 보존한다.

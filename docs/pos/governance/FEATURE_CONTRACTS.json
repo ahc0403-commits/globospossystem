@@ -172,7 +172,8 @@
         "order-intent-storage",
         "order-command-recovery",
         "browser-order-intent-journal",
-        "additional-order-native-recovery"
+        "additional-order-native-recovery",
+        "order-submission-lifetime"
       ],
       "adoption": "legacy_or_partial"
     },
@@ -399,7 +400,8 @@
         "order-intent-storage",
         "order-command-recovery",
         "browser-order-intent-journal",
-        "additional-order-native-recovery"
+        "additional-order-native-recovery",
+        "order-submission-lifetime"
       ],
       "adoption": "legacy_or_partial"
     }
@@ -892,6 +894,10 @@
     },
     "additional-order-native-recovery": {
       "path": "scripts/resilience/additional_order_recovery_scenario.py",
+      "kind": "focused"
+    },
+    "order-submission-lifetime": {
+      "path": "test/order_submission_lifetime_test.dart",
       "kind": "focused"
     }
   },
